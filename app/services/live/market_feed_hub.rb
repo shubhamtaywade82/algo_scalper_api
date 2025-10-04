@@ -81,6 +81,7 @@ module Live
     private
 
     def enabled?
+      pp config
       # Prefer app config if present; otherwise derive from ENV credentials
       cfg = config
       if cfg && cfg.respond_to?(:enabled) && cfg.respond_to?(:ws_enabled)
