@@ -11,25 +11,16 @@ class CandleSeries
     @candles = []
   end
 
-  def each(&block)
-    candles.each(&block)
-  end
-
-  def add_candle(candle)
-    candles << candle
-  end
+  def each(&) = candles.each(&)
+  def add_candle(candle) = candles << candle
 
   def load_from_raw(response)
     normalise_candles(response).each do |row|
-      add_candle(
-        Candle.new(
-          ts: coerce_timestamp(row[:timestamp]),
-          open: row[:open],
-          high: row[:high],
-          low: row[:low],
-          close: row[:close],
-          volume: row[:volume]
-        )
+      @candles << Candle.new(
+        ts: Time.zone.parse(row[:timestamp].to_s),
+        open: row[:open], high: row[:high],
+        low: row[:low], close: row[:close],
+        volume: row[:volume]
       )
     end
   end
@@ -39,9 +30,7 @@ class CandleSeries
 
     return resp.map { |c| slice_candle(c) } if resp.is_a?(Array)
 
-    unless resp.is_a?(Hash) && resp["high"].respond_to?(:size)
-      raise "Unexpected candle format: #{resp.class}"
-    end
+    raise "Unexpected candle format: #{resp.class}" unless resp.is_a?(Hash) && resp["high"].is_a?(Array)
 
     size = resp["high"].size
     (0...size).map do |i|
@@ -50,7 +39,7 @@ class CandleSeries
         close: resp["close"][i].to_f,
         high: resp["high"][i].to_f,
         low: resp["low"][i].to_f,
-        timestamp: resp["timestamp"][i],
+        timestamp: Time.zone.at(resp["timestamp"][i]),
         volume: resp["volume"][i].to_i
       }
     end
@@ -80,21 +69,10 @@ class CandleSeries
     end
   end
 
-  def opens
-    candles.map(&:open)
-  end
-
-  def closes
-    candles.map(&:close)
-  end
-
-  def highs
-    candles.map(&:high)
-  end
-
-  def lows
-    candles.map(&:low)
-  end
+  def opens  = candles.map(&:open)
+  def closes = candles.map(&:close)
+  def highs  = candles.map(&:high)
+  def lows   = candles.map(&:low)
 
   def to_hash
     {
@@ -110,7 +88,7 @@ class CandleSeries
   def hlc
     candles.each_with_index.map do |c, _i|
       {
-        date_time: c.timestamp || Time.zone.at(0),
+        date_time: Time.zone.at(c.timestamp || 0),
         high: c.high,
         low: c.low,
         close: c.close
@@ -119,11 +97,7 @@ class CandleSeries
   end
 
   def atr(period = 14)
-    result = TechnicalAnalysis::Atr.calculate(hlc, period: period)
-    entry = Array(result).first
-    entry&.respond_to?(:atr) ? entry.atr : nil
-  rescue NameError
-    nil
+    TechnicalAnalysis::Atr.calculate(hlc, period: period).first.atr
   end
 
   def swing_high?(index, lookback = 2)
@@ -153,17 +127,17 @@ class CandleSeries
   end
 
   def previous_swing_high
-    highs = recent_highs
-    return nil if highs.size < 2
+    values = recent_highs
+    return nil if values.size < 2
 
-    highs.sort[-2]
+    values.sort[-2]
   end
 
   def previous_swing_low
-    lows = recent_lows
-    return nil if lows.size < 2
+    values = recent_lows
+    return nil if values.size < 2
 
-    lows.sort[1]
+    values.sort[1]
   end
 
   def liquidity_grab_up?(lookback: 20)
@@ -192,33 +166,23 @@ class CandleSeries
 
   def rsi(period = 14)
     RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: closes, period: period).call
-  rescue NameError
-    nil
   end
 
   def moving_average(period = 20)
     RubyTechnicalAnalysis::MovingAverages.new(series: closes, period: period)
-  rescue NameError
-    nil
   end
 
   def sma(period = 20)
-    moving_average(period)&.sma
+    moving_average(period).sma
   end
 
   def ema(period = 20)
-    moving_average(period)&.ema
+    moving_average(period).ema
   end
 
   def macd(fast_period = 12, slow_period = 26, signal_period = 9)
-    RubyTechnicalAnalysis::Macd.new(
-      series: closes,
-      fast_period: fast_period,
-      slow_period: slow_period,
-      signal_period: signal_period
-    ).call
-  rescue NameError
-    nil
+    macd = RubyTechnicalAnalysis::Macd.new(series: closes, fast_period: fast_period, slow_period: slow_period, signal_period: signal_period)
+    macd.call
   end
 
   def rate_of_change(period = 5)
@@ -236,24 +200,21 @@ class CandleSeries
 
   def supertrend_signal
     trend_line = Indicators::Supertrend.new(series: self).call
-    return nil if trend_line.blank?
+    return nil if trend_line.empty?
 
     latest_close = closes.last
     latest_trend = trend_line.last
 
     return :long_entry if latest_close > latest_trend
-    return :short_entry if latest_close < latest_trend
 
-    nil
-  rescue NameError
-    nil
+    :short_entry if latest_close < latest_trend
   end
 
-  def inside_bar?(index)
-    return false if index < 1 || index >= candles.size
+  def inside_bar?(i)
+    return false if i < 1
 
-    curr = candles[index]
-    prev = candles[index - 1]
+    curr = @candles[i]
+    prev = @candles[i - 1]
     curr.high < prev.high && curr.low > prev.low
   end
 
@@ -266,8 +227,6 @@ class CandleSeries
     ).call
 
     { upper: bb[0], lower: bb[1], middle: bb[2] }
-  rescue NameError
-    nil
   end
 
   def donchian_channel(period: 20)
@@ -275,49 +234,22 @@ class CandleSeries
 
     dc = candles.each_with_index.map do |c, _i|
       {
-        date_time: c.timestamp || Time.zone.at(0),
+        date_time: Time.zone.at(c.timestamp || 0),
         value: c.close
       }
     end
     TechnicalAnalysis::Dc.calculate(dc, period: period)
-  rescue NameError
-    nil
   end
 
   def obv
-    candles.each_with_index.map do |c, _i|
+    dcv = candles.each_with_index.map do |c, _i|
       {
-        date_time: c.timestamp || Time.zone.at(0),
+        date_time: Time.zone.at(c.timestamp || 0),
         close: c.close,
         volume: c.volume || 0
       }
     end
-  end
 
-  def on_balance_volume
-    data = obv
-    TechnicalAnalysis::Obv.calculate(data)
-  rescue NameError
-    nil
-  end
-
-  private
-
-  def coerce_timestamp(value)
-    case value
-    when ActiveSupport::TimeWithZone, Time
-      value
-    when DateTime
-      value.to_time.in_time_zone
-    when Integer
-      Time.zone.at(value)
-    when Float
-      Time.zone.at(value)
-    else
-      Integer(value)
-      Time.zone.at(value.to_i)
-    end
-  rescue ArgumentError, TypeError
-    value.present? ? Time.zone.parse(value.to_s) : nil
+    TechnicalAnalysis::Obv.calculate(dcv)
   end
 end

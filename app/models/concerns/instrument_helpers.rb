@@ -7,14 +7,8 @@ module InstrumentHelpers
   include CandleExtension
 
   included do
-    enum :exchange, { nse: "NSE", bse: "BSE", mcx: "MCX" }, allow_nil: true
-    enum :segment, {
-      index: "I",
-      equity: "E",
-      currency: "C",
-      derivatives: "D",
-      commodity: "M"
-    }, allow_nil: true, prefix: true
+    enum :exchange, { nse: "NSE", bse: "BSE", mcx: "MCX" }
+    enum :segment, { index: "I", equity: "E", currency: "C", derivatives: "D", commodity: "M" }, prefix: true
     enum :instrument_code, {
       index: "INDEX",
       futures_index: "FUTIDX",
@@ -26,13 +20,13 @@ module InstrumentHelpers
       options_currency: "OPTCUR",
       futures_commodity: "FUTCOM",
       options_commodity: "OPTFUT"
-    }, allow_nil: true, prefix: true
+    }, prefix: true
 
     scope :nse, -> { where(exchange: "NSE") }
     scope :bse, -> { where(exchange: "BSE") }
 
     def subscribe
-      Live::MarketFeedHub.instance.subscribe(segment: exchange_segment, security_id: security_id.to_s)
+      Live::WsHub.instance.subscribe(seg: exchange_segment, sid: security_id.to_s)
       Rails.logger.info("Subscribed #{self.class.name} #{security_id} to WS feed.")
       true
     rescue StandardError => e
@@ -41,9 +35,7 @@ module InstrumentHelpers
     end
 
     def unsubscribe
-      return true unless Live::MarketFeedHub.instance.running?
-
-      Live::MarketFeedHub.instance.unsubscribe(segment: exchange_segment, security_id: security_id.to_s)
+      Live::WsHub.instance.unsubscribe(seg: exchange_segment, sid: security_id.to_s)
       Rails.logger.info("Unsubscribed #{self.class.name} #{security_id} from WS feed.")
       true
     rescue StandardError => e
@@ -71,9 +63,7 @@ module InstrumentHelpers
 
   def fetch_ltp_from_api
     response = DhanHQ::Models::MarketFeed.ltp(exch_segment_enum)
-    return unless response.is_a?(Hash) && response["status"] == "success"
-
-    response.dig("data", exchange_segment, security_id.to_s, "last_price")
+    response.dig("data", exchange_segment, security_id.to_s, "last_price") if response["status"] == "success"
   rescue StandardError => e
     Rails.logger.error("Failed to fetch LTP from API for #{self.class.name} #{security_id}: #{e.message}")
     nil
@@ -103,7 +93,7 @@ module InstrumentHelpers
     DhanHQ::Models::HistoricalData.daily(
       securityId: security_id,
       exchangeSegment: exchange_segment,
-      instrument: instrument_type || instrument_code,
+      instrument: instrument_type || resolve_instrument_code,
       oi: oi,
       fromDate: from_date || (Time.zone.today - 365).to_s,
       toDate: to_date || (Time.zone.today - 1).to_s,
@@ -115,7 +105,11 @@ module InstrumentHelpers
   end
 
   def intraday_ohlc(interval: "5", oi: false, from_date: nil, to_date: nil, days: 90)
-    to_date ||= resolve_to_date(days)
+    to_date ||= if defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+      MarketCalendar.today_or_last_trading_day.to_s
+    else
+      (Time.zone.today - 1).to_s
+    end
     from_date ||= (Date.parse(to_date) - days).to_s
 
     instrument_code = resolve_instrument_code
@@ -126,8 +120,8 @@ module InstrumentHelpers
       instrument: instrument_code,
       interval: interval,
       oi: oi,
-      from_date: from_date,
-      to_date: to_date
+      from_date: from_date || (Time.zone.today - days).to_s,
+      to_date: to_date || (Time.zone.today - 1).to_s
     )
   rescue StandardError => e
     Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message}")
@@ -161,19 +155,11 @@ module InstrumentHelpers
 
   private
 
-  def resolve_to_date(days)
-    if defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
-      MarketCalendar.today_or_last_trading_day.to_s
-    else
-      (Time.zone.today - 1).to_s
-    end
-  end
-
   def resolve_instrument_code
-    code = self[:instrument_code].presence || instrument_type.presence
-    code ||= InstrumentTypeMapping.underlying_for(self[:instrument_code]) if respond_to?(:instrument_code)
+    code = instrument_code.presence || instrument_type.presence
+    code ||= InstrumentTypeMapping.underlying_for(self[:instrument_code]).presence if respond_to?(:instrument_code)
 
-    segment_value = respond_to?(:segment) ? segment.to_s : nil
+    segment_value = respond_to?(:segment) ? segment.to_s.downcase : nil
     code ||= "EQUITY" if segment_value == "equity"
     code ||= "INDEX" if segment_value == "index"
 
