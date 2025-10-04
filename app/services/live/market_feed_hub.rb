@@ -92,6 +92,10 @@ module Live
     def handle_tick(tick)
       Live::TickCache.put(tick)
       ActiveSupport::Notifications.instrument("dhanhq.tick", tick)
+      # Broadcast to Action Cable subscribers if channel is present
+      if defined?(::TickerChannel)
+        ::TickerChannel.broadcast_to(::TickerChannel::CHANNEL_ID, tick)
+      end
       @callbacks.each do |callback|
         safe_invoke(callback, tick)
       end

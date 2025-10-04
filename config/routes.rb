@@ -6,7 +6,10 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
   # Defines the root path route ("/")
-  # root "posts#index"
+  root "home#index"
+
+  # Quietly handle browser/devtools well-known probes with 204 No Content
+  get "/.well-known/*path", to: proc { [204, { "Content-Type" => "text/plain" }, [""] ] }
 
   mount ActionCable.server => "/cable"
 end
