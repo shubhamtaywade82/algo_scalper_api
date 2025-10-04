@@ -75,7 +75,10 @@ module Live
     end
 
     def refresh_positions_indexed
-      Live::PositionStore.instance.refresh_and_index
+      Live::PositionStore.instance.refresh!
+    rescue StandardError => e
+      Rails.logger.error("Falling back to cached positions: #{e.class} - #{e.message}")
+      Live::PositionStore.instance.positions_by_security
     end
 
     def fetch_pnl(position, tracker)
