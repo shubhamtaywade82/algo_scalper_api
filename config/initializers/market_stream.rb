@@ -10,11 +10,15 @@ Rails.application.config.to_prepare do
 
   # Optional order updates (only starts if defined and configured inside the hub)
   Live::OrderUpdateHub.instance.start! if defined?(Live::OrderUpdateHub)
+
+  # Start staggered OHLC intraday prefetch loop for watchlist
+  Live::OhlcPrefetcherService.instance.start! if defined?(Live::OhlcPrefetcherService)
 end
 
 at_exit do
   Live::MarketFeedHub.instance.stop! if defined?(Live::MarketFeedHub)
   MarketFeedHub.instance.stop! if defined?(MarketFeedHub)
   Live::OrderUpdateHub.instance.stop! if defined?(Live::OrderUpdateHub)
+  Live::OhlcPrefetcherService.instance.stop! if defined?(Live::OhlcPrefetcherService)
   DhanHQ::WS.disconnect_all_local! if defined?(DhanHQ::WS)
 end
