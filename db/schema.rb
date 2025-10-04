@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_04_080000) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_04_081500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -126,9 +126,12 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_04_080000) do
     t.integer "kind"
     t.string "label"
     t.boolean "active", default: true, null: false
+    t.string "watchable_type"
+    t.bigint "watchable_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["segment", "security_id"], name: "index_watchlist_items_on_segment_and_security_id", unique: true
+    t.index ["watchable_type", "watchable_id"], name: "index_watchlist_items_on_watchable_type_and_watchable_id"
   end
 
   add_foreign_key "derivatives", "instruments"

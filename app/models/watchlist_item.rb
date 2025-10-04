@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class WatchlistItem < ApplicationRecord
+  belongs_to :watchable, polymorphic: true, optional: true
   ALLOWED_SEGMENTS = %w[
     IDX_I NSE_EQ NSE_FNO NSE_CURRENCY BSE_EQ MCX_COMM BSE_CURRENCY BSE_FNO
   ].freeze
