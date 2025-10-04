@@ -6,10 +6,19 @@ Rails.application.config.to_prepare do
   dhanhq_config = Rails.application.config.x.dhanhq
   next unless dhanhq_config&.enabled
 
-  if dhanhq_config.ws_enabled && defined?(MarketFeedHub)
-    MarketFeedHub.instance.start!
-  elsif defined?(MarketFeedHub)
-    MarketFeedHub.instance.stop!
+  # Prefer the namespaced Live hub which uses DB-backed watchlist; fallback to legacy if needed
+  if dhanhq_config.ws_enabled
+    if defined?(Live::MarketFeedHub)
+      Live::MarketFeedHub.instance.start!
+    elsif defined?(MarketFeedHub)
+      MarketFeedHub.instance.start!
+    end
+  else
+    if defined?(Live::MarketFeedHub)
+      Live::MarketFeedHub.instance.stop!
+    elsif defined?(MarketFeedHub)
+      MarketFeedHub.instance.stop!
+    end
   end
 
   if dhanhq_config.order_ws_enabled && defined?(Live::OrderUpdateHub)
@@ -20,6 +29,7 @@ Rails.application.config.to_prepare do
 end
 
 at_exit do
+  Live::MarketFeedHub.instance.stop! if defined?(Live::MarketFeedHub)
   MarketFeedHub.instance.stop! if defined?(MarketFeedHub)
   Live::OrderUpdateHub.instance.stop! if defined?(Live::OrderUpdateHub)
   DhanHQ::WS.disconnect_all_local! if defined?(DhanHQ::WS)
