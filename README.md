@@ -42,6 +42,11 @@ Run the server:
 bin/dev    # or: bin/rails server
 ```
 
+### Can I run it without third-party services?
+- **Rails API & database:** Yes. You can boot the API locally with PostgreSQL only; the business endpoints that do not talk to DhanHQ will function normally.
+- **Background jobs:** Sidekiq is configured as the Active Job adapter. For full functionality you need a Redis instance (local Docker redis is fine). If Redis is unavailable the jobs will not run, but the web API can still boot.
+- **DhanHQ broker integration:** Live trading, historical data pulls, and WebSocket streaming all require DhanHQ credentials and network access to their REST/WS endpoints. For local/offline development set `DHANHQ_ENABLED=false`, `DHANHQ_WS_ENABLED=false`, and `DHANHQ_ORDER_WS_ENABLED=false` in `.env` to skip broker calls. Any code paths that rely on live market data or order placement will be inert until real credentials are supplied.
+
 ---
 
 ## DhanHQ Integration
@@ -135,6 +140,9 @@ An example file is provided at `.env.example`.
   - `app/services/market_feed_hub.rb`
   - `app/services/live/market_feed_hub.rb`
   - `app/services/live/tick_cache.rb`
+- Position lifecycle:
+  - `app/services/live/position_store.rb` keeps active Dhan positions cached in Redis and persists closed fills to `positions`.
+  - `app/models/position.rb` stores realized PnL snapshots for audits once trades exit.
 - Settings store: `app/models/setting.rb` (+ migration)
 
 ---

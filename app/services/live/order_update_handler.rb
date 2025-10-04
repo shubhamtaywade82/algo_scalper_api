@@ -1,13 +1,12 @@
 # frozen_string_literal: true
 
-require "bigdecimal"
 require "singleton"
 
 module Live
   class OrderUpdateHandler
     include Singleton
 
-    FILL_STATUSES = %w[TRADED COMPLETE].freeze
+    FILL_STATUSES = %w[TRADED COMPLETE PARTIAL_FILL].freeze
     CANCELLED_STATUSES = %w[CANCELLED REJECTED].freeze
 
     def initialize
@@ -34,15 +33,15 @@ module Live
     private
 
     def handle_update(payload)
-      order_no = payload[:order_no] || payload[:order_id]
-      return if order_no.blank?
+      order = BrokerOrder.upsert_from_payload(payload)
+      return unless order
 
-      tracker = PositionTracker.find_by(order_no: order_no)
+      tracker = PositionTracker.find_by(order_no: order.order_no)
       return unless tracker
 
-      status = payload[:order_status] || payload[:status]
-      avg_price = safe_decimal(payload[:average_traded_price] || payload[:average_price])
-      quantity = payload[:filled_quantity] || payload[:quantity]
+      status = order.status.to_s.upcase
+      avg_price = order.avg_traded_price
+      quantity = order.traded_quantity || order.quantity || tracker.quantity
 
       if FILL_STATUSES.include?(status)
         tracker.mark_active!(avg_price: avg_price, quantity: quantity)
@@ -53,12 +52,5 @@ module Live
       Rails.logger.error("Failed to process Dhan order update: #{e.class} - #{e.message}")
     end
 
-    def safe_decimal(value)
-      return if value.nil?
-
-      BigDecimal(value.to_s)
-    rescue ArgumentError
-      nil
-    end
   end
 end

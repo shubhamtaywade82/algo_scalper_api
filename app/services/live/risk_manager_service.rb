@@ -54,10 +54,11 @@ module Live
     end
 
     def enforce_trailing_stops
-      positions = fetch_positions_indexed
+      positions = refresh_positions_indexed
 
       PositionTracker.active.find_each do |tracker|
-        position = positions[tracker.security_id.to_s]
+        position_entry = positions[tracker.security_id.to_s]
+        position = select_position_entry(position_entry, tracker)
         next unless position
 
         pnl = fetch_pnl(position, tracker)
@@ -73,21 +74,20 @@ module Live
       end
     end
 
-    def fetch_positions_indexed
-      Dhanhq.client.active_positions.each_with_object({}) do |position, map|
-        security_id = position.respond_to?(:security_id) ? position.security_id : position[:security_id]
-        map[security_id.to_s] = position if security_id
-      end
-    rescue StandardError => e
-      Rails.logger.error("Failed to load active positions: #{e.class} - #{e.message}")
-      {}
+    def refresh_positions_indexed
+      Live::PositionStore.instance.refresh_and_index
     end
 
     def fetch_pnl(position, tracker)
       return BigDecimal(position.pnl.to_s) if position.respond_to?(:pnl) && position.pnl
 
-      quantity = (position.respond_to?(:quantity) ? position.quantity : position[:quantity]) || tracker.quantity
-      avg_price = (position.respond_to?(:average_price) ? position.average_price : position[:average_price]) || tracker.entry_price
+      if position.is_a?(Hash)
+        unrealized = position[:unrealized_profit] || position[:unrealized_profit_rupees]
+        return BigDecimal(unrealized.to_s) if unrealized
+      end
+
+      quantity = extract_quantity(position) || tracker.quantity
+      avg_price = extract_average_price(position) || tracker.entry_price
       ltp = fetch_ltp(position, tracker)
       return if quantity.nil? || avg_price.nil? || ltp.nil?
 
@@ -107,6 +107,31 @@ module Live
 
       ltp = Live::TickCache.ltp(segment || tracker.instrument.exchange_segment, tracker.security_id)
       ltp ? BigDecimal(ltp.to_s) : nil
+    end
+
+    def extract_quantity(position)
+      if position.respond_to?(:quantity)
+        position.quantity
+      elsif position.is_a?(Hash)
+        position[:quantity] || position[:net_qty]
+      end
+    end
+
+    def extract_average_price(position)
+      if position.respond_to?(:average_price)
+        position.average_price
+      elsif position.is_a?(Hash)
+        position[:average_price] || position[:buy_avg] || position[:cost_price]
+      end
+    end
+
+    def select_position_entry(entry, tracker)
+      return if entry.blank?
+
+      return entry unless entry.is_a?(Array)
+
+      match = entry.find { |pos| pos[:order_no].present? && pos[:order_no] == tracker.order_no }
+      match || entry.first
     end
 
     def execute_exit(position, tracker)
