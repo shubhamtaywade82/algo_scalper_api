@@ -139,6 +139,29 @@ An example file is provided at `.env.example`.
 
 ---
 
+## Phase I – Realtime Core
+
+High-speed, persistent infrastructure with thread-safe singletons and clean broker integration.
+
+### 1) Data foundation and shared state
+- TickCache: `app/services/tick_cache.rb`
+  - Singleton wrapping `Concurrent::Map` to store latest LTP/quote/tick per `[segment:security_id]` key.
+- MarketFeedHub: `app/services/live/market_feed_hub.rb`
+  - Singleton supervisor for `DhanHQ::WS::Client` (quote/ticker/full).
+  - Subscribes the DB-backed watchlist (`watchlist_items`) and forwards ticks to TickCache and listeners.
+
+### 2) Low-latency comms and utilities
+- Model helpers: `app/models/concerns/instrument_helpers.rb`
+  - `#subscribe` / `#unsubscribe` helpers to manage live streams per instrument/derivative.
+- Order updates: `Live::OrderUpdateHub` (supervisor wiring; starts when enabled)
+  - Receives broker order state transitions; ready to hydrate local state and feed risk management.
+- Data fetcher: `app/services/trading/data_fetcher_service.rb`
+  - Bulk REST calls for `HistoricalData` / `OptionChain` kept off the main execution path.
+
+Result: Thread-safe, persistent WS connections with centralized tick storage and clean extension points for strategies and risk.
+
+---
+
 ## Development
 
 Format, lint, and security scan:
