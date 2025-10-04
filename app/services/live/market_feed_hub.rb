@@ -82,8 +82,9 @@ module Live
 
     def enabled?
       # Prefer app config if present; otherwise derive from ENV credentials
-      if config
-        return (config.enabled && config.ws_enabled)
+      cfg = config
+      if cfg && cfg.respond_to?(:enabled) && cfg.respond_to?(:ws_enabled)
+        return (cfg.enabled && cfg.ws_enabled)
       end
 
       client_id = ENV["DHANHQ_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
@@ -97,6 +98,8 @@ module Live
     end
 
     def handle_tick(tick)
+      # Log every tick (segment:security_id and LTP) for verification during development
+      Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
       Live::TickCache.put(tick)
       ActiveSupport::Notifications.instrument("dhanhq.tick", tick)
       # Broadcast to Action Cable subscribers if channel is present
@@ -148,12 +151,18 @@ module Live
 
     def mode
       allowed = %i[ticker quote full]
-      selected = config.ws_mode
+      selected = (config&.ws_mode || DEFAULT_MODE)
       allowed.include?(selected) ? selected : DEFAULT_MODE
     end
 
     def config
-      Rails.application.config.x.dhanhq if Rails.application.config.x.respond_to?(:dhanhq)
+      return nil unless Rails.application.config.respond_to?(:x)
+      x = Rails.application.config.x
+      return nil unless x.respond_to?(:dhanhq)
+      cfg = x.dhanhq
+      cfg.is_a?(ActiveSupport::InheritableOptions) ? cfg : nil
+    rescue StandardError
+      nil
     end
   end
 end

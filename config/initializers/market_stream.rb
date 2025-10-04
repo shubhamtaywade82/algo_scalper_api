@@ -1,31 +1,15 @@
 # frozen_string_literal: true
 
 Rails.application.config.to_prepare do
-  next unless Rails.application.config.x.respond_to?(:dhanhq)
-
-  dhanhq_config = Rails.application.config.x.dhanhq
-  next unless dhanhq_config&.enabled
-
-  # Prefer the namespaced Live hub which uses DB-backed watchlist; fallback to legacy if needed
-  if dhanhq_config.ws_enabled
-    if defined?(Live::MarketFeedHub)
-      Live::MarketFeedHub.instance.start!
-    elsif defined?(MarketFeedHub)
-      MarketFeedHub.instance.start!
-    end
-  else
-    if defined?(Live::MarketFeedHub)
-      Live::MarketFeedHub.instance.stop!
-    elsif defined?(MarketFeedHub)
-      MarketFeedHub.instance.stop!
-    end
+  # Try to start the live feed hub; it internally checks ENV/config and no-ops if disabled
+  if defined?(Live::MarketFeedHub)
+    Live::MarketFeedHub.instance.start!
+  elsif defined?(MarketFeedHub)
+    MarketFeedHub.instance.start!
   end
 
-  if dhanhq_config.order_ws_enabled && defined?(Live::OrderUpdateHub)
-    Live::OrderUpdateHub.instance.start!
-  elsif defined?(Live::OrderUpdateHub)
-    Live::OrderUpdateHub.instance.stop!
-  end
+  # Optional order updates (only starts if defined and configured inside the hub)
+  Live::OrderUpdateHub.instance.start! if defined?(Live::OrderUpdateHub)
 end
 
 at_exit do

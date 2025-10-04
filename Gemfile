@@ -59,6 +59,9 @@ group :development, :test do
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
 
+  # Load .env files in development/test before initializers
+  gem "dotenv-rails"
+
   # Testing stack
   gem "rspec-rails"
   gem "factory_bot_rails"
