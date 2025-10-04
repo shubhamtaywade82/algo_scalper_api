@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_04_070000) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_04_080000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -118,6 +118,17 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_04_070000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_settings_on_key", unique: true
+  end
+
+  create_table "watchlist_items", force: :cascade do |t|
+    t.string "segment", null: false
+    t.string "security_id", null: false
+    t.integer "kind"
+    t.string "label"
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["segment", "security_id"], name: "index_watchlist_items_on_segment_and_security_id", unique: true
   end
 
   add_foreign_key "derivatives", "instruments"

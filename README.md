@@ -28,13 +28,12 @@ bin/rails db:prepare
 cp .env.example .env
 ```
 
-Minimal `.env` (Dhan credentials required if you enable integration):
+Minimal `.env`:
 ```dotenv
-DHANHQ_ENABLED=false
 DHANHQ_CLIENT_ID=
 DHANHQ_ACCESS_TOKEN=
 RAILS_LOG_LEVEL=info
-RAILS_MAX_THREADS=3
+RAILS_MAX_THREADS=2
 REDIS_URL=redis://localhost:6379/0
 ```
 
@@ -49,12 +48,12 @@ bin/dev    # or: bin/rails server
 
 Configuration lives in `config/initializers/dhanhq_config.rb`.
 
-Required when `DHANHQ_ENABLED=true`:
+Required when DhanHQ integration is active (enabled by default):
 - `DHANHQ_CLIENT_ID` (or fallback `CLIENT_ID`)
 - `DHANHQ_ACCESS_TOKEN` (or fallback `ACCESS_TOKEN`)
 
 Optional:
-- `DHANHQ_WS_ENABLED`, `DHANHQ_ORDER_WS_ENABLED`
+- `DHANHQ_WS_ENABLED`, `DHANHQ_ORDER_WS_ENABLED` (default to enabled)
 - `DHANHQ_WS_MODE` (quote/ticker/full; default: quote)
 - `DHANHQ_BASE_URL` (default: https://api.dhan.co/v2)
 - `DHANHQ_WS_VERSION` (default: 2)
@@ -112,7 +111,7 @@ Database:
 - `DATABASE_URL` (optional, single URL)
 
 DhanHQ:
-- `DHANHQ_ENABLED`, `DHANHQ_CLIENT_ID`, `DHANHQ_ACCESS_TOKEN`
+- `DHANHQ_CLIENT_ID`, `DHANHQ_ACCESS_TOKEN`
 - Optional: `DHANHQ_WS_ENABLED`, `DHANHQ_ORDER_WS_ENABLED`, `DHANHQ_WS_MODE`
 - Optional: `DHANHQ_BASE_URL`, `DHANHQ_WS_VERSION`, `DHANHQ_WS_ORDER_URL`, `DHANHQ_WS_USER_TYPE`
 - Optional: `DHANHQ_PARTNER_ID`, `DHANHQ_PARTNER_SECRET`

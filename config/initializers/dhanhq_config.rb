@@ -7,8 +7,8 @@ Rails.application.config.x.dhanhq = ActiveSupport::InheritableOptions.new unless
 config = Rails.application.config.x.dhanhq
 boolean_type = ActiveModel::Type::Boolean.new
 
-config.enabled = boolean_type.cast(ENV.fetch("DHANHQ_ENABLED", "false"))
-config.ws_enabled = boolean_type.cast(ENV.fetch("DHANHQ_WS_ENABLED", ENV.fetch("DHANHQ_ENABLED", "false")))
+config.enabled = boolean_type.cast(ENV.fetch("DHANHQ_ENABLED", "true"))
+config.ws_enabled = boolean_type.cast(ENV.fetch("DHANHQ_WS_ENABLED", ENV.fetch("DHANHQ_ENABLED", "true")))
 config.ws_mode = (ENV["DHANHQ_WS_MODE"] || "quote").downcase.to_sym
 config.order_ws_enabled = boolean_type.cast(ENV.fetch("DHANHQ_ORDER_WS_ENABLED", config.ws_enabled))
 config.base_url = ENV.fetch("DHANHQ_BASE_URL", "https://api.dhan.co/v2")

@@ -17,8 +17,9 @@ end
 Dir[Rails.root.join('spec/support/**/*.rb')].sort.each { |f| require f }
 
 RSpec.configure do |config|
-  config.fixture_path = "#{::Rails.root}/spec/fixtures"
-  config.use_transactional_fixtures = false
+  # These settings depend on rspec-rails features; guard in case APIs change
+  config.fixture_path = "#{::Rails.root}/spec/fixtures" if config.respond_to?(:fixture_path=)
+  config.use_transactional_fixtures = false if config.respond_to?(:use_transactional_fixtures=)
   config.infer_spec_type_from_file_location!
   config.filter_rails_from_backtrace!
 

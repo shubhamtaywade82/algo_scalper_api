@@ -22,7 +22,7 @@ module Live
       @lock.synchronize do
         return if running?
 
-        @watchlist = load_watchlist || []
+      @watchlist = load_watchlist || []
         @ws_client = build_client
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
         @ws_client.start
@@ -110,8 +110,16 @@ module Live
     end
 
     def load_watchlist
+      # Prefer DB watchlist if present; fall back to ENV for bootstrap-only
+      if ActiveRecord::Base.connection.schema_cache.data_source_exists?("watchlist_items") &&
+         WatchlistItem.exists?
+        return WatchlistItem.order(:segment, :security_id).pluck(:segment, :security_id).map do |seg, sid|
+          { segment: seg, security_id: sid }
+        end
+      end
+
       raw = ENV.fetch("DHANHQ_WS_WATCHLIST", "")
-               .split(/[;,\n]/)
+               .split(/[;\n,]/)
                .map(&:strip)
                .reject(&:blank?)
 
