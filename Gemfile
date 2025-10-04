@@ -24,7 +24,12 @@ gem "sidekiq"
 gem "concurrent-ruby"
 gem "ruby-technical-analysis"
 gem "technical-analysis"
-gem "indicators"
+
+# Bulk upserts for instruments/derivatives importer
+gem "activerecord-import"
+
+# CSV will not be bundled with Ruby by default from 3.4+; we require it explicitly
+gem "csv", require: false
 
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false

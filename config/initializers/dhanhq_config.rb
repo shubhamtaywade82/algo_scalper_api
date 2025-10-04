@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "dhanhq"
+require "DhanHQ"
 
 Rails.application.config.x.dhanhq = ActiveSupport::InheritableOptions.new unless Rails.application.config.x.respond_to?(:dhanhq)
 
