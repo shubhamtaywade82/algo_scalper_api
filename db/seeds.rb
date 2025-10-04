@@ -22,21 +22,39 @@ else
     if age > max_age
       puts "Skipping watchlist seed: import is stale (age=#{age.round(1)}s > #{max_age.inspect}). Run `bin/rails instruments:reimport`."
     else
-      items = [
-        { segment: "IDX_I", security_id: "13",  kind: :index_value, label: "NIFTY" },
-        { segment: "IDX_I", security_id: "25",  kind: :index_value, label: "BANKNIFTY" },
-        { segment: "IDX_I", security_id: "1",   kind: :index_value, label: "SENSEX" }
+      # Resolve by exchange + INDEX segment + symbol name (more robust than hardcoding IDs)
+      queries = [
+        { label: "NIFTY",      exchange: "NSE", symbol_like: "%NIFTY%" },
+        { label: "BANKNIFTY",  exchange: "NSE", symbol_like: "%BANKNIFTY%" },
+        { label: "SENSEX",     exchange: "BSE", symbol_like: "%SENSEX%" }
       ]
 
-      items.each do |attrs|
-        WatchlistItem.find_or_create_by!(segment: attrs[:segment], security_id: attrs[:security_id]) do |rec|
-          rec.kind  = attrs[:kind]
-          rec.label = attrs[:label]
-          rec.active = true
+      created = 0
+      queries.each do |q|
+        instrument = Instrument
+                      .where(exchange: q[:exchange])
+                      .where(segment: "I")
+                      .where("(instrument_code = ? OR instrument_type = ?)", "INDEX", "INDEX")
+                      .where("symbol_name ILIKE ?", q[:symbol_like])
+                      .order(Arel.sql("LENGTH(symbol_name) ASC"))
+                      .first
+
+        unless instrument
+          puts "Skipping #{q[:label]}: Instrument not found (exchange=#{q[:exchange]} segment=INDEX symbol_name ILIKE #{q[:symbol_like]})"
+          next
         end
+
+        seg_code = instrument.exchange_segment
+        wl = WatchlistItem.find_or_initialize_by(segment: seg_code, security_id: instrument.security_id)
+        wl.label = q[:label]
+        wl.kind  = :index_value
+        wl.active = true
+        wl.watchable = instrument
+        wl.save!
+        created += 1 if wl.persisted?
       end
 
-      puts "Seeded #{items.size} index watchlist items"
+      puts "Seeded/Ensured #{created} index watchlist items with associations"
     end
   end
 end

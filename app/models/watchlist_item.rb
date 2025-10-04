@@ -2,6 +2,10 @@
 
 class WatchlistItem < ApplicationRecord
   belongs_to :watchable, polymorphic: true, optional: true
+  # belongs_to :instrument, polymorphic: true, optional: true
+  # belongs_to :derivative, polymorphic: true, optional: true
+
+  # TODO: Remove this once we have a proper mapping of segments to exchanges
   ALLOWED_SEGMENTS = %w[
     IDX_I NSE_EQ NSE_FNO NSE_CURRENCY BSE_EQ MCX_COMM BSE_CURRENCY BSE_FNO
   ].freeze
@@ -22,6 +26,15 @@ class WatchlistItem < ApplicationRecord
   scope :active, -> { where(active: true) }
   scope :by_segment, ->(seg) { where(segment: seg) }
   scope :for, ->(seg, sid) { where(segment: seg, security_id: sid) }
+
+  # Convenience accessors for the polymorphic association
+  def instrument
+    watchable if watchable_type == "Instrument"
+  end
+
+  def derivative
+    watchable if watchable_type == "Derivative"
+  end
 end
 
 

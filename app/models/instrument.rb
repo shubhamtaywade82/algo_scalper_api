@@ -7,6 +7,8 @@ class Instrument < ApplicationRecord
 
   has_many :derivatives, dependent: :destroy
   accepts_nested_attributes_for :derivatives, allow_destroy: true
+  has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
+  has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: "WatchlistItem"
   has_many :position_trackers, dependent: :restrict_with_error
 
   scope :enabled, -> { where(enabled: true) }
