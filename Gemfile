@@ -20,6 +20,12 @@ gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"
 
+gem "sidekiq"
+gem "concurrent-ruby"
+gem "ruby-technical-analysis"
+gem "technical-analysis"
+gem "indicators"
+
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
 

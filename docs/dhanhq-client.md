@@ -22,7 +22,7 @@ A clean Ruby client for Dhan API v2 with ORM-style models (orders, positions, ho
 ### Runtime helpers
 - `Dhanhq.client` exposes a shared instance of `Dhanhq::Client` for REST calls (`place_order`, `positions`, `historical_intraday`, etc.). All methods raise `Dhanhq::Client::Error` when something goes wrong.
 - `Live::TickCache` stores the latest WebSocket ticks and provides helpers like `Live::TickCache.ltp("NSE_FNO", "12345")`.
-- `Live::MarketFeedSupervisor` spins up `DhanHQ::WS::Client` when WebSockets are enabled, subscribes the configured watchlist, forwards ticks to `ActiveSupport::Notifications` (`"dhanhq.tick"`), and keeps callbacks running.
+- `Live::MarketFeedHub` spins up `DhanHQ::WS::Client` when WebSockets are enabled, subscribes the configured watchlist, forwards ticks to `ActiveSupport::Notifications` (`"dhanhq.tick"`), and keeps callbacks running.【F:app/services/live/market_feed_hub.rb†L1-L118】
 - `Live::OrderUpdateHub` listens to order events via `DhanHQ::WS::Orders::Client`, emits `ActiveSupport::Notifications` (`"dhanhq.order_update"`), and allows registering callbacks with `on_update`.
 
 Initializers (`config/initializers/dhanhq.rb` and `config/initializers/dhanhq_streams.rb`) drive configuration, check for required credentials, and guard startup/shutdown for both WebSocket clients.
