@@ -4,7 +4,7 @@ require "singleton"
 require "concurrent/array"
 
 module Live
-  class MarketFeedSupervisor
+  class MarketFeedHub
     include Singleton
 
     DEFAULT_MODE = :quote
@@ -22,7 +22,7 @@ module Live
       @lock.synchronize do
         return if running?
 
-        @watchlist = load_watchlist
+        @watchlist = load_watchlist || []
         @ws_client = build_client
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
         @ws_client.start

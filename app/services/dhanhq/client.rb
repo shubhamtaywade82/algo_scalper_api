@@ -39,6 +39,11 @@ module Dhanhq
       end
     end
 
+    def create_super_order(attributes)
+      ensure_enabled!
+      wrap_errors(__method__) { DhanHQ::Models::SuperOrder.create(attributes) }
+    end
+
     def modify_order(order_id:, **attributes)
       ensure_enabled!
       wrap_errors(__method__) do
@@ -64,6 +69,11 @@ module Dhanhq
     def positions
       ensure_enabled!
       wrap_errors(__method__) { DhanHQ::Models::Position.all }
+    end
+
+    def active_positions
+      ensure_enabled!
+      wrap_errors(__method__) { DhanHQ::Models::Position.active }
     end
 
     def holdings
