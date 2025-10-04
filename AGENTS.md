@@ -6,6 +6,7 @@
 - `db/` tracks persistence (`*_schema.rb`, seeds); create migrations under `db/migrate/` even if the directory must be added with your change.
 - `bin/` bundles project scripts (`bin/setup`, `bin/dev`, linters); favor these wrappers over direct `bundle exec` calls.
 - `lib/` is reserved for shared abstractions and rake tasks; keep reusable utilities here instead of bloating controllers.
+- `app/services/` holds integration helpers; `market_feed_hub.rb` drives the DhanHQ WebSocket + Action Cable loop and `tick_cache.rb` caches last ticks for fast lookups.
 
 ## Build, Test, and Development Commands
 - `bin/setup` installs gems, prepares the database, and can boot the dev server (skip with `--skip-server`).

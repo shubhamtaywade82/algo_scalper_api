@@ -1,6 +1,6 @@
-# DhanHQ Client API Guide
+# DhanHQ — Ruby Client for DhanHQ API (v2)
 
-## Overview
+A clean Ruby client for **Dhan API v2** with ORM-like models (Orders, Positions, Holdings, etc.) **and** a robust **WebSocket market feed** (ticker/quote/full) built on EventMachine + Faye.
 
 A clean Ruby client for Dhan API v2 with ORM-style models (orders, positions, holdings, and more) plus a resilient WebSocket market feed (ticker, quote, full) built on EventMachine and Faye.
 
@@ -34,7 +34,7 @@ Initializers (`config/initializers/dhanhq.rb` and `config/initializers/dhanhq_st
 Add to your Gemfile:
 
 ```ruby
-gem "DhanHQ", git: "https://github.com/shubhamtaywade82/dhanhq-client.git", branch: "main"
+gem 'DhanHQ', git: 'https://github.com/shubhamtaywade82/dhanhq-client.git', branch: 'main'
 ```
 
 Install:
@@ -56,24 +56,27 @@ gem install DhanHQ
 ### Programmatic
 
 ```ruby
-require "DhanHQ"
+require 'DhanHQ'
 
 DhanHQ.configure do |config|
   config.client_id    = ENV["CLIENT_ID"]    # e.g. "1001234567"
   config.access_token = ENV["ACCESS_TOKEN"] # e.g. "eyJhbGciOi..."
-  config.base_url     = "https://api.dhan.co/v2" # optional REST base
-  config.ws_version   = 2                         # optional WS version (default 2)
-  config.ws_order_url  = "wss://api-order-update.dhan.co" # optional order WS knobs
-  config.ws_user_type  = "SELF"                      # or "PARTNER"
-  config.partner_id    = nil                         # required for PARTNER mode
+  # Optional REST base
+  config.base_url     = "https://api.dhan.co/v2"
+  # Optional WS version (default: 2)
+  config.ws_version   = 2
+  # Optional Order Update WS knobs
+  config.ws_order_url  = "wss://api-order-update.dhan.co"
+  config.ws_user_type  = "SELF"     # or "PARTNER"
+  config.partner_id    = nil         # required for PARTNER mode
   config.partner_secret = nil
 end
 ```
 
-### From environment variables
+### From ENV / .env
 
 ```ruby
-require "DhanHQ"
+require 'DhanHQ'
 
 DhanHQ.configure_with_env
 DhanHQ.logger.level = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase.then { |level| Logger.const_get(level) }
@@ -135,35 +138,36 @@ oc = DhanHQ::Models::OptionChain.fetch(
 
 ---
 
-## WebSocket Market Feed
+## WebSocket Market Feed (NEW)
 
-### Modes
+### What you get
 
-- `:ticker` -> LTP and LTT
-- `:quote` -> OHLCV and totals (recommended default)
-- `:full` -> quote plus open interest and best five depth
+* **Modes**
 
-### Normalized tick payload
+  * `:ticker` → LTP + LTT
+  * `:quote`  → OHLCV + totals (recommended default)
+  * `:full`   → quote + **OI** + **best-5 depth**
+* **Normalized ticks** (Hash):
 
-```ruby
-{
-  kind: :quote,                 # :ticker | :quote | :full | :oi | :prev_close | :misc
-  segment: "NSE_FNO",           # string enum
-  security_id: "12345",
-  ltp: 101.5,
-  ts:  1723791300,              # LTT epoch (sec) if present
-  vol: 123456,                  # quote/full
-  atp: 100.9,                   # quote/full
-  day_open: 100.1, day_high: 102.4, day_low: 99.5, day_close: nil,
-  oi: 987654,                   # full or OI packet
-  bid: 101.45, ask: 101.55      # from depth (mode :full)
-}
-```
+  ```ruby
+  {
+    kind: :quote,                 # :ticker | :quote | :full | :oi | :prev_close | :misc
+    segment: "NSE_FNO",           # string enum
+    security_id: "12345",
+    ltp: 101.5,
+    ts:  1723791300,              # LTT epoch (sec) if present
+    vol: 123456,                  # quote/full
+    atp: 100.9,                   # quote/full
+    day_open: 100.1, day_high: 102.4, day_low: 99.5, day_close: nil,
+    oi: 987654,                   # full or OI packet
+    bid: 101.45, ask: 101.55      # from depth (mode :full)
+  }
+  ```
 
 ### Start, subscribe, stop
 
 ```ruby
-require "DhanHQ"
+require 'DhanHQ'
 
 DhanHQ.configure_with_env
 DhanHQ.logger.level = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase.then { |level| Logger.const_get(level) }
@@ -174,7 +178,7 @@ ws.on(:tick) do |t|
   puts "[#{t[:segment]}:#{t[:security_id]}] LTP=#{t[:ltp]} kind=#{t[:kind]}"
 end
 
-# Subscribe instruments (<=100 per frame; send multiple frames if needed)
+# Subscribe instruments (≤100 per frame; send multiple frames if needed)
 ws.subscribe_one(segment: "IDX_I",   security_id: "13")     # NIFTY index value
 ws.subscribe_one(segment: "NSE_FNO", security_id: "12345")  # an option
 
@@ -193,22 +197,37 @@ DhanHQ::WS.disconnect_all_local!
 
 ### Under the hood
 
-- Request codes per Dhan docs: subscribe 15 (ticker), 17 (quote), 21 (full); unsubscribe 16, 18, 22; disconnect 12
-- Limits: up to 100 instruments per SUB or UNSUB; up to 5 WebSocket connections per user
-- Backoff and 429 cool-off: exponential backoff with jitter; handshake 429 triggers a 60 second cool-off before retry
-- Reconnect and resubscribe: on reconnect the client resends the current subscription snapshot (idempotent)
-- Graceful shutdown: `ws.disconnect!` or `ws.stop` prevents reconnects; an `at_exit` hook stops all registered WS clients
+* **Request codes** (per Dhan docs)
+
+  * Subscribe: **15** (ticker), **17** (quote), **21** (full)
+  * Unsubscribe: **16**, **18**, **22**
+  * Disconnect: **12**
+* **Limits**
+
+  * Up to **100 instruments per SUB/UNSUB** message (client auto-chunks)
+  * Up to 5 WS connections per user (per Dhan)
+* **Backoff & 429 cool-off**
+
+  * Exponential backoff with jitter
+  * Handshake **429** triggers a **60s cool-off** before retry
+* **Reconnect & resubscribe**
+
+  * On reconnect the client resends the **current subscription snapshot** (idempotent)
+* **Graceful shutdown**
+
+  * `ws.disconnect!` or `ws.stop` prevents reconnects
+  * An `at_exit` hook stops all registered WS clients to avoid leaked sockets
 
 ---
 
-## Order Update WebSocket
+## Order Update WebSocket (NEW)
 
-Receive live updates whenever orders transition between states (placed, traded, cancelled, etc.).
+Receive live updates whenever your orders transition between states (placed → traded → cancelled, etc.).
 
 ### Standalone Ruby script
 
 ```ruby
-require "DhanHQ"
+require 'DhanHQ'
 
 DhanHQ.configure_with_env
 DhanHQ.logger.level = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase.then { |level| Logger.const_get(level) }
@@ -220,12 +239,14 @@ ou.on(:update) do |payload|
   puts "ORDER #{data[:OrderNo]} #{data[:Status]} traded=#{data[:TradedQty]} avg=#{data[:AvgTradedPrice]}"
 end
 
-sleep # keep the script alive (CTRL+C to exit)
+# Keep the script alive (CTRL+C to exit)
+sleep
 
+# Later, stop the socket
 ou.stop
 ```
 
-Quick callback helper:
+Or, if you just need a quick callback:
 
 ```ruby
 DhanHQ::WS::Orders.connect do |payload|
@@ -235,20 +256,21 @@ end
 
 ### Rails bot integration
 
-Mirror the market feed supervisor by adding an Order Update hub singleton that hydrates the local database and hands off to execution services.
+Mirror the market-feed supervisor by adding an Order Update hub singleton that hydrates your local DB and hands off to execution services.
 
-1. Service: `app/services/live/order_update_hub.rb`
+1. **Service** – `app/services/live/order_update_hub.rb`
 
    ```ruby
    Live::OrderUpdateHub.instance.start!
    ```
 
    The hub wires `DhanHQ::WS::Orders::Client` to:
-   - Upsert local `BrokerOrder` rows so UIs always reflect broker status
-   - Auto subscribe traded entry legs on your existing `Live::WsHub` (if defined)
-   - Refresh `Execution::PositionGuard` (if present) with fill prices and quantities
 
-2. Initializer: `config/initializers/order_update_hub.rb`
+   * Upsert local `BrokerOrder` rows so UIs always reflect current broker status.
+   * Auto-subscribe traded entry legs on your existing `Live::WsHub` (if defined).
+   * Refresh `Execution::PositionGuard` (if present) with fill prices/qty for trailing exits.
+
+2. **Initializer** – `config/initializers/order_update_hub.rb`
 
    ```ruby
    if ENV["ENABLE_WS"] == "true"
@@ -260,26 +282,26 @@ Mirror the market feed supervisor by adding an Order Update hub singleton that h
    end
    ```
 
-   Set `ENABLE_WS=true` in your Procfile or `.env` to boot the hub alongside the feed supervisor. On shutdown the client stops cleanly to avoid leaked sockets.
+   Flip `ENABLE_WS=true` in your Procfile or `.env` to boot the hub alongside the existing feed supervisor. On shutdown the client is stopped cleanly to avoid leaked sockets.
 
-The hub is resilient to missing dependencies; if there is no `BrokerOrder` model it skips persistence while keeping downstream callbacks alive.
+The hub is resilient to missing dependencies—if you do not have a `BrokerOrder` model, it safely skips persistence while keeping downstream callbacks alive.
 
 ---
 
 ## Exchange Segment Enums
 
-Use these string enums in WebSocket subscriptions and REST parameters:
+Use the string enums below in WS `subscribe_*` and REST params:
 
 | Enum           | Exchange | Segment           |
 | -------------- | -------- | ----------------- |
 | `IDX_I`        | Index    | Index Value       |
 | `NSE_EQ`       | NSE      | Equity Cash       |
-| `NSE_FNO`      | NSE      | Futures and Options |
+| `NSE_FNO`      | NSE      | Futures & Options |
 | `NSE_CURRENCY` | NSE      | Currency          |
 | `BSE_EQ`       | BSE      | Equity Cash       |
 | `MCX_COMM`     | MCX      | Commodity         |
 | `BSE_CURRENCY` | BSE      | Currency          |
-| `BSE_FNO`      | BSE      | Futures and Options |
+| `BSE_FNO`      | BSE      | Futures & Options |
 
 ---
 
@@ -297,15 +319,9 @@ ws.on(:tick) { |t| do_something_fast(t) } # avoid heavy work here
 # app/services/live/tick_cache.rb
 class TickCache
   MAP = Concurrent::Map.new
-  def self.put(t)
-    MAP["#{t[:segment]}:#{t[:security_id]}"] = t
-  end
-  def self.get(seg, sid)
-    MAP["#{seg}:#{sid}"]
-  end
-  def self.ltp(seg, sid)
-    get(seg, sid)&.dig(:ltp)
-  end
+  def self.put(t)  = MAP["#{t[:segment]}:#{t[:security_id]}"] = t
+  def self.get(seg, sid) = MAP["#{seg}:#{sid}"]
+  def self.ltp(seg, sid) = get(seg, sid)&.dig(:ltp)
 end
 
 ws.on(:tick) { |t| TickCache.put(t) }
@@ -317,24 +333,26 @@ ltp = TickCache.ltp("NSE_FNO", "12345")
 ```ruby
 def on_tick_for(ws, segment:, security_id:, &blk)
   key = "#{segment}:#{security_id}"
-  ws.on(:tick) { |t| blk.call(t) if "#{t[:segment]}:#{t[:security_id]}" == key }
+  ws.on(:tick){ |t| blk.call(t) if "#{t[:segment]}:#{t[:security_id]}" == key }
 end
 ```
 
 ---
 
-## Rails integration example
+## Rails integration (example)
 
-Goal: generate signals from Historical Intraday OHLC (5 minute bars) and use the WebSocket only for exits or trailing on open option legs.
+**Goal:** Generate signals from clean **Historical Intraday OHLC** (5-min bars), and use **WebSocket** only for **exits/trailing** on open option legs.
 
-1. Initializer `config/initializers/dhanhq.rb`
+1. **Initializer**
+   `config/initializers/dhanhq.rb`
 
    ```ruby
    DhanHQ.configure_with_env
    DhanHQ.logger.level = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase.then { |level| Logger.const_get(level) }
    ```
 
-2. Start WebSocket supervisor `config/initializers/stream.rb`
+2. **Start WS supervisor**
+   `config/initializers/stream.rb`
 
    ```ruby
    INDICES = [
@@ -346,17 +364,24 @@ Goal: generate signals from Historical Intraday OHLC (5 minute bars) and use the
      $WS = DhanHQ::WS::Client.new(mode: :quote).start
      $WS.on(:tick) do |t|
        TickCache.put(t)
-       Execution::PositionGuard.instance.on_tick(t)  # trailing and fast exits
+       Execution::PositionGuard.instance.on_tick(t)  # trailing & fast exits
      end
      INDICES.each { |i| $WS.subscribe_one(segment: i[:segment], security_id: i[:security_id]) }
    end
    ```
 
-3. Fetch bars every five minutes via the Historical API; update your `CandleSeries` and run strategy logic on each closed bar.
+3. **Bar fetch (every 5 min) via Historical API**
 
-4. Routing and orders: on signal, place Super Orders (SL, TP, TSL) or fallback to Market plus local trailing. Register the leg in `PositionGuard` and subscribe its option on the WebSocket.
+   * Fetch intraday OHLC at 5-minute boundaries.
+   * Update your `CandleSeries`; on each closed bar, run strategy to emit signals.
+     *(Use your existing `Bars::FetchLoop` + `CandleSeries` code.)*
 
-5. Shutdown hook:
+4. **Routing & orders**
+
+   * On signal: place **Super Order** (SL/TP/TSL) or fallback to Market + local trailing.
+   * After a successful place, **register** the leg in `PositionGuard` and **subscribe** its option on WS.
+
+5. **Shutdown**
 
    ```ruby
    at_exit { DhanHQ::WS.disconnect_all_local! }
@@ -364,7 +389,7 @@ Goal: generate signals from Historical Intraday OHLC (5 minute bars) and use the
 
 ---
 
-## Super Orders example
+## Super Orders (example)
 
 ```ruby
 intent = {
@@ -372,12 +397,13 @@ intent = {
   security_id:      "12345",   # option
   transaction_type: "BUY",
   quantity:         50,
-  take_profit:      0.35,      # 35 percent target
-  stop_loss:        0.18,      # 18 percent stop loss
-  trailing_sl:      0.12       # 12 percent trail
+  # derived risk params from ATR/ADX
+  take_profit:      0.35,      # 35% target
+  stop_loss:        0.18,      # 18% SL
+  trailing_sl:      0.12       # 12% trail
 }
 
-# If your SuperOrder model exposes create or modify:
+# If your SuperOrder model exposes create/modify:
 o = DhanHQ::Models::SuperOrder.create(intent)
 # or fallback:
 mkt = DhanHQ::Models::Order.new(
@@ -387,498 +413,583 @@ mkt = DhanHQ::Models::Order.new(
 ).save
 ```
 
-Trailing a super order using WebSocket ticks:
+If you placed a Super Order and want to trail SL upward using WS ticks:
 
 ```ruby
 DhanHQ::Models::SuperOrder.modify(
   order_id: o.order_id,
-  stop_loss: new_abs_price,    # broker permitting
+  stop_loss: new_abs_price,    # broker API permitting
   trailing_sl: nil
 )
 ```
 
 ---
 
-## Packet parsing reference
+## Packet parsing (for reference)
 
-- Response header (8 bytes): `feed_response_code` (u8 big endian), `message_length` (u16 big endian), `exchange_segment` (u8 big endian), `security_id` (i32 little endian)
-- Packet codes supported:
-  - 1 Index (surface as raw or misc unless documented)
-  - 2 Ticker: `ltp`, `ltt`
-  - 4 Quote: `ltp`, `ltt`, `atp`, `volume`, totals, `day_*`
-  - 5 Open interest packet
-  - 6 Previous close: `prev_close`, `oi_prev`
-  - 7 Market status (raw or misc unless documented)
-  - 8 Full: quote plus open interest plus five depth levels
-  - 50 Disconnect reason
+* **Response Header (8 bytes)**:
+  `feed_response_code (u8, BE)`, `message_length (u16, BE)`, `exchange_segment (u8, BE)`, `security_id (i32, LE)`
+* **Packets supported**:
+
+  * **1** Index (surface as raw/misc unless documented)
+  * **2** Ticker: `ltp`, `ltt`
+  * **4** Quote: `ltp`, `ltt`, `atp`, `volume`, totals, `day_*`
+  * **5** OI: `open_interest`
+  * **6** Prev Close: `prev_close`, `oi_prev`
+  * **7** Market Status (raw/misc unless documented)
+  * **8** Full: quote + `open_interest` + 5× depth (bid/ask)
+  * **50** Disconnect: reason code
 
 ---
 
 ## Best practices
 
-- Keep the `on(:tick)` handler non-blocking; push work to a queue or thread.
-- Use `mode: :quote` for most strategies; switch to `:full` only if you need depth or open interest in real time.
-- Call `ws.disconnect!` or `ws.stop` when leaving IRB or tests; use `DhanHQ::WS.disconnect_all_local!` to be safe.
-- Do not exceed 100 instruments per subscribe frame (the client auto chunks but be mindful).
-- Avoid rapid connect and disconnect loops; the client already backs off and cools off on 429 responses.
+* Keep the `on(:tick)` handler **non-blocking**; push work to a queue/thread.
+* Use `mode: :quote` for most strategies; switch to `:full` only if you need depth/OI in real-time.
+* Call **`ws.disconnect!`** (or `ws.stop`) when leaving IRB / tests.
+  Use **`DhanHQ::WS.disconnect_all_local!`** to be extra safe.
+* Don’t exceed **100 instruments per SUB frame** (the client auto-chunks).
+* Avoid rapid connect/disconnect loops; the client already **backs off & cools off** when server replies 429.
 
 ---
 
 ## Troubleshooting
 
-- **429 unexpected response code**: you connected too frequently or have too many sockets. The client cools off for 60 seconds and backs off. Prefer `ws.disconnect!` before reconnecting and call `DhanHQ::WS.disconnect_all_local!` to kill stragglers.
-- **No ticks after reconnect**: ensure you re subscribed after a clean start; the client resends the snapshot automatically on reconnect.
-- **Binary parse errors**: run with `DHAN_LOG_LEVEL=DEBUG` to inspect. The client drops malformed frames and keeps the loop alive.
+* **429: Unexpected response code**
+  You connected too frequently or have too many sockets. The client auto-cools off for **60s** and backs off. Prefer `ws.disconnect!` before reconnecting; and call `DhanHQ::WS.disconnect_all_local!` to kill stragglers.
+* **No ticks after reconnect**
+  Ensure you re-subscribed after a clean start (the client resends the snapshot automatically on reconnect).
+* **Binary parse errors**
+  Run with `DHAN_LOG_LEVEL=DEBUG` to inspect; we safely drop malformed frames and keep the loop alive.
 
 ---
 
 ## Contributing
 
-Pull requests are welcome. Include tests for new packet decoders and WebSocket behaviors such as chunking, reconnect, and cool-off handling.
+PRs welcome! Please include tests for new packet decoders and WS behaviors (chunking, reconnect, cool-off).
+
+---
 
 ## License
 
-MIT
+MIT.
+
+# DhanHQ - Ruby Client for DhanHQ API
+
+DhanHQ is a **Ruby client** for interacting with **Dhan API v2.0**. It provides **ActiveRecord-like** behavior, **RESTful resource management**, and **ActiveModel validation** for seamless integration into **algorithmic trading applications**.
+
+## ⚡ Features
+
+✅ **ORM-like Interface** (`find`, `all`, `where`, `save`, `update`, `destroy`)
+✅ **ActiveModel Integration** (`validations`, `errors`, `serialization`)
+✅ **Resource Objects for Trading** (`Orders`, `Positions`, `Holdings`, etc.)
+✅ **Supports WebSockets for Market Feeds**
+✅ **Error Handling & Validations** (`ActiveModel::Errors`)
+✅ **DRY & Modular Code** (`Helpers`, `Contracts`, `Request Handling`)
 
 ---
 
-## Detailed Model Reference
+## 📌 Installation
 
-Use this section as a companion to the official Dhan API v2 documentation. It maps the public DhanHQ Ruby client classes to REST and WebSocket endpoints, highlights the validations enforced by the gem, and shows how to compose end to end flows without tripping over common pitfalls.
-
-### Table of Contents
-
-1. [Getting Started](#getting-started)
-2. [Working With Models](#working-with-models)
-3. [Orders](#orders)
-4. [Super and Forever Orders](#super-and-forever-orders)
-5. [Portfolio and Funds](#portfolio-and-funds)
-6. [Trade and Ledger Data](#trade-and-ledger-data)
-7. [Data and Market Services](#data-and-market-services)
-8. [Account Utilities](#account-utilities)
-9. [Constants and Enums](#constants-and-enums)
-10. [Error Handling](#error-handling)
-11. [Best Practices](#best-practices)
-
----
-
-### Getting Started
+Add this line to your application's Gemfile:
 
 ```ruby
-# Gemfile
-gem "DhanHQ", git: "https://github.com/shubhamtaywade82/dhanhq-client.git", branch: "main"
+gem 'DhanHQ', git: 'https://github.com/shubhamtaywade82/dhanhq-client.git', branch: 'main'
 ```
 
-```bash
+Then execute:
+
+```
 bundle install
 ```
 
-Configure the client (directly or via environment variables):
+Or install it manually:
 
-```ruby
-require "DhanHQ"
-
-DhanHQ.configure do |config|
-  config.client_id    = ENV.fetch("CLIENT_ID")
-  config.access_token = ENV.fetch("ACCESS_TOKEN")
-  config.base_url     = "https://api.dhan.co/v2"   # optional override
-  config.ws_version   = 2                           # optional, defaults to 2
-end
-
-DhanHQ.logger.level = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase.then { |level| Logger.const_get(level) }
+```
+gem install dhanhq
 ```
 
-Or bootstrap from environment variables:
+🔹 Configuration
+Set your DhanHQ API credentials:
 
 ```ruby
-require "DhanHQ"
+require 'DhanHQ'
+
+DhanHQ.configure do |config|
+  config.client_id = "your_client_id"
+  config.access_token = "your_access_token"
+  # Optional: override the default API endpoint
+  config.base_url = "https://api.dhan.co/v2"
+end
+```
+
+Use `config.base_url` to point the client at a different API URL (for example, a sandbox).
+
+Alternatively, set credentials from environment variables:
+
+```ruby
+require 'DhanHQ'
 
 DhanHQ.configure_with_env
 DhanHQ.logger.level = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase.then { |level| Logger.const_get(level) }
 ```
 
----
+`configure_with_env` expects the following environment variables:
 
-### Working With Models
+* `CLIENT_ID`
+* `ACCESS_TOKEN`
+* `DHAN_LOG_LEVEL` (optional, defaults to `INFO`)
 
-All models inherit from `DhanHQ::BaseModel` and expose a consistent API:
+Create a `.env` file in your project root to supply these values:
 
-- Class helpers: `.all`, `.find`, `.create`, and where available `.where`, `.history`, `.today`
-- Instance helpers: `#save`, `#modify`, `#cancel`, `#refresh`, `#destroy`
-- Validation: the gem wraps Dry Validation contracts. Validation errors raise `DhanHQ::Error`.
-- Parameter naming: Ruby facing APIs accept snake case keys. The client converts to camelCase for the REST API. Low level `DhanHQ::Resources::*` classes expect API casing directly.
-- Responses: constructors normalize keys to snake case and expose attribute readers. Raw API hashes are wrapped in `HashWithIndifferentAccess` for simple lookup.
-
----
-
-### Orders
-
-```ruby
-order = DhanHQ::Models::Order.place(payload)    # validate, post, fetch
-order = DhanHQ::Models::Order.create(payload)   # build and save
-orders = DhanHQ::Models::Order.all              # current day order book
-order  = DhanHQ::Models::Order.find(order_id)
-order  = DhanHQ::Models::Order.find_by_correlation(correlation_id)
+```dotenv
+CLIENT_ID=your_client_id
+ACCESS_TOKEN=your_access_token
 ```
 
-Instance workflow:
+The gem requires `dotenv/load`, so these variables are loaded automatically when you require `DhanHQ`.
+
+## 🚀 Usage
+
+✅ Placing an Order
 
 ```ruby
-order = DhanHQ::Models::Order.new(params)
-order.save
-order.modify(price: 101.5)
-order.cancel
-order.refresh
-```
-
-Required fields validated by `DhanHQ::Contracts::PlaceOrderContract`:
-
-| Key               | Type    | Notes |
-| ----------------- | ------- | ----- |
-| `transaction_type`| String  | `BUY`, `SELL` |
-| `exchange_segment`| String  | Use `DhanHQ::Constants::EXCHANGE_SEGMENTS` |
-| `product_type`    | String  | `CNC`, `INTRADAY`, `MARGIN`, `MTF`, `CO`, `BO` |
-| `order_type`      | String  | `LIMIT`, `MARKET`, `STOP_LOSS`, `STOP_LOSS_MARKET` |
-| `validity`        | String  | `DAY`, `IOC` |
-| `security_id`     | String  | Security identifier from the scrip master |
-| `quantity`        | Integer | Must be greater than zero |
-
-Optional fields and rules:
-
-| Key                   | Type    | Notes |
-| --------------------- | ------- | ----- |
-| `correlation_id`      | String  | Up to 25 characters for idempotency |
-| `disclosed_quantity`  | Integer | Greater than or equal to zero and up to 30 percent of quantity |
-| `trading_symbol`      | String  | Optional label |
-| `price`               | Float   | Mandatory for limit orders |
-| `trigger_price`       | Float   | Mandatory for stop loss orders |
-| `after_market_order`  | Boolean | Requires `amo_time` when true |
-| `amo_time`            | String  | `OPEN`, `OPEN_30`, `OPEN_60` |
-| `bo_profit_value`     | Float   | Required with `product_type: "BO"` |
-| `bo_stop_loss_value`  | Float   | Required with `product_type: "BO"` |
-| `drv_expiry_date`     | String  | ISO `YYYY-MM-DD` for derivatives |
-| `drv_option_type`     | String  | `CALL`, `PUT`, `NA` |
-| `drv_strike_price`    | Float   | Greater than zero |
-
-Example:
-
-```ruby
-payload = {
+order = DhanHQ::Models::Order.new(
   transaction_type: "BUY",
-  exchange_segment: "NSE_EQ",
-  product_type: "CNC",
+  exchange_segment: "NSE_FNO",
+  product_type: "MARGIN",
   order_type: "LIMIT",
   validity: "DAY",
-  security_id: "1333",
-  quantity: 10,
-  price: 150.0,
-  correlation_id: "hs20240910-01"
-}
+  security_id: "43492",
+  quantity: 125,
+  price: 100.0
+)
 
-order = DhanHQ::Models::Order.place(payload)
-puts order.order_status
+order.save
+puts order.persisted? # true
 ```
 
-`Order#modify` merges existing attributes with overrides and validates against `ModifyOrderContract`. The instance must have `order_id` and `dhan_client_id`. At least one modifiable field must change. `Order#cancel` issues the cancel endpoint, and `Order#refresh` refetches current state.
-
-Slicing orders uses similar parameters and allows additional validity options (`GTC`, `GTD`). When using the low level resource, camelize keys before calling `DhanHQ::Models::Order.resource.slicing`.
-
----
-
-### Super and Forever Orders
-
-#### Super Orders
+✅ Fetching an Order
 
 ```ruby
-legs = {
-  transactionType: "BUY",
-  exchangeSegment: "NSE_FNO",
-  productType: "CO",
-  orderType: "LIMIT",
-  validity: "DAY",
-  securityId: "43492",
-  quantity: 50,
-  price: 100.0,
-  stopLossPrice: 95.0,
-  targetPrice: 110.0
-}
-
-super_order = DhanHQ::Models::SuperOrder.create(legs)
-super_order.modify(trailingJump: 2.5)
-super_order.cancel("ENTRY_LEG")
+order = DhanHQ::Models::Order.find("452501297117")
+puts order.price # Current price of the order
 ```
 
-#### Forever Orders (GTT)
+✅ Updating an Order
 
 ```ruby
-params = {
-  dhanClientId: "123456",
-  transactionType: "SELL",
-  exchangeSegment: "NSE_EQ",
-  productType: "CNC",
-  orderType: "LIMIT",
-  validity: "DAY",
-  securityId: "1333",
-  price: 200.0,
-  triggerPrice: 198.0
-}
-
-forever_order = DhanHQ::Models::ForeverOrder.create(params)
-forever_order.modify(price: 205.0)
-forever_order.cancel
+order.update(price: 105.0)
+puts order.price # 105.0
 ```
 
-The high level helpers accept snake case parameters and camelize internally.
+✅ Canceling an Order
 
----
+```ruby
+order.cancel
+```
 
-### Portfolio and Funds
+✅ Fetching All Orders
 
-#### Positions
+```ruby
+orders = DhanHQ::Models::Order.all
+puts orders.count
+```
+
+✅ Querying Orders
+
+```ruby
+pending_orders = DhanHQ::Models::Order.where(status: "PENDING")
+puts pending_orders.first.order_id
+```
+
+✅ Exiting Positions
 
 ```ruby
 positions = DhanHQ::Models::Position.all
-open_positions = DhanHQ::Models::Position.active
+position = positions.first
+position.exit!
 ```
 
-Convert an intraday position to delivery:
+### Orders
+
+#### Place
 
 ```ruby
-convert_payload = {
-  dhan_client_id: "123456",
-  security_id: "1333",
-  from_product_type: "INTRADAY",
-  to_product_type: "CNC",
-  convert_qty: 10,
-  exchange_segment: "NSE_EQ",
-  position_type: "LONG"
-}
-
-response = DhanHQ::Models::Position.convert(convert_payload)
+order = DhanHQ::Models::Order.new(transaction_type: "BUY", security_id: "123", quantity: 1)
+order.save
 ```
 
-#### Holdings
+#### Modify
 
 ```ruby
-holdings = DhanHQ::Models::Holding.all
+order.modify(price: 102.5)
 ```
 
-#### Funds
+#### Cancel
 
 ```ruby
-funds = DhanHQ::Models::Funds.fetch
-puts funds.available_balance
+order.cancel
+```
 
+### Trades
+
+```ruby
+DhanHQ::Models::Trade.today
+DhanHQ::Models::Trade.find_by_order_id("452501297117")
+```
+
+### Positions
+
+```ruby
+positions = DhanHQ::Models::Position.all
+active = DhanHQ::Models::Position.active
+DhanHQ::Models::Position.convert(position_id: "1", product_type: "CNC")
+```
+
+### Holdings
+
+```ruby
+DhanHQ::Models::Holding.all
+```
+
+### Funds
+
+```ruby
+DhanHQ::Models::Funds.fetch
 balance = DhanHQ::Models::Funds.balance
 ```
 
-`available_balance` is normalized from the API's `availabelBalance` typo.
-
----
-
-### Trade and Ledger Data
-
-#### Trades
+### Option Chain
 
 ```ruby
-history = DhanHQ::Models::Trade.history(from_date: "2024-01-01", to_date: "2024-01-31", page: 0)
-trade_book = DhanHQ::Models::Trade.today
-trade = DhanHQ::Models::Trade.find_by_order_id("ORDER123")
+DhanHQ::Models::OptionChain.fetch(security_id: "1333", expiry_date: "2024-06-30")
+DhanHQ::Models::OptionChain.fetch_expiry_list(security_id: "1333")
 ```
 
-#### Ledger Entries
+### Historical Data
 
 ```ruby
-ledger = DhanHQ::Models::LedgerEntry.all(from_date: "2024-04-01", to_date: "2024-04-30")
-ledger.each { |entry| puts "#{entry.voucherdate} #{entry.narration} #{entry.runbal}" }
+DhanHQ::Models::HistoricalData.daily(security_id: "1333", from_date: "2024-01-01", to_date: "2024-01-31")
+DhanHQ::Models::HistoricalData.intraday(security_id: "1333", interval: "15")
 ```
 
----
+## 🔹 Available Resources
 
-### Data and Market Services
+| Resource                 | Model                            | Actions                                             |
+| ------------------------ | -------------------------------- | --------------------------------------------------- |
+| Orders                   | `DhanHQ::Models::Models::Order`          | `find`, `all`, `where`, `place`, `update`, `cancel` |
+| Trades                   | `DhanHQ::Models::Models::Trade`          | `all`, `find_by_order_id`                           |
+| Forever Orders           | `DhanHQ::Models::Models::ForeverOrder`   | `create`, `find`, `modify`, `cancel`, `all`         |
+| Holdings                 | `DhanHQ::Models::Models::Holding`        | `all`                                               |
+| Positions                | `DhanHQ::Models::Models::Position`       | `all`, `find`, `exit!`                              |
+| Funds & Margin           | `DhanHQ::Models::Models::Funds`          | `fund_limit`, `margin_calculator`                   |
+| Ledger                   | `DhanHQ::Models::Models::Ledger`         | `all`                                               |
+| Market Feeds             | `DhanHQ::Models::Models::MarketFeed`     | `ltp, ohlc`, `quote`                                |
+| Historical Data (Charts) | `DhanHQ::Models::Models::HistoricalData` | `daily`, `intraday`                                 |
+| Option Chain             | `DhanHQ::Models::Models::OptionChain`    | `fetch`, `fetch_expiry_list`                        |
 
-#### Historical Data
+## 📌 Development
 
-`DhanHQ::Models::HistoricalData` validates requests via `HistoricalDataContract`.
+Set `DHAN_DEBUG=true` to log HTTP requests during development:
 
-```ruby
-bars = DhanHQ::Models::HistoricalData.intraday(
-  security_id: "13",
-  exchange_segment: "IDX_I",
-  instrument: "INDEX",
-  interval: "5",
-  from_date: "2024-08-14",
-  to_date: "2024-08-14"
-)
+```bash
+export DHAN_DEBUG=true
 ```
 
-#### Option Chain
+Running Tests
 
-```ruby
-chain = DhanHQ::Models::OptionChain.fetch(
-  underlying_scrip: 1333,
-  underlying_seg: "NSE_FNO",
-  expiry: "2024-12-26"
-)
-
-expiries = DhanHQ::Models::OptionChain.fetch_expiry_list(
-  underlying_scrip: 1333,
-  underlying_seg: "NSE_FNO"
-)
+```bash
+bundle exec rspec
 ```
 
-#### Margin Calculator
+Installing Locally
 
-```ruby
-params = {
-  dhan_client_id: "123456",
-  exchange_segment: "NSE_EQ",
-  transaction_type: "BUY",
-  quantity: 10,
-  product_type: "INTRADAY",
-  security_id: "1333",
-  price: 150.0
-}
-
-margin = DhanHQ::Models::Margin.calculate(params)
-puts margin.total_margin
+```bash
+bundle exec rake install
 ```
 
-Validation errors raise `DhanHQ::Error` before making the API call.
+Releasing a New Version
 
-#### REST Market Feed (Batch)
-
-```ruby
-payload = {
-  "NSE_EQ" => [11536, 3456],
-  "NSE_FNO" => [49081, 49082]
-}
-
-ltp   = DhanHQ::Models::MarketFeed.ltp(payload)
-ohlc  = DhanHQ::Models::MarketFeed.ohlc(payload)
-quote = DhanHQ::Models::MarketFeed.quote(payload)
-```
-
-The client throttles requests via an internal rate limiter.
-
-#### WebSocket Market Feed
-
-See the earlier WebSocket section for code. Modes are `:ticker`, `:quote`, and `:full`. The client manages reconnects, snapshot resubscribe, and 429 cool-off handling.
-
----
-
-### Account Utilities
-
-#### Profile
-
-```ruby
-profile = DhanHQ::Models::Profile.fetch
-profile.dhan_client_id
-profile.token_validity
-profile.active_segment
-```
-
-Invalid credentials raise `DhanHQ::InvalidAuthenticationError`.
-
-#### EDIS
-
-```ruby
-form = DhanHQ::Models::Edis.form(
-  isin: "INE0ABCDE123",
-  qty: 1,
-  exchange: "NSE",
-  segment: "EQ",
-  bulk: false
-)
-
-bulk_form = DhanHQ::Models::Edis.bulk_form(
-  isin: %w[INE0ABCDE123 INE0XYZ89012],
-  exchange: "NSE",
-  segment: "EQ"
-)
-
-DhanHQ::Models::Edis.tpin
-authorisations = DhanHQ::Models::Edis.inquire("ALL")
-```
-
-Helpers accept snake case keys; the client camelizes before calling `/v2/edis/...`.
-
-#### Kill Switch
-
-```ruby
-DhanHQ::Models::KillSwitch.activate
-DhanHQ::Models::KillSwitch.deactivate
-DhanHQ::Models::KillSwitch.update("ACTIVATE")
-```
-
-Only `ACTIVATE` and `DEACTIVATE` are accepted.
-
----
-
-### Constants and Enums
-
-`DhanHQ::Constants` exposes canonical values:
-
-- `TRANSACTION_TYPES`
-- `EXCHANGE_SEGMENTS`
-- `PRODUCT_TYPES`
-- `ORDER_TYPES`
-- `VALIDITY_TYPES`
-- `AMO_TIMINGS`
-- `INSTRUMENTS`
-- `ORDER_STATUSES`
-- CSV URLs: `COMPACT_CSV_URL`, `DETAILED_CSV_URL`
-- `DHAN_ERROR_MAPPING` for broker error code translation
-
-Example:
-
-```ruby
-validity = DhanHQ::Constants::VALIDITY_TYPES
+```bash
+bundle exec rake release
 ```
 
 ---
 
-### Error Handling
+## WebSocket Market Feed (NEW)
 
-Broker error payloads map to subclasses of `DhanHQ::Error` (see `lib/DhanHQ/errors.rb`). Key mappings:
+### What you get
 
-- `InvalidAuthenticationError` -> `DH-901`
-- `InvalidAccessError` -> `DH-902`
-- `UserAccountError` -> `DH-903`
-- `RateLimitError` -> `DH-904`, HTTP 429 or 805
-- `InputExceptionError` -> `DH-905`
-- `OrderError` -> `DH-906`
-- `DataError` -> `DH-907`
-- `InternalServerError` -> `DH-908` or `800`
-- `NetworkError` -> `DH-909`
-- `OtherError` -> `DH-910`
-- `InvalidTokenError`, `InvalidClientIDError`, `InvalidRequestError` for broker codes 807 through 814
+* **Modes**
 
-Example handling on order placement:
+  * `:ticker` → LTP + LTT
+  * `:quote`  → OHLCV + totals (recommended default)
+  * `:full`   → quote + **OI** + **best-5 depth**
+* **Normalized ticks** (Hash):
+
+  ```ruby
+  {
+    kind: :quote,                 # :ticker | :quote | :full | :oi | :prev_close | :misc
+    segment: "NSE_FNO",           # string enum
+    security_id: "12345",
+    ltp: 101.5,
+    ts:  1723791300,              # LTT epoch (sec) if present
+    vol: 123456,                  # quote/full
+    atp: 100.9,                   # quote/full
+    day_open: 100.1, day_high: 102.4, day_low: 99.5, day_close: nil,
+    oi: 987654,                   # full or OI packet
+    bid: 101.45, ask: 101.55      # from depth (mode :full)
+  }
+  ```
+
+### Start, subscribe, stop
 
 ```ruby
-begin
-  order = DhanHQ::Models::Order.place(payload)
-  puts "Order status: #{order.order_status}"
-rescue DhanHQ::InvalidAuthenticationError => e
-  warn "Auth failed: #{e.message}"
-rescue DhanHQ::OrderError => e
-  warn "Order rejected: #{e.message}"
-rescue DhanHQ::RateLimitError => e
-  warn "Slow down: #{e.message}"
+DhanHQ.configure_with_env
+DhanHQ.logger.level = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase.then { |level| Logger.const_get(level) }
+
+ws = DhanHQ::WS::Client.new(mode: :quote).start
+
+ws.on(:tick) do |t|
+  puts "[#{t[:segment]}:#{t[:security_id]}] LTP=#{t[:ltp]} kind=#{t[:kind]}"
+end
+
+# Subscribe instruments (≤100 per frame; send multiple frames if needed)
+ws.subscribe_one(segment: "IDX_I",   security_id: "13")     # NIFTY index value
+ws.subscribe_one(segment: "NSE_FNO", security_id: "12345")  # an option
+
+# Unsubscribe
+ws.unsubscribe_one(segment: "NSE_FNO", security_id: "12345")
+
+# Graceful disconnect (sends broker disconnect code 12, no reconnect)
+ws.disconnect!
+
+# Or hard stop (no broker message, just closes and halts loop)
+ws.stop
+
+# Safety: kill all local sockets (useful in IRB)
+DhanHQ::WS.disconnect_all_local!
+```
+
+### Under the hood
+
+* **Request codes** (per Dhan docs)
+
+  * Subscribe: **15** (ticker), **17** (quote), **21** (full)
+  * Unsubscribe: **16**, **18**, **22**
+  * Disconnect: **12**
+* **Limits**
+
+  * Up to **100 instruments per SUB/UNSUB** message (client auto-chunks)
+  * Up to 5 WS connections per user (per Dhan)
+* **Backoff & 429 cool-off**
+
+  * Exponential backoff with jitter
+  * Handshake **429** triggers a **60s cool-off** before retry
+* **Reconnect & resubscribe**
+
+  * On reconnect the client resends the **current subscription snapshot** (idempotent)
+* **Graceful shutdown**
+
+  * `ws.disconnect!` or `ws.stop` prevents reconnects
+  * An `at_exit` hook stops all registered WS clients to avoid leaked sockets
+
+---
+
+## Exchange Segment Enums
+
+Use the string enums below in WS `subscribe_*` and REST params:
+
+| Enum           | Exchange | Segment           |
+| -------------- | -------- | ----------------- |
+| `IDX_I`        | Index    | Index Value       |
+| `NSE_EQ`       | NSE      | Equity Cash       |
+| `NSE_FNO`      | NSE      | Futures & Options |
+| `NSE_CURRENCY` | NSE      | Currency          |
+| `BSE_EQ`       | BSE      | Equity Cash       |
+| `MCX_COMM`     | MCX      | Commodity         |
+| `BSE_CURRENCY` | BSE      | Currency          |
+| `BSE_FNO`      | BSE      | Futures & Options |
+
+---
+
+## Accessing ticks elsewhere in your app
+
+### Direct handler
+
+```ruby
+ws.on(:tick) { |t| do_something_fast(t) } # avoid heavy work here
+```
+
+### Shared TickCache (recommended)
+
+```ruby
+# app/services/live/tick_cache.rb
+class TickCache
+  MAP = Concurrent::Map.new
+  def self.put(t)  = MAP["#{t[:segment]}:#{t[:security_id]}"] = t
+  def self.get(seg, sid) = MAP["#{seg}:#{sid}"]
+  def self.ltp(seg, sid) = get(seg, sid)&.dig(:ltp)
+end
+
+ws.on(:tick) { |t| TickCache.put(t) }
+ltp = TickCache.ltp("NSE_FNO", "12345")
+```
+
+### Filtered callback
+
+```ruby
+def on_tick_for(ws, segment:, security_id:, &blk)
+  key = "#{segment}:#{security_id}"
+  ws.on(:tick){ |t| blk.call(t) if "#{t[:segment]}:#{t[:security_id]}" == key }
 end
 ```
 
 ---
 
-### Best Practices
+## Rails integration (example)
 
-1. Validate payloads locally before hitting the API in batch scripts (contracts live under `DhanHQ::Contracts`).
-2. Use `correlation_id` for idempotent order placement across retries.
-3. Refresh orders after placement when you depend on derived fields such as average traded price.
-4. Respect the rate limiter; space out historical data and market feed calls to avoid `DH-904` or 805 responses.
-5. Reference `DhanHQ::Constants` instead of hardcoding enum strings.
-6. Persist broker error codes even when they map to Ruby exceptions; they are valuable for support.
-7. Subscribe in frames of 100 instruments or fewer and handle reconnect callbacks to resubscribe cleanly.
+**Goal:** Generate signals from clean **Historical Intraday OHLC** (5-min bars), and use **WebSocket** only for **exits/trailing** on open option legs.
 
-Always cross check with https://dhanhq.co/docs/v2/ for endpoint specifics. The Ruby client mirrors those contracts while adding guard rails and idiomatic ergonomics.
+1. **Initializer**
+   `config/initializers/dhanhq.rb`
+
+   ```ruby
+   DhanHQ.configure_with_env
+   DhanHQ.logger.level = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase.then { |level| Logger.const_get(level) }
+   ```
+
+2. **Start WS supervisor**
+   `config/initializers/stream.rb`
+
+   ```ruby
+   INDICES = [
+     { segment: "IDX_I", security_id: "13" },  # NIFTY index value
+     { segment: "IDX_I", security_id: "25" }   # BANKNIFTY index value
+   ]
+
+   Rails.application.config.to_prepare do
+     $WS = DhanHQ::WS::Client.new(mode: :quote).start
+     $WS.on(:tick) do |t|
+       TickCache.put(t)
+       Execution::PositionGuard.instance.on_tick(t)  # trailing & fast exits
+     end
+     INDICES each { |i| $WS.subscribe_one(segment: i[:segment], security_id: i[:security_id]) }
+   end
+   ```
+
+3. **Bar fetch (every 5 min) via Historical API**
+
+   * Fetch intraday OHLC at 5-minute boundaries.
+   * Update your `CandleSeries`; on each closed bar, run strategy to emit signals.
+     *(Use your existing `Bars::FetchLoop` + `CandleSeries` code.)*
+
+4. **Routing & orders**
+
+   * On signal: place **Super Order** (SL/TP/TSL) or fallback to Market + local trailing.
+   * After a successful place, **register** the leg in `PositionGuard` and **subscribe** its option on WS.
+
+5. **Shutdown**
+
+   ```ruby
+   at_exit { DhanHQ::WS.disconnect_all_local! }
+   ```
+
+---
+
+## Super Orders (example)
+
+```ruby
+intent = {
+  exchange_segment: "NSE_FNO",
+  security_id:      "12345",   # option
+  transaction_type: "BUY",
+  quantity:         50,
+  # derived risk params from ATR/ADX
+  take_profit:      0.35,      # 35% target
+  stop_loss:        0.18,      # 18% SL
+  trailing_sl:      0.12       # 12% trail
+}
+
+# If your SuperOrder model exposes create/modify:
+o = DhanHQ::Models::SuperOrder.create(intent)
+# or fallback:
+mkt = DhanHQ::Models::Order.new(
+  transaction_type: "BUY", exchange_segment: "NSE_FNO",
+  order_type: "MARKET", validity: "DAY",
+  security_id: "12345", quantity: 50
+).save
+```
+
+If you placed a Super Order and want to trail SL upward using WS ticks:
+
+```ruby
+DhanHQ::Models::SuperOrder.modify(
+  order_id: o.order_id,
+  stop_loss: new_abs_price,    # broker API permitting
+  trailing_sl: nil
+)
+```
+
+---
+
+## Packet parsing (for reference)
+
+* **Response Header (8 bytes)**:
+  `feed_response_code (u8, BE)`, `message_length (u16, BE)`, `exchange_segment (u8, BE)`, `security_id (i32, LE)`
+* **Packets supported**:
+
+  * **1** Index (surface as raw/misc unless documented)
+  * **2** Ticker: `ltp`, `ltt`
+  * **4** Quote: `ltp`, `ltt`, `atp`, `volume`, totals, `day_*`
+  * **5** OI: `open_interest`
+  * **6** Prev Close: `prev_close`, `oi_prev`
+  * **7** Market Status (raw/misc unless documented)
+  * **8** Full: quote + `open_interest` + 5× depth (bid/ask)
+  * **50** Disconnect: reason code
+
+---
+
+## Best practices
+
+* Keep the `on(:tick)` handler **non-blocking**; push work to a queue/thread.
+* Use `mode: :quote` for most strategies; switch to `:full` only if you need depth/OI in real-time.
+* Call **`ws.disconnect!`** (or `ws.stop`) when leaving IRB / tests.
+  Use **`DhanHQ::WS.disconnect_all_local!`** to be extra safe.
+* Don’t exceed **100 instruments per SUB frame** (the client auto-chunks).
+* Avoid rapid connect/disconnect loops; the client already **backs off & cools off** when server replies 429.
+
+---
+
+## Troubleshooting
+
+* **429: Unexpected response code**
+  You connected too frequently or have too many sockets. The client auto-cools off for **60s** and backs off. Prefer `ws.disconnect!` before reconnecting; and call `DhanHQ::WS.disconnect_all_local!` to kill stragglers.
+* **No ticks after reconnect**
+  Ensure you re-subscribed after a clean start (the client resends the snapshot automatically on reconnect).
+* **Binary parse errors**
+  Run with `DHAN_LOG_LEVEL=DEBUG` to inspect; we safely drop malformed frames and keep the loop alive.
+
+---
+
+## 📌 Contributing
+
+Bug reports and pull requests are welcome on GitHub at:
+🔗 <https://github.com/shubhamtaywade82/dhanhq>
+
+This project follows a code of conduct to maintain a safe and welcoming community.
+
+## 📌 License
+
+This gem is available under the MIT License.
+🔗 <https://opensource.org/licenses/MIT>
+
+## 📌 Code of Conduct
+
+Everyone interacting in the DhanHQ project is expected to follow the
+🔗 Code of Conduct.
+
+```markdown
+This **README.md** file is structured and formatted for **GitHub** or any **Markdown-compatible** documentation system. 🚀
+```
