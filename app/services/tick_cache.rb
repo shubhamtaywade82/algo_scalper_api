@@ -27,6 +27,13 @@ class TickCache
     @map.clear
   end
 
+  # Return a snapshot of all cached ticks as a plain Hash
+  def all
+    snapshot = {}
+    @map.each_pair { |k, v| snapshot[k] = v }
+    snapshot
+  end
+
   private
 
   def cache_key(segment, security_id)

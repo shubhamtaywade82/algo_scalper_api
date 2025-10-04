@@ -81,7 +81,14 @@ module Live
     private
 
     def enabled?
-      config.enabled && config.ws_enabled
+      # Prefer app config if present; otherwise derive from ENV credentials
+      if config
+        return (config.enabled && config.ws_enabled)
+      end
+
+      client_id = ENV["DHANHQ_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
+      access    = ENV["DHANHQ_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
+      client_id.present? && access.present?
     end
 
     def ensure_running!
@@ -146,7 +153,7 @@ module Live
     end
 
     def config
-      Rails.application.config.x.dhanhq
+      Rails.application.config.x.dhanhq if Rails.application.config.x.respond_to?(:dhanhq)
     end
   end
 end
