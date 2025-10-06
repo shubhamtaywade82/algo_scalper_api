@@ -136,6 +136,37 @@ An example file is provided at `.env.example`.
   - `app/services/live/market_feed_hub.rb`
   - `app/services/live/tick_cache.rb`
 - Settings store: `app/models/setting.rb` (+ migration)
+- Equity intraday stack:
+  - `app/services/equities/indicator_calculator.rb`
+  - `app/services/equities/signal_service.rb`
+  - `app/services/equities/position_sizer.rb`
+  - `app/services/equities/intraday_trading_service.rb`
+  - `app/jobs/equities_intraday_job.rb`
+  - `app/models/trade_log.rb`
+
+---
+
+## Intraday Equity Strategy
+
+The intraday equity workflow introduces a Supertrend + ADX driven scanner that runs alongside
+the existing options scalper without sharing state.
+
+- **Signal pipeline** – every minute, `Equities::SignalService` pulls the latest 1-minute OHLCV from
+  DhanHQ, computes Supertrend, ADX, EMA momentum, volume spikes (≥ 1.5× 20-period average), and OBV
+  direction before emitting `:long`, `:short`, or `:hold` signals.
+- **Position sizing** – `Equities::PositionSizer` caps risk at 1% of available funds (leveraging
+  instrument `mtf_leverage` when present) and ensures the estimated profit window stays between ₹40
+  and ₹1,000 per trade.
+- **Execution** – `Equities::IntradayTradingService` respects a two-position cap, places MIS bracket
+  orders via `create_super_order`, and logs every attempt in the new `trade_logs` table so the equity
+  flow never touches the options pyramiding tracker.
+- **Risk controls** – open positions are automatically squared-off after 3:15 PM IST and any failures
+  are persisted to `trade_logs.metadata` for auditing.
+- **Scheduling** – enqueue `EquitiesIntradayJob` (Solid Queue recurring rule or external scheduler)
+  to run every minute during market hours; the job short-circuits outside `09:15–15:20` IST.
+
+> NOTE: The `trade_logs` table only tracks equity intraday orders. Existing option scalper
+> components (`PositionTracker`, `Trading::TradingService`, etc.) remain untouched.
 
 ---
 
