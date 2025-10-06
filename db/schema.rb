@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_04_081500) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_11_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -132,6 +132,31 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_04_081500) do
     t.datetime "updated_at", null: false
     t.index ["segment", "security_id"], name: "index_watchlist_items_on_segment_and_security_id", unique: true
     t.index ["watchable_type", "watchable_id"], name: "index_watchlist_items_on_watchable_type_and_watchable_id"
+  end
+
+  create_table "trade_logs", force: :cascade do |t|
+    t.string "strategy", null: false
+    t.string "symbol"
+    t.string "segment", null: false
+    t.string "security_id", null: false
+    t.integer "direction", null: false
+    t.integer "status", default: 0, null: false
+    t.integer "quantity", null: false
+    t.decimal "entry_price", precision: 15, scale: 4
+    t.decimal "stop_price", precision: 15, scale: 4
+    t.decimal "target_price", precision: 15, scale: 4
+    t.decimal "risk_amount", precision: 15, scale: 4
+    t.decimal "estimated_profit", precision: 15, scale: 4
+    t.string "order_id"
+    t.datetime "placed_at"
+    t.string "exit_order_id"
+    t.decimal "exit_price", precision: 15, scale: 4
+    t.datetime "closed_at"
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["strategy", "security_id", "status"], name: "index_trade_logs_on_strategy_security_status"
+    t.index ["strategy"], name: "index_trade_logs_on_strategy"
   end
 
   add_foreign_key "derivatives", "instruments"
