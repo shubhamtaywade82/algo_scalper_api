@@ -10,7 +10,7 @@ class PositionTracker < ApplicationRecord
     cancelled: "cancelled"
   }.freeze
 
-  belongs_to :instrument
+  belongs_to :instrument, optional: true
 
   validates :order_no, presence: true, uniqueness: true
   validates :security_id, presence: true
@@ -20,10 +20,14 @@ class PositionTracker < ApplicationRecord
   scope :pending, -> { where(status: STATUSES[:pending]) }
 
   def mark_active!(avg_price:, quantity:)
+    price = avg_price ? BigDecimal(avg_price.to_s) : nil
+
     update!(
       status: STATUSES[:active],
-        entry_price: avg_price ? BigDecimal(avg_price.to_s) : nil,
-      quantity: quantity
+      entry_price: entry_price || price,
+      average_price: price,
+      quantity: quantity,
+      exchange_segment: exchange_segment.presence || instrument&.exchange_segment
     )
   end
 
@@ -31,8 +35,11 @@ class PositionTracker < ApplicationRecord
     update!(status: STATUSES[:cancelled])
   end
 
-  def mark_exited!
-    update!(status: STATUSES[:exited])
+  def mark_exited!(price: nil, reason: nil)
+    attrs = { status: STATUSES[:exited] }
+    attrs[:exit_price] = BigDecimal(price.to_s) if price
+    attrs[:exit_reason] = reason if reason
+    update!(attrs)
   end
 
   def update_pnl!(pnl)
@@ -56,6 +63,29 @@ class PositionTracker < ApplicationRecord
   end
 
   def unsubscribe
-    Live::MarketFeedHub.instance.unsubscribe(segment: instrument.exchange_segment, security_id: security_id)
+    segment = resolved_exchange_segment
+    return unless segment
+
+    Live::WsHub.instance.unsubscribe_option!(segment: segment, security_id: security_id)
+  end
+
+  def active?
+    status == STATUSES[:active]
+  end
+
+  def buy?
+    transaction_type.to_s.casecmp("BUY").zero?
+  end
+
+  def sell?
+    transaction_type.to_s.casecmp("SELL").zero?
+  end
+
+  def strategy_key
+    (strategy.presence || "index_options_buy").to_s
+  end
+
+  def resolved_exchange_segment
+    exchange_segment.presence || instrument&.exchange_segment
   end
 end

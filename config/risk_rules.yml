@@ -1,0 +1,12 @@
+index_options_buy:
+  segments:
+    - NSE_FNO
+  stop_loss_pct: 0.18
+  take_profit_pct: 0.35
+  trail_activation_pct: 0.20
+  trail_step_pct: 0.05
+  trail_atr_multiple: 1.2
+  atr_period: 14
+  atr_interval: "5"
+  atr_lookback_days: 3
+  breakeven_pct: 0.02

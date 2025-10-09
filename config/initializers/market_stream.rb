@@ -11,6 +11,9 @@ Rails.application.config.to_prepare do
   # Optional order updates (only starts if defined and configured inside the hub)
   Live::OrderUpdateHub.instance.start! if defined?(Live::OrderUpdateHub)
 
+  # Position tracking + risk management bootstrap
+  Positions::Manager.instance.bootstrap! if defined?(Positions::Manager)
+
   # Start staggered OHLC intraday prefetch loop for watchlist
   Live::OhlcPrefetcherService.instance.start! if defined?(Live::OhlcPrefetcherService)
 end
