@@ -11,6 +11,10 @@ module Live
 
     def initialize
       @callbacks = Concurrent::Array.new
+      @lifecycle_callbacks = {
+        connected: Concurrent::Array.new,
+        reconnected: Concurrent::Array.new
+      }
       @watchlist = nil
       @lock = Mutex.new
     end
@@ -22,7 +26,7 @@ module Live
       @lock.synchronize do
         return if running?
 
-      @watchlist = load_watchlist || []
+        @watchlist = load_watchlist || []
         @ws_client = build_client
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
         @ws_client.start
@@ -78,10 +82,17 @@ module Live
       @callbacks << block
     end
 
+    def on_connected(&block)
+      register_lifecycle(:connected, block)
+    end
+
+    def on_reconnected(&block)
+      register_lifecycle(:reconnected, block)
+    end
+
     private
 
     def enabled?
-      pp config
       # Prefer app config if present; otherwise derive from ENV credentials
       cfg = config
       if cfg && cfg.respond_to?(:enabled) && cfg.respond_to?(:ws_enabled)
@@ -107,15 +118,26 @@ module Live
       if defined?(::TickerChannel)
         ::TickerChannel.broadcast_to(::TickerChannel::CHANNEL_ID, tick)
       end
-      @callbacks.each do |callback|
-        safe_invoke(callback, tick)
-      end
+      @callbacks.each { |callback| safe_invoke(callback, tick) }
     end
 
     def safe_invoke(callback, payload)
       callback.call(payload)
     rescue StandardError => e
       Rails.logger.error("DhanHQ tick callback failed: #{e.class} - #{e.message}")
+    end
+
+    def register_lifecycle(event, block)
+      raise ArgumentError, "block required" unless block
+
+      @lifecycle_callbacks[event] << block
+    end
+
+    def notify_lifecycle(event)
+      callbacks = @lifecycle_callbacks[event]
+      return unless callbacks
+
+      callbacks.each { |callback| safe_invoke(callback, event) }
     end
 
     def subscribe_watchlist
@@ -147,7 +169,10 @@ module Live
     end
 
     def build_client
-      DhanHQ::WS::Client.new(mode: mode)
+      client = DhanHQ::WS::Client.new(mode: mode)
+      client.on(:connected) { notify_lifecycle(:connected) }
+      client.on(:reconnected) { notify_lifecycle(:reconnected) }
+      client
     end
 
     def mode
