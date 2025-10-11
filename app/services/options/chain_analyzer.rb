@@ -40,6 +40,16 @@ module Options
         Rails.logger.debug("[Options] Chain data structure: #{chain_data.keys}")
         Rails.logger.debug("[Options] OC data size: #{chain_data[:oc]&.size || 'nil'}")
 
+        # Debug: Show sample of raw option data
+        if chain_data[:oc] && chain_data[:oc].any?
+          sample_strike = chain_data[:oc].keys.first
+          sample_data = chain_data[:oc][sample_strike]
+          Rails.logger.debug("[Options] Sample strike #{sample_strike} data: #{sample_data}")
+          if sample_data["pe"]
+            Rails.logger.debug("[Options] Sample PE data: #{sample_data["pe"]}")
+          end
+        end
+
         atm_price = chain_data[:last_price]
         unless atm_price
           Rails.logger.warn("[Options] No ATM price available for #{index_cfg[:key]}")
@@ -51,7 +61,7 @@ module Options
         window = atm_price.to_f * (AlgoConfig.fetch.dig(:option_chain, :atm_window_pct).to_f / 100.0)
         Rails.logger.debug("[Options] Looking for #{side} options within #{window} points of ATM")
 
-        legs = filter_and_rank_from_instrument_data(chain_data[:oc], atm: atm_price, side: side, window: window)
+        legs = filter_and_rank_from_instrument_data(chain_data[:oc], atm: atm_price, side: side, window: window, index_cfg: index_cfg, expiry_date: expiry_date, instrument: instrument)
         Rails.logger.info("[Options] Found #{legs.size} qualifying #{side} options for #{index_cfg[:key]}")
 
         if legs.any?
@@ -76,27 +86,20 @@ module Options
         upcoming_expiries.first&.strftime("%Y-%m-%d")
       rescue StandardError => e
         Rails.logger.warn("Failed to parse expiry list: #{e.class} - #{e.message}")
-        calculate_next_thursday
+        calculate_next_trading_day
       end
 
-      def calculate_next_thursday
-        # Use Market::Calendar to find the next Thursday that's a trading day
-        today = Date.current
-        days_until_thursday = (4 - today.wday) % 7
-        days_until_thursday = 7 if days_until_thursday == 0 # If today is Thursday, get next Thursday
-
-        candidate = today + days_until_thursday.days
-
-        # If the candidate Thursday is not a trading day, find the next trading day
-        unless Market::Calendar.trading_day?(candidate)
-          candidate = Market::Calendar.next_trading_day
-        end
-
-        candidate.strftime("%Y-%m-%d")
+      def calculate_next_trading_day
+        # Use Market::Calendar to find the next trading day dynamically
+        # This replaces the hardcoded Thursday logic
+        Market::Calendar.next_trading_day.strftime("%Y-%m-%d")
       end
 
-      def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, window:)
+      def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, window:, index_cfg:, expiry_date:, instrument:)
+        # Force reload - debugging index_cfg scope issue
         return [] unless option_chain_data
+
+        Rails.logger.debug("[Options] Method called with index_cfg: #{index_cfg[:key]}, expiry_date: #{expiry_date}")
 
         Rails.logger.debug("[Options] Processing #{option_chain_data.size} strikes for #{side} options")
         Rails.logger.debug("[Options] ATM: #{atm}, Window: #{window} (#{atm - window} to #{atm + window})")
@@ -126,11 +129,16 @@ module Options
             next
           end
 
-          ltp = option_data["ltp"]&.to_f
+          # Debug: Show available fields for first few strikes
+          if rejected_count < 3
+            Rails.logger.debug("[Options] Available fields for #{side}: #{option_data.keys}")
+          end
+
+          ltp = option_data["last_price"]&.to_f
           iv = option_data["implied_volatility"]&.to_f
-          oi = option_data["open_interest"]&.to_i
-          bid = option_data["bid"]&.to_f
-          ask = option_data["ask"]&.to_f
+          oi = option_data["oi"]&.to_i
+          bid = option_data["top_bid_price"]&.to_f
+          ask = option_data["top_ask_price"]&.to_f
 
           Rails.logger.debug("[Options] Strike #{strike}: LTP=#{ltp}, IV=#{iv}, OI=#{oi}, Bid=#{bid}, Ask=#{ask}")
 
@@ -165,10 +173,29 @@ module Options
             end
           end
 
+          # Find the derivative security ID using instrument.derivatives association
+          # Filter by strike, expiry date, and option type
+          expiry_date_obj = Date.parse(expiry_date)
+          option_type = side.to_s.upcase # CE or PE
+
+          derivative = instrument.derivatives.find do |d|
+            d.strike_price == strike.to_f &&
+            d.expiry_date == expiry_date_obj &&
+            d.option_type == option_type
+          end
+
+          if derivative
+            Rails.logger.debug("[Options] Found derivative for #{index_cfg[:key]} #{strike} #{side}: security_id=#{derivative.security_id}")
+            security_id = derivative.security_id
+          else
+            Rails.logger.warn("[Options] No derivative found for #{index_cfg[:key]} #{strike} #{side} #{expiry_date}")
+            security_id = nil
+          end
+
           legs << {
-            segment: option_data["exchange_segment"] || "NSE_FNO",
-            security_id: option_data["security_id"],
-            symbol: option_data["symbol"],
+            segment: "NSE_FNO", # Default segment for index options
+            security_id: security_id,
+            symbol: "#{index_cfg[:key]}-#{expiry_date_obj.strftime('%b%Y')}-#{strike.to_i}-#{side.to_s.upcase}",
             strike: strike,
             ltp: ltp,
             iv: iv,
@@ -177,7 +204,7 @@ module Options
             distance_from_atm: (strike - atm).abs
           }
 
-          Rails.logger.debug("[Options] Accepted #{strike}: #{option_data["symbol"]}")
+          Rails.logger.debug("[Options] Accepted #{strike}: #{legs.last[:symbol]}")
         end
 
         Rails.logger.info("[Options] Filter results: #{legs.size} accepted, #{rejected_count} rejected")

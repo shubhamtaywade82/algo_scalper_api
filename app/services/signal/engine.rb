@@ -10,8 +10,10 @@ module Signal
         Rails.logger.debug("[Signal] Using timeframe: #{timeframe}")
 
         # Calculate trading dates using Market::Calendar
+        # from_date: 4-5 trading days ago for sufficient historical data
+        # to_date: today or last trading day
         to_date = Market::Calendar.today_or_last_trading_day.strftime("%Y-%m-%d")
-        from_date = Market::Calendar.trading_days_ago(1).strftime("%Y-%m-%d")
+        from_date = Market::Calendar.trading_days_ago(5).strftime("%Y-%m-%d")
         Rails.logger.debug("[Signal] Fetching data from #{from_date} to #{to_date}")
 
         candles = DhanHQ::Models::HistoricalData.intraday(

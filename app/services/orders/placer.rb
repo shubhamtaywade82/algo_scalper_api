@@ -6,7 +6,7 @@ module Orders
       def buy_market!(seg:, sid:, qty:, client_order_id:)
         return if duplicate?(client_order_id)
 
-        order = DhanHQ::Models::Order.new(
+        order = DhanHQ::Models::Order.create(
           transaction_type: "BUY",
           exchange_segment: seg,
           security_id: sid,
@@ -16,7 +16,6 @@ module Orders
           validity: "DAY",
           client_order_id: client_order_id
         )
-        order.save
         remember(client_order_id)
         order
       end
@@ -24,7 +23,7 @@ module Orders
       def sell_market!(seg:, sid:, qty:, client_order_id:)
         return if duplicate?(client_order_id)
 
-        order = DhanHQ::Models::Order.new(
+        order = DhanHQ::Models::Order.create(
           transaction_type: "SELL",
           exchange_segment: seg,
           security_id: sid,
@@ -34,7 +33,6 @@ module Orders
           validity: "DAY",
           client_order_id: client_order_id
         )
-        order.save
         remember(client_order_id)
         order
       end
