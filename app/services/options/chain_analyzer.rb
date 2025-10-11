@@ -106,7 +106,7 @@ module Options
 
         # Calculate strike interval dynamically from available strikes
         strikes = option_chain_data.keys.map(&:to_f).sort
-        pp strikes
+
         strike_interval = if strikes.size >= 2
                            strikes[1] - strikes[0]
         else
