@@ -23,7 +23,21 @@ module Capital
         max_by_risk = (risk_capital / (entry_price.to_f * 0.30)).floor * lot_size
 
         quantity = [ max_by_allocation, max_by_risk ].min
-        [ [ quantity, lot_size ].max, lot_size * 100 ].min
+        final_quantity = [ [ quantity, lot_size ].max, lot_size * 100 ].min
+
+        Rails.logger.info("[Capital] Calculation breakdown:")
+        Rails.logger.info("  - Available capital: ₹#{capital_available}")
+        Rails.logger.info("  - Capital allocation %: #{index_cfg[:capital_alloc_pct] * 100}%")
+        Rails.logger.info("  - Allocation amount: ₹#{allocation}")
+        Rails.logger.info("  - Risk capital %: #{AlgoConfig.fetch.dig(:risk, :per_trade_risk_pct) * 100}%")
+        Rails.logger.info("  - Risk capital amount: ₹#{risk_capital}")
+        Rails.logger.info("  - Entry price: ₹#{entry_price}")
+        Rails.logger.info("  - Lot size: #{lot_size}")
+        Rails.logger.info("  - Max by allocation: #{max_by_allocation}")
+        Rails.logger.info("  - Max by risk: #{max_by_risk}")
+        Rails.logger.info("  - Final quantity: #{final_quantity}")
+
+        final_quantity
       rescue StandardError => e
         Rails.logger.error("Capital::Allocator failed: #{e.class} - #{e.message}")
         0

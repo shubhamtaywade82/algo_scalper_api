@@ -5,11 +5,11 @@ module Entries
     class << self
       def try_enter(index_cfg:, pick:, direction:)
         instrument = find_instrument(index_cfg)
-        return unless instrument
+        return false unless instrument
 
         side = direction == :bullish ? "long_ce" : "long_pe"
-        return unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
-        return if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
+        return false unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
+        return false if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
 
         Rails.logger.debug("[EntryGuard] Pick data: #{pick.inspect}")
         quantity = Capital::Allocator.qty_for(
@@ -17,7 +17,7 @@ module Entries
           entry_price: pick[:ltp].to_f,
           derivative_lot_size: pick[:lot_size]
         )
-        return if quantity <= 0
+        return false if quantity <= 0
 
         response = Orders::Placer.buy_market!(
           seg: pick[:segment] || index_cfg[:segment],
@@ -27,7 +27,7 @@ module Entries
         )
 
         order_no = extract_order_no(response)
-        return unless order_no
+        return false unless order_no
 
         create_tracker!(
           instrument: instrument,
@@ -37,8 +37,12 @@ module Entries
           quantity: quantity,
           index_cfg: index_cfg
         )
+
+        Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
+        true
       rescue StandardError => e
         Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+        false
       end
 
       def exposure_ok?(instrument:, side:, max_same_side:)

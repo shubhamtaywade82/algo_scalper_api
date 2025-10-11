@@ -5,7 +5,7 @@ indices:
       key: NIFTY,
       segment: IDX_I,
       sid: "13",
-      capital_alloc_pct: 0.20,
+      capital_alloc_pct: 0.30,
       max_same_side: 2,
       cooldown_sec: 180,
     }
@@ -13,7 +13,7 @@ indices:
       key: BANKNIFTY,
       segment: IDX_I,
       sid: "25",
-      capital_alloc_pct: 0.20,
+      capital_alloc_pct: 0.30,
       max_same_side: 2,
       cooldown_sec: 180,
     }
@@ -21,7 +21,7 @@ indices:
       key: SENSEX,
       segment: IDX_I,
       sid: "51",
-      capital_alloc_pct: 0.20,
+      capital_alloc_pct: 0.30,
       max_same_side: 2,
       cooldown_sec: 180,
     }
