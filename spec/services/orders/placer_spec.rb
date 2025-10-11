@@ -5,9 +5,7 @@ require "bigdecimal"
 
 RSpec.describe Orders::Placer do
   let(:order_double) { instance_double("DhanOrder") }
-  let(:super_order_double) { instance_double("DhanSuperOrder") }
   let(:captured_attrs) { [] }
-  let(:captured_super_attrs) { [] }
   let(:segment) { "NSE_FNO" }
   let(:security_id) { "123456" }
   let(:quantity) { 50 }
@@ -18,10 +16,6 @@ RSpec.describe Orders::Placer do
     allow(DhanHQ::Models::Order).to receive(:create) do |attributes|
       captured_attrs << attributes
       order_double
-    end
-    allow(DhanHQ::Models::SuperOrder).to receive(:create) do |attributes|
-      captured_super_attrs << attributes
-      super_order_double
     end
   end
 
@@ -57,7 +51,7 @@ RSpec.describe Orders::Placer do
       expect(captured_attrs.last[:correlation_id].length).to be <= 30
     end
 
-    it "places a super order when risk parameters are provided" do
+    it "places a market order even when risk parameters are provided" do
       stop_loss = BigDecimal("100.5")
       target = BigDecimal("125.25")
 
@@ -70,14 +64,14 @@ RSpec.describe Orders::Placer do
         target_price: target
       )
 
-      expect(DhanHQ::Models::SuperOrder).to have_received(:create)
-      expect(captured_super_attrs.last).to include(
-        stop_loss_price: stop_loss,
-        target_price: target,
+      expect(DhanHQ::Models::Order).to have_received(:create)
+      expect(captured_attrs.last).to include(
+        transaction_type: "BUY",
         order_type: "MARKET",
         product_type: "INTRADAY"
       )
-      expect(DhanHQ::Models::Order).not_to have_received(:create)
+      expect(captured_attrs.last).not_to have_key(:stop_loss_price)
+      expect(captured_attrs.last).not_to have_key(:target_price)
     end
   end
 end

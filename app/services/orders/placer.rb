@@ -20,37 +20,23 @@ module Orders
           Rails.logger.warn("[Orders] client_order_id truncated to '#{normalized_id}' (was '#{client_order_id}')")
         end
 
-        base_payload = {
+        Rails.logger.info("[Orders] Placing BUY order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{normalized_id}")
+
+        payload = {
           transaction_type: "BUY",
           exchange_segment: seg,
           security_id: sid,
           quantity: qty,
           order_type: "MARKET",
           product_type: product_type,
-          correlation_id: normalized_id
+          validity: "DAY",
+          correlation_id: normalized_id,
+          disclosed_quantity: 0
         }
 
-        if super_order_request?(target_price: target_price, stop_loss_price: stop_loss_price, trailing_jump: trailing_jump)
-          Rails.logger.info("[Orders] Placing BUY super order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{normalized_id}")
+        payload[:price] = price if price.present?
 
-          payload = base_payload.merge(
-            price: price || 0,
-            target_price: target_price,
-            stop_loss_price: stop_loss_price,
-            trailing_jump: trailing_jump
-          ).compact
-
-          order = DhanHQ::Models::SuperOrder.create(payload)
-        else
-          Rails.logger.info("[Orders] Placing BUY order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{normalized_id}")
-
-          payload = base_payload.merge(
-            validity: "DAY",
-            disclosed_quantity: 0
-          )
-
-          order = DhanHQ::Models::Order.create(payload)
-        end
+        order = DhanHQ::Models::Order.create(payload)
 
         remember(normalized_id)
         order
@@ -113,9 +99,6 @@ module Orders
         "#{base}-#{digest}"
       end
 
-      def super_order_request?(target_price:, stop_loss_price:, trailing_jump:)
-        target_price.present? || stop_loss_price.present? || trailing_jump.present?
-      end
     end
   end
 end
