@@ -14,13 +14,13 @@ module Indicators
 
     def call
       atr = calculate_atr
-      return [] if atr.empty?
+      return [] if atr.empty? || candles.size < period + 1
 
       supertrend = []
       trend = []
 
       candles.each_with_index do |candle, i|
-        next if i < period
+        next if i < period || atr[i].nil?
 
         hl2 = (candle.high + candle.low) / 2.0
         upper_band = hl2 + (multiplier * atr[i])
@@ -33,11 +33,11 @@ module Indicators
           prev_close = candles[i - 1].close
           prev_supertrend = supertrend[i - 1]
 
-          if prev_close <= supertrend[i - 1]
-            supertrend[i] = [upper_band, prev_supertrend].min
+          if prev_close <= prev_supertrend
+            supertrend[i] = [ upper_band, prev_supertrend ].min
             trend[i] = candle.close <= supertrend[i] ? :bearish : :bullish
           else
-            supertrend[i] = [lower_band, prev_supertrend].max
+            supertrend[i] = [ lower_band, prev_supertrend ].max
             trend[i] = candle.close >= supertrend[i] ? :bullish : :bearish
           end
         end
@@ -45,7 +45,12 @@ module Indicators
         supertrend_values[i] = supertrend[i]
       end
 
-      supertrend_values
+      # Return both values and trend for signal analysis
+      {
+        values: supertrend_values.compact,
+        trend: trend.compact.last,
+        last_value: supertrend_values.compact.last
+      }
     end
 
     private
@@ -68,16 +73,14 @@ module Indicators
       end
 
       (0...candles.size).each do |i|
-        atr[i] = if i < period
-                   nil
-                 else
-                   tr[(i - period + 1)..i].compact.sum / period
-                 end
+        if i < period
+          atr[i] = nil
+        else
+          atr[i] = tr[(i - period + 1)..i].compact.sum / period
+        end
       end
 
       atr
     end
   end
 end
-
-

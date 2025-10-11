@@ -12,3 +12,18 @@ begin
 rescue NameError
   DhanHQ.logger.level = Logger::INFO
 end
+
+# Configure Rails app settings for DhanHQ integration
+Rails.application.configure do
+  config.x.dhanhq = ActiveSupport::InheritableOptions.new(
+    enabled: ENV["DHANHQ_ENABLED"] == "true",
+    ws_enabled: ENV["DHANHQ_WS_ENABLED"] == "true",
+    order_ws_enabled: ENV["DHANHQ_ORDER_WS_ENABLED"] == "true",
+    ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
+    ws_watchlist: ENV["DHANHQ_WS_WATCHLIST"],
+    order_ws_url: ENV["DHANHQ_WS_ORDER_URL"],
+    ws_user_type: ENV["DHANHQ_WS_USER_TYPE"],
+    partner_id: ENV["DHANHQ_PARTNER_ID"],
+    partner_secret: ENV["DHANHQ_PARTNER_SECRET"]
+  )
+end

@@ -7,7 +7,8 @@ module Api
         mode: AlgoConfig.mode,
         watchlist: WatchlistItem.where(active: true).count,
         active_positions: PositionTracker.where(status: PositionTracker::STATUSES[:active]).count,
-        scheduler: scheduler_status
+        scheduler: scheduler_status,
+        circuit_breaker: Risk::CircuitBreaker.instance.status
       }
     end
 

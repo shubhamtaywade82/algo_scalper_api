@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_04_081500) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_10_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -112,6 +112,28 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_04_081500) do
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
   end
 
+  create_table "position_trackers", force: :cascade do |t|
+    t.bigint "instrument_id", null: false
+    t.string "order_no", null: false
+    t.string "security_id", null: false
+    t.string "symbol"
+    t.string "segment"
+    t.string "side"
+    t.string "status", default: "pending", null: false
+    t.integer "quantity"
+    t.decimal "avg_price", precision: 12, scale: 4
+    t.decimal "entry_price", precision: 12, scale: 4
+    t.decimal "last_pnl_rupees", precision: 12, scale: 4
+    t.decimal "last_pnl_pct", precision: 8, scale: 4
+    t.decimal "high_water_mark_pnl", precision: 12, scale: 4, default: "0.0"
+    t.jsonb "meta", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
+    t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
+    t.index ["security_id", "status"], name: "index_position_trackers_on_security_id_and_status"
+  end
+
   create_table "settings", force: :cascade do |t|
     t.string "key", null: false
     t.text "value"
@@ -135,4 +157,5 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_04_081500) do
   end
 
   add_foreign_key "derivatives", "instruments"
+  add_foreign_key "position_trackers", "instruments"
 end

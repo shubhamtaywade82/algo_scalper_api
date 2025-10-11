@@ -30,7 +30,15 @@ module Capital
       private
 
       def available_cash
-        value = Dhanhq.client.available_cash
+        data = DhanHQ::Models::Funds.fetch
+        value = if data.respond_to?(:available_balance)
+                  data.available_balance
+                elsif data.respond_to?(:available_cash)
+                  data.available_cash
+                elsif data.is_a?(Hash)
+                  data[:available_balance] || data[:available_cash]
+                end
+
         return BigDecimal("0") if value.nil?
 
         value.is_a?(BigDecimal) ? value : BigDecimal(value.to_s)

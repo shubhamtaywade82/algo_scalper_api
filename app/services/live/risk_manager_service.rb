@@ -44,6 +44,7 @@ module Live
     def monitor_loop
       while running?
         enforce_trailing_stops
+        enforce_daily_circuit_breaker
         sleep LOOP_INTERVAL
       end
     rescue StandardError => e
@@ -82,8 +83,45 @@ module Live
       end
     end
 
+    def enforce_daily_circuit_breaker
+      risk = risk_config
+      limit_pct = BigDecimal((risk[:daily_loss_limit_pct] || 0).to_s)
+      return if limit_pct <= 0
+
+      begin
+        funds = DhanHQ::Models::Funds.fetch
+        pnl_today = if funds.respond_to?(:day_pnl)
+                      BigDecimal(funds.day_pnl.to_s)
+        elsif funds.is_a?(Hash)
+                      BigDecimal((funds[:day_pnl] || 0).to_s)
+        else
+                      BigDecimal("0")
+        end
+
+        balance = if funds.respond_to?(:net_balance)
+                    BigDecimal(funds.net_balance.to_s)
+        elsif funds.respond_to?(:net_cash)
+                    BigDecimal(funds.net_cash.to_s)
+        elsif funds.is_a?(Hash)
+                    BigDecimal((funds[:net_balance] || funds[:net_cash] || 0).to_s)
+        else
+                    BigDecimal("0")
+        end
+
+        return if balance <= 0
+
+        loss_pct = (pnl_today / balance) * -1
+        if pnl_today < 0 && loss_pct >= limit_pct
+          Risk::CircuitBreaker.instance.trip!(reason: "daily loss limit reached: #{(loss_pct * 100).round(2)}%")
+          Rails.logger.warn("Circuit breaker TRIPPED due to daily loss: #{pnl_today.to_s('F')} against balance #{balance.to_s('F')}")
+        end
+      rescue StandardError => e
+        Rails.logger.warn("Daily circuit breaker check failed: #{e.class} - #{e.message}")
+      end
+    end
+
     def fetch_positions_indexed
-      Dhanhq.client.active_positions.each_with_object({}) do |position, map|
+      DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
         security_id = position.respond_to?(:security_id) ? position.security_id : position[:security_id]
         map[security_id.to_s] = position if security_id
       end
@@ -96,9 +134,9 @@ module Live
       segment = tracker.segment.presence
       segment ||= if position.respond_to?(:exchange_segment)
                     position.exchange_segment
-                  elsif position.is_a?(Hash)
+      elsif position.is_a?(Hash)
                     position[:exchange_segment]
-                  end
+      end
       segment ||= tracker.instrument&.exchange_segment
 
       cached = Live::TickCache.ltp(segment, tracker.security_id)
@@ -112,9 +150,9 @@ module Live
       if quantity.zero? && position
         quantity = if position.respond_to?(:quantity)
                      position.quantity
-                   else
+        else
                      position[:quantity]
-                   end.to_i
+        end.to_i
       end
       return nil if quantity.zero?
 
@@ -122,9 +160,9 @@ module Live
       if entry_price.blank? && position
         entry_price = if position.respond_to?(:average_price)
                         position.average_price
-                      else
+        else
                         position[:average_price]
-                      end
+        end
       end
       return nil if entry_price.blank?
 
