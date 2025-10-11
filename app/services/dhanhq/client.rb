@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "singleton"
+require "bigdecimal"
 
 module Dhanhq
   class Client
@@ -84,6 +85,25 @@ module Dhanhq
     def funds
       ensure_enabled!
       wrap_errors(__method__) { DhanHQ::Models::Funds.fetch }
+    end
+
+    def available_cash
+      ensure_enabled!
+      wrap_errors(__method__) do
+        data = DhanHQ::Models::Funds.fetch
+        value =
+          if data.respond_to?(:available_balance)
+            data.available_balance
+          elsif data.respond_to?(:available_cash)
+            data.available_cash
+          elsif data.is_a?(Hash)
+            data[:available_balance] || data[:available_cash]
+          end
+
+        return BigDecimal("0") if value.nil?
+
+        BigDecimal(value.to_s)
+      end
     end
 
     def option_chain(underlying_scrip:, underlying_seg:, expiry: nil)

@@ -1,0 +1,28 @@
+mode: live   # live | paper
+
+indices:
+  - { key: NIFTY,     segment: IDX_I, sid: "13",  lot: 75,  capital_alloc_pct: 0.20, max_same_side: 2, cooldown_sec: 180 }
+  - { key: BANKNIFTY, segment: IDX_I, sid: "25",  lot: 15,  capital_alloc_pct: 0.20, max_same_side: 2, cooldown_sec: 180 }
+  - { key: SENSEX,    segment: IDX_I, sid: "999", lot: 10,  capital_alloc_pct: 0.20, max_same_side: 2, cooldown_sec: 180 }
+
+risk:
+  daily_loss_limit_pct: 0.04
+  per_trade_risk_pct:   0.01
+  sl_pct:               0.30
+  tp_pct:               0.60
+  trail_step_pct:       0.10
+  breakeven_after_gain: 0.35
+  exit_drop_pct:        0.05   # use by PositionTracker high-water-mark trailing
+
+signals:
+  timeframe: "5m"
+  supertrend: { factor: 3.0, period: 10 }
+  adx:        { min_strength: 18 }
+
+option_chain:
+  expiry: next
+  atm_window_pct: 1.0
+  min_iv: 10
+  max_iv: 60
+  min_oi: 50000
+  max_spread_pct: 1.0
