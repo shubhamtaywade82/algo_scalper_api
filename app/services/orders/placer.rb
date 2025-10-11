@@ -6,6 +6,14 @@ module Orders
       def buy_market!(seg:, sid:, qty:, client_order_id:)
         return if duplicate?(client_order_id)
 
+        # Validate required parameters
+        unless seg && sid && qty && client_order_id
+          Rails.logger.error("[Orders] Missing required parameters: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
+          return nil
+        end
+
+        Rails.logger.info("[Orders] Placing BUY order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
+
         order = DhanHQ::Models::Order.create(
           transaction_type: "BUY",
           exchange_segment: seg,
@@ -14,7 +22,12 @@ module Orders
           order_type: "MARKET",
           product_type: "INTRADAY",
           validity: "DAY",
-          client_order_id: client_order_id
+          client_order_id: client_order_id,
+          price: 0.01, # Market order - minimal price, actual execution will be at market price
+          disclosed_quantity: 0,
+          stop_loss: 0.0,
+          square_off: 0.0,
+          trailing_stop_loss: 0.0
         )
         remember(client_order_id)
         order
@@ -22,6 +35,14 @@ module Orders
 
       def sell_market!(seg:, sid:, qty:, client_order_id:)
         return if duplicate?(client_order_id)
+
+        # Validate required parameters
+        unless seg && sid && qty && client_order_id
+          Rails.logger.error("[Orders] Missing required parameters: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
+          return nil
+        end
+
+        Rails.logger.info("[Orders] Placing SELL order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
 
         order = DhanHQ::Models::Order.create(
           transaction_type: "SELL",
@@ -31,7 +52,12 @@ module Orders
           order_type: "MARKET",
           product_type: "INTRADAY",
           validity: "DAY",
-          client_order_id: client_order_id
+          client_order_id: client_order_id,
+          price: 0.01, # Market order - minimal price, actual execution will be at market price
+          disclosed_quantity: 0,
+          stop_loss: 0.0,
+          square_off: 0.0,
+          trailing_stop_loss: 0.0
         )
         remember(client_order_id)
         order

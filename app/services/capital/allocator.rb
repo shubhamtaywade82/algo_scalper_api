@@ -5,14 +5,16 @@ require "bigdecimal"
 module Capital
   class Allocator
     class << self
-      def qty_for(index_cfg:, entry_price:)
+      def qty_for(index_cfg:, entry_price:, derivative_lot_size:)
         capital_available = available_cash
         return 0 if capital_available.zero?
 
         return 0 if entry_price.to_f <= 0
 
         allocation = capital_available * index_cfg[:capital_alloc_pct].to_f
-        lot_size = index_cfg[:lot].to_i
+        # Always use derivative lot size - no fallback to index config
+        lot_size = derivative_lot_size.to_i
+        Rails.logger.debug("[Capital] Using derivative lot_size: #{lot_size}")
         return 0 if lot_size <= 0
 
         risk_capital = capital_available * AlgoConfig.fetch.dig(:risk, :per_trade_risk_pct).to_f
@@ -20,8 +22,8 @@ module Capital
         max_by_allocation = (allocation / (entry_price.to_f * lot_size)).floor * lot_size
         max_by_risk = (risk_capital / (entry_price.to_f * 0.30)).floor * lot_size
 
-        quantity = [max_by_allocation, max_by_risk].min
-        [[quantity, lot_size].max, lot_size * 100].min
+        quantity = [ max_by_allocation, max_by_risk ].min
+        [ [ quantity, lot_size ].max, lot_size * 100 ].min
       rescue StandardError => e
         Rails.logger.error("Capital::Allocator failed: #{e.class} - #{e.message}")
         0
@@ -33,11 +35,11 @@ module Capital
         data = DhanHQ::Models::Funds.fetch
         value = if data.respond_to?(:available_balance)
                   data.available_balance
-                elsif data.respond_to?(:available_cash)
+        elsif data.respond_to?(:available_cash)
                   data.available_cash
-                elsif data.is_a?(Hash)
+        elsif data.is_a?(Hash)
                   data[:available_balance] || data[:available_cash]
-                end
+        end
 
         return BigDecimal("0") if value.nil?
 

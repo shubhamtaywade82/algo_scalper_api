@@ -11,7 +11,12 @@ module Entries
         return unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
         return if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
 
-        quantity = Capital::Allocator.qty_for(index_cfg: index_cfg, entry_price: pick[:ltp].to_f)
+        Rails.logger.debug("[EntryGuard] Pick data: #{pick.inspect}")
+        quantity = Capital::Allocator.qty_for(
+          index_cfg: index_cfg,
+          entry_price: pick[:ltp].to_f,
+          derivative_lot_size: pick[:lot_size]
+        )
         return if quantity <= 0
 
         response = Orders::Placer.buy_market!(

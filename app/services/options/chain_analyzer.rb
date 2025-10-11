@@ -69,7 +69,7 @@ module Options
         end
 
         legs.first(2).map do |leg|
-          leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread)
+          leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size)
         end
       end
 
@@ -185,7 +185,7 @@ module Options
           end
 
           if derivative
-            Rails.logger.debug("[Options] Found derivative for #{index_cfg[:key]} #{strike} #{side}: security_id=#{derivative.security_id}")
+            Rails.logger.debug("[Options] Found derivative for #{index_cfg[:key]} #{strike} #{side}: security_id=#{derivative.security_id}, lot_size=#{derivative.lot_size}")
             security_id = derivative.security_id
           else
             Rails.logger.warn("[Options] No derivative found for #{index_cfg[:key]} #{strike} #{side} #{expiry_date}")
@@ -201,7 +201,8 @@ module Options
             iv: iv,
             oi: oi,
             spread: ask && bid ? (ask - bid) : nil,
-            distance_from_atm: (strike - atm).abs
+            distance_from_atm: (strike - atm).abs,
+            lot_size: derivative&.lot_size || index_cfg[:lot].to_i
           }
 
           Rails.logger.debug("[Options] Accepted #{strike}: #{legs.last[:symbol]}")
