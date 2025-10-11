@@ -8,8 +8,6 @@ module Live
     include Singleton
 
     LOOP_INTERVAL = 5
-    MIN_PROFIT_LOCK = BigDecimal("1000")
-    EXIT_DROP_PCT = BigDecimal("0.05")
 
     def initialize
       @mutex = Mutex.new
@@ -55,18 +53,29 @@ module Live
 
     def enforce_trailing_stops
       positions = fetch_positions_indexed
+      risk = risk_config
 
-      PositionTracker.active.find_each do |tracker|
+      PositionTracker.active.includes(:instrument).find_each do |tracker|
         position = positions[tracker.security_id.to_s]
-        next unless position
+        ltp = current_ltp(tracker, position)
+        next unless ltp
 
-        pnl = fetch_pnl(position, tracker)
+        pnl = compute_pnl(tracker, position, ltp)
         next unless pnl
 
-        tracker.with_lock do
-          tracker.update_pnl!(pnl)
+        pnl_pct = compute_pnl_pct(tracker, ltp)
 
-          if tracker.ready_to_trail?(pnl, MIN_PROFIT_LOCK) && tracker.trailing_stop_triggered?(pnl, EXIT_DROP_PCT)
+        tracker.with_lock do
+          tracker.update_pnl!(pnl, pnl_pct: pnl_pct)
+
+          if should_lock_breakeven?(tracker, pnl_pct, risk[:breakeven_after_gain])
+            tracker.lock_breakeven!
+          end
+
+          min_profit = tracker.min_profit_lock(risk[:trail_step_pct] || 0)
+          drop_pct = BigDecimal((risk[:exit_drop_pct] || 0.05).to_s)
+
+          if tracker.ready_to_trail?(pnl, min_profit) && tracker.trailing_stop_triggered?(pnl, drop_pct)
             execute_exit(position, tracker)
           end
         end
@@ -83,17 +92,54 @@ module Live
       {}
     end
 
-    def fetch_pnl(position, tracker)
-      return BigDecimal(position.pnl.to_s) if position.respond_to?(:pnl) && position.pnl
+    def current_ltp(tracker, position)
+      segment = tracker.segment.presence
+      segment ||= if position.respond_to?(:exchange_segment)
+                    position.exchange_segment
+                  elsif position.is_a?(Hash)
+                    position[:exchange_segment]
+                  end
+      segment ||= tracker.instrument&.exchange_segment
 
-      quantity = (position.respond_to?(:quantity) ? position.quantity : position[:quantity]) || tracker.quantity
-      avg_price = (position.respond_to?(:average_price) ? position.average_price : position[:average_price]) || tracker.entry_price
-      ltp = fetch_ltp(position, tracker)
-      return if quantity.nil? || avg_price.nil? || ltp.nil?
+      cached = Live::TickCache.ltp(segment, tracker.security_id)
+      return BigDecimal(cached.to_s) if cached
 
-      (ltp - BigDecimal(avg_price.to_s)) * quantity.to_i
+      fetch_ltp(position, tracker)
+    end
+
+    def compute_pnl(tracker, position, ltp)
+      quantity = tracker.quantity.to_i
+      if quantity.zero? && position
+        quantity = if position.respond_to?(:quantity)
+                     position.quantity
+                   else
+                     position[:quantity]
+                   end.to_i
+      end
+      return nil if quantity.zero?
+
+      entry_price = tracker.entry_price || tracker.avg_price
+      if entry_price.blank? && position
+        entry_price = if position.respond_to?(:average_price)
+                        position.average_price
+                      else
+                        position[:average_price]
+                      end
+      end
+      return nil if entry_price.blank?
+
+      (ltp - BigDecimal(entry_price.to_s)) * quantity
     rescue StandardError => e
       Rails.logger.error("Failed to compute PnL for tracker #{tracker.id}: #{e.class} - #{e.message}")
+      nil
+    end
+
+    def compute_pnl_pct(tracker, ltp)
+      entry_price = tracker.entry_price || tracker.avg_price
+      return nil if entry_price.blank?
+
+      (ltp - BigDecimal(entry_price.to_s)) / BigDecimal(entry_price.to_s)
+    rescue StandardError
       nil
     end
 
@@ -101,29 +147,51 @@ module Live
       segment =
         if position.respond_to?(:exchange_segment)
           position.exchange_segment
-        else
+        elsif position.is_a?(Hash)
           position[:exchange_segment]
         end
+      segment ||= tracker.instrument&.exchange_segment
 
-      ltp = Live::TickCache.ltp(segment || tracker.instrument.exchange_segment, tracker.security_id)
-      ltp ? BigDecimal(ltp.to_s) : nil
+      ltp = Live::TickCache.ltp(segment, tracker.security_id)
+      return BigDecimal(ltp.to_s) if ltp
+
+      nil
+    end
+
+    def should_lock_breakeven?(tracker, pnl_pct, threshold)
+      return false if threshold.to_f <= 0
+      return false if tracker.breakeven_locked?
+      return false if pnl_pct.nil?
+
+      pnl_pct >= BigDecimal(threshold.to_s)
     end
 
     def execute_exit(position, tracker)
       Rails.logger.info("Triggering trailing-stop exit for #{tracker.order_no} (PnL=#{tracker.last_pnl_rupees}).")
-      exit_position(position)
-      tracker.unsubscribe
+      exit_position(position, tracker)
       tracker.mark_exited!
     rescue StandardError => e
       Rails.logger.error("Failed to exit position #{tracker.order_no}: #{e.class} - #{e.message}")
     end
 
-    def exit_position(position)
+    def exit_position(position, tracker)
       if position.respond_to?(:exit!)
         position.exit!
       elsif position.respond_to?(:order_id)
         Dhanhq.client.cancel_order(order_id: position.order_id)
+      else
+        segment = tracker.segment.presence || tracker.instrument&.exchange_segment
+        Orders::Placer.sell_market!(
+          seg: segment,
+          sid: tracker.security_id,
+          qty: tracker.quantity.to_i,
+          client_order_id: "AS-EXIT-#{tracker.order_no}-#{Time.current.to_i}"
+        ) if segment.present?
       end
+    end
+
+    def risk_config
+      AlgoConfig.fetch[:risk] || {}
     end
   end
 end

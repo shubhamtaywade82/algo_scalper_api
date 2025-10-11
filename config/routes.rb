@@ -8,6 +8,10 @@ Rails.application.routes.draw do
   # Defines the root path route ("/")
   root "home#index"
 
+  namespace :api do
+    get :health, to: "health#show"
+  end
+
   # Quietly handle browser/devtools well-known probes with 204 No Content
   get "/.well-known/*path", to: proc { [204, { "Content-Type" => "text/plain" }, [""] ] }
 

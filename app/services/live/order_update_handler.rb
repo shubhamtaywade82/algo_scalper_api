@@ -44,8 +44,14 @@ module Live
       avg_price = safe_decimal(payload[:average_traded_price] || payload[:average_price])
       quantity = payload[:filled_quantity] || payload[:quantity]
 
+      transaction_type = (payload[:transaction_type] || payload[:side] || payload[:transaction_side]).to_s.upcase
+
       if FILL_STATUSES.include?(status)
-        tracker.mark_active!(avg_price: avg_price, quantity: quantity)
+        if transaction_type == "SELL"
+          tracker.mark_exited!
+        else
+          tracker.mark_active!(avg_price: avg_price, quantity: quantity)
+        end
       elsif CANCELLED_STATUSES.include?(status)
         tracker.mark_cancelled!
       end
