@@ -9,17 +9,17 @@ module Trading
     DEFAULT_TARGET = BigDecimal("1000")
 
     def initialize(
-      client: Dhanhq.client,
+      super_order_model: DhanHQ::Models::SuperOrder,
       trend_identifier: TrendIdentifier.new,
       strike_selector: StrikeSelector.new
     )
-      @client = client
+      @super_order_model = super_order_model
       @trend_identifier = trend_identifier
       @strike_selector = strike_selector
     end
 
     def execute_cycle!
-      return unless @client.enabled?
+      return unless dhanhq_enabled?
       return if global_position_limit_reached?
 
       Instrument.enabled.find_each do |instrument|
@@ -53,7 +53,7 @@ module Trading
       stop_loss = DEFAULT_STOP_LOSS
       target = DEFAULT_TARGET
 
-      @client.create_super_order(
+      @super_order_model.create(
         security_id: derivative.security_id,
         exchange_segment: derivative.exchange_segment,
         transaction_type: "BUY",
@@ -94,6 +94,13 @@ module Trading
 
     def active_positions_for_security(security_id)
       PositionTracker.active.where(security_id: security_id).count
+    end
+
+    def dhanhq_enabled?
+      config = Rails.application.config.x
+      return false unless config.respond_to?(:dhanhq)
+
+      config.dhanhq&.enabled
     end
   end
 end

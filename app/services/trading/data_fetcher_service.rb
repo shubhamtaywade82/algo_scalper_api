@@ -12,17 +12,13 @@ module Trading
       "15minute" => 15
     }.freeze
 
-    def initialize(client: Dhanhq.client)
-      @client = client
-    end
-
     def fetch_historical_data(security_id:, exchange_segment:, interval: "5minute", lookback: 200, from: nil, to: nil)
       interval_key = interval.to_s
       minutes = INTERVAL_IN_MINUTES.fetch(interval_key, 5)
       to_time = (to || Time.current).in_time_zone("Asia/Kolkata")
       from_time = (from || to_time - minutes.minutes * lookback)
 
-      candles = @client.historical_intraday(
+      candles = DhanHQ::Models::HistoricalData.intraday(
         security_id: security_id,
         exchange_segment: exchange_segment,
         interval: interval_key,
@@ -41,7 +37,11 @@ module Trading
 
       payload[:expiry] = expiry if expiry
 
-      @client.option_chain(**payload)
+      if expiry
+        DhanHQ::Models::OptionChain.fetch(**payload)
+      else
+        DhanHQ::Models::OptionChain.fetch_expiry_list(**payload)
+      end
     end
 
     def fetch_derivative_quote(derivative)

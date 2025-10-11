@@ -216,7 +216,7 @@ module Live
       if position.respond_to?(:exit!)
         position.exit!
       elsif position.respond_to?(:order_id)
-        Dhanhq.client.cancel_order(order_id: position.order_id)
+        cancel_remote_order(position.order_id)
       else
         segment = tracker.segment.presence || tracker.instrument&.exchange_segment
         Orders::Placer.sell_market!(
@@ -230,6 +230,17 @@ module Live
 
     def risk_config
       AlgoConfig.fetch[:risk] || {}
+    end
+
+    def cancel_remote_order(order_id)
+      order = DhanHQ::Models::Order.find(order_id)
+      order.cancel
+    rescue DhanHQ::Error => e
+      Rails.logger.error("Failed to cancel order #{order_id}: #{e.message}")
+      raise
+    rescue StandardError => e
+      Rails.logger.error("Unexpected error cancelling order #{order_id}: #{e.class} - #{e.message}")
+      raise
     end
   end
 end
