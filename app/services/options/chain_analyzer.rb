@@ -58,10 +58,11 @@ module Options
         Rails.logger.info("[Options] ATM price: #{atm_price}")
 
         side = direction == :bullish ? :ce : :pe
-        window = atm_price.to_f * (AlgoConfig.fetch.dig(:option_chain, :atm_window_pct).to_f / 100.0)
-        Rails.logger.debug("[Options] Looking for #{side} options within #{window} points of ATM")
+        # For buying options, focus on ATM and ATM+1 strikes only
+        # This prevents selecting expensive ITM options
+        Rails.logger.debug("[Options] Looking for #{side} options at ATM and ATM+1 strikes only")
 
-        legs = filter_and_rank_from_instrument_data(chain_data[:oc], atm: atm_price, side: side, window: window, index_cfg: index_cfg, expiry_date: expiry_date, instrument: instrument)
+        legs = filter_and_rank_from_instrument_data(chain_data[:oc], atm: atm_price, side: side, index_cfg: index_cfg, expiry_date: expiry_date, instrument: instrument)
         Rails.logger.info("[Options] Found #{legs.size} qualifying #{side} options for #{index_cfg[:key]}")
 
         if legs.any?
@@ -95,14 +96,26 @@ module Options
         Market::Calendar.next_trading_day.strftime("%Y-%m-%d")
       end
 
-      def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, window:, index_cfg:, expiry_date:, instrument:)
+      def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, index_cfg:, expiry_date:, instrument:)
         # Force reload - debugging index_cfg scope issue
         return [] unless option_chain_data
 
         Rails.logger.debug("[Options] Method called with index_cfg: #{index_cfg[:key]}, expiry_date: #{expiry_date}")
 
         Rails.logger.debug("[Options] Processing #{option_chain_data.size} strikes for #{side} options")
-        Rails.logger.debug("[Options] ATM: #{atm}, Window: #{window} (#{atm - window} to #{atm + window})")
+
+        # Calculate strike interval dynamically from available strikes
+        strikes = option_chain_data.keys.map(&:to_f).sort
+        pp strikes
+        strike_interval = if strikes.size >= 2
+                           strikes[1] - strikes[0]
+        else
+                           50 # fallback
+        end
+
+        atm_strike = (atm / strike_interval).round * strike_interval
+        atm_plus_one = atm_strike + strike_interval
+        Rails.logger.debug("[Options] ATM: #{atm}, Strike interval: #{strike_interval}, Looking for ATM (#{atm_strike}) and ATM+1 (#{atm_plus_one}) strikes")
 
         min_iv = AlgoConfig.fetch.dig(:option_chain, :min_iv).to_f
         max_iv = AlgoConfig.fetch.dig(:option_chain, :max_iv).to_f
@@ -117,8 +130,19 @@ module Options
         option_chain_data.each do |strike_str, strike_data|
           strike = strike_str.to_f
 
-          # Check ATM window first
-          unless (atm - window) <= strike && strike <= (atm + window)
+          # For buying options, only consider ATM and ATM+1 strikes
+          # This prevents selecting expensive ITM options
+          # Use the same dynamic strike interval calculation as above
+          strikes = option_chain_data.keys.map(&:to_f).sort
+          strike_interval = if strikes.size >= 2
+                             strikes[1] - strikes[0]
+          else
+                             50 # fallback
+          end
+          atm_strike = (atm / strike_interval).round * strike_interval
+          atm_plus_one = atm_strike + strike_interval
+
+          unless strike == atm_strike || strike == atm_plus_one
             rejected_count += 1
             next
           end

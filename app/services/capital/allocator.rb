@@ -17,6 +17,13 @@ module Capital
         Rails.logger.debug("[Capital] Using derivative lot_size: #{lot_size}")
         return 0 if lot_size <= 0
 
+        # Safety check: Can we afford at least 1 lot?
+        min_lot_cost = entry_price.to_f * lot_size
+        if capital_available < min_lot_cost
+          Rails.logger.warn("[Capital] Insufficient capital for minimum lot: Available ₹#{capital_available}, Required ₹#{min_lot_cost}")
+          return 0
+        end
+
         risk_capital = capital_available * AlgoConfig.fetch.dig(:risk, :per_trade_risk_pct).to_f
 
         max_by_allocation = (allocation / (entry_price.to_f * lot_size)).floor * lot_size
@@ -24,6 +31,17 @@ module Capital
 
         quantity = [ max_by_allocation, max_by_risk ].min
         final_quantity = [ [ quantity, lot_size ].max, lot_size * 100 ].min
+
+        # Safety check: Ensure final buy value doesn't exceed available capital
+        final_buy_value = entry_price.to_f * final_quantity
+        if final_buy_value > capital_available
+          Rails.logger.warn("[Capital] Final buy value exceeds available capital: Buy ₹#{final_buy_value}, Available ₹#{capital_available}")
+          # Reduce quantity to fit within available capital
+          max_affordable_lots = (capital_available / (entry_price.to_f * lot_size)).floor
+          final_quantity = max_affordable_lots * lot_size
+          final_quantity = [ final_quantity, lot_size ].max # Ensure at least 1 lot
+          Rails.logger.info("[Capital] Adjusted quantity to fit available capital: #{final_quantity}")
+        end
 
         Rails.logger.info("[Capital] Calculation breakdown:")
         Rails.logger.info("  - Available capital: ₹#{capital_available}")
@@ -36,6 +54,7 @@ module Capital
         Rails.logger.info("  - Max by allocation: #{max_by_allocation}")
         Rails.logger.info("  - Max by risk: #{max_by_risk}")
         Rails.logger.info("  - Final quantity: #{final_quantity}")
+        Rails.logger.info("  - Total buy value: ₹#{entry_price * final_quantity}")
 
         final_quantity
       rescue StandardError => e

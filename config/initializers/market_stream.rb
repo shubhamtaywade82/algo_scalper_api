@@ -15,8 +15,8 @@ Rails.application.config.to_prepare do
   # Start staggered OHLC intraday prefetch loop for watchlist
   Live::OhlcPrefetcherService.instance.start! if defined?(Live::OhlcPrefetcherService)
 
-  # Start trading scheduler (signals → entries)
-  Signal::Scheduler.new.start! if defined?(Signal::Scheduler)
+  # Start trading scheduler (signals → entries) - only in server mode
+  Signal::Scheduler.new.start! if defined?(Signal::Scheduler) && !Rails.const_defined?(:Console)
 
   Live::RiskManagerService.instance.start! if defined?(Live::RiskManagerService)
 end

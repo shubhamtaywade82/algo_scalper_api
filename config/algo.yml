@@ -41,8 +41,8 @@ signals:
   adx: { min_strength: 18 }
 
 option_chain:
-  atm_window_pct: 1.0
+  atm_window_pct: 0.1
   min_iv: 10
   max_iv: 60
   min_oi: 50000
-  max_spread_pct: 1.0
+  max_spread_pct: 3.0

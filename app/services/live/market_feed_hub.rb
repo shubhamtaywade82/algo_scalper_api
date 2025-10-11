@@ -121,7 +121,7 @@ module Live
 
     def subscribe_watchlist
       @watchlist.each do |item|
-        @ws_client.subscribe_one(item)
+        @ws_client.subscribe_one(**item)
       end
     end
 

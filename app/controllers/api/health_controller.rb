@@ -8,7 +8,17 @@ module Api
         watchlist: WatchlistItem.where(active: true).count,
         active_positions: PositionTracker.where(status: PositionTracker::STATUSES[:active]).count,
         scheduler: scheduler_status,
-        circuit_breaker: Risk::CircuitBreaker.instance.status
+        circuit_breaker: Risk::CircuitBreaker.instance.status,
+        websocket: {
+          market_feed_running: Live::MarketFeedHub.instance.running?,
+          order_update_running: Live::OrderUpdateHub.instance.running?,
+          tick_cache_size: Live::TickCache.all.size,
+          sample_ltps: {
+            nifty: Live::TickCache.ltp('IDX_I', '13'),
+            banknifty: Live::TickCache.ltp('IDX_I', '25'),
+            sensex: Live::TickCache.ltp('IDX_I', '51')
+          }
+        }
       }
     end
 
