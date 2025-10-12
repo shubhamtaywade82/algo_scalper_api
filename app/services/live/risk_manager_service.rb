@@ -196,6 +196,13 @@ module Live
     end
 
     def current_ltp(tracker, position)
+      # Try to get LTP from the instrument first
+      if tracker.instrument
+        ltp = tracker.instrument.latest_ltp
+        return ltp if ltp
+      end
+
+      # Fallback to manual fetching
       segment = tracker.segment.presence
       segment ||= if position.respond_to?(:exchange_segment)
                     position.exchange_segment

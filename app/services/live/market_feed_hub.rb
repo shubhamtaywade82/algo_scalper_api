@@ -59,17 +59,15 @@ module Live
 
     def subscribe(segment:, security_id:)
       ensure_running!
-      payload = { segment: segment, security_id: security_id.to_s }
-      @ws_client.subscribe_one(payload)
-      payload
+      @ws_client.subscribe_one(segment: segment, security_id: security_id.to_s)
+      { segment: segment, security_id: security_id.to_s }
     end
 
     def unsubscribe(segment:, security_id:)
       return unless running?
 
-      payload = { segment: segment, security_id: security_id.to_s }
-      @ws_client.unsubscribe_one(payload)
-      payload
+      @ws_client.unsubscribe_one(segment: segment, security_id: security_id.to_s)
+      { segment: segment, security_id: security_id.to_s }
     end
 
     def on_tick(&block)
@@ -121,7 +119,7 @@ module Live
 
     def subscribe_watchlist
       @watchlist.each do |item|
-        @ws_client.subscribe_one(**item)
+        @ws_client.subscribe_one(segment: item[:segment], security_id: item[:security_id])
       end
     end
 

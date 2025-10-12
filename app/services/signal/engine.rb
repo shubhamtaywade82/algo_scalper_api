@@ -36,8 +36,7 @@ module Signal
         st = Indicators::Supertrend.new(series: series, **supertrend_cfg).call
         Rails.logger.info("[Signal] Supertrend result for #{index_cfg[:key]}: trend=#{st[:trend]}, last_value=#{st[:last_value]}")
 
-        adx_calculator = Indicators::Calculator.new(series)
-        adx_value = adx_calculator.adx
+        adx_value = instrument.adx(14, interval: timeframe.gsub("m", ""))
         adx = { value: adx_value }
         Rails.logger.info("[Signal] ADX value for #{index_cfg[:key]}: #{adx_value}")
 

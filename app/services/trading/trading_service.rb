@@ -37,7 +37,7 @@ module Trading
       return if active_positions_for_security(derivative.security_id) >= MAX_POSITIONS
 
       instrument.subscribe!
-      Live::MarketFeedHub.instance.subscribe(segment: derivative.exchange_segment, security_id: derivative.security_id)
+      derivative.subscribe
 
       order = submit_market_order(instrument, derivative)
       persist_tracker(instrument, derivative, order)
