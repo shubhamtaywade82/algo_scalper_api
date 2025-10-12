@@ -676,18 +676,18 @@ DhanHQ::Models::HistoricalData.intraday(security_id: "1333", interval: "15")
 
 ## 🔹 Available Resources
 
-| Resource                 | Model                                    | Actions                                             |
-| ------------------------ | ---------------------------------------- | --------------------------------------------------- |
-| Orders                   | `DhanHQ::Models::Models::Order`          | `find`, `all`, `where`, `place`, `update`, `cancel` |
-| Trades                   | `DhanHQ::Models::Models::Trade`          | `all`, `find_by_order_id`                           |
-| Forever Orders           | `DhanHQ::Models::Models::ForeverOrder`   | `create`, `find`, `modify`, `cancel`, `all`         |
-| Holdings                 | `DhanHQ::Models::Models::Holding`        | `all`                                               |
-| Positions                | `DhanHQ::Models::Models::Position`       | `all`, `find`, `exit!`                              |
-| Funds & Margin           | `DhanHQ::Models::Models::Funds`          | `fund_limit`, `margin_calculator`                   |
-| Ledger                   | `DhanHQ::Models::Models::Ledger`         | `all`                                               |
-| Market Feeds             | `DhanHQ::Models::Models::MarketFeed`     | `ltp, ohlc`, `quote`                                |
-| Historical Data (Charts) | `DhanHQ::Models::Models::HistoricalData` | `daily`, `intraday`                                 |
-| Option Chain             | `DhanHQ::Models::Models::OptionChain`    | `fetch`, `fetch_expiry_list`                        |
+| Resource                 | Model                            | Actions                                             |
+| ------------------------ | -------------------------------- | --------------------------------------------------- |
+| Orders                   | `DhanHQ::Models::Order`          | `find`, `all`, `where`, `place`, `update`, `cancel` |
+| Trades                   | `DhanHQ::Models::Trade`          | `all`, `find_by_order_id`                           |
+| Forever Orders           | `DhanHQ::Models::ForeverOrder`   | `create`, `find`, `modify`, `cancel`, `all`         |
+| Holdings                 | `DhanHQ::Models::Holding`        | `all`                                               |
+| Positions                | `DhanHQ::Models::Position`       | `all`, `find`, `exit!`                              |
+| Funds & Margin           | `DhanHQ::Models::Funds`          | `fetch`, `balance`                                  |
+| Ledger                   | `DhanHQ::Models::Ledger`         | `all`                                               |
+| Market Feeds             | `DhanHQ::Models::MarketFeed`     | `ltp`, `ohlc`, `quote`                              |
+| Historical Data (Charts) | `DhanHQ::Models::HistoricalData` | `daily`, `intraday`                                 |
+| Option Chain             | `DhanHQ::Models::OptionChain`    | `fetch`, `fetch_expiry_list`                        |
 
 ## 📌 Development
 
