@@ -55,9 +55,11 @@ module Live
     def fetch_all_watchlist
       return unless defined?(::WatchlistItem)
 
-      WatchlistItem.active.order(:segment, :security_id).find_each do |wl|
-        fetch_one(wl)
-        sleep STAGGER_SECONDS
+      WatchlistItem.active.find_in_batches(batch_size: 100) do |batch|
+        batch.each do |wl|
+          fetch_one(wl)
+          sleep STAGGER_SECONDS
+        end
       end
     end
 
@@ -104,5 +106,3 @@ module Live
     end
   end
 end
-
-

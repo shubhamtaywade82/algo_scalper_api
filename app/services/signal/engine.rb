@@ -9,28 +9,21 @@ module Signal
         timeframe = AlgoConfig.fetch.dig(:signals, :timeframe)
         Rails.logger.debug("[Signal] Using timeframe: #{timeframe}")
 
-        # Calculate trading dates using Market::Calendar
-        # from_date: 4-5 trading days ago for sufficient historical data
-        # to_date: today or last trading day
-        to_date = Market::Calendar.today_or_last_trading_day.strftime("%Y-%m-%d")
-        from_date = Market::Calendar.trading_days_ago(5).strftime("%Y-%m-%d")
-        Rails.logger.debug("[Signal] Fetching data from #{from_date} to #{to_date}")
+        # Get the instrument and use its built-in candle methods
+        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+        unless instrument
+          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
+          return
+        end
 
-        candles = DhanHQ::Models::HistoricalData.intraday(
-          exchange_segment: index_cfg[:segment],
-          security_id: index_cfg[:sid],
-          instrument: "INDEX",
-          interval: timeframe.gsub("m", ""), # Convert "5m" to "5"
-          from_date: from_date,
-          to_date: to_date
-        )
-
-        if candles.blank?
+        # Use instrument's candle_series method which returns CandleSeries with Candle objects
+        series = instrument.candle_series(interval: timeframe.gsub("m", ""))
+        unless series&.candles&.any?
           Rails.logger.warn("[Signal] No candle data available for #{index_cfg[:key]}")
           return
         end
 
-        Rails.logger.info("[Signal] Fetched #{candles.size} candles for #{index_cfg[:key]}")
+        Rails.logger.info("[Signal] Fetched #{series.candles.size} candles for #{index_cfg[:key]}")
 
         supertrend_cfg = AlgoConfig.fetch.dig(:signals, :supertrend)
         unless supertrend_cfg
@@ -39,10 +32,6 @@ module Signal
         end
 
         Rails.logger.debug("[Signal] Supertrend config: #{supertrend_cfg}")
-
-        # Convert candles to CandleSeries format expected by Supertrend
-        series = CandleSeries.new(symbol: index_cfg[:key], interval: timeframe.gsub("m", ""))
-        series.load_from_raw(candles)
 
         st = Indicators::Supertrend.new(series: series, **supertrend_cfg).call
         Rails.logger.info("[Signal] Supertrend result for #{index_cfg[:key]}: trend=#{st[:trend]}, last_value=#{st[:last_value]}")
@@ -61,7 +50,7 @@ module Signal
         end
 
         # Comprehensive validation checks
-        validation_result = comprehensive_validation(index_cfg, direction, candles, st, adx)
+        validation_result = comprehensive_validation(index_cfg, direction, series, st, adx)
         unless validation_result[:valid]
           Rails.logger.warn("[Signal] Comprehensive validation failed for #{index_cfg[:key]}: #{validation_result[:reason]}")
           return
@@ -96,13 +85,13 @@ module Signal
       end
 
       # Comprehensive validation checks before proceeding with trades
-      def comprehensive_validation(index_cfg, direction, candles, supertrend_result, adx)
+      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx)
         Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction}")
 
         validation_checks = []
 
         # 1. IV Rank Check - Avoid extreme volatility
-        iv_rank_result = validate_iv_rank(index_cfg, candles)
+        iv_rank_result = validate_iv_rank(index_cfg, series)
         validation_checks << iv_rank_result
 
         # 2. Theta Risk Assessment - Avoid high theta decay
@@ -114,7 +103,7 @@ module Signal
         validation_checks << adx_result
 
         # 4. Trend Confirmation - Multiple signal validation
-        trend_result = validate_trend_confirmation(supertrend_result, candles)
+        trend_result = validate_trend_confirmation(supertrend_result, series)
         validation_checks << trend_result
 
         # 5. Market Timing Check - Avoid problematic times
@@ -141,17 +130,21 @@ module Signal
       end
 
       # Validate IV Rank - avoid extreme volatility conditions
-      def validate_iv_rank(index_cfg, candles)
+      def validate_iv_rank(index_cfg, series)
         # For now, we'll use a simple volatility check based on recent price movement
         # In a full implementation, you'd calculate actual IV rank from historical IV data
 
-        if candles.size < 5
+        candles = series.candles
+        if candles.blank? || candles.size < 5
           return { valid: false, name: "IV Rank", message: "Insufficient data for volatility assessment" }
         end
 
         # Calculate recent volatility as a proxy for IV rank
+        # series.candles is an array of Candle objects
         recent_candles = candles.last(5)
-        price_changes = recent_candles.each_cons(2).map { |c1, c2| (c2[:close] - c1[:close]).abs / c1[:close] }
+        return { valid: false, name: "IV Rank", message: "Insufficient recent candles" } if recent_candles.size < 2
+
+        price_changes = recent_candles.each_cons(2).map { |c1, c2| (c2.close - c1.close).abs / c1.close }
         avg_volatility = price_changes.sum / price_changes.size
 
         # Normalize volatility (this is a simplified approach)
@@ -199,7 +192,7 @@ module Signal
       end
 
       # Validate trend confirmation with multiple signals
-      def validate_trend_confirmation(supertrend_result, candles)
+      def validate_trend_confirmation(supertrend_result, series)
         trend = supertrend_result[:trend]
 
         if trend.nil?
@@ -207,7 +200,8 @@ module Signal
         end
 
         # Additional confirmation: check if recent price action supports the trend
-        if candles.size < 3
+        candles = series.candles
+        if candles.blank? || candles.size < 3
           return { valid: false, name: "Trend Confirmation", message: "Insufficient data for trend confirmation" }
         end
 
@@ -216,13 +210,13 @@ module Signal
         # Check if recent closes are moving in trend direction
         case trend
         when :bullish
-          if recent_candles.last[:close] > recent_candles.first[:close]
+          if recent_candles.last.close > recent_candles.first.close
             { valid: true, name: "Trend Confirmation", message: "Bullish trend confirmed by price action" }
           else
             { valid: false, name: "Trend Confirmation", message: "Bullish signal not confirmed by recent price action" }
           end
         when :bearish
-          if recent_candles.last[:close] < recent_candles.first[:close]
+          if recent_candles.last.close < recent_candles.first.close
             { valid: true, name: "Trend Confirmation", message: "Bearish trend confirmed by price action" }
           else
             { valid: false, name: "Trend Confirmation", message: "Bearish signal not confirmed by recent price action" }
