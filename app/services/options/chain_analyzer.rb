@@ -366,85 +366,85 @@ module Options
         oi = leg[:oi]
         spread_pct = leg[:spread_pct]
         delta = leg[:delta] || 0.5 # Default delta if not available
-        
+
         # 1. ATM Preference Score (0-100)
         distance_from_atm = (strike_price - atm_strike).abs
         atm_range_points = atm_strike * atm_range_percent
-        
+
         atm_preference_score = if distance_from_atm <= (atm_range_points * 0.1)
                                  100  # Perfect ATM
-                                elsif distance_from_atm <= (atm_range_points * 0.3)
+        elsif distance_from_atm <= (atm_range_points * 0.3)
                                   80  # Near ATM
-                                elsif distance_from_atm <= (atm_range_points * 0.6)
+        elsif distance_from_atm <= (atm_range_points * 0.6)
                                   50  # Slightly away
-                                else
+        else
                                   20  # Far from ATM
-                                end
-        
+        end
+
         # Penalty for ITM strikes (30% reduction)
         if itm_strike?(strike_price, side, atm_strike)
           atm_preference_score *= 0.7
         end
-        
+
         # 2. Liquidity Score (0-50)
         # Based on OI and spread
         liquidity_score = if oi >= 1000000
                             50  # Excellent liquidity
-                           elsif oi >= 500000
+        elsif oi >= 500000
                             40  # Good liquidity
-                           elsif oi >= 100000
+        elsif oi >= 100000
                             30  # Decent liquidity
-                           else
+        else
                             20  # Poor liquidity
-                           end
-        
+        end
+
         # Spread penalty
         if spread_pct > 2.0
           liquidity_score *= 0.8  # 20% penalty for wide spreads
         elsif spread_pct > 1.0
           liquidity_score *= 0.9  # 10% penalty for moderate spreads
         end
-        
+
         # 3. Delta Score (0-30)
         # Higher delta is better for options buying
         delta_score = if delta >= 0.5
                         30  # Excellent delta
-                       elsif delta >= 0.4
+        elsif delta >= 0.4
                         25  # Good delta
-                       elsif delta >= 0.3
+        elsif delta >= 0.3
                         20  # Decent delta
-                       else
+        else
                         10  # Poor delta
-                       end
-        
+        end
+
         # 4. IV Score (0-20)
         # Moderate IV is preferred (not too high, not too low)
         iv_score = if iv >= 15 && iv <= 25
                      20  # Sweet spot
-                    elsif iv >= 10 && iv <= 30
+        elsif iv >= 10 && iv <= 30
                      15  # Acceptable range
-                    elsif iv >= 5 && iv <= 40
+        elsif iv >= 5 && iv <= 40
                      10  # Marginal
-                    else
+        else
                       5  # Poor IV
-                    end
-        
+        end
+
         # 5. Price Efficiency Score (0-10)
         # Lower price per point of delta is better
         price_efficiency = delta > 0 ? (ltp / delta) : ltp
         price_efficiency_score = if price_efficiency <= 200
                                    10  # Excellent efficiency
-                                  elsif price_efficiency <= 300
+        elsif price_efficiency <= 300
                                     8   # Good efficiency
-                                  elsif price_efficiency <= 500
+        elsif price_efficiency <= 500
                                     6   # Decent efficiency
-                                  else
+        else
                                     4   # Poor efficiency
-                                  end
-        
+        end
+
         # Calculate total score
         total_score = atm_preference_score + liquidity_score + delta_score + iv_score + price_efficiency_score
-        
+
         # Log scoring breakdown for debugging
         Rails.logger.debug("[Options] Strike #{strike_price} scoring:")
         Rails.logger.debug("  - ATM Preference: #{atm_preference_score.round(1)} (distance: #{distance_from_atm.round(1)})")
@@ -453,10 +453,10 @@ module Options
         Rails.logger.debug("  - IV: #{iv_score.round(1)} (IV: #{iv.round(2)}%)")
         Rails.logger.debug("  - Price Efficiency: #{price_efficiency_score.round(1)} (price/delta: #{price_efficiency.round(1)})")
         Rails.logger.debug("  - Total Score: #{total_score.round(1)}")
-        
+
         total_score
       end
-      
+
       # Check if a strike is ITM (In-The-Money)
       def itm_strike?(strike_price, side, atm_strike)
         case side.to_sym
