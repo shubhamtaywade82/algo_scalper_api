@@ -16,9 +16,7 @@ class CreateWatchlistItemsPolymorphic < ActiveRecord::Migration[8.0]
       t.timestamps
     end
 
-    add_index :watchlist_items, [:segment, :security_id], unique: true
-    add_index :watchlist_items, [:watchable_type, :watchable_id]
+    add_index :watchlist_items, [ :segment, :security_id ], unique: true
+    add_index :watchlist_items, [ :watchable_type, :watchable_id ]
   end
 end
-
-

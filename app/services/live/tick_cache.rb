@@ -19,5 +19,3 @@ module Live
     end
   end
 end
-
-

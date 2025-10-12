@@ -36,5 +36,3 @@ class WatchlistItem < ApplicationRecord
     watchable if watchable_type == "Derivative"
   end
 end
-
-

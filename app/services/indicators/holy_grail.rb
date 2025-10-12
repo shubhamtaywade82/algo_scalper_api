@@ -167,5 +167,3 @@ module Indicators
     end
   end
 end
-
-

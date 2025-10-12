@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require 'pp'
+require "pp"
 
 namespace :instruments do
-  desc 'Import instruments from DhanHQ CSV'
+  desc "Import instruments from DhanHQ CSV"
   task import: :environment do
-    pp 'Starting instruments import...'
+    pp "Starting instruments import..."
     start_time = Time.current
 
     begin
@@ -23,8 +23,8 @@ namespace :instruments do
       pp "BSE Derivatives: #{Derivative.bse.count}"
       pp "Options: #{Derivative.options.count}"
       pp "Futures: #{Derivative.futures.count}"
-      pp 'Instruments: Instrument.count'
-      pp 'Derivatives: Derivative.count'
+      pp "Instruments: Instrument.count"
+      pp "Derivatives: Derivative.count"
       pp "TOTAL: #{Instrument.count + Derivative.count}"
     rescue StandardError => e
       pp "Import failed: #{e.message}"
@@ -32,23 +32,23 @@ namespace :instruments do
     end
   end
 
-  desc 'Clear all instruments and derivatives'
+  desc "Clear all instruments and derivatives"
   task clear: :environment do
-    pp 'Clearing all instruments and derivatives...'
+    pp "Clearing all instruments and derivatives..."
     Derivative.delete_all
     Instrument.delete_all
-    pp 'Cleared successfully!'
+    pp "Cleared successfully!"
   end
 
-  desc 'Reimport (clear and import)'
+  desc "Reimport (clear and import)"
   task reimport: %i[clear import]
 
-  desc 'Check instrument inventory freshness and counts'
+  desc "Check instrument inventory freshness and counts"
   task status: :environment do
-    last_import_raw = Setting.fetch('instruments.last_imported_at')
+    last_import_raw = Setting.fetch("instruments.last_imported_at")
 
     unless last_import_raw
-      pp 'No instrument import recorded yet.'
+      pp "No instrument import recorded yet."
       exit 1
     end
 
@@ -71,7 +71,7 @@ namespace :instruments do
       exit 1
     end
 
-    pp 'Status: OK'
+    pp "Status: OK"
   rescue ArgumentError => e
     pp "Failed to parse last import timestamp: #{e.message}"
     exit 1
@@ -80,14 +80,12 @@ end
 
 # Provide aliases for legacy singular namespace usage.
 namespace :instrument do
-  desc 'Alias for instruments:import'
-  task import: 'instruments:import'
+  desc "Alias for instruments:import"
+  task import: "instruments:import"
 
-  desc 'Alias for instruments:clear'
-  task clear: 'instruments:clear'
+  desc "Alias for instruments:clear"
+  task clear: "instruments:clear"
 
-  desc 'Alias for instruments:reimport'
-  task reimport: 'instruments:reimport'
+  desc "Alias for instruments:reimport"
+  task reimport: "instruments:reimport"
 end
-
-
