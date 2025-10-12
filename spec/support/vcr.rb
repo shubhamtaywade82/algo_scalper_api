@@ -17,5 +17,3 @@ VCR.configure do |config|
   # Allow localhost connections (Capybara or Rails server)
   config.ignore_localhost = true
 end
-
-

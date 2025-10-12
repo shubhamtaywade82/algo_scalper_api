@@ -5,5 +5,3 @@ class ApplicationService
     new(*args, **kwargs).call(&block)
   end
 end
-
-

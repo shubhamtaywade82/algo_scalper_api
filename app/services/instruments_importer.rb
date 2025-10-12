@@ -1,12 +1,12 @@
 # app/services/instruments_importer.rb
 # frozen_string_literal: true
 
-require 'csv'
-require 'open-uri'
+require "csv"
+require "open-uri"
 
 class InstrumentsImporter
-  CSV_URL         = 'https://images.dhan.co/api-data/api-scrip-master-detailed.csv'
-  CACHE_PATH      = Rails.root.join('tmp/dhan_scrip_master.csv') # ← NEW
+  CSV_URL         = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
+  CACHE_PATH      = Rails.root.join("tmp/dhan_scrip_master.csv") # ← NEW
   CACHE_MAX_AGE   = 24.hours # ← NEW
   VALID_EXCHANGES = %w[NSE BSE].freeze
   BATCH_SIZE      = 1_000
@@ -39,7 +39,7 @@ class InstrumentsImporter
         return CACHE_PATH.read
       end
 
-      Rails.logger.info 'Downloading fresh CSV from Dhan…'
+      Rails.logger.info "Downloading fresh CSV from Dhan…"
       csv_text = URI.open(CSV_URL).read
 
       CACHE_PATH.dirname.mkpath
@@ -51,7 +51,7 @@ class InstrumentsImporter
       Rails.logger.warn "CSV download failed: #{e.message}"
       raise e if CACHE_PATH.exist? == false   # don’t swallow if no fallback
 
-      Rails.logger.warn 'Falling back to cached CSV (may be stale)'
+      Rails.logger.warn "Falling back to cached CSV (may be stale)"
       CACHE_PATH.read
     end
     private :fetch_csv_with_cache             # keep helper private
@@ -87,62 +87,62 @@ class InstrumentsImporter
       derivatives = []
 
       CSV.parse(csv_content, headers: true).each do |row|
-        next unless VALID_EXCHANGES.include?(row['EXCH_ID'])
+        next unless VALID_EXCHANGES.include?(row["EXCH_ID"])
 
         attrs = build_attrs(row)
 
-        if row['SEGMENT'] == 'D'   # Derivative
+        if row["SEGMENT"] == "D"   # Derivative
           derivatives << attrs.slice(*Derivative.column_names.map(&:to_sym))
         else                       # Cash / Index
           instruments << attrs.slice(*Instrument.column_names.map(&:to_sym))
         end
       end
 
-      [instruments, derivatives]
+      [ instruments, derivatives ]
     end
 
     def build_attrs(row)
       now = Time.zone.now
       {
-        security_id: row['SECURITY_ID'],
-        exchange: row['EXCH_ID'],
-        segment: row['SEGMENT'],
-        isin: row['ISIN'],
-        instrument_code: row['INSTRUMENT'],
-        underlying_security_id: row['UNDERLYING_SECURITY_ID'],
-        underlying_symbol: row['UNDERLYING_SYMBOL'],
-        symbol_name: row['SYMBOL_NAME'],
-        display_name: row['DISPLAY_NAME'],
-        instrument_type: row['INSTRUMENT_TYPE'],
-        series: row['SERIES'],
-        lot_size: row['LOT_SIZE']&.to_i,
-        expiry_date: safe_date(row['SM_EXPIRY_DATE']),
-        strike_price: row['STRIKE_PRICE']&.to_f,
-        option_type: row['OPTION_TYPE'],
-        tick_size: row['TICK_SIZE']&.to_f,
-        expiry_flag: row['EXPIRY_FLAG'],
-        bracket_flag: row['BRACKET_FLAG'],
-        cover_flag: row['COVER_FLAG'],
-        asm_gsm_flag: row['ASM_GSM_FLAG'],
-        asm_gsm_category: row['ASM_GSM_CATEGORY'],
-        buy_sell_indicator: row['BUY_SELL_INDICATOR'],
-        buy_co_min_margin_per: row['BUY_CO_MIN_MARGIN_PER']&.to_f,
-        sell_co_min_margin_per: row['SELL_CO_MIN_MARGIN_PER']&.to_f,
-        buy_co_sl_range_max_perc: row['BUY_CO_SL_RANGE_MAX_PERC']&.to_f,
-        sell_co_sl_range_max_perc: row['SELL_CO_SL_RANGE_MAX_PERC']&.to_f,
-        buy_co_sl_range_min_perc: row['BUY_CO_SL_RANGE_MIN_PERC']&.to_f,
-        sell_co_sl_range_min_perc: row['SELL_CO_SL_RANGE_MIN_PERC']&.to_f,
-        buy_bo_min_margin_per: row['BUY_BO_MIN_MARGIN_PER']&.to_f,
-        sell_bo_min_margin_per: row['SELL_BO_MIN_MARGIN_PER']&.to_f,
-        buy_bo_sl_range_max_perc: row['BUY_BO_SL_RANGE_MAX_PERC']&.to_f,
-        sell_bo_sl_range_max_perc: row['SELL_BO_SL_RANGE_MAX_PERC']&.to_f,
-        buy_bo_sl_range_min_perc: row['BUY_BO_SL_RANGE_MIN_PERC']&.to_f,
-        sell_bo_sl_min_range: row['SELL_BO_SL_MIN_RANGE']&.to_f,
-        buy_bo_profit_range_max_perc: row['BUY_BO_PROFIT_RANGE_MAX_PERC']&.to_f,
-        sell_bo_profit_range_max_perc: row['SELL_BO_PROFIT_RANGE_MAX_PERC']&.to_f,
-        buy_bo_profit_range_min_perc: row['BUY_BO_PROFIT_RANGE_MIN_PERC']&.to_f,
-        sell_bo_profit_range_min_perc: row['SELL_BO_PROFIT_RANGE_MIN_PERC']&.to_f,
-        mtf_leverage: row['MTF_LEVERAGE']&.to_f,
+        security_id: row["SECURITY_ID"],
+        exchange: row["EXCH_ID"],
+        segment: row["SEGMENT"],
+        isin: row["ISIN"],
+        instrument_code: row["INSTRUMENT"],
+        underlying_security_id: row["UNDERLYING_SECURITY_ID"],
+        underlying_symbol: row["UNDERLYING_SYMBOL"],
+        symbol_name: row["SYMBOL_NAME"],
+        display_name: row["DISPLAY_NAME"],
+        instrument_type: row["INSTRUMENT_TYPE"],
+        series: row["SERIES"],
+        lot_size: row["LOT_SIZE"]&.to_i,
+        expiry_date: safe_date(row["SM_EXPIRY_DATE"]),
+        strike_price: row["STRIKE_PRICE"]&.to_f,
+        option_type: row["OPTION_TYPE"],
+        tick_size: row["TICK_SIZE"]&.to_f,
+        expiry_flag: row["EXPIRY_FLAG"],
+        bracket_flag: row["BRACKET_FLAG"],
+        cover_flag: row["COVER_FLAG"],
+        asm_gsm_flag: row["ASM_GSM_FLAG"],
+        asm_gsm_category: row["ASM_GSM_CATEGORY"],
+        buy_sell_indicator: row["BUY_SELL_INDICATOR"],
+        buy_co_min_margin_per: row["BUY_CO_MIN_MARGIN_PER"]&.to_f,
+        sell_co_min_margin_per: row["SELL_CO_MIN_MARGIN_PER"]&.to_f,
+        buy_co_sl_range_max_perc: row["BUY_CO_SL_RANGE_MAX_PERC"]&.to_f,
+        sell_co_sl_range_max_perc: row["SELL_CO_SL_RANGE_MAX_PERC"]&.to_f,
+        buy_co_sl_range_min_perc: row["BUY_CO_SL_RANGE_MIN_PERC"]&.to_f,
+        sell_co_sl_range_min_perc: row["SELL_CO_SL_RANGE_MIN_PERC"]&.to_f,
+        buy_bo_min_margin_per: row["BUY_BO_MIN_MARGIN_PER"]&.to_f,
+        sell_bo_min_margin_per: row["SELL_BO_MIN_MARGIN_PER"]&.to_f,
+        buy_bo_sl_range_max_perc: row["BUY_BO_SL_RANGE_MAX_PERC"]&.to_f,
+        sell_bo_sl_range_max_perc: row["SELL_BO_SL_RANGE_MAX_PERC"]&.to_f,
+        buy_bo_sl_range_min_perc: row["BUY_BO_SL_RANGE_MIN_PERC"]&.to_f,
+        sell_bo_sl_min_range: row["SELL_BO_SL_MIN_RANGE"]&.to_f,
+        buy_bo_profit_range_max_perc: row["BUY_BO_PROFIT_RANGE_MAX_PERC"]&.to_f,
+        sell_bo_profit_range_max_perc: row["SELL_BO_PROFIT_RANGE_MAX_PERC"]&.to_f,
+        buy_bo_profit_range_min_perc: row["BUY_BO_PROFIT_RANGE_MIN_PERC"]&.to_f,
+        sell_bo_profit_range_min_perc: row["SELL_BO_PROFIT_RANGE_MIN_PERC"]&.to_f,
+        mtf_leverage: row["MTF_LEVERAGE"]&.to_f,
         created_at: now,
         updated_at: now
       }
@@ -206,7 +206,7 @@ class InstrumentsImporter
         next if sym.blank?
 
         csv_code = enum_to_csv[enum_code] || enum_code # keep CSV code itself
-        key      = [csv_code, sym.upcase]
+        key      = [ csv_code, sym.upcase ]
         h[key]   = id
       end
 
@@ -220,7 +220,7 @@ class InstrumentsImporter
         next without_parent << h if h[:underlying_symbol].blank?
 
         parent_code = InstrumentTypeMapping.underlying_for(h[:instrument_code]) # FUTIDX ➜ INDEX
-        key         = [parent_code, h[:underlying_symbol].upcase]
+        key         = [ parent_code, h[:underlying_symbol].upcase ]
 
         if (pid = lookup[key])
           h[:instrument_id] = pid
@@ -230,7 +230,7 @@ class InstrumentsImporter
         end
       end
 
-      [with_parent, without_parent]
+      [ with_parent, without_parent ]
     end
 
     # ------------------------------------------------------------
@@ -243,21 +243,19 @@ class InstrumentsImporter
     end
 
     def map_segment(char)
-      { 'I' => 'index', 'E' => 'equity', 'C' => 'currency',
-        'D' => 'derivatives', 'M' => 'commodity' }[char] || char.downcase
+      { "I" => "index", "E" => "equity", "C" => "currency",
+        "D" => "derivatives", "M" => "commodity" }[char] || char.downcase
     end
 
     def record_success!(summary)
-      Setting.put('instruments.last_imported_at', summary[:finished_at].iso8601)
-      Setting.put('instruments.last_import_duration_sec', summary[:duration].to_f.round(2))
-      Setting.put('instruments.last_instrument_rows', summary[:instrument_rows])
-      Setting.put('instruments.last_derivative_rows', summary[:derivative_rows])
-      Setting.put('instruments.last_instrument_upserts', summary[:instrument_upserts])
-      Setting.put('instruments.last_derivative_upserts', summary[:derivative_upserts])
-      Setting.put('instruments.instrument_total', summary[:instrument_total])
-      Setting.put('instruments.derivative_total', summary[:derivative_total])
+      Setting.put("instruments.last_imported_at", summary[:finished_at].iso8601)
+      Setting.put("instruments.last_import_duration_sec", summary[:duration].to_f.round(2))
+      Setting.put("instruments.last_instrument_rows", summary[:instrument_rows])
+      Setting.put("instruments.last_derivative_rows", summary[:derivative_rows])
+      Setting.put("instruments.last_instrument_upserts", summary[:instrument_upserts])
+      Setting.put("instruments.last_derivative_upserts", summary[:derivative_upserts])
+      Setting.put("instruments.instrument_total", summary[:instrument_total])
+      Setting.put("instruments.derivative_total", summary[:derivative_total])
     end
   end
 end
-
-

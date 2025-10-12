@@ -11,5 +11,3 @@ class CreateSettings < ActiveRecord::Migration[8.0]
     add_index :settings, :key, unique: true
   end
 end
-
-

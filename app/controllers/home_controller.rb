@@ -41,5 +41,3 @@ class HomeController < ActionController::API
     ERB
   end
 end
-
-

@@ -252,8 +252,16 @@ module Options
             security_id = nil
           end
 
+          derivative_segment = if derivative&.respond_to?(:exchange_segment) && derivative.exchange_segment.present?
+                                  derivative.exchange_segment
+          elsif derivative.is_a?(Hash)
+                                  derivative[:exchange_segment]
+          end
+          derivative_segment ||= instrument.exchange_segment
+          derivative_segment ||= index_cfg[:segment]
+
           legs << {
-            segment: "NSE_FNO", # Default segment for index options
+            segment: derivative_segment,
             security_id: security_id,
             symbol: "#{index_cfg[:key]}-#{expiry_date_obj.strftime('%b%Y')}-#{strike.to_i}-#{side.to_s.upcase}",
             strike: strike,

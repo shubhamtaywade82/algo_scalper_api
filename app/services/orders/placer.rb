@@ -98,7 +98,6 @@ module Orders
         base = value[0, 23]
         "#{base}-#{digest}"
       end
-
     end
   end
 end

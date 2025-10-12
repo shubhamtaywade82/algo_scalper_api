@@ -25,10 +25,8 @@ class Setting < ApplicationRecord
 
   def self.fetch_bool(key, default = false) # rubocop:disable Style/OptionalBooleanParameter,Naming/PredicateMethod
     raw = fetch(key, default)
-    return !!raw if [true, false].include?(raw)
+    return !!raw if [ true, false ].include?(raw)
 
     %w[1 true yes on].include?(raw.to_s.strip.downcase)
   end
 end
-
-

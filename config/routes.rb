@@ -13,7 +13,7 @@ Rails.application.routes.draw do
   end
 
   # Quietly handle browser/devtools well-known probes with 204 No Content
-  get "/.well-known/*path", to: proc { [204, { "Content-Type" => "text/plain" }, [""] ] }
+  get "/.well-known/*path", to: proc { [ 204, { "Content-Type" => "text/plain" }, [ "" ] ] }
 
   mount ActionCable.server => "/cable"
 end

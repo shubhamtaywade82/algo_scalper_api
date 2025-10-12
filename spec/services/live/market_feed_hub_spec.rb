@@ -77,5 +77,3 @@ RSpec.describe Live::MarketFeedHub do
     end
   end
 end
-
-
