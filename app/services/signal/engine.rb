@@ -229,6 +229,12 @@ module Signal
       # Validate market timing - avoid problematic trading times
       def validate_market_timing
         current_time = Time.zone.now
+
+        # First check if it's a trading day using Market::Calendar
+        unless Market::Calendar.trading_day_today?
+          return { valid: false, name: "Market Timing", message: "Not a trading day (weekend/holiday)" }
+        end
+
         hour = current_time.hour
         minute = current_time.min
 
