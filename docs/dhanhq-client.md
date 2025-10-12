@@ -20,7 +20,7 @@ A clean Ruby client for Dhan API v2 with ORM-style models (orders, positions, ho
 - `DHANHQ_ORDER_WS_ENABLED`, `DHANHQ_WS_ORDER_URL`, `DHANHQ_WS_USER_TYPE`, `DHANHQ_PARTNER_ID`, `DHANHQ_PARTNER_SECRET` – order update stream settings.
 
 ### Runtime helpers
-- `Dhanhq.client` exposes a shared instance of `Dhanhq::Client` for REST calls (`place_order`, `positions`, `historical_intraday`, etc.). All methods raise `Dhanhq::Client::Error` when something goes wrong.
+- All services use `DhanHQ::Models::*` directly (e.g., `DhanHQ::Models::Order.create`, `DhanHQ::Models::Funds.fetch`, etc.)
 - `Live::TickCache` stores the latest WebSocket ticks and provides helpers like `Live::TickCache.ltp("NSE_FNO", "12345")`.
 - `Live::MarketFeedHub` spins up `DhanHQ::WS::Client` when WebSockets are enabled, subscribes the configured watchlist, forwards ticks to `ActiveSupport::Notifications` (`"dhanhq.tick"`), and keeps callbacks running.【F:app/services/live/market_feed_hub.rb†L1-L118】
 - `Live::OrderUpdateHub` listens to order events via `DhanHQ::WS::Orders::Client`, emits `ActiveSupport::Notifications` (`"dhanhq.order_update"`), and allows registering callbacks with `on_update`.
@@ -676,8 +676,8 @@ DhanHQ::Models::HistoricalData.intraday(security_id: "1333", interval: "15")
 
 ## 🔹 Available Resources
 
-| Resource                 | Model                            | Actions                                             |
-| ------------------------ | -------------------------------- | --------------------------------------------------- |
+| Resource                 | Model                                    | Actions                                             |
+| ------------------------ | ---------------------------------------- | --------------------------------------------------- |
 | Orders                   | `DhanHQ::Models::Models::Order`          | `find`, `all`, `where`, `place`, `update`, `cancel` |
 | Trades                   | `DhanHQ::Models::Models::Trade`          | `all`, `find_by_order_id`                           |
 | Forever Orders           | `DhanHQ::Models::Models::ForeverOrder`   | `create`, `find`, `modify`, `cancel`, `all`         |
