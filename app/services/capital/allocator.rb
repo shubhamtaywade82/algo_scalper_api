@@ -4,6 +4,15 @@ require "bigdecimal"
 
 module Capital
   class Allocator
+    # Capital-aware deployment policy based on account size
+    # Bands are inclusive upper-bounds. Smaller accounts get higher allocation % but lower risk %
+    CAPITAL_BANDS = [
+      { upto: 75_000, alloc_pct: 0.30, risk_per_trade_pct: 0.050, daily_max_loss_pct: 0.050 }, # small a/c (≈ ₹50k)
+      { upto: 150_000, alloc_pct: 0.25, risk_per_trade_pct: 0.035, daily_max_loss_pct: 0.060 }, # ≈ ₹1L
+      { upto: 300_000, alloc_pct: 0.20, risk_per_trade_pct: 0.030, daily_max_loss_pct: 0.060 }, # ≈ ₹2–3L
+      { upto: Float::INFINITY, alloc_pct: 0.20, risk_per_trade_pct: 0.025, daily_max_loss_pct: 0.050 }
+    ].freeze
+
     class << self
       def qty_for(index_cfg:, entry_price:, derivative_lot_size:)
         capital_available = available_cash
@@ -11,7 +20,14 @@ module Capital
 
         return 0 if entry_price.to_f <= 0
 
-        allocation = capital_available * index_cfg[:capital_alloc_pct].to_f
+        # Get deployment policy based on account size
+        policy = deployment_policy(capital_available.to_f)
+
+        # Use policy values, but allow config override for allocation %
+        effective_alloc_pct = index_cfg[:capital_alloc_pct] || policy[:alloc_pct]
+        effective_risk_pct = policy[:risk_per_trade_pct]
+
+        allocation = capital_available * effective_alloc_pct
         # Always use derivative lot size - no fallback to index config
         lot_size = derivative_lot_size.to_i
         Rails.logger.debug("[Capital] Using derivative lot_size: #{lot_size}")
@@ -24,7 +40,7 @@ module Capital
           return 0
         end
 
-        risk_capital = capital_available * AlgoConfig.fetch.dig(:risk, :per_trade_risk_pct).to_f
+        risk_capital = capital_available * effective_risk_pct
 
         max_by_allocation = (allocation / (entry_price.to_f * lot_size)).floor * lot_size
         max_by_risk = (risk_capital / (entry_price.to_f * 0.30)).floor * lot_size
@@ -45,9 +61,10 @@ module Capital
 
         Rails.logger.info("[Capital] Calculation breakdown:")
         Rails.logger.info("  - Available capital: ₹#{capital_available}")
-        Rails.logger.info("  - Capital allocation %: #{index_cfg[:capital_alloc_pct] * 100}%")
+        Rails.logger.info("  - Capital band: #{policy[:upto] == Float::INFINITY ? 'Large' : "Up to ₹#{policy[:upto]}"}")
+        Rails.logger.info("  - Effective allocation %: #{effective_alloc_pct * 100}%")
         Rails.logger.info("  - Allocation amount: ₹#{allocation}")
-        Rails.logger.info("  - Risk capital %: #{AlgoConfig.fetch.dig(:risk, :per_trade_risk_pct) * 100}%")
+        Rails.logger.info("  - Effective risk %: #{effective_risk_pct * 100}%")
         Rails.logger.info("  - Risk capital amount: ₹#{risk_capital}")
         Rails.logger.info("  - Entry price: ₹#{entry_price}")
         Rails.logger.info("  - Lot size: #{lot_size}")
@@ -62,7 +79,21 @@ module Capital
         0
       end
 
-      private
+      # Capital-aware deployment policy based on account size
+      def deployment_policy(balance)
+        band = CAPITAL_BANDS.find { |b| balance <= b[:upto] } || CAPITAL_BANDS.last
+        # Allow env overrides (optional)
+        alloc = ENV["ALLOC_PCT"]&.to_f || band[:alloc_pct]
+        r_pt  = ENV["RISK_PER_TRADE_PCT"]&.to_f || band[:risk_per_trade_pct]
+        d_ml  = ENV["DAILY_MAX_LOSS_PCT"]&.to_f || band[:daily_max_loss_pct]
+
+        {
+          upto: band[:upto],
+          alloc_pct: alloc,
+          risk_per_trade_pct: r_pt,
+          daily_max_loss_pct: d_ml
+        }
+      end
 
       def available_cash
         data = DhanHQ::Models::Funds.fetch

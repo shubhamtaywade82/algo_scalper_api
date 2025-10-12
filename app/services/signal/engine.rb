@@ -60,6 +60,13 @@ module Signal
           return
         end
 
+        # Comprehensive validation checks
+        validation_result = comprehensive_validation(index_cfg, direction, candles, st, adx)
+        unless validation_result[:valid]
+          Rails.logger.warn("[Signal] Comprehensive validation failed for #{index_cfg[:key]}: #{validation_result[:reason]}")
+          return
+        end
+
         Rails.logger.info("[Signal] Proceeding with #{direction} signal for #{index_cfg[:key]}")
 
         picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: direction)
@@ -86,6 +93,166 @@ module Signal
       rescue StandardError => e
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
         Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
+      end
+
+      # Comprehensive validation checks before proceeding with trades
+      def comprehensive_validation(index_cfg, direction, candles, supertrend_result, adx)
+        Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction}")
+
+        validation_checks = []
+
+        # 1. IV Rank Check - Avoid extreme volatility
+        iv_rank_result = validate_iv_rank(index_cfg, candles)
+        validation_checks << iv_rank_result
+
+        # 2. Theta Risk Assessment - Avoid high theta decay
+        theta_risk_result = validate_theta_risk(index_cfg, direction)
+        validation_checks << theta_risk_result
+
+        # 3. Enhanced ADX Confirmation - Ensure strong trend
+        adx_result = validate_adx_strength(adx, supertrend_result)
+        validation_checks << adx_result
+
+        # 4. Trend Confirmation - Multiple signal validation
+        trend_result = validate_trend_confirmation(supertrend_result, candles)
+        validation_checks << trend_result
+
+        # 5. Market Timing Check - Avoid problematic times
+        timing_result = validate_market_timing
+        validation_checks << timing_result
+
+        # Log all validation results
+        Rails.logger.info("[Signal] Validation Results:")
+        validation_checks.each do |check|
+          status = check[:valid] ? "✅" : "❌"
+          Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
+        end
+
+        # Determine overall validation result
+        failed_checks = validation_checks.select { |check| !check[:valid] }
+
+        if failed_checks.empty?
+          Rails.logger.info("[Signal] All validation checks passed for #{index_cfg[:key]}")
+          { valid: true, reason: "All checks passed" }
+        else
+          failed_reasons = failed_checks.map { |check| check[:name] }.join(", ")
+          { valid: false, reason: "Failed checks: #{failed_reasons}" }
+        end
+      end
+
+      # Validate IV Rank - avoid extreme volatility conditions
+      def validate_iv_rank(index_cfg, candles)
+        # For now, we'll use a simple volatility check based on recent price movement
+        # In a full implementation, you'd calculate actual IV rank from historical IV data
+
+        if candles.size < 5
+          return { valid: false, name: "IV Rank", message: "Insufficient data for volatility assessment" }
+        end
+
+        # Calculate recent volatility as a proxy for IV rank
+        recent_candles = candles.last(5)
+        price_changes = recent_candles.each_cons(2).map { |c1, c2| (c2[:close] - c1[:close]).abs / c1[:close] }
+        avg_volatility = price_changes.sum / price_changes.size
+
+        # Normalize volatility (this is a simplified approach)
+        iv_rank_proxy = [ (avg_volatility * 1000), 1.0 ].min  # Cap at 1.0
+
+        if iv_rank_proxy > 0.8
+          { valid: false, name: "IV Rank", message: "Extreme volatility detected (#{(iv_rank_proxy * 100).round(1)}%)" }
+        elsif iv_rank_proxy < 0.1
+          { valid: false, name: "IV Rank", message: "Very low volatility (#{(iv_rank_proxy * 100).round(1)}%)" }
+        else
+          { valid: true, name: "IV Rank", message: "Volatility within acceptable range (#{(iv_rank_proxy * 100).round(1)}%)" }
+        end
+      end
+
+      # Validate theta risk - avoid high theta decay situations
+      def validate_theta_risk(index_cfg, direction)
+        current_time = Time.zone.now
+        hour = current_time.hour
+        minute = current_time.min
+
+        # High theta risk periods (last hour of trading)
+        if hour >= 14 && minute >= 30  # After 2:30 PM
+          { valid: false, name: "Theta Risk", message: "High theta decay risk - too close to market close" }
+        elsif hour >= 14  # After 2:00 PM
+          { valid: true, name: "Theta Risk", message: "Moderate theta risk - afternoon trading" }
+        else
+          { valid: true, name: "Theta Risk", message: "Low theta risk - early/midday trading" }
+        end
+      end
+
+      # Enhanced ADX validation with trend strength assessment
+      def validate_adx_strength(adx, supertrend_result)
+        adx_value = adx[:value].to_f
+        min_strength = AlgoConfig.fetch.dig(:signals, :adx, :min_strength).to_f
+
+        if adx_value < min_strength
+          { valid: false, name: "ADX Strength", message: "Weak trend strength (#{adx_value.round(1)} < #{min_strength})" }
+        elsif adx_value >= 40
+          { valid: true, name: "ADX Strength", message: "Very strong trend (#{adx_value.round(1)})" }
+        elsif adx_value >= 25
+          { valid: true, name: "ADX Strength", message: "Strong trend (#{adx_value.round(1)})" }
+        else
+          { valid: true, name: "ADX Strength", message: "Moderate trend (#{adx_value.round(1)})" }
+        end
+      end
+
+      # Validate trend confirmation with multiple signals
+      def validate_trend_confirmation(supertrend_result, candles)
+        trend = supertrend_result[:trend]
+
+        if trend.nil?
+          return { valid: false, name: "Trend Confirmation", message: "No trend signal from Supertrend" }
+        end
+
+        # Additional confirmation: check if recent price action supports the trend
+        if candles.size < 3
+          return { valid: false, name: "Trend Confirmation", message: "Insufficient data for trend confirmation" }
+        end
+
+        recent_candles = candles.last(3)
+
+        # Check if recent closes are moving in trend direction
+        case trend
+        when :bullish
+          if recent_candles.last[:close] > recent_candles.first[:close]
+            { valid: true, name: "Trend Confirmation", message: "Bullish trend confirmed by price action" }
+          else
+            { valid: false, name: "Trend Confirmation", message: "Bullish signal not confirmed by recent price action" }
+          end
+        when :bearish
+          if recent_candles.last[:close] < recent_candles.first[:close]
+            { valid: true, name: "Trend Confirmation", message: "Bearish trend confirmed by price action" }
+          else
+            { valid: false, name: "Trend Confirmation", message: "Bearish signal not confirmed by recent price action" }
+          end
+        else
+          { valid: false, name: "Trend Confirmation", message: "Unknown trend direction" }
+        end
+      end
+
+      # Validate market timing - avoid problematic trading times
+      def validate_market_timing
+        current_time = Time.zone.now
+        hour = current_time.hour
+        minute = current_time.min
+
+        # Market hours: 9:15 AM to 3:30 PM IST
+        market_open = hour >= 9 && (hour > 9 || minute >= 15)
+        market_close = hour >= 15 && minute >= 30
+
+        if !market_open
+          { valid: false, name: "Market Timing", message: "Market not yet open" }
+        elsif market_close
+          { valid: false, name: "Market Timing", message: "Market closed" }
+        elsif hour == 9 && minute < 30
+          { valid: true, name: "Market Timing", message: "Early market - high volatility period" }
+        elsif hour >= 14 && minute >= 30
+          { valid: true, name: "Market Timing", message: "Late market - theta decay risk" }
+        else
+          { valid: true, name: "Market Timing", message: "Normal trading hours" }
+        end
       end
 
       def decide_direction(supertrend_result, adx)
