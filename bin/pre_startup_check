@@ -1,0 +1,309 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Pre-startup health check script for Algo Scalper API
+# Run with: bin/pre_startup_check
+# This script checks basic requirements before loading Rails
+
+require "json"
+require "yaml"
+
+class PreStartupChecker
+  attr_reader :errors, :warnings, :checks_passed
+
+  def initialize
+    @errors = []
+    @warnings = []
+    @checks_passed = 0
+    @total_checks = 0
+  end
+
+  def run_all_checks
+    puts "🚀 Algo Scalper API Pre-Startup Check"
+    puts "=" * 50
+    puts "Timestamp: #{Time.now}"
+    puts
+
+    check_ruby_version
+    check_bundler
+    check_gemfile_lock
+    check_environment_file
+    check_database_config
+    check_redis_availability
+    check_disk_space
+    check_file_permissions
+    check_network_connectivity
+    check_critical_files
+
+    print_summary
+    exit_with_code
+  end
+
+  private
+
+  def check_ruby_version
+    check("Ruby Version") do
+      required_version = "3.3.0"
+      current_version = RUBY_VERSION
+
+      if Gem::Version.new(current_version) < Gem::Version.new(required_version)
+        raise "Ruby #{required_version}+ required, found #{current_version}"
+      end
+
+      "Ruby #{current_version} ✓"
+    end
+  rescue StandardError => e
+    error("Ruby version check failed: #{e.message}")
+  end
+
+  def check_bundler
+    check("Bundler") do
+      unless system("which bundle > /dev/null 2>&1")
+        raise "Bundler not found. Install with: gem install bundler"
+      end
+
+      "Bundler available ✓"
+    end
+  rescue StandardError => e
+    error("Bundler check failed: #{e.message}")
+  end
+
+  def check_gemfile_lock
+    check("Gemfile.lock") do
+      unless File.exist?("Gemfile.lock")
+        raise "Gemfile.lock not found. Run: bundle install"
+      end
+
+      "Gemfile.lock exists ✓"
+    end
+  rescue StandardError => e
+    error("Gemfile.lock check failed: #{e.message}")
+  end
+
+  def check_environment_file
+    check("Environment Configuration") do
+      env_file = ".env"
+      env_example = ".env.example"
+
+      unless File.exist?(env_file)
+        if File.exist?(env_example)
+          warning("No .env file found. Copy from .env.example and configure")
+        else
+          warning("No .env file found. Create one with required environment variables")
+        end
+      end
+
+      # Check for critical environment variables
+      critical_vars = %w[
+        DHANHQ_CLIENT_ID
+        DHANHQ_ACCESS_TOKEN
+        REDIS_URL
+      ]
+
+      missing_vars = []
+      critical_vars.each do |var|
+        unless ENV[var] || (File.exist?(env_file) && File.read(env_file).include?(var))
+          missing_vars << var
+        end
+      end
+
+      if missing_vars.any?
+        warning("Missing environment variables: #{missing_vars.join(', ')}")
+      end
+
+      "Environment configuration checked ✓"
+    end
+  rescue StandardError => e
+    error("Environment check failed: #{e.message}")
+  end
+
+  def check_database_config
+    check("Database Configuration") do
+      config_file = "config/database.yml"
+
+      unless File.exist?(config_file)
+        raise "Database configuration not found: #{config_file}"
+      end
+
+      # Basic YAML syntax check
+      begin
+        YAML.load_file(config_file, aliases: true)
+      rescue Psych::SyntaxError => e
+        raise "Invalid YAML in database.yml: #{e.message}"
+      end
+
+      "Database configuration valid ✓"
+    end
+  rescue StandardError => e
+    error("Database config check failed: #{e.message}")
+  end
+
+  def check_redis_availability
+    check("Redis Availability") do
+      redis_url = ENV["REDIS_URL"] || "redis://localhost:6379/0"
+
+      # Extract host and port from URL
+      require "uri"
+      uri = URI.parse(redis_url)
+      host = uri.host || "localhost"
+      port = uri.port || 6379
+
+      # Simple TCP connection check
+      require "socket"
+      socket = Socket.tcp(host, port, connect_timeout: 5)
+      socket.close
+
+      "Redis accessible at #{host}:#{port} ✓"
+    end
+  rescue StandardError => e
+    warning("Redis not accessible: #{e.message}")
+  end
+
+  def check_disk_space
+    check("Disk Space") do
+      # Check available disk space
+      if RUBY_PLATFORM.include?("linux")
+        output = `df -h / 2>/dev/null | tail -1 | awk '{print $4}'`
+        if output && !output.empty?
+          free_space = output.strip
+          puts "   Free space: #{free_space}"
+        end
+      end
+
+      "Disk space checked ✓"
+    end
+  rescue StandardError => e
+    warning("Could not check disk space: #{e.message}")
+  end
+
+  def check_file_permissions
+    check("File Permissions") do
+      critical_dirs = %w[
+        log
+        tmp
+        storage
+      ]
+
+      critical_dirs.each do |dir|
+        dir_path = File.join(Dir.pwd, dir)
+        if File.exist?(dir_path)
+          unless File.writable?(dir_path)
+            raise "Directory not writable: #{dir}"
+          end
+        end
+      end
+
+      "File permissions OK ✓"
+    end
+  rescue StandardError => e
+    error("File permission issue: #{e.message}")
+  end
+
+  def check_network_connectivity
+    check("Network Connectivity") do
+      # Check basic internet connectivity
+      require "net/http"
+      require "uri"
+
+      test_urls = [
+        "https://www.google.com",
+        "https://api.dhan.co"
+      ]
+
+      accessible_urls = 0
+      test_urls.each do |url|
+        begin
+          uri = URI(url)
+          response = Net::HTTP.get_response(uri)
+          accessible_urls += 1 if response.code.to_i < 500
+        rescue StandardError
+          # Ignore individual failures
+        end
+      end
+
+      if accessible_urls == 0
+        warning("No test URLs accessible - check internet connection")
+      end
+
+      "Network connectivity checked ✓"
+    end
+  rescue StandardError => e
+    warning("Network check failed: #{e.message}")
+  end
+
+  def check_critical_files
+    check("Critical Files") do
+      critical_files = %w[
+        Gemfile
+        config/application.rb
+        config/routes.rb
+        config/algo.yml
+      ]
+
+      missing_files = critical_files.select { |file| !File.exist?(file) }
+
+      if missing_files.any?
+        raise "Missing critical files: #{missing_files.join(', ')}"
+      end
+
+      "All critical files present ✓"
+    end
+  rescue StandardError => e
+    error("Critical files check failed: #{e.message}")
+  end
+
+  def check(name)
+    @total_checks += 1
+    print "🔍 #{name}... "
+
+    result = yield
+    puts "✅ #{result}"
+    @checks_passed += 1
+  rescue StandardError => e
+    puts "❌ #{e.message}"
+    @errors << "#{name}: #{e.message}"
+  end
+
+  def error(message)
+    @errors << message
+  end
+
+  def warning(message)
+    @warnings << message
+  end
+
+  def print_summary
+    puts
+    puts "📊 Pre-Startup Check Summary"
+    puts "=" * 50
+    puts "Checks Passed: #{@checks_passed}/#{@total_checks}"
+
+    if @warnings.any?
+      puts
+      puts "⚠️  Warnings:"
+      @warnings.each { |warning| puts "   • #{warning}" }
+    end
+
+    if @errors.any?
+      puts
+      puts "❌ Errors:"
+      @errors.each { |error| puts "   • #{error}" }
+    end
+
+    puts
+    if @errors.empty?
+      puts "🎉 Pre-startup checks passed! Ready to load Rails."
+      puts "✅ Run 'bin/health_check' for full application health check."
+    else
+      puts "🚨 Critical issues found! Please fix errors before starting."
+      puts "❌ Application is not ready to start."
+    end
+  end
+
+  def exit_with_code
+    exit(@errors.empty? ? 0 : 1)
+  end
+end
+
+# Run the pre-startup check
+PreStartupChecker.new.run_all_checks

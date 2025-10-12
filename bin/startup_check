@@ -1,0 +1,146 @@
+#!/bin/bash
+# frozen_string_literal: true
+
+# Comprehensive startup script for Algo Scalper API
+# Run with: bin/startup_check
+# This script runs all health checks before starting the application
+
+set -e  # Exit on any error
+
+echo "🚀 Algo Scalper API Startup Check"
+echo "=================================="
+echo "Timestamp: $(date)"
+echo
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
+}
+
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Step 1: Pre-startup checks (no Rails required)
+print_status $BLUE "Step 1: Pre-startup checks..."
+echo "----------------------------------------"
+
+if [ -f "bin/pre_startup_check" ]; then
+    if ruby bin/pre_startup_check; then
+        print_status $GREEN "✅ Pre-startup checks passed"
+    else
+        print_status $RED "❌ Pre-startup checks failed"
+        echo "Please fix the issues above before continuing."
+        exit 1
+    fi
+else
+    print_status $YELLOW "⚠️  Pre-startup check script not found, skipping..."
+fi
+
+echo
+
+# Step 2: Bundle check
+print_status $BLUE "Step 2: Bundle check..."
+echo "------------------------"
+
+if command_exists bundle; then
+    print_status $GREEN "✅ Bundler found"
+
+    # Check if bundle install is needed
+    if bundle check >/dev/null 2>&1; then
+        print_status $GREEN "✅ All gems installed"
+    else
+        print_status $YELLOW "⚠️  Running bundle install..."
+        bundle install
+        print_status $GREEN "✅ Bundle install completed"
+    fi
+else
+    print_status $RED "❌ Bundler not found. Install with: gem install bundler"
+    exit 1
+fi
+
+echo
+
+# Step 3: Database check
+print_status $BLUE "Step 3: Database check..."
+echo "---------------------------"
+
+if bundle exec rails db:version >/dev/null 2>&1; then
+    print_status $GREEN "✅ Database connection OK"
+
+    # Check if migrations are needed
+    if bundle exec rails db:migrate:status | grep -q "^\s*down"; then
+        print_status $YELLOW "⚠️  Pending migrations found"
+        echo "Running migrations..."
+        bundle exec rails db:migrate
+        print_status $GREEN "✅ Migrations completed"
+    else
+        print_status $GREEN "✅ Database schema up to date"
+    fi
+else
+    print_status $RED "❌ Database connection failed"
+    echo "Please check your database configuration and ensure the database server is running."
+    exit 1
+fi
+
+echo
+
+# Step 4: Full health check (Rails required)
+print_status $BLUE "Step 4: Full application health check..."
+echo "---------------------------------------------"
+
+if [ -f "bin/health_check" ]; then
+    if bundle exec ruby bin/health_check; then
+        print_status $GREEN "✅ Full health check passed"
+    else
+        print_status $RED "❌ Full health check failed"
+        echo "Please fix the issues above before starting the application."
+        exit 1
+    fi
+else
+    print_status $YELLOW "⚠️  Health check script not found, skipping..."
+fi
+
+echo
+
+# Step 5: Final readiness check
+print_status $BLUE "Step 5: Final readiness check..."
+echo "--------------------------------"
+
+# Check if we can start Rails console
+if timeout 10s bundle exec rails runner "puts 'Rails loaded successfully'" >/dev/null 2>&1; then
+    print_status $GREEN "✅ Rails can be loaded successfully"
+else
+    print_status $RED "❌ Rails failed to load"
+    echo "There may be configuration issues preventing Rails from starting."
+    exit 1
+fi
+
+echo
+
+# Success message
+print_status $GREEN "🎉 All checks passed! Application is ready to start."
+echo "=================================="
+echo
+echo "You can now start the application with:"
+echo "  • bin/dev          # Development server with live trading"
+echo "  • bin/rails server # Rails server only"
+echo "  • bin/rails console # Rails console"
+echo
+echo "Other useful commands:"
+echo "  • bin/rails instruments:import  # Import instruments"
+echo "  • bin/rails instruments:status  # Check instrument status"
+echo "  • bin/rails db:seed            # Seed database"
+echo
+
+exit 0

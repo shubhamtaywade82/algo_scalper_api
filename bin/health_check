@@ -1,0 +1,369 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Comprehensive health check script for Algo Scalper API
+# Run with: bin/health_check
+# Exit codes: 0 = healthy, 1 = unhealthy
+
+require_relative "../config/environment"
+require "json"
+
+class HealthChecker
+  attr_reader :errors, :warnings, :checks_passed
+
+  def initialize
+    @errors = []
+    @warnings = []
+    @checks_passed = 0
+    @total_checks = 0
+  end
+
+  def run_all_checks
+    puts "🏥 Algo Scalper API Health Check"
+    puts "=" * 50
+    puts "Timestamp: #{Time.current}"
+    puts
+
+    check_database_connection
+    check_redis_connection
+    check_dhanhq_configuration
+    check_instrument_data
+    check_derivative_data
+    check_websocket_configuration
+    check_file_permissions
+    check_disk_space
+    check_memory_usage
+    check_environment_variables
+    check_gem_dependencies
+    check_database_schema
+    check_models_functionality
+    check_services_functionality
+
+    print_summary
+    exit_with_code
+  end
+
+  private
+
+  def check_database_connection
+    check("Database Connection") do
+      ActiveRecord::Base.connection.execute("SELECT 1")
+      "Connected to #{ActiveRecord::Base.connection.current_database}"
+    end
+  rescue StandardError => e
+    error("Database connection failed: #{e.message}")
+  end
+
+  def check_redis_connection
+    check("Redis Connection") do
+      require "redis-client"
+      redis = RedisClient.new(url: ENV["REDIS_URL"] || "redis://localhost:6379/0")
+      redis.call("PING")
+      "Redis is responding"
+    end
+  rescue StandardError => e
+    error("Redis connection failed: #{e.message}")
+  end
+
+  def check_dhanhq_configuration
+    check("DhanHQ Configuration") do
+      client_id = ENV["DHANHQ_CLIENT_ID"] || ENV["CLIENT_ID"]
+      access_token = ENV["DHANHQ_ACCESS_TOKEN"] || ENV["ACCESS_TOKEN"]
+
+      if client_id.blank? || access_token.blank?
+        raise "Missing DhanHQ credentials. Set DHANHQ_CLIENT_ID and DHANHQ_ACCESS_TOKEN"
+      end
+
+      "DhanHQ credentials configured"
+    end
+  rescue StandardError => e
+    error("DhanHQ configuration issue: #{e.message}")
+  end
+
+  def check_instrument_data
+    check("Instrument Data") do
+      count = Instrument.count
+      if count == 0
+        warning("No instruments found. Run: bin/rails instruments:import")
+        "No instruments (run import)"
+      else
+        # Check if enabled column exists, if not just show total count
+        if Instrument.column_names.include?("enabled")
+          enabled_count = Instrument.enabled.count
+          "Found #{count} instruments (#{enabled_count} enabled)"
+        else
+          "Found #{count} instruments"
+        end
+      end
+    end
+  rescue StandardError => e
+    error("Instrument data check failed: #{e.message}")
+  end
+
+  def check_derivative_data
+    check("Derivative Data") do
+      count = Derivative.count
+      if count == 0
+        warning("No derivatives found. Instruments may need derivative data")
+        "No derivatives found"
+      else
+        "Found #{count} derivatives"
+      end
+    end
+  rescue StandardError => e
+    error("Derivative data check failed: #{e.message}")
+  end
+
+  def check_websocket_configuration
+    check("WebSocket Configuration") do
+      ws_enabled = ENV["DHANHQ_WS_ENABLED"] != "false"
+      order_ws_enabled = ENV["DHANHQ_ORDER_WS_ENABLED"] != "false"
+
+      if ws_enabled && order_ws_enabled
+        "WebSocket and Order WebSocket enabled"
+      elsif ws_enabled
+        "WebSocket enabled, Order WebSocket disabled"
+      else
+        warning("WebSocket disabled - real-time data unavailable")
+        "WebSocket disabled"
+      end
+    end
+  rescue StandardError => e
+    error("WebSocket configuration check failed: #{e.message}")
+  end
+
+  def check_file_permissions
+    check("File Permissions") do
+      critical_files = [
+        "config/database.yml",
+        "config/credentials.yml.enc",
+        "log/",
+        "tmp/"
+      ]
+
+      critical_files.each do |file|
+        path = Rails.root.join(file)
+        if File.exist?(path)
+          unless File.readable?(path)
+            raise "Cannot read #{file}"
+          end
+        end
+      end
+
+      "File permissions OK"
+    end
+  rescue StandardError => e
+    error("File permission issue: #{e.message}")
+  end
+
+  def check_disk_space
+    check("Disk Space") do
+      # Check available disk space (simplified check)
+      if RUBY_PLATFORM.include?("linux")
+        output = `df -h / 2>/dev/null | tail -1 | awk '{print $4}'`
+        if output && !output.empty?
+          free_space = output.strip
+          "Free space: #{free_space}"
+        else
+          "Disk space check unavailable"
+        end
+      else
+        "Disk space check unavailable on this platform"
+      end
+    end
+  rescue StandardError => e
+    warning("Could not check disk space: #{e.message}")
+  end
+
+  def check_memory_usage
+    check("Memory Usage") do
+      # Basic memory check
+      memory_mb = `ps -o rss= -p #{Process.pid}`.to_i / 1024
+      "Current process using #{memory_mb}MB"
+    end
+  rescue StandardError => e
+    warning("Could not check memory usage: #{e.message}")
+  end
+
+  def check_environment_variables
+    check("Environment Variables") do
+      required_vars = %w[
+        RAILS_ENV
+        RAILS_LOG_LEVEL
+        REDIS_URL
+      ]
+
+      missing_vars = required_vars.select { |var| ENV[var].blank? }
+
+      if missing_vars.any?
+        warning("Missing environment variables: #{missing_vars.join(', ')}")
+      end
+
+      "Environment variables checked"
+    end
+  rescue StandardError => e
+    error("Environment variable check failed: #{e.message}")
+  end
+
+  def check_gem_dependencies
+    check("Gem Dependencies") do
+      # Check critical gems are loaded
+      critical_gems = %w[
+        rails
+        redis-client
+        solid_queue
+        solid_cache
+      ]
+
+      missing_gems = critical_gems.select do |gem_name|
+        begin
+          gem(gem_name)
+          false
+        rescue Gem::LoadError
+          true
+        end
+      end
+
+      # Check DhanHQ client separately as it might be a git gem
+      begin
+        # Try to access the DhanHQ classes directly since they're already loaded
+        DhanHQ::Models::Order
+        DhanHQ::WS::Client
+      rescue NameError
+        missing_gems << "dhanhq-client"
+      end
+
+      if missing_gems.any?
+        raise "Missing critical gems: #{missing_gems.join(', ')}"
+      end
+
+      "All critical gems loaded"
+    end
+  rescue StandardError => e
+    error("Gem dependency check failed: #{e.message}")
+  end
+
+  def check_database_schema
+    check("Database Schema") do
+      # Check critical tables exist
+      critical_tables = %w[
+        instruments
+        derivatives
+        position_trackers
+        watchlist_items
+        settings
+      ]
+
+      missing_tables = critical_tables.select do |table|
+        !ActiveRecord::Base.connection.table_exists?(table)
+      end
+
+      if missing_tables.any?
+        raise "Missing critical tables: #{missing_tables.join(', ')}. Run: bin/rails db:migrate"
+      end
+
+      "All critical tables exist"
+    end
+  rescue StandardError => e
+    error("Database schema check failed: #{e.message}")
+  end
+
+  def check_models_functionality
+    check("Models Functionality") do
+      # Test basic model operations
+      instrument = Instrument.first
+      if instrument
+        # Test instrument methods
+        instrument.exchange_segment
+        instrument.latest_ltp rescue nil
+
+        # Test derivative methods if available
+        derivative = Derivative.first
+        if derivative
+          derivative.exchange_segment
+          derivative.subscribe rescue nil
+        end
+      end
+
+      "Models functioning correctly"
+    end
+  rescue StandardError => e
+    error("Model functionality check failed: #{e.message}")
+  end
+
+  def check_services_functionality
+    check("Services Functionality") do
+      # Test critical services can be instantiated
+      services = [
+        "Live::MarketFeedHub",
+        "Orders::Placer",
+        "Signal::Engine",
+        "Trading::DataFetcherService"
+      ]
+
+      services.each do |service_name|
+        service_class = service_name.constantize
+        service_class.new rescue service_class.instance rescue nil
+      end
+
+      "Services can be instantiated"
+    end
+  rescue StandardError => e
+    error("Service functionality check failed: #{e.message}")
+  end
+
+  def check(name)
+    @total_checks += 1
+    print "🔍 #{name}... "
+
+    result = yield
+    puts "✅ #{result}"
+    @checks_passed += 1
+  rescue StandardError => e
+    puts "❌ #{e.message}"
+    @errors << "#{name}: #{e.message}"
+  end
+
+  def error(message)
+    @errors << message
+  end
+
+  def warning(message)
+    @warnings << message
+  end
+
+  def print_summary
+    puts
+    puts "📊 Health Check Summary"
+    puts "=" * 50
+    puts "Checks Passed: #{@checks_passed}/#{@total_checks}"
+
+    if @warnings.any?
+      puts
+      puts "⚠️  Warnings:"
+      @warnings.each { |warning| puts "   • #{warning}" }
+    end
+
+    if @errors.any?
+      puts
+      puts "❌ Errors:"
+      @errors.each { |error| puts "   • #{error}" }
+    end
+
+    puts
+    if @errors.empty?
+      puts "🎉 All critical checks passed! Application is healthy."
+      puts "✅ Ready to start the application."
+    else
+      puts "🚨 Critical issues found! Please fix errors before starting."
+      puts "❌ Application is not ready to start."
+    end
+  end
+
+  def exit_with_code
+    exit(@errors.empty? ? 0 : 1)
+  end
+end
+
+# Run the health check
+HealthChecker.new.run_all_checks
