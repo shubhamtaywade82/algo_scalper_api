@@ -75,26 +75,31 @@ class IndexInstrumentCache
       # If not found, create a temporary instrument object with the config
       Rails.logger.info("[IndexCache] Creating temporary instrument for #{index_cfg[:key]} (SID: #{index_cfg[:sid]}, Segment: #{index_cfg[:segment]})")
 
+      exchange = determine_exchange(index_cfg)
       Instrument.new(
         security_id: index_cfg[:sid],
         symbol_name: index_cfg[:key],
-        exchange: determine_exchange(index_cfg[:segment]),
+        exchange: exchange,
+        exchange_segment: determine_exchange_segment(index_cfg, exchange),
         segment: "index",
         instrument_code: "index",
         enabled: true
       )
     end
 
-    def determine_exchange(segment)
-      case segment
-      when "IDX_I"
-        "NSE" # Default to NSE for index instruments
-      when "BSE_EQ"
-        "BSE"
-      when "NSE_EQ"
-        "NSE"
-      else
-        "NSE" # Default fallback
-      end
+    def determine_exchange(index_cfg)
+      segment = index_cfg[:segment].to_s
+      key = index_cfg[:key].to_s.upcase
+
+      return "BSE" if segment.start_with?("BSE") || key == "SENSEX"
+
+      "NSE"
+    end
+
+    def determine_exchange_segment(index_cfg, exchange)
+      segment = index_cfg[:segment].to_s
+      return segment if segment.present? && (exchange == "NSE" || !segment.eql?("IDX_I"))
+
+      exchange == "BSE" ? "BSE_IDX" : (segment.presence || "IDX_I")
     end
 end

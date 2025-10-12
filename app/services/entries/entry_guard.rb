@@ -10,6 +10,7 @@ module Entries
         side = direction == :bullish ? "long_ce" : "long_pe"
         return false unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
         return false if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
+        ensure_feed_health!
 
         Rails.logger.debug("[EntryGuard] Pick data: #{pick.inspect}")
         quantity = Capital::Allocator.qty_for(
@@ -40,6 +41,9 @@ module Entries
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
         true
+      rescue Live::FeedHealthService::FeedStaleError => e
+        Rails.logger.warn("[EntryGuard] Blocked entry for #{index_cfg[:key]}: #{e.message}")
+        false
       rescue StandardError => e
         Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
         false
@@ -58,6 +62,10 @@ module Entries
       end
 
       private
+
+      def ensure_feed_health!
+        Live::FeedHealthService.instance.assert_healthy!([ :funds, :positions, :ticks ])
+      end
 
       def find_instrument(index_cfg)
         Instrument.find_by(security_id: index_cfg[:sid]) || Instrument.find_by(symbol_name: index_cfg[:key].to_s)

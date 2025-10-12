@@ -13,6 +13,7 @@ class TickCache
   def put(tick)
     key = cache_key(tick[:segment], tick[:security_id])
     @map[key] = tick
+    Live::FeedHealthService.instance.mark_success!(:ticks)
   end
 
   def fetch(segment, security_id)

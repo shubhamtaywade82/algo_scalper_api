@@ -43,7 +43,9 @@ module Live
 
     def monitor_loop
       while running?
-        enforce_trailing_stops
+        positions = fetch_positions_indexed
+        enforce_hard_limits(positions)
+        enforce_trailing_stops(positions)
         enforce_daily_circuit_breaker
         sleep LOOP_INTERVAL
       end
@@ -52,8 +54,7 @@ module Live
       @running = false
     end
 
-    def enforce_trailing_stops
-      positions = fetch_positions_indexed
+    def enforce_trailing_stops(positions = fetch_positions_indexed)
       risk = risk_config
 
       PositionTracker.active.includes(:instrument).find_each do |tracker|
@@ -77,8 +78,67 @@ module Live
           drop_pct = BigDecimal((risk[:exit_drop_pct] || 0.05).to_s)
 
           if tracker.ready_to_trail?(pnl, min_profit) && tracker.trailing_stop_triggered?(pnl, drop_pct)
-            execute_exit(position, tracker)
+            execute_exit(position, tracker, reason: "trailing stop (drop #{(drop_pct * 100).round(2)}%)")
           end
+        end
+      end
+    end
+
+    def enforce_hard_limits(positions = fetch_positions_indexed)
+      risk = risk_config
+      sl_pct = pct_value(risk[:sl_pct])
+      tp_pct = pct_value(risk[:tp_pct])
+      per_trade_pct = pct_value(risk[:per_trade_risk_pct])
+
+      return if sl_pct <= 0 && tp_pct <= 0 && per_trade_pct <= 0
+
+      PositionTracker.active.includes(:instrument).find_each do |tracker|
+        position = positions[tracker.security_id.to_s]
+        ltp = current_ltp(tracker, position)
+        next unless ltp
+
+        entry_price = tracker.entry_price || tracker.avg_price
+        next if entry_price.blank?
+
+        quantity = tracker.quantity.to_i
+        if quantity.zero? && position
+          quantity = if position.respond_to?(:quantity)
+                       position.quantity
+          else
+                       position[:quantity]
+          end.to_i
+        end
+        next if quantity <= 0
+
+        entry = BigDecimal(entry_price.to_s)
+        ltp_value = BigDecimal(ltp.to_s)
+        reason = nil
+
+        if sl_pct > 0
+          stop_price = entry * (BigDecimal("1") - sl_pct)
+          reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%)" if ltp_value <= stop_price
+        end
+
+        if reason.nil? && per_trade_pct > 0
+          invested = entry * quantity
+          loss = [ entry - ltp_value, BigDecimal("0") ].max * quantity
+          if invested > 0 && loss >= invested * per_trade_pct
+            reason = "per-trade risk #{(per_trade_pct * 100).round(2)}%"
+          end
+        end
+
+        if reason.nil? && tp_pct > 0
+          target_price = entry * (BigDecimal("1") + tp_pct)
+          reason = "take-profit (#{(tp_pct * 100).round(2)}%)" if ltp_value >= target_price
+        end
+
+        next unless reason
+
+        tracker.with_lock do
+          next unless tracker.status == PositionTracker::STATUSES[:active]
+
+          Rails.logger.info("Triggering exit for #{tracker.order_no} due to #{reason}.")
+          execute_exit(position, tracker, reason: reason)
         end
       end
     end
@@ -90,6 +150,7 @@ module Live
 
       begin
         funds = DhanHQ::Models::Funds.fetch
+        Live::FeedHealthService.instance.mark_success!(:funds)
         pnl_today = if funds.respond_to?(:day_pnl)
                       BigDecimal(funds.day_pnl.to_s)
         elsif funds.is_a?(Hash)
@@ -117,16 +178,20 @@ module Live
         end
       rescue StandardError => e
         Rails.logger.warn("Daily circuit breaker check failed: #{e.class} - #{e.message}")
+        Live::FeedHealthService.instance.mark_failure!(:funds, error: e)
       end
     end
 
     def fetch_positions_indexed
-      DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
+      positions = DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
         security_id = position.respond_to?(:security_id) ? position.security_id : position[:security_id]
         map[security_id.to_s] = position if security_id
       end
+      Live::FeedHealthService.instance.mark_success!(:positions)
+      positions
     rescue StandardError => e
       Rails.logger.error("Failed to load active positions: #{e.class} - #{e.message}")
+      Live::FeedHealthService.instance.mark_failure!(:positions, error: e)
       {}
     end
 
@@ -204,8 +269,9 @@ module Live
       pnl_pct >= BigDecimal(threshold.to_s)
     end
 
-    def execute_exit(position, tracker)
-      Rails.logger.info("Triggering trailing-stop exit for #{tracker.order_no} (PnL=#{tracker.last_pnl_rupees}).")
+    def execute_exit(position, tracker, reason: "manual")
+      Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{tracker.last_pnl_rupees}).")
+      store_exit_reason(tracker, reason)
       exit_position(position, tracker)
       tracker.mark_exited!
     rescue StandardError => e
@@ -228,6 +294,13 @@ module Live
       end
     end
 
+    def store_exit_reason(tracker, reason)
+      metadata = tracker.meta.is_a?(Hash) ? tracker.meta : {}
+      tracker.update!(meta: metadata.merge("exit_reason" => reason, "exit_triggered_at" => Time.current))
+    rescue StandardError => e
+      Rails.logger.warn("Failed to persist exit reason for #{tracker.order_no}: #{e.class} - #{e.message}")
+    end
+
     def risk_config
       AlgoConfig.fetch[:risk] || {}
     end
@@ -241,6 +314,12 @@ module Live
     rescue StandardError => e
       Rails.logger.error("Unexpected error cancelling order #{order_id}: #{e.class} - #{e.message}")
       raise
+    end
+
+    def pct_value(value)
+      BigDecimal(value.to_s)
+    rescue StandardError
+      BigDecimal("0")
     end
   end
 end

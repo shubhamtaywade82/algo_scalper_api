@@ -1,15 +1,12 @@
 # Risk Management & Exchange Support Review
 
 ## Summary Of Findings
-- The live risk loop only enforces trailing stops and a daily loss breaker, leaving the
-  configured stop-loss, take-profit, and per-trade risk settings unused in production
-  flows.
-- Options strike selection always tags orders as `NSE_FNO`, so BSE_FNO contracts (for
-  example, SENSEX weekly options) will be placed against the wrong exchange segment.
-- Temporary index instruments created from `config/algo.yml` default to NSE, which means
-  SENSEX can be misclassified unless the BSE record already exists in the database.
-- Operational self-sufficiency still depends on DhanHQ data availability for funds,
-  positions, and market data; loss of those feeds leaves the risk loop blind.
+- The live risk loop now enforces per-trade loss caps, hard stop-loss, and take-profit
+  exits in addition to the existing trailing and daily circuit protections.
+- Options strike selection carries the derivative-provided exchange segment so NSE_FNO
+  and BSE_FNO contracts route to the proper venue.
+- Index cache creation recognises BSE indices (for example, SENSEX) and seeds the
+  correct exchange metadata while entry flow blocks orders when DhanHQ feeds turn stale.
 
 ## Validation Steps
 1. Reviewed `config/algo.yml` to catalogue available risk configuration switches and
@@ -26,31 +23,28 @@
 | --- | --- | --- | --- |
 | Daily loss breaker | `risk.daily_loss_limit_pct` | Enforced | Trips the circuit breaker when the net balance drawdown exceeds the threshold. |
 | Trailing stop / breakeven | `risk.trail_step_pct`, `risk.breakeven_after_gain`, `risk.exit_drop_pct` | Enforced | Executes exits through `RiskManagerService` when high-water marks roll over. |
-| Per-trade risk sizing | `risk.per_trade_risk_pct` | Not Enforced | No call sites reference this key; `RiskManagerService` ignores it. |
-| Hard stop-loss / take-profit | `risk.sl_pct`, `risk.tp_pct` | Not Enforced | No exit logic uses these percentages, so runaway losses remain possible. |
+| Per-trade risk sizing | `risk.per_trade_risk_pct` | Enforced | Hard exits trigger once realised loss exceeds the configured allocation relative to deployed capital. |
+| Hard stop-loss / take-profit | `risk.sl_pct`, `risk.tp_pct` | Enforced | Deterministic exit prices terminate exposure even if live ticks stop updating the trailing logic. |
+| Feed health guard | N/A | Enforced | Entry flow raises when funds, positions, or tick feeds fall behind the safety thresholds. |
 
-> **Warning:** Without hard stop-loss enforcement, a connectivity lapse between the app
-> and DhanHQ can allow deep drawdowns because only trailing logic reacts, and it depends
-> on live ticks and existing `PositionTracker` rows.
+> **Warning:** Configure realistic stop-loss and take-profit percentages per index; overly
+> tight thresholds can over-trigger exits while wide bands weaken the new deterministic
+> guards.
 
 ## Exchange Coverage Assessment
-- `Options::ChainAnalyzer` injects `segment: "NSE_FNO"` for every selected leg, which
-  will break BSE_FNO execution even if the derivative metadata is present because order
-  entry will hit the wrong exchange code.
-- `IndexInstrumentCache` assumes `IDX_I` implies NSE when constructing a fallback
-  `Instrument`, so SENSEX requests issued before BSE indices are imported will inherit
-  the NSE exchange and ultimately fetch NSE option chains.
-- Position tracking and exit logic pull quotes from `Live::TickCache`. If the WebSocket
-  subscription for a BSE security fails (because the segment is mislabelled), trailing
-  exits will never trigger despite open exposure.
+- `Options::ChainAnalyzer` now preserves the derivative-provided `exchange_segment`, so
+  NSE_FNO and BSE_FNO orders are tagged correctly when they reach `Orders::Placer`.
+- `IndexInstrumentCache` seeds BSE indices with the `BSE_IDX` exchange segment when the
+  database has not been pre-populated, eliminating the previous misclassification of
+  SENSEX as NSE.
+- Position tracking still depends on real-time ticks, but the entry guard blocks orders
+  when the tick feed is stale, reducing the chance of running blind exposure.
 
-## Recommended Fixes
-1. Wire `risk.per_trade_risk_pct`, `risk.sl_pct`, and `risk.tp_pct` into the live exit
-   loop with deterministic stop orders so that losses cap even when trailing logic does
-   not fire.
-2. Carry the derivative`s `exchange_segment` through `Options::ChainAnalyzer` and
-   `Entries::EntryGuard` so NSE_FNO and BSE_FNO legs route to their native exchanges.
-3. Extend `IndexInstrumentCache#determine_exchange` to recognise BSE index segments and
-   pre-seed SENSEX derivative metadata to avoid defaulting to NSE.
-4. Add health assertions for required DhanHQ feeds (funds, positions, ticks) and block
-   order placement when any source is stale to maintain operational safety.
+## Follow-Up Actions
+1. Validate the configured stop-loss and take-profit percentages for each index with
+   broker-side bracket or cover orders to keep platform and exchange risk controls in
+   sync.
+2. Extend automated tests to cover feed-health degradation scenarios (for example, mock
+   tick droughts) so future changes cannot regress the guard rails.
+3. Periodically review derivative metadata in the database to ensure lot sizes and
+   exchange segments stay aligned with circular updates from NSE and BSE.
