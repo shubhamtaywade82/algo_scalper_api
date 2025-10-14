@@ -368,7 +368,7 @@ module Options
 
       # Calculate sophisticated strike score based on multiple factors
       def calculate_strike_score(leg, side, atm_strike, atm_range_percent)
-        strike_price = leg[:strike_price]
+        strike_price = leg[:strike]
         ltp = leg[:ltp]
         iv = leg[:iv]
         oi = leg[:oi]

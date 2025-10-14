@@ -10,6 +10,7 @@ Rails.application.routes.draw do
 
   namespace :api do
     get :health, to: "health#show"
+    post :test_broadcast, to: "test#broadcast"
   end
 
   # Quietly handle browser/devtools well-known probes with 204 No Content

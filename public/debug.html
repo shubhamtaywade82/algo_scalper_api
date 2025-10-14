@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>TickerChannel Debug Page</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: monospace;
+      margin: 20px;
+      background: #f0f0f0;
+    }
+
+    .debug-panel {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+
+    .connected {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .disconnected {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .loading {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .log {
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 4px;
+      height: 200px;
+      overflow-y: auto;
+      font-size: 12px;
+    }
+
+    .ticker {
+      background: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+      border-left: 4px solid #007bff;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="debug-panel">
+    <h1>🔧 TickerChannel Debug Page</h1>
+    <p>This page helps debug WebSocket connection issues with TickerChannel.</p>
+
+    <div class="status loading" id="connectionStatus">
+      Status: Connecting...
+    </div>
+
+    <button onclick="testConnection()">Test Connection</button>
+    <button onclick="clearLog()">Clear Log</button>
+    <button onclick="testBroadcast()">Test Broadcast</button>
+
+    <h3>📊 Live Tickers:</h3>
+    <div class="ticker">
+      <strong>NIFTY (IDX_I:13)</strong><br>
+      LTP: <span id="nifty-ltp">Loading...</span><br>
+      Time: <span id="nifty-time">-</span>
+    </div>
+
+    <div class="ticker">
+      <strong>BANKNIFTY (IDX_I:25)</strong><br>
+      LTP: <span id="banknifty-ltp">Loading...</span><br>
+      Time: <span id="banknifty-time">-</span>
+    </div>
+
+    <div class="ticker">
+      <strong>SENSEX (IDX_I:51)</strong><br>
+      LTP: <span id="sensex-ltp">Loading...</span><br>
+      Time: <span id="sensex-time">-</span>
+    </div>
+
+    <h3>📝 Debug Log:</h3>
+    <div class="log" id="debugLog"></div>
+  </div>
+
+  <script src="https://cdn.skypack.dev/@hotwired/stimulus@3.2.1"></script>
+  <script src="https://cdn.skypack.dev/@rails/actioncable@7.0.0"></script>
+  <script>
+    let cable = null;
+    let subscription = null;
+    let logCount = 0;
+
+    function log(message) {
+      const logElement = document.getElementById('debugLog');
+      const timestamp = new Date().toLocaleTimeString();
+      logCount++;
+      logElement.innerHTML += `[${timestamp}] ${message}\n`;
+      logElement.scrollTop = logElement.scrollHeight;
+      console.log(message);
+    }
+
+    function clearLog() {
+      document.getElementById('debugLog').innerHTML = '';
+      logCount = 0;
+    }
+
+    function updateStatus(status, message) {
+      const statusElement = document.getElementById('connectionStatus');
+      statusElement.className = `status ${status}`;
+      statusElement.textContent = `Status: ${message}`;
+    }
+
+    function updateTicker(segment, securityId, ltp) {
+      const tickerMap = {
+        'IDX_I:13': { ltp: 'nifty-ltp', time: 'nifty-time' },
+        'IDX_I:25': { ltp: 'banknifty-ltp', time: 'banknifty-time' },
+        'IDX_I:51': { ltp: 'sensex-ltp', time: 'sensex-time' }
+      };
+
+      const key = `${segment}:${securityId}`;
+      const elements = tickerMap[key];
+
+      if (elements) {
+        document.getElementById(elements.ltp).textContent = Number(ltp).toFixed(2);
+        document.getElementById(elements.time).textContent = new Date().toLocaleTimeString();
+        log(`Updated ${key} = ${ltp}`);
+      }
+    }
+
+    function testConnection() {
+      log('Testing WebSocket connection...');
+
+      if (cable) {
+        log('Closing existing connection...');
+        cable.disconnect();
+      }
+
+      try {
+        log('Creating ActionCable consumer...');
+        cable = ActionCable.createConsumer("/cable");
+
+        log('Creating subscription...');
+        subscription = cable.subscriptions.create({ channel: "TickerChannel" }, {
+          received: (data) => {
+            log(`Received: ${JSON.stringify(data)}`);
+            updateTicker(data.segment, data.security_id, data.ltp);
+          },
+          connected: () => {
+            log('✅ WebSocket connected successfully!');
+            updateStatus('connected', 'Connected');
+          },
+          disconnected: () => {
+            log('❌ WebSocket disconnected');
+            updateStatus('disconnected', 'Disconnected');
+          },
+          rejected: () => {
+            log('❌ WebSocket connection rejected');
+            updateStatus('disconnected', 'Rejected');
+          }
+        });
+
+        log('Subscription created, waiting for connection...');
+
+      } catch (error) {
+        log(`❌ Error: ${error.message}`);
+        updateStatus('disconnected', 'Error: ' + error.message);
+      }
+    }
+
+    function testBroadcast() {
+      log('Requesting test broadcast from server...');
+
+      // This would need to be implemented as an API endpoint
+      fetch('/api/test_broadcast', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          segment: 'IDX_I',
+          security_id: '13',
+          ltp: Math.random() * 1000 + 25000
+        })
+      })
+        .then(response => response.json())
+        .then(data => {
+          log(`Test broadcast response: ${JSON.stringify(data)}`);
+        })
+        .catch(error => {
+          log(`Test broadcast error: ${error.message}`);
+        });
+    }
+
+    // Auto-start connection
+    log('Page loaded, starting connection test...');
+    setTimeout(testConnection, 1000);
+
+    // Keep connection alive
+    setInterval(() => {
+      if (cable && cable.connection && cable.connection.isOpen()) {
+        log('Connection alive check: OK');
+      } else {
+        log('Connection alive check: FAILED');
+        updateStatus('disconnected', 'Connection Lost');
+      }
+    }, 30000);
+  </script>
+</body>
+
+</html>
