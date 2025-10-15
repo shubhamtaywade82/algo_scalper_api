@@ -1,31 +1,47 @@
 # frozen_string_literal: true
 
-Rails.application.config.to_prepare do
-  # Try to start the live feed hub; it internally checks ENV/config and no-ops if disabled
-  if defined?(Live::MarketFeedHub)
-    Live::MarketFeedHub.instance.start!
-  elsif defined?(MarketFeedHub)
-    MarketFeedHub.instance.start!
+module MarketStreamLifecycle
+  module_function
+
+  def safely_start
+    yield
+  rescue NameError
+    nil
   end
 
+  def safely_stop
+    yield
+  rescue NameError
+    nil
+  end
+end
+
+Rails.application.config.to_prepare do
+  # Try to start the live feed hub; it internally checks ENV/config and no-ops if disabled
+  started = MarketStreamLifecycle.safely_start { Live::MarketFeedHub.instance.start! }
+  MarketStreamLifecycle.safely_start { MarketFeedHub.instance.start! } unless started
+
   # Optional order updates (only starts if defined and configured inside the hub)
-  Live::OrderUpdateHub.instance.start! if defined?(Live::OrderUpdateHub)
-  Live::OrderUpdateHandler.instance.start! if defined?(Live::OrderUpdateHandler)
+  MarketStreamLifecycle.safely_start { Live::OrderUpdateHub.instance.start! }
+  MarketStreamLifecycle.safely_start { Live::OrderUpdateHandler.instance.start! }
 
   # Start staggered OHLC intraday prefetch loop for watchlist
-  Live::OhlcPrefetcherService.instance.start! if defined?(Live::OhlcPrefetcherService)
+  MarketStreamLifecycle.safely_start { Live::OhlcPrefetcherService.instance.start! }
 
   # Start trading scheduler (signals → entries) - only in server mode
-  Signal::Scheduler.new.start! if defined?(Signal::Scheduler) && !Rails.const_defined?(:Console)
+  unless Rails.const_defined?(:Console)
+    MarketStreamLifecycle.safely_start { Signal::Scheduler.instance.start! }
+  end
 
-  Live::RiskManagerService.instance.start! if defined?(Live::RiskManagerService)
+  MarketStreamLifecycle.safely_start { Live::RiskManagerService.instance.start! }
 end
 
 at_exit do
-  Live::MarketFeedHub.instance.stop! if defined?(Live::MarketFeedHub)
-  MarketFeedHub.instance.stop! if defined?(MarketFeedHub)
-  Live::OrderUpdateHub.instance.stop! if defined?(Live::OrderUpdateHub)
-  Live::OrderUpdateHandler.instance.stop! if defined?(Live::OrderUpdateHandler)
-  Live::OhlcPrefetcherService.instance.stop! if defined?(Live::OhlcPrefetcherService)
-  DhanHQ::WS.disconnect_all_local! if defined?(DhanHQ::WS)
+  MarketStreamLifecycle.safely_stop { Live::MarketFeedHub.instance.stop! }
+  MarketStreamLifecycle.safely_stop { MarketFeedHub.instance.stop! }
+  MarketStreamLifecycle.safely_stop { Live::OrderUpdateHub.instance.stop! }
+  MarketStreamLifecycle.safely_stop { Live::OrderUpdateHandler.instance.stop! }
+  MarketStreamLifecycle.safely_stop { Live::OhlcPrefetcherService.instance.stop! }
+  MarketStreamLifecycle.safely_stop { Signal::Scheduler.instance.stop! }
+  MarketStreamLifecycle.safely_stop { DhanHQ::WS.disconnect_all_local! }
 end
