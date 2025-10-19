@@ -31,10 +31,14 @@ module Signal
           return
         end
 
-        Rails.logger.debug("[Signal] Supertrend config: #{supertrend_cfg}")
+        Rails.logger.debug("[Signal] Adaptive Supertrend config: #{supertrend_cfg}")
 
-        st = Indicators::Supertrend.new(series: series, **supertrend_cfg).call
-        Rails.logger.info("[Signal] Supertrend result for #{index_cfg[:key]}: trend=#{st[:trend]}, last_value=#{st[:last_value]}")
+        st_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)
+        st = st_service.call
+        last_multiplier = st[:adaptive_multipliers]&.compact&.last
+        Rails.logger.info(
+          "[Signal] Adaptive Supertrend result for #{index_cfg[:key]}: trend=#{st[:trend]}, last_value=#{st[:last_value]}, multiplier=#{last_multiplier}"
+        )
 
         adx_value = instrument.adx(14, interval: timeframe.gsub("m", ""))
         adx = { value: adx_value }

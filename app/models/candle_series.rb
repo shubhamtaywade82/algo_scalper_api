@@ -199,11 +199,23 @@ class CandleSeries
   end
 
   def supertrend_signal
-    trend_line = Indicators::Supertrend.new(series: self).call
+    result = Indicators::Supertrend.new(series: self).call
+    trend_line = result[:line] || []
     return nil if trend_line.empty?
 
-    latest_close = closes.last
-    latest_trend = trend_line.last
+    case result[:trend]
+    when :bullish
+      return :long_entry
+    when :bearish
+      return :short_entry
+    end
+
+    latest_index = trend_line.rindex { |value| !value.nil? }
+    return nil if latest_index.nil?
+
+    latest_close = closes[latest_index]
+    latest_trend = trend_line[latest_index]
+    return nil if latest_close.nil? || latest_trend.nil?
 
     return :long_entry if latest_close > latest_trend
 
