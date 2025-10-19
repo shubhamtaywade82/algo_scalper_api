@@ -31,8 +31,17 @@ module Live
     def stop!
       @mutex.synchronize do
         @running = false
-        @thread&.wakeup
+        thread = @thread
         @thread = nil
+
+        return unless thread
+        return unless thread.alive?
+
+        begin
+          thread.wakeup
+        rescue ThreadError
+          # thread might not be sleeping; ignore
+        end
       end
     end
 

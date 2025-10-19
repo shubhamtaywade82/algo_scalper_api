@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 ENV['RAILS_ENV'] ||= 'test'
+ENV['DHANHQ_ENABLED'] ||= 'false'
+ENV['DHANHQ_WS_ENABLED'] ||= 'false'
+ENV['DHANHQ_ORDER_WS_ENABLED'] ||= 'false'
 require File.expand_path('../config/environment', __dir__)
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require 'rspec/rails'

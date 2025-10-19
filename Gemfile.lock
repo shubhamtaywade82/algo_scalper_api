@@ -1,13 +1,14 @@
 GIT
   remote: https://github.com/shubhamtaywade82/dhanhq-client.git
-  revision: 86d58f60efcb1b5761ef0f4d5d5622f0d32c8f26
+  revision: 41eb6f8b0b8fbf17e16a8dafaa2bb5f7fd266fb1
   branch: main
   specs:
-    DhanHQ (2.1.4)
+    DhanHQ (2.1.6)
       activesupport
       base64
       bindata
       concurrent-ruby
+      csv
       dry-validation
       eventmachine
       faraday

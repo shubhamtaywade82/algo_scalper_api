@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "DhanHQ"
+require "dhan_hq"
 
 # Bootstrap DhanHQ from ENV only
 # expects CLIENT_ID/ACCESS_TOKEN or DHANHQ_CLIENT_ID/DHANHQ_ACCESS_TOKEN

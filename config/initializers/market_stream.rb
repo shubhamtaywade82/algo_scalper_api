@@ -34,6 +34,9 @@ Rails.application.config.to_prepare do
   end
 
   MarketStreamLifecycle.safely_start { Live::RiskManagerService.instance.start! }
+
+  # Start ATM options service for live trading
+  MarketStreamLifecycle.safely_start { Live::AtmOptionsService.instance.start! }
 end
 
 at_exit do
@@ -43,5 +46,6 @@ at_exit do
   MarketStreamLifecycle.safely_stop { Live::OrderUpdateHandler.instance.stop! }
   MarketStreamLifecycle.safely_stop { Live::OhlcPrefetcherService.instance.stop! }
   MarketStreamLifecycle.safely_stop { Signal::Scheduler.instance.stop! }
+  MarketStreamLifecycle.safely_stop { Live::AtmOptionsService.instance.stop! }
   MarketStreamLifecycle.safely_stop { DhanHQ::WS.disconnect_all_local! }
 end

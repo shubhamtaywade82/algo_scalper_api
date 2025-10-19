@@ -22,6 +22,15 @@ class HomeController < ActionController::Base
           .status.connected { background: #d4edda; color: #155724; }
           .status.disconnected { background: #f8d7da; color: #721c24; }
           .status.loading { background: #fff3cd; color: #856404; }
+
+          /* Options Section Styles */
+          .options-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #e9ecef; }
+          .options-row { display: flex; gap: 10px; }
+          .option-cell { flex: 1; text-align: center; }
+          .option-label { font-size: 11px; font-weight: bold; color: #6c757d; margin-bottom: 5px; }
+          .option-price { font-size: 16px; font-weight: bold; padding: 8px; border-radius: 4px; }
+          .option-cell.call .option-price { background: #d1ecf1; color: #0c5460; }
+          .option-cell.put .option-price { background: #f8d7da; color: #721c24; }
         </style>
       </head>
       <body>
@@ -40,6 +49,20 @@ class HomeController < ActionController::Base
               <h3>📈 NIFTY</h3>
               <div class="ltp" data-ticker-display-target="ltp">Loading...</div>
               <div class="timestamp" data-ticker-display-target="timestamp">-</div>
+
+              <!-- ATM Options -->
+              <div class="options-section">
+                <div class="options-row">
+                  <div class="option-cell call">
+                    <div class="option-label">CALL</div>
+                    <div class="option-price" data-ticker-display-target="callPrice">-</div>
+                  </div>
+                  <div class="option-cell put">
+                    <div class="option-label">PUT</div>
+                    <div class="option-price" data-ticker-display-target="putPrice">-</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- BANKNIFTY -->
@@ -47,6 +70,20 @@ class HomeController < ActionController::Base
               <h3>🏦 BANKNIFTY</h3>
               <div class="ltp" data-ticker-display-target="ltp">Loading...</div>
               <div class="timestamp" data-ticker-display-target="timestamp">-</div>
+
+              <!-- ATM Options -->
+              <div class="options-section">
+                <div class="options-row">
+                  <div class="option-cell call">
+                    <div class="option-label">CALL</div>
+                    <div class="option-price" data-ticker-display-target="callPrice">-</div>
+                  </div>
+                  <div class="option-cell put">
+                    <div class="option-label">PUT</div>
+                    <div class="option-price" data-ticker-display-target="putPrice">-</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- SENSEX -->
@@ -54,6 +91,20 @@ class HomeController < ActionController::Base
               <h3>📊 SENSEX</h3>
               <div class="ltp" data-ticker-display-target="ltp">Loading...</div>
               <div class="timestamp" data-ticker-display-target="timestamp">-</div>
+
+              <!-- ATM Options -->
+              <div class="options-section">
+                <div class="options-row">
+                  <div class="option-cell call">
+                    <div class="option-label">CALL</div>
+                    <div class="option-price" data-ticker-display-target="callPrice">-</div>
+                  </div>
+                  <div class="option-cell put">
+                    <div class="option-label">PUT</div>
+                    <div class="option-price" data-ticker-display-target="putPrice">-</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -64,7 +115,7 @@ class HomeController < ActionController::Base
           console.log('Script loading...');
 
           class TickerDisplayController extends Stimulus.Controller {
-            static targets = ["ltp", "timestamp"];
+            static targets = ["ltp", "timestamp", "callPrice", "putPrice"];
             static values = { segment: String, securityId: String };
 
             connect() {
@@ -114,6 +165,49 @@ class HomeController < ActionController::Base
                 this.timestampTarget.textContent = new Date().toLocaleTimeString();
                 console.log(`Updated ${this.segmentValue}:${this.securityIdValue} = ${data.ltp}`);
               }
+
+              // Handle option price updates
+              this.handleOptionTick(data);
+            }
+
+            handleOptionTick(data) {
+              // Check if this is an option tick for our index
+              const indexKey = this.getIndexKey();
+              if (!indexKey) return;
+
+              // Get ATM option contracts for this index
+              const atmOptions = window.atmOptions?.[indexKey];
+              if (!atmOptions) return;
+
+              // Check if this tick matches our ATM CALL option
+              if (atmOptions.call &&
+                  data.segment === atmOptions.call.segment &&
+                  data.security_id === atmOptions.call.security_id) {
+                if (this.hasCallPriceTarget) {
+                  this.callPriceTarget.textContent = Number(data.ltp).toFixed(2);
+                  console.log(`Updated ${indexKey} CALL: ${data.ltp}`);
+                }
+              }
+
+              // Check if this tick matches our ATM PUT option
+              if (atmOptions.put &&
+                  data.segment === atmOptions.put.segment &&
+                  data.security_id === atmOptions.put.security_id) {
+                if (this.hasPutPriceTarget) {
+                  this.putPriceTarget.textContent = Number(data.ltp).toFixed(2);
+                  console.log(`Updated ${indexKey} PUT: ${data.ltp}`);
+                }
+              }
+            }
+
+            getIndexKey() {
+              // Map security IDs to index keys
+              const indexMap = {
+                '13': 'NIFTY',
+                '25': 'BANKNIFTY',
+                '51': 'SENSEX'
+              };
+              return indexMap[this.securityIdValue];
             }
 
             updateConnectionStatus(status) {
@@ -133,6 +227,24 @@ class HomeController < ActionController::Base
               console.log('ConnectionStatus controller connected');
             }
           }
+
+          // Global ATM options data
+          window.atmOptions = {};
+
+          // Load ATM options data from server
+          window.loadAtmOptions = async function() {
+            try {
+              const response = await fetch('/api/atm_options');
+              if (response.ok) {
+                window.atmOptions = await response.json();
+                console.log('Loaded ATM options:', window.atmOptions);
+              } else {
+                console.warn('Failed to load ATM options:', response.status);
+              }
+            } catch (error) {
+              console.error('Error loading ATM options:', error);
+            }
+          };
 
           // Global functions to handle all tickers
           window.updateAllTickers = function(data) {
@@ -163,6 +275,9 @@ class HomeController < ActionController::Base
           window.Stimulus.register("ticker-display", TickerDisplayController);
           window.Stimulus.register("connection-status", ConnectionStatusController);
           console.log('Stimulus started and controllers registered');
+
+          // Load ATM options data
+          window.loadAtmOptions();
         </script>
       </body>
       </html>
