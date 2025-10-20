@@ -62,13 +62,15 @@ class IndexInstrumentCache
 
     def fetch_instrument(index_cfg)
       # Try to find existing instrument in database first using both security_id and segment
-      instrument = Instrument.find_by(
+      segment_key = Instrument.segment_key_for(index_cfg[:segment]) || "index"
+      instrument = Instrument.find_by_sid_and_segment(
         security_id: index_cfg[:sid],
-        segment: "index"
+        segment_code: segment_key,
+        symbol_name: index_cfg[:key]
       )
 
       if instrument
-        Rails.logger.debug("[IndexCache] Found existing instrument in DB: #{instrument.symbol_name} (#{instrument.segment})")
+        Rails.logger.debug("[IndexCache] Found existing instrument in DB: #{instrument.symbol_name} (#{segment_key})")
         return instrument
       end
 
@@ -81,7 +83,7 @@ class IndexInstrumentCache
         symbol_name: index_cfg[:key],
         exchange: exchange,
         exchange_segment: determine_exchange_segment(index_cfg, exchange),
-        segment: "index",
+        segment: segment_key,
         instrument_code: "index",
         enabled: true
       )

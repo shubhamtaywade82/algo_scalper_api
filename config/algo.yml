@@ -33,10 +33,11 @@ risk:
   tp_pct: 0.60
   trail_step_pct: 0.10
   breakeven_after_gain: 0.35
-  exit_drop_pct: 0.05 # use by PositionTracker high-water-mark trailing
+  exit_drop_pct: 0.03 # trigger trailing exit after 3% pullback from high-water mark
 
 signals:
-  timeframe: "5m"
+  primary_timeframe: "1m"
+  confirmation_timeframe: "5m"
   supertrend:
     period: 10
     base_multiplier: 2.0
@@ -44,7 +45,13 @@ signals:
     num_clusters: 3
     performance_alpha: 0.1
     multiplier_candidates: [1.5, 2.0, 2.5, 3.0, 3.5]
-  adx: { min_strength: 18 }
+  adx:
+    min_strength: 18
+    confirmation_min_strength: 20
+  scaling:
+    enabled: true
+    max_multiplier: 3
+    decay_seconds: 900
 
 option_chain:
   atm_window_pct: 0.1

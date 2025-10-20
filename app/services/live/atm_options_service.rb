@@ -53,9 +53,11 @@ module Live
         Rails.logger.info("[AtmOptions] Loading ATM options for #{index_key}")
 
         begin
-          # Get the instrument - query by exchange and segment fields
-          instrument = Instrument.find_by(exchange: "nse", segment: "index", security_id: security_id) ||
-                      Instrument.find_by(exchange: "bse", segment: "index", security_id: security_id)
+          instrument = Instrument.find_by_sid_and_segment(
+            security_id: security_id,
+            segment_code: segment,
+            symbol_name: index_key
+          )
           next unless instrument
 
           # Get current LTP to determine ATM strike

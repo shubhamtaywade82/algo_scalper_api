@@ -17,6 +17,44 @@ class Instrument < ApplicationRecord
   validates :symbol_name, presence: true
   validates :exchange_segment, presence: true, unless: -> { exchange.present? && segment.present? }
 
+  SEGMENT_FROM_EXCHANGE = {
+    "IDX_I" => "index",
+    "BSE_IDX" => "index",
+    "NSE_IDX" => "index",
+    "I" => "index",
+    "NSE_EQ" => "equity",
+    "BSE_EQ" => "equity",
+    "E" => "equity",
+    "NSE_FNO" => "derivatives",
+    "BSE_FNO" => "derivatives",
+    "D" => "derivatives",
+    "NSE_CURRENCY" => "currency",
+    "BSE_CURRENCY" => "currency",
+    "C" => "currency",
+    "MCX_COMM" => "commodity",
+    "M" => "commodity"
+  }.freeze
+
+  class << self
+    def segment_key_for(segment_code)
+      return if segment_code.blank?
+
+      code = segment_code.to_s.upcase.strip
+      SEGMENT_FROM_EXCHANGE[code] || code.downcase
+    end
+
+    def find_by_sid_and_segment(security_id:, segment_code:, symbol_name: nil)
+      segment_key = segment_key_for(segment_code)
+      return nil unless security_id.present? && segment_key.present?
+
+      sid = security_id.to_s
+      instrument = find_by(security_id: sid, segment: segment_key)
+      return instrument if instrument.present? || symbol_name.blank?
+
+      find_by(symbol_name: symbol_name.to_s, segment: segment_key)
+    end
+  end
+
   def subscribe!
     subscribe
   end

@@ -3,9 +3,12 @@
 module Entries
   class EntryGuard
     class << self
-      def try_enter(index_cfg:, pick:, direction:)
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1)
         instrument = find_instrument(index_cfg)
         return false unless instrument
+
+        multiplier = [ scale_multiplier.to_i, 1 ].max
+        Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
 
         side = direction == :bullish ? "long_ce" : "long_pe"
         return false unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
@@ -16,7 +19,8 @@ module Entries
         quantity = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
           entry_price: pick[:ltp].to_f,
-          derivative_lot_size: pick[:lot_size]
+          derivative_lot_size: pick[:lot_size],
+          scale_multiplier: multiplier
         )
         return false if quantity <= 0
 
@@ -68,7 +72,20 @@ module Entries
       end
 
       def find_instrument(index_cfg)
-        Instrument.find_by(security_id: index_cfg[:sid]) || Instrument.find_by(symbol_name: index_cfg[:key].to_s)
+        segment_code = index_cfg[:segment]
+        instrument = Instrument.find_by_sid_and_segment(
+          security_id: index_cfg[:sid],
+          segment_code: segment_code,
+          symbol_name: index_cfg[:key]
+        )
+
+        unless instrument
+          Rails.logger.warn(
+            "[EntryGuard] Instrument lookup failed for #{index_cfg[:key]} (segment: #{segment_code}, sid: #{index_cfg[:sid]})"
+          )
+        end
+
+        instrument
       end
 
       def build_client_order_id(index_cfg:, pick:)

@@ -74,7 +74,10 @@ module Live
 
     def fetch_one(wl)
       instrument = wl.watchable
-      instrument ||= ::Instrument.find_by(security_id: wl.security_id)
+      instrument ||= ::Instrument.find_by_sid_and_segment(
+        security_id: wl.security_id,
+        segment_code: wl.segment
+      )
       unless instrument
         Rails.logger.debug("[OHLC prefetch] Instrument not found for #{wl.segment}:#{wl.security_id}")
         return

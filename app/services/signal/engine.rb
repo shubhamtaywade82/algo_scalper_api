@@ -6,73 +6,103 @@ module Signal
       def run_for(index_cfg)
         Rails.logger.info("[Signal] Starting analysis for #{index_cfg[:key]} (#{index_cfg[:segment]})")
 
-        timeframe = AlgoConfig.fetch.dig(:signals, :timeframe)
-        Rails.logger.debug("[Signal] Using timeframe: #{timeframe}")
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || "5m").to_s
+        confirmation_tf = signals_cfg[:confirmation_timeframe].presence&.to_s
 
-        # Get the instrument and use its built-in candle methods
+        Rails.logger.debug("[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'}")
+
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         unless instrument
           Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
           return
         end
 
-        # Use instrument's candle_series method which returns CandleSeries with Candle objects
-        series = instrument.candle_series(interval: timeframe.gsub("m", ""))
-        unless series&.candles&.any?
-          Rails.logger.warn("[Signal] No candle data available for #{index_cfg[:key]}")
-          return
-        end
-
-        Rails.logger.info("[Signal] Fetched #{series.candles.size} candles for #{index_cfg[:key]}")
-
-        supertrend_cfg = AlgoConfig.fetch.dig(:signals, :supertrend)
+        supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
           Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
           return
         end
 
-        Rails.logger.debug("[Signal] Adaptive Supertrend config: #{supertrend_cfg}")
-
-        st_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)
-        st = st_service.call
-        last_multiplier = st[:adaptive_multipliers]&.compact&.last
-        Rails.logger.info(
-          "[Signal] Adaptive Supertrend result for #{index_cfg[:key]}: trend=#{st[:trend]}, last_value=#{st[:last_value]}, multiplier=#{last_multiplier}"
+        adx_cfg = signals_cfg[:adx] || {}
+        primary_analysis = analyze_timeframe(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          timeframe: primary_tf,
+          supertrend_cfg: supertrend_cfg,
+          adx_min_strength: adx_cfg[:min_strength]
         )
 
-        adx_value = instrument.adx(14, interval: timeframe.gsub("m", ""))
-        adx = { value: adx_value }
-        Rails.logger.info("[Signal] ADX value for #{index_cfg[:key]}: #{adx_value}")
-
-        direction = decide_direction(st, adx)
-        Rails.logger.info("[Signal] Direction decision for #{index_cfg[:key]}: #{direction}")
-
-        if direction == :avoid
-          Rails.logger.info("[Signal] Avoiding trade for #{index_cfg[:key]} - conditions not met")
+        unless primary_analysis[:status] == :ok
+          Rails.logger.warn("[Signal] Primary timeframe analysis unavailable for #{index_cfg[:key]}: #{primary_analysis[:message]}")
+          Signal::StateTracker.reset(index_cfg[:key])
           return
         end
 
-        # Comprehensive validation checks
-        validation_result = comprehensive_validation(index_cfg, direction, series, st, adx)
+        final_direction = primary_analysis[:direction]
+        confirmation_analysis = nil
+
+        if confirmation_tf.present?
+          confirmation_analysis = analyze_timeframe(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            timeframe: confirmation_tf,
+            supertrend_cfg: supertrend_cfg,
+            adx_min_strength: adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+          )
+
+          unless confirmation_analysis[:status] == :ok
+            Rails.logger.warn("[Signal] Confirmation timeframe analysis unavailable for #{index_cfg[:key]}: #{confirmation_analysis[:message]}")
+            Signal::StateTracker.reset(index_cfg[:key])
+            return
+          end
+
+          final_direction = multi_timeframe_direction(primary_analysis[:direction], confirmation_analysis[:direction])
+          Rails.logger.info("[Signal] Multi-timeframe decision for #{index_cfg[:key]}: primary=#{primary_analysis[:direction]} confirmation=#{confirmation_analysis[:direction]} final=#{final_direction}")
+        end
+
+        if final_direction == :avoid
+          Rails.logger.info("[Signal] Avoiding trade for #{index_cfg[:key]} - multi-timeframe bias mismatch or weak trend")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
+        primary_series = primary_analysis[:series]
+        validation_result = comprehensive_validation(index_cfg, final_direction, primary_series, primary_analysis[:supertrend], { value: primary_analysis[:adx_value] })
         unless validation_result[:valid]
           Rails.logger.warn("[Signal] Comprehensive validation failed for #{index_cfg[:key]}: #{validation_result[:reason]}")
+          Signal::StateTracker.reset(index_cfg[:key])
           return
         end
 
-        Rails.logger.info("[Signal] Proceeding with #{direction} signal for #{index_cfg[:key]}")
+        Rails.logger.info("[Signal] Proceeding with #{final_direction} signal for #{index_cfg[:key]}")
 
-        picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: direction)
+        state_snapshot = Signal::StateTracker.record(
+          index_key: index_cfg[:key],
+          direction: final_direction,
+          candle_timestamp: primary_analysis[:last_candle_timestamp],
+          config: signals_cfg
+        )
+
+        Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
+
+        picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: final_direction)
 
         if picks.blank?
-          Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{direction}")
+          Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
           return
         end
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.map { |p| "#{p[:symbol]}@#{p[:strike]}" }.join(', ')}")
 
         picks.each_with_index do |pick, index|
-          Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]}")
-          result = Entries::EntryGuard.try_enter(index_cfg: index_cfg, pick: pick, direction: direction)
+          Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
+          result = Entries::EntryGuard.try_enter(
+            index_cfg: index_cfg,
+            pick: pick,
+            direction: final_direction,
+            scale_multiplier: state_snapshot[:multiplier]
+          )
 
           if result
             Rails.logger.info("[Signal] Entry successful for #{index_cfg[:key]}: #{pick[:symbol]}")
@@ -85,6 +115,69 @@ module Signal
       rescue StandardError => e
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
         Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
+      end
+
+      def analyze_timeframe(index_cfg:, instrument:, timeframe:, supertrend_cfg:, adx_min_strength:)
+        interval = normalize_interval(timeframe)
+        if interval.blank?
+          message = "Invalid timeframe '#{timeframe}'"
+          Rails.logger.error("[Signal] #{message} for #{index_cfg[:key]}")
+          return { status: :error, message: message }
+        end
+
+        series = instrument.candle_series(interval: interval)
+        unless series&.candles&.any?
+          message = "No candle data (#{timeframe})"
+          Rails.logger.warn("[Signal] #{message} for #{index_cfg[:key]}")
+          return { status: :no_data, message: message }
+        end
+
+        Rails.logger.info("[Signal] Fetched #{series.candles.size} candles for #{index_cfg[:key]} @ #{timeframe}")
+        Rails.logger.debug("[Signal] Adaptive Supertrend config: #{supertrend_cfg}")
+
+        st_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)
+        st = st_service.call
+        last_multiplier = st[:adaptive_multipliers]&.compact&.last
+        Rails.logger.info(
+          "[Signal] Supertrend(#{timeframe}) for #{index_cfg[:key]}: trend=#{st[:trend]} last_value=#{st[:last_value]} multiplier=#{last_multiplier}"
+        )
+
+        adx_value = instrument.adx(14, interval: interval)
+        Rails.logger.info("[Signal] ADX(#{timeframe}) for #{index_cfg[:key]}: #{adx_value}")
+
+        direction = decide_direction(
+          st,
+          adx_value,
+          min_strength: adx_min_strength,
+          timeframe_label: timeframe
+        )
+
+        {
+          status: :ok,
+          series: series,
+          supertrend: st,
+          adx_value: adx_value,
+          direction: direction,
+          last_candle_timestamp: series.candles.last&.timestamp
+        }
+      rescue StandardError => e
+        Rails.logger.error("[Signal] Timeframe analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
+        { status: :error, message: e.message }
+      end
+
+      def multi_timeframe_direction(primary_direction, confirmation_direction)
+        return :avoid if primary_direction == :avoid || confirmation_direction == :avoid
+        return primary_direction if primary_direction == confirmation_direction
+
+        :avoid
+      end
+
+      def normalize_interval(timeframe)
+        return if timeframe.blank?
+
+        cleaned = timeframe.to_s.strip.downcase
+        digits = cleaned.gsub(/[^0-9]/, "")
+        digits.present? ? digits : nil
       end
 
       # Comprehensive validation checks before proceeding with trades
@@ -258,35 +351,35 @@ module Signal
         end
       end
 
-      def decide_direction(supertrend_result, adx)
-        min_strength = AlgoConfig.fetch.dig(:signals, :adx, :min_strength).to_f
-        adx_value = adx[:value].to_f
+      def decide_direction(supertrend_result, adx_value, min_strength:, timeframe_label:)
+        min_required = min_strength.to_f
+        adx_numeric = adx_value.to_f
 
-        Rails.logger.debug("[Signal] ADX check: value=#{adx_value}, min_required=#{min_strength}")
+        Rails.logger.debug("[Signal] ADX check(#{timeframe_label}): value=#{adx_numeric}, min_required=#{min_required}")
 
-        if adx_value < min_strength
-          Rails.logger.info("[Signal] ADX too weak: #{adx_value} < #{min_strength}")
+        if min_required > 0 && adx_numeric < min_required
+          Rails.logger.info("[Signal] ADX too weak on #{timeframe_label}: #{adx_numeric} < #{min_required}")
           return :avoid
         end
 
         if supertrend_result.blank? || supertrend_result[:trend].nil?
-          Rails.logger.warn("[Signal] Supertrend result invalid: #{supertrend_result}")
+          Rails.logger.warn("[Signal] Supertrend result invalid on #{timeframe_label}: #{supertrend_result}")
           return :avoid
         end
 
         trend = supertrend_result[:trend]
-        Rails.logger.debug("[Signal] Supertrend trend: #{trend}")
+        Rails.logger.debug("[Signal] Supertrend trend(#{timeframe_label}): #{trend}")
 
         # Use the trend from Supertrend calculation
         case trend
         when :bullish
-          Rails.logger.info("[Signal] Bullish signal confirmed: ADX=#{adx_value}, Supertrend=#{trend}")
+          Rails.logger.info("[Signal] Bullish signal confirmed on #{timeframe_label}: ADX=#{adx_numeric}, Supertrend=#{trend}")
           :bullish
         when :bearish
-          Rails.logger.info("[Signal] Bearish signal confirmed: ADX=#{adx_value}, Supertrend=#{trend}")
+          Rails.logger.info("[Signal] Bearish signal confirmed on #{timeframe_label}: ADX=#{adx_numeric}, Supertrend=#{trend}")
           :bearish
         else
-          Rails.logger.info("[Signal] Neutral/unknown trend: #{trend}")
+          Rails.logger.info("[Signal] Neutral/unknown trend on #{timeframe_label}: #{trend}")
           :avoid
         end
       end

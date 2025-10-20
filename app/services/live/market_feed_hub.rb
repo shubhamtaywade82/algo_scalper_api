@@ -99,7 +99,7 @@ module Live
     def handle_tick(tick)
       # pp tick
       # Log every tick (segment:security_id and LTP) for verification during development
-      Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
+      # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
       Live::TickCache.put(tick)
       ActiveSupport::Notifications.instrument("dhanhq.tick", tick)
       # Broadcast to Action Cable subscribers if channel is present
