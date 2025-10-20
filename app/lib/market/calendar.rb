@@ -4,39 +4,7 @@ module Market
   class Calendar
     # Indian market holidays for 2024-2025 (simplified list)
     # In production, this should be loaded from a more comprehensive source
-    MARKET_HOLIDAYS = [
-      # 2024
-      "2024-01-26", # Republic Day
-      "2024-03-08", # Holi
-      "2024-03-29", # Good Friday
-      "2024-04-11", # Eid ul Fitr
-      "2024-04-17", # Ram Navami
-      "2024-05-01", # Maharashtra Day
-      "2024-06-17", # Eid ul Adha
-      "2024-08-15", # Independence Day
-      "2024-08-26", # Janmashtami
-      "2024-10-02", # Gandhi Jayanti
-      "2024-10-12", # Dussehra
-      "2024-10-31", # Diwali
-      "2024-11-01", # Diwali
-      "2024-11-15", # Guru Nanak Jayanti
-      "2024-12-25", # Christmas
-
-      # 2025
-      "2025-01-26", # Republic Day
-      "2025-03-14", # Holi
-      "2025-04-18", # Good Friday
-      "2025-04-21", # Eid ul Fitr
-      "2025-05-01", # Maharashtra Day
-      "2025-06-06", # Eid ul Adha
-      "2025-08-15", # Independence Day
-      "2025-08-15", # Independence Day
-      "2025-10-02", # Gandhi Jayanti
-      "2025-10-20", # Dussehra
-      "2025-11-01", # Diwali
-      "2025-11-02", # Diwali
-      "2025-12-25" # Christmas
-    ].freeze
+    MARKET_HOLIDAYS = [].freeze
 
     class << self
       # Returns today if it's a trading day, otherwise the last trading day

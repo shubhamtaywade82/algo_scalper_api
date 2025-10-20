@@ -335,8 +335,8 @@ module Signal
         minute = current_time.min
 
         # Market hours: 9:15 AM to 3:30 PM IST
-        market_open = hour >= 9 && (hour > 9 || minute >= 15)
-        market_close = hour >= 15 && minute >= 30
+        market_open = hour > 9 || (hour == 9 && minute >= 15)
+        market_close = hour > 15 || (hour == 15 && minute >= 30)
 
         if !market_open
           { valid: false, name: "Market Timing", message: "Market not yet open" }
