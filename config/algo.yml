@@ -38,6 +38,7 @@ risk:
 signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
+  validation_mode: "aggressive" # conservative | balanced | aggressive
   supertrend:
     period: 10
     base_multiplier: 2.0
@@ -52,6 +53,37 @@ signals:
     enabled: true
     max_multiplier: 3
     decay_seconds: 900
+  validation_modes:
+    conservative:
+      adx_min_strength: 25
+      adx_confirmation_min_strength: 30
+      iv_rank_max: 0.6
+      iv_rank_min: 0.15
+      theta_risk_cutoff_hour: 14
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+    balanced:
+      adx_min_strength: 18
+      adx_confirmation_min_strength: 20
+      iv_rank_max: 0.8
+      iv_rank_min: 0.1
+      theta_risk_cutoff_hour: 14
+      theta_risk_cutoff_minute: 30
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+    aggressive:
+      adx_min_strength: 15
+      adx_confirmation_min_strength: 18
+      iv_rank_max: 0.9
+      iv_rank_min: 0.05
+      theta_risk_cutoff_hour: 15
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: false
+      require_iv_rank_check: true
+      require_theta_risk_check: false
 
 option_chain:
   atm_window_pct: 0.1

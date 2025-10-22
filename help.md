@@ -3,12 +3,11 @@
 - Initial boot
   - `config/initializers/dhanhq_config.rb`
     - Loads DhanHQ gem and configures it from ENV (`DHANHQ_CLIENT_ID`, `DHANHQ_ACCESS_TOKEN`)
-    - Sets `Rails.application.config.x.dhanhq` flags (enabled, ws flags, mode, etc.)
+    - Sets `Rails.application.config.x.dhanhq` flags (always enabled, ws mode, etc.)
   - `config/initializers/market_stream.rb`
     - On `to_prepare`, starts the live stack unless console mode:
       - `Live::MarketFeedHub.instance.start!` (primary WS feed)
-      - `MarketFeedHub.instance.start!` (fallback/local hub)
-      - `Live::OrderUpdateHub.instance.start!` (order updates WS)
+      - `Live::OrderUpdateHandler.instance.start!` (order updates - internally starts OrderUpdateHub)
       - `Live::OhlcPrefetcherService.instance.start!` (intraday OHLC prefetch loop)
       - `Signal::Scheduler.instance.start!` (signals → entries scheduler)
       - `Live::RiskManagerService.instance.start!` (PnL/risk loops)
@@ -34,8 +33,6 @@
       - `Live::TickCache.put(tick)` (in-memory latest)
       - `ActiveSupport::Notifications.instrument("dhanhq.tick", tick)`
       - Broadcasts to `TickerChannel` (if present) for UI/debug
-  - `MarketFeedHub` (non-namespaced local hub)
-    - Same responsibilities as a fallback/simple hub
 
 ### Historical/Intraday data prefetch
 
@@ -53,10 +50,11 @@
 - `Signal::Engine`
   - Loads candles/series (via instrument data methods)
   - Computes Supertrend + ADX
-  - Runs comprehensive validation:
-    - IV rank, theta risk, ADX strength/confirmation
-    - Trend confirmation
-    - Market timing (`Market::Calendar` trading day and market hours)
+  - Runs comprehensive validation with configurable modes:
+    - **Conservative**: Strict ADX (≥25/≥30), narrow IV range (15%-60%), early theta cutoff (2:00 PM)
+    - **Balanced**: Moderate ADX (≥18/≥20), standard IV range (10%-80%), normal theta cutoff (2:30 PM)
+    - **Aggressive**: Relaxed ADX (≥15/≥18), wide IV range (5%-90%), late theta cutoff (3:00 PM)
+    - All modes validate: IV rank, theta risk, ADX strength, trend confirmation, market timing
   - Makes a direction decision and yields a pick for entries if all checks pass
 - Entry path
   - `Entries::EntryGuard.try_enter(...)`
@@ -72,6 +70,10 @@
 
 - `Orders::Placer`
   - Bridges order submission/modification/cancellation to `DhanHQ::Models::Order`
+- `Live::OrderUpdateHandler`
+  - Depends on `Live::OrderUpdateHub` (WebSocket client)
+  - Processes order updates and updates `PositionTracker` records
+  - Handles order status changes (FILLED, CANCELLED, etc.)
 - `Live::OrderUpdateHub`
   - Connects `DhanHQ::WS::Orders::Client`
   - Normalizes payloads and emits `"dhanhq.order_update"` notifications
@@ -114,7 +116,7 @@
   - All services start (subject to flags/ENV)
 - Console/runner mode
   - Automated services are skipped:
-    - `Live::MarketFeedHub`, `Live::OrderUpdateHub`, `Live::OhlcPrefetcherService`,
+    - `Live::MarketFeedHub`, `Live::OrderUpdateHandler`, `Live::OhlcPrefetcherService`,
       `Signal::Scheduler`, `Live::RiskManagerService`, `Live::AtmOptionsService`
 
 ### External integrations (DhanHQ gem)
@@ -125,15 +127,130 @@
   - `DhanHQ::WS::Client` (quotes/ticker/full)
   - `DhanHQ::WS::Orders::Client` (order updates)
 
-### Minimal ENV needed (runtime)
+### Environment Variables
 
-- Required
-  - `DHANHQ_CLIENT_ID`
-  - `DHANHQ_ACCESS_TOKEN`
-- Optional (auto-wired by gem or already defaulted)
-  - `DHANHQ_LOG_LEVEL`
-  - `DHANHQ_BASE_URL` (gem default is used if not set)
-- Not needed if `WatchlistItem` exists
-  - `DHANHQ_WS_WATCHLIST`
+#### Required (Essential)
+- `DHANHQ_CLIENT_ID` - Your DhanHQ client ID
+- `DHANHQ_ACCESS_TOKEN` - Your DhanHQ access token
+
+#### Optional (Auto-configured)
+- `DHANHQ_LOG_LEVEL` - Logging level (default: INFO)
+- `DHANHQ_BASE_URL` - API base URL (default: https://api.dhan.co/v2)
+- `DHANHQ_WS_MODE` - WebSocket mode (default: quote, configured in algo.yml)
+- `DHANHQ_WS_WATCHLIST` - Fallback watchlist (not needed if WatchlistItem records exist)
+
+#### Not Needed (Always Enabled)
+- `DHANHQ_ENABLED` - Always enabled, no ENV check needed
+- `DHANHQ_WS_ENABLED` - Always enabled, no ENV check needed
+- `DHANHQ_ORDER_WS_ENABLED` - Always enabled, no ENV check needed
+
+#### Not Needed
+- `DHANHQ_WS_VERSION` - Uses gem default (version 2)
+- `DHANHQ_WS_ORDER_URL` - Uses gem default
+- `DHANHQ_WS_USER_TYPE` - Uses gem default (SELF)
+- `RAILS_LOG_LEVEL` - Rails default is sufficient
+- `RAILS_MAX_THREADS` - Rails default is sufficient
+- `PORT` - Rails default (3000) is sufficient
+- `REDIS_URL` - Uses default (redis://localhost:6379/0)
+
+#### Trading Configuration
+All trading parameters are configured in `config/algo.yml`:
+- Risk limits (`sl_pct`, `tp_pct`, `daily_loss_limit_pct`)
+- Signal parameters (`supertrend`, `adx`)
+- Index configurations (`NIFTY`, `BANKNIFTY`, `SENSEX`)
+
+#### **🎛️ Validation Modes**
+
+The system supports **3 validation modes** to tune strictness based on market conditions:
+
+```yaml
+signals:
+  validation_mode: "balanced" # conservative | balanced | aggressive
+
+  validation_modes:
+    conservative:
+      adx_min_strength: 25
+      adx_confirmation_min_strength: 30
+      iv_rank_max: 0.6          # 60% max volatility
+      iv_rank_min: 0.15         # 15% min volatility
+      theta_risk_cutoff_hour: 14    # 2:00 PM cutoff
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+
+    balanced:  # Default mode
+      adx_min_strength: 18
+      adx_confirmation_min_strength: 20
+      iv_rank_max: 0.8          # 80% max volatility
+      iv_rank_min: 0.1          # 10% min volatility
+      theta_risk_cutoff_hour: 14    # 2:30 PM cutoff
+      theta_risk_cutoff_minute: 30
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+
+    aggressive:
+      adx_min_strength: 15
+      adx_confirmation_min_strength: 18
+      iv_rank_max: 0.9          # 90% max volatility
+      iv_rank_min: 0.05         # 5% min volatility
+      theta_risk_cutoff_hour: 15    # 3:00 PM cutoff
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: false  # Skip trend confirmation
+      require_iv_rank_check: true
+      require_theta_risk_check: false    # Skip theta risk check
+```
+
+#### **📊 Mode Selection Guidelines**
+
+| Market Condition    | Recommended Mode | Reason                               |
+| ------------------- | ---------------- | ------------------------------------ |
+| **High Volatility** | Conservative     | Stricter filters prevent bad entries |
+| **Trending Market** | Aggressive       | Lower barriers capture momentum      |
+| **Sideways Market** | Conservative     | Avoid false breakouts                |
+| **Low Volatility**  | Aggressive       | Need lower thresholds for entries    |
+| **Late Session**    | Conservative     | Higher theta risk awareness          |
+
+#### **🔄 Dynamic Mode Switching**
+
+```ruby
+# Switch modes during runtime (requires restart)
+# Update config/algo.yml:
+signals:
+  validation_mode: "aggressive"
+
+# Then restart Rails server
+```
+
+### Risk Management Exit Rules
+
+The `Live::RiskManagerService` enforces multiple exit rules every 5 seconds:
+
+#### Hard Limits (Priority Order)
+1. **Stop-Loss** (`sl_pct: 0.30`) - Exit at 30% loss from entry
+2. **Per-Trade Risk** (`per_trade_risk_pct: 0.01`) - Exit if loss reaches 1% of invested amount
+3. **Take-Profit** (`tp_pct: 0.60`) - Exit at 60% gain from entry
+
+#### Trailing Stops
+4. **Trailing Stop** (`trail_step_pct: 0.10`, `exit_drop_pct: 0.03`)
+   - Activates after 10% profit
+   - Exits if current PnL drops 3% from high-water mark
+5. **Breakeven Lock** (`breakeven_after_gain: 0.35`)
+   - Locks breakeven after 35% profit
+   - Never allows loss below entry price
+
+#### Circuit Breakers
+6. **Daily Loss Limit** (`daily_loss_limit_pct: 0.04`)
+   - Stops all trading if daily loss reaches 4% of account balance
+   - Triggers `Risk::CircuitBreaker` to halt new entries
+
+### Architecture Simplifications
+
+- **Single Market Feed**: Only `Live::MarketFeedHub` (removed redundant `MarketFeedHub`)
+- **Simplified Order Updates**: `Live::OrderUpdateHandler` internally manages `Live::OrderUpdateHub`
+- **Console Mode Protection**: All automated services skip in console/runner mode
+- **Database-Driven Watchlist**: Uses `WatchlistItem` records (ENV fallback only if empty)
+- **Minimal Configuration**: Only DhanHQ credentials required, everything else auto-configured
 
 This is the end-to-end flow: initializers configure DhanHQ and spin up live services; feeds and prefetch hydrate data; the signal engine validates and produces entries; orders are routed and tracked; risk manager enforces exits and daily breakers; the system exposes health; on exit all live connections shut down cleanly.

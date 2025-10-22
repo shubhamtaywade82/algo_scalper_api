@@ -61,7 +61,10 @@ module Live
     private
 
     def enabled?
-      config.enabled && config.order_ws_enabled
+      # Always enabled - just check for credentials
+      client_id = ENV["DHANHQ_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
+      access    = ENV["DHANHQ_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
+      client_id.present? && access.present?
     end
 
     def config

@@ -79,13 +79,7 @@ module Live
     private
 
     def enabled?
-      pp config
-      # Prefer app config if present; otherwise derive from ENV credentials
-      cfg = config
-      if cfg && cfg.respond_to?(:enabled) && cfg.respond_to?(:ws_enabled)
-        return (cfg.enabled && cfg.ws_enabled)
-      end
-
+      # Always enabled - just check for credentials
       client_id = ENV["DHANHQ_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
       access    = ENV["DHANHQ_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
       client_id.present? && access.present?

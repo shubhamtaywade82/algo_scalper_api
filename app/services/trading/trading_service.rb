@@ -89,10 +89,10 @@ module Trading
     end
 
     def dhanhq_enabled?
-      config = Rails.application.config.x
-      return false unless config.respond_to?(:dhanhq)
-
-      config.dhanhq&.enabled
+      # Always enabled - just check for credentials
+      client_id = ENV["DHANHQ_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
+      access    = ENV["DHANHQ_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
+      client_id.present? && access.present?
     end
   end
 end

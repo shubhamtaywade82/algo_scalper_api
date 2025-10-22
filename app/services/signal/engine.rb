@@ -43,12 +43,15 @@ module Signal
         confirmation_analysis = nil
 
         if confirmation_tf.present?
+          mode_config = get_validation_mode_config
+          confirmation_adx_min = mode_config[:adx_confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+
           confirmation_analysis = analyze_timeframe(
             index_cfg: index_cfg,
             instrument: instrument,
             timeframe: confirmation_tf,
             supertrend_cfg: supertrend_cfg,
-            adx_min_strength: adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+            adx_min_strength: confirmation_adx_min
           )
 
           unless confirmation_analysis[:status] == :ok
@@ -182,32 +185,39 @@ module Signal
 
       # Comprehensive validation checks before proceeding with trades
       def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx)
-        Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction}")
+        mode_config = get_validation_mode_config
+        Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction} (mode: #{mode_config[:mode]})")
 
         validation_checks = []
 
-        # 1. IV Rank Check - Avoid extreme volatility
-        iv_rank_result = validate_iv_rank(index_cfg, series)
-        validation_checks << iv_rank_result
+        # 1. IV Rank Check - Avoid extreme volatility (if enabled)
+        if mode_config[:require_iv_rank_check]
+          iv_rank_result = validate_iv_rank(index_cfg, series, mode_config)
+          validation_checks << iv_rank_result
+        end
 
-        # 2. Theta Risk Assessment - Avoid high theta decay
-        theta_risk_result = validate_theta_risk(index_cfg, direction)
-        validation_checks << theta_risk_result
+        # 2. Theta Risk Assessment - Avoid high theta decay (if enabled)
+        if mode_config[:require_theta_risk_check]
+          theta_risk_result = validate_theta_risk(index_cfg, direction, mode_config)
+          validation_checks << theta_risk_result
+        end
 
         # 3. Enhanced ADX Confirmation - Ensure strong trend
-        adx_result = validate_adx_strength(adx, supertrend_result)
+        adx_result = validate_adx_strength(adx, supertrend_result, mode_config)
         validation_checks << adx_result
 
-        # 4. Trend Confirmation - Multiple signal validation
-        trend_result = validate_trend_confirmation(supertrend_result, series)
-        validation_checks << trend_result
+        # 4. Trend Confirmation - Multiple signal validation (if enabled)
+        if mode_config[:require_trend_confirmation]
+          trend_result = validate_trend_confirmation(supertrend_result, series)
+          validation_checks << trend_result
+        end
 
-        # 5. Market Timing Check - Avoid problematic times
+        # 5. Market Timing Check - Avoid problematic times (always required)
         timing_result = validate_market_timing
         validation_checks << timing_result
 
         # Log all validation results
-        Rails.logger.info("[Signal] Validation Results:")
+        Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
         validation_checks.each do |check|
           status = check[:valid] ? "✅" : "❌"
           Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
@@ -217,7 +227,7 @@ module Signal
         failed_checks = validation_checks.select { |check| !check[:valid] }
 
         if failed_checks.empty?
-          Rails.logger.info("[Signal] All validation checks passed for #{index_cfg[:key]}")
+          Rails.logger.info("[Signal] All validation checks passed for #{index_cfg[:key]} (#{mode_config[:mode]} mode)")
           { valid: true, reason: "All checks passed" }
         else
           failed_reasons = failed_checks.map { |check| check[:name] }.join(", ")
@@ -225,8 +235,20 @@ module Signal
         end
       end
 
+      # Get validation mode configuration
+      def get_validation_mode_config
+        signals_cfg = AlgoConfig.fetch.dig(:signals) || {}
+        mode = signals_cfg[:validation_mode] || "balanced"
+        mode_config = signals_cfg.dig(:validation_modes, mode.to_sym) || signals_cfg.dig(:validation_modes, :balanced)
+
+        # Merge with mode name for logging
+        mode_config.merge(mode: mode)
+      end
+
       # Validate IV Rank - avoid extreme volatility conditions
-      def validate_iv_rank(index_cfg, series)
+      def validate_iv_rank(index_cfg, series, mode_config = nil)
+        mode_config ||= get_validation_mode_config
+
         # For now, we'll use a simple volatility check based on recent price movement
         # In a full implementation, you'd calculate actual IV rank from historical IV data
 
@@ -246,24 +268,32 @@ module Signal
         # Normalize volatility (this is a simplified approach)
         iv_rank_proxy = [ (avg_volatility * 1000), 1.0 ].min  # Cap at 1.0
 
-        if iv_rank_proxy > 0.8
-          { valid: false, name: "IV Rank", message: "Extreme volatility detected (#{(iv_rank_proxy * 100).round(1)}%)" }
-        elsif iv_rank_proxy < 0.1
-          { valid: false, name: "IV Rank", message: "Very low volatility (#{(iv_rank_proxy * 100).round(1)}%)" }
+        max_threshold = mode_config[:iv_rank_max] || 0.8
+        min_threshold = mode_config[:iv_rank_min] || 0.1
+
+        if iv_rank_proxy > max_threshold
+          { valid: false, name: "IV Rank", message: "Extreme volatility detected (#{(iv_rank_proxy * 100).round(1)}% > #{(max_threshold * 100).round(1)}%)" }
+        elsif iv_rank_proxy < min_threshold
+          { valid: false, name: "IV Rank", message: "Very low volatility (#{(iv_rank_proxy * 100).round(1)}% < #{(min_threshold * 100).round(1)}%)" }
         else
           { valid: true, name: "IV Rank", message: "Volatility within acceptable range (#{(iv_rank_proxy * 100).round(1)}%)" }
         end
       end
 
       # Validate theta risk - avoid high theta decay situations
-      def validate_theta_risk(index_cfg, direction)
+      def validate_theta_risk(index_cfg, direction, mode_config = nil)
+        mode_config ||= get_validation_mode_config
+
         current_time = Time.zone.now
         hour = current_time.hour
         minute = current_time.min
 
-        # High theta risk periods (last hour of trading)
-        if hour >= 14 && minute >= 30  # After 2:30 PM
-          { valid: false, name: "Theta Risk", message: "High theta decay risk - too close to market close" }
+        cutoff_hour = mode_config[:theta_risk_cutoff_hour] || 14
+        cutoff_minute = mode_config[:theta_risk_cutoff_minute] || 30
+
+        # High theta risk periods (configurable cutoff time)
+        if hour > cutoff_hour || (hour == cutoff_hour && minute >= cutoff_minute)
+          { valid: false, name: "Theta Risk", message: "High theta decay risk - too close to market close (after #{cutoff_hour}:#{cutoff_minute.to_s.rjust(2, '0')})" }
         elsif hour >= 14  # After 2:00 PM
           { valid: true, name: "Theta Risk", message: "Moderate theta risk - afternoon trading" }
         else
@@ -272,9 +302,11 @@ module Signal
       end
 
       # Enhanced ADX validation with trend strength assessment
-      def validate_adx_strength(adx, supertrend_result)
+      def validate_adx_strength(adx, supertrend_result, mode_config = nil)
+        mode_config ||= get_validation_mode_config
+
         adx_value = adx[:value].to_f
-        min_strength = AlgoConfig.fetch.dig(:signals, :adx, :min_strength).to_f
+        min_strength = mode_config[:adx_min_strength] || AlgoConfig.fetch.dig(:signals, :adx, :min_strength).to_f
 
         if adx_value < min_strength
           { valid: false, name: "ADX Strength", message: "Weak trend strength (#{adx_value.round(1)} < #{min_strength})" }

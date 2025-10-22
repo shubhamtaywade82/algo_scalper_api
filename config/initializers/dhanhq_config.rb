@@ -16,9 +16,9 @@ end
 # Configure Rails app settings for DhanHQ integration
 Rails.application.configure do
   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
-    enabled: ENV["DHANHQ_ENABLED"] == "true",
-    ws_enabled: ENV["DHANHQ_WS_ENABLED"] == "true",
-    order_ws_enabled: ENV["DHANHQ_ORDER_WS_ENABLED"] == "true",
+    enabled: true,  # Always enabled - no ENV check needed
+    ws_enabled: true,  # Always enabled - no ENV check needed
+    order_ws_enabled: true,  # Always enabled - no ENV check needed
     ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
     ws_watchlist: ENV["DHANHQ_WS_WATCHLIST"],
     order_ws_url: ENV["DHANHQ_WS_ORDER_URL"],
