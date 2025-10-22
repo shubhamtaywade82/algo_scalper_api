@@ -19,12 +19,10 @@ end
 Rails.application.config.to_prepare do
   # Skip automated trading services in console mode
   unless Rails.const_defined?(:Console)
-    # Try to start the live feed hub; it internally checks ENV/config and no-ops if disabled
-    started = MarketStreamLifecycle.safely_start { Live::MarketFeedHub.instance.start! }
-    MarketStreamLifecycle.safely_start { MarketFeedHub.instance.start! } unless started
+    # Start the live market feed hub
+    MarketStreamLifecycle.safely_start { Live::MarketFeedHub.instance.start! }
 
-    # Optional order updates (only starts if defined and configured inside the hub)
-    MarketStreamLifecycle.safely_start { Live::OrderUpdateHub.instance.start! }
+    # Optional order updates (handler internally starts the hub)
     MarketStreamLifecycle.safely_start { Live::OrderUpdateHandler.instance.start! }
 
     # Start staggered OHLC intraday prefetch loop for watchlist
@@ -46,8 +44,6 @@ at_exit do
   # Only stop services if they were started (not in console mode)
   unless Rails.const_defined?(:Console)
     MarketStreamLifecycle.safely_stop { Live::MarketFeedHub.instance.stop! }
-    MarketStreamLifecycle.safely_stop { MarketFeedHub.instance.stop! }
-    MarketStreamLifecycle.safely_stop { Live::OrderUpdateHub.instance.stop! }
     MarketStreamLifecycle.safely_stop { Live::OrderUpdateHandler.instance.stop! }
     MarketStreamLifecycle.safely_stop { Live::OhlcPrefetcherService.instance.stop! }
     MarketStreamLifecycle.safely_stop { Signal::Scheduler.instance.stop! }
