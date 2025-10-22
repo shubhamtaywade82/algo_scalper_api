@@ -138,6 +138,7 @@
 - `DHANHQ_BASE_URL` - API base URL (default: https://api.dhan.co/v2)
 - `DHANHQ_WS_MODE` - WebSocket mode (default: quote, configured in algo.yml)
 - `DHANHQ_WS_WATCHLIST` - Fallback watchlist (not needed if WatchlistItem records exist)
+- `ENABLE_ORDER` - Enable actual order placement (default: false, dry run mode)
 
 #### Not Needed (Always Enabled)
 - `DHANHQ_ENABLED` - Always enabled, no ENV check needed
@@ -221,6 +222,55 @@ signals:
   validation_mode: "aggressive"
 
 # Then restart Rails server
+```
+
+#### **📋 Order Control**
+
+Control whether orders are actually placed or just logged (dry run mode):
+
+```bash
+# Enable actual order placement
+export ENABLE_ORDER=true
+
+# Dry run mode - only log orders, don't place them (default)
+export ENABLE_ORDER=false
+# or simply don't set the variable
+```
+
+**Example log output:**
+
+**When `ENABLE_ORDER=true` (Live Trading):**
+```
+[Orders] Placing BUY order: seg=IDX_I, sid=25, qty=50, client_order_id=nifty_20250120_001
+[Orders] BUY Order Payload: {
+  :transaction_type=>"BUY",
+  :exchange_segment=>"IDX_I",
+  :security_id=>"25",
+  :quantity=>50,
+  :order_type=>"MARKET",
+  :product_type=>"INTRADAY",
+  :validity=>"DAY",
+  :correlation_id=>"nifty_20250120_001",
+  :disclosed_quantity=>0
+}
+[Orders] BUY Order placed successfully
+```
+
+**When `ENABLE_ORDER=false` (Dry Run Mode):**
+```
+[Orders] Placing BUY order: seg=IDX_I, sid=25, qty=50, client_order_id=nifty_20250120_001
+[Orders] BUY Order Payload: {
+  :transaction_type=>"BUY",
+  :exchange_segment=>"IDX_I",
+  :security_id=>"25",
+  :quantity=>50,
+  :order_type=>"MARKET",
+  :product_type=>"INTRADAY",
+  :validity=>"DAY",
+  :correlation_id=>"nifty_20250120_001",
+  :disclosed_quantity=>0
+}
+[Orders] BUY Order NOT placed - ENABLE_ORDER=false (dry run mode)
 ```
 
 ### Risk Management Exit Rules

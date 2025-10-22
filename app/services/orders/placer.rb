@@ -36,7 +36,17 @@ module Orders
 
         payload[:price] = price if price.present?
 
-        order = DhanHQ::Models::Order.create(payload)
+        # Log order payload
+        Rails.logger.info("[Orders] BUY Order Payload: #{payload.inspect}")
+
+        # Only place order if ENABLE_ORDER flag is set
+        if order_placement_enabled?
+          order = DhanHQ::Models::Order.create(payload)
+          Rails.logger.info("[Orders] BUY Order placed successfully")
+        else
+          Rails.logger.info("[Orders] BUY Order NOT placed - ENABLE_ORDER=false (dry run mode)")
+          order = nil
+        end
 
         remember(normalized_id)
         order
@@ -58,7 +68,7 @@ module Orders
 
         Rails.logger.info("[Orders] Placing SELL order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{normalized_id}")
 
-        order = DhanHQ::Models::Order.create(
+        payload = {
           transaction_type: "SELL",
           exchange_segment: seg,
           security_id: sid,
@@ -68,12 +78,29 @@ module Orders
           validity: "DAY",
           correlation_id: normalized_id,
           disclosed_quantity: 0
-        )
+        }
+
+        # Log order payload
+        Rails.logger.info("[Orders] SELL Order Payload: #{payload.inspect}")
+
+        # Only place order if ENABLE_ORDER flag is set
+        if order_placement_enabled?
+          order = DhanHQ::Models::Order.create(payload)
+          Rails.logger.info("[Orders] SELL Order placed successfully")
+        else
+          Rails.logger.info("[Orders] SELL Order NOT placed - ENABLE_ORDER=false (dry run mode)")
+          order = nil
+        end
         remember(normalized_id)
         order
       end
 
       private
+
+      def order_placement_enabled?
+        config = Rails.application.config.x.dhanhq
+        config&.enable_order_logging == true
+      end
 
       def duplicate?(client_order_id)
         return false if client_order_id.blank?

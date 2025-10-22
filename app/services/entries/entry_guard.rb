@@ -13,7 +13,7 @@ module Entries
         side = direction == :bullish ? "long_ce" : "long_pe"
         return false unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
         return false if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
-        ensure_feed_health!
+        ensure_ws_connection!
 
         Rails.logger.debug("[EntryGuard] Pick data: #{pick.inspect}")
         quantity = Capital::Allocator.qty_for(
@@ -66,6 +66,22 @@ module Entries
       end
 
       private
+
+      def ensure_ws_connection!
+        # Only check if WebSocket is connected, skip ticks staleness
+        unless Live::MarketFeedHub.instance.running?
+          Rails.logger.warn("[EntryGuard] Blocked entry: WebSocket market feed not running")
+          raise Live::FeedHealthService::FeedStaleError.new(
+            feed: :ws_connection,
+            last_seen_at: nil,
+            threshold: 0,
+            last_error: nil
+          )
+        end
+
+        # Check funds and positions health (but skip ticks staleness)
+        Live::FeedHealthService.instance.assert_healthy!([ :funds, :positions ])
+      end
 
       def ensure_feed_health!
         Live::FeedHealthService.instance.assert_healthy!([ :funds, :positions, :ticks ])

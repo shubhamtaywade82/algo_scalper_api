@@ -19,6 +19,7 @@ Rails.application.configure do
     enabled: true,  # Always enabled - no ENV check needed
     ws_enabled: true,  # Always enabled - no ENV check needed
     order_ws_enabled: true,  # Always enabled - no ENV check needed
+    enable_order_logging: ENV["ENABLE_ORDER"] == "true",  # Order payload logging
     ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
     ws_watchlist: ENV["DHANHQ_WS_WATCHLIST"],
     order_ws_url: ENV["DHANHQ_WS_ORDER_URL"],

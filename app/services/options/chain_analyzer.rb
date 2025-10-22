@@ -126,26 +126,24 @@ module Options
         Rails.logger.debug("[Options] SPOT: #{atm}, Strike interval: #{strike_interval}, ATM strike: #{atm_strike}")
         Rails.logger.debug("[Options] IV Rank: #{iv_rank}, ATM range: #{atm_range_percent * 100}% (#{atm_range_points.round(2)} points)")
 
-        # For bullish: ATM and strikes within ATM range above current price
-        # For bearish: ATM and strikes within ATM range below current price
+        # For buying options, focus on ATM and nearby strikes only (+-1,2,3 steps)
+        # This prevents selecting expensive ITM options or far OTM options
         target_strikes = if side == :ce || side == "ce"
-                          # CE: ATM and strikes up to ATM + range
-                          strikes_in_range = oc_strikes.select do |s|
-                            s >= atm_strike && s <= (atm_strike + atm_range_points)
-                          end
-                          strikes_in_range.first(3) # Limit to top 3 strikes
+                          # CE: ATM, ATM+1, ATM+2, ATM+3 (OTM calls)
+                          [ atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval), atm_strike + (3 * strike_interval) ]
+                            .select { |s| oc_strikes.include?(s) }
+                            .first(3) # Limit to top 3 strikes
         else
-                          # PE: ATM and strikes down to ATM - range
-                          strikes_in_range = oc_strikes.select do |s|
-                            s <= atm_strike && s >= (atm_strike - atm_range_points)
-                          end
-                          strikes_in_range.first(3) # Limit to top 3 strikes
+                          # PE: ATM, ATM-1, ATM-2, ATM-3 (OTM puts)
+                          [ atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval), atm_strike - (3 * strike_interval) ]
+                            .select { |s| oc_strikes.include?(s) }
+                            .first(3) # Limit to top 3 strikes
         end
 
         Rails.logger.debug("[Options] Target strikes for #{side}: #{target_strikes}")
 
         # Log strike selection guidance
-        log_strike_selection_guidance(side, atm, atm_strike, target_strikes, iv_rank, atm_range_percent)
+        log_strike_selection_guidance(side, atm, atm_strike, target_strikes, iv_rank, atm_range_percent, strike_interval)
 
         min_iv = AlgoConfig.fetch.dig(:option_chain, :min_iv).to_f
         max_iv = AlgoConfig.fetch.dig(:option_chain, :max_iv).to_f
@@ -188,9 +186,11 @@ module Options
           strike_type = if strike == atm_strike
                           "ATM"
           elsif side == :ce || side == "ce"
-                          strike == atm_strike + strike_interval ? "ATM+1" : "OTHER"
+                          strike_diff = (strike - atm_strike) / strike_interval
+                          strike_diff == 1 ? "ATM+1" : strike_diff == 2 ? "ATM+2" : strike_diff == 3 ? "ATM+3" : "OTHER"
           else
-                          strike == atm_strike - strike_interval ? "ATM-1" : "OTHER"
+                          strike_diff = (atm_strike - strike) / strike_interval
+                          strike_diff == 1 ? "ATM-1" : strike_diff == 2 ? "ATM-2" : strike_diff == 3 ? "ATM-3" : "OTHER"
           end
           Rails.logger.debug("[Options] Strike #{strike} (#{strike_type}): LTP=#{ltp}, IV=#{iv}, OI=#{oi}, Bid=#{bid}, Ask=#{ask}")
 
@@ -269,6 +269,7 @@ module Options
             iv: iv,
             oi: oi,
             spread: ask && bid ? (ask - bid) : nil,
+            delta: delta,
             distance_from_atm: (strike - atm).abs,
             lot_size: derivative&.lot_size || index_cfg[:lot].to_i
           }
@@ -309,13 +310,13 @@ module Options
       end
 
       # Dynamic minimum delta thresholds depending on time of day
-      # Higher delta requirements as market approaches close to avoid theta decay
+      # More realistic delta requirements for OTM options
       def min_delta_now
         h = Time.zone.now.hour
-        return 0.45 if h >= 14  # After 2 PM - high delta to avoid theta decay
-        return 0.35 if h >= 13  # After 1 PM - medium-high delta
-        return 0.30 if h >= 11  # After 11 AM - medium delta
-        0.25                    # Before 11 AM - lower delta acceptable
+        return 0.15 if h >= 14  # After 2 PM - moderate delta for OTM options
+        return 0.12 if h >= 13  # After 1 PM - lower delta acceptable
+        return 0.10 if h >= 11  # After 11 AM - even lower delta
+        0.08                    # Before 11 AM - very low delta acceptable for OTM
       end
 
       # Dynamic ATM range based on volatility (IV rank)
@@ -329,7 +330,7 @@ module Options
       end
 
       # Log comprehensive strike selection guidance
-      def log_strike_selection_guidance(side, spot, atm_strike, target_strikes, iv_rank, atm_range_percent)
+      def log_strike_selection_guidance(side, spot, atm_strike, target_strikes, iv_rank, atm_range_percent, strike_interval)
         volatility_regime = case iv_rank
         when 0.0..0.2 then "Low"
         when 0.2..0.5 then "Medium"
@@ -337,9 +338,9 @@ module Options
         end
 
         explanation = if side == :ce || side == "ce"
-                       "CE strikes should be ATM or slightly OTM (never ITM) - buying calls above current price"
+                       "CE strikes: ATM, ATM+1, ATM+2, ATM+3 (OTM calls only)"
         else
-                       "PE strikes should be ATM or slightly OTM (never ITM) - buying puts below current price"
+                       "PE strikes: ATM, ATM-1, ATM-2, ATM-3 (OTM puts only)"
         end
 
         Rails.logger.info("[Options] Strike Selection Guidance:")
@@ -354,15 +355,17 @@ module Options
         target_strikes.each_with_index do |strike, index|
           distance_from_atm = (strike - atm_strike).abs
           distance_from_spot = (strike - spot).abs
-          strike_type = if strike == atm_strike
+          strike_step = if strike == atm_strike
                           "ATM"
           elsif side == :ce || side == "ce"
-                          strike > atm_strike ? "OTM" : "ITM"
+                          strike_diff = (strike - atm_strike) / strike_interval
+                          strike_diff == 1 ? "ATM+1" : strike_diff == 2 ? "ATM+2" : strike_diff == 3 ? "ATM+3" : "OTHER"
           else
-                          strike < atm_strike ? "OTM" : "ITM"
+                          strike_diff = (atm_strike - strike) / strike_interval
+                          strike_diff == 1 ? "ATM-1" : strike_diff == 2 ? "ATM-2" : strike_diff == 3 ? "ATM-3" : "OTHER"
           end
 
-          Rails.logger.info("  - Strike #{index + 1}: #{strike} (#{strike_type}) - #{distance_from_atm} points from ATM, #{distance_from_spot.round(2)} points from spot")
+          Rails.logger.info("  - Strike #{index + 1}: #{strike} (#{strike_step}) - #{distance_from_atm} points from ATM, #{distance_from_spot.round(2)} points from spot")
         end
       end
 
@@ -372,7 +375,14 @@ module Options
         ltp = leg[:ltp]
         iv = leg[:iv]
         oi = leg[:oi]
-        spread_pct = leg[:spread_pct]
+
+        # Calculate spread percentage from spread and LTP
+        spread_pct = if leg[:spread] && ltp && ltp > 0
+                       (leg[:spread] / ltp) * 100
+        else
+                       0.0  # Default to 0% spread if not available
+        end
+
         delta = leg[:delta] || 0.5 # Default delta if not available
 
         # 1. ATM Preference Score (0-100)

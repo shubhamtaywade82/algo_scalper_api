@@ -86,8 +86,8 @@ signals:
       require_theta_risk_check: false
 
 option_chain:
-  atm_window_pct: 0.1
-  min_iv: 10
-  max_iv: 60
-  min_oi: 50000
-  max_spread_pct: 3.0
+  atm_window_pct: 0.1 # Not used - now using fixed strike steps (ATM, ATM±1, ATM±2, ATM±3)
+  min_iv: 10 # Minimum implied volatility
+  max_iv: 60 # Maximum implied volatility
+  min_oi: 50000 # Minimum open interest
+  max_spread_pct: 3.0 # Maximum bid-ask spread percentage

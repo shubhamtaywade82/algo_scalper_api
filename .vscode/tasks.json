@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "rake",
+      "task": "action_mailbox:ingress:environment",
+      "problemMatcher": [],
+      "label": "rake: action_mailbox:ingress:environment",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}
