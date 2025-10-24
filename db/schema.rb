@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_10_000000) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_24_045159) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -140,6 +140,24 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_10_000000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["key"], name: "index_settings_on_key", unique: true
+  end
+
+  create_table "trading_signals", force: :cascade do |t|
+    t.string "index_key", null: false
+    t.string "direction", null: false
+    t.decimal "confidence_score", precision: 5, scale: 4
+    t.string "timeframe", null: false
+    t.decimal "supertrend_value", precision: 12, scale: 4
+    t.decimal "adx_value", precision: 8, scale: 4
+    t.datetime "signal_timestamp", null: false
+    t.datetime "candle_timestamp", null: false
+    t.jsonb "metadata", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["confidence_score"], name: "index_trading_signals_on_confidence_score"
+    t.index ["direction", "signal_timestamp"], name: "index_trading_signals_on_direction_and_signal_timestamp"
+    t.index ["index_key", "signal_timestamp"], name: "index_trading_signals_on_index_key_and_signal_timestamp"
+    t.index ["metadata"], name: "index_trading_signals_on_metadata", using: :gin
   end
 
   create_table "watchlist_items", force: :cascade do |t|

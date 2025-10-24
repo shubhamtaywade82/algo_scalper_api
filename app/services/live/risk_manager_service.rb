@@ -43,9 +43,13 @@ module Live
 
     def monitor_loop
       while running?
+        # Sync positions first to ensure we have all active positions tracked
+        Live::PositionSyncService.instance.sync_positions!
+
         positions = fetch_positions_indexed
         enforce_hard_limits(positions)
         enforce_trailing_stops(positions)
+        enforce_time_based_exit(positions)
         enforce_daily_circuit_breaker
         sleep LOOP_INTERVAL
       end
@@ -59,13 +63,16 @@ module Live
 
       PositionTracker.active.includes(:instrument).find_each do |tracker|
         position = positions[tracker.security_id.to_s]
-        ltp = current_ltp(tracker, position)
+        ltp = current_ltp_with_freshness_check(tracker, position)
         next unless ltp
 
         pnl = compute_pnl(tracker, position, ltp)
         next unless pnl
 
         pnl_pct = compute_pnl_pct(tracker, ltp)
+
+        # Store P&L in Redis for real-time tracking
+        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
 
         tracker.with_lock do
           tracker.update_pnl!(pnl, pnl_pct: pnl_pct)
@@ -143,6 +150,34 @@ module Live
       end
     end
 
+    def enforce_time_based_exit(positions = fetch_positions_indexed)
+      # Check if it's time for market close exit (3:20 PM)
+      current_time = Time.current
+      exit_time = Time.zone.parse("15:20") # 3:20 PM
+
+      # Only enforce time-based exit during trading hours and after 3:20 PM
+      return unless current_time >= exit_time
+
+      # Check if we're still in trading hours (before 3:30 PM)
+      market_close_time = Time.zone.parse("15:30") # 3:30 PM
+      return if current_time >= market_close_time
+
+      Rails.logger.info("[TimeExit] Enforcing time-based exit at #{current_time.strftime('%H:%M:%S')}")
+
+      PositionTracker.active.includes(:instrument).find_each do |tracker|
+        position = positions[tracker.security_id.to_s]
+
+        tracker.with_lock do
+          next unless tracker.status == PositionTracker::STATUSES[:active]
+
+          Rails.logger.info("[TimeExit] Triggering time-based exit for #{tracker.order_no}")
+          execute_exit(position, tracker, reason: "time-based exit (3:20 PM)")
+        end
+      end
+    rescue StandardError => e
+      Rails.logger.error("Time-based exit enforcement failed: #{e.class} - #{e.message}")
+    end
+
     def enforce_daily_circuit_breaker
       risk = risk_config
       limit_pct = BigDecimal((risk[:daily_loss_limit_pct] || 0).to_s)
@@ -217,6 +252,40 @@ module Live
       fetch_ltp(position, tracker)
     end
 
+    def current_ltp_with_freshness_check(tracker, position, max_age_seconds: 5)
+      # Check if tick is fresh in Redis cache
+      if Live::RedisPnlCache.instance.is_tick_fresh?(tracker.id, max_age_seconds: max_age_seconds)
+        tick_data = Live::RedisPnlCache.instance.fetch_tick(tracker.id)
+        return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
+      end
+
+      # Fallback to current LTP method
+      ltp = current_ltp(tracker, position)
+
+      # If we got fresh LTP, store it in Redis
+      if ltp
+        Live::RedisPnlCache.instance.store_tick(
+          tracker_id: tracker.id,
+          ltp: ltp,
+          timestamp: Time.current
+        )
+      end
+
+      ltp
+    end
+
+    def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
+      Live::RedisPnlCache.instance.store_pnl(
+        tracker_id: tracker.id,
+        pnl: pnl,
+        pnl_pct: pnl_pct,
+        ltp: ltp,
+        timestamp: Time.current
+      )
+    rescue StandardError => e
+      Rails.logger.error("Failed to update PnL in Redis for tracker #{tracker.id}: #{e.message}")
+    end
+
     def compute_pnl(tracker, position, ltp)
       quantity = tracker.quantity.to_i
       if quantity.zero? && position
@@ -280,6 +349,10 @@ module Live
       Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{tracker.last_pnl_rupees}).")
       store_exit_reason(tracker, reason)
       exit_position(position, tracker)
+
+      # Clear Redis cache for this tracker
+      Live::RedisPnlCache.instance.clear_tracker(tracker.id)
+
       tracker.mark_exited!
     rescue StandardError => e
       Rails.logger.error("Failed to exit position #{tracker.order_no}: #{e.class} - #{e.message}")
@@ -296,7 +369,7 @@ module Live
           seg: segment,
           sid: tracker.security_id,
           qty: tracker.quantity.to_i,
-          client_order_id: "AS-EXIT-#{tracker.order_no}-#{Time.current.to_i}"
+          client_order_id: "AS-EXIT-#{tracker.order_no[-8..-1]}-#{Time.current.to_i.to_s[-4..-1]}"
         ) if segment.present?
       end
     end

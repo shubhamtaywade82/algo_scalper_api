@@ -21,6 +21,7 @@ gem "solid_queue"
 gem "solid_cable"
 
 gem "sidekiq"
+gem "redis"
 gem "concurrent-ruby"
 gem "ruby-technical-analysis"
 gem "technical-analysis"

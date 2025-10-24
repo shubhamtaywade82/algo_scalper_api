@@ -39,9 +39,21 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_exited!
+    Rails.logger.info("[PositionTracker] Exiting position #{order_no} - releasing capital and unsubscribing")
+
+    # Unsubscribe from market feed
     unsubscribe
+
+    # Clear Redis cache for this tracker
+    Live::RedisPnlCache.instance.clear_tracker(id)
+
+    # Update status
     update!(status: STATUSES[:exited])
+
+    # Register cooldown to prevent immediate re-entry
     register_cooldown!
+
+    Rails.logger.info("[PositionTracker] Position #{order_no} successfully exited and capital released")
   end
 
   def update_pnl!(pnl, pnl_pct: nil)
@@ -85,7 +97,23 @@ class PositionTracker < ApplicationRecord
     segment_key = segment.presence || instrument&.exchange_segment
     return unless segment_key && security_id
 
+    Rails.logger.debug("[PositionTracker] Unsubscribing from market feed: #{segment_key}:#{security_id}")
     Live::MarketFeedHub.instance.unsubscribe(segment: segment_key, security_id: security_id)
+
+    # Also unsubscribe the underlying instrument if it's an option
+    if instrument&.underlying_symbol
+      underlying_instrument = Instrument.find_by(
+        symbol_name: instrument.underlying_symbol,
+        exchange_segment: instrument.exchange_segment
+      )
+      if underlying_instrument
+        Rails.logger.debug("[PositionTracker] Unsubscribing from underlying: #{underlying_instrument.symbol_name}")
+        Live::MarketFeedHub.instance.unsubscribe(
+          segment: underlying_instrument.exchange_segment,
+          security_id: underlying_instrument.security_id
+        )
+      end
+    end
   end
 
   def subscribe

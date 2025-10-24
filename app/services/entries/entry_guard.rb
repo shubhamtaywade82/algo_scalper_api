@@ -54,8 +54,34 @@ module Entries
       end
 
       def exposure_ok?(instrument:, side:, max_same_side:)
-        PositionTracker.where(instrument: instrument, side: side, status: PositionTracker::STATUSES[:active]).count <
-          max_same_side.to_i
+        active_positions = PositionTracker.where(instrument: instrument, side: side, status: PositionTracker::STATUSES[:active])
+        current_count = active_positions.count
+
+        # Check if we've reached the maximum allowed positions
+        return false if current_count >= max_same_side.to_i
+
+        # If this would be the second position, check pyramiding rules
+        if current_count == 1
+          return pyramiding_allowed?(active_positions.first)
+        end
+
+        true
+      end
+
+      def pyramiding_allowed?(first_position)
+        # Second position only allowed if first position is profitable
+        return false unless first_position.last_pnl_rupees&.positive?
+
+        # Additional check: ensure first position has been profitable for at least 5 minutes
+        # to avoid premature pyramiding
+        min_profit_duration = 5.minutes
+        return false unless first_position.updated_at < min_profit_duration.ago
+
+        Rails.logger.info("[Pyramiding] Allowing second position - first position profitable: #{first_position.last_pnl_rupees}")
+        true
+      rescue StandardError => e
+        Rails.logger.error("Pyramiding check failed: #{e.message}")
+        false
       end
 
       def cooldown_active?(symbol, cooldown)
@@ -105,7 +131,11 @@ module Entries
       end
 
       def build_client_order_id(index_cfg:, pick:)
-        "AS-#{index_cfg[:key]}-#{pick[:security_id]}-#{Time.current.to_i}"
+        # DhanHQ correlation_id limit is 25 characters
+        # Format: AS-{KEY}-{SID}-{TIMESTAMP}
+        # Keep it under 25 chars by using shorter timestamp
+        timestamp = Time.current.to_i.to_s[-6..-1] # Last 6 digits of timestamp
+        "AS-#{index_cfg[:key][0..3]}-#{pick[:security_id]}-#{timestamp}"
       end
 
       def extract_order_no(response)

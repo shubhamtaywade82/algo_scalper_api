@@ -4,28 +4,46 @@ module CandleExtension
   extend ActiveSupport::Concern
 
   included do
-    def candles(interval: "5")
-      @ohlc_cache ||= {}
+  def candles(interval: "5")
+    @ohlc_cache ||= {}
 
-      cached_series = @ohlc_cache[interval]
-      return cached_series if cached_series && !ohlc_stale?(interval)
+    # Check if caching is disabled for fresh data
+    freshness_config = AlgoConfig.fetch[:data_freshness] || {}
+    disable_caching = freshness_config[:disable_ohlc_caching] || false
 
-      raw_data = intraday_ohlc(interval: interval)
-      return nil if raw_data.blank?
-
-      @ohlc_cache[interval] = CandleSeries.new(symbol: symbol_name, interval: interval).tap do |series|
-        series.load_from_raw(raw_data)
-      end
+    if disable_caching
+      Rails.logger.debug("[CandleExtension] Fresh data mode - bypassing cache for #{symbol_name}")
+      return fetch_fresh_candles(interval)
     end
 
-    def ohlc_stale?(interval)
-      @last_ohlc_fetched ||= {}
-      return true unless @last_ohlc_fetched[interval]
+    cached_series = @ohlc_cache[interval]
+    return cached_series if cached_series && !ohlc_stale?(interval)
 
-      Time.current - @last_ohlc_fetched[interval] > 5.minutes
-    ensure
-      @last_ohlc_fetched[interval] = Time.current
+    fetch_fresh_candles(interval)
+  end
+
+  def fetch_fresh_candles(interval)
+    raw_data = intraday_ohlc(interval: interval)
+    return nil if raw_data.blank?
+
+    @ohlc_cache[interval] = CandleSeries.new(symbol: symbol_name, interval: interval).tap do |series|
+      series.load_from_raw(raw_data)
     end
+  end
+
+  def ohlc_stale?(interval)
+    @last_ohlc_fetched ||= {}
+
+    # Use configured cache duration or default
+    freshness_config = AlgoConfig.fetch[:data_freshness] || {}
+    cache_duration_minutes = freshness_config[:ohlc_cache_duration_minutes] || 5
+
+    return true unless @last_ohlc_fetched[interval]
+
+    Time.current - @last_ohlc_fetched[interval] > cache_duration_minutes.minutes
+  ensure
+    @last_ohlc_fetched[interval] = Time.current
+  end
 
     def candle_series(interval: "5")
       candles(interval: interval)

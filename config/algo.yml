@@ -91,3 +91,9 @@ option_chain:
   max_iv: 60 # Maximum implied volatility
   min_oi: 50000 # Minimum open interest
   max_spread_pct: 3.0 # Maximum bid-ask spread percentage
+
+data_freshness:
+  disable_ohlc_caching: false # Set to true to always fetch fresh OHLC data
+  disable_option_chain_caching: false # Set to true to always fetch fresh option chain data
+  ohlc_cache_duration_minutes: 5 # Cache OHLC data for 5 minutes
+  option_chain_cache_duration_minutes: 2 # Cache option chain data for 2 minutes

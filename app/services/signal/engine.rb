@@ -80,11 +80,36 @@ module Signal
 
         Rails.logger.info("[Signal] Proceeding with #{final_direction} signal for #{index_cfg[:key]}")
 
+        # Get state snapshot first for signal persistence
         state_snapshot = Signal::StateTracker.record(
           index_key: index_cfg[:key],
           direction: final_direction,
           candle_timestamp: primary_analysis[:last_candle_timestamp],
           config: signals_cfg
+        )
+
+        # Persist signal with confidence score
+        confidence_score = calculate_confidence_score(
+          primary_analysis: primary_analysis,
+          confirmation_analysis: confirmation_analysis,
+          validation_result: validation_result
+        )
+
+        TradingSignal.create_from_analysis(
+          index_key: index_cfg[:key],
+          direction: final_direction.to_s,
+          timeframe: primary_tf,
+          supertrend_value: primary_analysis[:supertrend][:last_value],
+          adx_value: primary_analysis[:adx_value],
+          candle_timestamp: primary_analysis[:last_candle_timestamp],
+          confidence_score: confidence_score,
+          metadata: {
+            confirmation_timeframe: confirmation_tf,
+            confirmation_direction: confirmation_analysis&.dig(:direction),
+            validation_passed: validation_result[:valid],
+            state_count: state_snapshot[:count],
+            state_multiplier: state_snapshot[:multiplier]
+          }
         )
 
         Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
@@ -382,6 +407,43 @@ module Signal
         else
           { valid: true, name: "Market Timing", message: "Normal trading hours" }
         end
+      end
+
+      def calculate_confidence_score(primary_analysis:, confirmation_analysis:, validation_result:)
+        base_confidence = 0.5
+
+        # ADX strength factor (0-0.3)
+        adx_factor = 0.0
+        if primary_analysis[:adx_value]
+          adx_value = primary_analysis[:adx_value].to_f
+          if adx_value >= 30
+            adx_factor = 0.3
+          elsif adx_value >= 20
+            adx_factor = 0.2
+          elsif adx_value >= 15
+            adx_factor = 0.1
+          end
+        end
+
+        # Multi-timeframe confirmation factor (0-0.2)
+        confirmation_factor = 0.0
+        if confirmation_analysis && confirmation_analysis[:direction] == primary_analysis[:direction]
+          confirmation_factor = 0.2
+        end
+
+        # Validation factor (0-0.1)
+        validation_factor = validation_result[:valid] ? 0.1 : 0.0
+
+        # Supertrend strength factor (0-0.1)
+        supertrend_factor = 0.0
+        if primary_analysis[:supertrend] && primary_analysis[:supertrend][:last_value]
+          # Higher supertrend values indicate stronger trend
+          st_value = primary_analysis[:supertrend][:last_value].to_f
+          supertrend_factor = [ st_value / 1000.0, 0.1 ].min # Cap at 0.1
+        end
+
+        total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor
+        [ total_confidence, 1.0 ].min # Cap at 1.0
       end
 
       def decide_direction(supertrend_result, adx_value, min_strength:, timeframe_label:)

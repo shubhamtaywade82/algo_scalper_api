@@ -35,6 +35,12 @@ Rails.application.config.to_prepare do
 
     # Start ATM options service for live trading
     MarketStreamLifecycle.safely_start { Live::AtmOptionsService.instance.start! }
+
+    # Perform initial position sync to ensure all DhanHQ positions are tracked
+    MarketStreamLifecycle.safely_start do
+      Rails.logger.info("[PositionSync] Performing initial position synchronization...")
+      Live::PositionSyncService.instance.force_sync!
+    end
   else
     Rails.logger.info("[MarketStream] Skipping automated trading services in console mode")
   end
