@@ -193,6 +193,69 @@ module Signal
         { status: :error, message: e.message }
       end
 
+      def analyze_multi_timeframe(index_cfg:, instrument:)
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || "5m").to_s
+        confirmation_tf = signals_cfg[:confirmation_timeframe].presence&.to_s
+
+        supertrend_cfg = signals_cfg[:supertrend]
+        unless supertrend_cfg
+          Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
+          return { status: :error, message: "Supertrend configuration missing" }
+        end
+
+        adx_cfg = signals_cfg[:adx] || {}
+
+        # Analyze primary timeframe
+        primary_analysis = analyze_timeframe(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          timeframe: primary_tf,
+          supertrend_cfg: supertrend_cfg,
+          adx_min_strength: adx_cfg[:min_strength]
+        )
+
+        unless primary_analysis[:status] == :ok
+          return { status: :error, message: "Primary timeframe analysis failed: #{primary_analysis[:message]}" }
+        end
+
+        primary_direction = primary_analysis[:direction]
+        confirmation_analysis = nil
+        confirmation_direction = nil
+
+        if confirmation_tf.present?
+          confirmation_adx_min = adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+
+          confirmation_analysis = analyze_timeframe(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            timeframe: confirmation_tf,
+            supertrend_cfg: supertrend_cfg,
+            adx_min_strength: confirmation_adx_min
+          )
+
+          if confirmation_analysis[:status] == :ok
+            confirmation_direction = confirmation_analysis[:direction]
+          end
+        end
+
+        final_direction = multi_timeframe_direction(primary_direction, confirmation_direction)
+
+        {
+          status: :ok,
+          primary_direction: primary_direction,
+          confirmation_direction: confirmation_direction,
+          final_direction: final_direction,
+          timeframe_results: {
+            primary: primary_analysis,
+            confirmation: confirmation_analysis
+          }
+        }
+      rescue StandardError => e
+        Rails.logger.error("[Signal] Multi-timeframe analysis failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+        { status: :error, message: e.message }
+      end
+
       def multi_timeframe_direction(primary_direction, confirmation_direction)
         return :avoid if primary_direction == :avoid || confirmation_direction == :avoid
         return primary_direction if primary_direction == confirmation_direction

@@ -167,6 +167,12 @@ class CandleSeries
   def rsi(period = 14)
     return nil if candles.empty?
     RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: closes, period: period).call
+  rescue ArgumentError, TypeError, StandardError => e
+    # Don't catch NoMethodError as it indicates programming errors
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] RSI calculation failed: #{e.message}")
+    nil
   end
 
   def moving_average(period = 20)

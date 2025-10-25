@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe "Signal Generation Strategies Integration", type: :integration, vcr: true do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
-  let(:signal_engine) { Signal::Engine.new }
+  let(:signal_engine) { Signal::Engine }
   let(:trend_identifier) { Trading::TrendIdentifier.new }
   let(:holy_grail_service) { Indicators::HolyGrail.new(candles: candle_data, config: Indicators::HolyGrail.demo_config) }
   let(:candle_data) do
@@ -55,7 +55,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         validation_mode: 'conservative',
         supertrend: {
           period: 10,
-          multiplier: 2.0,
+          base_multiplier: 2.0,
           training_period: 50
         },
         adx: {
@@ -70,7 +70,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
           timeframes: [ '5m', '15m' ],
           supertrend: {
             period: 10,
-            multiplier: 2.0
+            base_multiplier: 2.0
           },
           adx_min_strength: 25
         }
@@ -83,11 +83,18 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       let(:index_config) { { key: 'nifty', segment: 'NSE_FNO', security_id: '12345' } }
 
       it "generates bullish signal when conditions are met" do
+        # Mock candle series with bullish data
+        candle_series = create_candle_series_with_trend_data
+        allow(instrument).to receive(:candle_series).and_return(candle_series)
+
+        # Mock ADX calculation
+        allow(instrument).to receive(:adx).and_return(35.0)
+
         result = signal_engine.analyze_timeframe(
           index_cfg: index_config,
           instrument: instrument,
           timeframe: '5m',
-          supertrend_cfg: { period: 10, multiplier: 2.0 },
+          supertrend_cfg: { period: 10, base_multiplier: 2.0 },
           adx_min_strength: 25
         )
 
@@ -103,7 +110,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
           index_cfg: index_config,
           instrument: instrument,
           timeframe: 'invalid',
-          supertrend_cfg: { period: 10, multiplier: 2.0 },
+          supertrend_cfg: { period: 10, base_multiplier: 2.0 },
           adx_min_strength: 25
         )
 
@@ -118,7 +125,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
           index_cfg: index_config,
           instrument: instrument,
           timeframe: '5m',
-          supertrend_cfg: { period: 10, multiplier: 2.0 },
+          supertrend_cfg: { period: 10, base_multiplier: 2.0 },
           adx_min_strength: 25
         )
 
@@ -133,7 +140,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
           index_cfg: index_config,
           instrument: instrument,
           timeframe: '5m',
-          supertrend_cfg: { period: 10, multiplier: 2.0 },
+          supertrend_cfg: { period: 10, base_multiplier: 2.0 },
           adx_min_strength: 25
         )
 
@@ -153,6 +160,23 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
 
       it "analyzes multiple timeframes" do
+        # Mock AlgoConfig for signals configuration
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          signals: {
+            primary_timeframe: '5m',
+            confirmation_timeframe: '15m',
+            supertrend: { period: 10, base_multiplier: 2.0 },
+            adx: { min_strength: 25 }
+          }
+        })
+
+        # Mock candle series for both timeframes
+        candle_series = create_candle_series_with_trend_data
+        allow(instrument).to receive(:candle_series).and_return(candle_series)
+
+        # Mock ADX calculation
+        allow(instrument).to receive(:adx).and_return(35.0)
+
         result = signal_engine.analyze_multi_timeframe(
           index_cfg: index_config,
           instrument: instrument
@@ -345,8 +369,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
 
   describe "Signal Validation and Filtering" do
     context "when validating signals" do
-      # Remove the non-existent Validator class reference
-      # let(:signal_validator) { Signal::Validator.new }
+      let(:signal_validator) { Signal::Validator.new }
 
       it "validates bullish signals" do
         # Test basic signal validation functionality
@@ -626,6 +649,8 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
 
   describe "Error Handling and Resilience" do
     context "when handling signal generation errors" do
+      let(:candle_series) { create_candle_series_with_trend_data }
+
       it "handles instrument data errors gracefully" do
         allow(instrument).to receive(:candle_series).and_raise(StandardError, "Data error")
 
@@ -636,7 +661,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
           index_cfg: { key: 'nifty' },
           instrument: instrument,
           timeframe: '5m',
-          supertrend_cfg: { period: 10, multiplier: 2.0 },
+          supertrend_cfg: { period: 10, base_multiplier: 2.0 },
           adx_min_strength: 25
         )
 
@@ -651,19 +676,24 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
           index_cfg: { key: 'nifty' },
           instrument: instrument,
           timeframe: '5m',
-          supertrend_cfg: { period: 10, multiplier: 2.0 },
+          supertrend_cfg: { period: 10, base_multiplier: 2.0 },
           adx_min_strength: 25
         ) }.not_to raise_error
       end
 
       it "handles indicator calculation errors" do
-        allow(candle_series).to receive(:rsi).and_raise(StandardError, "RSI error")
+        # Test that RSI method handles errors gracefully by mocking the internal call
+        allow_any_instance_of(RubyTechnicalAnalysis::RelativeStrengthIndex).to receive(:call).and_raise(StandardError, "RSI calculation failed")
 
-        expect { candle_series.rsi }.not_to raise_error
+        # The RSI method should return nil instead of raising an error
+        result = candle_series.rsi
+        expect(result).to be_nil
       end
     end
 
     context "when handling edge cases" do
+      let(:candle_series) { create_candle_series_with_trend_data }
+
       it "handles empty candle series" do
         empty_series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
 
