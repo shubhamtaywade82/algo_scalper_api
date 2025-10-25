@@ -107,7 +107,6 @@ module Orders
           order_type: "MARKET",
           product_type: position_details[:product_type],
           validity: "DAY",
-          correlation_id: normalized_id,
           disclosed_quantity: 0
         }
 
@@ -179,7 +178,6 @@ module Orders
           order_type: "MARKET",
           product_type: position_details[:product_type],
           validity: "DAY",
-          correlation_id: normalized_id,
           disclosed_quantity: 0
         }
 
