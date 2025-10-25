@@ -106,7 +106,7 @@ module Live
         pnl = compute_pnl(tracker, position, ltp)
         next unless pnl
 
-        pnl_pct = compute_pnl_pct(tracker, ltp)
+        pnl_pct = compute_pnl_pct(tracker, ltp, position)
 
         # Store P&L in Redis for real-time tracking
         update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
@@ -268,7 +268,24 @@ module Live
     end
 
     def current_ltp(tracker, position)
-      # Try to get LTP from the instrument first
+      # For options, fetch LTP directly from DhanHQ API to get correct option premium
+      if position && position.respond_to?(:exchange_segment) && position.exchange_segment == "NSE_FNO"
+        begin
+          response = DhanHQ::Models::MarketFeed.ltp({ "NSE_FNO" => [ tracker.security_id.to_i ] })
+          if response["status"] == "success"
+            option_data = response.dig("data", "NSE_FNO", tracker.security_id)
+            if option_data && option_data["last_price"]
+              ltp = BigDecimal(option_data["last_price"].to_s)
+              Rails.logger.debug("Fetched option LTP for #{tracker.security_id}: #{ltp}")
+              return ltp
+            end
+          end
+        rescue StandardError => e
+          Rails.logger.error("Failed to fetch option LTP for #{tracker.security_id}: #{e.message}")
+        end
+      end
+
+      # Fallback to original method for non-options
       if tracker.instrument
         ltp = tracker.instrument.latest_ltp
         return ltp if ltp
@@ -312,6 +329,9 @@ module Live
     end
 
     def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
+      # Ensure all values are present before storing
+      return unless pnl && pnl_pct && ltp
+
       Live::RedisPnlCache.instance.store_pnl(
         tracker_id: tracker.id,
         pnl: pnl,
@@ -324,6 +344,21 @@ module Live
     end
 
     def compute_pnl(tracker, position, ltp)
+      # For options, use the actual position quantity and cost price from DhanHQ
+      if position && position.respond_to?(:net_qty) && position.respond_to?(:cost_price)
+        quantity = position.net_qty.to_i
+        cost_price = position.cost_price.to_f
+
+        return nil if quantity.zero? || cost_price.zero?
+
+        # Correct PnL calculation for options: (Current LTP - Cost Price) × Position Quantity
+        pnl = (ltp - BigDecimal(cost_price.to_s)) * quantity
+
+        Rails.logger.debug("Option PnL calculation: (#{ltp} - #{cost_price}) × #{quantity} = #{pnl}")
+        return pnl
+      end
+
+      # Fallback to original calculation for non-option positions
       quantity = tracker.quantity.to_i
       if quantity.zero? && position
         quantity = if position.respond_to?(:quantity)
@@ -350,11 +385,20 @@ module Live
       nil
     end
 
-    def compute_pnl_pct(tracker, ltp)
-      entry_price = tracker.entry_price || tracker.avg_price
-      return nil if entry_price.blank?
+    def compute_pnl_pct(tracker, ltp, position = nil)
+      # For options, use cost price from DhanHQ position
+      if position && position.respond_to?(:cost_price)
+        cost_price = position.cost_price.to_f
+        return nil if cost_price.zero?
 
-      (ltp - BigDecimal(entry_price.to_s)) / BigDecimal(entry_price.to_s)
+        (ltp - BigDecimal(cost_price.to_s)) / BigDecimal(cost_price.to_s)
+      else
+        # Fallback to original calculation
+        entry_price = tracker.entry_price || tracker.avg_price
+        return nil if entry_price.blank?
+
+        (ltp - BigDecimal(entry_price.to_s)) / BigDecimal(entry_price.to_s)
+      end
     rescue StandardError
       nil
     end
@@ -386,12 +430,21 @@ module Live
     pnl_display = tracker.last_pnl_rupees ? tracker.last_pnl_rupees.to_s : "N/A"
     Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{pnl_display}).")
     store_exit_reason(tracker, reason)
-    exit_position(position, tracker)
 
-    # Clear Redis cache for this tracker
-    Live::RedisPnlCache.instance.clear_tracker(tracker.id)
+    # Attempt to exit position and check if successful
+    exit_successful = exit_position(position, tracker)
 
-    tracker.mark_exited!
+    if exit_successful
+      # Clear Redis cache for this tracker
+      Live::RedisPnlCache.instance.clear_tracker(tracker.id)
+
+      # Mark as exited only if order was placed successfully
+      tracker.mark_exited!
+      Rails.logger.info("Successfully exited position #{tracker.order_no}")
+    else
+      Rails.logger.error("Failed to place exit order for #{tracker.order_no} - position remains active")
+      # Don't mark as exited if order placement failed
+    end
   rescue StandardError => e
     Rails.logger.error("Failed to exit position #{tracker.order_no}: #{e.class} - #{e.message}")
   end
@@ -399,17 +452,27 @@ module Live
     def exit_position(position, tracker)
       if position.respond_to?(:exit!)
         position.exit!
+        true
       elsif position.respond_to?(:order_id)
         cancel_remote_order(position.order_id)
+        true
       else
         segment = tracker.segment.presence || tracker.instrument&.exchange_segment
-        Orders::Placer.sell_market!(
-          seg: segment,
-          sid: tracker.security_id,
-          qty: tracker.quantity.to_i,
-          client_order_id: "AS-EXIT-#{tracker.order_no[-8..-1]}-#{Time.current.to_i.to_s[-4..-1]}"
-        ) if segment.present?
+        if segment.present?
+          order = Orders::Placer.exit_position!(
+            seg: segment,
+            sid: tracker.security_id,
+            client_order_id: "AS-EXIT-#{tracker.order_no[-8..-1]}-#{Time.current.to_i.to_s[-4..-1]}"
+          )
+          order.present?
+        else
+          Rails.logger.error("Cannot exit position #{tracker.order_no}: no segment available")
+          false
+        end
       end
+    rescue StandardError => e
+      Rails.logger.error("Error in exit_position for #{tracker.order_no}: #{e.class} - #{e.message}")
+      false
     end
 
     def store_exit_reason(tracker, reason)
