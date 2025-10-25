@@ -34,6 +34,19 @@ RSpec.describe "Dynamic Subscription Integration", type: :integration, vcr: true
 
     # Mock environment variables
     allow(ENV).to receive(:[]).with('DHANHQ_WS_WATCHLIST').and_return('NSE_FNO:12345,NSE_FNO:67890')
+    allow(ENV).to receive(:[]).with('REDIS_URL').and_return('redis://localhost:6379/0')
+    allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return('test_client_id')
+    allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('test_client_id')
+    allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return('test_access_token')
+    allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return('test_access_token')
+    allow(ENV).to receive(:[]).with('COLUMNS').and_return('80')
+
+    # Mock Redis connection
+    mock_redis = double('Redis')
+    allow(Redis).to receive(:new).and_return(mock_redis)
+    allow(mock_redis).to receive(:set)
+    allow(mock_redis).to receive(:get)
+    allow(mock_redis).to receive(:del)
   end
 
   describe "Position-based Dynamic Subscription" do
@@ -91,20 +104,23 @@ RSpec.describe "Dynamic Subscription Integration", type: :integration, vcr: true
 
       it "unsubscribes from underlying instrument for options" do
         option_instrument = create(:instrument,
-          exchange_segment: 'NSE_FNO',
+          exchange: 'nse',
+          segment: 'derivatives',
           security_id: '12345CE',
           underlying_symbol: 'NIFTY'
         )
 
         underlying_instrument = create(:instrument,
           symbol_name: 'NIFTY',
-          exchange_segment: 'NSE_FNO',
-          security_id: '12345'
+          exchange: 'nse',
+          segment: 'derivatives',
+          security_id: '99999'
         )
 
         allow(Instrument).to receive(:find_by).with(
           symbol_name: 'NIFTY',
-          exchange_segment: 'NSE_FNO'
+          exchange: 'nse',
+          segment: 'derivatives'
         ).and_return(underlying_instrument)
 
         position_tracker.update!(instrument: option_instrument)

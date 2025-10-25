@@ -531,14 +531,19 @@ RSpec.describe "Supertrend & ADX Computation Integration", type: :integration, v
     context "when handling extreme values" do
       it "handles very large price values" do
         series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
-        series.add_candle(Candle.new(
-          ts: Time.current.to_i,
-          open: 1000000.0,
-          high: 1000002.0,
-          low: 999999.0,
-          close: 1000001.0,
-          volume: 1000
-        ))
+
+        # Add 15 candles with very large price values to ensure RSI can calculate
+        15.times do |i|
+          base_price = 1000000.0 + i * 1000.0
+          series.add_candle(Candle.new(
+            ts: Time.current.to_i + i * 300,
+            open: base_price,
+            high: base_price + 2.0,
+            low: base_price - 1.0,
+            close: base_price + 1.0,
+            volume: 1000
+          ))
+        end
 
         rsi = series.rsi
         expect(rsi).to be_a(Numeric)

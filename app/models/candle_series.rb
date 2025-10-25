@@ -165,19 +165,23 @@ class CandleSeries
   end
 
   def rsi(period = 14)
+    return nil if candles.empty?
     RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: closes, period: period).call
   end
 
   def moving_average(period = 20)
+    return nil if candles.empty?
     RubyTechnicalAnalysis::MovingAverages.new(series: closes, period: period)
   end
 
   def sma(period = 20)
-    moving_average(period).sma
+    return nil if candles.empty?
+    moving_average(period)&.sma
   end
 
   def ema(period = 20)
-    moving_average(period).ema
+    return nil if candles.empty?
+    moving_average(period)&.ema
   end
 
   def macd(fast_period = 12, slow_period = 26, signal_period = 9)
@@ -230,7 +234,7 @@ class CandleSeries
     curr.high < prev.high && curr.low > prev.low
   end
 
-  def bollinger_bands(period: 20)
+  def bollinger_bands(period: 20, std_dev: 2.0)
     return nil if candles.size < period
 
     bb = RubyTechnicalAnalysis::BollingerBands.new(
