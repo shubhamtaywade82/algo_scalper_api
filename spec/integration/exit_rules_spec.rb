@@ -449,14 +449,28 @@ RSpec.describe "Exit Rules Integration", type: :integration, vcr: true do
       it "stores exit reason in metadata" do
         reason = "take-profit (50.0%)"
 
-        expect(position_tracker).to receive(:update!).with(
-          meta: hash_including(
-            'exit_reason' => reason,
-            'exit_triggered_at' => anything
-          )
-        )
+        # Override the global mock to allow the actual method to be called
+        allow(risk_manager).to receive(:execute_exit).and_call_original
 
+        # Mock the sell order placement to prevent failures
+        allow(Orders::Placer).to receive(:sell_market!).and_return(double('Order', order_no: 'EXIT123'))
+
+        # Mock Redis cache clearing to prevent failures
+        allow(Live::RedisPnlCache.instance).to receive(:clear_tracker).and_return(true)
+
+        # Mock mark_exited! to prevent database issues
+        allow(position_tracker).to receive(:mark_exited!).and_return(true)
+
+        # Mock the exit_position method to prevent any issues there
+        allow(risk_manager).to receive(:exit_position).and_return(true)
+
+        # Let's test the execute_exit method
         risk_manager.send(:execute_exit, mock_position, position_tracker, reason: reason)
+
+        # Check that the metadata was actually updated
+        position_tracker.reload
+        expect(position_tracker.meta['exit_reason']).to eq(reason)
+        expect(position_tracker.meta['exit_triggered_at']).to be_present
       end
 
       it "clears Redis cache for tracker" do

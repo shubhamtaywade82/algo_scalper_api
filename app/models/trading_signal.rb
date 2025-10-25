@@ -74,6 +74,28 @@ class TradingSignal < ApplicationRecord
     direction == DIRECTIONS[:bearish]
   end
 
+  def calculate_accuracy
+    return 0.0 unless metadata.present?
+
+    execution_price = metadata["execution_price"]
+    exit_price = metadata["exit_price"]
+    final_status = metadata["final_status"]
+
+    return 0.0 unless execution_price && exit_price && final_status
+
+    # Calculate accuracy based on final status and price movement
+    case final_status
+    when "profitable"
+      # Positive accuracy for profitable trades
+      ((exit_price.to_f - execution_price.to_f) / execution_price.to_f) * 100
+    when "loss"
+      # Negative accuracy for losing trades
+      ((exit_price.to_f - execution_price.to_f) / execution_price.to_f) * 100
+    else
+      0.0
+    end
+  end
+
   def avoid?
     direction == DIRECTIONS[:avoid]
   end

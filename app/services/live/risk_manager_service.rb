@@ -39,7 +39,44 @@ module Live
       @running
     end
 
-    private
+    def evaluate_signal_risk(signal_data)
+    confidence = signal_data[:confidence] || 0.0
+    direction = signal_data[:direction]
+    entry_price = signal_data[:entry_price]
+    stop_loss = signal_data[:stop_loss]
+    take_profit = signal_data[:take_profit]
+
+    # Calculate risk level based on confidence and price levels
+    risk_level = case confidence
+    when 0.8..1.0
+      :low
+    when 0.6...0.8
+      :medium
+    else
+      :high
+    end
+
+    # Calculate maximum position size based on risk level
+    max_position_size = case risk_level
+    when :low
+      100
+    when :medium
+      50
+    else
+      25
+    end
+
+    # Use provided stop loss or calculate default
+    recommended_stop_loss = stop_loss || (entry_price * 0.98) # 2% default stop loss
+
+    {
+      risk_level: risk_level,
+      max_position_size: max_position_size,
+      recommended_stop_loss: recommended_stop_loss
+    }
+  end
+
+  private
 
     def monitor_loop
       while running?
@@ -345,18 +382,19 @@ module Live
       pnl_pct >= BigDecimal(threshold.to_s)
     end
 
-    def execute_exit(position, tracker, reason: "manual")
-      Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{tracker.last_pnl_rupees}).")
-      store_exit_reason(tracker, reason)
-      exit_position(position, tracker)
+  def execute_exit(position, tracker, reason: "manual")
+    pnl_display = tracker.last_pnl_rupees ? tracker.last_pnl_rupees.to_s : "N/A"
+    Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{pnl_display}).")
+    store_exit_reason(tracker, reason)
+    exit_position(position, tracker)
 
-      # Clear Redis cache for this tracker
-      Live::RedisPnlCache.instance.clear_tracker(tracker.id)
+    # Clear Redis cache for this tracker
+    Live::RedisPnlCache.instance.clear_tracker(tracker.id)
 
-      tracker.mark_exited!
-    rescue StandardError => e
-      Rails.logger.error("Failed to exit position #{tracker.order_no}: #{e.class} - #{e.message}")
-    end
+    tracker.mark_exited!
+  rescue StandardError => e
+    Rails.logger.error("Failed to exit position #{tracker.order_no}: #{e.class} - #{e.message}")
+  end
 
     def exit_position(position, tracker)
       if position.respond_to?(:exit!)

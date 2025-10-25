@@ -20,13 +20,16 @@ RSpec.describe Live::MarketFeedHub do
     )
 
     allow(DhanHQ::WS::Client).to receive(:new).and_return(@ws_double)
-    ::TickCache.instance.clear
+
+    # Clean up only the specific WatchlistItem records created in this test file
+    WatchlistItem.where(segment: [ 'IDX_I', 'NSE_FNO' ], security_id: [ '13', '12345' ]).delete_all
 
     # Properly reset the singleton instance state
     hub.stop! if hub.running?
     hub.instance_variable_set(:@ws_client, nil)
     hub.instance_variable_set(:@running, false)
     hub.instance_variable_set(:@watchlist, nil)
+    hub.instance_variable_set(:@callbacks, [])
   end
 
   after do
@@ -68,21 +71,16 @@ RSpec.describe Live::MarketFeedHub do
 
   describe 'tick handling and TickCache' do
     it 'writes ticks to Live::TickCache and exposes ltp' do
-      hub.start!
+      # Clear any existing ticks to ensure clean state
+      ::TickCache.instance.clear
 
-      # Capture the on(:tick) block and invoke it with a sample tick
-      called = nil
-      allow(@ws_double).to receive(:on) do |_, &blk|
-        called = blk
-      end
-
-      # Restart to re-register on with our spy
-      hub.stop!
-      hub.start!
-
+      # Create a test tick
       tick = { segment: 'NSE_FNO', security_id: '49081', ltp: 123.45, kind: :quote }
-      expect { called.call(tick) }.not_to raise_error
 
+      # Directly test the tick handling by calling the method
+      hub.send(:handle_tick, tick)
+
+      # Verify the tick was stored correctly
       expect(Live::TickCache.ltp('NSE_FNO', '49081')).to eq(123.45)
       expect(Live::TickCache.get('NSE_FNO', '49081')).to include(kind: :quote)
     end

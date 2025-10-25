@@ -242,11 +242,6 @@ RSpec.describe "Order Placement Integration", type: :integration, vcr: true do
 
     context "when processing individual instruments" do
       it "places market order for long signal" do
-        allow(trading_service).to receive(:signal_for).with(instrument).and_return(:long)
-        allow(trading_service).to receive(:select_for).with(instrument, signal: :long).and_return(derivative)
-        allow(trading_service).to receive(:submit_market_order).and_return(mock_order)
-        allow(trading_service).to receive(:persist_tracker)
-
         trading_service.send(:process_instrument, instrument)
 
         # Test passes if no exception is raised
@@ -254,7 +249,7 @@ RSpec.describe "Order Placement Integration", type: :integration, vcr: true do
       end
 
       it "skips processing for non-long signals" do
-        allow(trading_service).to receive(:signal_for).with(instrument).and_return(:short)
+        allow(trading_service.instance_variable_get(:@trend_identifier)).to receive(:signal_for).and_return(:short)
 
         trading_service.send(:process_instrument, instrument)
 
@@ -263,8 +258,8 @@ RSpec.describe "Order Placement Integration", type: :integration, vcr: true do
       end
 
       it "skips processing when no derivative selected" do
-        allow(trading_service).to receive(:signal_for).with(instrument).and_return(:long)
-        allow(trading_service).to receive(:select_for).with(instrument, signal: :long).and_return(nil)
+        allow(trading_service.instance_variable_get(:@trend_identifier)).to receive(:signal_for).and_return(:long)
+        allow(trading_service.instance_variable_get(:@strike_selector)).to receive(:select_for).and_return(nil)
 
         trading_service.send(:process_instrument, instrument)
 
@@ -273,9 +268,8 @@ RSpec.describe "Order Placement Integration", type: :integration, vcr: true do
       end
 
       it "handles processing errors gracefully" do
-        # Mock the trading service to avoid the defined_attributes error
-        allow(trading_service).to receive(:signal_for).and_raise(StandardError, "Processing error")
-        allow(trading_service).to receive(:process_instrument).and_return(true)
+        # Mock the trend identifier to raise an error
+        allow(trading_service.instance_variable_get(:@trend_identifier)).to receive(:signal_for).and_raise(StandardError, "Processing error")
 
         # Verify that the method can be called without crashing
         expect { trading_service.send(:process_instrument, instrument) }.not_to raise_error
@@ -472,8 +466,10 @@ RSpec.describe "Order Placement Integration", type: :integration, vcr: true do
         mock_record = double('Record')
         allow(mock_record).to receive(:errors).and_return(double('Errors', full_messages: [ 'some error' ]))
 
-        # Add i18n_scope method to the mock record class
-        allow(mock_record.class).to receive(:i18n_scope).and_return(:activerecord)
+        # Create a proper mock class that responds to i18n_scope
+        mock_class = double('RecordClass')
+        allow(mock_class).to receive(:i18n_scope).and_return(:activerecord)
+        allow(mock_record).to receive(:class).and_return(mock_class)
 
         allow(Entries::EntryGuard).to receive(:create_tracker!).and_raise(ActiveRecord::RecordInvalid.new(mock_record))
 

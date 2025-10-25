@@ -64,6 +64,9 @@ class Derivative < ApplicationRecord
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
   has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: "WatchlistItem"
 
+  validates :security_id, presence: true, uniqueness: { scope: [ :symbol_name, :exchange, :segment ] }
+  validates :option_type, inclusion: { in: %w[CE PE], allow_blank: true }
+
   scope :options, -> { where.not(option_type: [ nil, "" ]) }
   scope :futures, -> { where(option_type: [ nil, "" ]) }
 end
