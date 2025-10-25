@@ -63,11 +63,47 @@ module Live
       { segment: segment, security_id: security_id.to_s }
     end
 
+    def subscribe_many(instruments)
+      ensure_running!
+      return [] if instruments.empty?
+
+      # Convert to the format expected by DhanHQ WebSocket client
+      list = instruments.map do |instrument|
+        if instrument.is_a?(Hash)
+          { segment: instrument[:segment], security_id: instrument[:security_id].to_s }
+        else
+          { segment: instrument.segment, security_id: instrument.security_id.to_s }
+        end
+      end
+
+      @ws_client.subscribe_many(req: mode, list: list)
+      Rails.logger.info("[MarketFeedHub] Batch subscribed to #{list.count} instruments")
+      list
+    end
+
     def unsubscribe(segment:, security_id:)
       return unless running?
 
       @ws_client.unsubscribe_one(segment: segment, security_id: security_id.to_s)
       { segment: segment, security_id: security_id.to_s }
+    end
+
+    def unsubscribe_many(instruments)
+      return [] unless running?
+      return [] if instruments.empty?
+
+      # Convert to the format expected by DhanHQ WebSocket client
+      list = instruments.map do |instrument|
+        if instrument.is_a?(Hash)
+          { segment: instrument[:segment], security_id: instrument[:security_id].to_s }
+        else
+          { segment: instrument.segment, security_id: instrument.security_id.to_s }
+        end
+      end
+
+      @ws_client.unsubscribe_many(req: mode, list: list)
+      Rails.logger.info("[MarketFeedHub] Batch unsubscribed from #{list.count} instruments")
+      list
     end
 
     def on_tick(&block)
@@ -112,9 +148,11 @@ module Live
     end
 
     def subscribe_watchlist
-      @watchlist.each do |item|
-        @ws_client.subscribe_one(segment: item[:segment], security_id: item[:security_id])
-      end
+      return if @watchlist.empty?
+
+      # Use subscribe_many for efficient batch subscription (up to 100 instruments per message)
+      @ws_client.subscribe_many(req: mode, list: @watchlist)
+      Rails.logger.info("[MarketFeedHub] Subscribed to #{@watchlist.count} instruments using subscribe_many")
     end
 
     def load_watchlist

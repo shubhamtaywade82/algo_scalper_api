@@ -25,7 +25,7 @@ module Orders
         payload = {
           transaction_type: "BUY",
           exchange_segment: seg,
-          security_id: sid,
+          security_id: sid.to_s,
           quantity: qty,
           order_type: "MARKET",
           product_type: product_type,
@@ -102,7 +102,7 @@ module Orders
         payload = {
           transaction_type: "SELL",
           exchange_segment: actual_segment,
-          security_id: sid,
+          security_id: sid.to_s,
           quantity: actual_qty,
           order_type: "MARKET",
           product_type: position_details[:product_type],
@@ -173,7 +173,7 @@ module Orders
         payload = {
           transaction_type: transaction_type,
           exchange_segment: actual_segment,
-          security_id: sid,
+          security_id: sid.to_s,
           quantity: actual_qty,
           order_type: "MARKET",
           product_type: position_details[:product_type],

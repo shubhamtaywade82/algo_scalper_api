@@ -276,12 +276,39 @@ module Live
             option_data = response.dig("data", "NSE_FNO", tracker.security_id)
             if option_data && option_data["last_price"]
               ltp = BigDecimal(option_data["last_price"].to_s)
-              Rails.logger.debug("Fetched option LTP for #{tracker.security_id}: #{ltp}")
+              Rails.logger.info("Fetched option LTP for #{tracker.security_id}: #{ltp}")
+
+              # Store in Redis for future use
+              Live::RedisPnlCache.instance.store_tick(
+                segment: "NSE_FNO",
+                security_id: tracker.security_id,
+                ltp: ltp,
+                timestamp: Time.current
+              )
               return ltp
             end
           end
         rescue StandardError => e
           Rails.logger.error("Failed to fetch option LTP for #{tracker.security_id}: #{e.message}")
+
+          # For rate limiting errors, try to get from Redis cache first
+          if e.message.include?("429")
+            Rails.logger.warn("Rate limited - trying Redis cache for #{tracker.security_id}")
+            cached = Live::TickCache.ltp("NSE_FNO", tracker.security_id)
+            if cached
+              ltp = BigDecimal(cached.to_s)
+              Rails.logger.info("Using cached option LTP for #{tracker.security_id}: #{ltp}")
+
+              # Store in Redis for future use
+              Live::RedisPnlCache.instance.store_tick(
+                segment: "NSE_FNO",
+                security_id: tracker.security_id,
+                ltp: ltp,
+                timestamp: Time.current
+              )
+              return ltp
+            end
+          end
         end
       end
 
@@ -307,9 +334,13 @@ module Live
     end
 
     def current_ltp_with_freshness_check(tracker, position, max_age_seconds: 5)
+      # Get segment and security_id for Redis key
+      segment = position&.respond_to?(:exchange_segment) ? position.exchange_segment : tracker.segment
+      security_id = tracker.security_id
+
       # Check if tick is fresh in Redis cache
-      if Live::RedisPnlCache.instance.is_tick_fresh?(tracker.id, max_age_seconds: max_age_seconds)
-        tick_data = Live::RedisPnlCache.instance.fetch_tick(tracker.id)
+      if Live::RedisPnlCache.instance.is_tick_fresh?(segment: segment, security_id: security_id, max_age_seconds: max_age_seconds)
+        tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
         return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
       end
 
@@ -317,9 +348,10 @@ module Live
       ltp = current_ltp(tracker, position)
 
       # If we got fresh LTP, store it in Redis
-      if ltp
+      if ltp && segment && security_id
         Live::RedisPnlCache.instance.store_tick(
-          tracker_id: tracker.id,
+          segment: segment,
+          security_id: security_id,
           ltp: ltp,
           timestamp: Time.current
         )
