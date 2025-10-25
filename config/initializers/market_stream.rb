@@ -17,8 +17,8 @@ module MarketStreamLifecycle
 end
 
 Rails.application.config.to_prepare do
-  # Skip automated trading services in console mode
-  unless Rails.const_defined?(:Console)
+  # Skip automated trading services in console mode and test environment
+  unless Rails.const_defined?(:Console) || Rails.env.test?
     # Start the live market feed hub
     MarketStreamLifecycle.safely_start { Live::MarketFeedHub.instance.start! }
 
@@ -42,13 +42,13 @@ Rails.application.config.to_prepare do
       Live::PositionSyncService.instance.force_sync!
     end
   else
-    Rails.logger.info("[MarketStream] Skipping automated trading services in console mode")
+    Rails.logger.info("[MarketStream] Skipping automated trading services in #{Rails.const_defined?(:Console) ? 'console' : 'test'} mode")
   end
 end
 
 at_exit do
-  # Only stop services if they were started (not in console mode)
-  unless Rails.const_defined?(:Console)
+  # Only stop services if they were started (not in console mode or test environment)
+  unless Rails.const_defined?(:Console) || Rails.env.test?
     MarketStreamLifecycle.safely_stop { Live::MarketFeedHub.instance.stop! }
     MarketStreamLifecycle.safely_stop { Live::OrderUpdateHandler.instance.stop! }
     MarketStreamLifecycle.safely_stop { Live::OhlcPrefetcherService.instance.stop! }

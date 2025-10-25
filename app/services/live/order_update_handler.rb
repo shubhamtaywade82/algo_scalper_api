@@ -31,6 +31,18 @@ module Live
       @lock.synchronize { @subscribed = false }
     end
 
+    def process_update(payload)
+      handle_update(payload)
+    end
+
+    def handle_order_update(payload)
+      handle_update(payload)
+    end
+
+    def find_tracker_by_order_id(order_id)
+      PositionTracker.find_by(order_no: order_id)
+    end
+
     private
 
     def handle_update(payload)

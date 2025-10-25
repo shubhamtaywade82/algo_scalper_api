@@ -1,3 +1,21 @@
+# == Schema Information
+#
+# Table name: trading_signals
+#
+#  id                        :integer         not null, primary key
+#  index_key                 :string          not null
+#  direction                 :string          not null
+#  confidence_score          :decimal
+#  timeframe                 :string          not null
+#  supertrend_value          :decimal
+#  adx_value                 :decimal
+#  signal_timestamp          :datetime        not null
+#  candle_timestamp          :datetime        not null
+#  metadata                  :jsonb
+#  created_at                :datetime        not null
+#  updated_at                :datetime        not null
+#
+
 # frozen_string_literal: true
 
 class TradingSignal < ApplicationRecord

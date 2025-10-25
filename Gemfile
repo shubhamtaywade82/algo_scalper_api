@@ -70,4 +70,7 @@ group :development, :test do
   gem "shoulda-matchers"
   gem "webmock", require: false
   gem "vcr", require: false
+
+  # Annotate models, routes, etc.
+  gem "annotate"
 end

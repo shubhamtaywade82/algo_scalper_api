@@ -1,3 +1,35 @@
+# == Schema Information
+#
+# Table name: position_trackers
+#
+#  id                        :integer         not null, primary key
+#  instrument_id             :integer         not null
+#  order_no                  :string          not null
+#  security_id               :string          not null
+#  symbol                    :string
+#  segment                   :string
+#  side                      :string
+#  status                    :string          not null
+#  quantity                  :integer
+#  avg_price                 :decimal
+#  entry_price               :decimal
+#  last_pnl_rupees           :decimal
+#  last_pnl_pct              :decimal
+#  high_water_mark_pnl       :decimal
+#  meta                      :jsonb
+#  created_at                :datetime        not null
+#  updated_at                :datetime        not null
+#
+# Indexes
+#
+#  index_position_trackers_on_instrument_id  (instrument_id)
+#  index_position_trackers_on_order_no       (order_no) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (instrument_id => instruments.id)
+#
+
 # frozen_string_literal: true
 
 require "bigdecimal"
@@ -104,12 +136,13 @@ class PositionTracker < ApplicationRecord
     if instrument&.underlying_symbol
       underlying_instrument = Instrument.find_by(
         symbol_name: instrument.underlying_symbol,
-        exchange_segment: instrument.exchange_segment
+        exchange: instrument.exchange,
+        segment: instrument.segment
       )
       if underlying_instrument
         Rails.logger.debug("[PositionTracker] Unsubscribing from underlying: #{underlying_instrument.symbol_name}")
         Live::MarketFeedHub.instance.unsubscribe(
-          segment: underlying_instrument.exchange_segment,
+          segment: underlying_instrument.segment,
           security_id: underlying_instrument.security_id
         )
       end

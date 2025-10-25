@@ -2,7 +2,7 @@
 
 # Start ATM options service if WebSocket is enabled
 Rails.application.config.after_initialize do
-  if Rails.env.development?
+  if Rails.env.development? && !Rails.env.test?
     Rails.logger.info("[AtmOptions] Starting ATM options service")
     begin
       Live::AtmOptionsService.instance.start!
@@ -11,6 +11,6 @@ Rails.application.config.after_initialize do
       Rails.logger.error("[AtmOptions] Backtrace: #{e.backtrace.first(5).join(', ')}")
     end
   else
-    Rails.logger.info("[AtmOptions] Not starting - not in development mode")
+    Rails.logger.info("[AtmOptions] Not starting - not in development mode or in test environment")
   end
 end

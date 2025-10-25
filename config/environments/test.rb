@@ -50,4 +50,12 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Disable trading system in test environment
+  config.x.dhanhq = ActiveSupport::InheritableOptions.new(
+    enabled: false,
+    ws_enabled: false,
+    order_ws_enabled: false,
+    enable_order_logging: false
+  )
 end

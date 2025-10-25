@@ -41,8 +41,13 @@ module Orders
 
         # Only place order if ENABLE_ORDER flag is set
         if order_placement_enabled?
-          order = DhanHQ::Models::Order.create(payload)
-          Rails.logger.info("[Orders] BUY Order placed successfully")
+          begin
+            order = DhanHQ::Models::Order.create(payload)
+            Rails.logger.info("[Orders] BUY Order placed successfully")
+          rescue StandardError => e
+            Rails.logger.error("[Orders] Failed to place order: #{e.class} - #{e.message}")
+            order = nil
+          end
         else
           Rails.logger.info("[Orders] BUY Order NOT placed - ENABLE_ORDER=false (dry run mode)")
           order = nil
@@ -85,8 +90,13 @@ module Orders
 
         # Only place order if ENABLE_ORDER flag is set
         if order_placement_enabled?
-          order = DhanHQ::Models::Order.create(payload)
-          Rails.logger.info("[Orders] SELL Order placed successfully")
+          begin
+            order = DhanHQ::Models::Order.create(payload)
+            Rails.logger.info("[Orders] SELL Order placed successfully")
+          rescue StandardError => e
+            Rails.logger.error("[Orders] Failed to place order: #{e.class} - #{e.message}")
+            order = nil
+          end
         else
           Rails.logger.info("[Orders] SELL Order NOT placed - ENABLE_ORDER=false (dry run mode)")
           order = nil

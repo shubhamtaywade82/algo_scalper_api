@@ -1,3 +1,18 @@
+# == Schema Information
+#
+# Table name: settings
+#
+#  id         :integer          not null, primary key
+#  key        :string           not null
+#  value      :text
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#
+# Indexes
+#
+#  index_settings_on_key  (key) UNIQUE
+#
+
 # frozen_string_literal: true
 
 class Setting < ApplicationRecord

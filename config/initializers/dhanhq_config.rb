@@ -16,9 +16,9 @@ end
 # Configure Rails app settings for DhanHQ integration
 Rails.application.configure do
   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
-    enabled: true,  # Always enabled - no ENV check needed
-    ws_enabled: true,  # Always enabled - no ENV check needed
-    order_ws_enabled: true,  # Always enabled - no ENV check needed
+    enabled: !Rails.env.test?,  # Disable in test environment
+    ws_enabled: !Rails.env.test?,  # Disable WebSocket in test environment
+    order_ws_enabled: !Rails.env.test?,  # Disable order WebSocket in test environment
     enable_order_logging: ENV["ENABLE_ORDER"] == "true",  # Order payload logging
     ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
     ws_watchlist: ENV["DHANHQ_WS_WATCHLIST"],

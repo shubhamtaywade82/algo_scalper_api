@@ -148,6 +148,12 @@ RSpec.describe Orders::Placer do
           "[Orders] Placing BUY order: seg=#{segment}, sid=#{security_id}, qty=#{quantity}, client_order_id=#{client_order_id}"
         )
 
+        expect(Rails.logger).to receive(:info).with(
+          match(/\[Orders\] BUY Order Payload:/)
+        )
+
+        expect(Rails.logger).to receive(:info).with("[Orders] BUY Order placed successfully")
+
         described_class.buy_market!(
           seg: segment,
           sid: security_id,
@@ -204,6 +210,12 @@ RSpec.describe Orders::Placer do
         expect(Rails.logger).to receive(:info).with(
           "[Orders] Placing SELL order: seg=#{segment}, sid=#{security_id}, qty=#{quantity}, client_order_id=#{client_order_id}"
         )
+
+        expect(Rails.logger).to receive(:info).with(
+          match(/\[Orders\] SELL Order Payload:/)
+        )
+
+        expect(Rails.logger).to receive(:info).with("[Orders] SELL Order placed successfully")
 
         described_class.sell_market!(
           seg: segment,
@@ -449,6 +461,12 @@ RSpec.describe Orders::Placer do
         expect(Rails.logger).to receive(:info).with(
           "[Orders] Placing BUY order: seg=#{nse_derivative_segment}, sid=#{derivative_security_id}, qty=50, client_order_id=TEST-DERIVATIVE"
         )
+
+        expect(Rails.logger).to receive(:info).with(
+          "[Orders] BUY Order Payload: {:transaction_type=>\"BUY\", :exchange_segment=>\"#{nse_derivative_segment}\", :security_id=>\"#{derivative_security_id}\", :quantity=>50, :order_type=>\"MARKET\", :product_type=>\"INTRADAY\", :validity=>\"DAY\", :correlation_id=>\"TEST-DERIVATIVE\", :disclosed_quantity=>0}"
+        )
+
+        expect(Rails.logger).to receive(:info).with("[Orders] BUY Order placed successfully")
 
         described_class.buy_market!(
           seg: nse_derivative_segment,  # This should be derivative.exchange_segment
