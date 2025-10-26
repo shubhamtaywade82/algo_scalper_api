@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "bigdecimal"
+require 'bigdecimal'
 
 module Trading
   module Indicators
@@ -16,16 +16,16 @@ module Trading
         change = decimal(curr) - decimal(prev)
         if change.positive?
           gains << change
-          losses << BigDecimal("0")
+          losses << BigDecimal(0)
         else
-          gains << BigDecimal("0")
+          gains << BigDecimal(0)
           losses << change.abs
         end
       end
 
       avg_gain = average(gains.last(period))
       avg_loss = average(losses.last(period))
-      return BigDecimal("50") if avg_loss.zero?
+      return BigDecimal(50) if avg_loss.zero?
 
       rs = avg_gain / avg_loss
       100 - (100 / (1 + rs))
@@ -34,16 +34,16 @@ module Trading
     def atr(candles, period: 7)
       return if candles.size < period + 1
 
-      trs = candles.each_cons(2).map do |prev, curr|
+      trs = candles.each_cons(2).filter_map do |prev, curr|
         high = curr[:high]
         low = curr[:low]
         prev_close = prev[:close]
 
         next unless high && low && prev_close
 
-          ranges = [ high - low, (high - prev_close).abs, (low - prev_close).abs ]
+        ranges = [high - low, (high - prev_close).abs, (low - prev_close).abs]
         ranges.compact.max
-      end.compact
+      end
 
       average(trs.last(period))
     end
@@ -68,13 +68,13 @@ module Trading
 
     def average(values)
       values = Array(values).compact.map { |value| decimal(value) }
-      return BigDecimal("0") if values.empty?
+      return BigDecimal(0) if values.empty?
 
-      values.sum(BigDecimal("0")) / values.size
+      values.sum(BigDecimal(0)) / values.size
     end
 
     def decimal(value)
-      return BigDecimal("0") if value.nil?
+      return BigDecimal(0) if value.nil?
 
       BigDecimal(value.to_s)
     end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "singleton"
+require 'singleton'
 
 module Signal
   # Coordinates periodic signal evaluation for configured indices.
@@ -26,7 +26,7 @@ module Signal
 
         indices = Array(AlgoConfig.fetch[:indices])
         @thread = Thread.new do
-          Thread.current.name = "signal-scheduler"
+          Thread.current.name = 'signal-scheduler'
           loop do
             break if Risk::CircuitBreaker.instance.tripped?
 

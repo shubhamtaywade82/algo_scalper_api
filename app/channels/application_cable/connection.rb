@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "securerandom"
+require 'securerandom'
 
 module ApplicationCable
   class Connection < ActionCable::Connection::Base

@@ -55,7 +55,7 @@
 
 # frozen_string_literal: true
 
-require "bigdecimal"
+require 'bigdecimal'
 
 class Instrument < ApplicationRecord
   include InstrumentHelpers
@@ -63,7 +63,7 @@ class Instrument < ApplicationRecord
   has_many :derivatives, dependent: :destroy
   accepts_nested_attributes_for :derivatives, allow_destroy: true
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
-  has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: "WatchlistItem"
+  has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: 'WatchlistItem'
   has_many :position_trackers, dependent: :restrict_with_error
 
   scope :enabled, -> { where(enabled: true) }
@@ -73,21 +73,21 @@ class Instrument < ApplicationRecord
   validates :exchange_segment, presence: true, unless: -> { exchange.present? && segment.present? }
 
   SEGMENT_FROM_EXCHANGE = {
-    "IDX_I" => "index",
-    "BSE_IDX" => "index",
-    "NSE_IDX" => "index",
-    "I" => "index",
-    "NSE_EQ" => "equity",
-    "BSE_EQ" => "equity",
-    "E" => "equity",
-    "NSE_FNO" => "derivatives",
-    "BSE_FNO" => "derivatives",
-    "D" => "derivatives",
-    "NSE_CURRENCY" => "currency",
-    "BSE_CURRENCY" => "currency",
-    "C" => "currency",
-    "MCX_COMM" => "commodity",
-    "M" => "commodity"
+    'IDX_I' => 'index',
+    'BSE_IDX' => 'index',
+    'NSE_IDX' => 'index',
+    'I' => 'index',
+    'NSE_EQ' => 'equity',
+    'BSE_EQ' => 'equity',
+    'E' => 'equity',
+    'NSE_FNO' => 'derivatives',
+    'BSE_FNO' => 'derivatives',
+    'D' => 'derivatives',
+    'NSE_CURRENCY' => 'currency',
+    'BSE_CURRENCY' => 'currency',
+    'C' => 'currency',
+    'MCX_COMM' => 'commodity',
+    'M' => 'commodity'
   }.freeze
 
   class << self
@@ -132,7 +132,7 @@ class Instrument < ApplicationRecord
     disable_caching = freshness_config[:disable_option_chain_caching] || false
 
     if disable_caching
-      Rails.logger.debug("[Instrument] Fresh data mode - bypassing option chain cache for #{symbol_name}")
+      Rails.logger.debug { "[Instrument] Fresh data mode - bypassing option chain cache for #{symbol_name}" }
       return fetch_fresh_option_chain(expiry)
     end
 
@@ -141,7 +141,7 @@ class Instrument < ApplicationRecord
     cached_data = Rails.cache.read(cache_key)
 
     if cached_data && !option_chain_stale?(expiry)
-      Rails.logger.debug("[Instrument] Using cached option chain for #{symbol_name} #{expiry}")
+      Rails.logger.debug { "[Instrument] Using cached option chain for #{symbol_name} #{expiry}" }
       return cached_data
     end
 
@@ -151,7 +151,7 @@ class Instrument < ApplicationRecord
       cache_duration_minutes = freshness_config[:option_chain_cache_duration_minutes] || 2
       Rails.cache.write(cache_key, fresh_data, expires_in: cache_duration_minutes.minutes)
       Rails.cache.write("#{cache_key}:timestamp", Time.current, expires_in: cache_duration_minutes.minutes)
-      Rails.logger.debug("[Instrument] Cached fresh option chain for #{symbol_name} #{expiry}")
+      Rails.logger.debug { "[Instrument] Cached fresh option chain for #{symbol_name} #{expiry}" }
     end
 
     fresh_data
@@ -167,7 +167,7 @@ class Instrument < ApplicationRecord
 
     filtered_data = filter_option_chain_data(data)
 
-    { last_price: data["last_price"], oc: filtered_data }
+    { last_price: data['last_price'], oc: filtered_data }
   rescue StandardError => e
     Rails.logger.error("Failed to fetch Option Chain for Instrument #{security_id}: #{e.message}")
     nil
@@ -186,14 +186,14 @@ class Instrument < ApplicationRecord
   end
 
   def filter_option_chain_data(data)
-    data["oc"].select do |_strike, option_data|
-      call_data = option_data["ce"]
-      put_data = option_data["pe"]
+    data['oc'].select do |_strike, option_data|
+      call_data = option_data['ce']
+      put_data = option_data['pe']
 
-      has_call_values = call_data && call_data.except("implied_volatility").values.any? do |v|
+      has_call_values = call_data && call_data.except('implied_volatility').values.any? do |v|
         numeric_value?(v) && v.to_f.positive?
       end
-      has_put_values = put_data && put_data.except("implied_volatility").values.any? do |v|
+      has_put_values = put_data && put_data.except('implied_volatility').values.any? do |v|
         numeric_value?(v) && v.to_f.positive?
       end
 

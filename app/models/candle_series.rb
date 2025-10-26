@@ -5,7 +5,7 @@ class CandleSeries
 
   attr_reader :symbol, :interval, :candles
 
-  def initialize(symbol:, interval: "5")
+  def initialize(symbol:, interval: '5')
     @symbol = symbol
     @interval = interval
     @candles = []
@@ -30,17 +30,17 @@ class CandleSeries
 
     return resp.map { |c| slice_candle(c) } if resp.is_a?(Array)
 
-    raise "Unexpected candle format: #{resp.class}" unless resp.is_a?(Hash) && resp["high"].is_a?(Array)
+    raise "Unexpected candle format: #{resp.class}" unless resp.is_a?(Hash) && resp['high'].is_a?(Array)
 
-    size = resp["high"].size
+    size = resp['high'].size
     (0...size).map do |i|
       {
-        open: resp["open"][i].to_f,
-        close: resp["close"][i].to_f,
-        high: resp["high"][i].to_f,
-        low: resp["low"][i].to_f,
-        timestamp: Time.zone.at(resp["timestamp"][i]),
-        volume: resp["volume"][i].to_i
+        open: resp['open'][i].to_f,
+        close: resp['close'][i].to_f,
+        high: resp['high'][i].to_f,
+        low: resp['low'][i].to_f,
+        timestamp: Time.zone.at(resp['timestamp'][i]),
+        volume: resp['volume'][i].to_i
       }
     end
   end
@@ -48,12 +48,12 @@ class CandleSeries
   def slice_candle(candle)
     if candle.is_a?(Hash)
       {
-        open: candle[:open] || candle["open"],
-        close: candle[:close] || candle["close"],
-        high: candle[:high] || candle["high"],
-        low: candle[:low] || candle["low"],
-        timestamp: candle[:timestamp] || candle["timestamp"],
-        volume: candle[:volume] || candle["volume"] || 0
+        open: candle[:open] || candle['open'],
+        close: candle[:close] || candle['close'],
+        high: candle[:high] || candle['high'],
+        low: candle[:low] || candle['low'],
+        timestamp: candle[:timestamp] || candle['timestamp'],
+        volume: candle[:volume] || candle['volume'] || 0
       }
     elsif candle.respond_to?(:[]) && candle.size >= 6
       {
@@ -76,12 +76,12 @@ class CandleSeries
 
   def to_hash
     {
-      "timestamp" => candles.map { |c| c.timestamp.to_i },
-      "open" => opens,
-      "high" => highs,
-      "low" => lows,
-      "close" => closes,
-      "volume" => candles.map(&:volume)
+      'timestamp' => candles.map { |c| c.timestamp.to_i },
+      'open' => opens,
+      'high' => highs,
+      'low' => lows,
+      'close' => closes,
+      'volume' => candles.map(&:volume)
     }
   end
 
@@ -166,6 +166,7 @@ class CandleSeries
 
   def rsi(period = 14)
     return nil if candles.empty?
+
     RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: closes, period: period).call
   rescue ArgumentError, TypeError, StandardError => e
     # Don't catch NoMethodError as it indicates programming errors
@@ -177,21 +178,25 @@ class CandleSeries
 
   def moving_average(period = 20)
     return nil if candles.empty?
+
     RubyTechnicalAnalysis::MovingAverages.new(series: closes, period: period)
   end
 
   def sma(period = 20)
     return nil if candles.empty?
+
     moving_average(period)&.sma
   end
 
   def ema(period = 20)
     return nil if candles.empty?
+
     moving_average(period)&.ema
   end
 
   def macd(fast_period = 12, slow_period = 26, signal_period = 9)
-    macd = RubyTechnicalAnalysis::Macd.new(series: closes, fast_period: fast_period, slow_period: slow_period, signal_period: signal_period)
+    macd = RubyTechnicalAnalysis::Macd.new(series: closes, fast_period: fast_period, slow_period: slow_period,
+                                           signal_period: signal_period)
     macd.call
   end
 

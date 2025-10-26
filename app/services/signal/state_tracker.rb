@@ -2,7 +2,7 @@
 
 module Signal
   class StateTracker
-    CACHE_PREFIX = "signal:state"
+    CACHE_PREFIX = 'signal:state'
 
     class << self
       def record(index_key:, direction:, candle_timestamp:, config: {})
@@ -22,7 +22,7 @@ module Signal
           if same_direction && new_candle
             state[:count].to_i + 1
           elsif same_direction
-            [ state[:count].to_i, 1 ].max
+            [state[:count].to_i, 1].max
           else
             1
           end
@@ -34,7 +34,7 @@ module Signal
           last_seen_at: Time.current
         }
 
-        ttl = [ scaling_cfg.fetch(:decay_seconds, 900).to_i, 0 ].max
+        ttl = [scaling_cfg.fetch(:decay_seconds, 900).to_i, 0].max
         Rails.cache.write(key, updated_state, expires_in: ttl)
 
         multiplier = [

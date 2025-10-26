@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "singleton"
+require 'singleton'
 
 module Live
   # Centralised guard for DhanHQ data feeds.
@@ -32,7 +32,7 @@ module Live
       private
 
       def stale_duration(last_seen_at, threshold)
-        last_seen_at ? "#{(Time.current - last_seen_at).round(1)}s (> #{threshold}s)" : "unknown duration"
+        last_seen_at ? "#{(Time.current - last_seen_at).round(1)}s (> #{threshold}s)" : 'unknown duration'
       end
     end
 
@@ -105,8 +105,8 @@ module Live
 
     private
 
-    def with_lock(&block)
-      @mutex.synchronize(&block)
+    def with_lock(&)
+      @mutex.synchronize(&)
     end
 
     def threshold_value(feed)

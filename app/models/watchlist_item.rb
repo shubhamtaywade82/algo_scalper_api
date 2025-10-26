@@ -54,10 +54,10 @@ class WatchlistItem < ApplicationRecord
 
   # Convenience accessors for the polymorphic association
   def instrument
-    watchable if watchable_type == "Instrument"
+    watchable if watchable_type == 'Instrument'
   end
 
   def derivative
-    watchable if watchable_type == "Derivative"
+    watchable if watchable_type == 'Derivative'
   end
 end

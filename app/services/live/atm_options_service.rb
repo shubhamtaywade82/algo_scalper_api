@@ -24,7 +24,7 @@ module Live
         @service_started = false
         unsubscribe_all
         @atm_options.clear
-        Rails.logger.info("[AtmOptions] Stopped ATM options service")
+        Rails.logger.info('[AtmOptions] Stopped ATM options service')
       end
     end
 
@@ -85,7 +85,6 @@ module Live
           }
 
           Rails.logger.info("[AtmOptions] #{index_key} ATM: CALL #{atm_strikes[:call][:strike]} PUT #{atm_strikes[:put][:strike]}")
-
         rescue StandardError => e
           Rails.logger.error("[AtmOptions] Failed to load ATM options for #{index_key}: #{e.message}")
         end
@@ -97,7 +96,7 @@ module Live
       all_options = []
 
       @atm_options.each do |index_key, options|
-        [ :call, :put ].each do |option_type|
+        %i[call put].each do |option_type|
           option = options[option_type]
           next unless option
 
@@ -122,21 +121,18 @@ module Live
         all_options.each do |option|
           Rails.logger.info("[AtmOptions] Subscribed to #{option[:index_key]} #{option[:option_type].upcase} #{option[:strike]}")
         end
-
       rescue StandardError => e
         Rails.logger.error("[AtmOptions] Failed to batch subscribe to options: #{e.message}")
 
         # Fallback to individual subscriptions
         all_options.each do |option|
-          begin
-            Live::MarketFeedHub.instance.subscribe(
-              segment: option[:segment],
-              security_id: option[:security_id]
-            )
-            Rails.logger.info("[AtmOptions] Fallback subscribed to #{option[:index_key]} #{option[:option_type].upcase} #{option[:strike]}")
-          rescue StandardError => fallback_error
-            Rails.logger.error("[AtmOptions] Failed to subscribe to #{option[:index_key]} #{option[:option_type]}: #{fallback_error.message}")
-          end
+          Live::MarketFeedHub.instance.subscribe(
+            segment: option[:segment],
+            security_id: option[:security_id]
+          )
+          Rails.logger.info("[AtmOptions] Fallback subscribed to #{option[:index_key]} #{option[:option_type].upcase} #{option[:strike]}")
+        rescue StandardError => fallback_error
+          Rails.logger.error("[AtmOptions] Failed to subscribe to #{option[:index_key]} #{option[:option_type]}: #{fallback_error.message}")
         end
       end
     end
@@ -146,7 +142,7 @@ module Live
       all_options = []
 
       @atm_options.each do |index_key, options|
-        [ :call, :put ].each do |option_type|
+        %i[call put].each do |option_type|
           option = options[option_type]
           next unless option
 
@@ -171,21 +167,18 @@ module Live
         all_options.each do |option|
           Rails.logger.info("[AtmOptions] Unsubscribed from #{option[:index_key]} #{option[:option_type].upcase} #{option[:strike]}")
         end
-
       rescue StandardError => e
         Rails.logger.error("[AtmOptions] Failed to batch unsubscribe from options: #{e.message}")
 
         # Fallback to individual unsubscriptions
         all_options.each do |option|
-          begin
-            Live::MarketFeedHub.instance.unsubscribe(
-              segment: option[:segment],
-              security_id: option[:security_id]
-            )
-            Rails.logger.info("[AtmOptions] Fallback unsubscribed from #{option[:index_key]} #{option[:option_type].upcase} #{option[:strike]}")
-          rescue StandardError => fallback_error
-            Rails.logger.warn("[AtmOptions] Failed to unsubscribe from #{option[:index_key]} #{option[:option_type]}: #{fallback_error.message}")
-          end
+          Live::MarketFeedHub.instance.unsubscribe(
+            segment: option[:segment],
+            security_id: option[:security_id]
+          )
+          Rails.logger.info("[AtmOptions] Fallback unsubscribed from #{option[:index_key]} #{option[:option_type].upcase} #{option[:strike]}")
+        rescue StandardError => fallback_error
+          Rails.logger.warn("[AtmOptions] Failed to unsubscribe from #{option[:index_key]} #{option[:option_type]}: #{fallback_error.message}")
         end
       end
     end
@@ -196,11 +189,9 @@ module Live
       next_thursday = today + ((4 - today.wday) % 7).days
 
       # If today is Thursday and market is still open, use next Thursday
-      if today.wday == 4 && Time.current.hour < 15
-        next_thursday += 7.days
-      end
+      next_thursday += 7.days if today.wday == 4 && Time.current.hour < 15
 
-      next_thursday.strftime("%Y-%m-%d")
+      next_thursday.strftime('%Y-%m-%d')
     end
 
     def find_atm_strikes(option_chain, current_ltp)
@@ -208,7 +199,7 @@ module Live
       return { call: nil, put: nil } unless option_chain.is_a?(Array) && option_chain.any?
 
       # Find the closest strikes to current LTP
-      strikes = option_chain.map do |option|
+      strikes = option_chain.filter_map do |option|
         if option.is_a?(Hash) && option[:strike]
           option[:strike]
         elsif option.respond_to?(:strike)
@@ -217,7 +208,7 @@ module Live
           Rails.logger.warn("[AtmOptions] Invalid option structure: #{option.inspect}")
           nil
         end
-      end.compact.uniq.sort
+      end.uniq.sort
 
       return { call: nil, put: nil } if strikes.empty?
 
@@ -236,7 +227,7 @@ module Live
                       elsif option.respond_to?(:option_type)
                         option.option_type
                       end
-        strike == atm_strike && option_type == "CE"
+        strike == atm_strike && option_type == 'CE'
       end
 
       put_option = option_chain.find do |option|
@@ -250,7 +241,7 @@ module Live
                       elsif option.respond_to?(:option_type)
                         option.option_type
                       end
-        strike == atm_strike && option_type == "PE"
+        strike == atm_strike && option_type == 'PE'
       end
 
       {

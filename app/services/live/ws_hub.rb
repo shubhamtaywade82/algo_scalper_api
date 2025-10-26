@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "singleton"
+require 'singleton'
 
 module Live
   class WsHub
@@ -16,9 +16,7 @@ module Live
       delegate.unsubscribe(segment: seg, security_id: sid)
     end
 
-    def running?
-      delegate.running?
-    end
+    delegate :running?, to: :delegate
 
     private
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "bigdecimal"
+require 'bigdecimal'
 
 module Capital
   class Allocator
@@ -15,9 +15,10 @@ module Capital
 
     class << self
       def qty_for(index_cfg:, entry_price:, derivative_lot_size:, scale_multiplier: 1)
-        multiplier = [ scale_multiplier.to_i, 1 ].max
+        multiplier = [scale_multiplier.to_i, 1].max
         capital_available = available_cash
         return 0 if capital_available.zero?
+
         capital_available_f = capital_available.to_f
 
         return 0 if entry_price.to_f <= 0
@@ -32,7 +33,7 @@ module Capital
         allocation = capital_available_f * effective_alloc_pct
         # Always use derivative lot size - no fallback to index config
         lot_size = derivative_lot_size.to_i
-        Rails.logger.debug("[Capital] Using derivative lot_size: #{lot_size}")
+        Rails.logger.debug { "[Capital] Using derivative lot_size: #{lot_size}" }
         return 0 if lot_size <= 0
 
         # Safety check: Can we afford at least 1 lot?
@@ -43,15 +44,15 @@ module Capital
         end
 
         cost_per_lot = entry_price.to_f * lot_size
-        scaled_allocation = [ allocation * multiplier, capital_available_f ].min
+        scaled_allocation = [allocation * multiplier, capital_available_f].min
         risk_capital = capital_available_f * effective_risk_pct
-        risk_capital_scaled = [ risk_capital * multiplier, capital_available_f ].min
+        risk_capital_scaled = [risk_capital * multiplier, capital_available_f].min
 
         max_by_allocation = (scaled_allocation / cost_per_lot).floor * lot_size
         max_by_risk = (risk_capital_scaled / (entry_price.to_f * 0.30)).floor * lot_size
 
-        quantity = [ max_by_allocation, max_by_risk ].min
-        final_quantity = [ [ quantity, lot_size ].max, lot_size * 100 ].min
+        quantity = [max_by_allocation, max_by_risk].min
+        final_quantity = [[quantity, lot_size].max, lot_size * 100].min
 
         # Safety check: Ensure final buy value doesn't exceed available capital
         final_buy_value = entry_price.to_f * final_quantity
@@ -60,11 +61,11 @@ module Capital
           # Reduce quantity to fit within available capital
           max_affordable_lots = (capital_available_f / cost_per_lot).floor
           final_quantity = max_affordable_lots * lot_size
-          final_quantity = [ final_quantity, lot_size ].max # Ensure at least 1 lot
+          final_quantity = [final_quantity, lot_size].max # Ensure at least 1 lot
           Rails.logger.info("[Capital] Adjusted quantity to fit available capital: #{final_quantity}")
         end
 
-        Rails.logger.info("[Capital] Calculation breakdown:")
+        Rails.logger.info('[Capital] Calculation breakdown:')
         Rails.logger.info("  - Available capital: ₹#{capital_available}")
         Rails.logger.info("  - Capital band: #{policy[:upto] == Float::INFINITY ? 'Large' : "Up to ₹#{policy[:upto]}"}")
         Rails.logger.info("  - Effective allocation %: #{effective_alloc_pct * 100}%")
@@ -91,9 +92,9 @@ module Capital
       def deployment_policy(balance)
         band = CAPITAL_BANDS.find { |b| balance <= b[:upto] } || CAPITAL_BANDS.last
         # Allow env overrides (optional)
-        alloc = ENV["ALLOC_PCT"]&.to_f || band[:alloc_pct]
-        r_pt  = ENV["RISK_PER_TRADE_PCT"]&.to_f || band[:risk_per_trade_pct]
-        d_ml  = ENV["DAILY_MAX_LOSS_PCT"]&.to_f || band[:daily_max_loss_pct]
+        alloc = ENV['ALLOC_PCT']&.to_f || band[:alloc_pct]
+        r_pt  = ENV['RISK_PER_TRADE_PCT']&.to_f || band[:risk_per_trade_pct]
+        d_ml  = ENV['DAILY_MAX_LOSS_PCT']&.to_f || band[:daily_max_loss_pct]
 
         {
           upto: band[:upto],
@@ -107,18 +108,18 @@ module Capital
         data = DhanHQ::Models::Funds.fetch
         value = if data.respond_to?(:available_balance)
                   data.available_balance
-        elsif data.respond_to?(:available_cash)
+                elsif data.respond_to?(:available_cash)
                   data.available_cash
-        elsif data.is_a?(Hash)
+                elsif data.is_a?(Hash)
                   data[:available_balance] || data[:available_cash]
-        end
+                end
 
-        return BigDecimal("0") if value.nil?
+        return BigDecimal(0) if value.nil?
 
         value.is_a?(BigDecimal) ? value : BigDecimal(value.to_s)
       rescue StandardError => e
         Rails.logger.error("Failed to fetch available cash: #{e.class} - #{e.message}")
-        BigDecimal("0")
+        BigDecimal(0)
       end
     end
   end

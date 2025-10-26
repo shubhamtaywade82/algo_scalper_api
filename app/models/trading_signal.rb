@@ -20,9 +20,9 @@
 
 class TradingSignal < ApplicationRecord
   DIRECTIONS = {
-    bullish: "bullish",
-    bearish: "bearish",
-    avoid: "avoid"
+    bullish: 'bullish',
+    bearish: 'bearish',
+    avoid: 'avoid'
   }.freeze
 
   validates :index_key, presence: true
@@ -35,9 +35,10 @@ class TradingSignal < ApplicationRecord
   scope :for_index, ->(index_key) { where(index_key: index_key) }
   scope :for_direction, ->(direction) { where(direction: direction) }
   scope :recent, ->(hours = 24) { where(signal_timestamp: hours.hours.ago..Time.current) }
-  scope :high_confidence, ->(threshold = 0.7) { where("confidence_score >= ?", threshold) }
+  scope :high_confidence, ->(threshold = 0.7) { where(confidence_score: threshold..) }
 
-  def self.create_from_analysis(index_key:, direction:, timeframe:, supertrend_value:, adx_value:, candle_timestamp:, confidence_score: nil, metadata: {})
+  def self.create_from_analysis(index_key:, direction:, timeframe:, supertrend_value:, adx_value:, candle_timestamp:,
+                                confidence_score: nil, metadata: {})
     create!(
       index_key: index_key,
       direction: direction,
@@ -55,14 +56,14 @@ class TradingSignal < ApplicationRecord
   end
 
   def confidence_level
-    return "unknown" unless confidence_score
+    return 'unknown' unless confidence_score
 
     case confidence_score
-    when 0.8..1.0 then "very_high"
-    when 0.6..0.8 then "high"
-    when 0.4..0.6 then "medium"
-    when 0.2..0.4 then "low"
-    else "very_low"
+    when 0.8..1.0 then 'very_high'
+    when 0.6..0.8 then 'high'
+    when 0.4..0.6 then 'medium'
+    when 0.2..0.4 then 'low'
+    else 'very_low'
     end
   end
 
@@ -75,20 +76,20 @@ class TradingSignal < ApplicationRecord
   end
 
   def calculate_accuracy
-    return 0.0 unless metadata.present?
+    return 0.0 if metadata.blank?
 
-    execution_price = metadata["execution_price"]
-    exit_price = metadata["exit_price"]
-    final_status = metadata["final_status"]
+    execution_price = metadata['execution_price']
+    exit_price = metadata['exit_price']
+    final_status = metadata['final_status']
 
     return 0.0 unless execution_price && exit_price && final_status
 
     # Calculate accuracy based on final status and price movement
     case final_status
-    when "profitable"
+    when 'profitable'
       # Positive accuracy for profitable trades
       ((exit_price.to_f - execution_price.to_f) / execution_price.to_f) * 100
-    when "loss"
+    when 'loss'
       # Negative accuracy for losing trades
       ((exit_price.to_f - execution_price.to_f) / execution_price.to_f) * 100
     else

@@ -55,7 +55,7 @@ module Market
       # Checks if a given date is a trading day
       def trading_day?(date)
         return false if date.saturday? || date.sunday?
-        return false if MARKET_HOLIDAYS.include?(date.strftime("%Y-%m-%d"))
+        return false if MARKET_HOLIDAYS.include?(date.strftime('%Y-%m-%d'))
 
         true
       end

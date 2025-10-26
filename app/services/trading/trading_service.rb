@@ -49,11 +49,11 @@ module Trading
       @order_model.create(
         security_id: derivative.security_id,
         exchange_segment: derivative.exchange_segment,
-        transaction_type: "BUY",
-        order_type: "MARKET",
+        transaction_type: 'BUY',
+        order_type: 'MARKET',
         quantity: derivative.lot_size,
-        product_type: "INTRADAY",
-        validity: "DAY",
+        product_type: 'INTRADAY',
+        validity: 'DAY',
         remarks: "Auto entry for #{instrument.symbol_name}"
       )
     end
@@ -66,7 +66,7 @@ module Trading
           order[:order_id] || order[:order_no]
         end
 
-      raise "Dhan order id missing" unless order_id
+      raise 'Dhan order id missing' unless order_id
 
       PositionTracker.create!(
         instrument: instrument,
@@ -90,8 +90,8 @@ module Trading
 
     def dhanhq_enabled?
       # Always enabled - just check for credentials
-      client_id = ENV["DHANHQ_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
-      access    = ENV["DHANHQ_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
+      client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
     end
   end

@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require "singleton"
+require 'singleton'
 
 module Risk
   class CircuitBreaker
     include Singleton
 
-    TRIP_CACHE_KEY = "risk:circuit_breaker:tripped"
+    TRIP_CACHE_KEY = 'risk:circuit_breaker:tripped'
 
     def tripped?
       !!Rails.cache.read(TRIP_CACHE_KEY)

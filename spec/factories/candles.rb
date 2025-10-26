@@ -3,77 +3,77 @@
 FactoryBot.define do
   factory :candle do
     timestamp { Time.current }
-    open { 25000.0 }
-    high { 25100.0 }
-    low { 24900.0 }
-    close { 25050.0 }
-    volume { 1000000 }
+    open { 25_000.0 }
+    high { 25_100.0 }
+    low { 24_900.0 }
+    close { 25_050.0 }
+    volume { 1_000_000 }
 
     trait :bullish do
-      open { 25000.0 }
-      high { 25100.0 }
-      low { 24950.0 }
-      close { 25080.0 }
+      open { 25_000.0 }
+      high { 25_100.0 }
+      low { 24_950.0 }
+      close { 25_080.0 }
     end
 
     trait :bearish do
-      open { 25000.0 }
-      high { 25050.0 }
-      low { 24900.0 }
-      close { 24920.0 }
+      open { 25_000.0 }
+      high { 25_050.0 }
+      low { 24_900.0 }
+      close { 24_920.0 }
     end
 
     trait :doji do
-      open { 25000.0 }
-      high { 25020.0 }
-      low { 24980.0 }
-      close { 25000.0 }
+      open { 25_000.0 }
+      high { 25_020.0 }
+      low { 24_980.0 }
+      close { 25_000.0 }
     end
 
     trait :hammer do
-      open { 25000.0 }
-      high { 25050.0 }
-      low { 24800.0 }
-      close { 25020.0 }
+      open { 25_000.0 }
+      high { 25_050.0 }
+      low { 24_800.0 }
+      close { 25_020.0 }
     end
 
     trait :shooting_star do
-      open { 25000.0 }
-      high { 25200.0 }
-      low { 24980.0 }
-      close { 25010.0 }
+      open { 25_000.0 }
+      high { 25_200.0 }
+      low { 24_980.0 }
+      close { 25_010.0 }
     end
 
     trait :high_volume do
-      volume { 5000000 }
+      volume { 5_000_000 }
     end
 
     trait :low_volume do
-      volume { 100000 }
+      volume { 100_000 }
     end
 
     trait :nifty_candle do
-      open { 25000.0 }
-      high { 25100.0 }
-      low { 24900.0 }
-      close { 25050.0 }
-      volume { 2000000 }
+      open { 25_000.0 }
+      high { 25_100.0 }
+      low { 24_900.0 }
+      close { 25_050.0 }
+      volume { 2_000_000 }
     end
 
     trait :banknifty_candle do
-      open { 56000.0 }
-      high { 56200.0 }
-      low { 55800.0 }
-      close { 56100.0 }
-      volume { 1500000 }
+      open { 56_000.0 }
+      high { 56_200.0 }
+      low { 55_800.0 }
+      close { 56_100.0 }
+      volume { 1_500_000 }
     end
 
     trait :sensex_candle do
-      open { 82000.0 }
-      high { 82500.0 }
-      low { 81800.0 }
-      close { 82300.0 }
-      volume { 3000000 }
+      open { 82_000.0 }
+      high { 82_500.0 }
+      low { 81_800.0 }
+      close { 82_300.0 }
+      volume { 3_000_000 }
     end
 
     trait :recent do
@@ -101,66 +101,66 @@ FactoryBot.define do
     end
 
     trait :with_gap_up do
-      open { 25200.0 }
-      high { 25300.0 }
-      low { 25150.0 }
-      close { 25250.0 }
+      open { 25_200.0 }
+      high { 25_300.0 }
+      low { 25_150.0 }
+      close { 25_250.0 }
     end
 
     trait :with_gap_down do
-      open { 24800.0 }
-      high { 24900.0 }
-      low { 24700.0 }
-      close { 24850.0 }
+      open { 24_800.0 }
+      high { 24_900.0 }
+      low { 24_700.0 }
+      close { 24_850.0 }
     end
 
     trait :small_body do
-      open { 25000.0 }
-      high { 25020.0 }
-      low { 24980.0 }
-      close { 25010.0 }
+      open { 25_000.0 }
+      high { 25_020.0 }
+      low { 24_980.0 }
+      close { 25_010.0 }
     end
 
     trait :large_body do
-      open { 25000.0 }
-      high { 25200.0 }
-      low { 24800.0 }
-      close { 25150.0 }
+      open { 25_000.0 }
+      high { 25_200.0 }
+      low { 24_800.0 }
+      close { 25_150.0 }
     end
 
     trait :long_wick_high do
-      open { 25000.0 }
-      high { 25200.0 }
-      low { 24950.0 }
-      close { 25020.0 }
+      open { 25_000.0 }
+      high { 25_200.0 }
+      low { 24_950.0 }
+      close { 25_020.0 }
     end
 
     trait :long_wick_low do
-      open { 25000.0 }
-      high { 25050.0 }
-      low { 24800.0 }
-      close { 24980.0 }
+      open { 25_000.0 }
+      high { 25_050.0 }
+      low { 24_800.0 }
+      close { 24_980.0 }
     end
 
     trait :spinning_top do
-      open { 25000.0 }
-      high { 25030.0 }
-      low { 24970.0 }
-      close { 25005.0 }
+      open { 25_000.0 }
+      high { 25_030.0 }
+      low { 24_970.0 }
+      close { 25_005.0 }
     end
 
     trait :marubozu_bullish do
-      open { 25000.0 }
-      high { 25100.0 }
-      low { 25000.0 }
-      close { 25100.0 }
+      open { 25_000.0 }
+      high { 25_100.0 }
+      low { 25_000.0 }
+      close { 25_100.0 }
     end
 
     trait :marubozu_bearish do
-      open { 25000.0 }
-      high { 25000.0 }
-      low { 24900.0 }
-      close { 24900.0 }
+      open { 25_000.0 }
+      high { 25_000.0 }
+      low { 24_900.0 }
+      close { 24_900.0 }
     end
   end
 end

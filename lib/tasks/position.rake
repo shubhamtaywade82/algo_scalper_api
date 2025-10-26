@@ -1,21 +1,23 @@
+# frozen_string_literal: true
+
 namespace :position do
-  desc "Sync positions between DhanHQ and PositionTracker database"
+  desc 'Sync positions between DhanHQ and PositionTracker database'
   task sync: :environment do
-    puts "Starting position synchronization..."
+    puts 'Starting position synchronization...'
 
     begin
       Live::PositionSyncService.instance.force_sync!
-      puts "Position synchronization completed successfully!"
+      puts 'Position synchronization completed successfully!'
     rescue StandardError => e
       puts "Position synchronization failed: #{e.class} - #{e.message}"
       exit 1
     end
   end
 
-  desc "Show position sync status"
+  desc 'Show position sync status'
   task status: :environment do
-    puts "Position Sync Status:"
-    puts "===================="
+    puts 'Position Sync Status:'
+    puts '===================='
 
     begin
       # Count DhanHQ positions
@@ -37,13 +39,12 @@ namespace :position do
 
       if untracked.any?
         puts "\nUntracked Position Details:"
-      untracked.each do |pos|
-        security_id = pos.security_id
-        symbol = pos.trading_symbol
-        puts "  - #{security_id}: #{symbol}"
+        untracked.each do |pos|
+          security_id = pos.security_id
+          symbol = pos.trading_symbol
+          puts "  - #{security_id}: #{symbol}"
+        end
       end
-      end
-
     rescue StandardError => e
       puts "Failed to get position status: #{e.class} - #{e.message}"
       exit 1

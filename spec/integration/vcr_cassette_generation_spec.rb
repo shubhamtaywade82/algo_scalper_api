@@ -6,12 +6,12 @@ require 'rails_helper'
 # Run with: bundle exec rspec spec/integration/vcr_cassette_generation_spec.rb
 # Make sure to set DHANHQ_CLIENT_ID and DHANHQ_ACCESS_TOKEN environment variables
 
-RSpec.describe "VCR Cassette Generation", type: :integration, vcr: true do
-  describe "DhanHQ API calls" do
-    context "when making real API calls" do
-      it "records OHLC API call with filtered sensitive data" do
+RSpec.describe 'VCR Cassette Generation', :vcr, type: :integration do
+  describe 'DhanHQ API calls' do
+    context 'when making real API calls' do
+      it 'records OHLC API call with filtered sensitive data' do
         # Skip if no credentials are available
-        skip "No DhanHQ credentials available" unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
+        skip 'No DhanHQ credentials available' unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
 
         # Create a real instrument
         instrument = create(:instrument, :nifty_index)
@@ -24,9 +24,9 @@ RSpec.describe "VCR Cassette Generation", type: :integration, vcr: true do
         expect(result).to be_present
       end
 
-      it "records historical data API call with filtered sensitive data" do
+      it 'records historical data API call with filtered sensitive data' do
         # Skip if no credentials are available
-        skip "No DhanHQ credentials available" unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
+        skip 'No DhanHQ credentials available' unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
 
         # Create a real instrument
         instrument = create(:instrument, :nifty_index)

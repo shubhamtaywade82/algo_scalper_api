@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "bigdecimal"
-require "singleton"
+require 'bigdecimal'
+require 'singleton'
 
 module Live
   class RiskManagerService
@@ -23,7 +23,7 @@ module Live
 
         @running = true
         @thread = Thread.new { monitor_loop }
-        @thread.name = "risk-manager-service"
+        @thread.name = 'risk-manager-service'
       end
     end
 
@@ -40,43 +40,43 @@ module Live
     end
 
     def evaluate_signal_risk(signal_data)
-    confidence = signal_data[:confidence] || 0.0
-    direction = signal_data[:direction]
-    entry_price = signal_data[:entry_price]
-    stop_loss = signal_data[:stop_loss]
-    take_profit = signal_data[:take_profit]
+      confidence = signal_data[:confidence] || 0.0
+      signal_data[:direction]
+      entry_price = signal_data[:entry_price]
+      stop_loss = signal_data[:stop_loss]
+      signal_data[:take_profit]
 
-    # Calculate risk level based on confidence and price levels
-    risk_level = case confidence
-    when 0.8..1.0
-      :low
-    when 0.6...0.8
-      :medium
-    else
-      :high
+      # Calculate risk level based on confidence and price levels
+      risk_level = case confidence
+                   when 0.8..1.0
+                     :low
+                   when 0.6...0.8
+                     :medium
+                   else
+                     :high
+                   end
+
+      # Calculate maximum position size based on risk level
+      max_position_size = case risk_level
+                          when :low
+                            100
+                          when :medium
+                            50
+                          else
+                            25
+                          end
+
+      # Use provided stop loss or calculate default
+      recommended_stop_loss = stop_loss || (entry_price * 0.98) # 2% default stop loss
+
+      {
+        risk_level: risk_level,
+        max_position_size: max_position_size,
+        recommended_stop_loss: recommended_stop_loss
+      }
     end
 
-    # Calculate maximum position size based on risk level
-    max_position_size = case risk_level
-    when :low
-      100
-    when :medium
-      50
-    else
-      25
-    end
-
-    # Use provided stop loss or calculate default
-    recommended_stop_loss = stop_loss || (entry_price * 0.98) # 2% default stop loss
-
-    {
-      risk_level: risk_level,
-      max_position_size: max_position_size,
-      recommended_stop_loss: recommended_stop_loss
-    }
-  end
-
-  private
+    private
 
     def monitor_loop
       while running?
@@ -117,9 +117,7 @@ module Live
         tracker.with_lock do
           tracker.update_pnl!(pnl, pnl_pct: pnl_pct)
 
-          if should_lock_breakeven?(tracker, pnl_pct, risk[:breakeven_after_gain])
-            tracker.lock_breakeven!
-          end
+          tracker.lock_breakeven! if should_lock_breakeven?(tracker, pnl_pct, risk[:breakeven_after_gain])
 
           min_profit = tracker.min_profit_lock(risk[:trail_step_pct] || 0)
           drop_pct = BigDecimal((risk[:exit_drop_pct] || 0.05).to_s)
@@ -154,9 +152,9 @@ module Live
         if quantity.zero? && position
           quantity = if position.respond_to?(:quantity)
                        position.quantity
-          else
+                     else
                        position[:quantity]
-          end.to_i
+                     end.to_i
         end
         next if quantity <= 0
 
@@ -164,21 +162,21 @@ module Live
         ltp_value = BigDecimal(ltp.to_s)
         reason = nil
 
-        if sl_pct > 0
-          stop_price = entry * (BigDecimal("1") - sl_pct)
+        if sl_pct.positive?
+          stop_price = entry * (BigDecimal(1) - sl_pct)
           reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%)" if ltp_value <= stop_price
         end
 
-        if reason.nil? && per_trade_pct > 0
+        if reason.nil? && per_trade_pct.positive?
           invested = entry * quantity
-          loss = [ entry - ltp_value, BigDecimal("0") ].max * quantity
-          if invested > 0 && loss >= invested * per_trade_pct
+          loss = [entry - ltp_value, BigDecimal(0)].max * quantity
+          if invested.positive? && loss >= invested * per_trade_pct
             reason = "per-trade risk #{(per_trade_pct * 100).round(2)}%"
           end
         end
 
-        if reason.nil? && tp_pct > 0
-          target_price = entry * (BigDecimal("1") + tp_pct)
+        if reason.nil? && tp_pct.positive?
+          target_price = entry * (BigDecimal(1) + tp_pct)
           reason = "take-profit (#{(tp_pct * 100).round(2)}%)" if ltp_value >= target_price
         end
 
@@ -196,13 +194,13 @@ module Live
     def enforce_time_based_exit(positions = fetch_positions_indexed)
       # Check if it's time for market close exit (3:20 PM)
       current_time = Time.current
-      exit_time = Time.zone.parse("15:20") # 3:20 PM
+      exit_time = Time.zone.parse('15:20') # 3:20 PM
 
       # Only enforce time-based exit during trading hours and after 3:20 PM
       return unless current_time >= exit_time
 
       # Check if we're still in trading hours (before 3:30 PM)
-      market_close_time = Time.zone.parse("15:30") # 3:30 PM
+      market_close_time = Time.zone.parse('15:30') # 3:30 PM
       return if current_time >= market_close_time
 
       Rails.logger.info("[TimeExit] Enforcing time-based exit at #{current_time.strftime('%H:%M:%S')}")
@@ -214,7 +212,7 @@ module Live
           next unless tracker.status == PositionTracker::STATUSES[:active]
 
           Rails.logger.info("[TimeExit] Triggering time-based exit for #{tracker.order_no}")
-          execute_exit(position, tracker, reason: "time-based exit (3:20 PM)")
+          execute_exit(position, tracker, reason: 'time-based exit (3:20 PM)')
         end
       end
     rescue StandardError => e
@@ -231,26 +229,26 @@ module Live
         Live::FeedHealthService.instance.mark_success!(:funds)
         pnl_today = if funds.respond_to?(:day_pnl)
                       BigDecimal(funds.day_pnl.to_s)
-        elsif funds.is_a?(Hash)
+                    elsif funds.is_a?(Hash)
                       BigDecimal((funds[:day_pnl] || 0).to_s)
-        else
-                      BigDecimal("0")
-        end
+                    else
+                      BigDecimal(0)
+                    end
 
         balance = if funds.respond_to?(:net_balance)
                     BigDecimal(funds.net_balance.to_s)
-        elsif funds.respond_to?(:net_cash)
+                  elsif funds.respond_to?(:net_cash)
                     BigDecimal(funds.net_cash.to_s)
-        elsif funds.is_a?(Hash)
+                  elsif funds.is_a?(Hash)
                     BigDecimal((funds[:net_balance] || funds[:net_cash] || 0).to_s)
-        else
-                    BigDecimal("0")
-        end
+                  else
+                    BigDecimal(0)
+                  end
 
         return if balance <= 0
 
         loss_pct = (pnl_today / balance) * -1
-        if pnl_today < 0 && loss_pct >= limit_pct
+        if pnl_today.negative? && loss_pct >= limit_pct
           Risk::CircuitBreaker.instance.trip!(reason: "daily loss limit reached: #{(loss_pct * 100).round(2)}%")
           Rails.logger.warn("Circuit breaker TRIPPED due to daily loss: #{pnl_today.to_s('F')} against balance #{balance.to_s('F')}")
         end
@@ -275,18 +273,18 @@ module Live
 
     def current_ltp(tracker, position)
       # For options, fetch LTP directly from DhanHQ API to get correct option premium
-      if position && position.respond_to?(:exchange_segment) && position.exchange_segment == "NSE_FNO"
+      if position.respond_to?(:exchange_segment) && position.exchange_segment == 'NSE_FNO'
         begin
-          response = DhanHQ::Models::MarketFeed.ltp({ "NSE_FNO" => [ tracker.security_id.to_i ] })
-          if response["status"] == "success"
-            option_data = response.dig("data", "NSE_FNO", tracker.security_id)
-            if option_data && option_data["last_price"]
-              ltp = BigDecimal(option_data["last_price"].to_s)
+          response = DhanHQ::Models::MarketFeed.ltp({ 'NSE_FNO' => [tracker.security_id.to_i] })
+          if response['status'] == 'success'
+            option_data = response.dig('data', 'NSE_FNO', tracker.security_id)
+            if option_data && option_data['last_price']
+              ltp = BigDecimal(option_data['last_price'].to_s)
               Rails.logger.info("Fetched option LTP for #{tracker.security_id}: #{ltp}")
 
               # Store in Redis for future use
               Live::RedisPnlCache.instance.store_tick(
-                segment: "NSE_FNO",
+                segment: 'NSE_FNO',
                 security_id: tracker.security_id,
                 ltp: ltp,
                 timestamp: Time.current
@@ -298,16 +296,16 @@ module Live
           Rails.logger.error("Failed to fetch option LTP for #{tracker.security_id}: #{e.message}")
 
           # For rate limiting errors, try to get from Redis cache first
-          if e.message.include?("429")
+          if e.message.include?('429')
             Rails.logger.warn("Rate limited - trying Redis cache for #{tracker.security_id}")
-            cached = Live::TickCache.ltp("NSE_FNO", tracker.security_id)
+            cached = Live::TickCache.ltp('NSE_FNO', tracker.security_id)
             if cached
               ltp = BigDecimal(cached.to_s)
               Rails.logger.info("Using cached option LTP for #{tracker.security_id}: #{ltp}")
 
               # Store in Redis for future use
               Live::RedisPnlCache.instance.store_tick(
-                segment: "NSE_FNO",
+                segment: 'NSE_FNO',
                 security_id: tracker.security_id,
                 ltp: ltp,
                 timestamp: Time.current
@@ -328,9 +326,9 @@ module Live
       segment = tracker.segment.presence
       segment ||= if position.respond_to?(:exchange_segment)
                     position.exchange_segment
-      elsif position.is_a?(Hash)
+                  elsif position.is_a?(Hash)
                     position[:exchange_segment]
-      end
+                  end
       segment ||= tracker.instrument&.exchange_segment
 
       cached = Live::TickCache.ltp(segment, tracker.security_id)
@@ -341,11 +339,12 @@ module Live
 
     def current_ltp_with_freshness_check(tracker, position, max_age_seconds: 5)
       # Get segment and security_id for Redis key
-      segment = position&.respond_to?(:exchange_segment) ? position.exchange_segment : tracker.segment
+      segment = position.respond_to?(:exchange_segment) ? position.exchange_segment : tracker.segment
       security_id = tracker.security_id
 
       # Check if tick is fresh in Redis cache
-      if Live::RedisPnlCache.instance.is_tick_fresh?(segment: segment, security_id: security_id, max_age_seconds: max_age_seconds)
+      if Live::RedisPnlCache.instance.is_tick_fresh?(segment: segment, security_id: security_id,
+                                                     max_age_seconds: max_age_seconds)
         tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
         return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
       end
@@ -383,7 +382,7 @@ module Live
 
     def compute_pnl(tracker, position, ltp)
       # For options, use the actual position quantity and cost price from DhanHQ
-      if position && position.respond_to?(:net_qty) && position.respond_to?(:cost_price)
+      if position.respond_to?(:net_qty) && position.respond_to?(:cost_price)
         quantity = position.net_qty.to_i
         cost_price = position.cost_price.to_f
 
@@ -392,7 +391,7 @@ module Live
         # Correct PnL calculation for options: (Current LTP - Cost Price) × Position Quantity
         pnl = (ltp - BigDecimal(cost_price.to_s)) * quantity
 
-        Rails.logger.debug("Option PnL calculation: (#{ltp} - #{cost_price}) × #{quantity} = #{pnl}")
+        Rails.logger.debug { "Option PnL calculation: (#{ltp} - #{cost_price}) × #{quantity} = #{pnl}" }
         return pnl
       end
 
@@ -401,9 +400,9 @@ module Live
       if quantity.zero? && position
         quantity = if position.respond_to?(:quantity)
                      position.quantity
-        else
+                   else
                      position[:quantity]
-        end.to_i
+                   end.to_i
       end
       return nil if quantity.zero?
 
@@ -411,9 +410,9 @@ module Live
       if entry_price.blank? && position
         entry_price = if position.respond_to?(:average_price)
                         position.average_price
-        else
+                      else
                         position[:average_price]
-        end
+                      end
       end
       return nil if entry_price.blank?
 
@@ -425,7 +424,7 @@ module Live
 
     def compute_pnl_pct(tracker, ltp, position = nil)
       # For options, use cost price from DhanHQ position
-      if position && position.respond_to?(:cost_price)
+      if position.respond_to?(:cost_price)
         cost_price = position.cost_price.to_f
         return nil if cost_price.zero?
 
@@ -464,28 +463,28 @@ module Live
       pnl_pct >= BigDecimal(threshold.to_s)
     end
 
-  def execute_exit(position, tracker, reason: "manual")
-    pnl_display = tracker.last_pnl_rupees ? tracker.last_pnl_rupees.to_s : "N/A"
-    Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{pnl_display}).")
-    store_exit_reason(tracker, reason)
+    def execute_exit(position, tracker, reason: 'manual')
+      pnl_display = tracker.last_pnl_rupees ? tracker.last_pnl_rupees.to_s : 'N/A'
+      Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{pnl_display}).")
+      store_exit_reason(tracker, reason)
 
-    # Attempt to exit position and check if successful
-    exit_successful = exit_position(position, tracker)
+      # Attempt to exit position and check if successful
+      exit_successful = exit_position(position, tracker)
 
-    if exit_successful
-      # Clear Redis cache for this tracker
-      Live::RedisPnlCache.instance.clear_tracker(tracker.id)
+      if exit_successful
+        # Clear Redis cache for this tracker
+        Live::RedisPnlCache.instance.clear_tracker(tracker.id)
 
-      # Mark as exited only if order was placed successfully
-      tracker.mark_exited!
-      Rails.logger.info("Successfully exited position #{tracker.order_no}")
-    else
-      Rails.logger.error("Failed to place exit order for #{tracker.order_no} - position remains active")
-      # Don't mark as exited if order placement failed
+        # Mark as exited only if order was placed successfully
+        tracker.mark_exited!
+        Rails.logger.info("Successfully exited position #{tracker.order_no}")
+      else
+        Rails.logger.error("Failed to place exit order for #{tracker.order_no} - position remains active")
+        # Don't mark as exited if order placement failed
+      end
+    rescue StandardError => e
+      Rails.logger.error("Failed to exit position #{tracker.order_no}: #{e.class} - #{e.message}")
     end
-  rescue StandardError => e
-    Rails.logger.error("Failed to exit position #{tracker.order_no}: #{e.class} - #{e.message}")
-  end
 
     def exit_position(position, tracker)
       if position.respond_to?(:exit!)
@@ -500,7 +499,7 @@ module Live
           order = Orders::Placer.exit_position!(
             seg: segment,
             sid: tracker.security_id,
-            client_order_id: "AS-EXIT-#{tracker.order_no[-8..-1]}-#{Time.current.to_i.to_s[-4..-1]}"
+            client_order_id: "AS-EXIT-#{tracker.order_no[-8..]}-#{Time.current.to_i.to_s[-4..]}"
           )
           order.present?
         else
@@ -515,7 +514,7 @@ module Live
 
     def store_exit_reason(tracker, reason)
       metadata = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      tracker.update!(meta: metadata.merge("exit_reason" => reason, "exit_triggered_at" => Time.current))
+      tracker.update!(meta: metadata.merge('exit_reason' => reason, 'exit_triggered_at' => Time.current))
     rescue StandardError => e
       Rails.logger.warn("Failed to persist exit reason for #{tracker.order_no}: #{e.class} - #{e.message}")
     end
@@ -538,7 +537,7 @@ module Live
     def pct_value(value)
       BigDecimal(value.to_s)
     rescue StandardError
-      BigDecimal("0")
+      BigDecimal(0)
     end
   end
 end

@@ -7,15 +7,16 @@ module Entries
         instrument = find_instrument(index_cfg)
         return false unless instrument
 
-        multiplier = [ scale_multiplier.to_i, 1 ].max
+        multiplier = [scale_multiplier.to_i, 1].max
         Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
 
-        side = direction == :bullish ? "long_ce" : "long_pe"
+        side = direction == :bullish ? 'long_ce' : 'long_pe'
         return false unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
         return false if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
+
         ensure_ws_connection!
 
-        Rails.logger.debug("[EntryGuard] Pick data: #{pick.inspect}")
+        Rails.logger.debug { "[EntryGuard] Pick data: #{pick.inspect}" }
         quantity = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
           entry_price: pick[:ltp].to_f,
@@ -66,9 +67,7 @@ module Entries
         return false if current_count >= max_same_side.to_i
 
         # If this would be the second position, check pyramiding rules
-        if current_count == 1
-          return pyramiding_allowed?(active_positions.first)
-        end
+        return pyramiding_allowed?(active_positions.first) if current_count == 1
 
         true
       end
@@ -101,7 +100,7 @@ module Entries
       def ensure_ws_connection!
         # Only check if WebSocket is connected, skip ticks staleness
         unless Live::MarketFeedHub.instance.running?
-          Rails.logger.warn("[EntryGuard] Blocked entry: WebSocket market feed not running")
+          Rails.logger.warn('[EntryGuard] Blocked entry: WebSocket market feed not running')
           raise Live::FeedHealthService::FeedStaleError.new(
             feed: :ws_connection,
             last_seen_at: nil,
@@ -111,11 +110,11 @@ module Entries
         end
 
         # Check funds and positions health (but skip ticks staleness)
-        Live::FeedHealthService.instance.assert_healthy!([ :funds, :positions ])
+        Live::FeedHealthService.instance.assert_healthy!(%i[funds positions])
       end
 
       def ensure_feed_health!
-        Live::FeedHealthService.instance.assert_healthy!([ :funds, :positions, :ticks ])
+        Live::FeedHealthService.instance.assert_healthy!(%i[funds positions ticks])
       end
 
       def find_instrument(index_cfg)
@@ -139,7 +138,7 @@ module Entries
         # DhanHQ correlation_id limit is 25 characters
         # Format: AS-{KEY}-{SID}-{TIMESTAMP}
         # Keep it under 25 chars by using shorter timestamp
-        timestamp = Time.current.to_i.to_s[-6..-1] # Last 6 digits of timestamp
+        timestamp = Time.current.to_i.to_s[-6..] # Last 6 digits of timestamp
         "AS-#{index_cfg[:key][0..3]}-#{pick[:security_id]}-#{timestamp}"
       end
 

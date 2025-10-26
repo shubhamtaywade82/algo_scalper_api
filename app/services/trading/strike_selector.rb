@@ -15,7 +15,7 @@ module Trading
 
       # Expect chain to have arrays/hashes; normalize to contracts with fields we need
       contracts = normalize_chain(chain)
-      type = (signal == :long ? "CALL" : "PUT")
+      type = (signal == :long ? 'CALL' : 'PUT')
 
       filtered = contracts.select do |c|
         c[:option_type] == type && c[:open_interest].to_i >= MIN_OPEN_INTEREST
@@ -33,15 +33,14 @@ module Trading
 
     def find_next_expiry(_instrument)
       # Placeholder: in practice read from instrument.expiry_list
-      (Date.today + 7).to_s
+      (Time.zone.today + 7).to_s
     end
 
     def normalize_chain(chain)
       return chain if chain.is_a?(Array)
       # Example remap
-      if chain.is_a?(Hash) && chain[:option_data].is_a?(Array)
-        return chain[:option_data]
-      end
+      return chain[:option_data] if chain.is_a?(Hash) && chain[:option_data].is_a?(Array)
+
       []
     end
   end
@@ -49,7 +48,7 @@ end
 
 # frozen_string_literal: true
 
-require "bigdecimal"
+require 'bigdecimal'
 
 module Trading
   class StrikeSelector
@@ -73,14 +72,14 @@ module Trading
     private
 
     def next_expiry(instrument)
-      instrument.derivatives.upcoming.limit(1).pluck(:expiry_date).first
+      instrument.derivatives.upcoming.limit(1).pick(:expiry_date)
     end
 
     def fallback_spot(instrument)
       candles = @data_fetcher.fetch_historical_data(
         security_id: instrument.security_id,
         exchange_segment: instrument.exchange_segment,
-        interval: "5minute",
+        interval: '5minute',
         lookback: 5
       )
       last_close = candles.last&.dig(:close)

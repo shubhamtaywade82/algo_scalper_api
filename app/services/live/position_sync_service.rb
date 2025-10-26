@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "singleton"
+require 'singleton'
 
 module Live
   class PositionSyncService
@@ -14,7 +14,7 @@ module Live
     def sync_positions!
       return unless should_sync?
 
-      Rails.logger.info("[PositionSync] Starting position synchronization")
+      Rails.logger.info('[PositionSync] Starting position synchronization')
 
       begin
         # Fetch all active positions from DhanHQ
@@ -57,7 +57,6 @@ module Live
 
         @last_sync = Time.current
         Rails.logger.info("[PositionSync] Synchronization completed - created #{untracked_positions.size} trackers, marked #{orphaned_trackers.size} as exited")
-
       rescue StandardError => e
         Rails.logger.error("[PositionSync] Failed to sync positions: #{e.class} - #{e.message}")
         Rails.logger.error("[PositionSync] Backtrace: #{e.backtrace.first(5).join(', ')}")
@@ -100,21 +99,21 @@ module Live
       # Parse exchange_segment like "NSE_FNO" into ["nse", "derivatives"]
       # DhanHQ uses "NSE_FNO" but our database uses "nse" and "derivatives"
       case exchange_segment
-      when "NSE_FNO"
-        [ "nse", "derivatives" ]
-      when "BSE_FNO"
-        [ "bse", "derivatives" ]
-      when "NSE_EQ"
-        [ "nse", "equity" ]
-      when "BSE_EQ"
-        [ "bse", "equity" ]
+      when 'NSE_FNO'
+        %w[nse derivatives]
+      when 'BSE_FNO'
+        %w[bse derivatives]
+      when 'NSE_EQ'
+        %w[nse equity]
+      when 'BSE_EQ'
+        %w[bse equity]
       else
         # Fallback - try to parse as exchange_segment
-        if exchange_segment&.include?("_")
-          parts = exchange_segment.split("_", 2)
-          [ parts[0].downcase, parts[1].downcase ]
+        if exchange_segment&.include?('_')
+          parts = exchange_segment.split('_', 2)
+          [parts[0].downcase, parts[1].downcase]
         else
-          [ "nse", exchange_segment&.downcase ]
+          ['nse', exchange_segment&.downcase]
         end
       end
     end
@@ -131,7 +130,7 @@ module Live
       exchange, segment = parse_exchange_segment(exchange_segment)
 
       # For options (derivatives), look up derivatives
-      if segment == "derivatives"
+      if segment == 'derivatives'
         derivative = Derivative.find_by(
           security_id: security_id,
           exchange: exchange,
@@ -168,7 +167,7 @@ module Live
         security_id: security_id.to_s,
         symbol: symbol,
         segment: exchange_segment,
-        side: "long", # Default assumption - could be enhanced to detect actual side
+        side: 'long', # Default assumption - could be enhanced to detect actual side
         status: PositionTracker::STATUSES[:active],
         quantity: quantity,
         avg_price: average_price,
@@ -188,7 +187,6 @@ module Live
       tracker.subscribe
 
       Rails.logger.info("[PositionSync] Created tracker #{tracker.id} for untracked position #{security_id}")
-
     rescue StandardError => e
       Rails.logger.error("[PositionSync] Failed to create tracker for position #{security_id}: #{e.class} - #{e.message}")
     end

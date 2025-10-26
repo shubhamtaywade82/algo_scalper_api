@@ -12,7 +12,7 @@ module Options
           Rails.logger.warn("[Options] No instrument found for #{index_cfg[:key]}")
           return []
         end
-        Rails.logger.debug("[Options] Using instrument: #{instrument.symbol_name}")
+        Rails.logger.debug { "[Options] Using instrument: #{instrument.symbol_name}" }
 
         # Use instrument's existing methods to get expiry list and option chain
         expiry_list = instrument.expiry_list
@@ -20,7 +20,7 @@ module Options
           Rails.logger.warn("[Options] No expiry list available for #{index_cfg[:key]}")
           return []
         end
-        Rails.logger.debug("[Options] Available expiries: #{expiry_list}")
+        Rails.logger.debug { "[Options] Available expiries: #{expiry_list}" }
 
         # Get the next upcoming expiry
         expiry_date = find_next_expiry(expiry_list)
@@ -37,17 +37,15 @@ module Options
           return []
         end
 
-        Rails.logger.debug("[Options] Chain data structure: #{chain_data.keys}")
-        Rails.logger.debug("[Options] OC data size: #{chain_data[:oc]&.size || 'nil'}")
+        Rails.logger.debug { "[Options] Chain data structure: #{chain_data.keys}" }
+        Rails.logger.debug { "[Options] OC data size: #{chain_data[:oc]&.size || 'nil'}" }
 
         # Debug: Show sample of raw option data
-        if chain_data[:oc] && chain_data[:oc].any?
+        if chain_data[:oc]&.any?
           sample_strike = chain_data[:oc].keys.first
           sample_data = chain_data[:oc][sample_strike]
-          Rails.logger.debug("[Options] Sample strike #{sample_strike} data: #{sample_data}")
-          if sample_data["pe"]
-            Rails.logger.debug("[Options] Sample PE data: #{sample_data["pe"]}")
-          end
+          Rails.logger.debug { "[Options] Sample strike #{sample_strike} data: #{sample_data}" }
+          Rails.logger.debug { "[Options] Sample PE data: #{sample_data['pe']}" } if sample_data['pe']
         end
 
         atm_price = chain_data[:last_price]
@@ -60,9 +58,10 @@ module Options
         side = direction == :bullish ? :ce : :pe
         # For buying options, focus on ATM and ATM+1 strikes only
         # This prevents selecting expensive ITM options
-        Rails.logger.debug("[Options] Looking for #{side} options at ATM and ATM#{side == :ce || side == "ce" ? "+1" : "-1"} strikes only")
+        Rails.logger.debug { "[Options] Looking for #{side} options at ATM and ATM#{[:ce, 'ce'].include?(side) ? '+1' : '-1'} strikes only" }
 
-        legs = filter_and_rank_from_instrument_data(chain_data[:oc], atm: atm_price, side: side, index_cfg: index_cfg, expiry_date: expiry_date, instrument: instrument)
+        legs = filter_and_rank_from_instrument_data(chain_data[:oc], atm: atm_price, side: side, index_cfg: index_cfg,
+                                                                     expiry_date: expiry_date, instrument: instrument)
         Rails.logger.info("[Options] Found #{legs.size} qualifying #{side} options for #{index_cfg[:key]}")
 
         if legs.any?
@@ -79,12 +78,15 @@ module Options
 
         today = Date.current
         upcoming_expiries = expiry_list
-          .map { |date_str| Date.parse(date_str.to_s) rescue nil }
-          .compact
-          .select { |date| date > today }
-          .sort
+                            .filter_map do |date_str|
+          Date.parse(date_str.to_s)
+        rescue StandardError
+          nil
+        end
+                            .select { |date| date > today }
+                            .sort
 
-        upcoming_expiries.first&.strftime("%Y-%m-%d")
+        upcoming_expiries.first&.strftime('%Y-%m-%d')
       rescue StandardError => e
         Rails.logger.warn("Failed to parse expiry list: #{e.class} - #{e.message}")
         calculate_next_trading_day
@@ -93,57 +95,64 @@ module Options
       def calculate_next_trading_day
         # Use Market::Calendar to find the next trading day dynamically
         # This replaces the hardcoded Thursday logic
-        Market::Calendar.next_trading_day.strftime("%Y-%m-%d")
+        Market::Calendar.next_trading_day.strftime('%Y-%m-%d')
       end
 
       def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, index_cfg:, expiry_date:, instrument:)
         # Force reload - debugging index_cfg scope issue
         return [] unless option_chain_data
 
-        Rails.logger.debug("[Options] Method called with index_cfg: #{index_cfg[:key]}, expiry_date: #{expiry_date}")
+        Rails.logger.debug { "[Options] Method called with index_cfg: #{index_cfg[:key]}, expiry_date: #{expiry_date}" }
 
-        Rails.logger.debug("[Options] Processing #{option_chain_data.size} strikes for #{side} options")
+        Rails.logger.debug { "[Options] Processing #{option_chain_data.size} strikes for #{side} options" }
 
         # Calculate strike interval dynamically from available strikes
         strikes = option_chain_data.keys.map(&:to_f).sort
-        oc_strikes = strikes  # Make strikes available for ATM range calculation
+        oc_strikes = strikes # Make strikes available for ATM range calculation
 
         strike_interval = if strikes.size >= 2
-                           strikes[1] - strikes[0]
-        else
-                           50 # fallback
-        end
+                            strikes[1] - strikes[0]
+                          else
+                            50 # fallback
+                          end
 
         atm_strike = (atm / strike_interval).round * strike_interval
 
         # Calculate dynamic ATM range based on volatility
         # For now, we'll use a default IV rank of 0.5 (medium volatility)
         # TODO: Integrate with actual IV rank calculation
-        iv_rank = 0.5  # Default to medium volatility
+        iv_rank = 0.5 # Default to medium volatility
         atm_range_percent = atm_range_pct(iv_rank)
         atm_range_points = atm * atm_range_percent
 
-        Rails.logger.debug("[Options] SPOT: #{atm}, Strike interval: #{strike_interval}, ATM strike: #{atm_strike}")
-        Rails.logger.debug("[Options] IV Rank: #{iv_rank}, ATM range: #{atm_range_percent * 100}% (#{atm_range_points.round(2)} points)")
+        Rails.logger.debug { "[Options] SPOT: #{atm}, Strike interval: #{strike_interval}, ATM strike: #{atm_strike}" }
+        Rails.logger.debug { "[Options] IV Rank: #{iv_rank}, ATM range: #{atm_range_percent * 100}% (#{atm_range_points.round(2)} points)" }
 
         # For buying options, focus on ATM and nearby strikes only (+-1,2,3 steps)
         # This prevents selecting expensive ITM options or far OTM options
-        target_strikes = if side == :ce || side == "ce"
-                          # CE: ATM, ATM+1, ATM+2, ATM+3 (OTM calls)
-                          [ atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval), atm_strike + (3 * strike_interval) ]
-                            .select { |s| oc_strikes.include?(s) }
-                            .first(3) # Limit to top 3 strikes
-        else
-                          # PE: ATM, ATM-1, ATM-2, ATM-3 (OTM puts)
-                          [ atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval), atm_strike - (3 * strike_interval) ]
-                            .select { |s| oc_strikes.include?(s) }
-                            .first(3) # Limit to top 3 strikes
-        end
+        target_strikes = if [:ce, 'ce'].include?(side)
+                           # CE: ATM, ATM+1, ATM+2, ATM+3 (OTM calls)
+                           [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval),
+                            atm_strike + (3 * strike_interval)]
+                             .select do |s|
+                             oc_strikes.include?(s)
+                           end
+                             .first(3) # Limit to top 3 strikes
+                         else
+                           # PE: ATM, ATM-1, ATM-2, ATM-3 (OTM puts)
+                           [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval),
+                            atm_strike - (3 * strike_interval)]
+                             .select do |s|
+                             oc_strikes.include?(s)
+                           end
+                             .first(3) # Limit to top 3 strikes
+                         end
 
-        Rails.logger.debug("[Options] Target strikes for #{side}: #{target_strikes}")
+        Rails.logger.debug { "[Options] Target strikes for #{side}: #{target_strikes}" }
 
         # Log strike selection guidance
-        log_strike_selection_guidance(side, atm, atm_strike, target_strikes, iv_rank, atm_range_percent, strike_interval)
+        log_strike_selection_guidance(side, atm, atm_strike, target_strikes, iv_rank, atm_range_percent,
+                                      strike_interval)
 
         min_iv = AlgoConfig.fetch.dig(:option_chain, :min_iv).to_f
         max_iv = AlgoConfig.fetch.dig(:option_chain, :max_iv).to_f
@@ -151,7 +160,7 @@ module Options
         max_spread_pct = AlgoConfig.fetch.dig(:option_chain, :max_spread_pct).to_f
 
         min_delta = min_delta_now
-        Rails.logger.debug("[Options] Filter criteria: IV(#{min_iv}-#{max_iv}), OI(>=#{min_oi}), Spread(<=#{max_spread_pct}%), Delta(>=#{min_delta})")
+        Rails.logger.debug { "[Options] Filter criteria: IV(#{min_iv}-#{max_iv}), OI(>=#{min_oi}), Spread(<=#{max_spread_pct}%), Delta(>=#{min_delta})" }
 
         legs = []
         rejected_count = 0
@@ -173,63 +182,75 @@ module Options
           end
 
           # Debug: Show available fields for first few strikes
-          if rejected_count < 3
-            Rails.logger.debug("[Options] Available fields for #{side}: #{option_data.keys}")
-          end
+          Rails.logger.debug { "[Options] Available fields for #{side}: #{option_data.keys}" } if rejected_count < 3
 
-          ltp = option_data["last_price"]&.to_f
-          iv = option_data["implied_volatility"]&.to_f
-          oi = option_data["oi"]&.to_i
-          bid = option_data["top_bid_price"]&.to_f
-          ask = option_data["top_ask_price"]&.to_f
+          ltp = option_data['last_price']&.to_f
+          iv = option_data['implied_volatility']&.to_f
+          oi = option_data['oi']&.to_i
+          bid = option_data['top_bid_price']&.to_f
+          ask = option_data['top_ask_price']&.to_f
 
           strike_type = if strike == atm_strike
-                          "ATM"
-          elsif side == :ce || side == "ce"
+                          'ATM'
+                        elsif [:ce, 'ce'].include?(side)
                           strike_diff = (strike - atm_strike) / strike_interval
-                          strike_diff == 1 ? "ATM+1" : strike_diff == 2 ? "ATM+2" : strike_diff == 3 ? "ATM+3" : "OTHER"
-          else
+                          case strike_diff
+                          when 1
+                            'ATM+1'
+                          when 2
+                            'ATM+2'
+                          else
+                            strike_diff == 3 ? 'ATM+3' : 'OTHER'
+                          end
+                        else
                           strike_diff = (atm_strike - strike) / strike_interval
-                          strike_diff == 1 ? "ATM-1" : strike_diff == 2 ? "ATM-2" : strike_diff == 3 ? "ATM-3" : "OTHER"
-          end
-          Rails.logger.debug("[Options] Strike #{strike} (#{strike_type}): LTP=#{ltp}, IV=#{iv}, OI=#{oi}, Bid=#{bid}, Ask=#{ask}")
+                          case strike_diff
+                          when 1
+                            'ATM-1'
+                          when 2
+                            'ATM-2'
+                          else
+                            strike_diff == 3 ? 'ATM-3' : 'OTHER'
+                          end
+                        end
+          Rails.logger.debug { "[Options] Strike #{strike} (#{strike_type}): LTP=#{ltp}, IV=#{iv}, OI=#{oi}, Bid=#{bid}, Ask=#{ask}" }
 
           # Check LTP
-          unless ltp && ltp > 0
+          unless ltp&.positive?
             rejected_count += 1
-            Rails.logger.debug("[Options] Rejected #{strike}: Invalid LTP")
+            Rails.logger.debug { "[Options] Rejected #{strike}: Invalid LTP" }
             next
           end
 
           # Check IV
           unless iv && iv >= min_iv && iv <= max_iv
             rejected_count += 1
-            Rails.logger.debug("[Options] Rejected #{strike}: IV #{iv} not in range #{min_iv}-#{max_iv}")
+            Rails.logger.debug { "[Options] Rejected #{strike}: IV #{iv} not in range #{min_iv}-#{max_iv}" }
             next
           end
 
           # Check OI
           unless oi && oi >= min_oi
             rejected_count += 1
-            Rails.logger.debug("[Options] Rejected #{strike}: OI #{oi} < #{min_oi}")
+            Rails.logger.debug { "[Options] Rejected #{strike}: OI #{oi} < #{min_oi}" }
             next
           end
 
           # Calculate spread percentage
-          if bid && ask && bid > 0
+          if bid && ask && bid.positive?
             spread_pct = ((ask - bid) / bid) * 100
             if spread_pct > max_spread_pct
               rejected_count += 1
-              Rails.logger.debug("[Options] Rejected #{strike}: Spread #{spread_pct}% > #{max_spread_pct}%")
+              Rails.logger.debug { "[Options] Rejected #{strike}: Spread #{spread_pct}% > #{max_spread_pct}%" }
               next
             end
           end
 
           # Check Delta (time-based thresholds)
-          delta = option_data.dig("greeks", "delta")&.to_f&.abs
+          delta = option_data.dig('greeks', 'delta')&.to_f&.abs
           unless delta && delta >= min_delta
             rejected_count += 1
-            Rails.logger.debug("[Options] Rejected #{strike}: Delta #{delta} < #{min_delta}")
+            Rails.logger.debug { "[Options] Rejected #{strike}: Delta #{delta} < #{min_delta}" }
             next
           end
 
@@ -240,23 +261,23 @@ module Options
 
           derivative = instrument.derivatives.find do |d|
             d.strike_price == strike.to_f &&
-            d.expiry_date == expiry_date_obj &&
-            d.option_type == option_type
+              d.expiry_date == expiry_date_obj &&
+              d.option_type == option_type
           end
 
           if derivative
-            Rails.logger.debug("[Options] Found derivative for #{index_cfg[:key]} #{strike} #{side}: security_id=#{derivative.security_id}, lot_size=#{derivative.lot_size}")
+            Rails.logger.debug { "[Options] Found derivative for #{index_cfg[:key]} #{strike} #{side}: security_id=#{derivative.security_id}, lot_size=#{derivative.lot_size}" }
             security_id = derivative.security_id
           else
             Rails.logger.warn("[Options] No derivative found for #{index_cfg[:key]} #{strike} #{side} #{expiry_date}")
             security_id = nil
           end
 
-          derivative_segment = if derivative&.respond_to?(:exchange_segment) && derivative.exchange_segment.present?
-                                  derivative.exchange_segment
-          elsif derivative.is_a?(Hash)
-                                  derivative[:exchange_segment]
-          end
+          derivative_segment = if derivative.respond_to?(:exchange_segment) && derivative.exchange_segment.present?
+                                 derivative.exchange_segment
+                               elsif derivative.is_a?(Hash)
+                                 derivative[:exchange_segment]
+                               end
           derivative_segment ||= instrument.exchange_segment
           derivative_segment ||= index_cfg[:segment]
 
@@ -274,7 +295,7 @@ module Options
             lot_size: derivative&.lot_size || index_cfg[:lot].to_i
           }
 
-          Rails.logger.debug("[Options] Accepted #{strike}: #{legs.last[:symbol]}")
+          Rails.logger.debug { "[Options] Accepted #{strike}: #{legs.last[:symbol]}" }
         end
 
         Rails.logger.info("[Options] Filter results: #{legs.size} accepted, #{rejected_count} rejected")
@@ -289,7 +310,7 @@ module Options
         end
 
         # Sort by score (descending), then by distance from ATM
-        scored_legs.sort_by { |leg| [ -leg[:score], leg[:distance_from_atm] ] }
+        scored_legs.sort_by { |leg| [-leg[:score], leg[:distance_from_atm]] }
       end
 
       def filter_and_rank(legs, atm:, side:, window:)
@@ -306,7 +327,7 @@ module Options
             leg[:iv].to_f.between?(min_iv, max_iv) &&
             leg[:oi].to_i >= min_oi &&
             leg.fetch(:spread_pct, 0.0).to_f <= max_spread_pct
-        end.sort_by { |leg| [ -leg[:oi].to_i, leg.fetch(:spread_pct, 0.0).to_f ] }
+        end.sort_by { |leg| [-leg[:oi].to_i, leg.fetch(:spread_pct, 0.0).to_f] }
       end
 
       # Dynamic minimum delta thresholds depending on time of day
@@ -316,6 +337,7 @@ module Options
         return 0.15 if h >= 14  # After 2 PM - moderate delta for OTM options
         return 0.12 if h >= 13  # After 1 PM - lower delta acceptable
         return 0.10 if h >= 11  # After 11 AM - even lower delta
+
         0.08                    # Before 11 AM - very low delta acceptable for OTM
       end
 
@@ -323,27 +345,28 @@ module Options
       # Low volatility = tight range, High volatility = wider range
       def atm_range_pct(iv_rank = 0.5)
         case iv_rank
-        when 0.0..0.2 then 0.01   # Low volatility - tight range (1%)
+        when 0.0..0.2 then 0.01 # Low volatility - tight range (1%)
         when 0.2..0.5 then 0.015 # Medium volatility - medium range (1.5%)
         else 0.025               # High volatility - wider range (2.5%)
         end
       end
 
       # Log comprehensive strike selection guidance
-      def log_strike_selection_guidance(side, spot, atm_strike, target_strikes, iv_rank, atm_range_percent, strike_interval)
+      def log_strike_selection_guidance(side, spot, atm_strike, target_strikes, iv_rank, atm_range_percent,
+                                        strike_interval)
         volatility_regime = case iv_rank
-        when 0.0..0.2 then "Low"
-        when 0.2..0.5 then "Medium"
-        else "High"
-        end
+                            when 0.0..0.2 then 'Low'
+                            when 0.2..0.5 then 'Medium'
+                            else 'High'
+                            end
 
-        explanation = if side == :ce || side == "ce"
-                       "CE strikes: ATM, ATM+1, ATM+2, ATM+3 (OTM calls only)"
-        else
-                       "PE strikes: ATM, ATM-1, ATM-2, ATM-3 (OTM puts only)"
-        end
+        explanation = if [:ce, 'ce'].include?(side)
+                        'CE strikes: ATM, ATM+1, ATM+2, ATM+3 (OTM calls only)'
+                      else
+                        'PE strikes: ATM, ATM-1, ATM-2, ATM-3 (OTM puts only)'
+                      end
 
-        Rails.logger.info("[Options] Strike Selection Guidance:")
+        Rails.logger.info('[Options] Strike Selection Guidance:')
         Rails.logger.info("  - Current SPOT: #{spot}")
         Rails.logger.info("  - ATM Strike: #{atm_strike}")
         Rails.logger.info("  - Volatility Regime: #{volatility_regime} (IV Rank: #{iv_rank})")
@@ -356,14 +379,28 @@ module Options
           distance_from_atm = (strike - atm_strike).abs
           distance_from_spot = (strike - spot).abs
           strike_step = if strike == atm_strike
-                          "ATM"
-          elsif side == :ce || side == "ce"
+                          'ATM'
+                        elsif [:ce, 'ce'].include?(side)
                           strike_diff = (strike - atm_strike) / strike_interval
-                          strike_diff == 1 ? "ATM+1" : strike_diff == 2 ? "ATM+2" : strike_diff == 3 ? "ATM+3" : "OTHER"
-          else
+                          case strike_diff
+                          when 1
+                            'ATM+1'
+                          when 2
+                            'ATM+2'
+                          else
+                            strike_diff == 3 ? 'ATM+3' : 'OTHER'
+                          end
+                        else
                           strike_diff = (atm_strike - strike) / strike_interval
-                          strike_diff == 1 ? "ATM-1" : strike_diff == 2 ? "ATM-2" : strike_diff == 3 ? "ATM-3" : "OTHER"
-          end
+                          case strike_diff
+                          when 1
+                            'ATM-1'
+                          when 2
+                            'ATM-2'
+                          else
+                            strike_diff == 3 ? 'ATM-3' : 'OTHER'
+                          end
+                        end
 
           Rails.logger.info("  - Strike #{index + 1}: #{strike} (#{strike_step}) - #{distance_from_atm} points from ATM, #{distance_from_spot.round(2)} points from spot")
         end
@@ -377,11 +414,11 @@ module Options
         oi = leg[:oi]
 
         # Calculate spread percentage from spread and LTP
-        spread_pct = if leg[:spread] && ltp && ltp > 0
+        spread_pct = if leg[:spread] && ltp&.positive?
                        (leg[:spread] / ltp) * 100
-        else
-                       0.0  # Default to 0% spread if not available
-        end
+                     else
+                       0.0 # Default to 0% spread if not available
+                     end
 
         delta = leg[:delta] || 0.5 # Default delta if not available
 
@@ -390,31 +427,29 @@ module Options
         atm_range_points = atm_strike * atm_range_percent
 
         atm_preference_score = if distance_from_atm <= (atm_range_points * 0.1)
-                                 100  # Perfect ATM
-        elsif distance_from_atm <= (atm_range_points * 0.3)
-                                  80  # Near ATM
-        elsif distance_from_atm <= (atm_range_points * 0.6)
-                                  50  # Slightly away
-        else
-                                  20  # Far from ATM
-        end
+                                 100 # Perfect ATM
+                               elsif distance_from_atm <= (atm_range_points * 0.3)
+                                 80  # Near ATM
+                               elsif distance_from_atm <= (atm_range_points * 0.6)
+                                 50  # Slightly away
+                               else
+                                 20  # Far from ATM
+                               end
 
         # Penalty for ITM strikes (30% reduction)
-        if itm_strike?(strike_price, side, atm_strike)
-          atm_preference_score *= 0.7
-        end
+        atm_preference_score *= 0.7 if itm_strike?(strike_price, side, atm_strike)
 
         # 2. Liquidity Score (0-50)
         # Based on OI and spread
-        liquidity_score = if oi >= 1000000
-                            50  # Excellent liquidity
-        elsif oi >= 500000
+        liquidity_score = if oi >= 1_000_000
+                            50 # Excellent liquidity
+                          elsif oi >= 500_000
                             40  # Good liquidity
-        elsif oi >= 100000
+                          elsif oi >= 100_000
                             30  # Decent liquidity
-        else
+                          else
                             20  # Poor liquidity
-        end
+                          end
 
         # Spread penalty
         if spread_pct > 2.0
@@ -426,51 +461,51 @@ module Options
         # 3. Delta Score (0-30)
         # Higher delta is better for options buying
         delta_score = if delta >= 0.5
-                        30  # Excellent delta
-        elsif delta >= 0.4
+                        30 # Excellent delta
+                      elsif delta >= 0.4
                         25  # Good delta
-        elsif delta >= 0.3
+                      elsif delta >= 0.3
                         20  # Decent delta
-        else
+                      else
                         10  # Poor delta
-        end
+                      end
 
         # 4. IV Score (0-20)
         # Moderate IV is preferred (not too high, not too low)
-        iv_score = if iv >= 15 && iv <= 25
-                     20  # Sweet spot
-        elsif iv >= 10 && iv <= 30
+        iv_score = if iv.between?(15, 25)
+                     20 # Sweet spot
+                   elsif iv.between?(10, 30)
                      15  # Acceptable range
-        elsif iv >= 5 && iv <= 40
+                   elsif iv.between?(5, 40)
                      10  # Marginal
-        else
-                      5  # Poor IV
-        end
+                   else
+                     5 # Poor IV
+                   end
 
         # 5. Price Efficiency Score (0-10)
         # Lower price per point of delta is better
-        price_efficiency = delta > 0 ? (ltp / delta) : ltp
+        price_efficiency = delta.positive? ? (ltp / delta) : ltp
         price_efficiency_score = if price_efficiency <= 200
-                                   10  # Excellent efficiency
-        elsif price_efficiency <= 300
-                                    8   # Good efficiency
-        elsif price_efficiency <= 500
-                                    6   # Decent efficiency
-        else
-                                    4   # Poor efficiency
-        end
+                                   10 # Excellent efficiency
+                                 elsif price_efficiency <= 300
+                                   8   # Good efficiency
+                                 elsif price_efficiency <= 500
+                                   6   # Decent efficiency
+                                 else
+                                   4   # Poor efficiency
+                                 end
 
         # Calculate total score
         total_score = atm_preference_score + liquidity_score + delta_score + iv_score + price_efficiency_score
 
         # Log scoring breakdown for debugging
-        Rails.logger.debug("[Options] Strike #{strike_price} scoring:")
-        Rails.logger.debug("  - ATM Preference: #{atm_preference_score.round(1)} (distance: #{distance_from_atm.round(1)})")
-        Rails.logger.debug("  - Liquidity: #{liquidity_score.round(1)} (OI: #{oi}, Spread: #{spread_pct.round(2)}%)")
-        Rails.logger.debug("  - Delta: #{delta_score.round(1)} (delta: #{delta.round(3)})")
-        Rails.logger.debug("  - IV: #{iv_score.round(1)} (IV: #{iv.round(2)}%)")
-        Rails.logger.debug("  - Price Efficiency: #{price_efficiency_score.round(1)} (price/delta: #{price_efficiency.round(1)})")
-        Rails.logger.debug("  - Total Score: #{total_score.round(1)}")
+        Rails.logger.debug { "[Options] Strike #{strike_price} scoring:" }
+        Rails.logger.debug { "  - ATM Preference: #{atm_preference_score.round(1)} (distance: #{distance_from_atm.round(1)})" }
+        Rails.logger.debug { "  - Liquidity: #{liquidity_score.round(1)} (OI: #{oi}, Spread: #{spread_pct.round(2)}%)" }
+        Rails.logger.debug { "  - Delta: #{delta_score.round(1)} (delta: #{delta.round(3)})" }
+        Rails.logger.debug { "  - IV: #{iv_score.round(1)} (IV: #{iv.round(2)}%)" }
+        Rails.logger.debug { "  - Price Efficiency: #{price_efficiency_score.round(1)} (price/delta: #{price_efficiency.round(1)})" }
+        Rails.logger.debug { "  - Total Score: #{total_score.round(1)}" }
 
         total_score
       end
@@ -478,10 +513,10 @@ module Options
       # Check if a strike is ITM (In-The-Money)
       def itm_strike?(strike_price, side, atm_strike)
         case side.to_sym
-        when :ce, "ce"
+        when :ce, 'ce'
           # For calls: strike < ATM is ITM
           strike_price < atm_strike
-        when :pe, "pe"
+        when :pe, 'pe'
           # For puts: strike > ATM is ITM
           strike_price > atm_strike
         else
@@ -490,22 +525,23 @@ module Options
       end
 
       # Log detailed filtering summary with explanations
-      def log_filtering_summary(side, accepted_count, rejected_count, min_iv, max_iv, min_oi, max_spread_pct, min_delta)
+      def log_filtering_summary(_side, accepted_count, rejected_count, min_iv, max_iv, min_oi, max_spread_pct,
+                                min_delta)
         total_processed = accepted_count + rejected_count
-        acceptance_rate = total_processed > 0 ? (accepted_count.to_f / total_processed * 100).round(1) : 0
+        acceptance_rate = total_processed.positive? ? (accepted_count.to_f / total_processed * 100).round(1) : 0
 
-        Rails.logger.info("[Options] Filtering Summary:")
+        Rails.logger.info('[Options] Filtering Summary:')
         Rails.logger.info("  - Total strikes processed: #{total_processed}")
         Rails.logger.info("  - Accepted: #{accepted_count} (#{acceptance_rate}%)")
         Rails.logger.info("  - Rejected: #{rejected_count} (#{100 - acceptance_rate}%)")
-        Rails.logger.info("  - Filter criteria applied:")
+        Rails.logger.info('  - Filter criteria applied:')
         Rails.logger.info("    * IV Range: #{min_iv}-#{max_iv}%")
         Rails.logger.info("    * Minimum OI: #{min_oi}")
         Rails.logger.info("    * Maximum Spread: #{max_spread_pct}%")
         Rails.logger.info("    * Minimum Delta: #{min_delta} (time-based)")
 
-        if accepted_count == 0
-          Rails.logger.warn("  - ⚠️  No strikes passed all filters - consider adjusting criteria")
+        if accepted_count.zero?
+          Rails.logger.warn('  - ⚠️  No strikes passed all filters - consider adjusting criteria')
         elsif accepted_count < 3
           Rails.logger.info("  - ℹ️  Limited strikes available - #{accepted_count} option(s) found")
         else

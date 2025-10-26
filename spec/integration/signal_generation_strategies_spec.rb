@@ -2,17 +2,17 @@
 
 require 'rails_helper'
 
-RSpec.describe "Signal Generation Strategies Integration", type: :integration, vcr: true do
+RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integration do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
   let(:signal_engine) { Signal::Engine }
   let(:trend_identifier) { Trading::TrendIdentifier.new }
   let(:holy_grail_service) { Indicators::HolyGrail.new(candles: candle_data, config: Indicators::HolyGrail.demo_config) }
   let(:candle_data) do
     {
-      "close" => Array.new(100) { |i| 100.0 + i * 0.1 },
-      "high" => Array.new(100) { |i| 101.0 + i * 0.1 },
-      "low" => Array.new(100) { |i| 99.0 + i * 0.1 },
-      "timestamp" => Array.new(100) { |i| Time.current.to_i - (100 - i).minutes }
+      'close' => Array.new(100) { |i| 100.0 + (i * 0.1) },
+      'high' => Array.new(100) { |i| 101.0 + (i * 0.1) },
+      'low' => Array.new(100) { |i| 99.0 + (i * 0.1) },
+      'timestamp' => Array.new(100) { |i| Time.current.to_i - (100 - i).minutes }
     }
   end
 
@@ -21,23 +21,23 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
 
     # Create bullish trend data
     candles_data = [
-      { open: 100.0, high: 102.0, low: 99.0, close: 101.0, volume: 1000, timestamp: Time.current - 25.minutes },
-      { open: 101.0, high: 103.0, low: 100.0, close: 102.0, volume: 1200, timestamp: Time.current - 20.minutes },
-      { open: 102.0, high: 104.0, low: 101.0, close: 103.0, volume: 1100, timestamp: Time.current - 15.minutes },
-      { open: 103.0, high: 105.0, low: 102.0, close: 104.0, volume: 1300, timestamp: Time.current - 10.minutes },
-      { open: 104.0, high: 106.0, low: 103.0, close: 105.0, volume: 1400, timestamp: Time.current - 5.minutes },
+      { open: 100.0, high: 102.0, low: 99.0, close: 101.0, volume: 1000, timestamp: 25.minutes.ago },
+      { open: 101.0, high: 103.0, low: 100.0, close: 102.0, volume: 1200, timestamp: 20.minutes.ago },
+      { open: 102.0, high: 104.0, low: 101.0, close: 103.0, volume: 1100, timestamp: 15.minutes.ago },
+      { open: 103.0, high: 105.0, low: 102.0, close: 104.0, volume: 1300, timestamp: 10.minutes.ago },
+      { open: 104.0, high: 106.0, low: 103.0, close: 105.0, volume: 1400, timestamp: 5.minutes.ago },
       { open: 105.0, high: 107.0, low: 104.0, close: 106.0, volume: 1500, timestamp: Time.current }
     ]
 
     candles_data.each do |data|
       series.add_candle(Candle.new(
-        ts: data[:timestamp].to_i,
-        open: data[:open],
-        high: data[:high],
-        low: data[:low],
-        close: data[:close],
-        volume: data[:volume]
-      ))
+                          ts: data[:timestamp].to_i,
+                          open: data[:open],
+                          high: data[:high],
+                          low: data[:low],
+                          close: data[:close],
+                          volume: data[:volume]
+                        ))
     end
 
     series
@@ -45,50 +45,47 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
 
   before do
     # Mock instrument methods
-    allow(instrument).to receive(:candle_series).and_return(nil) # Not needed for Holy Grail tests
-    allow(instrument).to receive(:adx).and_return(35.5) # Strong trend
-    allow(instrument).to receive(:symbol_name).and_return('NIFTY')
+    allow(instrument).to receive_messages(candle_series: nil, adx: 35.5, symbol_name: 'NIFTY')
 
     # Mock AlgoConfig
     allow(AlgoConfig).to receive(:fetch).and_return({
-      signals: {
-        validation_mode: 'conservative',
-        supertrend: {
-          period: 10,
-          base_multiplier: 2.0,
-          training_period: 50
-        },
-        adx: {
-          min_strength: 25
-        }
-      },
-      indices: {
-        nifty: {
-          key: 'nifty',
-          segment: 'NSE_FNO',
-          security_id: '12345',
-          timeframes: [ '5m', '15m' ],
-          supertrend: {
-            period: 10,
-            base_multiplier: 2.0
-          },
-          adx_min_strength: 25
-        }
-      }
-    })
+                                                      signals: {
+                                                        validation_mode: 'conservative',
+                                                        supertrend: {
+                                                          period: 10,
+                                                          base_multiplier: 2.0,
+                                                          training_period: 50
+                                                        },
+                                                        adx: {
+                                                          min_strength: 25
+                                                        }
+                                                      },
+                                                      indices: {
+                                                        nifty: {
+                                                          key: 'nifty',
+                                                          segment: 'NSE_FNO',
+                                                          security_id: '12345',
+                                                          timeframes: %w[5m 15m],
+                                                          supertrend: {
+                                                            period: 10,
+                                                            base_multiplier: 2.0
+                                                          },
+                                                          adx_min_strength: 25
+                                                        }
+                                                      }
+                                                    })
   end
 
-  describe "Signal Engine Integration" do
-    context "when generating signals for single timeframe" do
+  describe 'Signal Engine Integration' do
+    context 'when generating signals for single timeframe' do
       let(:index_config) { { key: 'nifty', segment: 'NSE_FNO', security_id: '12345' } }
 
-      it "generates bullish signal when conditions are met" do
+      it 'generates bullish signal when conditions are met' do
         # Mock candle series with bullish data
         candle_series = create_candle_series_with_trend_data
-        allow(instrument).to receive(:candle_series).and_return(candle_series)
 
         # Mock ADX calculation
-        allow(instrument).to receive(:adx).and_return(35.0)
+        allow(instrument).to receive_messages(candle_series: candle_series, adx: 35.0)
 
         result = signal_engine.analyze_timeframe(
           index_cfg: index_config,
@@ -105,7 +102,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result).to have_key(:series)
       end
 
-      it "returns error status for invalid timeframe" do
+      it 'returns error status for invalid timeframe' do
         result = signal_engine.analyze_timeframe(
           index_cfg: index_config,
           instrument: instrument,
@@ -118,7 +115,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result[:message]).to include('Invalid timeframe')
       end
 
-      it "returns no_data status when no candle data available" do
+      it 'returns no_data status when no candle data available' do
         allow(instrument).to receive(:candle_series).and_return(nil)
 
         result = signal_engine.analyze_timeframe(
@@ -133,8 +130,8 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result[:message]).to include('No candle data')
       end
 
-      it "handles analysis errors gracefully" do
-        allow(instrument).to receive(:candle_series).and_raise(StandardError, "Analysis error")
+      it 'handles analysis errors gracefully' do
+        allow(instrument).to receive(:candle_series).and_raise(StandardError, 'Analysis error')
 
         result = signal_engine.analyze_timeframe(
           index_cfg: index_config,
@@ -149,33 +146,32 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
     end
 
-    context "when generating multi-timeframe signals" do
+    context 'when generating multi-timeframe signals' do
       let(:index_config) do
         {
           key: 'nifty',
           segment: 'NSE_FNO',
           security_id: '12345',
-          timeframes: [ '5m', '15m' ]
+          timeframes: %w[5m 15m]
         }
       end
 
-      it "analyzes multiple timeframes" do
+      it 'analyzes multiple timeframes' do
         # Mock AlgoConfig for signals configuration
         allow(AlgoConfig).to receive(:fetch).and_return({
-          signals: {
-            primary_timeframe: '5m',
-            confirmation_timeframe: '15m',
-            supertrend: { period: 10, base_multiplier: 2.0 },
-            adx: { min_strength: 25 }
-          }
-        })
+                                                          signals: {
+                                                            primary_timeframe: '5m',
+                                                            confirmation_timeframe: '15m',
+                                                            supertrend: { period: 10, base_multiplier: 2.0 },
+                                                            adx: { min_strength: 25 }
+                                                          }
+                                                        })
 
         # Mock candle series for both timeframes
         candle_series = create_candle_series_with_trend_data
-        allow(instrument).to receive(:candle_series).and_return(candle_series)
 
         # Mock ADX calculation
-        allow(instrument).to receive(:adx).and_return(35.0)
+        allow(instrument).to receive_messages(candle_series: candle_series, adx: 35.0)
 
         result = signal_engine.analyze_multi_timeframe(
           index_cfg: index_config,
@@ -189,7 +185,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result).to have_key(:timeframe_results)
       end
 
-      it "combines timeframe directions correctly" do
+      it 'combines timeframe directions correctly' do
         primary_direction = :bullish
         confirmation_direction = :bullish
 
@@ -198,7 +194,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(final_direction).to eq(:bullish)
       end
 
-      it "handles conflicting timeframe directions" do
+      it 'handles conflicting timeframe directions' do
         primary_direction = :bullish
         confirmation_direction = :bearish
 
@@ -208,12 +204,12 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
     end
 
-    context "when deciding signal direction" do
+    context 'when deciding signal direction' do
       let(:bullish_supertrend) do
         {
           trend: :bullish,
           last_value: 100.0,
-          adaptive_multipliers: [ 2.0, 2.1, 2.2 ]
+          adaptive_multipliers: [2.0, 2.1, 2.2]
         }
       end
 
@@ -221,29 +217,32 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         {
           trend: :bearish,
           last_value: 100.0,
-          adaptive_multipliers: [ 2.0, 2.1, 2.2 ]
+          adaptive_multipliers: [2.0, 2.1, 2.2]
         }
       end
 
-      it "generates bullish signal with strong ADX" do
-        direction = Signal::Engine.send(:decide_direction, bullish_supertrend, 35.0, min_strength: 25, timeframe_label: '5m')
+      it 'generates bullish signal with strong ADX' do
+        direction = Signal::Engine.send(:decide_direction, bullish_supertrend, 35.0, min_strength: 25,
+                                                                                     timeframe_label: '5m')
 
         expect(direction).to eq(:bullish)
       end
 
-      it "generates bearish signal with strong ADX" do
-        direction = Signal::Engine.send(:decide_direction, bearish_supertrend, 35.0, min_strength: 25, timeframe_label: '5m')
+      it 'generates bearish signal with strong ADX' do
+        direction = Signal::Engine.send(:decide_direction, bearish_supertrend, 35.0, min_strength: 25,
+                                                                                     timeframe_label: '5m')
 
         expect(direction).to eq(:bearish)
       end
 
-      it "generates neutral signal with weak ADX" do
-        direction = Signal::Engine.send(:decide_direction, bullish_supertrend, 15.0, min_strength: 25, timeframe_label: '5m')
+      it 'generates neutral signal with weak ADX' do
+        direction = Signal::Engine.send(:decide_direction, bullish_supertrend, 15.0, min_strength: 25,
+                                                                                     timeframe_label: '5m')
 
         expect(direction).to eq(:avoid)
       end
 
-      it "generates neutral signal with nil Supertrend" do
+      it 'generates neutral signal with nil Supertrend' do
         direction = Signal::Engine.send(:decide_direction, nil, 35.0, min_strength: 25, timeframe_label: '5m')
 
         expect(direction).to eq(:avoid)
@@ -251,9 +250,9 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
     end
   end
 
-  describe "Trend Identifier Integration" do
-    context "when identifying trends" do
-      it "identifies bullish trend" do
+  describe 'Trend Identifier Integration' do
+    context 'when identifying trends' do
+      it 'identifies bullish trend' do
         allow(trend_identifier).to receive(:signal_for).with(instrument).and_return(:long)
 
         signal = trend_identifier.signal_for(instrument)
@@ -261,7 +260,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(signal).to eq(:long)
       end
 
-      it "identifies bearish trend" do
+      it 'identifies bearish trend' do
         allow(trend_identifier).to receive(:signal_for).with(instrument).and_return(:short)
 
         signal = trend_identifier.signal_for(instrument)
@@ -269,7 +268,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(signal).to eq(:short)
       end
 
-      it "identifies neutral trend" do
+      it 'identifies neutral trend' do
         allow(trend_identifier).to receive(:signal_for).with(instrument).and_return(:neutral)
 
         signal = trend_identifier.signal_for(instrument)
@@ -278,8 +277,8 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
     end
 
-    context "when analyzing trend strength" do
-      it "analyzes trend strength correctly" do
+    context 'when analyzing trend strength' do
+      it 'analyzes trend strength correctly' do
         # Test that the trend identifier can generate signals
         # Since analyze_trend_strength doesn't exist, test the signal_for method instead
         allow(trend_identifier).to receive(:signal_for).with(instrument).and_return(:long)
@@ -291,17 +290,17 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
     end
   end
 
-  describe "Holy Grail Strategy Integration" do
-    context "when computing Holy Grail signals" do
-      it "generates entry signal" do
+  describe 'Holy Grail Strategy Integration' do
+    context 'when computing Holy Grail signals' do
+      it 'generates entry signal' do
         allow(holy_grail_service).to receive(:call).and_return({
-          signal: :entry,
-          direction: :long,
-          confidence: 0.85,
-          entry_price: 105.0,
-          stop_loss: 103.0,
-          take_profit: 108.0
-        })
+                                                                 signal: :entry,
+                                                                 direction: :long,
+                                                                 confidence: 0.85,
+                                                                 entry_price: 105.0,
+                                                                 stop_loss: 103.0,
+                                                                 take_profit: 108.0
+                                                               })
 
         result = holy_grail_service.call
 
@@ -310,14 +309,14 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result[:confidence]).to be > 0.8
       end
 
-      it "generates exit signal" do
+      it 'generates exit signal' do
         allow(holy_grail_service).to receive(:call).and_return({
-          signal: :exit,
-          direction: :long,
-          confidence: 0.75,
-          exit_price: 107.0,
-          reason: :take_profit
-        })
+                                                                 signal: :exit,
+                                                                 direction: :long,
+                                                                 confidence: 0.75,
+                                                                 exit_price: 107.0,
+                                                                 reason: :take_profit
+                                                               })
 
         result = holy_grail_service.call
 
@@ -326,13 +325,13 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result[:reason]).to eq(:take_profit)
       end
 
-      it "generates hold signal" do
+      it 'generates hold signal' do
         allow(holy_grail_service).to receive(:call).and_return({
-          signal: :hold,
-          direction: :long,
-          confidence: 0.6,
-          reason: :trend_continuing
-        })
+                                                                 signal: :hold,
+                                                                 direction: :long,
+                                                                 confidence: 0.6,
+                                                                 reason: :trend_continuing
+                                                               })
 
         result = holy_grail_service.call
 
@@ -341,13 +340,13 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
     end
 
-    context "when analyzing market conditions" do
-      it "analyzes volatility correctly" do
+    context 'when analyzing market conditions' do
+      it 'analyzes volatility correctly' do
         allow(holy_grail_service).to receive(:analyze_volatility).and_return({
-          level: :medium,
-          atr_value: 2.5,
-          volatility_percentile: 0.6
-        })
+                                                                               level: :medium,
+                                                                               atr_value: 2.5,
+                                                                               volatility_percentile: 0.6
+                                                                             })
 
         volatility = holy_grail_service.analyze_volatility
 
@@ -356,22 +355,22 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(volatility[:volatility_percentile]).to eq(0.6)
       end
 
-      it "analyzes momentum correctly" do
+      it 'analyzes momentum correctly' do
         # Test that the Holy Grail service can analyze momentum
         result = holy_grail_service.call
 
         expect(result).to be_a(Indicators::HolyGrail::Result)
-        expect(result.momentum).to be_in([ :up, :down, :flat ])
-        expect(result.bias).to be_in([ :bullish, :bearish, :neutral ])
+        expect(result.momentum).to be_in(%i[up down flat])
+        expect(result.bias).to be_in(%i[bullish bearish neutral])
       end
     end
   end
 
-  describe "Signal Validation and Filtering" do
-    context "when validating signals" do
+  describe 'Signal Validation and Filtering' do
+    context 'when validating signals' do
       let(:signal_validator) { Signal::Validator.new }
 
-      it "validates bullish signals" do
+      it 'validates bullish signals' do
         # Test basic signal validation functionality
         signal_data = {
           direction: :bullish,
@@ -391,7 +390,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(signal_data[:indicators][:supertrend]).to eq(:bullish)
       end
 
-      it "rejects weak signals" do
+      it 'rejects weak signals' do
         signal_data = {
           direction: :bullish,
           confidence: 0.3,
@@ -409,11 +408,11 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(validation[:reason]).to include('low confidence')
       end
 
-      it "validates multi-timeframe signals" do
+      it 'validates multi-timeframe signals' do
         signal_data = {
           direction: :bullish,
           confidence: 0.85,
-          timeframes: [ '5m', '15m' ],
+          timeframes: %w[5m 15m],
           timeframe_consensus: :bullish,
           indicators: {
             supertrend: :bullish,
@@ -433,18 +432,18 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
     end
 
-    context "when filtering signals by market conditions" do
+    context 'when filtering signals by market conditions' do
       # Remove the non-existent MarketFilter class reference
       # let(:market_filter) { Signal::MarketFilter.new }
 
-      it "validates market hours for signal generation" do
+      it 'validates market hours for signal generation' do
         # Test that signal generation respects market hours
         # This is a placeholder test since Signal::MarketFilter doesn't exist
-        current_time = Time.current
+        Time.current
 
         # Market hours: 9:15 AM to 3:30 PM IST
-        market_open = Time.zone.parse("09:15")
-        market_close = Time.zone.parse("15:30")
+        market_open = Time.zone.parse('09:15')
+        Time.zone.parse('15:30')
 
         # Test during market hours
         allow(Time).to receive(:current).and_return(market_open + 1.hour)
@@ -454,20 +453,20 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(Time.current.hour).to be <= 15
       end
 
-      it "validates market hours constraints" do
+      it 'validates market hours constraints' do
         # Test market hours validation logic
         current_hour = Time.current.hour
 
         # Market hours: 9:15 AM to 3:30 PM IST
-        is_market_hours = current_hour >= 9 && current_hour <= 15
+        is_market_hours = current_hour.between?(9, 15)
 
         # This is a basic validation test
-        expect(is_market_hours).to be_in([ true, false ])
+        expect(is_market_hours).to be_in([true, false])
       end
 
-      it "validates volatility constraints" do
+      it 'validates volatility constraints' do
         # Test volatility validation logic
-        volatility_levels = [ :low, :medium, :high ]
+        volatility_levels = %i[low medium high]
 
         # This is a basic validation test
         expect(volatility_levels).to include(:medium)
@@ -475,8 +474,8 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
     end
   end
 
-  describe "Signal Persistence and Tracking" do
-    context "when persisting trading signals" do
+  describe 'Signal Persistence and Tracking' do
+    context 'when persisting trading signals' do
       let(:signal_data) do
         {
           index_key: 'nifty',
@@ -496,7 +495,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         }
       end
 
-      it "creates trading signal record" do
+      it 'creates trading signal record' do
         signal = TradingSignal.create!(signal_data)
 
         expect(signal).to be_persisted
@@ -505,16 +504,16 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(signal.timeframe).to eq('5m')
       end
 
-      it "tracks signal performance" do
+      it 'tracks signal performance' do
         signal = TradingSignal.create!(signal_data)
 
         # Simulate signal execution by updating metadata
         signal.update!(
           metadata: signal.metadata.merge({
-            executed_at: Time.current.iso8601,
-            execution_price: 105.5,
-            status: 'executed'
-          })
+                                            executed_at: Time.current.iso8601,
+                                            execution_price: 105.5,
+                                            status: 'executed'
+                                          })
         )
 
         expect(signal.metadata['executed_at']).to be_present
@@ -522,17 +521,17 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(signal.metadata['status']).to eq('executed')
       end
 
-      it "calculates signal accuracy" do
+      it 'calculates signal accuracy' do
         signal = TradingSignal.create!(signal_data.merge(
-          metadata: signal_data[:metadata].merge({
-            executed_at: Time.current.iso8601,
-            execution_price: 105.5,
-            status: 'executed',
-            exit_price: 108.0,
-            exit_at: (Time.current + 1.hour).iso8601,
-            final_status: 'profitable'
-          })
-        ))
+                                         metadata: signal_data[:metadata].merge({
+                                                                                  executed_at: Time.current.iso8601,
+                                                                                  execution_price: 105.5,
+                                                                                  status: 'executed',
+                                                                                  exit_price: 108.0,
+                                                                                  exit_at: 1.hour.from_now.iso8601,
+                                                                                  final_status: 'profitable'
+                                                                                })
+                                       ))
 
         # Verify that the signal was created with execution data
         expect(signal.metadata['executed_at']).to be_present
@@ -543,16 +542,15 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
     end
 
-    context "when analyzing signal performance" do
+    context 'when analyzing signal performance' do
       # Remove the non-existent PerformanceAnalyzer class reference
       # let(:signal_analyzer) { Signal::PerformanceAnalyzer.new }
 
-      it "analyzes signal accuracy over time" do
+      it 'analyzes signal accuracy over time' do
         # Create sample signals
         create_list(:trading_signal, 10,
-          direction: 'bullish',
-          confidence_score: 0.8
-        )
+                    direction: 'bullish',
+                    confidence_score: 0.8)
 
         # Test basic signal analysis functionality
         signals = TradingSignal.where(direction: 'bullish')
@@ -561,7 +559,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(signals.first.confidence_score).to eq(0.8)
       end
 
-      it "analyzes signal performance by timeframe" do
+      it 'analyzes signal performance by timeframe' do
         create_list(:trading_signal, 5, timeframe: '5m', direction: 'bullish')
         create_list(:trading_signal, 5, timeframe: '15m', direction: 'bearish')
 
@@ -577,12 +575,12 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
     end
   end
 
-  describe "Signal Integration with Trading System" do
-    context "when integrating with entry system" do
+  describe 'Signal Integration with Trading System' do
+    context 'when integrating with entry system' do
       let(:entry_guard) { Entries::EntryGuard }
 
-      it "processes signals for entry" do
-        signal_data = {
+      it 'processes signals for entry' do
+        {
           direction: :bullish,
           confidence: 0.85,
           instrument: instrument,
@@ -600,8 +598,8 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result).to be true
       end
 
-      it "rejects weak signals for entry" do
-        signal_data = {
+      it 'rejects weak signals for entry' do
+        {
           direction: :bullish,
           confidence: 0.3,
           instrument: instrument,
@@ -620,10 +618,10 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
     end
 
-    context "when integrating with risk management" do
+    context 'when integrating with risk management' do
       let(:risk_manager) { Live::RiskManagerService.instance }
 
-      it "considers signals in risk calculations" do
+      it 'considers signals in risk calculations' do
         signal_data = {
           direction: :bullish,
           confidence: 0.85,
@@ -634,10 +632,10 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         }
 
         allow(risk_manager).to receive(:evaluate_signal_risk).with(signal_data).and_return({
-          risk_level: :low,
-          max_position_size: 100,
-          recommended_stop_loss: 103.0
-        })
+                                                                                             risk_level: :low,
+                                                                                             max_position_size: 100,
+                                                                                             recommended_stop_loss: 103.0
+                                                                                           })
 
         risk_assessment = risk_manager.evaluate_signal_risk(signal_data)
 
@@ -647,15 +645,15 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
     end
   end
 
-  describe "Error Handling and Resilience" do
-    context "when handling signal generation errors" do
+  describe 'Error Handling and Resilience' do
+    context 'when handling signal generation errors' do
       let(:candle_series) { create_candle_series_with_trend_data }
 
-      it "handles instrument data errors gracefully" do
-        allow(instrument).to receive(:candle_series).and_raise(StandardError, "Data error")
+      it 'handles instrument data errors gracefully' do
+        allow(instrument).to receive(:candle_series).and_raise(StandardError, 'Data error')
 
         # Mock the analyze_timeframe method to return a sample result
-        allow(signal_engine).to receive(:analyze_timeframe).and_return({ status: :error, message: "Data error" })
+        allow(signal_engine).to receive(:analyze_timeframe).and_return({ status: :error, message: 'Data error' })
 
         result = signal_engine.analyze_timeframe(
           index_cfg: { key: 'nifty' },
@@ -669,21 +667,24 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result[:message]).to eq('Data error')
       end
 
-      it "handles configuration errors gracefully" do
-        allow(AlgoConfig).to receive(:fetch).and_raise(StandardError, "Config error")
+      it 'handles configuration errors gracefully' do
+        allow(AlgoConfig).to receive(:fetch).and_raise(StandardError, 'Config error')
 
-        expect { signal_engine.analyze_timeframe(
-          index_cfg: { key: 'nifty' },
-          instrument: instrument,
-          timeframe: '5m',
-          supertrend_cfg: { period: 10, base_multiplier: 2.0 },
-          adx_min_strength: 25
-        ) }.not_to raise_error
+        expect do
+          signal_engine.analyze_timeframe(
+            index_cfg: { key: 'nifty' },
+            instrument: instrument,
+            timeframe: '5m',
+            supertrend_cfg: { period: 10, base_multiplier: 2.0 },
+            adx_min_strength: 25
+          )
+        end.not_to raise_error
       end
 
-      it "handles indicator calculation errors" do
+      it 'handles indicator calculation errors' do
         # Test that RSI method handles errors gracefully by mocking the internal call
-        allow_any_instance_of(RubyTechnicalAnalysis::RelativeStrengthIndex).to receive(:call).and_raise(StandardError, "RSI calculation failed")
+        allow_any_instance_of(RubyTechnicalAnalysis::RelativeStrengthIndex).to receive(:call).and_raise(StandardError,
+                                                                                                        'RSI calculation failed')
 
         # The RSI method should return nil instead of raising an error
         result = candle_series.rsi
@@ -691,10 +692,10 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
       end
     end
 
-    context "when handling edge cases" do
+    context 'when handling edge cases' do
       let(:candle_series) { create_candle_series_with_trend_data }
 
-      it "handles empty candle series" do
+      it 'handles empty candle series' do
         empty_series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
 
         expect(empty_series.rsi).to be_nil
@@ -702,7 +703,7 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(empty_series.supertrend_signal).to be_nil
       end
 
-      it "handles invalid indicator parameters" do
+      it 'handles invalid indicator parameters' do
         # Test that invalid parameters don't crash the system
         # RSI with negative period should raise an error
         expect { candle_series.rsi(-1) }.to raise_error(NoMethodError)
@@ -712,17 +713,17 @@ RSpec.describe "Signal Generation Strategies Integration", type: :integration, v
         expect(result).to be_nan
       end
 
-      it "handles extreme market conditions" do
+      it 'handles extreme market conditions' do
         # Test with extreme price movements
         extreme_series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
         extreme_series.add_candle(Candle.new(
-          ts: Time.current.to_i,
-          open: 100.0,
-          high: 200.0,
-          low: 50.0,
-          close: 150.0,
-          volume: 1000
-        ))
+                                    ts: Time.current.to_i,
+                                    open: 100.0,
+                                    high: 200.0,
+                                    low: 50.0,
+                                    close: 150.0,
+                                    volume: 1000
+                                  ))
 
         expect { extreme_series.rsi }.not_to raise_error
         expect { extreme_series.sma }.not_to raise_error

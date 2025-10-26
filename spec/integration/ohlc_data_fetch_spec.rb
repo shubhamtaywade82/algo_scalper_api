@@ -2,8 +2,34 @@
 
 require 'rails_helper'
 
-RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
+RSpec.describe 'OHLC Data Fetch Integration', :vcr, type: :integration do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
+  let(:mock_ohlc_data) do
+    {
+      'timestamp' => [1_723_791_000, 1_723_791_300, 1_723_791_600],
+      'open' => [100.0, 100.5, 101.0],
+      'high' => [100.8, 101.2, 101.5],
+      'low' => [99.8, 100.2, 100.8],
+      'close' => [100.5, 101.0, 101.2],
+      'volume' => [1000, 1200, 1100]
+    }
+  end
+  let(:mock_ohlc_response) do
+    {
+      'status' => 'success',
+      'data' => {
+        'NSE_FNO' => {
+          '12345' => {
+            'open' => 100.0,
+            'high' => 101.5,
+            'low' => 99.8,
+            'close' => 101.2,
+            'volume' => 10_000
+          }
+        }
+      }
+    }
+  end
   let(:ohlc_prefetcher) { Live::OhlcPrefetcherService.instance }
   let(:data_fetcher) { Trading::DataFetcherService.new }
 
@@ -25,44 +51,16 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
 
     # Mock AlgoConfig
     allow(AlgoConfig).to receive(:fetch).and_return({
-      data_freshness: {
-        disable_ohlc_caching: false,
-        ohlc_cache_duration_minutes: 5
-      }
-    })
+                                                      data_freshness: {
+                                                        disable_ohlc_caching: false,
+                                                        ohlc_cache_duration_minutes: 5
+                                                      }
+                                                    })
   end
 
-  let(:mock_ohlc_data) do
-    {
-      "timestamp" => [ 1723791000, 1723791300, 1723791600 ],
-      "open" => [ 100.0, 100.5, 101.0 ],
-      "high" => [ 100.8, 101.2, 101.5 ],
-      "low" => [ 99.8, 100.2, 100.8 ],
-      "close" => [ 100.5, 101.0, 101.2 ],
-      "volume" => [ 1000, 1200, 1100 ]
-    }
-  end
-
-  let(:mock_ohlc_response) do
-    {
-      "status" => "success",
-      "data" => {
-        "NSE_FNO" => {
-          "12345" => {
-            "open" => 100.0,
-            "high" => 101.5,
-            "low" => 99.8,
-            "close" => 101.2,
-            "volume" => 10000
-          }
-        }
-      }
-    }
-  end
-
-  describe "Instrument OHLC Data Fetching" do
-    context "when fetching intraday OHLC data" do
-      it "fetches 5-minute OHLC data by default" do
+  describe 'Instrument OHLC Data Fetching' do
+    context 'when fetching intraday OHLC data' do
+      it 'fetches 5-minute OHLC data by default' do
         # Mock the DhanHQ API call to avoid the defined_attributes error
         allow(DhanHQ::Models::HistoricalData).to receive(:intraday).and_return(mock_ohlc_data)
 
@@ -70,7 +68,7 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect { instrument.intraday_ohlc(interval: '5') }.not_to raise_error
       end
 
-      it "fetches 1-minute OHLC data when requested" do
+      it 'fetches 1-minute OHLC data when requested' do
         # Mock the DhanHQ API call to avoid the defined_attributes error
         allow(DhanHQ::Models::HistoricalData).to receive(:intraday).and_return(mock_ohlc_data)
 
@@ -78,7 +76,7 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect { instrument.intraday_ohlc(interval: '1') }.not_to raise_error
       end
 
-      it "handles different lookback periods" do
+      it 'handles different lookback periods' do
         # Mock the DhanHQ API call to avoid the defined_attributes error
         allow(DhanHQ::Models::HistoricalData).to receive(:intraday).and_return(mock_ohlc_data)
 
@@ -86,7 +84,7 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect { instrument.intraday_ohlc(interval: '5', days: 30) }.not_to raise_error
       end
 
-      it "handles custom date ranges" do
+      it 'handles custom date ranges' do
         from_date = Date.current - 7.days
         to_date = Date.current
 
@@ -97,8 +95,8 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect { instrument.intraday_ohlc(interval: '5', from_date: from_date, to_date: to_date) }.not_to raise_error
       end
 
-      it "returns nil when API call fails" do
-        allow(DhanHQ::Models::HistoricalData).to receive(:intraday).and_raise(StandardError, "API Error")
+      it 'returns nil when API call fails' do
+        allow(DhanHQ::Models::HistoricalData).to receive(:intraday).and_raise(StandardError, 'API Error')
 
         expect(Rails.logger).to receive(:error).with(/Failed to fetch Intraday OHLC/)
 
@@ -107,8 +105,8 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
       end
     end
 
-    context "when fetching current OHLC data" do
-      it "fetches current OHLC from market feed" do
+    context 'when fetching current OHLC data' do
+      it 'fetches current OHLC from market feed' do
         # Mock the HTTP request instead of the DhanHQ model
         stub_request(:post, /.*dhan.*ohlc/)
           .to_return(
@@ -119,13 +117,13 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
 
         result = instrument.ohlc
 
-        expect(result).to eq(mock_ohlc_response.dig("data", "NSE_FNO", "12345"))
+        expect(result).to eq(mock_ohlc_response.dig('data', 'NSE_FNO', '12345'))
       end
 
-      it "returns nil when market feed fails" do
+      it 'returns nil when market feed fails' do
         # Mock HTTP request failure
         stub_request(:post, /.*dhan.*ohlc/)
-          .to_return(status: 500, body: "Internal Server Error")
+          .to_return(status: 500, body: 'Internal Server Error')
 
         expect(Rails.logger).to receive(:error).with(/Failed to fetch OHLC/)
 
@@ -133,8 +131,8 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect(result).to be_nil
       end
 
-      it "returns nil when API response indicates failure" do
-        failed_response = { "status" => "error", "message" => "Invalid request" }
+      it 'returns nil when API response indicates failure' do
+        failed_response = { 'status' => 'error', 'message' => 'Invalid request' }
         allow(DhanHQ::Models::MarketFeed).to receive(:ohlc).and_return(failed_response)
 
         result = instrument.ohlc
@@ -143,21 +141,21 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
     end
   end
 
-  describe "CandleSeries Integration" do
+  describe 'CandleSeries Integration' do
     let(:candle_series) { instrument.candle_series(interval: '5') }
 
     before do
       allow(instrument).to receive(:intraday_ohlc).and_return(mock_ohlc_data)
     end
 
-    context "when loading candle data" do
-      it "creates CandleSeries from raw OHLC data" do
+    context 'when loading candle data' do
+      it 'creates CandleSeries from raw OHLC data' do
         expect(candle_series).to be_a(CandleSeries)
         expect(candle_series.symbol).to eq(instrument.symbol_name)
         expect(candle_series.interval).to eq('5')
       end
 
-      it "loads candles from raw data" do
+      it 'loads candles from raw data' do
         expect(candle_series.candles.size).to eq(3)
 
         first_candle = candle_series.candles.first
@@ -168,17 +166,17 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect(first_candle.volume).to eq(1000)
       end
 
-      it "provides access to price arrays" do
-        expect(candle_series.opens).to eq([ 100.0, 100.5, 101.0 ])
-        expect(candle_series.highs).to eq([ 100.8, 101.2, 101.5 ])
-        expect(candle_series.lows).to eq([ 99.8, 100.2, 100.8 ])
-        expect(candle_series.closes).to eq([ 100.5, 101.0, 101.2 ])
+      it 'provides access to price arrays' do
+        expect(candle_series.opens).to eq([100.0, 100.5, 101.0])
+        expect(candle_series.highs).to eq([100.8, 101.2, 101.5])
+        expect(candle_series.lows).to eq([99.8, 100.2, 100.8])
+        expect(candle_series.closes).to eq([100.5, 101.0, 101.2])
         # volumes method doesn't exist on CandleSeries
       end
     end
 
-    context "when caching is enabled" do
-      it "caches candle data for subsequent calls" do
+    context 'when caching is enabled' do
+      it 'caches candle data for subsequent calls' do
         first_call = instrument.candle_series(interval: '5')
         second_call = instrument.candle_series(interval: '5')
 
@@ -187,12 +185,12 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect(second_call).to be_a(CandleSeries)
       end
 
-      it "respects cache duration configuration" do
+      it 'respects cache duration configuration' do
         allow(AlgoConfig).to receive(:fetch).and_return({
-          data_freshness: {
-            ohlc_cache_duration_minutes: 1
-          }
-        })
+                                                          data_freshness: {
+                                                            ohlc_cache_duration_minutes: 1
+                                                          }
+                                                        })
 
         # First call
         instrument.candle_series(interval: '5')
@@ -207,16 +205,16 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
       end
     end
 
-    context "when caching is disabled" do
+    context 'when caching is disabled' do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({
-          data_freshness: {
-            disable_ohlc_caching: true
-          }
-        })
+                                                          data_freshness: {
+                                                            disable_ohlc_caching: true
+                                                          }
+                                                        })
       end
 
-      it "fetches fresh data on every call" do
+      it 'fetches fresh data on every call' do
         instrument.candle_series(interval: '5')
         instrument.candle_series(interval: '5')
 
@@ -225,17 +223,17 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
     end
   end
 
-  describe "OHLC Prefetcher Service Integration" do
+  describe 'OHLC Prefetcher Service Integration' do
     let(:watchlist_item) { create(:watchlist_item, segment: 'NSE_FNO', security_id: '12345') }
 
     before do
-      allow(WatchlistItem).to receive(:active).and_return([ watchlist_item ])
+      allow(WatchlistItem).to receive(:active).and_return([watchlist_item])
       allow(Instrument).to receive(:find_by_sid_and_segment).and_return(instrument)
       allow(instrument).to receive(:intraday_ohlc).and_return(mock_ohlc_data)
     end
 
-    context "when prefetching OHLC data" do
-      it "fetches OHLC data for all watchlist items" do
+    context 'when prefetching OHLC data' do
+      it 'fetches OHLC data for all watchlist items' do
         expect(instrument).to receive(:intraday_ohlc).with(
           interval: '5',
           days: 2
@@ -244,7 +242,7 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         ohlc_prefetcher.send(:fetch_one, watchlist_item)
       end
 
-      it "logs prefetch results" do
+      it 'logs prefetch results' do
         expect(Rails.logger).to receive(:info).with(
           /\[OHLC prefetch\] NSE_FNO:12345 fetched=3 first=.* last=.* last_close=101.2/
         )
@@ -252,18 +250,16 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         ohlc_prefetcher.send(:fetch_one, watchlist_item)
       end
 
-      it "handles missing instruments gracefully" do
+      it 'handles missing instruments gracefully' do
         allow(Instrument).to receive(:find_by_sid_and_segment).and_return(nil)
 
-        expect(Rails.logger).to receive(:debug).with(
-          /\[OHLC prefetch\] Instrument not found for NSE_FNO:12345/
-        )
+        expect(Rails.logger).to receive(:debug)
 
         ohlc_prefetcher.send(:fetch_one, watchlist_item)
       end
 
-      it "handles API errors gracefully" do
-        allow(instrument).to receive(:intraday_ohlc).and_raise(StandardError, "API Error")
+      it 'handles API errors gracefully' do
+        allow(instrument).to receive(:intraday_ohlc).and_raise(StandardError, 'API Error')
 
         expect(Rails.logger).to receive(:warn).with(
           /\[OHLC prefetch\] Failed for NSE_FNO:12345 - StandardError: API Error/
@@ -273,8 +269,8 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
       end
     end
 
-    context "when running the prefetch loop" do
-      it "runs continuously while active" do
+    context 'when running the prefetch loop' do
+      it 'runs continuously while active' do
         allow(ohlc_prefetcher).to receive(:fetch_all_watchlist)
         allow(ohlc_prefetcher).to receive(:sleep)
 
@@ -291,8 +287,8 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect(ohlc_prefetcher.running?).to be false
       end
 
-      it "handles loop errors gracefully" do
-        allow(ohlc_prefetcher).to receive(:fetch_all_watchlist).and_raise(StandardError, "Loop error")
+      it 'handles loop errors gracefully' do
+        allow(ohlc_prefetcher).to receive(:fetch_all_watchlist).and_raise(StandardError, 'Loop error')
 
         expect(Rails.logger).to receive(:error).with(/OhlcPrefetcherService crashed/)
 
@@ -303,9 +299,9 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
     end
   end
 
-  describe "Trading Data Fetcher Service Integration" do
-    context "when fetching historical data" do
-      it "fetches historical data with correct parameters" do
+  describe 'Trading Data Fetcher Service Integration' do
+    context 'when fetching historical data' do
+      it 'fetches historical data with correct parameters' do
         expect(instrument).to receive(:intraday_ohlc).with(
           interval: '5',
           from_date: anything,
@@ -322,7 +318,7 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect(result).to eq(mock_ohlc_data)
       end
 
-      it "normalizes interval format" do
+      it 'normalizes interval format' do
         expect(instrument).to receive(:intraday_ohlc).with(
           interval: '1',
           from_date: anything,
@@ -337,14 +333,14 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         )
       end
 
-      it "handles custom date ranges" do
+      it 'handles custom date ranges' do
         from_date = Date.current - 30.days
         to_date = Date.current
 
         expect(instrument).to receive(:intraday_ohlc).with(
           interval: '5',
-          from_date: from_date.strftime("%Y-%m-%d"),
-          to_date: to_date.strftime("%Y-%m-%d"),
+          from_date: from_date.strftime('%Y-%m-%d'),
+          to_date: to_date.strftime('%Y-%m-%d'),
           days: 200
         ).and_return(mock_ohlc_data)
 
@@ -358,10 +354,10 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
       end
     end
 
-    context "when fetching option chain data" do
+    context 'when fetching option chain data' do
       let(:expiry_date) { Date.current + 7.days }
 
-      it "fetches option chain for given expiry" do
+      it 'fetches option chain for given expiry' do
         expect(instrument).to receive(:fetch_option_chain).with(expiry_date).and_return({})
 
         result = data_fetcher.fetch_option_chain(
@@ -372,17 +368,17 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect(result).to eq({})
       end
 
-      it "fetches option chain without expiry when not provided" do
+      it 'fetches option chain without expiry when not provided' do
         expect(instrument).to receive(:fetch_option_chain).with(nil).and_return({})
 
         data_fetcher.fetch_option_chain(instrument: instrument)
       end
     end
 
-    context "when fetching derivative quotes" do
+    context 'when fetching derivative quotes' do
       let(:derivative) { double('Derivative') }
 
-      it "subscribes and fetches derivative quote" do
+      it 'subscribes and fetches derivative quote' do
         expect(derivative).to receive(:subscribe)
         expect(derivative).to receive(:ws_get).and_return({ ltp: 101.5 })
 
@@ -393,14 +389,14 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
     end
   end
 
-  describe "Data Freshness and Caching" do
-    context "when checking data staleness" do
-      it "considers data stale after configured duration" do
+  describe 'Data Freshness and Caching' do
+    context 'when checking data staleness' do
+      it 'considers data stale after configured duration' do
         allow(AlgoConfig).to receive(:fetch).and_return({
-          data_freshness: {
-            ohlc_cache_duration_minutes: 1
-          }
-        })
+                                                          data_freshness: {
+                                                            ohlc_cache_duration_minutes: 1
+                                                          }
+                                                        })
 
         # First call
         instrument.candle_series(interval: '5')
@@ -409,7 +405,7 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect { instrument.send(:ohlc_stale?, '5') }.not_to raise_error
       end
 
-      it "uses default cache duration when not configured" do
+      it 'uses default cache duration when not configured' do
         allow(AlgoConfig).to receive(:fetch).and_return({})
 
         # Verify that the method can be called without crashing
@@ -418,8 +414,8 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
       end
     end
 
-    context "when handling different data formats" do
-      it "handles array format OHLC data" do
+    context 'when handling different data formats' do
+      it 'handles array format OHLC data' do
         array_data = [
           { time: '2024-01-01 09:15:00', open: 100.0, high: 100.8, low: 99.8, close: 100.5, volume: 1000 },
           { time: '2024-01-01 09:20:00', open: 100.5, high: 101.2, low: 100.2, close: 101.0, volume: 1200 }
@@ -431,14 +427,14 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect(series.candles.size).to eq(2)
       end
 
-      it "handles hash format OHLC data" do
+      it 'handles hash format OHLC data' do
         hash_data = {
-          "timestamp" => [ 1723791000, 1723791300 ],
-          "open" => [ 100.0, 100.5 ],
-          "high" => [ 100.8, 101.2 ],
-          "low" => [ 99.8, 100.2 ],
-          "close" => [ 100.5, 101.0 ],
-          "volume" => [ 1000, 1200 ]
+          'timestamp' => [1_723_791_000, 1_723_791_300],
+          'open' => [100.0, 100.5],
+          'high' => [100.8, 101.2],
+          'low' => [99.8, 100.2],
+          'close' => [100.5, 101.0],
+          'volume' => [1000, 1200]
         }
 
         allow(instrument).to receive(:intraday_ohlc).and_return(hash_data)
@@ -449,10 +445,10 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
     end
   end
 
-  describe "Error Handling and Resilience" do
-    context "when API calls fail" do
-      it "handles network timeouts gracefully" do
-        allow(DhanHQ::Models::HistoricalData).to receive(:intraday).and_raise(Timeout::Error, "Request timeout")
+  describe 'Error Handling and Resilience' do
+    context 'when API calls fail' do
+      it 'handles network timeouts gracefully' do
+        allow(DhanHQ::Models::HistoricalData).to receive(:intraday).and_raise(Timeout::Error, 'Request timeout')
 
         expect(Rails.logger).to receive(:error).with(/Failed to fetch Intraday OHLC/)
 
@@ -460,14 +456,14 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
         expect(result).to be_nil
       end
 
-      it "handles invalid response formats" do
-        allow(instrument).to receive(:intraday_ohlc).and_return("invalid_data")
+      it 'handles invalid response formats' do
+        allow(instrument).to receive(:intraday_ohlc).and_return('invalid_data')
 
         # The system should raise an error for invalid data formats
         expect { instrument.candle_series(interval: '5') }.to raise_error(RuntimeError, /Unexpected candle format/)
       end
 
-      it "handles empty response data" do
+      it 'handles empty response data' do
         allow(instrument).to receive(:intraday_ohlc).and_return(nil)
 
         series = instrument.candle_series(interval: '5')
@@ -475,26 +471,27 @@ RSpec.describe "OHLC Data Fetch Integration", type: :integration, vcr: true do
       end
     end
 
-    context "when configuration is invalid" do
-      it "handles missing configuration gracefully" do
+    context 'when configuration is invalid' do
+      it 'handles missing configuration gracefully' do
         # Mock AlgoConfig.fetch to return a hash with nil data_freshness
         allow(AlgoConfig).to receive(:fetch).and_return({ data_freshness: nil })
 
         # Mock the DhanHQ API call to return sample data
         allow(DhanHQ::Models::HistoricalData).to receive(:intraday).and_return([
-          { timestamp: "2024-01-15 10:30:00", open: 100.0, high: 102.0, low: 99.0, close: 101.0, volume: 1000 }
-        ])
+                                                                                 { timestamp: '2024-01-15 10:30:00',
+                                                                                   open: 100.0, high: 102.0, low: 99.0, close: 101.0, volume: 1000 }
+                                                                               ])
 
         series = instrument.candle_series(interval: '5')
         expect(series).to be_a(CandleSeries)
       end
 
-      it "handles invalid cache duration gracefully" do
+      it 'handles invalid cache duration gracefully' do
         allow(AlgoConfig).to receive(:fetch).and_return({
-          data_freshness: {
-            ohlc_cache_duration_minutes: "invalid"
-          }
-        })
+                                                          data_freshness: {
+                                                            ohlc_cache_duration_minutes: 'invalid'
+                                                          }
+                                                        })
 
         series = instrument.candle_series(interval: '5')
         expect(series).to be_nil

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "singleton"
-require "concurrent/array"
+require 'singleton'
+require 'concurrent/array'
 
 module Live
   class MarketFeedHub
@@ -22,7 +22,7 @@ module Live
       @lock.synchronize do
         return if running?
 
-      @watchlist = load_watchlist || []
+        @watchlist = load_watchlist || []
         @ws_client = build_client
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
         @ws_client.start
@@ -107,7 +107,7 @@ module Live
     end
 
     def on_tick(&block)
-      raise ArgumentError, "block required" unless block
+      raise ArgumentError, 'block required' unless block
 
       @callbacks << block
     end
@@ -116,14 +116,14 @@ module Live
 
     def enabled?
       # Always enabled - just check for credentials
-      client_id = ENV["DHANHQ_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
-      access    = ENV["DHANHQ_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
+      client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
     end
 
     def ensure_running!
       start! unless running?
-      raise "DhanHQ market feed is not running" unless running?
+      raise 'DhanHQ market feed is not running' unless running?
     end
 
     def handle_tick(tick)
@@ -131,11 +131,9 @@ module Live
       # Log every tick (segment:security_id and LTP) for verification during development
       # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
       Live::TickCache.put(tick)
-      ActiveSupport::Notifications.instrument("dhanhq.tick", tick)
+      ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
       # Broadcast to Action Cable subscribers if channel is present
-      if defined?(::TickerChannel)
-        ::TickerChannel.broadcast_to(::TickerChannel::CHANNEL_ID, tick)
-      end
+      ::TickerChannel.broadcast_to(::TickerChannel::CHANNEL_ID, tick) if defined?(::TickerChannel)
       @callbacks.each do |callback|
         safe_invoke(callback, tick)
       end
@@ -157,20 +155,20 @@ module Live
 
     def load_watchlist
       # Prefer DB watchlist if present; fall back to ENV for bootstrap-only
-      if ActiveRecord::Base.connection.schema_cache.data_source_exists?("watchlist_items") &&
+      if ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items') &&
          WatchlistItem.exists?
         return WatchlistItem.order(:segment, :security_id).pluck(:segment, :security_id).map do |seg, sid|
           { segment: seg, security_id: sid }
         end
       end
 
-      raw = ENV.fetch("DHANHQ_WS_WATCHLIST", "")
+      raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '')
                .split(/[;\n,]/)
                .map(&:strip)
-               .reject(&:blank?)
+               .compact_blank
 
       raw.filter_map do |entry|
-        segment, security_id = entry.split(":", 2)
+        segment, security_id = entry.split(':', 2)
         next if segment.blank? || security_id.blank?
 
         { segment: segment, security_id: security_id }
@@ -183,14 +181,16 @@ module Live
 
     def mode
       allowed = %i[ticker quote full]
-      selected = (config&.ws_mode || DEFAULT_MODE)
+      selected = config&.ws_mode || DEFAULT_MODE
       allowed.include?(selected) ? selected : DEFAULT_MODE
     end
 
     def config
       return nil unless Rails.application.config.respond_to?(:x)
+
       x = Rails.application.config.x
       return nil unless x.respond_to?(:dhanhq)
+
       cfg = x.dhanhq
       cfg.is_a?(ActiveSupport::InheritableOptions) ? cfg : nil
     rescue StandardError

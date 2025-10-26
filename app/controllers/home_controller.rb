@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class HomeController < ActionController::Base
+class HomeController < ApplicationController
   def index
     render inline: <<~ERB
       <!DOCTYPE html>

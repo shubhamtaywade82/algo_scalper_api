@@ -7,10 +7,10 @@ module Signal
         Rails.logger.info("[Signal] Starting analysis for #{index_cfg[:key]} (#{index_cfg[:segment]})")
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
-        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || "5m").to_s
+        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         confirmation_tf = signals_cfg[:confirmation_timeframe].presence&.to_s
 
-        Rails.logger.debug("[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'}")
+        Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'}" }
 
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         unless instrument
@@ -71,7 +71,8 @@ module Signal
         end
 
         primary_series = primary_analysis[:series]
-        validation_result = comprehensive_validation(index_cfg, final_direction, primary_series, primary_analysis[:supertrend], { value: primary_analysis[:adx_value] })
+        validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
+                                                     primary_analysis[:supertrend], { value: primary_analysis[:adx_value] })
         unless validation_result[:valid]
           Rails.logger.warn("[Signal] Comprehensive validation failed for #{index_cfg[:key]}: #{validation_result[:reason]}")
           Signal::StateTracker.reset(index_cfg[:key])
@@ -161,7 +162,7 @@ module Signal
         end
 
         Rails.logger.info("[Signal] Fetched #{series.candles.size} candles for #{index_cfg[:key]} @ #{timeframe}")
-        Rails.logger.debug("[Signal] Adaptive Supertrend config: #{supertrend_cfg}")
+        Rails.logger.debug { "[Signal] Adaptive Supertrend config: #{supertrend_cfg}" }
 
         st_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)
         st = st_service.call
@@ -195,13 +196,13 @@ module Signal
 
       def analyze_multi_timeframe(index_cfg:, instrument:)
         signals_cfg = AlgoConfig.fetch[:signals] || {}
-        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || "5m").to_s
+        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         confirmation_tf = signals_cfg[:confirmation_timeframe].presence&.to_s
 
         supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
           Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
-          return { status: :error, message: "Supertrend configuration missing" }
+          return { status: :error, message: 'Supertrend configuration missing' }
         end
 
         adx_cfg = signals_cfg[:adx] || {}
@@ -234,9 +235,7 @@ module Signal
             adx_min_strength: confirmation_adx_min
           )
 
-          if confirmation_analysis[:status] == :ok
-            confirmation_direction = confirmation_analysis[:direction]
-          end
+          confirmation_direction = confirmation_analysis[:direction] if confirmation_analysis[:status] == :ok
         end
 
         final_direction = multi_timeframe_direction(primary_direction, confirmation_direction)
@@ -267,8 +266,8 @@ module Signal
         return if timeframe.blank?
 
         cleaned = timeframe.to_s.strip.downcase
-        digits = cleaned.gsub(/[^0-9]/, "")
-        digits.present? ? digits : nil
+        digits = cleaned.gsub(/[^0-9]/, '')
+        digits.presence
       end
 
       # Comprehensive validation checks before proceeding with trades
@@ -307,26 +306,26 @@ module Signal
         # Log all validation results
         Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
         validation_checks.each do |check|
-          status = check[:valid] ? "✅" : "❌"
+          status = check[:valid] ? '✅' : '❌'
           Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
         end
 
         # Determine overall validation result
-        failed_checks = validation_checks.select { |check| !check[:valid] }
+        failed_checks = validation_checks.reject { |check| check[:valid] }
 
         if failed_checks.empty?
           Rails.logger.info("[Signal] All validation checks passed for #{index_cfg[:key]} (#{mode_config[:mode]} mode)")
-          { valid: true, reason: "All checks passed" }
+          { valid: true, reason: 'All checks passed' }
         else
-          failed_reasons = failed_checks.map { |check| check[:name] }.join(", ")
+          failed_reasons = failed_checks.pluck(:name).join(', ')
           { valid: false, reason: "Failed checks: #{failed_reasons}" }
         end
       end
 
       # Get validation mode configuration
       def get_validation_mode_config
-        signals_cfg = AlgoConfig.fetch.dig(:signals) || {}
-        mode = signals_cfg[:validation_mode] || "balanced"
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        mode = signals_cfg[:validation_mode] || 'balanced'
         mode_config = signals_cfg.dig(:validation_modes, mode.to_sym) || signals_cfg.dig(:validation_modes, :balanced)
 
         # Merge with mode name for logging
@@ -334,7 +333,7 @@ module Signal
       end
 
       # Validate IV Rank - avoid extreme volatility conditions
-      def validate_iv_rank(index_cfg, series, mode_config = nil)
+      def validate_iv_rank(_index_cfg, series, mode_config = nil)
         mode_config ||= get_validation_mode_config
 
         # For now, we'll use a simple volatility check based on recent price movement
@@ -342,34 +341,34 @@ module Signal
 
         candles = series.candles
         if candles.blank? || candles.size < 5
-          return { valid: false, name: "IV Rank", message: "Insufficient data for volatility assessment" }
+          return { valid: false, name: 'IV Rank', message: 'Insufficient data for volatility assessment' }
         end
 
         # Calculate recent volatility as a proxy for IV rank
         # series.candles is an array of Candle objects
         recent_candles = candles.last(5)
-        return { valid: false, name: "IV Rank", message: "Insufficient recent candles" } if recent_candles.size < 2
+        return { valid: false, name: 'IV Rank', message: 'Insufficient recent candles' } if recent_candles.size < 2
 
         price_changes = recent_candles.each_cons(2).map { |c1, c2| (c2.close - c1.close).abs / c1.close }
         avg_volatility = price_changes.sum / price_changes.size
 
         # Normalize volatility (this is a simplified approach)
-        iv_rank_proxy = [ (avg_volatility * 1000), 1.0 ].min  # Cap at 1.0
+        iv_rank_proxy = [(avg_volatility * 1000), 1.0].min # Cap at 1.0
 
         max_threshold = mode_config[:iv_rank_max] || 0.8
         min_threshold = mode_config[:iv_rank_min] || 0.1
 
         if iv_rank_proxy > max_threshold
-          { valid: false, name: "IV Rank", message: "Extreme volatility detected (#{(iv_rank_proxy * 100).round(1)}% > #{(max_threshold * 100).round(1)}%)" }
+          { valid: false, name: 'IV Rank', message: "Extreme volatility detected (#{(iv_rank_proxy * 100).round(1)}% > #{(max_threshold * 100).round(1)}%)" }
         elsif iv_rank_proxy < min_threshold
-          { valid: false, name: "IV Rank", message: "Very low volatility (#{(iv_rank_proxy * 100).round(1)}% < #{(min_threshold * 100).round(1)}%)" }
+          { valid: false, name: 'IV Rank', message: "Very low volatility (#{(iv_rank_proxy * 100).round(1)}% < #{(min_threshold * 100).round(1)}%)" }
         else
-          { valid: true, name: "IV Rank", message: "Volatility within acceptable range (#{(iv_rank_proxy * 100).round(1)}%)" }
+          { valid: true, name: 'IV Rank', message: "Volatility within acceptable range (#{(iv_rank_proxy * 100).round(1)}%)" }
         end
       end
 
       # Validate theta risk - avoid high theta decay situations
-      def validate_theta_risk(index_cfg, direction, mode_config = nil)
+      def validate_theta_risk(_index_cfg, _direction, mode_config = nil)
         mode_config ||= get_validation_mode_config
 
         current_time = Time.zone.now
@@ -381,29 +380,29 @@ module Signal
 
         # High theta risk periods (configurable cutoff time)
         if hour > cutoff_hour || (hour == cutoff_hour && minute >= cutoff_minute)
-          { valid: false, name: "Theta Risk", message: "High theta decay risk - too close to market close (after #{cutoff_hour}:#{cutoff_minute.to_s.rjust(2, '0')})" }
-        elsif hour >= 14  # After 2:00 PM
-          { valid: true, name: "Theta Risk", message: "Moderate theta risk - afternoon trading" }
+          { valid: false, name: 'Theta Risk', message: "High theta decay risk - too close to market close (after #{cutoff_hour}:#{cutoff_minute.to_s.rjust(2, '0')})" }
+        elsif hour >= 14 # After 2:00 PM
+          { valid: true, name: 'Theta Risk', message: 'Moderate theta risk - afternoon trading' }
         else
-          { valid: true, name: "Theta Risk", message: "Low theta risk - early/midday trading" }
+          { valid: true, name: 'Theta Risk', message: 'Low theta risk - early/midday trading' }
         end
       end
 
       # Enhanced ADX validation with trend strength assessment
-      def validate_adx_strength(adx, supertrend_result, mode_config = nil)
+      def validate_adx_strength(adx, _supertrend_result, mode_config = nil)
         mode_config ||= get_validation_mode_config
 
         adx_value = adx[:value].to_f
         min_strength = mode_config[:adx_min_strength] || AlgoConfig.fetch.dig(:signals, :adx, :min_strength).to_f
 
         if adx_value < min_strength
-          { valid: false, name: "ADX Strength", message: "Weak trend strength (#{adx_value.round(1)} < #{min_strength})" }
+          { valid: false, name: 'ADX Strength', message: "Weak trend strength (#{adx_value.round(1)} < #{min_strength})" }
         elsif adx_value >= 40
-          { valid: true, name: "ADX Strength", message: "Very strong trend (#{adx_value.round(1)})" }
+          { valid: true, name: 'ADX Strength', message: "Very strong trend (#{adx_value.round(1)})" }
         elsif adx_value >= 25
-          { valid: true, name: "ADX Strength", message: "Strong trend (#{adx_value.round(1)})" }
+          { valid: true, name: 'ADX Strength', message: "Strong trend (#{adx_value.round(1)})" }
         else
-          { valid: true, name: "ADX Strength", message: "Moderate trend (#{adx_value.round(1)})" }
+          { valid: true, name: 'ADX Strength', message: "Moderate trend (#{adx_value.round(1)})" }
         end
       end
 
@@ -411,14 +410,12 @@ module Signal
       def validate_trend_confirmation(supertrend_result, series)
         trend = supertrend_result[:trend]
 
-        if trend.nil?
-          return { valid: false, name: "Trend Confirmation", message: "No trend signal from Supertrend" }
-        end
+        return { valid: false, name: 'Trend Confirmation', message: 'No trend signal from Supertrend' } if trend.nil?
 
         # Additional confirmation: check if recent price action supports the trend
         candles = series.candles
         if candles.blank? || candles.size < 3
-          return { valid: false, name: "Trend Confirmation", message: "Insufficient data for trend confirmation" }
+          return { valid: false, name: 'Trend Confirmation', message: 'Insufficient data for trend confirmation' }
         end
 
         recent_candles = candles.last(3)
@@ -427,29 +424,29 @@ module Signal
         case trend
         when :bullish
           if recent_candles.last.close > recent_candles.first.close
-            { valid: true, name: "Trend Confirmation", message: "Bullish trend confirmed by price action" }
+            { valid: true, name: 'Trend Confirmation', message: 'Bullish trend confirmed by price action' }
           else
-            { valid: false, name: "Trend Confirmation", message: "Bullish signal not confirmed by recent price action" }
+            { valid: false, name: 'Trend Confirmation', message: 'Bullish signal not confirmed by recent price action' }
           end
         when :bearish
           if recent_candles.last.close < recent_candles.first.close
-            { valid: true, name: "Trend Confirmation", message: "Bearish trend confirmed by price action" }
+            { valid: true, name: 'Trend Confirmation', message: 'Bearish trend confirmed by price action' }
           else
-            { valid: false, name: "Trend Confirmation", message: "Bearish signal not confirmed by recent price action" }
+            { valid: false, name: 'Trend Confirmation', message: 'Bearish signal not confirmed by recent price action' }
           end
         else
-          { valid: false, name: "Trend Confirmation", message: "Unknown trend direction" }
+          { valid: false, name: 'Trend Confirmation', message: 'Unknown trend direction' }
         end
       end
 
       # Validate market timing - avoid problematic trading times
       def validate_market_timing
-        return  { valid: true, name: "Market Timing", message: "Normal trading hours" }
+        return { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
         current_time = Time.zone.now
 
         # First check if it's a trading day using Market::Calendar
         unless Market::Calendar.trading_day_today?
-          return { valid: false, name: "Market Timing", message: "Not a trading day (weekend/holiday)" }
+          return { valid: false, name: 'Market Timing', message: 'Not a trading day (weekend/holiday)' }
         end
 
         hour = current_time.hour
@@ -460,15 +457,15 @@ module Signal
         market_close = hour > 15 || (hour == 15 && minute >= 30)
 
         if !market_open
-          { valid: false, name: "Market Timing", message: "Market not yet open" }
+          { valid: false, name: 'Market Timing', message: 'Market not yet open' }
         elsif market_close
-          { valid: false, name: "Market Timing", message: "Market closed" }
+          { valid: false, name: 'Market Timing', message: 'Market closed' }
         elsif hour == 9 && minute < 30
-          { valid: true, name: "Market Timing", message: "Early market - high volatility period" }
+          { valid: true, name: 'Market Timing', message: 'Early market - high volatility period' }
         elsif hour >= 14 && minute >= 30
-          { valid: true, name: "Market Timing", message: "Late market - theta decay risk" }
+          { valid: true, name: 'Market Timing', message: 'Late market - theta decay risk' }
         else
-          { valid: true, name: "Market Timing", message: "Normal trading hours" }
+          { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
         end
       end
 
@@ -502,20 +499,20 @@ module Signal
         if primary_analysis[:supertrend] && primary_analysis[:supertrend][:last_value]
           # Higher supertrend values indicate stronger trend
           st_value = primary_analysis[:supertrend][:last_value].to_f
-          supertrend_factor = [ st_value / 1000.0, 0.1 ].min # Cap at 0.1
+          supertrend_factor = [st_value / 1000.0, 0.1].min # Cap at 0.1
         end
 
         total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor
-        [ total_confidence, 1.0 ].min # Cap at 1.0
+        [total_confidence, 1.0].min # Cap at 1.0
       end
 
       def decide_direction(supertrend_result, adx_value, min_strength:, timeframe_label:)
         min_required = min_strength.to_f
         adx_numeric = adx_value.to_f
 
-        Rails.logger.debug("[Signal] ADX check(#{timeframe_label}): value=#{adx_numeric}, min_required=#{min_required}")
+        Rails.logger.debug { "[Signal] ADX check(#{timeframe_label}): value=#{adx_numeric}, min_required=#{min_required}" }
 
-        if min_required > 0 && adx_numeric < min_required
+        if min_required.positive? && adx_numeric < min_required
           Rails.logger.info("[Signal] ADX too weak on #{timeframe_label}: #{adx_numeric} < #{min_required}")
           return :avoid
         end
@@ -526,7 +523,7 @@ module Signal
         end
 
         trend = supertrend_result[:trend]
-        Rails.logger.debug("[Signal] Supertrend trend(#{timeframe_label}): #{trend}")
+        Rails.logger.debug { "[Signal] Supertrend trend(#{timeframe_label}): #{trend}" }
 
         # Use the trend from Supertrend calculation
         case trend

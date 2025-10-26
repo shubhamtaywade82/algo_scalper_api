@@ -59,18 +59,18 @@
 
 FactoryBot.define do
   factory :derivative do
-    association :instrument, factory: :instrument
-    sequence(:security_id) { |n| (20000 + n).to_s }
+    instrument
+    sequence(:security_id) { |n| (20_000 + n).to_s }
     symbol_name { instrument.symbol_name }
     exchange { instrument.exchange }
-    segment { "derivatives" }
-    isin { "INE987654321" }
-    instrument_code { "futures_index" }
+    segment { 'derivatives' }
+    isin { 'INE987654321' }
+    instrument_code { 'futures_index' }
     underlying_security_id { instrument.security_id }
     underlying_symbol { instrument.symbol_name }
     display_name { "#{instrument.symbol_name} Future" }
-    instrument_type { "FUTURE" }
-    series { "EQ" }
+    instrument_type { 'FUTURE' }
+    series { 'EQ' }
     lot_size { instrument.lot_size }
     expiry_date { 1.month.from_now }
     strike_price { nil }
@@ -80,8 +80,8 @@ FactoryBot.define do
     bracket_flag { false }
     cover_flag { false }
     asm_gsm_flag { false }
-    asm_gsm_category { "NORMAL" }
-    buy_sell_indicator { "BOTH" }
+    asm_gsm_category { 'NORMAL' }
+    buy_sell_indicator { 'BOTH' }
     buy_co_min_margin_per { 10.0 }
     sell_co_min_margin_per { 10.0 }
     buy_co_sl_range_max_perc { 20.0 }
@@ -101,159 +101,159 @@ FactoryBot.define do
     mtf_leverage { 1.0 }
 
     trait :future do
-      instrument_type { "FUTURE" }
+      instrument_type { 'FUTURE' }
       strike_price { nil }
       option_type { nil }
     end
 
     trait :call_option do
-      instrument_type { "OPTION" }
-      option_type { "CE" }
-      strike_price { 25000 }
+      instrument_type { 'OPTION' }
+      option_type { 'CE' }
+      strike_price { 25_000 }
       display_name { "#{symbol_name} #{strike_price} CE" }
     end
 
     trait :put_option do
-      instrument_type { "OPTION" }
-      option_type { "PE" }
-      strike_price { 25000 }
+      instrument_type { 'OPTION' }
+      option_type { 'PE' }
+      strike_price { 25_000 }
       display_name { "#{symbol_name} #{strike_price} PE" }
     end
 
     trait :nifty_future do
-      association :instrument, factory: [ :instrument, :nifty_index ]
-      security_id { "12345" }
-      symbol_name { "NIFTY" }
-      exchange { "NSE" }
-      segment { "derivatives" }
-      underlying_security_id { "13" }
-      underlying_symbol { "NIFTY" }
-      instrument_type { "FUTURE" }
+      instrument factory: %i[instrument nifty_index]
+      security_id { '12345' }
+      symbol_name { 'NIFTY' }
+      exchange { 'NSE' }
+      segment { 'derivatives' }
+      underlying_security_id { '13' }
+      underlying_symbol { 'NIFTY' }
+      instrument_type { 'FUTURE' }
       lot_size { 25 }
       expiry_date { 1.month.from_now }
     end
 
     trait :nifty_call_option do
-      association :instrument, factory: [ :instrument, :nifty_index ]
-      security_id { "11111" }
-      symbol_name { "NIFTY" }
-      exchange { "NSE" }
-      segment { "derivatives" }
-      underlying_security_id { "13" }
-      underlying_symbol { "NIFTY" }
-      instrument_type { "OPTION" }
+      instrument factory: %i[instrument nifty_index]
+      security_id { '11111' }
+      symbol_name { 'NIFTY' }
+      exchange { 'NSE' }
+      segment { 'derivatives' }
+      underlying_security_id { '13' }
+      underlying_symbol { 'NIFTY' }
+      instrument_type { 'OPTION' }
       lot_size { 25 }
       expiry_date { 1.month.from_now }
-      strike_price { 25000 }
-      option_type { "CE" }
-      display_name { "NIFTY 25000 CE" }
+      strike_price { 25_000 }
+      option_type { 'CE' }
+      display_name { 'NIFTY 25000 CE' }
     end
 
     trait :nifty_put_option do
-      association :instrument, factory: [ :instrument, :nifty_index ]
-      security_id { "22222" }
-      symbol_name { "NIFTY" }
-      exchange { "NSE" }
-      segment { "derivatives" }
-      underlying_security_id { "13" }
-      underlying_symbol { "NIFTY" }
-      instrument_type { "OPTION" }
+      instrument factory: %i[instrument nifty_index]
+      security_id { '22222' }
+      symbol_name { 'NIFTY' }
+      exchange { 'NSE' }
+      segment { 'derivatives' }
+      underlying_security_id { '13' }
+      underlying_symbol { 'NIFTY' }
+      instrument_type { 'OPTION' }
       lot_size { 25 }
       expiry_date { 1.month.from_now }
-      strike_price { 25000 }
-      option_type { "PE" }
-      display_name { "NIFTY 25000 PE" }
+      strike_price { 25_000 }
+      option_type { 'PE' }
+      display_name { 'NIFTY 25000 PE' }
     end
 
     trait :banknifty_future do
-      association :instrument, factory: [ :instrument, :banknifty_index ]
-      security_id { "67890" }
-      symbol_name { "BANKNIFTY" }
-      exchange { "NSE" }
-      segment { "derivatives" }
-      underlying_security_id { "25" }
-      underlying_symbol { "BANKNIFTY" }
-      instrument_type { "FUTURE" }
+      instrument factory: %i[instrument banknifty_index]
+      security_id { '67890' }
+      symbol_name { 'BANKNIFTY' }
+      exchange { 'NSE' }
+      segment { 'derivatives' }
+      underlying_security_id { '25' }
+      underlying_symbol { 'BANKNIFTY' }
+      instrument_type { 'FUTURE' }
       lot_size { 15 }
       expiry_date { 1.month.from_now }
     end
 
     trait :banknifty_call_option do
-      association :instrument, factory: [ :instrument, :banknifty_index ]
-      security_id { "33333" }
-      symbol_name { "BANKNIFTY" }
-      exchange { "NSE" }
-      segment { "derivatives" }
-      underlying_security_id { "25" }
-      underlying_symbol { "BANKNIFTY" }
-      instrument_type { "OPTION" }
+      instrument factory: %i[instrument banknifty_index]
+      security_id { '33333' }
+      symbol_name { 'BANKNIFTY' }
+      exchange { 'NSE' }
+      segment { 'derivatives' }
+      underlying_security_id { '25' }
+      underlying_symbol { 'BANKNIFTY' }
+      instrument_type { 'OPTION' }
       lot_size { 15 }
       expiry_date { 1.month.from_now }
-      strike_price { 56000 }
-      option_type { "CE" }
-      display_name { "BANKNIFTY 56000 CE" }
+      strike_price { 56_000 }
+      option_type { 'CE' }
+      display_name { 'BANKNIFTY 56000 CE' }
     end
 
     trait :banknifty_put_option do
-      association :instrument, factory: [ :instrument, :banknifty_index ]
-      security_id { "44444" }
-      symbol_name { "BANKNIFTY" }
-      exchange { "NSE" }
-      segment { "derivatives" }
-      underlying_security_id { "25" }
-      underlying_symbol { "BANKNIFTY" }
-      instrument_type { "OPTION" }
+      instrument factory: %i[instrument banknifty_index]
+      security_id { '44444' }
+      symbol_name { 'BANKNIFTY' }
+      exchange { 'NSE' }
+      segment { 'derivatives' }
+      underlying_security_id { '25' }
+      underlying_symbol { 'BANKNIFTY' }
+      instrument_type { 'OPTION' }
       lot_size { 15 }
       expiry_date { 1.month.from_now }
-      strike_price { 56000 }
-      option_type { "PE" }
-      display_name { "BANKNIFTY 56000 PE" }
+      strike_price { 56_000 }
+      option_type { 'PE' }
+      display_name { 'BANKNIFTY 56000 PE' }
     end
 
     trait :currency_future do
-      association :instrument, factory: [ :instrument, :currency_future ]
-      security_id { "55555" }
-      symbol_name { "USDINR" }
-      exchange { "NSE" }
-      segment { "currency" }
-      instrument_type { "FUTURE" }
+      instrument factory: %i[instrument currency_future]
+      security_id { '55555' }
+      symbol_name { 'USDINR' }
+      exchange { 'NSE' }
+      segment { 'currency' }
+      instrument_type { 'FUTURE' }
       lot_size { 1000 }
       expiry_date { 1.month.from_now }
     end
 
     trait :atm_call_option do
       call_option
-      strike_price { 25000 }
+      strike_price { 25_000 }
       display_name { "#{symbol_name} #{strike_price} CE" }
     end
 
     trait :atm_put_option do
       put_option
-      strike_price { 25000 }
+      strike_price { 25_000 }
       display_name { "#{symbol_name} #{strike_price} PE" }
     end
 
     trait :otm_call_option do
       call_option
-      strike_price { 25500 }
+      strike_price { 25_500 }
       display_name { "#{symbol_name} #{strike_price} CE" }
     end
 
     trait :otm_put_option do
       put_option
-      strike_price { 24500 }
+      strike_price { 24_500 }
       display_name { "#{symbol_name} #{strike_price} PE" }
     end
 
     trait :itm_call_option do
       call_option
-      strike_price { 24500 }
+      strike_price { 24_500 }
       display_name { "#{symbol_name} #{strike_price} CE" }
     end
 
     trait :itm_put_option do
       put_option
-      strike_price { 25500 }
+      strike_price { 25_500 }
       display_name { "#{symbol_name} #{strike_price} PE" }
     end
   end

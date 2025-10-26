@@ -4,9 +4,9 @@ module Api
   class TestController < ApplicationController
     def broadcast
       tick_data = {
-        segment: params[:segment] || "IDX_I",
-        security_id: params[:security_id] || "13",
-        ltp: params[:ltp] || (25000 + rand(1000)),
+        segment: params[:segment] || 'IDX_I',
+        security_id: params[:security_id] || '13',
+        ltp: params[:ltp] || rand(25_000..25_999),
         kind: :quote,
         ts: Time.current.to_i
       }
@@ -15,7 +15,7 @@ module Api
 
       render json: {
         success: true,
-        message: "Test broadcast sent",
+        message: 'Test broadcast sent',
         data: tick_data
       }
     end

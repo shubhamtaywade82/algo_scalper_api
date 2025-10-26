@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "concurrent/map"
-require "singleton"
+require 'concurrent/map'
+require 'singleton'
 
 class TickCache
   include Singleton
@@ -24,9 +24,7 @@ class TickCache
     fetch(segment, security_id)&.dig(:ltp)
   end
 
-  def clear
-    @map.clear
-  end
+  delegate :clear, to: :@map
 
   # Return a snapshot of all cached ticks as a plain Hash
   def all

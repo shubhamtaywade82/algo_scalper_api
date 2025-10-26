@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "singleton"
-require "concurrent/array"
+require 'singleton'
+require 'concurrent/array'
 
 module Live
   class OrderUpdateHub
@@ -25,7 +25,7 @@ module Live
         @running = true
       end
 
-      Rails.logger.info("DhanHQ order update feed started.")
+      Rails.logger.info('DhanHQ order update feed started.')
       true
     rescue StandardError => e
       Rails.logger.error("Failed to start DhanHQ order update feed: #{e.class} - #{e.message}")
@@ -53,7 +53,7 @@ module Live
     end
 
     def on_update(&block)
-      raise ArgumentError, "block required" unless block
+      raise ArgumentError, 'block required' unless block
 
       @callbacks << block
     end
@@ -62,8 +62,8 @@ module Live
 
     def enabled?
       # Always enabled - just check for credentials
-      client_id = ENV["DHANHQ_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
-      access    = ENV["DHANHQ_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
+      client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
     end
 
@@ -73,7 +73,7 @@ module Live
 
     def handle_update(payload)
       normalized = normalize(payload)
-      ActiveSupport::Notifications.instrument("dhanhq.order_update", normalized)
+      ActiveSupport::Notifications.instrument('dhanhq.order_update', normalized)
       @callbacks.each { |callback| safe_invoke(callback, normalized) }
     end
 

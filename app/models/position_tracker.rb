@@ -32,14 +32,14 @@
 
 # frozen_string_literal: true
 
-require "bigdecimal"
+require 'bigdecimal'
 
 class PositionTracker < ApplicationRecord
   STATUSES = {
-    pending: "pending",
-    active: "active",
-    exited: "exited",
-    cancelled: "cancelled"
+    pending: 'pending',
+    active: 'active',
+    exited: 'exited',
+    cancelled: 'cancelled'
   }.freeze
 
   belongs_to :instrument
@@ -90,8 +90,8 @@ class PositionTracker < ApplicationRecord
 
   def update_pnl!(pnl, pnl_pct: nil)
     pnl_value = BigDecimal(pnl.to_s)
-    current_hwm = high_water_mark_pnl ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal("0")
-    hwm = [ current_hwm, pnl_value ].max
+    current_hwm = high_water_mark_pnl ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
+    hwm = [current_hwm, pnl_value].max
     attrs = { last_pnl_rupees: pnl_value, high_water_mark_pnl: hwm }
     attrs[:last_pnl_pct] = BigDecimal(pnl_pct.to_s) if pnl_pct
     update!(attrs)
@@ -111,42 +111,42 @@ class PositionTracker < ApplicationRecord
   end
 
   def min_profit_lock(trail_step_pct)
-    return BigDecimal("0") if trail_step_pct.to_f <= 0
-    return BigDecimal("0") if entry_price.blank? || quantity.to_i <= 0
+    return BigDecimal(0) if trail_step_pct.to_f <= 0
+    return BigDecimal(0) if entry_price.blank? || quantity.to_i <= 0
 
     BigDecimal(entry_price.to_s) * quantity.to_i * BigDecimal(trail_step_pct.to_s)
   end
 
   def breakeven_locked?
-    ActiveModel::Type::Boolean.new.cast(meta_hash.fetch("breakeven_locked", false))
+    ActiveModel::Type::Boolean.new.cast(meta_hash.fetch('breakeven_locked', false))
   end
 
   def lock_breakeven!
-    update!(meta: meta_hash.merge("breakeven_locked" => true))
+    update!(meta: meta_hash.merge('breakeven_locked' => true))
   end
 
   def unsubscribe
     segment_key = segment.presence || instrument&.exchange_segment
     return unless segment_key && security_id
 
-    Rails.logger.debug("[PositionTracker] Unsubscribing from market feed: #{segment_key}:#{security_id}")
+    Rails.logger.debug { "[PositionTracker] Unsubscribing from market feed: #{segment_key}:#{security_id}" }
     Live::MarketFeedHub.instance.unsubscribe(segment: segment_key, security_id: security_id)
 
     # Also unsubscribe the underlying instrument if it's an option
-    if instrument&.underlying_symbol
-      underlying_instrument = Instrument.find_by(
-        symbol_name: instrument.underlying_symbol,
-        exchange: instrument.exchange,
-        segment: instrument.segment
-      )
-      if underlying_instrument
-        Rails.logger.debug("[PositionTracker] Unsubscribing from underlying: #{underlying_instrument.symbol_name}")
-        Live::MarketFeedHub.instance.unsubscribe(
-          segment: underlying_instrument.segment,
-          security_id: underlying_instrument.security_id
-        )
-      end
-    end
+    return unless instrument&.underlying_symbol
+
+    underlying_instrument = Instrument.find_by(
+      symbol_name: instrument.underlying_symbol,
+      exchange: instrument.exchange,
+      segment: instrument.segment
+    )
+    return unless underlying_instrument
+
+    Rails.logger.debug { "[PositionTracker] Unsubscribing from underlying: #{underlying_instrument.symbol_name}" }
+    Live::MarketFeedHub.instance.unsubscribe(
+      segment: underlying_instrument.segment,
+      security_id: underlying_instrument.security_id
+    )
   end
 
   def subscribe

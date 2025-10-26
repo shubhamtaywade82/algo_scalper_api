@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require "digest"
+require 'digest'
 
 module Orders
   class Placer
     class << self
-      def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: "INTRADAY", price: nil,
+      def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: 'INTRADAY', price: nil,
                       target_price: nil, stop_loss_price: nil, trailing_jump: nil)
         normalized_id = normalize_client_order_id(client_order_id)
         return if duplicate?(normalized_id)
@@ -23,13 +23,13 @@ module Orders
         Rails.logger.info("[Orders] Placing BUY order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{normalized_id}")
 
         payload = {
-          transaction_type: "BUY",
+          transaction_type: 'BUY',
           exchange_segment: seg,
           security_id: sid.to_s,
           quantity: qty,
-          order_type: "MARKET",
+          order_type: 'MARKET',
           product_type: product_type,
-          validity: "DAY",
+          validity: 'DAY',
           correlation_id: normalized_id,
           disclosed_quantity: 0
         }
@@ -43,13 +43,13 @@ module Orders
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders] BUY Order placed successfully")
+            Rails.logger.info('[Orders] BUY Order placed successfully')
           rescue StandardError => e
             Rails.logger.error("[Orders] Failed to place order: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          Rails.logger.info("[Orders] BUY Order NOT placed - ENABLE_ORDER=false (dry run mode)")
+          Rails.logger.info('[Orders] BUY Order NOT placed - ENABLE_ORDER=false (dry run mode)')
           order = nil
         end
 
@@ -90,23 +90,23 @@ module Orders
 
         # Validate position type for proper exit
         position_type = position_details[:position_type]
-        if position_type == "SHORT"
+        if position_type == 'SHORT'
           Rails.logger.error("[Orders] Position is SHORT (#{position_type}) - should use BUY order to cover, not SELL order")
           return nil
-        elsif position_type != "LONG"
+        elsif position_type != 'LONG'
           Rails.logger.warn("[Orders] Unknown position type: #{position_type} - proceeding with SELL order")
         end
 
         Rails.logger.info("[Orders] Placing SELL order: seg=#{actual_segment}, sid=#{sid}, qty=#{actual_qty}, client_order_id=#{normalized_id}, product_type=#{position_details[:product_type]}, position_type=#{position_type}")
 
         payload = {
-          transaction_type: "SELL",
+          transaction_type: 'SELL',
           exchange_segment: actual_segment,
           security_id: sid.to_s,
           quantity: actual_qty,
-          order_type: "MARKET",
+          order_type: 'MARKET',
           product_type: position_details[:product_type],
-          validity: "DAY",
+          validity: 'DAY',
           disclosed_quantity: 0
         }
 
@@ -117,13 +117,13 @@ module Orders
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders] SELL Order placed successfully")
+            Rails.logger.info('[Orders] SELL Order placed successfully')
           rescue StandardError => e
             Rails.logger.error("[Orders] Failed to place order: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          Rails.logger.info("[Orders] SELL Order NOT placed - ENABLE_ORDER=false (dry run mode)")
+          Rails.logger.info('[Orders] SELL Order NOT placed - ENABLE_ORDER=false (dry run mode)')
           order = nil
         end
         remember(normalized_id)
@@ -159,14 +159,14 @@ module Orders
 
         # Determine transaction type based on position type
         transaction_type = case position_type
-        when "LONG"
-          "SELL"
-        when "SHORT"
-          "BUY"
-        else
-          Rails.logger.error("[Orders] Unknown position type: #{position_type} - cannot determine exit transaction type")
-          return nil
-        end
+                           when 'LONG'
+                             'SELL'
+                           when 'SHORT'
+                             'BUY'
+                           else
+                             Rails.logger.error("[Orders] Unknown position type: #{position_type} - cannot determine exit transaction type")
+                             return nil
+                           end
 
         Rails.logger.info("[Orders] Placing EXIT order: #{transaction_type} #{actual_segment}:#{sid} qty=#{actual_qty}, product_type=#{position_details[:product_type]}, position_type=#{position_type}")
 
@@ -175,9 +175,9 @@ module Orders
           exchange_segment: actual_segment,
           security_id: sid.to_s,
           quantity: actual_qty,
-          order_type: "MARKET",
+          order_type: 'MARKET',
           product_type: position_details[:product_type],
-          validity: "DAY",
+          validity: 'DAY',
           disclosed_quantity: 0
         }
 
@@ -188,13 +188,13 @@ module Orders
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders] EXIT Order placed successfully")
+            Rails.logger.info('[Orders] EXIT Order placed successfully')
           rescue StandardError => e
             Rails.logger.error("[Orders] Failed to place exit order: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          Rails.logger.info("[Orders] EXIT Order NOT placed - ENABLE_ORDER=false (dry run mode)")
+          Rails.logger.info('[Orders] EXIT Order NOT placed - ENABLE_ORDER=false (dry run mode)')
           order = nil
         end
 
@@ -205,28 +205,26 @@ module Orders
       private
 
       def fetch_position_details(security_id)
-        begin
-          positions = DhanHQ::Models::Position.active
-          position = positions.find { |p| p.security_id.to_s == security_id.to_s }
+        positions = DhanHQ::Models::Position.active
+        position = positions.find { |p| p.security_id.to_s == security_id.to_s }
 
-          if position
-            Rails.logger.debug("[Orders] Found position for #{security_id}: product_type=#{position.product_type}, net_qty=#{position.net_qty}")
-            {
-              product_type: position.product_type,
-              net_qty: position.net_qty,
-              exchange_segment: position.exchange_segment,
-              position_type: position.position_type,
-              buy_avg: position.buy_avg,
-              trading_symbol: position.trading_symbol
-            }
-          else
-            Rails.logger.warn("[Orders] No active position found for security_id #{security_id}")
-            nil
-          end
-        rescue StandardError => e
-          Rails.logger.error("[Orders] Error fetching position for #{security_id}: #{e.class} - #{e.message}")
+        if position
+          Rails.logger.debug { "[Orders] Found position for #{security_id}: product_type=#{position.product_type}, net_qty=#{position.net_qty}" }
+          {
+            product_type: position.product_type,
+            net_qty: position.net_qty,
+            exchange_segment: position.exchange_segment,
+            position_type: position.position_type,
+            buy_avg: position.buy_avg,
+            trading_symbol: position.trading_symbol
+          }
+        else
+          Rails.logger.warn("[Orders] No active position found for security_id #{security_id}")
           nil
         end
+      rescue StandardError => e
+        Rails.logger.error("[Orders] Error fetching position for #{security_id}: #{e.class} - #{e.message}")
+        nil
       end
 
       def order_placement_enabled?

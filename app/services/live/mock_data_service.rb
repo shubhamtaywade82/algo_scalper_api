@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Live
   class MockDataService
     include Singleton
@@ -12,15 +14,15 @@ module Live
 
       @running = true
       @thread = Thread.new do
-        Rails.logger.info("[MockData] Starting mock data service")
+        Rails.logger.info('[MockData] Starting mock data service')
 
         while @running
           begin
             # Mock data for the three indices
             mock_data = [
-              { segment: "IDX_I", security_id: "13", ltp: 25200 + rand(200), name: "NIFTY" },
-              { segment: "IDX_I", security_id: "25", ltp: 56500 + rand(300), name: "BANKNIFTY" },
-              { segment: "IDX_I", security_id: "51", ltp: 82000 + rand(500), name: "SENSEX" }
+              { segment: 'IDX_I', security_id: '13', ltp: rand(25_200..25_399), name: 'NIFTY' },
+              { segment: 'IDX_I', security_id: '25', ltp: rand(56_500..56_799), name: 'BANKNIFTY' },
+              { segment: 'IDX_I', security_id: '51', ltp: rand(82_000..82_499), name: 'SENSEX' }
             ]
 
             mock_data.each do |data|
@@ -34,11 +36,11 @@ module Live
 
               # Broadcast to TickerChannel
               TickerChannel.broadcast_to(TickerChannel::CHANNEL_ID, tick_data)
-              Rails.logger.debug("[MockData] Broadcasted #{data[:name]}: #{data[:ltp]}")
+              Rails.logger.debug { "[MockData] Broadcasted #{data[:name]}: #{data[:ltp]}" }
             end
 
             sleep 2 # Update every 2 seconds
-          rescue => e
+          rescue StandardError => e
             Rails.logger.error("[MockData] Error: #{e.message}")
             sleep 5
           end
@@ -49,7 +51,7 @@ module Live
     def stop!
       @running = false
       @thread&.join
-      Rails.logger.info("[MockData] Mock data service stopped")
+      Rails.logger.info('[MockData] Mock data service stopped')
     end
 
     def running?

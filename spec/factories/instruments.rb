@@ -57,17 +57,17 @@
 
 FactoryBot.define do
   factory :instrument do
-    sequence(:security_id) { |n| (10000 + n).to_s }
+    sequence(:security_id) { |n| (10_000 + n).to_s }
     sequence(:symbol_name) { |n| "SYMBOL#{n}" }
-    exchange { "nse" }
-    segment { "derivatives" }
-    isin { "INE123456789" }
-    instrument_code { "futures_index" }
-    underlying_security_id { "12345" }
-    underlying_symbol { "UNDERLYING" }
-    display_name { "Display Name" }
-    instrument_type { "FUTURE" }
-    series { "EQ" }
+    exchange { 'nse' }
+    segment { 'derivatives' }
+    isin { 'INE123456789' }
+    instrument_code { 'futures_index' }
+    underlying_security_id { '12345' }
+    underlying_symbol { 'UNDERLYING' }
+    display_name { 'Display Name' }
+    instrument_type { 'FUTURE' }
+    series { 'EQ' }
     lot_size { 25 }
     expiry_date { 1.month.from_now }
     strike_price { nil }
@@ -77,8 +77,8 @@ FactoryBot.define do
     bracket_flag { false }
     cover_flag { false }
     asm_gsm_flag { false }
-    asm_gsm_category { "NORMAL" }
-    buy_sell_indicator { "BOTH" }
+    asm_gsm_category { 'NORMAL' }
+    buy_sell_indicator { 'BOTH' }
     buy_co_min_margin_per { 10.0 }
     sell_co_min_margin_per { 10.0 }
     buy_co_sl_range_max_perc { 20.0 }
@@ -98,122 +98,122 @@ FactoryBot.define do
     mtf_leverage { 1.0 }
 
     trait :nifty_index do
-      security_id { "13" }
-      symbol_name { "NIFTY" }
-      exchange { "nse" }
-      segment { "index" }
-      instrument_code { "index" }
-      instrument_type { "INDEX" }
+      security_id { '13' }
+      symbol_name { 'NIFTY' }
+      exchange { 'nse' }
+      segment { 'index' }
+      instrument_code { 'index' }
+      instrument_type { 'INDEX' }
       lot_size { 1 }
       tick_size { 0.05 }
     end
 
     trait :banknifty_index do
-      security_id { "25" }
-      symbol_name { "BANKNIFTY" }
-      exchange { "nse" }
-      segment { "index" }
-      instrument_code { "index" }
-      instrument_type { "INDEX" }
+      security_id { '25' }
+      symbol_name { 'BANKNIFTY' }
+      exchange { 'nse' }
+      segment { 'index' }
+      instrument_code { 'index' }
+      instrument_type { 'INDEX' }
       lot_size { 1 }
       tick_size { 0.05 }
     end
 
     trait :sensex_index do
-      security_id { "51" }
-      symbol_name { "SENSEX" }
-      exchange { "bse" }
-      segment { "index" }
-      instrument_code { "index" }
-      instrument_type { "INDEX" }
+      security_id { '51' }
+      symbol_name { 'SENSEX' }
+      exchange { 'bse' }
+      segment { 'index' }
+      instrument_code { 'index' }
+      instrument_type { 'INDEX' }
       lot_size { 1 }
       tick_size { 0.05 }
     end
 
     trait :nifty_future do
-      symbol_name { "NIFTY" }
-      exchange { "nse" }
-      segment { "derivatives" }
-      instrument_code { "futures_index" }
-      instrument_type { "FUTURE" }
+      symbol_name { 'NIFTY' }
+      exchange { 'nse' }
+      segment { 'derivatives' }
+      instrument_code { 'futures_index' }
+      instrument_type { 'FUTURE' }
       lot_size { 25 }
       expiry_date { 1.month.from_now }
     end
 
     trait :nifty_call_option do
-      symbol_name { "NIFTY" }
-      exchange { "nse" }
-      segment { "derivatives" }
-      instrument_code { "options_index" }
-      instrument_type { "OPTION" }
+      symbol_name { 'NIFTY' }
+      exchange { 'nse' }
+      segment { 'derivatives' }
+      instrument_code { 'options_index' }
+      instrument_type { 'OPTION' }
       lot_size { 25 }
       expiry_date { 1.month.from_now }
-      strike_price { 25000 }
-      option_type { "CE" }
+      strike_price { 25_000 }
+      option_type { 'CE' }
     end
 
     trait :nifty_put_option do
-      symbol_name { "NIFTY" }
-      exchange { "nse" }
-      segment { "derivatives" }
-      instrument_code { "options_index" }
-      instrument_type { "OPTION" }
+      symbol_name { 'NIFTY' }
+      exchange { 'nse' }
+      segment { 'derivatives' }
+      instrument_code { 'options_index' }
+      instrument_type { 'OPTION' }
       lot_size { 25 }
       expiry_date { 1.month.from_now }
-      strike_price { 25000 }
-      option_type { "PE" }
+      strike_price { 25_000 }
+      option_type { 'PE' }
     end
 
     trait :banknifty_future do
-      symbol_name { "BANKNIFTY" }
-      exchange { "nse" }
-      segment { "derivatives" }
-      instrument_code { "futures_index" }
-      instrument_type { "FUTURE" }
+      symbol_name { 'BANKNIFTY' }
+      exchange { 'nse' }
+      segment { 'derivatives' }
+      instrument_code { 'futures_index' }
+      instrument_type { 'FUTURE' }
       lot_size { 15 }
       expiry_date { 1.month.from_now }
     end
 
     trait :banknifty_call_option do
-      symbol_name { "BANKNIFTY" }
-      exchange { "nse" }
-      segment { "derivatives" }
-      instrument_code { "options_index" }
-      instrument_type { "OPTION" }
+      symbol_name { 'BANKNIFTY' }
+      exchange { 'nse' }
+      segment { 'derivatives' }
+      instrument_code { 'options_index' }
+      instrument_type { 'OPTION' }
       lot_size { 15 }
       expiry_date { 1.month.from_now }
-      strike_price { 56000 }
-      option_type { "CE" }
+      strike_price { 56_000 }
+      option_type { 'CE' }
     end
 
     trait :banknifty_put_option do
-      symbol_name { "BANKNIFTY" }
-      exchange { "nse" }
-      segment { "derivatives" }
-      instrument_code { "options_index" }
-      instrument_type { "OPTION" }
+      symbol_name { 'BANKNIFTY' }
+      exchange { 'nse' }
+      segment { 'derivatives' }
+      instrument_code { 'options_index' }
+      instrument_type { 'OPTION' }
       lot_size { 15 }
       expiry_date { 1.month.from_now }
-      strike_price { 56000 }
-      option_type { "PE" }
+      strike_price { 56_000 }
+      option_type { 'PE' }
     end
 
     trait :currency_future do
-      symbol_name { "USDINR" }
-      exchange { "nse" }
-      segment { "currency" }
-      instrument_code { "futures_currency" }
-      instrument_type { "FUTURE" }
+      symbol_name { 'USDINR' }
+      exchange { 'nse' }
+      segment { 'currency' }
+      instrument_code { 'futures_currency' }
+      instrument_type { 'FUTURE' }
       lot_size { 1000 }
       expiry_date { 1.month.from_now }
     end
 
     trait :equity do
-      symbol_name { "RELIANCE" }
-      exchange { "nse" }
-      segment { "equity" }
-      instrument_code { "equity" }
-      instrument_type { "EQ" }
+      symbol_name { 'RELIANCE' }
+      exchange { 'nse' }
+      segment { 'equity' }
+      instrument_code { 'equity' }
+      instrument_type { 'EQ' }
       lot_size { 1 }
       tick_size { 0.05 }
     end

@@ -2,34 +2,34 @@
 
 FactoryBot.define do
   factory :trading_signal do
-    index_key { "nifty" }
+    index_key { 'nifty' }
     direction { TradingSignal::DIRECTIONS[:bullish] }
-    timeframe { "1m" }
-    supertrend_value { BigDecimal("25000.00") }
-    adx_value { BigDecimal("25.5") }
+    timeframe { '1m' }
+    supertrend_value { BigDecimal('25000.00') }
+    adx_value { BigDecimal('25.5') }
     candle_timestamp { 1.hour.ago }
     signal_timestamp { Time.current }
     confidence_score { 0.75 }
-    metadata { { "source" => "supertrend_adx", "version" => "1.0" } }
+    metadata { { 'source' => 'supertrend_adx', 'version' => '1.0' } }
 
     trait :bullish do
       direction { TradingSignal::DIRECTIONS[:bullish] }
-      supertrend_value { BigDecimal("25000.00") }
-      adx_value { BigDecimal("30.0") }
+      supertrend_value { BigDecimal('25000.00') }
+      adx_value { BigDecimal('30.0') }
       confidence_score { 0.8 }
     end
 
     trait :bearish do
       direction { TradingSignal::DIRECTIONS[:bearish] }
-      supertrend_value { BigDecimal("24800.00") }
-      adx_value { BigDecimal("28.0") }
+      supertrend_value { BigDecimal('24800.00') }
+      adx_value { BigDecimal('28.0') }
       confidence_score { 0.7 }
     end
 
     trait :avoid do
       direction { TradingSignal::DIRECTIONS[:avoid] }
-      supertrend_value { BigDecimal("25000.00") }
-      adx_value { BigDecimal("15.0") }
+      supertrend_value { BigDecimal('25000.00') }
+      adx_value { BigDecimal('15.0') }
       confidence_score { 0.3 }
     end
 
@@ -42,38 +42,38 @@ FactoryBot.define do
     end
 
     trait :nifty_signal do
-      index_key { "nifty" }
-      supertrend_value { BigDecimal("25000.00") }
+      index_key { 'nifty' }
+      supertrend_value { BigDecimal('25000.00') }
     end
 
     trait :banknifty_signal do
-      index_key { "banknifty" }
-      supertrend_value { BigDecimal("56000.00") }
+      index_key { 'banknifty' }
+      supertrend_value { BigDecimal('56000.00') }
     end
 
     trait :sensex_signal do
-      index_key { "sensex" }
-      supertrend_value { BigDecimal("82000.00") }
+      index_key { 'sensex' }
+      supertrend_value { BigDecimal('82000.00') }
     end
 
     trait :one_minute do
-      timeframe { "1m" }
+      timeframe { '1m' }
     end
 
     trait :five_minute do
-      timeframe { "5m" }
+      timeframe { '5m' }
     end
 
     trait :fifteen_minute do
-      timeframe { "15m" }
+      timeframe { '15m' }
     end
 
     trait :one_hour do
-      timeframe { "1h" }
+      timeframe { '1h' }
     end
 
     trait :daily do
-      timeframe { "1d" }
+      timeframe { '1d' }
     end
 
     trait :recent do
@@ -89,22 +89,22 @@ FactoryBot.define do
     trait :with_metadata do
       metadata do
         {
-          "source" => "supertrend_adx",
-          "version" => "1.0",
-          "indicators" => {
-            "supertrend" => {
-              "value" => supertrend_value.to_f,
-              "multiplier" => 2.0,
-              "period" => 10
+          'source' => 'supertrend_adx',
+          'version' => '1.0',
+          'indicators' => {
+            'supertrend' => {
+              'value' => supertrend_value.to_f,
+              'multiplier' => 2.0,
+              'period' => 10
             },
-            "adx" => {
-              "value" => adx_value.to_f,
-              "period" => 14
+            'adx' => {
+              'value' => adx_value.to_f,
+              'period' => 14
             }
           },
-          "market_conditions" => {
-            "volatility" => "normal",
-            "trend_strength" => "strong"
+          'market_conditions' => {
+            'volatility' => 'normal',
+            'trend_strength' => 'strong'
           }
         }
       end

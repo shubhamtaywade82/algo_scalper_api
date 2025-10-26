@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require "spec_helper"
-require "logger"
-require "singleton"
+require 'spec_helper'
+require 'logger'
+require 'singleton'
 
 module Rails
   def self.logger
@@ -29,12 +29,12 @@ end
 class AlgoConfig
   class << self
     def fetch
-      { indices: [ :nifty_50 ] }
+      { indices: [:nifty_50] }
     end
   end
 end
 
-require_relative "../../../app/services/signal/scheduler"
+require_relative '../../../app/services/signal/scheduler'
 
 RSpec.describe Signal::Scheduler do
   subject(:scheduler) { described_class.instance }
@@ -50,8 +50,8 @@ RSpec.describe Signal::Scheduler do
     allow(Signal::Engine).to receive(:run_for)
   end
 
-  describe "#start!" do
-    it "spawns the scheduler thread only once" do
+  describe '#start!' do
+    it 'spawns the scheduler thread only once' do
       scheduler.start!
       scheduler.start!
 
@@ -60,8 +60,8 @@ RSpec.describe Signal::Scheduler do
     end
   end
 
-  describe "#stop!" do
-    it "kills the thread and clears the running state" do
+  describe '#stop!' do
+    it 'kills the thread and clears the running state' do
       scheduler.start!
       scheduler.stop!
 

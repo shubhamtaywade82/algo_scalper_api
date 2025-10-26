@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "ruby_technical_analysis"
-require "technical_analysis"
+require 'ruby_technical_analysis'
+require 'technical_analysis'
 
 module Indicators
   class HolyGrail < ApplicationService
@@ -132,31 +132,29 @@ module Indicators
 
       # Calculate volatility percentile based on recent ATR values
       recent_atrs = []
-      (1..20).each do |i|
-        begin
-          recent_atrs << atr(atr_len)
-        rescue
-          # Skip if not enough data
-        end
+      (1..20).each do |_i|
+        recent_atrs << atr(atr_len)
+      rescue StandardError
+        # Skip if not enough data
       end
 
       volatility_percentile = if recent_atrs.any?
-        sorted_atrs = recent_atrs.sort
-        current_rank = sorted_atrs.index(atr_value) || 0
-        current_rank.to_f / (sorted_atrs.size - 1)
-      else
-        0.5
-      end
+                                sorted_atrs = recent_atrs.sort
+                                current_rank = sorted_atrs.index(atr_value) || 0
+                                current_rank.to_f / (sorted_atrs.size - 1)
+                              else
+                                0.5
+                              end
 
       # Determine volatility level
       level = case volatility_percentile
-      when 0.0...0.3
-        :low
-      when 0.3...0.7
-        :medium
-      else
-        :high
-      end
+              when 0.0...0.3
+                :low
+              when 0.3...0.7
+                :medium
+              else
+                :high
+              end
 
       {
         level: level,
@@ -167,10 +165,10 @@ module Indicators
 
     private
 
-    def closes = @candles["close"].map(&:to_f)
-    def highs  = @candles["high"].map(&:to_f)
-    def lows   = @candles["low"].map(&:to_f)
-    def stamps = @candles["timestamp"] || []
+    def closes = @candles['close'].map(&:to_f)
+    def highs  = @candles['high'].map(&:to_f)
+    def lows   = @candles['low'].map(&:to_f)
+    def stamps = @candles['timestamp'] || []
 
     def ohlc_rows
       @ohlc_rows ||= highs.each_index.map do |i|

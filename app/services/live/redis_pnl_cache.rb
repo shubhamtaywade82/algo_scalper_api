@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
-require "singleton"
+require 'singleton'
 
 module Live
   class RedisPnlCache
     include Singleton
 
-    REDIS_KEY_PREFIX = "pnl:tracker"
+    REDIS_KEY_PREFIX = 'pnl:tracker'
     TTL_SECONDS = 1.hour.to_i
 
     def initialize
-      @redis = Redis.new(url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0"))
+      @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/0'))
     rescue StandardError => e
       Rails.logger.error("Failed to initialize Redis PnL cache: #{e.message}")
       @redis = nil
@@ -31,7 +31,7 @@ module Live
       @redis.hset(key, data)
       @redis.expire(key, TTL_SECONDS)
 
-      Rails.logger.debug("[RedisPnL] Stored PnL for tracker #{tracker_id}: #{pnl}")
+      Rails.logger.debug { "[RedisPnL] Stored PnL for tracker #{tracker_id}: #{pnl}" }
     rescue StandardError => e
       Rails.logger.error("Failed to store PnL in Redis for tracker #{tracker_id}: #{e.message}")
     end
@@ -44,11 +44,11 @@ module Live
       return nil if data.empty?
 
       {
-        pnl: data["pnl"]&.to_f,
-        pnl_pct: data["pnl_pct"]&.to_f,
-        ltp: data["ltp"]&.to_f,
-        timestamp: data["timestamp"]&.to_i,
-        updated_at: data["updated_at"]&.to_i
+        pnl: data['pnl']&.to_f,
+        pnl_pct: data['pnl_pct']&.to_f,
+        ltp: data['ltp']&.to_f,
+        timestamp: data['timestamp']&.to_i,
+        updated_at: data['updated_at']&.to_i
       }
     rescue StandardError => e
       Rails.logger.error("Failed to fetch PnL from Redis for tracker #{tracker_id}: #{e.message}")
@@ -68,7 +68,7 @@ module Live
       @redis.hset(key, data)
       @redis.expire(key, TTL_SECONDS)
 
-      Rails.logger.debug("[RedisPnL] Stored tick for #{segment}:#{security_id}: #{ltp}")
+      Rails.logger.debug { "[RedisPnL] Stored tick for #{segment}:#{security_id}: #{ltp}" }
     rescue StandardError => e
       Rails.logger.error("Failed to store tick in Redis for #{segment}:#{security_id}: #{e.message}")
     end
@@ -81,9 +81,9 @@ module Live
       return nil if data.empty?
 
       {
-        ltp: data["ltp"]&.to_f,
-        timestamp: data["timestamp"]&.to_i,
-        updated_at: data["updated_at"]&.to_i
+        ltp: data['ltp']&.to_f,
+        timestamp: data['timestamp']&.to_i,
+        updated_at: data['updated_at']&.to_i
       }
     rescue StandardError => e
       Rails.logger.error("Failed to fetch tick from Redis for #{segment}:#{security_id}: #{e.message}")
@@ -122,10 +122,10 @@ module Live
     end
 
     def health_check
-      return { status: :error, message: "Redis not initialized" } unless @redis
+      return { status: :error, message: 'Redis not initialized' } unless @redis
 
       @redis.ping
-      { status: :ok, message: "Redis PnL cache is healthy" }
+      { status: :ok, message: 'Redis PnL cache is healthy' }
     rescue StandardError => e
       { status: :error, message: "Redis PnL cache error: #{e.message}" }
     end

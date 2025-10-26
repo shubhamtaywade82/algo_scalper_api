@@ -3,7 +3,7 @@
 class AlgoConfig
   class << self
     def fetch
-      @cfg ||= YAML.load_file(Rails.root.join("config/algo.yml")).deep_symbolize_keys
+      @fetch ||= YAML.load_file(Rails.root.join('config/algo.yml')).deep_symbolize_keys
     end
 
     def mode

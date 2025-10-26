@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "bigdecimal"
-require "singleton"
+require 'bigdecimal'
+require 'singleton'
 
 module Live
   class OrderUpdateHandler
@@ -59,7 +59,7 @@ module Live
       transaction_type = (payload[:transaction_type] || payload[:side] || payload[:transaction_side]).to_s.upcase
 
       if FILL_STATUSES.include?(status)
-        if transaction_type == "SELL"
+        if transaction_type == 'SELL'
           tracker.mark_exited!
         else
           tracker.mark_active!(avg_price: avg_price, quantity: quantity)

@@ -14,9 +14,9 @@ module Api
           order_update_running: Live::OrderUpdateHub.instance.running?,
           tick_cache_size: Live::TickCache.all.size,
           sample_ltps: {
-            nifty: Live::TickCache.ltp("IDX_I", "13"),
-            banknifty: Live::TickCache.ltp("IDX_I", "25"),
-            sensex: Live::TickCache.ltp("IDX_I", "51")
+            nifty: Live::TickCache.ltp('IDX_I', '13'),
+            banknifty: Live::TickCache.ltp('IDX_I', '25'),
+            sensex: Live::TickCache.ltp('IDX_I', '51')
           }
         }
       }
@@ -25,7 +25,7 @@ module Api
     private
 
     def scheduler_status
-      Thread.list.any? { |thread| thread.name == "signal-scheduler" } ? "running" : "unknown"
+      Thread.list.any? { |thread| thread.name == 'signal-scheduler' } ? 'running' : 'unknown'
     end
   end
 end

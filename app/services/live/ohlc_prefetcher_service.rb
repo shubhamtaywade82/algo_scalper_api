@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "singleton"
+require 'singleton'
 
 module Live
   class OhlcPrefetcherService
@@ -8,7 +8,7 @@ module Live
 
     LOOP_INTERVAL_SECONDS = 60
     STAGGER_SECONDS = 0.5
-    DEFAULT_INTERVAL = "5"
+    DEFAULT_INTERVAL = '5'
     LOOKBACK_DAYS = 2
 
     def initialize
@@ -22,9 +22,10 @@ module Live
 
       @mutex.synchronize do
         return if @running
+
         @running = true
         @thread = Thread.new { run_loop }
-        @thread.name = "ohlc-prefetcher"
+        @thread.name = 'ohlc-prefetcher'
       end
     end
 
@@ -79,7 +80,7 @@ module Live
         segment_code: wl.segment
       )
       unless instrument
-        Rails.logger.debug("[OHLC prefetch] Instrument not found for #{wl.segment}:#{wl.security_id}")
+        Rails.logger.debug { "[OHLC prefetch] Instrument not found for #{wl.segment}:#{wl.security_id}" }
         return
       end
 
@@ -91,24 +92,32 @@ module Live
       last_close = nil
 
       if data.is_a?(Hash)
-        ts = data[:timestamp] || data["timestamp"] || data[:time] || data["time"]
+        ts = data[:timestamp] || data['timestamp'] || data[:time] || data['time']
         if ts.is_a?(Array)
           count = ts.length
-          first_time = ts.first ? Time.at(ts.first.to_f) : nil
-          last_time  = ts.last  ? Time.at(ts.last.to_f)  : nil
-          closes = data[:close] || data["close"]
+          first_time = ts.first ? Time.zone.at(ts.first.to_f) : nil
+          last_time  = ts.last  ? Time.zone.at(ts.last.to_f)  : nil
+          closes = data[:close] || data['close']
           last_close = closes.last if closes.is_a?(Array) && closes.any?
         else
           # fall back to lengths of OHLC arrays if present
-          arrays = %i[open high low close volume].map { |k| data[k] || data[k.to_s] }.compact.select { |v| v.is_a?(Array) }
+          arrays = %i[open high low close volume].filter_map do |k|
+            data[k] || data[k.to_s]
+          end.select { |v| v.is_a?(Array) }
           count = arrays.map(&:length).max || 0
         end
       elsif data.is_a?(Array)
         count = data.size
         if (bar = data.last).is_a?(Hash)
-          tsv = bar[:time] || bar["time"]
-          last_time = (Time.zone.parse(tsv.to_s) rescue nil) if tsv
-          last_close = bar[:close] || bar["close"]
+          tsv = bar[:time] || bar['time']
+          if tsv
+            last_time = begin
+              Time.zone.parse(tsv.to_s)
+            rescue StandardError
+              nil
+            end
+          end
+          last_close = bar[:close] || bar['close']
         end
       end
 

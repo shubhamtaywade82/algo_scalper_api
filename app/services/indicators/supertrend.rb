@@ -163,11 +163,11 @@ module Indicators
     def returns_for_window(window)
       return [] if window.nil? || window.size < 2
 
-      window.each_cons(2).map do |a, b|
+      window.each_cons(2).filter_map do |a, b|
         next if a.to_f.zero?
 
         (b - a) / a.to_f
-      end.compact
+      end
     end
 
     def volatility_from_returns(returns)
@@ -209,12 +209,12 @@ module Indicators
         normalized_atr = avg_atr&.zero? ? 1.0 : atr[i] / (avg_atr + 1e-8)
 
         volatility = if i >= 10
-          recent_prices = closes[(i - 9)..i]
-          returns = returns_for_window(recent_prices)
-          volatility_from_returns(returns)
-        else
-          0.0
-        end
+                       recent_prices = closes[(i - 9)..i]
+                       returns = returns_for_window(recent_prices)
+                       volatility_from_returns(returns)
+                     else
+                       0.0
+                     end
 
         ma_period = [10, i + 1].min
         ma_start = [i - ma_period + 1, 0].max
@@ -284,7 +284,7 @@ module Indicators
                    when 0
                      multiplier_candidates.select { |mult| mult <= base_multiplier + 0.5 }
                    when 1
-                     multiplier_candidates.select { |mult| mult >= base_multiplier && mult <= base_multiplier + 1.0 }
+                     multiplier_candidates.select { |mult| mult.between?(base_multiplier, base_multiplier + 1.0) }
                    when 2
                      multiplier_candidates.select { |mult| mult >= base_multiplier + 0.5 }
                    else
@@ -371,19 +371,17 @@ module Indicators
           next
         end
 
-        if prev_supertrend == prev_upper
-          if closes[i] && closes[i] <= upperband[i]
-            supertrend[i] = [upperband[i], prev_supertrend].compact.min
-          else
-            supertrend[i] = lowerband[i]
-          end
-        else
-          if closes[i] && closes[i] >= lowerband[i]
-            supertrend[i] = [lowerband[i], prev_supertrend].compact.max
-          else
-            supertrend[i] = upperband[i]
-          end
-        end
+        supertrend[i] = if prev_supertrend == prev_upper
+                          if closes[i] && closes[i] <= upperband[i]
+                            [upperband[i], prev_supertrend].compact.min
+                          else
+                            lowerband[i]
+                          end
+                        elsif closes[i] && closes[i] >= lowerband[i]
+                          [lowerband[i], prev_supertrend].compact.max
+                        else
+                          upperband[i]
+                        end
       end
 
       supertrend

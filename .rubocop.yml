@@ -49,7 +49,7 @@ RSpec/NestedGroups:
   Max: 5
 
 RSpec/MultipleMemoizedHelpers:
-  Max: 6
+  Max: 10
 
 # Performance rules
 Performance/StringReplacement:
