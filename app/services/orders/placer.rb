@@ -6,7 +6,7 @@ module Orders
   class Placer
     class << self
       def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: 'INTRADAY', price: nil,
-                      target_price: nil, stop_loss_price: nil, trailing_jump: nil)
+                      target_price: nil, stop_loss_price: nil, trailing_jump: nil) # rubocop:disable Lint/UnusedMethodArgument
         normalized_id = normalize_client_order_id(client_order_id)
         return if duplicate?(normalized_id)
 

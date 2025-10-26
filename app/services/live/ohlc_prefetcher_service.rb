@@ -73,7 +73,7 @@ module Live
       end
     end
 
-    def fetch_one(wl)
+    def fetch_one(wl) # rubocop:disable Naming/MethodParameterName
       instrument = wl.watchable
       instrument ||= ::Instrument.find_by_sid_and_segment(
         security_id: wl.security_id,

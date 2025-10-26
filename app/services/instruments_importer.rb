@@ -40,7 +40,7 @@ class InstrumentsImporter
       end
 
       Rails.logger.info 'Downloading fresh CSV from Dhan…'
-      csv_text = URI.open(CSV_URL).read
+      csv_text = URI.open(CSV_URL, &:read) # rubocop:disable Security/Open
 
       CACHE_PATH.dirname.mkpath
       File.write(CACHE_PATH, csv_text)

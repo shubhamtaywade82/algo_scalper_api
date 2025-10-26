@@ -140,7 +140,7 @@ class CandleSeries
     values.sort[1]
   end
 
-  def liquidity_grab_up?(lookback: 20)
+  def liquidity_grab_up?(_lookback: 20)
     return false if candles.empty?
 
     high_now = candles.last.high
@@ -152,7 +152,7 @@ class CandleSeries
       candles.last.bearish?
   end
 
-  def liquidity_grab_down?(lookback: 20)
+  def liquidity_grab_down?(_lookback: 20)
     return false if candles.empty?
 
     low_now = candles.last.low
@@ -245,7 +245,8 @@ class CandleSeries
     curr.high < prev.high && curr.low > prev.low
   end
 
-  def bollinger_bands(period: 20, std_dev: 2.0)
+  def bollinger_bands(period: 20, std_dev: 2.0) # rubocop:disable Lint/UnusedMethodArgument
+    # std_dev parameter kept for API compatibility but not used by library
     return nil if candles.size < period
 
     bb = RubyTechnicalAnalysis::BollingerBands.new(
