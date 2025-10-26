@@ -29,7 +29,7 @@ end
 class AlgoConfig
   class << self
     def fetch
-      { indices: [:nifty_50] }
+      { indices: [:nifty_fifty] }
     end
   end
 end

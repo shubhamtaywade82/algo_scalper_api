@@ -23,7 +23,7 @@ module Live
 
         # Get all tracked positions from database with proper preloading
         tracked_positions = PositionTracker.active.eager_load(:instrument).to_a
-        tracked_security_ids = tracked_positions.map { |p| p.security_id.to_s }
+        tracked_security_ids = tracked_positions.map { |p| p.security_id.to_s } # rubocop:disable Performance/MapMethodChain
 
         Rails.logger.info("[PositionSync] Found #{tracked_positions.size} tracked positions in database")
 
