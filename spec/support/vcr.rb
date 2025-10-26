@@ -10,7 +10,7 @@ VCR.configure do |config|
 
   # Filter secrets from environment variables
   %w[DHANHQ_CLIENT_ID DHANHQ_ACCESS_TOKEN RAILS_MASTER_KEY CLIENT_ID ACCESS_TOKEN].each do |key|
-    val = ENV[key]
+    val = ENV.fetch(key, nil)
     config.filter_sensitive_data("<#{key}>") { val } if val
   end
 
@@ -18,40 +18,29 @@ VCR.configure do |config|
   config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
     # Check various header formats
     interaction.request.headers['Access-Token'] ||
-    interaction.request.headers['access-token'] ||
-    interaction.request.headers['ACCESS_TOKEN'] ||
-    interaction.request.headers['access_token']
+      interaction.request.headers['access-token'] ||
+      interaction.request.headers['ACCESS_TOKEN'] ||
+      interaction.request.headers['access_token']
   end
 
   config.filter_sensitive_data('<CLIENT_ID>') do |interaction|
     # Check various header formats
     interaction.request.headers['Client-Id'] ||
-    interaction.request.headers['client-id'] ||
-    interaction.request.headers['CLIENT_ID'] ||
-    interaction.request.headers['client_id']
+      interaction.request.headers['client-id'] ||
+      interaction.request.headers['CLIENT_ID'] ||
+      interaction.request.headers['client_id']
   end
 
   config.filter_sensitive_data('<AUTHORIZATION>') do |interaction|
     interaction.request.headers['Authorization'] ||
-    interaction.request.headers['authorization'] ||
-    interaction.request.headers['AUTHORIZATION']
+      interaction.request.headers['authorization'] ||
+      interaction.request.headers['AUTHORIZATION']
   end
 
   # Filter sensitive data from request body
   config.filter_sensitive_data('<REQUEST_BODY>') do |interaction|
     body = interaction.request.body
-    if body && body.include?('access_token')
-      body.gsub(/"access_token":"[^"]*"/, '"access_token":"<ACCESS_TOKEN>"')
-          .gsub(/"client_id":"[^"]*"/, '"client_id":"<CLIENT_ID>"')
-    else
-      body
-    end
-  end
-
-  # Filter sensitive data from response body
-  config.filter_sensitive_data('<RESPONSE_BODY>') do |interaction|
-    body = interaction.response.body
-    if body && body.include?('access_token')
+    if body&.include?('access_token')
       body.gsub(/"access_token":"[^"]*"/, '"access_token":"<ACCESS_TOKEN>"')
           .gsub(/"client_id":"[^"]*"/, '"client_id":"<CLIENT_ID>"')
     else

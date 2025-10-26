@@ -240,20 +240,14 @@ RSpec.describe "Dynamic Subscription Integration", type: :integration, vcr: true
         ]
 
         mock_ws_client = double('WSClient')
-        allow(mock_ws_client).to receive(:subscribe_one)
 
         allow(market_feed_hub).to receive(:load_watchlist).and_return(watchlist)
         market_feed_hub.instance_variable_set(:@watchlist, watchlist)
         market_feed_hub.instance_variable_set(:@ws_client, mock_ws_client)
 
-        expect(mock_ws_client).to receive(:subscribe_one).with(
-          segment: 'NSE_FNO',
-          security_id: '12345'
-        )
-
-        expect(mock_ws_client).to receive(:subscribe_one).with(
-          segment: 'NSE_FNO',
-          security_id: '67890'
+        expect(mock_ws_client).to receive(:subscribe_many).with(
+          req: :quote,
+          list: watchlist
         )
 
         market_feed_hub.send(:subscribe_watchlist)
@@ -271,22 +265,16 @@ RSpec.describe "Dynamic Subscription Integration", type: :integration, vcr: true
         # Mock the instance variable directly
         market_feed_hub.instance_variable_set(:@watchlist, watchlist)
 
-        # Mock the WebSocket client to raise an error on first subscription
+        # Mock the WebSocket client to raise an error on subscribe_many
         mock_ws_client = double('WSClient')
-        allow(mock_ws_client).to receive(:subscribe_one).with(
-          segment: 'NSE_FNO',
-          security_id: '12345'
+        allow(mock_ws_client).to receive(:subscribe_many).with(
+          req: :quote,
+          list: watchlist
         ).and_raise(StandardError, "Subscription error")
-
-        # Allow the second subscription to succeed
-        allow(mock_ws_client).to receive(:subscribe_one).with(
-          segment: 'NSE_FNO',
-          security_id: '67890'
-        )
 
         market_feed_hub.instance_variable_set(:@ws_client, mock_ws_client)
 
-        # The method should raise an error when the first subscription fails
+        # The method should raise an error when subscription fails
         expect {
           market_feed_hub.send(:subscribe_watchlist)
         }.to raise_error(StandardError, "Subscription error")
@@ -678,10 +666,12 @@ RSpec.describe "Dynamic Subscription Integration", type: :integration, vcr: true
         # Mock the WebSocket client
         mock_ws_client = double('WebSocketClient')
         market_feed_hub.instance_variable_set(:@ws_client, mock_ws_client)
-        allow(mock_ws_client).to receive(:subscribe_one)
 
-        # Verify that subscribe_one is called for each item
-        expect(mock_ws_client).to receive(:subscribe_one).exactly(100).times
+        # Verify that subscribe_many is called once with all items
+        expect(mock_ws_client).to receive(:subscribe_many).with(
+          req: :quote,
+          list: watchlist
+        ).once
 
         market_feed_hub.send(:subscribe_watchlist)
       end

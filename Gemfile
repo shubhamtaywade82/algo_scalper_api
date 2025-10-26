@@ -57,8 +57,13 @@ group :development, :test do
   # Static analysis for security vulnerabilities [https://brakemanscanner.org/]
   gem "brakeman", require: false
 
-  # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
-  gem "rubocop-rails-omakase", require: false
+  # Code quality and style enforcement
+  gem "rubocop", "~> 1.71", require: false
+  gem "rubocop-rails", "~> 2.23", require: false
+  gem "rubocop-rspec", "~> 3.0", require: false
+  gem "rubocop-performance", "~> 1.21", require: false
+  gem "rubocop-factory_bot", "~> 2.25", require: false
+  gem "rubocop-rspec_rails"
 
   # Load .env files in development/test before initializers
   gem "dotenv-rails"
@@ -66,6 +71,7 @@ group :development, :test do
   # Testing stack
   gem "rspec-rails"
   gem "factory_bot_rails"
+  gem "faker"
   gem "database_cleaner-active_record"
   gem "shoulda-matchers"
   gem "webmock", require: false

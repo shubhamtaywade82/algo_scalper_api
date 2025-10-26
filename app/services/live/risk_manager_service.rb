@@ -98,7 +98,10 @@ module Live
     def enforce_trailing_stops(positions = fetch_positions_indexed)
       risk = risk_config
 
-      PositionTracker.active.includes(:instrument).find_each do |tracker|
+      # Load all trackers with instruments in a single query with proper preloading
+      trackers = PositionTracker.active.eager_load(:instrument).to_a
+
+      trackers.each do |tracker|
         position = positions[tracker.security_id.to_s]
         ltp = current_ltp_with_freshness_check(tracker, position)
         next unless ltp
@@ -136,7 +139,10 @@ module Live
 
       return if sl_pct <= 0 && tp_pct <= 0 && per_trade_pct <= 0
 
-      PositionTracker.active.includes(:instrument).find_each do |tracker|
+      # Load all trackers with instruments in a single query with proper preloading
+      trackers = PositionTracker.active.eager_load(:instrument).to_a
+
+      trackers.each do |tracker|
         position = positions[tracker.security_id.to_s]
         ltp = current_ltp(tracker, position)
         next unless ltp

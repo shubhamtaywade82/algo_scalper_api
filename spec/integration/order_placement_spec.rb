@@ -118,6 +118,18 @@ RSpec.describe "Order Placement Integration", type: :integration, vcr: true do
           client_order_id: 'TEST-SELL-001'
         }
       end
+      let(:position_details) do
+        {
+          product_type: "INTRADAY",
+          net_qty: 50,
+          exchange_segment: "NSE_FNO",
+          position_type: "LONG"
+        }
+      end
+
+      before do
+        allow(Orders::Placer).to receive(:fetch_position_details).and_return(position_details)
+      end
 
       it "places MARKET SELL order successfully" do
         result = order_placer.sell_market!(**order_params)

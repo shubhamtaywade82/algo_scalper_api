@@ -54,7 +54,12 @@ module Entries
       end
 
       def exposure_ok?(instrument:, side:, max_same_side:)
-        active_positions = PositionTracker.where(instrument: instrument, side: side, status: PositionTracker::STATUSES[:active])
+        # Use efficient query with index
+        active_positions = PositionTracker.where(
+          instrument: instrument,
+          side: side,
+          status: PositionTracker::STATUSES[:active]
+        ).limit(max_same_side.to_i + 1) # Only fetch what we need
         current_count = active_positions.count
 
         # Check if we've reached the maximum allowed positions

@@ -47,8 +47,13 @@ RSpec.describe Live::MarketFeedHub do
 
       expect(@ws_double).to receive(:on).with(:tick)
       expect(@ws_double).to receive(:start)
-      expect(@ws_double).to receive(:subscribe_one).with(segment: 'IDX_I', security_id: '13')
-      expect(@ws_double).to receive(:subscribe_one).with(segment: 'NSE_FNO', security_id: '12345')
+      expect(@ws_double).to receive(:subscribe_many).with(
+        req: :quote,
+        list: [
+          { segment: 'IDX_I', security_id: '13' },
+          { segment: 'NSE_FNO', security_id: '12345' }
+        ]
+      )
 
       expect(hub.start!).to eq(true)
       expect(hub).to be_running

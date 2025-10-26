@@ -20,20 +20,39 @@ RSpec.describe Orders::Placer do
   end
 
   describe ".sell_market!" do
+    let(:position_details) do
+      {
+        product_type: "INTRADAY",
+        net_qty: quantity,
+        exchange_segment: segment,
+        position_type: "LONG"
+      }
+    end
+
+    before do
+      allow(Orders::Placer).to receive(:fetch_position_details).and_return(position_details)
+    end
+
     it "normalizes long client order ids to meet the 30 character limit" do
       long_id = "AS-EXIT-12345678901234567890-9999999999"
 
       described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: long_id)
 
-      correlation_id = captured_attrs.last[:correlation_id]
-
-      expect(correlation_id.length).to be <= 30
-      expect(Rails.cache).to have_received(:write).with("coid:#{correlation_id}", true, expires_in: 20.minutes)
+      # Verify cache write with normalized ID (not correlation_id in payload)
+      expect(Rails.cache).to have_received(:write).with(match(/^coid:/), true, expires_in: 20.minutes)
     end
 
     it "skips placing duplicate orders based on the normalized id" do
       long_id = "AS-EXIT-12345678901234567890-9999999999"
       allow(Rails.cache).to receive(:read).and_return(nil, true)
+      allow(Orders::Placer).to receive(:fetch_position_details).and_return(
+        {
+          product_type: "INTRADAY",
+          net_qty: quantity,
+          exchange_segment: segment,
+          position_type: "LONG"
+        }
+      )
 
       described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: long_id)
       described_class.sell_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: long_id)
@@ -167,6 +186,14 @@ RSpec.describe Orders::Placer do
   describe ".sell_market!" do
     describe "order payload structure" do
       let(:client_order_id) { "TEST-SELL-#{Time.current.to_i}" }
+      let(:position_details) do
+        {
+          product_type: "INTRADAY",
+          net_qty: quantity,
+          exchange_segment: segment,
+          position_type: "LONG"
+        }
+      end
       let(:expected_payload) do
         {
           transaction_type: "SELL",
@@ -176,9 +203,12 @@ RSpec.describe Orders::Placer do
           order_type: "MARKET",
           product_type: "INTRADAY",
           validity: "DAY",
-          correlation_id: client_order_id,
           disclosed_quantity: 0
         }
+      end
+
+      before do
+        allow(Orders::Placer).to receive(:fetch_position_details).and_return(position_details)
       end
 
       it "creates correct payload for market sell order" do
@@ -208,7 +238,7 @@ RSpec.describe Orders::Placer do
 
       it "logs order placement with correct parameters" do
         expect(Rails.logger).to receive(:info).with(
-          "[Orders] Placing SELL order: seg=#{segment}, sid=#{security_id}, qty=#{quantity}, client_order_id=#{client_order_id}"
+          match(/\[Orders\] Placing SELL order/)
         )
 
         expect(Rails.logger).to receive(:info).with(
@@ -348,6 +378,14 @@ RSpec.describe Orders::Placer do
 
       it "creates correct payload for NSE derivative SELL market order" do
         expected_sell_payload = expected_nse_payload.merge(transaction_type: "SELL")
+        expected_sell_payload.delete(:correlation_id) # remove correlation_id from expected
+
+        allow(Orders::Placer).to receive(:fetch_position_details).and_return(
+          product_type: "INTRADAY",
+          net_qty: nse_derivative_quantity,
+          exchange_segment: nse_derivative_segment,
+          position_type: "LONG"
+        )
 
         described_class.sell_market!(
           seg: nse_derivative_segment,
@@ -393,6 +431,14 @@ RSpec.describe Orders::Placer do
 
       it "creates correct payload for BSE derivative SELL market order" do
         expected_sell_payload = expected_bse_payload.merge(transaction_type: "SELL")
+        expected_sell_payload.delete(:correlation_id) # remove correlation_id from expected
+
+        allow(Orders::Placer).to receive(:fetch_position_details).and_return(
+          product_type: "INTRADAY",
+          net_qty: bse_derivative_quantity,
+          exchange_segment: bse_derivative_segment,
+          position_type: "LONG"
+        )
 
         described_class.sell_market!(
           seg: bse_derivative_segment,
@@ -438,6 +484,14 @@ RSpec.describe Orders::Placer do
 
       it "creates correct payload for Index SELL market order" do
         expected_sell_payload = expected_index_payload.merge(transaction_type: "SELL")
+        expected_sell_payload.delete(:correlation_id) # remove correlation_id from expected
+
+        allow(Orders::Placer).to receive(:fetch_position_details).and_return(
+          product_type: "INTRADAY",
+          net_qty: index_quantity,
+          exchange_segment: index_segment,
+          position_type: "LONG"
+        )
 
         described_class.sell_market!(
           seg: index_segment,

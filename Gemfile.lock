@@ -176,6 +176,8 @@ GEM
     factory_bot_rails (6.5.1)
       factory_bot (~> 6.5)
       railties (>= 6.1.0)
+    faker (3.5.2)
+      i18n (>= 1.8.11, < 2)
     faraday (1.10.4)
       faraday-em_http (~> 1.0)
       faraday-em_synchrony (~> 1.0)
@@ -386,6 +388,9 @@ GEM
     rubocop-ast (1.47.1)
       parser (>= 3.3.7.2)
       prism (~> 1.4)
+    rubocop-factory_bot (2.27.1)
+      lint_roller (~> 1.1)
+      rubocop (~> 1.72, >= 1.72.1)
     rubocop-performance (1.26.0)
       lint_roller (~> 1.1)
       rubocop (>= 1.75.0, < 2.0)
@@ -396,10 +401,13 @@ GEM
       rack (>= 1.1)
       rubocop (>= 1.75.0, < 2.0)
       rubocop-ast (>= 1.44.0, < 2.0)
-    rubocop-rails-omakase (1.1.0)
-      rubocop (>= 1.72)
-      rubocop-performance (>= 1.24)
-      rubocop-rails (>= 2.30)
+    rubocop-rspec (3.7.0)
+      lint_roller (~> 1.1)
+      rubocop (~> 1.72, >= 1.72.1)
+    rubocop-rspec_rails (2.31.0)
+      lint_roller (~> 1.1)
+      rubocop (~> 1.72, >= 1.72.1)
+      rubocop-rspec (~> 3.5)
     ruby-progressbar (1.13.0)
     ruby-technical-analysis (1.0.4)
     ruby2_keywords (0.0.5)
@@ -488,6 +496,7 @@ DEPENDENCIES
   debug
   dotenv-rails
   factory_bot_rails
+  faker
   kamal
   pg (~> 1.1)
   puma (>= 5.0)
@@ -495,7 +504,12 @@ DEPENDENCIES
   rails (~> 8.0.2)
   redis
   rspec-rails
-  rubocop-rails-omakase
+  rubocop (~> 1.71)
+  rubocop-factory_bot (~> 2.25)
+  rubocop-performance (~> 1.21)
+  rubocop-rails (~> 2.23)
+  rubocop-rspec (~> 3.0)
+  rubocop-rspec_rails
   ruby-technical-analysis
   shoulda-matchers
   sidekiq

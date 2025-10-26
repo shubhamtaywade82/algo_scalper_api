@@ -1,8 +1,132 @@
-# Omakase Ruby styling for Rails
-inherit_gem: { rubocop-rails-omakase: rubocop.yml }
+# Use the new plugins syntax for RuboCop extensions
+plugins:
+  - rubocop-rails
+  - rubocop-rspec
+  - rubocop-performance
+  - rubocop-factory_bot
+  - rubocop-rspec_rails
+
+# Global settings
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.3
+  Exclude:
+    - "vendor/**/*"
+    - "node_modules/**/*"
+    - "db/**/*"
+    - "tmp/**/*"
+    - "bin/**/*"
+    - "config/**/*"
 
 # Overwrite or add rules to create your own house style
 #
 # # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
 # Layout/SpaceInsideArrayLiteralBrackets:
 #   Enabled: false
+
+# RSpec-specific configuration
+RSpec:
+  Include:
+    - "spec/**/*_spec.rb"
+    - "spec/**/*.feature"
+
+RSpec/VariableName:
+  Enabled: false
+
+RSpec/MultipleExpectations:
+  Enabled: false
+  Max: 4
+
+RSpec/ExampleLength:
+  Max: 25
+  CountAsOne: ["block", "heredoc"]
+  Exclude:
+    - "spec/features/**/*"
+    - "spec/integration/**/*"
+    - "spec/system/**/*"
+
+RSpec/NestedGroups:
+  Max: 5
+
+RSpec/MultipleMemoizedHelpers:
+  Max: 6
+
+# Performance rules
+Performance/StringReplacement:
+  Enabled: true
+
+Performance/RedundantMatch:
+  Enabled: true
+
+Performance/RedundantStringChars:
+  Enabled: true
+
+Performance/RedundantBlockCall:
+  Enabled: true
+
+Performance/StartWith:
+  Enabled: true
+
+Performance/EndWith:
+  Enabled: true
+
+Performance/DeleteSuffix:
+  Enabled: true
+
+Performance/DeletePrefix:
+  Enabled: true
+
+# FactoryBot rules
+FactoryBot/AttributeDefinedStatically:
+  Enabled: true
+
+FactoryBot/CreateList:
+  Enabled: true
+
+FactoryBot/ConsistentParenthesesStyle:
+  Enabled: true
+
+# Allow longer lines for better readability
+Layout/LineLength:
+  Max: 120
+  AllowedPatterns:
+    - '\s*#'
+    - '\s*describe'
+    - '\s*context'
+    - '\s*it\s'
+    - '\s*expect'
+
+# Disable some overly strict rules
+Lint/MissingSuper:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/BlockLength:
+  Enabled: true
+  Exclude:
+    - "config/**/*"
+    - "spec/**/*"
+    - "db/migrate/**/*"
+    - "app/services/**/*"
+    - "app/models/concerns/**/*"
+
+Metrics/MethodLength:
+  Enabled: true
+  CountAsOne:
+    - "array"
+    - "hash"
+    - "heredoc"
+  Max: 30
+  Exclude:
+    - "spec/**/*"
+
+Metrics/AbcSize:
+  Max: 30
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+
+Metrics/PerceivedComplexity:
+  Max: 15

@@ -11,7 +11,7 @@ RSpec.describe "VCR Cassette Generation", type: :integration, vcr: true do
     context "when making real API calls" do
       it "records OHLC API call with filtered sensitive data" do
         # Skip if no credentials are available
-        skip "No DhanHQ credentials available" unless ENV['DHANHQ_CLIENT_ID'] && ENV['DHANHQ_ACCESS_TOKEN']
+        skip "No DhanHQ credentials available" unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
 
         # Create a real instrument
         instrument = create(:instrument, :nifty_index)
@@ -26,7 +26,7 @@ RSpec.describe "VCR Cassette Generation", type: :integration, vcr: true do
 
       it "records historical data API call with filtered sensitive data" do
         # Skip if no credentials are available
-        skip "No DhanHQ credentials available" unless ENV['DHANHQ_CLIENT_ID'] && ENV['DHANHQ_ACCESS_TOKEN']
+        skip "No DhanHQ credentials available" unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
 
         # Create a real instrument
         instrument = create(:instrument, :nifty_index)

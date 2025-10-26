@@ -270,8 +270,8 @@ RSpec.describe "Exit Rules Integration", type: :integration, vcr: true do
 
         # Mock PositionTracker.active to return our test tracker
         active_relation = double('ActiveRelation')
-        allow(active_relation).to receive(:includes).with(:instrument).and_return(active_relation)
-        allow(active_relation).to receive(:find_each).and_yield(position_tracker)
+        allow(active_relation).to receive(:eager_load).with(:instrument).and_return(active_relation)
+        allow(active_relation).to receive(:to_a).and_return([ position_tracker ])
         allow(PositionTracker).to receive(:active).and_return(active_relation)
 
         # New higher PnL
@@ -499,10 +499,17 @@ RSpec.describe "Exit Rules Integration", type: :integration, vcr: true do
         allow(mock_position).to receive(:respond_to?).with(:exit!).and_return(false)
         allow(mock_position).to receive(:respond_to?).with(:order_id).and_return(false)
 
-        expect(Orders::Placer).to receive(:sell_market!).with(
+        # Mock fetch_position_details for exit_position!
+        allow(Orders::Placer).to receive(:fetch_position_details).and_return(
+          product_type: "INTRADAY",
+          net_qty: 50,
+          exchange_segment: "NSE_FNO",
+          position_type: "LONG"
+        )
+
+        expect(Orders::Placer).to receive(:exit_position!).with(
           seg: 'derivatives',
           sid: '12345',
-          qty: 50,
           client_order_id: anything
         )
 

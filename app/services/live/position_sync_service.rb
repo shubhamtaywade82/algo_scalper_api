@@ -21,9 +21,9 @@ module Live
         dhan_positions = DhanHQ::Models::Position.active
         Rails.logger.info("[PositionSync] Found #{dhan_positions.size} active positions in DhanHQ")
 
-        # Get all tracked positions from database
-        tracked_positions = PositionTracker.active.includes(:instrument)
-        tracked_security_ids = tracked_positions.pluck(:security_id).map(&:to_s)
+        # Get all tracked positions from database with proper preloading
+        tracked_positions = PositionTracker.active.eager_load(:instrument).to_a
+        tracked_security_ids = tracked_positions.map(&:security_id).map(&:to_s)
 
         Rails.logger.info("[PositionSync] Found #{tracked_positions.size} tracked positions in database")
 
