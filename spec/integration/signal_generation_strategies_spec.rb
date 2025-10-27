@@ -631,11 +631,13 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
           take_profit: 108.0
         }
 
-        allow(risk_manager).to receive(:evaluate_signal_risk).with(signal_data).and_return({
-                                                                                             risk_level: :low,
-                                                                                             max_position_size: 100,
-                                                                                             recommended_stop_loss: 103.0
-                                                                                           })
+        allow(risk_manager).to receive(:evaluate_signal_risk).with(signal_data).and_return(
+          {
+            risk_level: :low,
+            max_position_size: 100,
+            recommended_stop_loss: 103.0
+          }
+        )
 
         risk_assessment = risk_manager.evaluate_signal_risk(signal_data)
 
@@ -682,9 +684,12 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
       end
 
       it 'handles indicator calculation errors' do
-        # Test that RSI method handles errors gracefully by mocking the internal call
-        allow_any_instance_of(RubyTechnicalAnalysis::RelativeStrengthIndex).to receive(:call).and_raise(StandardError,
-                                                                                                        'RSI calculation failed')
+        # Test that RSI method handles errors gracefully by stubbing the internal call
+        allow(RubyTechnicalAnalysis::RelativeStrengthIndex).to receive(:new).and_return(
+          instance_double(RubyTechnicalAnalysis::RelativeStrengthIndex, call: nil).tap do |double|
+            allow(double).to receive(:call).and_raise(StandardError, 'RSI calculation failed')
+          end
+        )
 
         # The RSI method should return nil instead of raising an error
         result = candle_series.rsi

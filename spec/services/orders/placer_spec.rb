@@ -21,7 +21,7 @@ RSpec.describe Orders::Placer do
     allow(described_class).to receive(:order_placement_enabled?).and_return(true)
   end
 
-  describe '.sell_market!' do
+  describe '.sell_market! client order ID handling' do
     let(:position_details) do
       {
         product_type: 'INTRADAY',
@@ -151,7 +151,7 @@ RSpec.describe Orders::Placer do
       end
 
       it 'validates required parameters' do
-        expect(Rails.logger).to receive(:error).with(/Missing required parameters/)
+        allow(Rails.logger).to receive(:error)
 
         result = described_class.buy_market!(
           seg: nil,
@@ -160,6 +160,7 @@ RSpec.describe Orders::Placer do
           client_order_id: client_order_id
         )
 
+        expect(Rails.logger).to have_received(:error).with(/Missing required parameters/)
         expect(result).to be_nil
         expect(DhanHQ::Models::Order).not_to have_received(:create)
       end
@@ -222,7 +223,7 @@ RSpec.describe Orders::Placer do
       end
 
       it 'validates required parameters' do
-        expect(Rails.logger).to receive(:error).with(/Missing required parameters/)
+        allow(Rails.logger).to receive(:error)
 
         result = described_class.sell_market!(
           seg: segment,
@@ -231,6 +232,7 @@ RSpec.describe Orders::Placer do
           client_order_id: client_order_id
         )
 
+        expect(Rails.logger).to have_received(:error).with(/Missing required parameters/)
         expect(result).to be_nil
         expect(DhanHQ::Models::Order).not_to have_received(:create)
       end
@@ -285,7 +287,7 @@ RSpec.describe Orders::Placer do
     it 'warns when ID is truncated' do
       long_id = 'VERY-LONG-CLIENT-ORDER-ID-THAT-EXCEEDS-THIRTY-CHARACTERS'
 
-      expect(Rails.logger).to receive(:warn).with(/client_order_id truncated/)
+      allow(Rails.logger).to receive(:warn)
 
       described_class.buy_market!(
         seg: segment,
@@ -293,6 +295,8 @@ RSpec.describe Orders::Placer do
         qty: quantity,
         client_order_id: long_id
       )
+
+      expect(Rails.logger).to have_received(:warn).with(/client_order_id truncated/)
     end
   end
 

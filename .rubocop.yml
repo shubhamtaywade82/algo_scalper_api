@@ -33,10 +33,26 @@ RSpec:
 RSpec/VariableName:
   Enabled: false
 
-RSpec/MultipleExpectations:
-  Enabled: false
-  Max: 4
+RSpec/DescribeClass:
+  Enabled: true
+  Exclude:
+    - "spec/integration/**/*"
+    - "spec/system/**/*"
+    - "spec/features/**/*"
 
+# RSpec/ContextWording: Prefer 'when', 'with', 'without' for contexts
+RSpec/ContextWording:
+  Enabled: true
+  Prefixes:
+    - when
+    - with
+    - without
+    - if
+    - unless
+    - for
+    - that
+
+# RSpec/ExampleLength: Keep examples focused and short
 RSpec/ExampleLength:
   Max: 25
   CountAsOne: ["block", "heredoc"]
@@ -45,11 +61,27 @@ RSpec/ExampleLength:
     - "spec/integration/**/*"
     - "spec/system/**/*"
 
+# RSpec/NestedGroups: Limit nested describe/context blocks
 RSpec/NestedGroups:
   Max: 5
 
+# RSpec/MultipleMemoizedHelpers: Allow reasonable use of let
 RSpec/MultipleMemoizedHelpers:
   Max: 10
+
+# RSpec/SubjectStub: Allow stubbing on subjects
+RSpec/SubjectStub:
+  Enabled: false
+
+# RSpec/MultipleExpectations: Allow multiple expectations in integration/system tests
+# Note: Better Specs allows multiple expectations in non-isolated tests
+RSpec/MultipleExpectations:
+  Enabled: true
+  Max: 4 # Allow up to 4 expectations per test
+  Exclude:
+    - "spec/integration/**/*"
+    - "spec/system/**/*"
+    - "spec/features/**/*"
 
 # Performance rules
 Performance/StringReplacement:

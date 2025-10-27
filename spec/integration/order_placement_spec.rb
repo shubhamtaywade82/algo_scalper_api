@@ -227,8 +227,8 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
 
         trading_service.execute_cycle!
 
-        # Test passes if no exception is raised
-        expect(true).to be true
+        # Test passes if no exception is raised - service calls mocked method
+        expect(trading_service).to have_received(:process_instrument)
       end
 
       it 'skips processing when DhanHQ is disabled' do
@@ -236,8 +236,8 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
 
         trading_service.execute_cycle!
 
-        # Test passes if no exception is raised
-        expect(true).to be true
+        # Test passes if no exception is raised - no processing when disabled
+        expect { trading_service.execute_cycle! }.not_to raise_error
       end
 
       it 'skips processing when position limit reached' do
@@ -245,36 +245,27 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
 
         trading_service.execute_cycle!
 
-        # Test passes if no exception is raised
-        expect(true).to be true
+        # Test passes if no exception is raised - no processing when limit reached
+        expect { trading_service.execute_cycle! }.not_to raise_error
       end
     end
 
     context 'when processing individual instruments' do
       it 'places market order for long signal' do
-        trading_service.send(:process_instrument, instrument)
-
-        # Test passes if no exception is raised
-        expect(true).to be true
+        expect { trading_service.send(:process_instrument, instrument) }.not_to raise_error
       end
 
       it 'skips processing for non-long signals' do
         allow(trading_service.instance_variable_get(:@trend_identifier)).to receive(:signal_for).and_return(:short)
 
-        trading_service.send(:process_instrument, instrument)
-
-        # Test passes if no exception is raised
-        expect(true).to be true
+        expect { trading_service.send(:process_instrument, instrument) }.not_to raise_error
       end
 
       it 'skips processing when no derivative selected' do
         allow(trading_service.instance_variable_get(:@trend_identifier)).to receive(:signal_for).and_return(:long)
         allow(trading_service.instance_variable_get(:@strike_selector)).to receive(:select_for).and_return(nil)
 
-        trading_service.send(:process_instrument, instrument)
-
-        # Test passes if no exception is raised
-        expect(true).to be true
+        expect { trading_service.send(:process_instrument, instrument) }.not_to raise_error
       end
 
       it 'handles processing errors gracefully' do
@@ -377,8 +368,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         )
 
         expect(result).to be false
-        # Test passes if no exception is raised
-        expect(true).to be true
+        expect { entry_guard.try_enter(index_cfg: index_config, pick: pick_data, direction: :bullish) }.not_to raise_error
       end
 
       it 'skips entry when cooldown is active' do
@@ -391,8 +381,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         )
 
         expect(result).to be false
-        # Test passes if no exception is raised
-        expect(true).to be true
+        expect { entry_guard.try_enter(index_cfg: index_config, pick: pick_data, direction: :bullish) }.not_to raise_error
       end
 
       it 'skips entry when quantity is zero' do
@@ -405,8 +394,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         )
 
         expect(result).to be false
-        # Test passes if no exception is raised
-        expect(true).to be true
+        expect { entry_guard.try_enter(index_cfg: index_config, pick: pick_data, direction: :bullish) }.not_to raise_error
       end
 
       it 'skips entry when order placement fails' do
@@ -543,10 +531,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         allow(order_update_handler).to receive(:find_tracker_by_order_id).and_return(tracker)
         allow(tracker).to receive(:mark_cancelled!)
 
-        order_update_handler.handle_order_update(cancellation_update)
-
-        # Test passes if no exception is raised
-        expect(true).to be true
+        expect { order_update_handler.handle_order_update(cancellation_update) }.not_to raise_error
       end
     end
   end
