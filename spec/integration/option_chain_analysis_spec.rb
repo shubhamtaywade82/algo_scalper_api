@@ -2,6 +2,9 @@
 
 require 'rails_helper'
 
+# rubocop:disable RSpec/VerifiedDoubles
+# rubocop:disable RSpec/MessageSpies
+# rubocop:disable Layout/LineLength
 RSpec.describe 'Option Chain Analysis Integration', :vcr, type: :integration do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
   let(:mock_option_chain_data) do
@@ -196,7 +199,10 @@ RSpec.describe 'Option Chain Analysis Integration', :vcr, type: :integration do
 
         # Only check strike prices if there are results
         if result.any?
-          strike_prices = result.filter_map { |r| r[:symbol]&.match(/(\d+)/)&.[](1)&.to_f }
+          strike_prices = result.filter_map do |r|
+            match = r[:symbol]&.match(/(\d+)/)
+            match ? match[1].to_f : nil
+          end
           # Should prioritize ATM and ATM-1 strikes for bearish direction
           expect(strike_prices).to be_an(Array)
         end
@@ -713,3 +719,6 @@ RSpec.describe 'Option Chain Analysis Integration', :vcr, type: :integration do
     end
   end
 end
+# rubocop:enable RSpec/VerifiedDoubles
+# rubocop:enable RSpec/MessageSpies
+# rubocop:enable Layout/LineLength

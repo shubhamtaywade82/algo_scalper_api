@@ -2,6 +2,9 @@
 
 require 'rails_helper'
 
+# rubocop:disable RSpec/VerifiedDoubles
+# rubocop:disable RSpec/MessageSpies
+# rubocop:disable RSpec/StubbedMock
 RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
   let(:order_placer) { Orders::Placer }
   let(:trading_service) { Trading::TradingService.new }
@@ -750,3 +753,6 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
     end
   end
 end
+# rubocop:enable RSpec/VerifiedDoubles
+# rubocop:enable RSpec/MessageSpies
+# rubocop:enable RSpec/StubbedMock

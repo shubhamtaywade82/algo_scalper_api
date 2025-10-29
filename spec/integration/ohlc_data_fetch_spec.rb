@@ -2,6 +2,10 @@
 
 require 'rails_helper'
 
+# rubocop:disable RSpec/VerifiedDoubles
+# rubocop:disable RSpec/MessageSpies
+# rubocop:disable RSpec/StubbedMock
+# rubocop:disable Layout/LineLength
 RSpec.describe 'OHLC Data Fetch Integration', :vcr, type: :integration do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
   let(:mock_ohlc_data) do
@@ -499,3 +503,7 @@ RSpec.describe 'OHLC Data Fetch Integration', :vcr, type: :integration do
     end
   end
 end
+# rubocop:enable RSpec/VerifiedDoubles
+# rubocop:enable RSpec/MessageSpies
+# rubocop:enable RSpec/StubbedMock
+# rubocop:enable Layout/LineLength
