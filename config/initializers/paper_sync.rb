@@ -3,19 +3,9 @@
 # Sync paper positions from PositionTracker (PostgreSQL) to Redis on startup
 # This ensures positions survive server restarts even if Redis is cleared
 Rails.application.config.to_prepare do
+  # Legacy PositionSync is not required with daily-namespaced Paper::GatewayV2
+  # Intentionally no-op in paper mode to avoid conflicting state.
   next unless ExecutionMode.paper?
-  next if Rails.const_defined?(:Console) || Rails.env.test?
-
-  # Run sync after Orders.config is initialized
-  Rails.application.config.after_initialize do
-    begin
-      result = Paper::PositionSync.sync!
-      Rails.logger.info("[PaperSync] Position sync completed: #{result.inspect}")
-    rescue StandardError => e
-      Rails.logger.error("[PaperSync] Position sync failed: #{e.class} - #{e.message}")
-      Rails.logger.error("[PaperSync] Backtrace: #{e.backtrace.first(5).join(', ')}")
-    end
-  end
 end
 
 

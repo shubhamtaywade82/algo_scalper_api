@@ -3,7 +3,7 @@
 # Bind Orders.config to the appropriate gateway based on execution mode
 Rails.application.config.to_prepare do
   Orders.config = if ExecutionMode.paper?
-                    Paper::Gateway.new
+                   Paper::GatewayV2.new
                   else
                     Live::Gateway.new
                   end
