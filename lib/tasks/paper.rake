@@ -128,37 +128,9 @@ namespace :paper do
     end
   end
 
-  desc 'Sync paper positions from PositionTracker to Redis (useful after server restart)'
+  desc 'Sync paper positions (deprecated)'
   task sync: :environment do
-    unless ExecutionMode.paper?
-      puts "❌ Paper mode is not enabled. Set PAPER_MODE=true to use paper trading."
-      exit 1
-    end
-
-    begin
-      puts 'Starting paper position sync from PositionTracker...'
-      result = Paper::PositionSync.sync!
-
-      puts "\n" + "=" * 60
-      puts "  SYNC RESULTS"
-      puts "=" * 60
-      puts "  Positions synced: #{result[:synced]}"
-      puts "  Errors:           #{result[:errors]}"
-      puts "=" * 60
-      puts "\n"
-
-      if result[:synced] > 0
-        puts "✅ Successfully synced #{result[:synced]} position(s) to Redis"
-      else
-        puts "ℹ️  No positions found to sync"
-      end
-
-      puts "✅ Sync complete!\n\n"
-    rescue StandardError => e
-      puts "❌ Failed to sync positions: #{e.class} - #{e.message}"
-      puts e.backtrace.first(5).join("\n")
-      exit 1
-    end
+    puts "⚠️  paper:sync is deprecated with GatewayV2 and performs no action."
   end
 end
 
