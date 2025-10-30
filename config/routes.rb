@@ -12,6 +12,18 @@ Rails.application.routes.draw do
     get :health, to: "health#show"
     post :test_broadcast, to: "test#broadcast"
     get :atm_options, to: "atm_options#index"
+
+    # Paper trading observability endpoints (only enabled when PAPER_MODE=true)
+    namespace :paper do
+      # New state controller endpoints (V2)
+      get :wallet, to: "paper/state#wallet"
+      get :position, to: "paper/state#position"
+      get :fills, to: "paper/state#fills"
+      get :performance, to: "paper/state#performance"
+
+      # Legacy endpoints (kept for backward compatibility if any clients use them)
+      # get :orders, to: "paper#orders"
+    end
   end
 
   # Quietly handle browser/devtools well-known probes with 204 No Content

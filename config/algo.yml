@@ -1,5 +1,11 @@
 mode: live # live | paper
 
+# Paper Trading Configuration
+paper_trading:
+  enabled: true # Set to true to enable paper trading mode
+  initial_capital: 100000 # Starting capital for paper trading (in rupees)
+  brokerage_per_lot: 20 # Brokerage charges per lot
+
 indices:
   - {
       key: NIFTY,

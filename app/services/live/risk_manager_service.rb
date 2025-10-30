@@ -2,6 +2,7 @@
 
 require 'bigdecimal'
 require 'singleton'
+require 'ostruct'
 
 module Live
   class RiskManagerService
@@ -99,7 +100,11 @@ module Live
       risk = risk_config
 
       # Load all trackers with instruments in a single query with proper preloading
-      trackers = PositionTracker.active.eager_load(:instrument).to_a
+      trackers = if paper_trading_enabled?
+                   PositionTracker.active.where("(meta ->> 'paper') = 'true'").eager_load(:instrument).to_a
+                 else
+                   PositionTracker.active.eager_load(:instrument).to_a
+                 end
 
       trackers.each do |tracker|
         position = positions[tracker.security_id.to_s]
@@ -138,7 +143,11 @@ module Live
       return if sl_pct <= 0 && tp_pct <= 0 && per_trade_pct <= 0
 
       # Load all trackers with instruments in a single query with proper preloading
-      trackers = PositionTracker.active.eager_load(:instrument).to_a
+      trackers = if paper_trading_enabled?
+                   PositionTracker.active.where("(meta ->> 'paper') = 'true'").eager_load(:instrument).to_a
+                 else
+                   PositionTracker.active.eager_load(:instrument).to_a
+                 end
 
       trackers.each do |tracker|
         position = positions[tracker.security_id.to_s]
@@ -225,29 +234,38 @@ module Live
       return if limit_pct <= 0
 
       begin
-        funds = DhanHQ::Models::Funds.fetch
-        Live::FeedHealthService.instance.mark_success!(:funds)
-        pnl_today = if funds.respond_to?(:day_pnl)
-                      BigDecimal(funds.day_pnl.to_s)
+        if paper_trading_enabled?
+          wallet = PaperWallet.wallet
+          balance = BigDecimal(wallet.available_capital.to_s) + BigDecimal(wallet.invested_capital.to_s)
+          pnl_today = BigDecimal(wallet.total_pnl.to_s)
+          return if balance <= 0
+
+          loss_pct = (pnl_today / balance) * -1
+        else
+          funds = DhanHQ::Models::Funds.fetch
+          Live::FeedHealthService.instance.mark_success!(:funds)
+          pnl_today = if funds.respond_to?(:day_pnl)
+                        BigDecimal(funds.day_pnl.to_s)
+                      elsif funds.is_a?(Hash)
+                        BigDecimal((funds[:day_pnl] || 0).to_s)
+                      else
+                        BigDecimal(0)
+                      end
+
+          balance = if funds.respond_to?(:net_balance)
+                      BigDecimal(funds.net_balance.to_s)
+                    elsif funds.respond_to?(:net_cash)
+                      BigDecimal(funds.net_cash.to_s)
                     elsif funds.is_a?(Hash)
-                      BigDecimal((funds[:day_pnl] || 0).to_s)
+                      BigDecimal((funds[:net_balance] || funds[:net_cash] || 0).to_s)
                     else
                       BigDecimal(0)
                     end
+          return if balance <= 0
 
-        balance = if funds.respond_to?(:net_balance)
-                    BigDecimal(funds.net_balance.to_s)
-                  elsif funds.respond_to?(:net_cash)
-                    BigDecimal(funds.net_cash.to_s)
-                  elsif funds.is_a?(Hash)
-                    BigDecimal((funds[:net_balance] || funds[:net_cash] || 0).to_s)
-                  else
-                    BigDecimal(0)
-                  end
+          loss_pct = (pnl_today / balance) * -1
+        end
 
-        return if balance <= 0
-
-        loss_pct = (pnl_today / balance) * -1
         if pnl_today.negative? && loss_pct >= limit_pct
           Risk::CircuitBreaker.instance.trip!(reason: "daily loss limit reached: #{(loss_pct * 100).round(2)}%")
           Rails.logger.warn("Circuit breaker TRIPPED due to daily loss: #{pnl_today.to_s('F')} against balance #{balance.to_s('F')}")
@@ -259,6 +277,9 @@ module Live
     end
 
     def fetch_positions_indexed
+      # In paper mode, use PositionTracker data instead of fetching from DhanHQ
+      return fetch_positions_from_trackers if paper_trading_enabled?
+
       positions = DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
         security_id = position.respond_to?(:security_id) ? position.security_id : position[:security_id]
         map[security_id.to_s] = position if security_id
@@ -268,6 +289,21 @@ module Live
     rescue StandardError => e
       Rails.logger.error("Failed to load active positions: #{e.class} - #{e.message}")
       Live::FeedHealthService.instance.mark_failure!(:positions, error: e)
+      {}
+    end
+
+    def fetch_positions_from_trackers
+      # Return fake position objects for paper trading
+      PositionTracker.active.each_with_object({}) do |tracker, map|
+        map[tracker.security_id.to_s] = OpenStruct.new(
+          security_id: tracker.security_id,
+          quantity: tracker.quantity,
+          buy_avg: tracker.entry_price || tracker.avg_price,
+          exchange_segment: tracker.segment || tracker.instrument&.exchange_segment
+        )
+      end
+    rescue StandardError => e
+      Rails.logger.error("Failed to load positions from trackers: #{e.class} - #{e.message}")
       {}
     end
 
@@ -496,10 +532,9 @@ module Live
       else
         segment = tracker.segment.presence || tracker.instrument&.exchange_segment
         if segment.present?
-          order = Orders::Placer.exit_position!(
-            seg: segment,
-            sid: tracker.security_id,
-            client_order_id: "AS-EXIT-#{tracker.order_no[-8..]}-#{Time.current.to_i.to_s[-4..]}"
+          order = Orders.config.flat_position(
+            segment: segment,
+            security_id: tracker.security_id
           )
           order.present?
         else
@@ -538,6 +573,19 @@ module Live
       BigDecimal(value.to_s)
     rescue StandardError
       BigDecimal(0)
+    end
+
+    def paper_trading_enabled?
+      mode = ENV.fetch('PAPER_MODE', nil)
+      return false if %w[false 0].include?(mode)
+      return true if %w[true 1].include?(mode)
+
+      cfg_enabled = begin
+        Rails.application.config_for(:algo).dig('paper_trading', 'enabled')
+      rescue StandardError
+        nil
+      end
+      cfg_enabled == true
     end
   end
 end

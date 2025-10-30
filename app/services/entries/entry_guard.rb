@@ -25,11 +25,15 @@ module Entries
         )
         return false if quantity <= 0
 
-        response = Orders::Placer.buy_market!(
-          seg: pick[:segment] || index_cfg[:segment],
-          sid: pick[:security_id],
+        response = Orders.config.place_market(
+          side: 'buy',
+          segment: pick[:segment] || index_cfg[:segment],
+          security_id: pick[:security_id],
           qty: quantity,
-          client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick)
+          meta: {
+            client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
+            ltp: pick[:ltp] # Pass LTP from signal to avoid API call
+          }
         )
 
         order_no = extract_order_no(response)
@@ -98,7 +102,15 @@ module Entries
       private
 
       def ensure_ws_connection!
-        # Only check if WebSocket is connected, skip ticks staleness
+        # In paper mode, skip all feed health checks (funds/positions are simulated locally)
+        if ExecutionMode.paper?
+          # For paper mode, we can proceed with TickCache data even if WS isn't running
+          # Funds and positions are managed in Redis, so no need for DhanHQ feed health checks
+          Rails.logger.debug('[EntryGuard] Paper mode: skipping WS connection and feed health checks')
+          return
+        end
+
+        # In live mode, require WebSocket connection
         unless Live::MarketFeedHub.instance.running?
           Rails.logger.warn('[EntryGuard] Blocked entry: WebSocket market feed not running')
           raise Live::FeedHealthService::FeedStaleError.new(
@@ -149,12 +161,13 @@ module Entries
           response.order_id
         elsif response.is_a?(Hash)
           response[:order_id] || response[:order_no]
-        elsif response.respond_to?(:[]) # Struct-like
-          response[:order_id] || response[:order_no]
+        elsif response.respond_to?(:[]) # Struct-like (e.g., OpenStruct)
+          response[:order_id] || response[:order_no] || response.order_id
         end
       end
 
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:)
+        is_paper = Orders::Router.paper_trading_enabled?
         PositionTracker.create!(
           instrument: instrument,
           order_no: order_no,
@@ -164,7 +177,7 @@ module Entries
           side: side,
           quantity: quantity,
           entry_price: pick[:ltp],
-          meta: { index_key: index_cfg[:key], direction: side, placed_at: Time.current }
+          meta: { index_key: index_cfg[:key], direction: side, placed_at: Time.current, paper: is_paper }
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")
