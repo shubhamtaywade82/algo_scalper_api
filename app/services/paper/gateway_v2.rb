@@ -8,8 +8,9 @@ module Paper
   # Daily-namespaced Redis gateway for paper trading (Phase 2)
   # Does not alter Live systems. Routing switch can be done after validation.
   class GatewayV2 < Orders::Gateway
-    BUY_CHARGE = BigDecimal(20)
-    SELL_CHARGE = BigDecimal(20)
+    # Charges are configurable via ENV (standardized to ENV-only)
+    BUY_CHARGE = BigDecimal(ENV.fetch('PAPER_CHARGES_PER_ORDER', '20'))
+    SELL_CHARGE = BigDecimal(ENV.fetch('PAPER_CHARGES_PER_ORDER', '20'))
 
     MAX_ORDER_LOGS = 1000
 

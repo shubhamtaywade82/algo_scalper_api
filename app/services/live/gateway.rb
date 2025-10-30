@@ -66,7 +66,7 @@ module Live
 
     def wallet_snapshot
       # Fetch from DhanHQ Funds API
-      funds = DhanHQ::Models::Fund.fetch
+      funds = DhanHQ::Models::Funds.fetch
       return default_wallet unless funds
 
       {

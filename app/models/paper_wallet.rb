@@ -14,12 +14,8 @@ class PaperWallet < ApplicationRecord
   end
 
   def self.default_initial_capital
-    raw = begin
-      Rails.application.config_for(:algo).dig('paper_trading', 'initial_capital')
-    rescue StandardError
-      nil
-    end
-    BigDecimal((raw || 100_000).to_s)
+    # Standardized to use ENV only (matches Paper::GatewayV2)
+    BigDecimal(ENV.fetch('PAPER_SEED_CASH', '100000').to_s)
   end
 
   def allocate!(amount)

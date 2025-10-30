@@ -167,7 +167,7 @@ module Entries
       end
 
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:)
-        is_paper = Orders::Router.paper_trading_enabled?
+        is_paper = ExecutionMode.paper?
         PositionTracker.create!(
           instrument: instrument,
           order_no: order_no,

@@ -576,16 +576,8 @@ module Live
     end
 
     def paper_trading_enabled?
-      mode = ENV.fetch('PAPER_MODE', nil)
-      return false if %w[false 0].include?(mode)
-      return true if %w[true 1].include?(mode)
-
-      cfg_enabled = begin
-        Rails.application.config_for(:algo).dig('paper_trading', 'enabled')
-      rescue StandardError
-        nil
-      end
-      cfg_enabled == true
+      # Standardized to use ExecutionMode (ENV-based only)
+      ExecutionMode.paper?
     end
   end
 end

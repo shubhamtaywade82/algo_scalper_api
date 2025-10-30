@@ -191,7 +191,7 @@ Add to `config/algo.yml`:
 paper_trading:
   enabled: true
   initial_capital: 100000 # 1 lakh
-  brokerage_per_lot: 20
+  charges_per_order: 20 # Trading charges per order (₹20 per buy/sell order)
   stamp_duty_per_lot: 1
 ```
 

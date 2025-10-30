@@ -6,10 +6,7 @@
 # PAPER_MODE=true  -> paper trading (simulated orders)
 # PAPER_MODE=false -> live trading (real orders via DhanHQ)
 #
-# Default behavior if PAPER_MODE is not set:
-# - Checks PAPER_TRADING env var (backward compatibility)
-# - Checks config/algo.yml paper_trading.enabled
-# - Falls back to live trading if nothing is set
+# Note: Mode selection is now standardized to ENV-only (ExecutionMode.paper?)
 module Orders
   class Router
     class << self
@@ -34,21 +31,8 @@ module Orders
       end
 
       def paper_trading_enabled?
-        # Check PAPER_MODE environment variable first
-        mode = ENV.fetch('PAPER_MODE', nil)
-        return false if %w[false 0].include?(mode)
-        return true if %w[true 1].include?(mode)
-
-        # Fallback to PAPER_TRADING for backward compatibility
-        return true if ENV['PAPER_TRADING'] == 'true'
-
-        # Check config file
-        cfg_enabled = begin
-          Rails.application.config_for(:algo).dig('paper_trading', 'enabled')
-        rescue StandardError
-          nil
-        end
-        cfg_enabled == true
+        # Standardized to use ExecutionMode (ENV-based only)
+        ExecutionMode.paper?
       end
     end
   end

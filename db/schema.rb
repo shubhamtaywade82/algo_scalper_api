@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_29_061615) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_30_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -110,6 +110,40 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_29_061615) do
     t.index ["security_id", "symbol_name", "exchange", "segment"], name: "index_instruments_unique", unique: true
     t.index ["symbol_name"], name: "index_instruments_on_symbol_name"
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
+  end
+
+  create_table "paper_daily_wallets", force: :cascade do |t|
+    t.date "trading_date", null: false
+    t.decimal "opening_cash", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "closing_cash", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "gross_pnl", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "fees_total", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "net_pnl", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "max_drawdown", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "max_equity", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "min_equity", precision: 18, scale: 2, default: "0.0", null: false
+    t.integer "trades_count", default: 0, null: false
+    t.jsonb "meta", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["trading_date"], name: "index_paper_daily_wallets_on_trading_date", unique: true
+  end
+
+  create_table "paper_fills_logs", force: :cascade do |t|
+    t.date "trading_date", null: false
+    t.string "exchange_segment", null: false
+    t.bigint "security_id", null: false
+    t.string "side", null: false
+    t.integer "qty", null: false
+    t.decimal "price", precision: 12, scale: 2, null: false
+    t.decimal "charge", precision: 10, scale: 2, default: "20.0", null: false
+    t.decimal "gross_value", precision: 14, scale: 2, null: false
+    t.decimal "net_value", precision: 14, scale: 2, null: false
+    t.datetime "executed_at", null: false
+    t.jsonb "meta", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["trading_date", "exchange_segment", "security_id"], name: "index_paper_fills_on_date_seg_sid"
   end
 
   create_table "paper_orders", force: :cascade do |t|
