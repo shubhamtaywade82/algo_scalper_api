@@ -1,14 +1,3 @@
-# Paper Trading Configuration (DEPRECATED - Now ENV-based only)
-# Paper mode is controlled via ENV variables:
-# - PAPER_MODE=true/false (required for mode switching)
-# - PAPER_SEED_CASH=100000 (default: 100000, for initial capital)
-# - PAPER_CHARGES_PER_ORDER=20 (default: 20, for buy/sell charges)
-# This section is kept for reference only and is not used by the application.
-# paper_trading:
-#   enabled: true # DEPRECATED - Use PAPER_MODE env var instead
-#   initial_capital: 100000 # DEPRECATED - Use PAPER_SEED_CASH env var instead
-#   charges_per_order: 20 # DEPRECATED - Use PAPER_CHARGES_PER_ORDER env var instead
-
 indices:
   - {
       key: NIFTY,

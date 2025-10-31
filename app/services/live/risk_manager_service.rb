@@ -100,11 +100,7 @@ module Live
       risk = risk_config
 
       # Load all trackers with instruments in a single query with proper preloading
-      trackers = if paper_trading_enabled?
-                   PositionTracker.active.where("(meta ->> 'paper') = 'true'").eager_load(:instrument).to_a
-                 else
-                   PositionTracker.active.eager_load(:instrument).to_a
-                 end
+      trackers = PositionTracker.active.eager_load(:instrument).to_a
 
       trackers.each do |tracker|
         position = positions[tracker.security_id.to_s]
@@ -143,11 +139,7 @@ module Live
       return if sl_pct <= 0 && tp_pct <= 0 && per_trade_pct <= 0
 
       # Load all trackers with instruments in a single query with proper preloading
-      trackers = if paper_trading_enabled?
-                   PositionTracker.active.where("(meta ->> 'paper') = 'true'").eager_load(:instrument).to_a
-                 else
-                   PositionTracker.active.eager_load(:instrument).to_a
-                 end
+      trackers = PositionTracker.active.eager_load(:instrument).to_a
 
       trackers.each do |tracker|
         position = positions[tracker.security_id.to_s]
@@ -234,23 +226,15 @@ module Live
       return if limit_pct <= 0
 
       begin
-        if paper_trading_enabled?
-          wallet = PaperWallet.wallet
-          balance = BigDecimal(wallet.available_capital.to_s) + BigDecimal(wallet.invested_capital.to_s)
-          pnl_today = BigDecimal(wallet.total_pnl.to_s)
-          return if balance <= 0
-
-          loss_pct = (pnl_today / balance) * -1
-        else
-          funds = DhanHQ::Models::Funds.fetch
-          Live::FeedHealthService.instance.mark_success!(:funds)
-          pnl_today = if funds.respond_to?(:day_pnl)
-                        BigDecimal(funds.day_pnl.to_s)
-                      elsif funds.is_a?(Hash)
-                        BigDecimal((funds[:day_pnl] || 0).to_s)
-                      else
-                        BigDecimal(0)
-                      end
+        funds = DhanHQ::Models::Funds.fetch
+        Live::FeedHealthService.instance.mark_success!(:funds)
+        pnl_today = if funds.respond_to?(:day_pnl)
+                      BigDecimal(funds.day_pnl.to_s)
+                    elsif funds.is_a?(Hash)
+                      BigDecimal((funds[:day_pnl] || 0).to_s)
+                    else
+                      BigDecimal(0)
+                    end
 
           balance = if funds.respond_to?(:net_balance)
                       BigDecimal(funds.net_balance.to_s)
@@ -277,9 +261,6 @@ module Live
     end
 
     def fetch_positions_indexed
-      # In paper mode, use PositionTracker data instead of fetching from DhanHQ
-      return fetch_positions_from_trackers if paper_trading_enabled?
-
       positions = DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
         security_id = position.respond_to?(:security_id) ? position.security_id : position[:security_id]
         map[security_id.to_s] = position if security_id
@@ -292,20 +273,6 @@ module Live
       {}
     end
 
-    def fetch_positions_from_trackers
-      # Return fake position objects for paper trading
-      PositionTracker.active.each_with_object({}) do |tracker, map|
-        map[tracker.security_id.to_s] = OpenStruct.new(
-          security_id: tracker.security_id,
-          quantity: tracker.quantity,
-          buy_avg: tracker.entry_price || tracker.avg_price,
-          exchange_segment: tracker.segment || tracker.instrument&.exchange_segment
-        )
-      end
-    rescue StandardError => e
-      Rails.logger.error("Failed to load positions from trackers: #{e.class} - #{e.message}")
-      {}
-    end
 
     def current_ltp(tracker, position)
       # For options, fetch LTP directly from DhanHQ API to get correct option premium
@@ -575,9 +542,5 @@ module Live
       BigDecimal(0)
     end
 
-    def paper_trading_enabled?
-      # Standardized to use ExecutionMode (ENV-based only)
-      ExecutionMode.paper?
-    end
   end
 end

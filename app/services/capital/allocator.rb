@@ -105,24 +105,7 @@ module Capital
       end
 
       def available_cash
-        # In paper mode, read cash from the paper gateway wallet snapshot
-        if defined?(ExecutionMode) && ExecutionMode.paper?
-          begin
-            snapshot = Orders.config&.wallet_snapshot
-            if snapshot && snapshot[:cash]
-              return snapshot[:cash].is_a?(BigDecimal) ? snapshot[:cash] : BigDecimal(snapshot[:cash].to_s)
-            end
-
-            # Fallback to AR-backed PaperWallet if snapshot isn't available
-            return BigDecimal(PaperWallet.wallet.available_capital.to_s) if defined?(PaperWallet)
-          rescue StandardError => e
-            Rails.logger.warn("[Capital] Paper wallet read failed: #{e.class} - #{e.message}")
-          end
-
-          return BigDecimal(0)
-        end
-
-        # Live mode: fetch cash from broker funds API
+        # Fetch cash from broker funds API for live trading
         data = DhanHQ::Models::Funds.fetch
         value = if data.respond_to?(:available_balance)
                   data.available_balance

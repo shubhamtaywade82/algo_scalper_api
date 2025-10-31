@@ -1,12 +1,8 @@
 # frozen_string_literal: true
 
-# Bind Orders.config to the appropriate gateway based on execution mode
+# Bind Orders.config to Live::Gateway for live trading
 Rails.application.config.to_prepare do
-  Orders.config = if ExecutionMode.paper?
-                   Paper::GatewayV2.new
-                  else
-                    Live::Gateway.new
-                  end
+  Orders.config = Live::Gateway.new
 end
 
 # Define Orders.config accessor

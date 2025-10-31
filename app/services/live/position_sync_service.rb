@@ -14,12 +14,6 @@ module Live
     def sync_positions!
       return unless should_sync?
 
-      # Skip sync if in paper trading mode
-      if paper_trading_enabled?
-        Rails.logger.debug('[PositionSync] Skipping sync - paper trading mode enabled')
-        return
-      end
-
       Rails.logger.info('[PositionSync] Starting position synchronization')
 
       begin
@@ -197,9 +191,5 @@ module Live
       Rails.logger.error("[PositionSync] Failed to create tracker for position #{security_id}: #{e.class} - #{e.message}")
     end
 
-    def paper_trading_enabled?
-      # Standardized to use ExecutionMode (ENV-based only)
-      ExecutionMode.paper?
-    end
   end
 end

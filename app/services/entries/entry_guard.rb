@@ -102,15 +102,7 @@ module Entries
       private
 
       def ensure_ws_connection!
-        # In paper mode, skip all feed health checks (funds/positions are simulated locally)
-        if ExecutionMode.paper?
-          # For paper mode, we can proceed with TickCache data even if WS isn't running
-          # Funds and positions are managed in Redis, so no need for DhanHQ feed health checks
-          Rails.logger.debug('[EntryGuard] Paper mode: skipping WS connection and feed health checks')
-          return
-        end
-
-        # In live mode, require WebSocket connection
+        # Require WebSocket connection for live trading
         unless Live::MarketFeedHub.instance.running?
           Rails.logger.warn('[EntryGuard] Blocked entry: WebSocket market feed not running')
           raise Live::FeedHealthService::FeedStaleError.new(
@@ -167,7 +159,6 @@ module Entries
       end
 
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:)
-        is_paper = ExecutionMode.paper?
         PositionTracker.create!(
           instrument: instrument,
           order_no: order_no,
@@ -177,7 +168,7 @@ module Entries
           side: side,
           quantity: quantity,
           entry_price: pick[:ltp],
-          meta: { index_key: index_cfg[:key], direction: side, placed_at: Time.current, paper: is_paper }
+          meta: { index_key: index_cfg[:key], direction: side, placed_at: Time.current }
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")

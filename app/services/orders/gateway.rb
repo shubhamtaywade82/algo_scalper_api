@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Abstract Gateway interface for order placement and position management
-# Implementations: Paper::Gateway (simulated) and Live::Gateway (real orders)
+# Implementation: Live::Gateway (real orders via DhanHQ)
 module Orders
   class Gateway
     # Place a MARKET order
@@ -37,12 +37,12 @@ module Orders
       raise NotImplementedError, "#{self.class} must implement wallet_snapshot"
     end
 
-    # Hook for tick updates (paper mode only)
+    # Hook for tick updates (optional)
     # @param segment [String] Exchange segment
     # @param security_id [String] Security ID
     # @param ltp [Float] Last traded price
     def on_tick(segment:, security_id:, ltp:)
-      # Default: no-op (live gateway doesn't need tick updates)
+      # Default: no-op
       nil
     end
   end
