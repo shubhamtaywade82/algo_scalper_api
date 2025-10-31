@@ -11,7 +11,6 @@ Rails.application.routes.draw do
   namespace :api do
     get :health, to: "health#show"
     post :test_broadcast, to: "test#broadcast"
-    get :atm_options, to: "atm_options#index"
 
     # Paper trading observability endpoints (only enabled when PAPER_MODE=true)
     namespace :paper do

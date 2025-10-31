@@ -11,6 +11,7 @@ module Api
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         websocket: {
           market_feed_running: Live::MarketFeedHub.instance.running?,
+          # Note: Order updates use PositionSyncService polling (not WebSocket)
           order_update_running: Live::OrderUpdateHub.instance.running?,
           tick_cache_size: Live::TickCache.all.size,
           sample_ltps: {
