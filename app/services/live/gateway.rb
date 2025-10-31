@@ -49,15 +49,15 @@ module Live
       upnl = if entry_price && ltp && qty != 0
                (BigDecimal(ltp.to_s) - entry_price) * qty
              else
-               BigDecimal('0')
+               BigDecimal(0)
              end
 
       {
         qty: qty,
-        avg_price: entry_price || BigDecimal('0'),
+        avg_price: entry_price || BigDecimal(0),
         upnl: upnl,
-        rpnl: BigDecimal('0'), # Realized PnL not directly available from Position API
-        last_ltp: ltp ? BigDecimal(ltp.to_s) : (entry_price || BigDecimal('0'))
+        rpnl: BigDecimal(0), # Realized PnL not directly available from Position API
+        last_ltp: ltp ? BigDecimal(ltp.to_s) : (entry_price || BigDecimal(0))
       }
     rescue StandardError => e
       Rails.logger.error("[Live::Gateway] position failed: #{e.message}")
@@ -72,8 +72,8 @@ module Live
       {
         cash: BigDecimal(funds.available.to_s || '0'),
         equity: BigDecimal(funds.available.to_s || '0'), # Simplified
-        mtm: BigDecimal('0'), # Not directly available
-        exposure: BigDecimal('0') # Would need to calculate from positions
+        mtm: BigDecimal(0), # Not directly available
+        exposure: BigDecimal(0) # Would need to calculate from positions
       }
     rescue StandardError => e
       Rails.logger.error("[Live::Gateway] wallet_snapshot failed: #{e.message}")
@@ -89,12 +89,11 @@ module Live
 
     def default_wallet
       {
-        cash: BigDecimal('0'),
-        equity: BigDecimal('0'),
-        mtm: BigDecimal('0'),
-        exposure: BigDecimal('0')
+        cash: BigDecimal(0),
+        equity: BigDecimal(0),
+        mtm: BigDecimal(0),
+        exposure: BigDecimal(0)
       }
     end
   end
 end
-

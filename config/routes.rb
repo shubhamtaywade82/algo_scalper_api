@@ -16,10 +16,10 @@ Rails.application.routes.draw do
     # Paper trading observability endpoints (only enabled when PAPER_MODE=true)
     namespace :paper do
       # New state controller endpoints (V2)
-      get :wallet, to: "paper/state#wallet"
-      get :position, to: "paper/state#position"
-      get :fills, to: "paper/state#fills"
-      get :performance, to: "paper/state#performance"
+      get :wallet, to: "state#wallet"
+      get :position, to: "state#position"
+      get :fills, to: "state#fills"
+      get :performance, to: "state#performance"
 
       # Legacy endpoints (kept for backward compatibility if any clients use them)
       # get :orders, to: "paper#orders"
