@@ -30,10 +30,20 @@ module Live
 
     def stop!
       @mutex.synchronize do
+
         @running = false
-        @thread&.wakeup
+        if @thread&.alive?
+          begin
+            @thread.wakeup
+          rescue StandardError
+            nil
+          end
+        end
         @thread = nil
       end
+    rescue ThreadError
+      # Thread may already be killed, just clear it
+      @thread = nil
     end
 
     def running?
