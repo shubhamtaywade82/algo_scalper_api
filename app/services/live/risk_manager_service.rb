@@ -90,6 +90,8 @@ module Live
     private
 
     def monitor_loop
+      logger = Rails.logger
+
       while running?
         # Sync positions first to ensure we have all active positions tracked
         Live::PositionSyncService.instance.sync_positions!
@@ -102,8 +104,15 @@ module Live
         sleep LOOP_INTERVAL
       end
     rescue StandardError => e
-      Rails.logger.error("RiskManagerService crashed: #{e.class} - #{e.message}")
+      message = "RiskManagerService crashed: #{e.class} - #{e.message}"
+      logger.error(message)
+      global_logger = Rails.logger
+      global_logger.error(message) unless global_logger.equal?(logger)
       @running = false
+    end
+
+    def sleep(seconds)
+      Kernel.sleep(seconds)
     end
 
     def enforce_trailing_stops(positions = fetch_positions_indexed)
