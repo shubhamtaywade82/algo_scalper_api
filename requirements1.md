@@ -1098,6 +1098,250 @@ STATUSES = {
 
 ---
 
+## 📊 EPIC G — Real-Time Risk & Exit Management
+
+### **EPIC G — G1: Enforce Simplified Exit Rules**
+
+#### User Story
+
+**As the system**
+**I want** robust exits aligned to intraday option volatility
+**So that** we cap losses and bank winners without over-constraint.
+
+---
+
+#### Acceptance Criteria (Generic Requirements)
+
+**Rules:**
+- Stop-Loss: exit at −30% from entry
+- Take-Profit: exit at +60% from entry
+- Dynamic Trail: once +10%, set BE (SL→entry) and trail at 3% below HWM; exit on pullback
+- Time Exit: force exit 15:20 IST
+- Daily Circuit: flatten and block new entries at −6% of day's starting balance
+
+**Technical:**
+- Loop every ≤5s evaluates each open position using `ltp:<sec_id>`
+- On first reach of +10%: set `be_locked=true` and initialize HWM
+- HWM updates whenever new LTP > previous HWM
+- Exit actions are SELL | MARKET | INTRADAY with tags:
+  - `stop_loss_30pct`
+  - `take_profit_60pct`
+  - `trailing_stop_3pct`
+  - `time_exit_1520`
+  - `circuit_breaker_6pct`
+- After exit: persist P&L to PG, clear Redis keys, and unsubscribe WS if no more positions on that security
+
+**Done:**
+- A live position cleanly exits on each of the four conditions in dry-run or paper mode
+- Circuit trips at −6% (cumulative) and prevents further entries until day reset
+
+---
+
+#### Actual Implementation
+
+**Service:** `Live::RiskManagerService` (singleton, runs in background thread)
+
+**Loop Interval:**
+- ✅ **5 seconds** (`LOOP_INTERVAL = 5`)
+- Meets AC requirement of ≤5s
+
+**Exit Rules:**
+
+1. **Stop-Loss: -30%** ✅
+   - **Config**: `risk.sl_pct: 0.30`
+   - **Method**: `enforce_hard_limits()` checks `ltp_value <= entry * (1 - sl_pct)`
+   - **Status**: ✅ Implemented and configured correctly
+
+2. **Take-Profit: +60%** ✅
+   - **Config**: `risk.tp_pct: 0.60`
+   - **Method**: `enforce_hard_limits()` checks `ltp_value >= entry * (1 + tp_pct)`
+   - **Status**: ✅ Implemented and configured correctly
+
+3. **Dynamic Trail: +10% triggers BE, trail at 3% below HWM** ✅
+   - **Config**: `risk.breakeven_after_gain: 0.10` (10%) ✅
+   - **Config**: `risk.exit_drop_pct: 0.03` (3%) ✅
+   - **Method**: `enforce_trailing_stops()` uses `tracker.lock_breakeven!()` when PnL% >= `breakeven_after_gain`
+   - **HWM Updates**: ✅ `tracker.update_pnl!()` updates `high_water_mark_pnl` as max(current_hwm, new_pnl)
+   - **Trailing Logic**: `tracker.trailing_stop_triggered?(pnl, drop_pct)` checks pullback from HWM
+   - **Status**: ✅ BE trigger at 10%, trailing logic works correctly
+
+4. **Time Exit: 15:20 IST** ✅
+   - **Method**: `enforce_time_based_exit()` checks `Time.current >= Time.zone.parse('15:20')`
+   - **Status**: ✅ Implemented correctly
+
+5. **Daily Circuit: -6% of starting balance** ⚠️
+   - **Config**: `risk.daily_loss_limit_pct: 0.04` (4%, **NOT 6%**)
+   - **Method**: `enforce_daily_circuit_breaker()` calculates `loss_pct = (pnl_today / balance) * -1`
+   - **Circuit Breaker**: `Risk::CircuitBreaker.instance.trip!()` sets cache flag
+   - **Status**: ⚠️ Configured at 4% (not 6%), but mechanism works correctly
+
+**LTP Source:**
+- Uses `current_ltp_with_freshness_check()` which:
+  1. Checks Redis cache freshness (max_age_seconds: 5)
+  2. Falls back to DhanHQ API for options (with rate limit handling)
+  3. Falls back to `TickCache.ltp()`
+- ✅ Uses `ltp:<sec_id>` pattern (stored in Redis as `tick:{segment}:{security_id}`)
+
+**Breakeven Locking:**
+- **Trigger**: `should_lock_breakeven?(tracker, pnl_pct, risk[:breakeven_after_gain])`
+- **Current Config**: 10% ✅ (matches AC requirement)
+- **Implementation**: `tracker.lock_breakeven!()` sets `breakeven_locked: true` in meta
+
+**High Water Mark (HWM):**
+- **Updates**: ✅ `tracker.update_pnl!()` updates `high_water_mark_pnl` as `[current_hwm, new_pnl].max`
+- **Timing**: Every loop iteration when new PnL is calculated
+- **Storage**: Persisted in PostgreSQL (`PositionTracker.high_water_mark_pnl`)
+
+**Exit Order Tags:** ❌
+- **AC Requirement**: Specific tags like `stop_loss_30pct`, `take_profit_60pct`, etc.
+- **Implementation**: Uses generic `client_order_id` format: `AS-EXI-{SID}-{TIMESTAMP}`
+- **Exit Reason**: Stored in `tracker.meta['exit_reason']` as string (e.g., "hard stop-loss (30.0%)", "take-profit (60.0%)")
+- **Status**: ❌ Not using specific tag format per AC
+
+**Exit Order Details:**
+- **Type**: `MARKET`
+- **Product Type**: `INTRADAY` (from position details)
+- **Transaction Type**: `SELL` (for LONG positions)
+- **Placed via**: `Orders.config.flat_position()` → `Live::Gateway.flat_position()` → `Orders::Placer.exit_position!()`
+
+**Post-Exit Cleanup:** ✅
+
+1. **PnL Persistence**: ✅
+   - `PositionTracker` stores `last_pnl_rupees`, `last_pnl_pct`, `high_water_mark_pnl` in PostgreSQL
+   - Values updated via `tracker.update_pnl!()` before exit
+   - Persisted permanently (not cleared on exit)
+
+2. **Redis Cleanup**: ✅
+   - `Live::RedisPnlCache.instance.clear_tracker(tracker.id)` called in `execute_exit()`
+   - Clears PnL cache: `pnl:tracker:{tracker_id}`
+
+3. **WebSocket Unsubscribe**: ✅
+   - `tracker.mark_exited!()` calls `tracker.unsubscribe()`
+   - `unsubscribe()` calls `MarketFeedHub.instance.unsubscribe(segment:, security_id:)`
+   - Also unsubscribes underlying instrument if it's an option
+
+4. **Status Update**: ✅
+   - `tracker.mark_exited!()` updates `status: 'exited'`
+
+5. **Cooldown Registration**: ✅
+   - `tracker.register_cooldown!()` prevents immediate re-entry
+
+**Circuit Breaker:**
+- **Storage**: `Rails.cache.write('risk:circuit_breaker:tripped', {...}, expires_in: 8.hours)`
+- **Check**: `Risk::CircuitBreaker.instance.tripped?`
+- **Reset**: `Risk::CircuitBreaker.instance.reset!()` (manual or expires after 8h)
+- **Blocks Entries**: ❌ **NOT IMPLEMENTED** - `EntryGuard` does NOT check circuit breaker before allowing entries
+
+**Exit Flow:**
+```ruby
+# 1. RiskManagerService detects exit condition
+enforce_hard_limits() or enforce_trailing_stops() or enforce_time_based_exit()
+  # Calculates PnL, checks thresholds
+  execute_exit(position, tracker, reason: "hard stop-loss (30.0%)")
+
+# 2. Exit execution
+execute_exit()
+  store_exit_reason(tracker, reason)  # Save to tracker.meta
+  exit_position(position, tracker)    # Place exit order via Orders.config.flat_position()
+
+  if exit_successful:
+    Live::RedisPnlCache.instance.clear_tracker(tracker.id)  # Clear Redis
+    tracker.mark_exited!()                                   # Unsubscribe + update status
+
+# 3. Post-exit
+tracker.mark_exited!()
+  unsubscribe()                                              # Unsubscribe WS
+  Live::RedisPnlCache.instance.clear_tracker(id)            # (already cleared, redundant)
+  update!(status: 'exited')                                  # Update status
+  register_cooldown!()                                       # Prevent re-entry
+```
+
+#### Implementation Details
+
+**Loop Structure:**
+```ruby
+def monitor_loop
+  while running?
+    Live::PositionSyncService.instance.sync_positions!
+    positions = fetch_positions_indexed
+    enforce_hard_limits(positions)           # Stop-loss & Take-profit
+    enforce_trailing_stops(positions)        # Trailing stops
+    enforce_time_based_exit(positions)       # 15:20 IST exit
+    enforce_daily_circuit_breaker            # Daily loss limit
+    sleep LOOP_INTERVAL  # 5 seconds
+  end
+end
+```
+
+**Exit Reason Storage:**
+```ruby
+# tracker.meta structure:
+{
+  'exit_reason' => 'hard stop-loss (30.0%)',
+  'exit_triggered_at' => '2025-11-01 10:30:00',
+  'breakeven_locked' => true,
+  'trailing_stop_price' => nil,
+  'index_key' => 'NIFTY',
+  'direction' => 'long_pe'
+}
+```
+
+**Configuration Values:**
+```yaml
+risk:
+  daily_loss_limit_pct: 0.04    # 4% (AC requires 6%)
+  sl_pct: 0.30                   # 30% ✅
+  tp_pct: 0.60                   # 60% ✅
+  trail_step_pct: 0.10          # 10% (minimum profit to start trailing)
+  breakeven_after_gain: 0.10     # 10% ✅ (matches AC requirement)
+  exit_drop_pct: 0.03            # 3% ✅
+```
+
+#### Status: ⚠️ **PARTIALLY IMPLEMENTED**
+
+**✅ Implemented:**
+- Loop runs every 5s (meets ≤5s requirement)
+- Stop-loss at -30% ✅
+- Take-profit at +60% ✅
+- Time exit at 15:20 IST ✅
+- Trailing stops with 3% pullback ✅
+- HWM updates correctly ✅
+- Post-exit cleanup (PnL persistence, Redis clear, unsubscribe) ✅
+- Daily circuit breaker mechanism ✅
+
+**❌ Missing/Gaps:**
+
+1. **Breakeven Trigger Threshold** ✅
+   - AC: +10% triggers BE lock
+   - **Implementation**: +10% (`breakeven_after_gain: 0.10`) ✅
+   - **Status**: Fixed - now matches AC requirement
+
+2. **Daily Circuit Breaker Threshold** ⚠️
+   - AC: -6% of starting balance
+   - **Implementation**: -4% (`daily_loss_limit_pct: 0.04`)
+   - **Gap**: Should be 6% per AC
+
+3. **Exit Order Tags** ❌
+   - AC: Specific tags (`stop_loss_30pct`, `take_profit_60pct`, etc.)
+   - **Implementation**: Generic `AS-EXI-{SID}-{TIMESTAMP}` format
+   - **Gap**: Not using AC-specified tag format
+
+4. **Circuit Breaker Entry Blocking** ❌
+   - AC: Circuit trips at −6% and prevents further entries until day reset
+   - **Implementation**: Circuit breaker trips correctly, but `EntryGuard` does NOT check it
+   - **Gap**: New entries are NOT blocked when circuit breaker is tripped
+
+**Current Configuration vs AC:**
+- Stop-Loss: ✅ 30%
+- Take-Profit: ✅ 60%
+- Trailing Drop: ✅ 3%
+- BE Trigger: ✅ 10% (fixed)
+- Daily Circuit: ⚠️ 4% (should be 6%)
+- Exit Tags: ❌ Not implemented
+- Circuit Breaker Entry Blocking: ❌ Not implemented
+
+---
+
 ## ⚙️ Configuration Management - COMPLETED
 
 ### **Trading Configuration** (`config/algo.yml`)

@@ -25,12 +25,12 @@ indices:
     }
 
 risk:
-  daily_loss_limit_pct: 0.04
+  daily_loss_limit_pct: 0.06 # trigger circuit breaker at -6% of starting balance
   per_trade_risk_pct: 0.01
   sl_pct: 0.30
   tp_pct: 0.60
   trail_step_pct: 0.10
-  breakeven_after_gain: 0.35
+  breakeven_after_gain: 0.10 # trigger breakeven lock at +10% gain
   exit_drop_pct: 0.03 # trigger trailing exit after 3% pullback from high-water mark
 
 signals:
