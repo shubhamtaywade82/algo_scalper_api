@@ -18,6 +18,18 @@ RSpec.describe PositionTracker do
   end
 
   describe 'EPIC F — F1: Place Entry Order & Subscribe Option Tick' do
+    let(:mock_redis) { instance_double('Redis', set: true, get: nil, del: true) }
+    let(:redis_cache) { Live::RedisPnlCache.instance }
+
+    before do
+      allow(Redis).to receive(:new).and_return(mock_redis)
+      redis_cache.instance_variable_set(:@redis, mock_redis)
+    end
+
+    after do
+      redis_cache.instance_variable_set(:@redis, nil)
+    end
+
     describe '#mark_active!' do
       context 'when order is filled' do
         it 'updates status to active' do
