@@ -142,9 +142,15 @@ class PositionTracker < ApplicationRecord
     )
     return unless underlying_instrument
 
-    Rails.logger.debug { "[PositionTracker] Unsubscribing from underlying: #{underlying_instrument.symbol_name}" }
+    underlying_segment = underlying_instrument.exchange_segment
+    return unless underlying_segment.present? && underlying_instrument.security_id.present?
+
+    Rails.logger.debug do
+      "[PositionTracker] Unsubscribing from underlying: #{underlying_instrument.symbol_name} "\
+      "(#{underlying_segment}:#{underlying_instrument.security_id})"
+    end
     Live::MarketFeedHub.instance.unsubscribe(
-      segment: underlying_instrument.segment,
+      segment: underlying_segment,
       security_id: underlying_instrument.security_id
     )
   end

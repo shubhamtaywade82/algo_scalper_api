@@ -7,11 +7,11 @@ RSpec.describe PositionTracker do
   let(:tracker) do
     create(
       :position_tracker,
+      :pending,
       instrument: instrument,
       order_no: 'ORD123456',
       security_id: '50074',
       segment: 'NSE_FNO',
-      status: 'pending',
       quantity: 75,
       entry_price: 100.0
     )
@@ -144,7 +144,7 @@ RSpec.describe PositionTracker do
       end
 
       it 'unsubscribes underlying instrument if option' do
-        underlying = create(:instrument, symbol_name: 'NIFTY', exchange_segment: 'IDX_I')
+        underlying = create(:instrument, :nifty_index)
         allow(tracker.instrument).to receive(:underlying_symbol).and_return('NIFTY')
         allow(Instrument).to receive(:find_by).and_return(underlying)
 

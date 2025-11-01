@@ -16,7 +16,10 @@ RSpec.configure do |config|
         Signal::Scheduler.instance.stop!
       end
       Live::RiskManagerService.instance.stop! if Live::RiskManagerService.instance.running?
-      Live::AtmOptionsService.instance.stop! if Live::AtmOptionsService.instance.running?
+      if defined?(Live::AtmOptionsService)
+        atm_service = Live::AtmOptionsService.instance
+        atm_service.stop! if atm_service.respond_to?(:running?) && atm_service.running?
+      end
       if Live::MockDataService.instance.respond_to?(:running?) && Live::MockDataService.instance.running?
         Live::MockDataService.instance.stop!
       end
@@ -39,7 +42,10 @@ RSpec.configure do |config|
         Signal::Scheduler.instance.stop!
       end
       Live::RiskManagerService.instance.stop! if Live::RiskManagerService.instance.running?
-      Live::AtmOptionsService.instance.stop! if Live::AtmOptionsService.instance.running?
+      if defined?(Live::AtmOptionsService)
+        atm_service = Live::AtmOptionsService.instance
+        atm_service.stop! if atm_service.respond_to?(:running?) && atm_service.running?
+      end
       if Live::MockDataService.instance.respond_to?(:running?) && Live::MockDataService.instance.running?
         Live::MockDataService.instance.stop!
       end

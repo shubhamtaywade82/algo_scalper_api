@@ -156,9 +156,30 @@ module Live
       if ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items') &&
          WatchlistItem.exists?
         # Only load active watchlist items for subscription
-        return WatchlistItem.active.order(:segment, :security_id).pluck(:segment, :security_id).map do |seg, sid|
-          { segment: seg, security_id: sid }
-        end
+        scope = WatchlistItem.active
+
+        pairs = if scope.respond_to?(:order) && scope.respond_to?(:pluck)
+                  scope.order(:segment, :security_id).pluck(:segment, :security_id)
+                else
+                  Array(scope).filter_map do |record|
+                    seg = if record.respond_to?(:segment)
+                            record.segment
+                          elsif record.is_a?(Hash)
+                            record[:segment]
+                          end
+                    sid = if record.respond_to?(:security_id)
+                            record.security_id
+                          elsif record.is_a?(Hash)
+                            record[:security_id]
+                          end
+                    next if seg.blank? || sid.blank?
+
+                    [seg, sid]
+                  end
+                end
+
+                
+        return pairs.map { |seg, sid| { segment: seg, security_id: sid } }
       end
 
       raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '')

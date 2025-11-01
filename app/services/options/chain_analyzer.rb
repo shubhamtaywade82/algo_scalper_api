@@ -31,7 +31,12 @@ module Options
         Rails.logger.info("[Options] Using expiry: #{expiry_date}")
 
         # Fetch option chain using instrument's method
-        chain_data = instrument.fetch_option_chain(expiry_date)
+        chain_data = begin
+                       instrument.fetch_option_chain(expiry_date)
+                     rescue StandardError => e
+                       Rails.logger.warn("[Options] Could not determine next expiry for #{index_cfg[:key]} #{expiry_date}: #{e.message}")
+                       nil
+                     end
         unless chain_data
           Rails.logger.warn("[Options] No option chain data for #{index_cfg[:key]} #{expiry_date}")
           return []
@@ -74,9 +79,29 @@ module Options
       end
 
       def find_next_expiry(expiry_list)
-        return nil unless expiry_list&.any?
+        return nil unless expiry_list.respond_to?(:each)
 
-        expiry_list.first
+        today = Time.zone.today
+
+        parsed = expiry_list.compact.map do |raw|
+          case raw
+          when Date
+            raw
+          when Time, DateTime, ActiveSupport::TimeWithZone
+            raw.to_date
+          when String
+            begin
+              Date.parse(raw)
+            rescue ArgumentError
+              nil
+            end
+          else
+            nil
+          end
+        end.compact
+
+        next_expiry = parsed.select { |date| date >= today }.min
+        next_expiry&.strftime('%Y-%m-%d')
       end
 
       def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, index_cfg:, expiry_date:, instrument:)
@@ -218,8 +243,10 @@ module Options
           end
 
           # Calculate spread percentage
+          spread_ratio = nil
           if bid && ask && bid.positive?
-            spread_pct = ((ask - bid) / bid) * 100
+            spread_ratio = (ask - bid) / bid
+            spread_pct = spread_ratio * 100
             if spread_pct > max_spread_pct
               rejected_count += 1
               Rails.logger.debug { "[Options] Rejected #{strike}: Spread #{spread_pct}% > #{max_spread_pct}%" }
@@ -270,7 +297,7 @@ module Options
             ltp: ltp,
             iv: iv,
             oi: oi,
-            spread: ask && bid ? (ask - bid) : nil,
+            spread: spread_ratio,
             delta: delta,
             distance_from_atm: (strike - atm).abs,
             lot_size: derivative&.lot_size || index_cfg[:lot].to_i
@@ -395,8 +422,8 @@ module Options
         oi = leg[:oi]
 
         # Calculate spread percentage from spread and LTP
-        spread_pct = if leg[:spread] && ltp&.positive?
-                       (leg[:spread] / ltp) * 100
+        spread_pct = if leg[:spread]
+                       leg[:spread] * 100
                      else
                        0.0 # Default to 0% spread if not available
                      end
