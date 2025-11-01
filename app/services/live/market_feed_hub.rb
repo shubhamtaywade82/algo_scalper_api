@@ -132,8 +132,6 @@ module Live
       # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
       Live::TickCache.put(tick)
       ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
-      # Broadcast to Action Cable subscribers if channel is present
-      ::TickerChannel.broadcast_to(::TickerChannel::CHANNEL_ID, tick) if defined?(::TickerChannel)
       @callbacks.each do |callback|
         safe_invoke(callback, tick)
       end

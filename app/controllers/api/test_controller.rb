@@ -11,11 +11,12 @@ module Api
         ts: Time.current.to_i
       }
 
-      TickerChannel.broadcast_to(TickerChannel::CHANNEL_ID, tick_data)
+      # Store in TickCache instead of broadcasting
+      Live::TickCache.put(tick_data)
 
       render json: {
         success: true,
-        message: 'Test broadcast sent',
+        message: 'Test tick stored in TickCache',
         data: tick_data
       }
     end

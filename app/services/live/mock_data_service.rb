@@ -37,9 +37,7 @@ module Live
               # Populate TickCache (like real WebSocket does)
               Live::TickCache.put(tick_data)
 
-              # Broadcast to TickerChannel
-              TickerChannel.broadcast_to(TickerChannel::CHANNEL_ID, tick_data) if defined?(TickerChannel)
-              Rails.logger.debug { "[MockData] Broadcasted #{data[:name]}: #{data[:ltp]}" }
+              Rails.logger.debug { "[MockData] Generated tick for #{data[:name]}: #{data[:ltp]}" }
             end
 
             sleep 2 # Update every 2 seconds
