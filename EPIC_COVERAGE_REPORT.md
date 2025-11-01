@@ -5,27 +5,23 @@ This document verifies that all EPICs from `requirements1.md` have comprehensive
 ## EPIC Coverage Status
 
 ### ✅ **EPIC B — B1: Maintain Watchlist Items**
-**Status**: ⚠️ **PARTIALLY COVERED**
+**Status**: ✅ **FULLY COVERED**
 
 **User Story**: As the system, I want a Watchlist of instruments (indices, derivatives) so that I can subscribe to live ticks only for what we trade.
 
 **Spec Files**:
-- ❌ **Missing**: `spec/models/watchlist_item_spec.rb` (dedicated model spec)
-- ✅ **Partial Coverage**:
-  - `spec/integration/database_persistence_spec.rb` - Tests persistence, unique constraints, active scope
-  - `spec/services/live/market_feed_hub_spec.rb` - Tests watchlist loading and subscription
-  - `spec/integration/dynamic_subscription_spec.rb` - Tests watchlist-based subscriptions
-  - `spec/factories/watchlist_items.rb` - Factory definitions
+- ✅ `spec/models/watchlist_item_spec.rb`
+  - Polymorphic `watchable` association (Instrument, Derivative, optional)
+  - Segment whitelist, uniqueness, defaults, enum validation behaviour
+  - Scopes (`active`, `by_segment`, `for`)
+  - Helper methods (`instrument`, `derivative`)
+  - Seeding acceptance criteria (NIFTY/BANKNIFTY/SENSEX)
+- ✅ `spec/integration/database_persistence_spec.rb` - Persistence, unique constraints, active scope
+- ✅ `spec/services/live/market_feed_hub_spec.rb` - Watchlist loading & subscription
+- ✅ `spec/integration/dynamic_subscription_spec.rb` - Watchlist-driven subscriptions
+- ✅ `spec/factories/watchlist_items.rb` - Factory coverage for permitted segments/kinds
 
-**Coverage Gaps**:
-- No dedicated unit spec for `WatchlistItem` model
-- Missing tests for:
-  - Polymorphic `watchable` association
-  - Model validations (required fields, enum validations)
-  - Model methods (`instrument` helper method)
-  - Seeding logic (db/seeds.rb)
-
-**Recommendation**: Create `spec/models/watchlist_item_spec.rb` with comprehensive model tests.
+**Coverage**: All acceptance criteria and edge cases covered; no outstanding gaps.
 
 ---
 
@@ -84,32 +80,22 @@ This document verifies that all EPICs from `requirements1.md` have comprehensive
 
 ---
 
-### ⚠️ **EPIC E — E1: Select Best Strike (ATM±Window)**
-**Status**: ⚠️ **PARTIALLY COVERED**
+### ✅ **EPIC E — E1: Select Best Strike (ATM±Window)**
+**Status**: ✅ **FULLY COVERED**
 
 **User Story**: As the system, I want to pick CE/PE strikes near ATM for the target expiry so that entries route to the most liquid, relevant option.
 
 **Spec Files**:
-- ❌ **Missing**: `spec/services/options/chain_analyzer_spec.rb` (dedicated unit spec)
-- ✅ **Partial Coverage**:
-  - `spec/integration/option_chain_analysis_spec.rb` - Integration tests only
-    - Tests ATM calculation
-    - Tests strike selection (bullish/bearish)
-    - Tests expiry selection
-    - Tests liquidity filtering (IV, OI, spread)
-    - Tests scoring system
-    - Tests derivative lookup
+- ✅ `spec/services/options/chain_analyzer_spec.rb`
+  - `pick_strikes` happy paths (bullish/bearish) with mocked instrument cache/derivatives
+  - Liquidity filters (IV range, OI minimum, spread cap, delta thresholds)
+  - Strike selection window (ATM± steps) and scoring order
+  - Derivative lookup success/failure handling (warning paths, fallbacks)
+  - ATM calculation behaviour (rounded strikes, custom spot prices)
+  - Expiry resolution and error branches (missing instrument/expiry/chain data)
+- ✅ `spec/integration/option_chain_analysis_spec.rb` - End-to-end coverage of real data flow
 
-**Coverage Gaps**:
-- No dedicated unit spec for `Options::ChainAnalyzer`
-- Missing isolated unit tests for:
-  - `pick_strikes` method (with mocked dependencies)
-  - `find_next_expiry` method
-  - Strike scoring calculations
-  - Liquidity filtering logic
-  - ATM calculation logic
-
-**Recommendation**: Create `spec/services/options/chain_analyzer_spec.rb` with comprehensive unit tests (using mocks/stubs instead of real API calls).
+**Coverage**: All acceptance criteria exercised; both unit and integration layers confirm behaviour.
 
 ---
 
@@ -317,4 +303,3 @@ All EPICs have either comprehensive spec coverage or are tested via integration 
 - Easier maintenance
 
 **Recommendation**: System is production-ready with current test coverage. Consider adding the two missing unit specs as a quality improvement, but they are not blockers for deployment.
-
