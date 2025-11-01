@@ -141,7 +141,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         ).ordered
 
         expect(market_feed_hub).to receive(:unsubscribe).with(
-          segment: 'derivatives',
+          segment: 'NSE_FNO',
           security_id: '99999'
         ).ordered
 

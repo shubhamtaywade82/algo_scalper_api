@@ -142,6 +142,9 @@ RSpec.describe Options::ChainAnalyzer do
       allow(instrument).to receive(:exchange_segment).and_return('NSE_FNO')
       allow(instrument).to receive(:derivatives).and_return(mock_derivatives)
 
+      allow(Time.zone).to receive(:today).and_return(Date.parse('2024-01-15'))
+      allow(Time.zone).to receive(:now).and_return(Time.zone.parse('2024-01-15 10:00:00'))
+
       # Mock AlgoConfig
       allow(AlgoConfig).to receive(:fetch).and_return({
                                                         option_chain: {
