@@ -889,6 +889,215 @@ CAPITAL_BANDS = [
 
 ---
 
+### **EPIC F — F1: Place Entry Order & Subscribe Option Tick**
+
+#### User Story
+
+**As the system**
+**I want** to place market buy orders for selected option and subscribe its ticks
+**So that** risk manager can trail exits using live LTP.
+
+---
+
+#### Acceptance Criteria (Generic Requirements)
+
+- Uses last-quote sanity check before firing (fallback to quote if index LTP stale >5s)
+- Places INTRADAY | MARKET | BUY with tag `entry_<symbol>_<type>_<strike>`
+- On fill: bootstrap Redis state `pos:<position_id>:{entry, qty, hwm, flags}` and subscribe option `ltp:<sec_id>`
+- A filled order creates Redis bootstrap keys and option WS subscription starts within 1s
+
+---
+
+#### Actual Implementation
+
+**Service:** `Entries::EntryGuard.try_enter()` → `Orders.config.place_market()` → `Live::Gateway.place_market()`
+
+**Order Placement:**
+- Places order via `Orders::Placer.buy_market!()`
+- **Order Type**: `MARKET`
+- **Product Type**: `INTRADAY` (hardcoded)
+- **Transaction Type**: `BUY`
+- **Client Order ID**: Format `AS-{KEY}-{SID}-{TIMESTAMP}` (not `entry_<symbol>_<type>_<strike>`)
+  - Example: `AS-NIFT-50074-123456`
+  - Truncated to 30 chars max via `normalize_client_order_id()`
+
+**Pre-Order Validation:**
+- Checks WebSocket connection via `ensure_ws_connection!()` (not last-quote sanity check)
+- Checks feed health (funds, positions) via `FeedHealthService.assert_healthy!()`
+- No explicit "index LTP stale >5s" check before order placement
+- Relies on WebSocket connection being active
+
+**Order Fill Detection:**
+- **PositionSyncService** polls DhanHQ Position API every 30 seconds
+- Detects filled positions by finding positions in DhanHQ that match `PositionTracker` records
+- When fill detected: calls `tracker.mark_active!(avg_price:, quantity:)`
+- Alternative (if enabled): `OrderUpdateHandler` receives WebSocket order updates in real-time (<1s)
+  - Currently **disabled** (commented out in `market_stream.rb`)
+  - If enabled, would call `tracker.mark_active!()` immediately on fill
+
+**Option Tick Subscription:**
+- Triggered when `tracker.mark_active!()` is called (after fill detected)
+- `mark_active!()` calls `tracker.subscribe()`
+- `PositionTracker#subscribe()` calls `MarketFeedHub.instance.subscribe(segment:, security_id:)`
+- Subscription happens **after fill**, not immediately on order placement
+- Timing: Within 30s via polling, or <1s if OrderUpdateHandler enabled
+
+**Redis State Bootstrap:**
+- **Does NOT use** `pos:<position_id>:{entry, qty, hwm, flags}` format
+- Uses different Redis key structure:
+  - **PnL Data**: `pnl:tracker:{tracker_id}` (stores: `pnl`, `pnl_pct`, `ltp`, `timestamp`)
+  - **Tick Data**: `tick:{segment}:{security_id}` (stores: `ltp`, `timestamp`)
+- Redis state populated when:
+  - PnL updated via `RedisPnlCache.store_pnl()` (called by `RiskManagerService`)
+  - Ticks stored via `RedisPnlCache.store_tick()` (called on tick updates)
+- **Not bootstrapped on fill** - populated incrementally as ticks/PnL updates arrive
+
+**Order Flow:**
+```ruby
+# 1. EntryGuard.try_enter()
+EntryGuard.try_enter(index_cfg:, pick:, direction:)
+  # - Validates exposure, cooldown, WebSocket connection
+  # - Calculates quantity via Capital::Allocator
+  # - Places order via Orders.config.place_market()
+  # - Creates PositionTracker (status: 'pending')
+
+# 2. Order Placement
+Live::Gateway.place_market(side: 'buy', ...)
+  Orders::Placer.buy_market!(
+    product_type: 'INTRADAY',
+    order_type: 'MARKET',
+    transaction_type: 'BUY',
+    client_order_id: 'AS-NIFT-50074-123456'
+  )
+
+# 3. Order Fill Detection (polling)
+PositionSyncService.sync_positions! (every 30s)
+  # - Polls DhanHQ Position API
+  # - Finds filled positions matching trackers
+  # - Calls tracker.mark_active!(avg_price:, quantity:)
+
+# 4. Subscription (on mark_active!)
+PositionTracker.mark_active!()
+  tracker.subscribe()
+    MarketFeedHub.instance.subscribe(segment:, security_id:)
+
+# 5. Redis State (incremental)
+RiskManagerService.update_pnl()
+  RedisPnlCache.store_pnl(tracker_id:, pnl:, ltp:)
+  RedisPnlCache.store_tick(segment:, security_id:, ltp:)
+```
+
+**Alternative: OrderUpdateHandler (Currently Disabled)**
+```ruby
+# If OrderUpdateHandler enabled (currently commented out):
+OrderUpdateHandler receives WebSocket order update
+  handle_update(payload)  # <1s latency
+    tracker.mark_active!(avg_price:, quantity:)
+      tracker.subscribe()  # Immediate subscription
+```
+
+#### Implementation Details
+
+**Client Order ID Format:**
+```ruby
+# EntryGuard.build_client_order_id()
+"AS-#{index_cfg[:key][0..3]}-#{pick[:security_id]}-#{timestamp}"
+# Example: "AS-NIFT-50074-123456"
+# Max 30 chars, truncated if longer
+```
+
+**PositionTracker States:**
+```ruby
+STATUSES = {
+  pending: 'pending',   # Order placed, not yet filled
+  active: 'active',     # Order filled, position active
+  exited: 'exited',     # Position closed
+  cancelled: 'cancelled' # Order cancelled/rejected
+}
+```
+
+**Subscription Timing:**
+- **Current (polling)**: Up to 30s delay (polling interval)
+- **If OrderUpdateHandler enabled**: <1s delay (real-time WebSocket)
+- Subscription happens when `mark_active!()` is called (after fill detected)
+
+**Redis Keys:**
+```ruby
+# PnL Cache
+"pnl:tracker:{tracker_id}"  # {pnl, pnl_pct, ltp, timestamp}
+
+# Tick Cache
+"tick:{segment}:{security_id}"  # {ltp, timestamp}
+```
+
+#### Status: ⚠️ **PARTIALLY IMPLEMENTED**
+
+**✅ Implemented:**
+- Places INTRADAY | MARKET | BUY orders
+- Subscription to option ticks happens on fill (via `mark_active!()`)
+- Redis stores tick and PnL data (different format than AC)
+- Order fill detection works (polling-based)
+
+**❌ Missing/Gaps:**
+
+1. **Last-Quote Sanity Check** ❌
+   - AC: Uses last-quote sanity check before firing (fallback to quote if index LTP stale >5s)
+   - **Implementation**: Only checks WebSocket connection and feed health
+   - **Gap**: No LTP staleness check or quote fallback before order placement
+
+2. **Order Tag Format** ❌
+   - AC: Tag format `entry_<symbol>_<type>_<strike>`
+   - **Implementation**: Uses `AS-{KEY}-{SID}-{TIMESTAMP}` format
+   - **Gap**: Different tag format
+
+3. **Redis Bootstrap Format** ❌
+   - AC: Bootstrap `pos:<position_id>:{entry, qty, hwm, flags}`
+   - **Implementation**: Uses `pnl:tracker:{tracker_id}` and `tick:{segment}:{security_id}`
+   - **Gap**: Different Redis key structure
+
+4. **Bootstrap Timing** ❌
+   - AC: Bootstrap Redis state on fill
+   - **Implementation**: Redis populated incrementally (not bootstrapped on fill)
+   - **Gap**: No immediate bootstrap when fill detected
+
+5. **Subscription Timing** ❌
+   - AC: Subscription starts within 1s of fill
+   - **Implementation**: Up to 30s delay via polling (PositionSyncService every 30s)
+   - **Alternative**: OrderUpdateHandler exists for <1s but is **disabled**
+   - **Gap**: Subscription timing does not meet <1s requirement (30s polling delay)
+
+**Current Implementation Details:**
+
+**Order Tag Format:**
+- Uses `AS-{KEY}-{SID}-{TIMESTAMP}` format (not `entry_<symbol>_<type>_<strike>`)
+- This is the actual client_order_id format used
+
+**Pre-Order Checks:**
+- Uses WebSocket connection check (not last-quote sanity check)
+- Uses feed health check (funds, positions) instead of LTP staleness check
+- No quote fallback if LTP stale >5s
+
+**Subscription Timing:**
+- Subscription happens **after fill detected**, not immediately on order placement
+- **Current**: Up to 30s delay via polling (`PositionSyncService` every 30s)
+- **Alternative**: `OrderUpdateHandler` exists for <1s but is **disabled** (commented out in `market_stream.rb`)
+- `mark_active!()` triggers subscription when fill is detected
+
+**Redis Bootstrap:**
+- **Does NOT create** `pos:<position_id>:{entry, qty, hwm, flags}` keys
+- Uses different structure:
+  - `pnl:tracker:{tracker_id}` for PnL tracking (populated incrementally)
+  - `tick:{segment}:{security_id}` for tick data (populated as ticks arrive)
+- Redis state populated incrementally (not bootstrapped on fill)
+- No immediate bootstrap when fill detected
+
+**Order Fill Detection:**
+- Uses **polling** via `PositionSyncService` (every 30s)
+- Alternative real-time approach (`OrderUpdateHandler`) exists but is disabled
+- Fill detection triggers `mark_active!()` which triggers subscription
+
+---
+
 ## ⚙️ Configuration Management - COMPLETED
 
 ### **Trading Configuration** (`config/algo.yml`)
