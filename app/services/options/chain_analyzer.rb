@@ -76,26 +76,7 @@ module Options
       def find_next_expiry(expiry_list)
         return nil unless expiry_list&.any?
 
-        today = Date.current
-        upcoming_expiries = expiry_list
-                            .filter_map do |date_str|
-          Date.parse(date_str.to_s)
-        rescue StandardError
-          nil
-        end
-                            .select { |date| date > today }
-                            .sort
-
-        upcoming_expiries.first&.strftime('%Y-%m-%d')
-      rescue StandardError => e
-        Rails.logger.warn("Failed to parse expiry list: #{e.class} - #{e.message}")
-        calculate_next_trading_day
-      end
-
-      def calculate_next_trading_day
-        # Use Market::Calendar to find the next trading day dynamically
-        # This replaces the hardcoded Thursday logic
-        Market::Calendar.next_trading_day.strftime('%Y-%m-%d')
+        expiry_list.first
       end
 
       def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, index_cfg:, expiry_date:, instrument:)

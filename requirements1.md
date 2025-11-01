@@ -567,6 +567,161 @@ signals:
 
 ---
 
+### **EPIC E — E1: Select Best Strike (ATM±Window)**
+
+#### User Story
+
+**As the system**
+**I want** to pick CE/PE strikes near ATM for the target expiry
+**So that** entries route to the most liquid, relevant option.
+
+---
+
+#### Acceptance Criteria (Generic Requirements)
+
+- ATM derived from latest index LTP rounded to nearest step (50 for NIFTY/SENSEX, 100 for BANKNIFTY)
+- Expiry policy: NIFTY & SENSEX → nearest weekly; BANKNIFTY → nearest monthly
+- From Derivatives, choose nearest-to-ATM by absolute distance
+- Apply basic liquidity screen when data exists
+- Returns a Derivative with security_id, expiry_on, lot_size, option_type
+
+---
+
+#### Actual Implementation
+
+**Service:** `Options::ChainAnalyzer.pick_strikes(index_cfg:, direction:)`
+
+**Return Value:** Array of hashes (not Derivative objects), each containing:
+- `segment` - Exchange segment (e.g., "NSE_FNO")
+- `security_id` - Derivative security ID (from database lookup)
+- `symbol` - Constructed symbol (e.g., "NIFTY-Oct2025-24800-CE")
+- `ltp` - Last traded price
+- `iv` - Implied volatility
+- `oi` - Open interest
+- `spread` - Bid-ask spread
+- `lot_size` - Lot size from derivative record
+
+**ATM Calculation:**
+- Uses spot price from option chain data: `chain_data[:last_price]` (not Redis `ltp:<security_id>`)
+- Calculates strike interval dynamically from available strikes in chain
+- Rounds to nearest strike: `atm_strike = (atm / strike_interval).round * strike_interval`
+- Strike intervals typically: 50 for NIFTY/SENSEX, 100 for BANKNIFTY (but calculated dynamically)
+
+**Expiry Selection:**
+- `find_next_expiry(expiry_list)` picks the **first upcoming expiry** from the list
+- No special logic for weekly vs monthly - simply selects nearest expiry
+- Gets expiry list from `instrument.expiry_list` (DhanHQ API)
+- Falls back to `Market::Calendar.next_trading_day` if expiry parsing fails
+
+**Strike Selection Window:**
+- CE (bullish): ATM, ATM+1, ATM+2, ATM+3 (OTM calls only, up to 3 strikes)
+- PE (bearish): ATM, ATM-1, ATM-2, ATM-3 (OTM puts only, up to 3 strikes)
+- Limits to target strikes to avoid expensive ITM options
+
+**Liquidity Screening:**
+- **IV Range**: Configurable via `option_chain[:min_iv]` and `option_chain[:max_iv]` (default: 10-60%)
+- **Open Interest**: Minimum OI via `option_chain[:min_oi]` (default: 50000)
+- **Spread**: Maximum spread % via `option_chain[:max_spread_pct]` (default: 3.0%)
+- **Delta**: Time-based minimum delta (0.08-0.15 depending on hour)
+- All filters must pass for strike to be accepted
+
+**Strike Scoring System:**
+- Sophisticated multi-factor scoring:
+  1. **ATM Preference** (0-100): Distance from ATM, penalty for ITM strikes
+  2. **Liquidity Score** (0-50): Based on OI and spread
+  3. **Delta Score** (0-30): Higher delta preferred
+  4. **IV Score** (0-20): Moderate IV preferred (15-25% sweet spot)
+  5. **Price Efficiency** (0-10): Price per delta ratio
+- Sorted by total score (descending), then by distance from ATM
+- Returns top 2 picks
+
+**Derivative Lookup:**
+- Matches strike price, expiry date, and option type (CE/PE) from database
+- Uses `instrument.derivatives.find()` to locate derivative record
+- Extracts `security_id` and `lot_size` from derivative
+- Uses derivative's `exchange_segment` or falls back to instrument's segment
+
+**Configuration:**
+```yaml
+# config/algo.yml
+option_chain:
+  min_iv: 10.0      # Minimum IV percentage
+  max_iv: 60.0      # Maximum IV percentage
+  min_oi: 50000     # Minimum open interest
+  max_spread_pct: 3.0  # Maximum bid-ask spread percentage
+```
+
+#### Implementation Details
+
+**Strike Selection Flow:**
+```ruby
+# app/services/options/chain_analyzer.rb
+Options::ChainAnalyzer.pick_strikes(index_cfg:, direction:)
+  # 1. Get instrument from cache
+  instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+
+  # 2. Get expiry list and select next expiry
+  expiry_list = instrument.expiry_list
+  expiry_date = find_next_expiry(expiry_list)  # Picks first upcoming
+
+  # 3. Fetch option chain
+  chain_data = instrument.fetch_option_chain(expiry_date)
+  atm_price = chain_data[:last_price]
+
+  # 4. Calculate ATM strike
+  strike_interval = calculate_from_strikes  # Dynamic
+  atm_strike = (atm_price / strike_interval).round * strike_interval
+
+  # 5. Filter and rank strikes
+  legs = filter_and_rank_from_instrument_data(...)
+    # - Target strikes: ATM±3 (direction-based)
+    # - Apply liquidity filters
+    # - Calculate scores
+    # - Sort by score
+
+  # 6. Return top 2 picks as hashes
+  legs.first(2).map { |leg| leg.slice(...) }
+```
+
+**Derivative Matching:**
+```ruby
+# Finds derivative from database
+derivative = instrument.derivatives.find do |d|
+  d.strike_price == strike.to_f &&
+    d.expiry_date == expiry_date_obj &&
+    d.option_type == option_type  # CE or PE
+end
+
+# Uses derivative.security_id and derivative.lot_size
+```
+
+#### Status: ✅ **COMPLETE**
+
+**Implementation Details:**
+
+**ATM Source:**
+- Uses option chain data (`chain_data[:last_price]`) - not Redis LTP
+- Strike rounding is dynamic based on available strikes
+- No hardcoded steps (50/100) - calculated from chain data
+
+**Expiry Policy:**
+- Selects **nearest expiry** from available list (no weekly/monthly distinction)
+- This is the actual implementation - just picks first upcoming expiry
+
+**Strike Selection:**
+- Focuses on ATM±3 strikes (limited window for buying options)
+- Applies comprehensive liquidity screening
+- Uses sophisticated scoring to rank strikes
+- Returns top 2 picks as hashes with all required fields
+
+**Return Format:**
+- Returns **array of hashes** (not Derivative objects)
+- Each hash includes `security_id` from derivative lookup
+- Includes `lot_size` from derivative record
+- Symbol is constructed, not from derivative directly
+
+---
+
 ## ⚙️ Configuration Management - COMPLETED
 
 ### **Trading Configuration** (`config/algo.yml`)
