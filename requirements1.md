@@ -28,7 +28,7 @@ The Algo Scalper API has been successfully implemented as a comprehensive autono
 | **Options Chain Analyzer** | ✅ Complete | ATM-focused selection with advanced scoring             |
 | **Capital Allocator**      | ✅ Complete | Dynamic risk-based position sizing                      |
 | **Entry Guard**            | ✅ Complete | Duplicate prevention and exposure management            |
-| **Risk Manager**           | ✅ Complete | PnL tracking, trailing stops, circuit breaker           |
+| **Risk Manager**           | ✅ Complete | PnL tracking, trailing stops                            |
 | **Order Management**       | ✅ Complete | Idempotent market order placement                       |
 
 ### **3. Real-time Infrastructure - COMPLETED**
@@ -66,7 +66,6 @@ The Algo Scalper API has been successfully implemented as a comprehensive autono
   - Position limits (max 3 per derivative)
   - Capital allocation limits
   - Trailing stops (5% from high-water mark)
-  - Daily loss limits with circuit breaker
   - Cooldown periods
 - ✅ **Real-time Monitoring**: Continuous PnL tracking
 - ✅ **Dynamic Capital Allocation**: Risk parameters based on account size
@@ -1128,12 +1127,10 @@ STATUSES = {
   - `take_profit_60pct`
   - `trailing_stop_3pct`
   - `time_exit_1520`
-  - `circuit_breaker_6pct`
 - After exit: persist P&L to PG, clear Redis keys, and unsubscribe WS if no more positions on that security
 
 **Done:**
-- A live position cleanly exits on each of the four conditions in dry-run or paper mode
-- Circuit trips at −6% (cumulative) and prevents further entries until day reset
+- A live position cleanly exits on each of the three conditions
 
 ---
 
@@ -1169,11 +1166,6 @@ STATUSES = {
    - **Method**: `enforce_time_based_exit()` checks `Time.current >= Time.zone.parse('15:20')`
    - **Status**: ✅ Implemented correctly
 
-5. **Daily Circuit: -6% of starting balance** ✅
-   - **Config**: `risk.daily_loss_limit_pct: 0.06` (6%) ✅
-   - **Method**: `enforce_daily_circuit_breaker()` calculates `loss_pct = (pnl_today / balance) * -1`
-   - **Circuit Breaker**: `Risk::CircuitBreaker.instance.trip!()` sets cache flag
-   - **Status**: ✅ Configured at 6%, mechanism works correctly
 
 **LTP Source:**
 - Uses `current_ltp_with_freshness_check()` which:
@@ -1226,14 +1218,6 @@ STATUSES = {
 5. **Cooldown Registration**: ✅
    - `tracker.register_cooldown!()` prevents immediate re-entry
 
-**Circuit Breaker:** ❌ **REMOVED**
-- Circuit breaker functionality has been removed from the system
-- `enforce_daily_circuit_breaker` method disabled in `RiskManagerService`
-- Circuit breaker check removed from `Signal::Scheduler`
-- Circuit breaker removed from health API
-- `daily_loss_limit_pct` config option commented out
-- `Risk::CircuitBreaker` service file kept for reference but not used
-
 **Exit Flow:**
 ```ruby
 # 1. RiskManagerService detects exit condition
@@ -1269,7 +1253,6 @@ def monitor_loop
     enforce_hard_limits(positions)           # Stop-loss & Take-profit
     enforce_trailing_stops(positions)        # Trailing stops
     enforce_time_based_exit(positions)       # 15:20 IST exit
-    # enforce_daily_circuit_breaker          # Circuit breaker removed
     sleep LOOP_INTERVAL  # 5 seconds
   end
 end
@@ -1309,7 +1292,6 @@ risk:
 - Trailing stops with 3% pullback ✅
 - HWM updates correctly ✅
 - Post-exit cleanup (PnL persistence, Redis clear, unsubscribe) ✅
-- Daily circuit breaker mechanism ✅
 
 **❌ Missing/Gaps:**
 
@@ -1318,272 +1300,437 @@ risk:
    - **Implementation**: +10% (`breakeven_after_gain: 0.10`) ✅
    - **Status**: Fixed - now matches AC requirement
 
-2. **Daily Circuit Breaker Threshold** ✅
-   - AC: -6% of starting balance
-   - **Implementation**: -6% (`daily_loss_limit_pct: 0.06`) ✅
-   - **Status**: Fixed - now matches AC requirement
-
-3. **Exit Order Tags** ❌
+2. **Exit Order Tags** ❌
    - AC: Specific tags (`stop_loss_30pct`, `take_profit_60pct`, etc.)
    - **Implementation**: Generic `AS-EXI-{SID}-{TIMESTAMP}` format
    - **Gap**: Not using AC-specified tag format
-
-4. **Circuit Breaker Entry Blocking** ❌
-   - AC: Circuit trips at −6% and prevents further entries until day reset
-   - **Implementation**: Circuit breaker trips correctly, but `EntryGuard` does NOT check it
-   - **Gap**: New entries are NOT blocked when circuit breaker is tripped
 
 **Current Configuration vs AC:**
 - Stop-Loss: ✅ 30%
 - Take-Profit: ✅ 60%
 - Trailing Drop: ✅ 3%
 - BE Trigger: ✅ 10%
-- Daily Circuit: ✅ 6% (fixed)
 - Exit Tags: ❌ Not implemented
-- Circuit Breaker Entry Blocking: ❌ Removed (circuit breaker functionality removed)
 
 ---
 
-### **EPIC G — G2: Daily Circuit Breaker**
+## 🎼 EPIC H — Orchestration Loops
 
-**⚠️ REMOVED**: Circuit breaker functionality has been removed per requirement. The system no longer uses circuit breaker logic.
+### **EPIC H — H1: Risk Loop**
 
-#### User Story (Historical - No Longer Implemented)
+#### User Story
 
 **As the system**
-**I want** a portfolio-level kill-switch
-**So that** the day's loss cannot exceed configured drawdown.
+**I want** a dedicated risk loop
+**So that** exits occur continuously.
 
 ---
 
 #### Acceptance Criteria (Generic Requirements)
 
-**AC 1: Daily P&L Tracking**
-- Tracks daily P&L = closed P&L (DB) + open P&L (Redis) vs start-of-day balance
+**AC 1: Loop Interval**
+- Runs every 5s (configurable)
 
-**AC 2: Circuit Breaker Trigger**
-- If ≤ −6%, sets `circuit:tripped=1`, exits all positions, and rejects new entry attempts (until reset next session)
+**AC 2: Exit Evaluation**
+- Calls `Orders::Adjuster.evaluate_exit!(position)` for each open position
 
-**AC 3: Reset Mechanism**
-- Resets next session
+**AC 3: Time-Based Exit**
+- At 15:20 IST, exits all open positions
+
+**AC 4: Visibility**
+- Single job/thread visibly running, logs minimal but clear events for each exit
 
 **Done:**
-- Trigger verified when open P&L pushes total below −6% (positions flattened immediately)
+- Single job/thread visibly running, logs minimal but clear events for each exit
 
 ---
 
 #### Actual Implementation
 
-**Service:** `Live::RiskManagerService.enforce_daily_circuit_breaker()` (called every 5s in monitor loop)
+**Service:** `Live::RiskManagerService` (singleton, runs in background thread)
 
-**AC 1: Daily P&L Tracking** ⚠️
-
-**AC Requirement:**
-- Track: `daily P&L = closed P&L (DB) + open P&L (Redis) vs start-of-day balance`
-- Separately calculate closed P&L from database + open P&L from Redis
-
-**Current Implementation:**
-- **Uses**: `DhanHQ::Models::Funds.fetch.day_pnl` (broker-provided combined P&L)
-- **Does NOT**: Separately calculate closed P&L from `PositionTracker.exited` records
-- **Does NOT**: Separately calculate open P&L from Redis (`RedisPnlCache` for active positions)
-- **Does NOT**: Track start-of-day balance separately (uses current balance from broker)
-
-**Gap:**
-- Relies on broker's combined `day_pnl` instead of calculating:
-  - Closed P&L: Sum of `PositionTracker.exited` records' final P&L
-  - Open P&L: Sum of active positions' current P&L from Redis/current LTP
-  - Start-of-day balance: Should be stored at market open
-
-**AC 2: Circuit Breaker Trigger** ⚠️
+**AC 1: Loop Interval** ✅
 
 **AC Requirement:**
-- If ≤ −6%:
-  1. Sets `circuit:tripped=1` ✅
-  2. Exits all positions ❌
-  3. Rejects new entry attempts ❌
+- Runs every 5s (configurable)
 
 **Current Implementation:**
+- **Loop Interval**: `LOOP_INTERVAL = 5` (hardcoded constant, not configurable from config file)
+- **Location**: `app/services/live/risk_manager_service.rb`
+- **Status**: ✅ Meets 5s requirement, but not configurable from config
 
-1. **Sets circuit:tripped flag** ✅
-   - `Risk::CircuitBreaker.instance.trip!()` called when loss threshold reached
-   - Sets cache key: `risk:circuit_breaker:tripped`
-   - Stores: `{at: Time.current, reason: "daily loss limit reached: X%"}`
-
-2. **Exits all positions** ❌
-   - **NOT IMPLEMENTED**: No automatic exit of all active positions when circuit trips
-   - Current: Only sets flag, does not call `execute_exit()` for all active positions
-
-3. **Rejects new entry attempts** ❌
-   - **NOT IMPLEMENTED**: `EntryGuard` does NOT check `Risk::CircuitBreaker.tripped?` before allowing entries
-   - Current: New entries are NOT blocked when circuit breaker is tripped
-
-**Gap:**
-- Circuit breaker trips but does not:
-  - Automatically exit all active positions
-  - Block new entry attempts
-
-**AC 3: Reset Mechanism** ⚠️
+**AC 2: Exit Evaluation** ⚠️
 
 **AC Requirement:**
-- Reset next session (presumably at market open next day)
+- Calls `Orders::Adjuster.evaluate_exit!(position)` for each open position
 
 **Current Implementation:**
-- **Cache TTL**: 8 hours (not daily reset)
-- **Manual Reset**: `Risk::CircuitBreaker.instance.reset!()` available
-- **Automatic Reset**: ❌ No automatic daily reset mechanism
+- **Orders::Adjuster**: ❌ Does NOT exist
+- **Current Method**: Uses `execute_exit(position, tracker, reason: reason)` instead
+- **Exit Flow**:
+  ```ruby
+  # For each open position:
+  enforce_hard_limits(positions)      # Stop-loss & Take-profit
+    → execute_exit(position, tracker, reason: "hard stop-loss (30.0%)")
 
-**Gap:**
-- No automatic reset at market open next day
-- Relies on cache expiration (8h) or manual reset
+  enforce_trailing_stops(positions)   # Trailing stops
+    → execute_exit(position, tracker, reason: "trailing stop (drop 3.0%)")
 
-**Current Circuit Breaker Logic:**
+  enforce_time_based_exit(positions)  # 15:20 IST exit
+    → execute_exit(position, tracker, reason: 'time-based exit (3:20 PM)')
+  ```
+- **Status**: ⚠️ Different implementation - uses `execute_exit()` instead of `Orders::Adjuster.evaluate_exit!()`
+
+**AC 3: Time-Based Exit at 15:20 IST** ✅
+
+**AC Requirement:**
+- At 15:20 IST, exits all open positions
+
+**Current Implementation:**
+- **Method**: `enforce_time_based_exit()`
+- **Time Check**: `Time.current >= Time.zone.parse('15:20')`
+- **Window**: Exits between 15:20 and 15:30 IST (before market close)
+- **Action**: Iterates through all `PositionTracker.active` and calls `execute_exit()` for each
+- **Status**: ✅ Fully implemented and working
+
+**AC 4: Single Job/Thread Visibility** ✅
+
+**AC Requirement:**
+- Single job/thread visibly running
+- Logs minimal but clear events for each exit
+
+**Current Implementation:**
+- **Thread**: Background thread created in `RiskManagerService.start!()`
+- **Thread Name**: `'risk-manager-service'` ✅
+- **Thread Visibility**: Can be checked via `Thread.list.find { |t| t.name == 'risk-manager-service' }`
+- **Auto-Start**: Started automatically in `config/initializers/market_stream.rb`:
+  ```ruby
+  MarketStreamLifecycle.safely_start { Live::RiskManagerService.instance.start! }
+  ```
+- **Logging**: ✅ Clear logging for each exit:
+  ```ruby
+  Rails.logger.info("Triggering exit for #{tracker.order_no} due to #{reason}.")
+  Rails.logger.info("Successfully exited position #{tracker.order_no}")
+  ```
+- **Status**: ✅ Fully implemented
+
+**Current Risk Loop Structure:**
 ```ruby
-# enforce_daily_circuit_breaker() in RiskManagerService
-def enforce_daily_circuit_breaker
-  funds = DhanHQ::Models::Funds.fetch
-  pnl_today = funds.day_pnl  # Broker-provided combined P&L
-  balance = funds.net_balance  # Current balance
+def monitor_loop
+  while running?
+    # Sync positions first to ensure we have all active positions tracked
+    Live::PositionSyncService.instance.sync_positions!
 
-  loss_pct = (pnl_today / balance) * -1
+    positions = fetch_positions_indexed
 
-  if pnl_today.negative? && loss_pct >= limit_pct  # limit_pct = 0.06 (6%)
-    Risk::CircuitBreaker.instance.trip!(reason: "...")
-    # ⚠️ Does NOT exit all positions
-    # ⚠️ Does NOT block new entries (EntryGuard doesn't check)
+    # Evaluate exits for each open position
+    enforce_hard_limits(positions)           # Stop-loss & Take-profit
+    enforce_trailing_stops(positions)         # Trailing stops
+    enforce_time_based_exit(positions)        # 15:20 IST exit
+    sleep LOOP_INTERVAL  # 5 seconds
   end
 end
 ```
 
-**Circuit Breaker Storage:**
+**Exit Evaluation Per Position:**
 ```ruby
-# Risk::CircuitBreaker
-TRIP_CACHE_KEY = 'risk:circuit_breaker:tripped'
-Rails.cache.write(TRIP_CACHE_KEY, {at: Time.current, reason: "..."}, expires_in: 8.hours)
+# For each active PositionTracker:
+1. Get current LTP (from Redis cache or DhanHQ API)
+2. Calculate current P&L and P&L%
+3. Update P&L in Redis and database
+4. Check exit conditions:
+   - Hard stop-loss (-30%)
+   - Take-profit (+60%)
+   - Trailing stop (3% pullback from HWM)
+   - Time-based exit (15:20 IST)
+5. If exit condition met: execute_exit(position, tracker, reason: "...")
 ```
 
-**Missing Functionality:**
+**Logging Examples:**
+```ruby
+# Hard limits exit:
+"Triggering exit for #{tracker.order_no} due to hard stop-loss (30.0%)."
 
-1. **Exit All Positions on Trip:**
-   ```ruby
-   # Should be added:
-   if circuit_breaker.tripped? && !@exits_triggered
-     PositionTracker.active.each do |tracker|
-       execute_exit(position, tracker, reason: 'circuit breaker trip')
-     end
-     @exits_triggered = true
-   end
-   ```
+# Trailing stop exit:
+"Triggering exit for #{tracker.order_no} due to trailing stop (drop 3.0%)."
 
-2. **Block New Entries:**
-   ```ruby
-   # In EntryGuard.try_enter(), should check:
-   if Risk::CircuitBreaker.instance.tripped?
-     Rails.logger.warn('[EntryGuard] Blocked entry: circuit breaker tripped')
-     return false
-   end
-   ```
+# Time-based exit:
+"[TimeExit] Enforcing time-based exit at 15:20:00"
+"[TimeExit] Triggering time-based exit for #{tracker.order_no}"
 
-3. **Separate P&L Calculation:**
-   ```ruby
-   # Should calculate:
-   closed_pnl = PositionTracker.exited
-     .where('DATE(updated_at) = ?', Date.current)
-     .sum('COALESCE(last_pnl_rupees, 0)')
-
-   open_pnl = PositionTracker.active.sum do |tracker|
-     # Get current P&L from Redis or calculate from current LTP
-     Live::RedisPnlCache.instance.fetch_pnl(tracker.id)&.dig(:pnl) || 0
-   end
-
-   daily_pnl = closed_pnl + open_pnl
-   ```
-
-4. **Start-of-Day Balance:**
-   ```ruby
-   # Should store at market open:
-   start_of_day_balance = DhanHQ::Models::Funds.fetch.net_balance
-   Rails.cache.write('risk:start_of_day_balance', start_of_day_balance, expires_in: 24.hours)
-   ```
-
-5. **Daily Reset:**
-   ```ruby
-   # Should reset at market open:
-   # Via scheduled job or initializer at market open time
-   Risk::CircuitBreaker.instance.reset! if new_trading_day?
-   ```
+# Success:
+"Successfully exited position #{tracker.order_no}"
+```
 
 #### Implementation Details
 
-**Current P&L Calculation:**
-- Uses broker's `day_pnl` (may include both closed and open positions)
-- Does not distinguish between closed (DB) and open (Redis) positions
+**Service Initialization:**
+- **File**: `app/services/live/risk_manager_service.rb`
+- **Pattern**: Singleton
+- **Auto-start**: Via `config/initializers/market_stream.rb`
+- **Thread**: Background thread named `'risk-manager-service'`
 
-**Current Circuit Breaker Trigger:**
-- Threshold: -6% (`daily_loss_limit_pct: 0.06`)
-- Calculation: `loss_pct = (pnl_today / balance) * -1`
-- Trip condition: `pnl_today.negative? && loss_pct >= 0.06`
+**Loop Interval:**
+- **Constant**: `LOOP_INTERVAL = 5` (seconds)
+- **Configurable**: ❌ Not configurable from `config/algo.yml` (hardcoded)
 
-**Current Circuit Breaker Actions:**
-- ✅ Sets tripped flag in cache
-- ❌ Does NOT exit all positions
-- ❌ Does NOT block new entries
+**Position Evaluation:**
+- **Frequency**: Every 5 seconds
+- **Data Source**: `PositionTracker.active` + `DhanHQ::Models::Position.active`
+- **LTP Source**: Redis cache (`tick:{segment}:{security_id}`) or DhanHQ API fallback
 
-**Reset Mechanism:**
-- Manual: `Risk::CircuitBreaker.instance.reset!()`
-- Automatic: Cache expires after 8 hours (not daily)
+**Exit Methods:**
+- **Stop-Loss/Take-Profit**: `enforce_hard_limits(positions)`
+- **Trailing Stops**: `enforce_trailing_stops(positions)`
+- **Time-Based**: `enforce_time_based_exit(positions)`
 
-#### Status: ❌ **REMOVED**
+**Exit Execution:**
+- **Method**: `execute_exit(position, tracker, reason: reason)`
+- **Calls**: `exit_position(position, tracker)` → `Orders.config.flat_position()`
+- **Post-Exit**: Clears Redis cache, unsubscribes WS, updates status, registers cooldown
 
-**⚠️ Circuit breaker functionality has been removed from the system:**
+#### Status: ⚠️ **PARTIALLY IMPLEMENTED**
 
-**Removed Components:**
-- `enforce_daily_circuit_breaker()` method disabled in `RiskManagerService`
-- Circuit breaker check removed from `Signal::Scheduler`
-- Circuit breaker removed from health API (`/api/health`)
-- `daily_loss_limit_pct` config option commented out in `config/algo.yml`
+**✅ Implemented:**
+- Loop runs every 5s ✅
+- Time-based exit at 15:20 IST ✅
+- Single job/thread visibly running ✅
+- Clear logging for each exit ✅
+- Auto-starts on system boot ✅
+
+**⚠️ Differences from AC:**
+
+1. **Exit Method** ⚠️
+   - AC: Calls `Orders::Adjuster.evaluate_exit!(position)`
+   - **Implementation**: Uses `execute_exit(position, tracker, reason: reason)` instead
+   - **Status**: Different implementation, but functionality is equivalent
+
+2. **Loop Interval Configurability** ⚠️
+   - AC: Runs every 5s (configurable)
+   - **Implementation**: Hardcoded `LOOP_INTERVAL = 5` (not configurable from config file)
+   - **Status**: Meets 5s requirement but not configurable
+
+**Summary:**
+- Core functionality fully implemented ✅
+- Uses different method names than AC (`execute_exit` vs `Orders::Adjuster.evaluate_exit!`)
+- Loop interval is 5s but not configurable from config file
+
+---
+
+### **EPIC H — H2: Signals Loop**
+
+#### User Story
+
+**As the system**
+**I want** a signals poller compatible with rate limits
+**So that** validated signals feed entry orchestration without API throttling.
+
+---
+
+#### Acceptance Criteria (Generic Requirements)
+
+**AC 1: OHLC Reading & Signal Production**
+- For each watchlisted index: read OHLC from Redis, produce one signal
+
+**AC 2: Cooldown**
+- Apply cooldown per symbol (≥180s)
+
+**AC 3: Pyramiding**
+- Pyramiding only if first position age ≥300s and P&L ≥ 0%
+
+**AC 4: Entry Cutoff**
+- Respect 15:00 entry cutoff
+
+**Done:**
+- Signals produced at a fixed cadence and gated by cooldown/pyramiding/cutoff
+
+---
+
+#### Actual Implementation
+
+**Service:** `Signal::Scheduler` (singleton, runs in background thread)
+
+**AC 1: OHLC Reading & Signal Production** ⚠️
+
+**AC Requirement:**
+- For each watchlisted index: read OHLC from Redis, produce one signal
+
+**Current Implementation:**
+- **Scheduler Loop**: Loops through indices from `AlgoConfig.fetch[:indices]` (not watchlist)
+- **OHLC Source**: Uses `instrument.candle_series(interval:)` which reads from **in-memory cache** (`@ohlc_cache`), NOT Redis
+- **No Redis caching**: OHLC is NOT cached in Redis for signal generation (per requirement - no caching in Redis)
+- **Signal Production**: Calls `Signal::Engine.run_for(index_cfg)` which:
+  1. Gets instrument via `IndexInstrumentCache.instance.get_or_fetch()`
+  2. Calls `instrument.candle_series(interval:)` for OHLC data (from in-memory cache or fetches fresh)
+  3. Analyzes OHLC with Supertrend + ADX
+  4. Produces one signal per index (direction: `:bullish`, `:bearish`, or `:avoid`)
+
+**Gap:**
+- **Not using watchlist**: Uses `AlgoConfig.fetch[:indices]` instead of `WatchlistItem.active`
+- **OHLC not from Redis**: Uses in-memory cache (`@ohlc_cache`) - per requirement, no Redis caching for OHLC
+- However, OHLC is cached in-memory and signals are produced correctly
+
+**AC 2: Cooldown Per Symbol** ✅
+
+**AC Requirement:**
+- Apply cooldown per symbol (≥180s)
+
+**Current Implementation:**
+- **Location**: `EntryGuard.cooldown_active?(symbol, cooldown)` (called in `EntryGuard.try_enter()`)
+- **Config**: `index_cfg[:cooldown_sec]` (default: 180s from `config/algo.yml`)
+- **Storage**: `Rails.cache.write("reentry:#{symbol}", Time.current, expires_in: cooldown)`
+- **Check**: `(Time.current - last) < cooldown`
+- **Status**: ✅ Cooldown implemented and working, but check happens in `EntryGuard` (after signal generation), not in `Signal::Engine`
 
 **Note:**
-- `Risk::CircuitBreaker` service file (`app/services/risk/circuit_breaker.rb`) is kept for reference but is no longer used
-- All circuit breaker checks and logic have been disabled
+- Cooldown prevents entry, not signal generation
+- Signals are still generated but entries are blocked if cooldown active
 
-**Historical (No Longer Active):**
+**AC 3: Pyramiding** ✅
 
-**✅ Previously Implemented:**
-- Circuit breaker detected -6% threshold ✅ (removed)
-- Set tripped flag in cache ✅ (removed)
-- Configurable threshold (6%) ✅ (removed)
+**AC Requirement:**
+- Pyramiding only if first position age ≥300s and P&L ≥ 0%
 
-**❌ Previously Missing/Gaps:**
+**Current Implementation:**
+- **Location**: `EntryGuard.pyramiding_allowed?(first_position)` (called in `EntryGuard.exposure_ok?()`)
+- **P&L Check**: `first_position.last_pnl_rupees&.positive?` ✅ (P&L ≥ 0%)
+- **Age Check**: `first_position.updated_at < 5.minutes.ago` ✅ (age ≥300s = 5 minutes)
+- **Status**: ✅ Fully implemented and matches AC requirement
 
-1. **Daily P&L Calculation** ⚠️
-   - AC: Separate closed P&L (DB) + open P&L (Redis)
-   - **Implementation**: Uses broker's combined `day_pnl`
-   - **Gap**: Not calculating separately as per AC
+**AC 4: Entry Cutoff at 15:00 IST** ⚠️
 
-2. **Exit All Positions on Trip** ❌
-   - AC: Exits all positions when circuit trips
-   - **Implementation**: Only sets flag, does NOT exit positions
-   - **Gap**: No automatic position flattening on trip
+**AC Requirement:**
+- Respect 15:00 entry cutoff
 
-3. **Block New Entries** ❌
-   - AC: Rejects new entry attempts when circuit tripped
-   - **Implementation**: `EntryGuard` does NOT check circuit breaker
-   - **Gap**: New entries are NOT blocked
+**Current Implementation:**
+- **Location**: `Signal::Engine.validate_theta_risk()` (called in `comprehensive_validation()`)
+- **Config**: `theta_risk_cutoff_hour: 14`, `theta_risk_cutoff_minute: 30` (14:30, NOT 15:00)
+- **Check**: `if hour > cutoff_hour || (hour == cutoff_hour && minute >= cutoff_minute)`
+- **Status**: ⚠️ Implemented but configured at 14:30 (should be 15:00 per AC)
 
-4. **Start-of-Day Balance Tracking** ❌
-   - AC: Compare against start-of-day balance
-   - **Implementation**: Uses current balance from broker
-   - **Gap**: No separate tracking of start-of-day balance
+**Current Scheduler Loop:**
+```ruby
+# Signal::Scheduler
+def start!
+  indices = Array(AlgoConfig.fetch[:indices])  # From config, not watchlist
+  @thread = Thread.new do
+    loop do
+      indices.each_with_index do |index_cfg, idx|
+        sleep(idx.zero? ? 0 : 5)  # 5s stagger between indices
+        Signal::Engine.run_for(index_cfg)  # Produce one signal per index
+      end
+      sleep(@period)  # 30 seconds between cycles
+    end
+  end
+end
+```
 
-5. **Daily Reset** ⚠️
-   - AC: Reset next session
-   - **Implementation**: Cache expires after 8 hours (not daily)
-   - **Gap**: No automatic daily reset at market open
+**Signal Generation Flow:**
+```ruby
+# Signal::Engine.run_for(index_cfg)
+1. Get instrument: IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+2. Read OHLC: instrument.candle_series(interval: '1')  # From in-memory cache
+3. Analyze: Supertrend + ADX
+4. Validate: comprehensive_validation() (includes theta risk/cutoff check)
+5. Produce signal: TradingSignal.create_from_analysis()
+6. Attempt entry: EntryGuard.try_enter() (checks cooldown + pyramiding)
+```
 
-**Critical Gaps:**
-- Circuit breaker trips but does NOT automatically exit all positions
-- Circuit breaker trips but does NOT block new entry attempts
-- P&L calculation does NOT match AC specification (should be closed DB + open Redis)
+**Cooldown Flow:**
+```ruby
+# EntryGuard.try_enter()
+→ cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec])  # 180s
+→ Returns false if cooldown active
+→ Blocks entry but signal was already produced
+```
+
+**Pyramiding Flow:**
+```ruby
+# EntryGuard.exposure_ok?()
+→ If current_count == 1:
+  → pyramiding_allowed?(first_position)
+    → Checks: P&L > 0 AND age ≥ 5 minutes (300s) ✅
+```
+
+**Entry Cutoff Flow:**
+```ruby
+# Signal::Engine.comprehensive_validation()
+→ validate_theta_risk()
+  → Checks: hour > 14 || (hour == 14 && minute >= 30)
+  → Blocks signal validation if after 14:30
+  → Should be 15:00 per AC ⚠️
+```
+
+#### Implementation Details
+
+**Scheduler Configuration:**
+- **Period**: 30 seconds (`@period = 30`) - hardcoded
+- **Stagger**: 5 seconds between indices
+- **Thread Name**: `'signal-scheduler'`
+- **Auto-Start**: Via `config/initializers/market_stream.rb`
+
+**OHLC Data Source:**
+- **Method**: `instrument.candle_series(interval:)`
+- **Storage**: In-memory cache (`@ohlc_cache`) via `CandleExtension` concern
+- **NOT Redis**: OHLC is NOT cached in Redis (per requirement - no Redis caching for signals)
+- **Cache Duration**: Configurable via `algo.yml` → `data_freshness.ohlc_cache_duration_minutes`
+- **Note**: In-memory cache reduces API calls while avoiding Redis overhead
+
+**Cooldown Implementation:**
+- **Storage**: `Rails.cache.write("reentry:#{symbol}", Time.current)`
+- **Duration**: From `index_cfg[:cooldown_sec]` (180s default)
+- **Check Location**: `EntryGuard.try_enter()` (after signal generated)
+- **Effect**: Prevents entry but doesn't prevent signal generation
+
+**Pyramiding Implementation:**
+- **Trigger**: When trying to enter second position on same instrument/side
+- **Requirements**:
+  - First position P&L ≥ 0% ✅
+  - First position age ≥ 300s (5 minutes) ✅
+- **Location**: `EntryGuard.pyramiding_allowed?()`
+
+**Entry Cutoff Implementation:**
+- **Validation**: `Signal::Engine.validate_theta_risk()`
+- **Current Config**: 14:30 (should be 15:00)
+- **Effect**: Blocks signal validation (prevents signal from proceeding to entry)
+
+#### Status: ⚠️ **PARTIALLY IMPLEMENTED**
+
+**✅ Implemented:**
+- Signals produced at fixed cadence (30s cycle) ✅
+- One signal per index ✅
+- Cooldown per symbol (180s) ✅
+- Pyramiding rules (age ≥300s, P&L ≥ 0%) ✅
+- Entry cutoff mechanism ✅
+
+**⚠️ Differences from AC:**
+
+1. **OHLC Source** ✅
+   - AC: Read OHLC from Redis
+   - **Implementation**: Reads from in-memory cache (`@ohlc_cache`) - per requirement, no Redis caching for OHLC
+   - **Status**: ✅ No Redis caching (as per requirement) - uses in-memory cache instead
+
+2. **Index Source** ⚠️
+   - AC: For each watchlisted index
+   - **Implementation**: Loops through `AlgoConfig.fetch[:indices]` (config-based, not watchlist)
+   - **Status**: Different source (config vs watchlist), but works correctly
+
+3. **Cooldown Location** ⚠️
+   - AC: Apply cooldown (implied: before or during signal generation)
+   - **Implementation**: Cooldown checked in `EntryGuard` (after signal generation)
+   - **Status**: Cooldown works but is enforced at entry time, not signal time
+
+4. **Entry Cutoff Time** ⚠️
+   - AC: Respect 15:00 entry cutoff
+   - **Implementation**: Configured at 14:30 (`theta_risk_cutoff_hour: 14`, `theta_risk_cutoff_minute: 30`)
+   - **Status**: Should be 15:00 to match AC
+
+**Summary:**
+- Core functionality fully implemented ✅
+- Signals produced at fixed cadence with cooldown/pyramiding/cutoff gates ✅
+- OHLC source is in-memory cache (not Redis) - per requirement, no Redis caching for signals ✅
+- Index source is config-based (not watchlist) but covers same indices
+- Entry cutoff configured at 14:30 (should be 15:00)
 
 ---
 
@@ -1641,7 +1788,6 @@ indices:
 - ✅ **Batch Operations**: Optimized database queries
 
 ### **Reliability Features**
-- ✅ **Circuit Breaker**: System protection mechanism
 - ✅ **Comprehensive Validation**: Multi-layer signal validation
 - ✅ **Error Recovery**: Robust error handling
 - ✅ **Health Monitoring**: Real-time system status
