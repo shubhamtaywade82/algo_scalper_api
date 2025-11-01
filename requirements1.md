@@ -1226,11 +1226,13 @@ STATUSES = {
 5. **Cooldown Registration**: ✅
    - `tracker.register_cooldown!()` prevents immediate re-entry
 
-**Circuit Breaker:**
-- **Storage**: `Rails.cache.write('risk:circuit_breaker:tripped', {...}, expires_in: 8.hours)`
-- **Check**: `Risk::CircuitBreaker.instance.tripped?`
-- **Reset**: `Risk::CircuitBreaker.instance.reset!()` (manual or expires after 8h)
-- **Blocks Entries**: ❌ **NOT IMPLEMENTED** - `EntryGuard` does NOT check circuit breaker before allowing entries
+**Circuit Breaker:** ❌ **REMOVED**
+- Circuit breaker functionality has been removed from the system
+- `enforce_daily_circuit_breaker` method disabled in `RiskManagerService`
+- Circuit breaker check removed from `Signal::Scheduler`
+- Circuit breaker removed from health API
+- `daily_loss_limit_pct` config option commented out
+- `Risk::CircuitBreaker` service file kept for reference but not used
 
 **Exit Flow:**
 ```ruby
@@ -1267,7 +1269,7 @@ def monitor_loop
     enforce_hard_limits(positions)           # Stop-loss & Take-profit
     enforce_trailing_stops(positions)        # Trailing stops
     enforce_time_based_exit(positions)       # 15:20 IST exit
-    enforce_daily_circuit_breaker            # Daily loss limit
+    # enforce_daily_circuit_breaker          # Circuit breaker removed
     sleep LOOP_INTERVAL  # 5 seconds
   end
 end
@@ -1338,7 +1340,250 @@ risk:
 - BE Trigger: ✅ 10%
 - Daily Circuit: ✅ 6% (fixed)
 - Exit Tags: ❌ Not implemented
-- Circuit Breaker Entry Blocking: ❌ Not implemented
+- Circuit Breaker Entry Blocking: ❌ Removed (circuit breaker functionality removed)
+
+---
+
+### **EPIC G — G2: Daily Circuit Breaker**
+
+**⚠️ REMOVED**: Circuit breaker functionality has been removed per requirement. The system no longer uses circuit breaker logic.
+
+#### User Story (Historical - No Longer Implemented)
+
+**As the system**
+**I want** a portfolio-level kill-switch
+**So that** the day's loss cannot exceed configured drawdown.
+
+---
+
+#### Acceptance Criteria (Generic Requirements)
+
+**AC 1: Daily P&L Tracking**
+- Tracks daily P&L = closed P&L (DB) + open P&L (Redis) vs start-of-day balance
+
+**AC 2: Circuit Breaker Trigger**
+- If ≤ −6%, sets `circuit:tripped=1`, exits all positions, and rejects new entry attempts (until reset next session)
+
+**AC 3: Reset Mechanism**
+- Resets next session
+
+**Done:**
+- Trigger verified when open P&L pushes total below −6% (positions flattened immediately)
+
+---
+
+#### Actual Implementation
+
+**Service:** `Live::RiskManagerService.enforce_daily_circuit_breaker()` (called every 5s in monitor loop)
+
+**AC 1: Daily P&L Tracking** ⚠️
+
+**AC Requirement:**
+- Track: `daily P&L = closed P&L (DB) + open P&L (Redis) vs start-of-day balance`
+- Separately calculate closed P&L from database + open P&L from Redis
+
+**Current Implementation:**
+- **Uses**: `DhanHQ::Models::Funds.fetch.day_pnl` (broker-provided combined P&L)
+- **Does NOT**: Separately calculate closed P&L from `PositionTracker.exited` records
+- **Does NOT**: Separately calculate open P&L from Redis (`RedisPnlCache` for active positions)
+- **Does NOT**: Track start-of-day balance separately (uses current balance from broker)
+
+**Gap:**
+- Relies on broker's combined `day_pnl` instead of calculating:
+  - Closed P&L: Sum of `PositionTracker.exited` records' final P&L
+  - Open P&L: Sum of active positions' current P&L from Redis/current LTP
+  - Start-of-day balance: Should be stored at market open
+
+**AC 2: Circuit Breaker Trigger** ⚠️
+
+**AC Requirement:**
+- If ≤ −6%:
+  1. Sets `circuit:tripped=1` ✅
+  2. Exits all positions ❌
+  3. Rejects new entry attempts ❌
+
+**Current Implementation:**
+
+1. **Sets circuit:tripped flag** ✅
+   - `Risk::CircuitBreaker.instance.trip!()` called when loss threshold reached
+   - Sets cache key: `risk:circuit_breaker:tripped`
+   - Stores: `{at: Time.current, reason: "daily loss limit reached: X%"}`
+
+2. **Exits all positions** ❌
+   - **NOT IMPLEMENTED**: No automatic exit of all active positions when circuit trips
+   - Current: Only sets flag, does not call `execute_exit()` for all active positions
+
+3. **Rejects new entry attempts** ❌
+   - **NOT IMPLEMENTED**: `EntryGuard` does NOT check `Risk::CircuitBreaker.tripped?` before allowing entries
+   - Current: New entries are NOT blocked when circuit breaker is tripped
+
+**Gap:**
+- Circuit breaker trips but does not:
+  - Automatically exit all active positions
+  - Block new entry attempts
+
+**AC 3: Reset Mechanism** ⚠️
+
+**AC Requirement:**
+- Reset next session (presumably at market open next day)
+
+**Current Implementation:**
+- **Cache TTL**: 8 hours (not daily reset)
+- **Manual Reset**: `Risk::CircuitBreaker.instance.reset!()` available
+- **Automatic Reset**: ❌ No automatic daily reset mechanism
+
+**Gap:**
+- No automatic reset at market open next day
+- Relies on cache expiration (8h) or manual reset
+
+**Current Circuit Breaker Logic:**
+```ruby
+# enforce_daily_circuit_breaker() in RiskManagerService
+def enforce_daily_circuit_breaker
+  funds = DhanHQ::Models::Funds.fetch
+  pnl_today = funds.day_pnl  # Broker-provided combined P&L
+  balance = funds.net_balance  # Current balance
+
+  loss_pct = (pnl_today / balance) * -1
+
+  if pnl_today.negative? && loss_pct >= limit_pct  # limit_pct = 0.06 (6%)
+    Risk::CircuitBreaker.instance.trip!(reason: "...")
+    # ⚠️ Does NOT exit all positions
+    # ⚠️ Does NOT block new entries (EntryGuard doesn't check)
+  end
+end
+```
+
+**Circuit Breaker Storage:**
+```ruby
+# Risk::CircuitBreaker
+TRIP_CACHE_KEY = 'risk:circuit_breaker:tripped'
+Rails.cache.write(TRIP_CACHE_KEY, {at: Time.current, reason: "..."}, expires_in: 8.hours)
+```
+
+**Missing Functionality:**
+
+1. **Exit All Positions on Trip:**
+   ```ruby
+   # Should be added:
+   if circuit_breaker.tripped? && !@exits_triggered
+     PositionTracker.active.each do |tracker|
+       execute_exit(position, tracker, reason: 'circuit breaker trip')
+     end
+     @exits_triggered = true
+   end
+   ```
+
+2. **Block New Entries:**
+   ```ruby
+   # In EntryGuard.try_enter(), should check:
+   if Risk::CircuitBreaker.instance.tripped?
+     Rails.logger.warn('[EntryGuard] Blocked entry: circuit breaker tripped')
+     return false
+   end
+   ```
+
+3. **Separate P&L Calculation:**
+   ```ruby
+   # Should calculate:
+   closed_pnl = PositionTracker.exited
+     .where('DATE(updated_at) = ?', Date.current)
+     .sum('COALESCE(last_pnl_rupees, 0)')
+
+   open_pnl = PositionTracker.active.sum do |tracker|
+     # Get current P&L from Redis or calculate from current LTP
+     Live::RedisPnlCache.instance.fetch_pnl(tracker.id)&.dig(:pnl) || 0
+   end
+
+   daily_pnl = closed_pnl + open_pnl
+   ```
+
+4. **Start-of-Day Balance:**
+   ```ruby
+   # Should store at market open:
+   start_of_day_balance = DhanHQ::Models::Funds.fetch.net_balance
+   Rails.cache.write('risk:start_of_day_balance', start_of_day_balance, expires_in: 24.hours)
+   ```
+
+5. **Daily Reset:**
+   ```ruby
+   # Should reset at market open:
+   # Via scheduled job or initializer at market open time
+   Risk::CircuitBreaker.instance.reset! if new_trading_day?
+   ```
+
+#### Implementation Details
+
+**Current P&L Calculation:**
+- Uses broker's `day_pnl` (may include both closed and open positions)
+- Does not distinguish between closed (DB) and open (Redis) positions
+
+**Current Circuit Breaker Trigger:**
+- Threshold: -6% (`daily_loss_limit_pct: 0.06`)
+- Calculation: `loss_pct = (pnl_today / balance) * -1`
+- Trip condition: `pnl_today.negative? && loss_pct >= 0.06`
+
+**Current Circuit Breaker Actions:**
+- ✅ Sets tripped flag in cache
+- ❌ Does NOT exit all positions
+- ❌ Does NOT block new entries
+
+**Reset Mechanism:**
+- Manual: `Risk::CircuitBreaker.instance.reset!()`
+- Automatic: Cache expires after 8 hours (not daily)
+
+#### Status: ❌ **REMOVED**
+
+**⚠️ Circuit breaker functionality has been removed from the system:**
+
+**Removed Components:**
+- `enforce_daily_circuit_breaker()` method disabled in `RiskManagerService`
+- Circuit breaker check removed from `Signal::Scheduler`
+- Circuit breaker removed from health API (`/api/health`)
+- `daily_loss_limit_pct` config option commented out in `config/algo.yml`
+
+**Note:**
+- `Risk::CircuitBreaker` service file (`app/services/risk/circuit_breaker.rb`) is kept for reference but is no longer used
+- All circuit breaker checks and logic have been disabled
+
+**Historical (No Longer Active):**
+
+**✅ Previously Implemented:**
+- Circuit breaker detected -6% threshold ✅ (removed)
+- Set tripped flag in cache ✅ (removed)
+- Configurable threshold (6%) ✅ (removed)
+
+**❌ Previously Missing/Gaps:**
+
+1. **Daily P&L Calculation** ⚠️
+   - AC: Separate closed P&L (DB) + open P&L (Redis)
+   - **Implementation**: Uses broker's combined `day_pnl`
+   - **Gap**: Not calculating separately as per AC
+
+2. **Exit All Positions on Trip** ❌
+   - AC: Exits all positions when circuit trips
+   - **Implementation**: Only sets flag, does NOT exit positions
+   - **Gap**: No automatic position flattening on trip
+
+3. **Block New Entries** ❌
+   - AC: Rejects new entry attempts when circuit tripped
+   - **Implementation**: `EntryGuard` does NOT check circuit breaker
+   - **Gap**: New entries are NOT blocked
+
+4. **Start-of-Day Balance Tracking** ❌
+   - AC: Compare against start-of-day balance
+   - **Implementation**: Uses current balance from broker
+   - **Gap**: No separate tracking of start-of-day balance
+
+5. **Daily Reset** ⚠️
+   - AC: Reset next session
+   - **Implementation**: Cache expires after 8 hours (not daily)
+   - **Gap**: No automatic daily reset at market open
+
+**Critical Gaps:**
+- Circuit breaker trips but does NOT automatically exit all positions
+- Circuit breaker trips but does NOT block new entry attempts
+- P&L calculation does NOT match AC specification (should be closed DB + open Redis)
 
 ---
 

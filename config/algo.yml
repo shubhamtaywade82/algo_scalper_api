@@ -25,7 +25,7 @@ indices:
     }
 
 risk:
-  daily_loss_limit_pct: 0.06 # trigger circuit breaker at -6% of starting balance
+  # daily_loss_limit_pct: 0.06 # Circuit breaker disabled - removed per requirement
   per_trade_risk_pct: 0.01
   sl_pct: 0.30
   tp_pct: 0.60

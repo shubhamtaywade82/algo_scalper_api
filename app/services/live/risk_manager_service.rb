@@ -88,7 +88,7 @@ module Live
         enforce_hard_limits(positions)
         enforce_trailing_stops(positions)
         enforce_time_based_exit(positions)
-        enforce_daily_circuit_breaker
+        # Circuit breaker disabled - removed per requirement
         sleep LOOP_INTERVAL
       end
     rescue StandardError => e
@@ -220,44 +220,10 @@ module Live
       Rails.logger.error("Time-based exit enforcement failed: #{e.class} - #{e.message}")
     end
 
-    def enforce_daily_circuit_breaker
-      risk = risk_config
-      limit_pct = BigDecimal((risk[:daily_loss_limit_pct] || 0).to_s)
-      return if limit_pct <= 0
-
-      begin
-        funds = DhanHQ::Models::Funds.fetch
-        Live::FeedHealthService.instance.mark_success!(:funds)
-        pnl_today = if funds.respond_to?(:day_pnl)
-                      BigDecimal(funds.day_pnl.to_s)
-                    elsif funds.is_a?(Hash)
-                      BigDecimal((funds[:day_pnl] || 0).to_s)
-                    else
-                      BigDecimal(0)
-                    end
-
-        balance = if funds.respond_to?(:net_balance)
-                    BigDecimal(funds.net_balance.to_s)
-                  elsif funds.respond_to?(:net_cash)
-                    BigDecimal(funds.net_cash.to_s)
-                  elsif funds.is_a?(Hash)
-                    BigDecimal((funds[:net_balance] || funds[:net_cash] || 0).to_s)
-                  else
-                    BigDecimal(0)
-                  end
-        return if balance <= 0
-
-        loss_pct = (pnl_today / balance) * -1
-
-        if pnl_today.negative? && loss_pct >= limit_pct
-          Risk::CircuitBreaker.instance.trip!(reason: "daily loss limit reached: #{(loss_pct * 100).round(2)}%")
-          Rails.logger.warn("Circuit breaker TRIPPED due to daily loss: #{pnl_today.to_s('F')} against balance #{balance.to_s('F')}")
-        end
-      rescue StandardError => e
-        Rails.logger.warn("Daily circuit breaker check failed: #{e.class} - #{e.message}")
-        Live::FeedHealthService.instance.mark_failure!(:funds, error: e)
-      end
-    end
+    # Circuit breaker disabled - removed per requirement
+    # def enforce_daily_circuit_breaker
+    #   # Method removed - circuit breaker functionality no longer needed
+    # end
 
     def fetch_positions_indexed
       positions = DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
