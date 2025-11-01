@@ -236,19 +236,18 @@ module Live
                       BigDecimal(0)
                     end
 
-          balance = if funds.respond_to?(:net_balance)
-                      BigDecimal(funds.net_balance.to_s)
-                    elsif funds.respond_to?(:net_cash)
-                      BigDecimal(funds.net_cash.to_s)
-                    elsif funds.is_a?(Hash)
-                      BigDecimal((funds[:net_balance] || funds[:net_cash] || 0).to_s)
-                    else
-                      BigDecimal(0)
-                    end
-          return if balance <= 0
+        balance = if funds.respond_to?(:net_balance)
+                    BigDecimal(funds.net_balance.to_s)
+                  elsif funds.respond_to?(:net_cash)
+                    BigDecimal(funds.net_cash.to_s)
+                  elsif funds.is_a?(Hash)
+                    BigDecimal((funds[:net_balance] || funds[:net_cash] || 0).to_s)
+                  else
+                    BigDecimal(0)
+                  end
+        return if balance <= 0
 
-          loss_pct = (pnl_today / balance) * -1
-        end
+        loss_pct = (pnl_today / balance) * -1
 
         if pnl_today.negative? && loss_pct >= limit_pct
           Risk::CircuitBreaker.instance.trip!(reason: "daily loss limit reached: #{(loss_pct * 100).round(2)}%")
@@ -272,7 +271,6 @@ module Live
       Live::FeedHealthService.instance.mark_failure!(:positions, error: e)
       {}
     end
-
 
     def current_ltp(tracker, position)
       # For options, fetch LTP directly from DhanHQ API to get correct option premium
@@ -541,6 +539,5 @@ module Live
     rescue StandardError
       BigDecimal(0)
     end
-
   end
 end
