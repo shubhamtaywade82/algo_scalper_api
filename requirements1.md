@@ -722,6 +722,173 @@ end
 
 ---
 
+### **EPIC E — E2: Position Sizing (Allocation-Based)**
+
+#### User Story
+
+**As the system**
+**I want** to size quantity by allocation band and lot size
+**So that** per-trade exposure respects capital tiers.
+
+---
+
+#### Acceptance Criteria (Generic Requirements)
+
+- Inputs: balance, entry_price, lot_size, allocation_pct, stop_loss_pct
+- Quantity is a multiple of lot size, total cost ≤ allocation_cap (balance * allocation_pct)
+- Optional risk-per-trade constraint can reduce size if implemented later
+- Returns qty >= lot_size or zero if capital insufficient
+
+---
+
+#### Actual Implementation
+
+**Service:** `Capital::Allocator.qty_for(index_cfg:, entry_price:, derivative_lot_size:, scale_multiplier: 1)`
+
+**Inputs:**
+- `balance`: Fetched from DhanHQ Funds API via `available_cash()` (not passed as parameter)
+- `entry_price`: From option pick `pick[:ltp]`
+- `lot_size`: From option pick `pick[:lot_size]` (derivative lot size)
+- `allocation_pct`: From `index_cfg[:capital_alloc_pct]` OR capital band policy (based on account size)
+- `stop_loss_pct`: Hardcoded as `0.30` (30%) in risk calculation (line 52)
+
+**Return Value:**
+- Quantity >= lot_size (always a multiple of lot_size)
+- Returns `0` if capital insufficient or if can't afford minimum 1 lot
+- Maximum quantity capped at `lot_size * 100` lots
+
+**Capital Bands (Deployment Policy):**
+- Account size-based allocation percentages:
+  - Up to ₹75k: 30% allocation, 5% risk per trade
+  - Up to ₹1.5L: 25% allocation, 3.5% risk per trade
+  - Up to ₹3L: 20% allocation, 3% risk per trade
+  - Above ₹3L: 20% allocation, 2.5% risk per trade
+- Configurable via `index_cfg[:capital_alloc_pct]` to override band default
+
+**Position Sizing Logic:**
+1. **Allocation-Based Sizing:**
+   - `allocation = balance * effective_alloc_pct`
+   - `scaled_allocation = allocation * scale_multiplier` (capped at available capital)
+   - `max_by_allocation = (scaled_allocation / cost_per_lot).floor * lot_size`
+
+2. **Risk-Based Sizing:**
+   - `risk_capital = balance * effective_risk_pct`
+   - `risk_capital_scaled = risk_capital * scale_multiplier`
+   - Uses hardcoded 30% stop loss: `max_by_risk = (risk_capital_scaled / (entry_price * 0.30)).floor * lot_size`
+
+3. **Final Quantity:**
+   - Takes minimum of allocation-based and risk-based sizing: `quantity = [max_by_allocation, max_by_risk].min`
+   - Ensures at least 1 lot: `final_quantity = [quantity, lot_size].max`
+   - Caps maximum at 100 lots: `final_quantity = [final_quantity, lot_size * 100].min`
+   - Safety check: Adjusts down if total buy value exceeds available capital
+
+**Safety Checks:**
+- Returns `0` if available capital is zero
+- Returns `0` if entry_price <= 0
+- Returns `0` if lot_size <= 0
+- Returns `0` if can't afford minimum 1 lot (`entry_price * lot_size > available_capital`)
+- Final adjustment if buy value exceeds available capital (reduces to max affordable lots)
+
+**Scale Multiplier:**
+- Supports position scaling via `scale_multiplier` parameter (default: 1)
+- Used in signal generation when same-side signals repeat
+- Multiplies both allocation and risk capital before calculating quantity
+
+**Configuration:**
+```yaml
+# config/algo.yml
+indices:
+  - key: NIFTY
+    capital_alloc_pct: 0.30  # Optional override (defaults to capital band if not specified)
+```
+
+**Usage:**
+```ruby
+# Called from EntryGuard.try_enter()
+quantity = Capital::Allocator.qty_for(
+  index_cfg: index_cfg,
+  entry_price: pick[:ltp].to_f,
+  derivative_lot_size: pick[:lot_size],
+  scale_multiplier: multiplier
+)
+return false if quantity <= 0  # Insufficient capital
+```
+
+#### Implementation Details
+
+**Calculation Flow:**
+```ruby
+# app/services/capital/allocator.rb
+Capital::Allocator.qty_for(...)
+  # 1. Get available cash from DhanHQ
+  capital_available = available_cash()  # From DhanHQ Funds API
+
+  # 2. Determine deployment policy (capital band)
+  policy = deployment_policy(capital_available)
+
+  # 3. Get effective allocation %
+  effective_alloc_pct = index_cfg[:capital_alloc_pct] || policy[:alloc_pct]
+
+  # 4. Calculate allocation amount
+  allocation = capital_available * effective_alloc_pct
+
+  # 5. Calculate max quantity by allocation
+  max_by_allocation = (allocation / cost_per_lot).floor * lot_size
+
+  # 6. Calculate max quantity by risk (30% stop loss hardcoded)
+  risk_capital = capital_available * policy[:risk_per_trade_pct]
+  max_by_risk = (risk_capital / (entry_price * 0.30)).floor * lot_size
+
+  # 7. Take minimum of both constraints
+  quantity = [max_by_allocation, max_by_risk].min
+
+  # 8. Ensure minimum 1 lot, maximum 100 lots
+  final_quantity = [[quantity, lot_size].max, lot_size * 100].min
+
+  # 9. Safety check: Adjust if exceeds capital
+  # ... adjust if needed ...
+```
+
+**Capital Bands:**
+```ruby
+CAPITAL_BANDS = [
+  { upto: 75_000, alloc_pct: 0.30, risk_per_trade_pct: 0.050 },
+  { upto: 150_000, alloc_pct: 0.25, risk_per_trade_pct: 0.035 },
+  { upto: 300_000, alloc_pct: 0.20, risk_per_trade_pct: 0.030 },
+  { upto: Float::INFINITY, alloc_pct: 0.20, risk_per_trade_pct: 0.025 }
+]
+```
+
+#### Status: ✅ **COMPLETE**
+
+**Implementation Details:**
+
+**Service Name:**
+- Uses `Capital::Allocator.qty_for()` (not `Risk::Sizing.compute()`)
+- This is the actual implementation
+
+**Stop Loss:**
+- Hardcoded as `0.30` (30%) in risk calculation (line 52)
+- Not passed as parameter - uses fixed 30% for risk-based sizing
+- Stop loss % from `algo.yml` (`sl_pct: 0.30`) is used elsewhere (risk management), not here
+
+**Risk-Per-Trade Constraint:**
+- **Already implemented** - not optional
+- Uses `risk_per_trade_pct` from capital band policy
+- Calculates `max_by_risk` and takes minimum of allocation and risk constraints
+
+**Multiple Constraints:**
+- Applies both allocation-based AND risk-based constraints
+- Takes the minimum of both to ensure both are respected
+- This provides more conservative sizing
+
+**Capital Band System:**
+- Dynamically determines allocation % based on account size
+- Smaller accounts get higher allocation % but lower risk %
+- Configurable via `index_cfg[:capital_alloc_pct]` to override
+
+---
+
 ## ⚙️ Configuration Management - COMPLETED
 
 ### **Trading Configuration** (`config/algo.yml`)
