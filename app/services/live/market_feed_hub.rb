@@ -157,7 +157,8 @@ module Live
       # Prefer DB watchlist if present; fall back to ENV for bootstrap-only
       if ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items') &&
          WatchlistItem.exists?
-        return WatchlistItem.order(:segment, :security_id).pluck(:segment, :security_id).map do |seg, sid|
+        # Only load active watchlist items for subscription
+        return WatchlistItem.active.order(:segment, :security_id).pluck(:segment, :security_id).map do |seg, sid|
           { segment: seg, security_id: sid }
         end
       end
