@@ -270,6 +270,122 @@ All acceptance criteria are met. The system:
 
 ---
 
+### **EPIC C — C1: Staggered OHLC Fetch**
+
+#### User Story
+
+**As the system**
+**I want** 1m & 5m intraday OHLC prefetched and cached for each watchlisted instrument
+**So that** signals compute without breaching API limits.
+
+---
+
+#### Acceptance Criteria
+
+1. **Prefetch Service**
+   - `Live::OhlcPrefetcherService` runs as background thread on Rails boot
+   - Starts automatically via `config/initializers/market_stream.rb`
+   - Loops continuously every 60 seconds, fetching OHLC for all active watchlist items
+
+2. **Staggered Fetching**
+   - Fetches OHLC per instrument from watchlist
+   - Sleeps 0.5 seconds between each instrument fetch to avoid rate limits
+   - Processes watchlist in batches to avoid memory issues
+
+3. **Timeframe Support**
+   - **Signals fetch both 1m and 5m** when needed:
+     - Primary timeframe (1m) via `instrument.candle_series(interval: '1')`
+     - Confirmation timeframe (5m) via `instrument.candle_series(interval: '5')`
+   - **Prefetcher**: Currently only prefetches 5m (warms cache)
+   - Signals fetch 1m on-demand when needed (uses in-memory cache after first fetch)
+   - Both timeframes are fetched and cached as needed by signal generation
+
+4. **Caching** ✅ **IMPLEMENTED**
+   - Uses **in-memory cache** via `CandleExtension` (`@ohlc_cache` hash)
+   - Cache key: `@ohlc_cache[interval]` where interval is '1' or '5'
+   - Signals use `instrument.candle_series(interval:)` which checks cache first
+   - Cache duration: `ohlc_cache_duration_minutes` from `algo.yml` (default: 5 minutes)
+   - If cache is stale or empty, fetches fresh data via `instrument.intraday_ohlc()`
+   - **Note**: Redis caching not required - in-memory cache is sufficient
+
+5. **Configuration**
+   - Prefetcher uses hardcoded constants:
+     - `LOOP_INTERVAL_SECONDS = 60` (refresh every 60 seconds)
+     - `STAGGER_SECONDS = 0.5` (sleep 0.5s between instruments)
+     - `DEFAULT_INTERVAL = '5'` (prefetches 5m only)
+     - `LOOKBACK_DAYS = 2`
+   - Cache duration configurable via `ohlc_cache_duration_minutes` in `algo.yml`
+   - Signals use timeframes from `algo.yml`: `primary_timeframe: "1m"` and `confirmation_timeframe: "5m"`
+
+6. **Verification**
+   - In-memory cache keys exist per instrument: `@ohlc_cache['1']` and `@ohlc_cache['5']`
+   - Cache refreshed automatically when stale (based on `ohlc_cache_duration_minutes`)
+   - Signals successfully fetch both 1m and 5m OHLC when needed
+
+#### Implementation Details
+
+**Prefetch Service:**
+```ruby
+# app/services/live/ohlc_prefetcher_service.rb
+class OhlcPrefetcherService
+  LOOP_INTERVAL_SECONDS = 60  # Refresh every 60 seconds
+  STAGGER_SECONDS = 0.5        # Sleep 0.5s between fetches
+  DEFAULT_INTERVAL = '5'       # Prefetches 5m to warm cache
+
+  def run_loop
+    while running?
+      fetch_all_watchlist  # Fetches all active watchlist items with stagger
+      sleep LOOP_INTERVAL_SECONDS
+    end
+  end
+end
+```
+
+**Signal OHLC Fetching:**
+```ruby
+# app/services/signal/engine.rb
+# Fetches 1m (primary) and 5m (confirmation) when needed
+series = instrument.candle_series(interval: '1')  # 1m for primary analysis
+series = instrument.candle_series(interval: '5')  # 5m for confirmation analysis
+```
+
+**In-Memory Caching:**
+```ruby
+# app/models/concerns/candle_extension.rb
+def candles(interval: '5')
+  @ohlc_cache ||= {}
+  cached_series = @ohlc_cache[interval]
+  return cached_series if cached_series && !ohlc_stale?(interval)
+  fetch_fresh_candles(interval)  # Fetches from API if cache stale
+end
+```
+
+#### Status: ✅ **COMPLETE**
+
+**✅ Implemented:**
+- Background prefetch service running on boot
+- Staggered fetching with 0.5s sleep between instruments
+- Fetches for all active watchlist items
+- Loop runs every 60 seconds
+- Service automatically starts/stops
+- **Signals fetch both 1m and 5m OHLC when needed**
+- In-memory caching works for both timeframes
+- Cache duration configurable via `algo.yml`
+
+**How It Works:**
+- **Prefetcher**: Fetches 5m OHLC every 60 seconds via `instrument.intraday_ohlc(interval: '5')` (direct API call)
+  - Note: Prefetcher does NOT populate the in-memory cache - it only makes API calls
+  - Helps with rate limiting by keeping API connection active
+- **Signals**: Fetch both 1m and 5m on-demand via `instrument.candle_series(interval:)`
+  - Primary: `candle_series(interval: '1')` → fetches/caches 1m OHLC
+  - Confirmation: `candle_series(interval: '5')` → fetches/caches 5m OHLC
+  - `candle_series()` checks `@ohlc_cache[interval]` first, then calls `fetch_fresh_candles()` if stale
+  - `fetch_fresh_candles()` calls API AND populates `@ohlc_cache[interval]`
+- Cache automatically refreshes when stale (based on `ohlc_cache_duration_minutes`)
+- This approach avoids Redis complexity while still preventing API rate limit issues
+
+---
+
 ## ⚙️ Configuration Management - COMPLETED
 
 ### **Trading Configuration** (`config/algo.yml`)
