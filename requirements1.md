@@ -1169,11 +1169,11 @@ STATUSES = {
    - **Method**: `enforce_time_based_exit()` checks `Time.current >= Time.zone.parse('15:20')`
    - **Status**: ✅ Implemented correctly
 
-5. **Daily Circuit: -6% of starting balance** ⚠️
-   - **Config**: `risk.daily_loss_limit_pct: 0.04` (4%, **NOT 6%**)
+5. **Daily Circuit: -6% of starting balance** ✅
+   - **Config**: `risk.daily_loss_limit_pct: 0.06` (6%) ✅
    - **Method**: `enforce_daily_circuit_breaker()` calculates `loss_pct = (pnl_today / balance) * -1`
    - **Circuit Breaker**: `Risk::CircuitBreaker.instance.trip!()` sets cache flag
-   - **Status**: ⚠️ Configured at 4% (not 6%), but mechanism works correctly
+   - **Status**: ✅ Configured at 6%, mechanism works correctly
 
 **LTP Source:**
 - Uses `current_ltp_with_freshness_check()` which:
@@ -1289,7 +1289,7 @@ end
 **Configuration Values:**
 ```yaml
 risk:
-  daily_loss_limit_pct: 0.04    # 4% (AC requires 6%)
+  daily_loss_limit_pct: 0.06    # 6% ✅ (matches AC requirement)
   sl_pct: 0.30                   # 30% ✅
   tp_pct: 0.60                   # 60% ✅
   trail_step_pct: 0.10          # 10% (minimum profit to start trailing)
@@ -1316,10 +1316,10 @@ risk:
    - **Implementation**: +10% (`breakeven_after_gain: 0.10`) ✅
    - **Status**: Fixed - now matches AC requirement
 
-2. **Daily Circuit Breaker Threshold** ⚠️
+2. **Daily Circuit Breaker Threshold** ✅
    - AC: -6% of starting balance
-   - **Implementation**: -4% (`daily_loss_limit_pct: 0.04`)
-   - **Gap**: Should be 6% per AC
+   - **Implementation**: -6% (`daily_loss_limit_pct: 0.06`) ✅
+   - **Status**: Fixed - now matches AC requirement
 
 3. **Exit Order Tags** ❌
    - AC: Specific tags (`stop_loss_30pct`, `take_profit_60pct`, etc.)
@@ -1335,8 +1335,8 @@ risk:
 - Stop-Loss: ✅ 30%
 - Take-Profit: ✅ 60%
 - Trailing Drop: ✅ 3%
-- BE Trigger: ✅ 10% (fixed)
-- Daily Circuit: ⚠️ 4% (should be 6%)
+- BE Trigger: ✅ 10%
+- Daily Circuit: ✅ 6% (fixed)
 - Exit Tags: ❌ Not implemented
 - Circuit Breaker Entry Blocking: ❌ Not implemented
 
