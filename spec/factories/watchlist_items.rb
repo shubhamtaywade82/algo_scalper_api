@@ -10,13 +10,33 @@ FactoryBot.define do
     trait :for_instrument do
       watchable factory: %i[instrument]
       security_id { watchable.security_id }
-      segment { watchable.segment }
+      segment do
+        if watchable.respond_to?(:exchange_segment)
+          begin
+            watchable.exchange_segment
+          rescue StandardError
+            watchable.try(:segment)
+          end
+        else
+          watchable.try(:segment)
+        end
+      end
     end
 
     trait :for_derivative do
       watchable factory: %i[derivative]
       security_id { watchable.security_id }
-      segment { watchable.segment }
+      segment do
+        if watchable.respond_to?(:exchange_segment)
+          begin
+            watchable.exchange_segment
+          rescue StandardError
+            watchable.try(:segment)
+          end
+        else
+          watchable.try(:segment)
+        end
+      end
     end
 
     trait :nifty_index do
@@ -33,7 +53,7 @@ FactoryBot.define do
 
     trait :sensex_index do
       security_id { '51' }
-      segment { 'BSE_IDX' }
+      segment { 'IDX_I' }
       kind { :index_value }
     end
 

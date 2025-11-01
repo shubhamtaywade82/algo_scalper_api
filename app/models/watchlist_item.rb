@@ -48,6 +48,8 @@ class WatchlistItem < ApplicationRecord
     commodity: 4
   }
 
+  validate :kind_must_be_valid
+
   scope :active, -> { where(active: true) }
   scope :by_segment, ->(seg) { where(segment: seg) }
   scope :for, ->(seg, sid) { where(segment: seg, security_id: sid) }
@@ -59,5 +61,21 @@ class WatchlistItem < ApplicationRecord
 
   def derivative
     watchable if watchable_type == 'Derivative'
+  end
+
+  def kind=(value)
+    @invalid_kind_value = nil
+    super(value)
+  rescue ArgumentError
+    @invalid_kind_value = value
+    super(nil)
+  end
+
+  private
+
+  def kind_must_be_valid
+    return unless defined?(@invalid_kind_value) && @invalid_kind_value
+
+    errors.add(:kind, 'is not included in the list')
   end
 end

@@ -102,6 +102,10 @@ class IndexInstrumentCache
     segment = index_cfg[:segment].to_s
     return segment if segment.present? && (exchange == 'NSE' || !segment.eql?('IDX_I'))
 
-    exchange == 'BSE' ? 'BSE_IDX' : (segment.presence || 'IDX_I')
+    if exchange == 'BSE'
+      'IDX_I'
+    else
+      segment.presence || 'IDX_I'
+    end
   end
 end
