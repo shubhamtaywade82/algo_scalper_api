@@ -170,52 +170,51 @@ RSpec.describe Live::OhlcPrefetcherService, :vcr do
         info_calls = []
         debug_calls = []
         warn_calls = []
-        allow(Rails.logger).to receive(:info) do |&block|
-          info_calls << block.call
+        allow(Rails.logger).to receive(:info) do |*args, &block|
+          info_calls << (block ? block.call : args.first)
         end
-        allow(Rails.logger).to receive(:debug) do |&block|
-          debug_calls << block.call
+        allow(Rails.logger).to receive(:debug) do |*args, &block|
+          debug_calls << (block ? block.call : args.first)
         end
-        allow(Rails.logger).to receive(:warn) do |&block|
-          warn_calls << block.call
+        allow(Rails.logger).to receive(:warn) do |*args, &block|
+          warn_calls << (block ? block.call : args.first)
         end
 
         service.send(:fetch_all_watchlist)
 
-        # VCR cassettes may not exist yet - if API calls fail, that's expected on first run
-        # When VCR cassettes exist, we should get info logs with OHLC data
-        if info_calls.any?
-          # Success case: VCR cassettes available and API calls succeeded
-          expect(info_calls.size).to be >= 2 # At least 2 calls (one per active watchlist item)
-          expect(info_calls.any? { |msg| msg.to_s.match(/OHLC prefetch/) }).to be_truthy
-        elsif warn_calls.any?
-          # VCR cassettes not available or API error - skip test but note it
-          expect(warn_calls.any? { |msg| msg.to_s.match(/Failed for/) }).to be_truthy
-          skip "VCR cassettes not available or API error. This is expected on first run. Warnings: #{warn_calls.map(&:to_s).join(', ')}"
-        else
-          # No logs at all - something is wrong
+        # VCR cassettes exist - verify API calls were made
+        # The service should log info for each instrument fetch, even if data is empty
+        if warn_calls.any?
+          # API error occurred - this should not happen with VCR cassettes
+          warn_msg = "API errors with VCR cassettes: #{warn_calls.map(&:to_s).join(', ')}"
+          puts warn_msg
+          # Still check that we tried to fetch (debug logs would show instrument not found)
           expect(debug_calls.none? { |msg| msg.to_s.match(/Instrument not found/) }).to be_truthy,
                  "Instruments not found. Debug: #{debug_calls.map(&:to_s).join(', ')}"
-          expect(info_calls.size).to be >= 2
         end
+
+        # With VCR cassettes, we should get info logs for successful fetches
+        # Even if data parsing results in fetched=0, we should still get logs
+        expect(info_calls.size).to be >= 2,
+               "Expected at least 2 info logs (one per active watchlist item). Got: #{info_calls.size}. Info: #{info_calls.map(&:to_s).join(', ')}. Debug: #{debug_calls.map(&:to_s).join(', ')}. Warnings: #{warn_calls.map(&:to_s).join(', ')}"
+        expect(info_calls.any? { |msg| msg.to_s.match(/OHLC prefetch/) }).to be_truthy
       end
 
       it 'does not fetch for inactive watchlist items' do
         # Inactive items are filtered by WatchlistItem.active scope
         info_calls = []
-        allow(Rails.logger).to receive(:info) { |&block| info_calls << block.call }
-        allow(Rails.logger).to receive(:warn) # Allow warnings for missing VCR cassettes
+        allow(Rails.logger).to receive(:info) { |*args, &block| info_calls << (block ? block.call : args.first) }
+        allow(Rails.logger).to receive(:warn) # Allow warnings
+        allow(Rails.logger).to receive(:debug) # Allow debug logs
+        
         service.send(:fetch_all_watchlist)
         
-        # If VCR cassettes are available, we should get exactly 2 logs (one per active item)
-        # If not available, may get 0 (due to API errors), which is acceptable
-        if info_calls.any?
-          expect(info_calls.size).to eq(2) # Only for nifty and banknifty
-          expect(info_calls.none? { |msg| msg.to_s.include?('51') }).to be_truthy
-        else
-          # VCR cassettes not available - skip assertion
-          skip 'VCR cassettes not available - cannot verify inactive filtering'
-        end
+        # With VCR cassettes, we should get exactly 2 logs (one per active item: nifty and banknifty)
+        # Security ID '51' (inactive SENSEX) should not appear in any logs
+        expect(info_calls.size).to eq(2),
+               "Expected exactly 2 info logs for active items. Got: #{info_calls.size}. Logs: #{info_calls.map(&:to_s).join(', ')}"
+        expect(info_calls.none? { |msg| msg.to_s.include?('51') }).to be_truthy,
+               "Inactive item (security_id: 51) should not appear in logs. Logs: #{info_calls.map(&:to_s).join(', ')}"
       end
 
       it 'sleeps STAGGER_SECONDS between each fetch' do
