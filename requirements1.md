@@ -274,8 +274,8 @@ All acceptance criteria are met. The system:
 #### User Story
 
 **As the system**
-**I want** 1m & 5m intraday OHLC prefetched and cached for each watchlisted instrument
-**So that** signals compute without breaching API limits.
+**I want** 1m & 5m intraday OHLC fetched directly from DhanHQ API on demand for each watchlisted instrument
+**So that** signals always use fresh data without caching.
 
 ---
 
@@ -292,34 +292,27 @@ All acceptance criteria are met. The system:
    - Processes watchlist in batches to avoid memory issues
 
 3. **Timeframe Support**
-   - **Signals fetch both 1m and 5m** when needed:
-     - Primary timeframe (1m) via `instrument.candle_series(interval: '1')`
-     - Confirmation timeframe (5m) via `instrument.candle_series(interval: '5')`
-   - **Prefetcher**: Currently only prefetches 5m (warms cache)
-   - Signals fetch 1m on-demand when needed (uses in-memory cache after first fetch)
-   - Both timeframes are fetched and cached as needed by signal generation
+   - **Signals fetch both 1m and 5m** directly from DhanHQ API when needed:
+     - Primary timeframe (1m) via `instrument.candle_series(interval: '1')` → direct API call
+     - Confirmation timeframe (5m) via `instrument.candle_series(interval: '5')` → direct API call
+   - **No caching**: Every call fetches fresh OHLC data from DhanHQ API via `instrument.intraday_ohlc()`
+   - Both timeframes are fetched on-demand with no caching mechanism
 
-4. **Caching** ✅ **IMPLEMENTED**
-   - Uses **in-memory cache** via `CandleExtension` (`@ohlc_cache` hash)
-   - Cache key: `@ohlc_cache[interval]` where interval is '1' or '5'
-   - Signals use `instrument.candle_series(interval:)` which checks cache first
-   - Cache duration: `ohlc_cache_duration_minutes` from `algo.yml` (default: 5 minutes)
-   - If cache is stale or empty, fetches fresh data via `instrument.intraday_ohlc()`
-   - **Note**: Redis caching not required - in-memory cache is sufficient
+4. **Direct API Calls Only** ✅ **IMPLEMENTED**
+   - Signals fetch OHLC directly from DhanHQ API via `instrument.intraday_ohlc(interval:)`
+   - **No caching**: No Redis cache, no in-memory cache - always fresh data
+   - Signals use `instrument.candle_series(interval:)` which calls API directly
+   - Every signal generation triggers fresh API calls for both 1m and 5m OHLC
 
 5. **Configuration**
-   - Prefetcher uses hardcoded constants:
-     - `LOOP_INTERVAL_SECONDS = 60` (refresh every 60 seconds)
-     - `STAGGER_SECONDS = 0.5` (sleep 0.5s between instruments)
-     - `DEFAULT_INTERVAL = '5'` (prefetches 5m only)
-     - `LOOKBACK_DAYS = 2`
-   - Cache duration configurable via `ohlc_cache_duration_minutes` in `algo.yml`
    - Signals use timeframes from `algo.yml`: `primary_timeframe: "1m"` and `confirmation_timeframe: "5m"`
+   - OHLC fetching configured via `disable_ohlc_caching: true` in `config/algo.yml` → `data_freshness.disable_ohlc_caching`
+   - When enabled, `instrument.candle_series(interval:)` bypasses all caching and calls DhanHQ API directly
 
 6. **Verification**
-   - In-memory cache keys exist per instrument: `@ohlc_cache['1']` and `@ohlc_cache['5']`
-   - Cache refreshed automatically when stale (based on `ohlc_cache_duration_minutes`)
-   - Signals successfully fetch both 1m and 5m OHLC when needed
+   - Signals successfully fetch both 1m and 5m OHLC directly from DhanHQ API
+   - No caching mechanism is used - every call is a fresh API request
+   - OHLC data is fetched on-demand when signal generation requires it
 
 #### Implementation Details
 
@@ -343,45 +336,56 @@ end
 **Signal OHLC Fetching:**
 ```ruby
 # app/services/signal/engine.rb
-# Fetches 1m (primary) and 5m (confirmation) when needed
-series = instrument.candle_series(interval: '1')  # 1m for primary analysis
-series = instrument.candle_series(interval: '5')  # 5m for confirmation analysis
+# Fetches 1m (primary) and 5m (confirmation) directly from DhanHQ API when needed
+series = instrument.candle_series(interval: '1')  # 1m for primary analysis - direct API call
+series = instrument.candle_series(interval: '5')  # 5m for confirmation analysis - direct API call
 ```
 
-**In-Memory Caching:**
+**OHLC Fetching Behavior (Direct API Calls Only):**
 ```ruby
 # app/models/concerns/candle_extension.rb
 def candles(interval: '5')
-  @ohlc_cache ||= {}
-  cached_series = @ohlc_cache[interval]
-  return cached_series if cached_series && !ohlc_stale?(interval)
-  fetch_fresh_candles(interval)  # Fetches from API if cache stale
+  # AC requirement: Direct API calls only - no caching
+  freshness_config = AlgoConfig.fetch[:data_freshness] || {}
+  disable_caching = freshness_config[:disable_ohlc_caching] || false
+
+  if disable_caching
+    # Direct API call - no caching (matches AC requirement)
+    return fetch_fresh_candles(interval)  # Calls instrument.intraday_ohlc() → DhanHQ API
+  end
+
+  # Note: disable_ohlc_caching must be set to true to match AC requirement
+  fetch_fresh_candles(interval)  # Fallback: direct API call
+end
+
+def fetch_fresh_candles(interval)
+  # Direct DhanHQ API call - no caching
+  raw_data = intraday_ohlc(interval: interval)  # DhanHQ API call
+  return nil if raw_data.blank?
+
+  CandleSeries.new(symbol: symbol_name, interval: interval).tap do |series|
+    series.load_from_raw(raw_data)
+  end
 end
 ```
+
+**Note:** AC requires `disable_ohlc_caching: true` in `config/algo.yml` to ensure direct API calls only with no caching.
 
 #### Status: ✅ **COMPLETE**
 
 **✅ Implemented:**
-- Background prefetch service running on boot
-- Staggered fetching with 0.5s sleep between instruments
-- Fetches for all active watchlist items
-- Loop runs every 60 seconds
-- Service automatically starts/stops
-- **Signals fetch both 1m and 5m OHLC when needed**
-- In-memory caching works for both timeframes
-- Cache duration configurable via `algo.yml`
+- Signals fetch both 1m and 5m OHLC directly from DhanHQ API when needed
+- **No caching**: Every signal generation triggers fresh API calls via `instrument.intraday_ohlc()`
+- Configured via `disable_ohlc_caching: true` in `config/algo.yml` to ensure direct API calls only
 
 **How It Works:**
-- **Prefetcher**: Fetches 5m OHLC every 60 seconds via `instrument.intraday_ohlc(interval: '5')` (direct API call)
-  - Note: Prefetcher does NOT populate the in-memory cache - it only makes API calls
-  - Helps with rate limiting by keeping API connection active
 - **Signals**: Fetch both 1m and 5m on-demand via `instrument.candle_series(interval:)`
-  - Primary: `candle_series(interval: '1')` → fetches/caches 1m OHLC
-  - Confirmation: `candle_series(interval: '5')` → fetches/caches 5m OHLC
-  - `candle_series()` checks `@ohlc_cache[interval]` first, then calls `fetch_fresh_candles()` if stale
-  - `fetch_fresh_candles()` calls API AND populates `@ohlc_cache[interval]`
-- Cache automatically refreshes when stale (based on `ohlc_cache_duration_minutes`)
-- This approach avoids Redis complexity while still preventing API rate limit issues
+  - **AC Requirement**: `disable_ohlc_caching: true` → direct DhanHQ API calls only (no caching)
+    - Primary: `candle_series(interval: '1')` → **direct API call** via `intraday_ohlc(interval: '1')`
+    - Confirmation: `candle_series(interval: '5')` → **direct API call** via `intraday_ohlc(interval: '5')`
+    - Every call hits DhanHQ API directly via `fetch_fresh_candles()` → `intraday_ohlc()` → DhanHQ API
+    - No Redis cache, no in-memory cache - always fresh data
+- **Prefetcher**: Background service that fetches 5m OHLC every 60 seconds (optional, does not affect signal fetching behavior)
 
 ---
 
@@ -415,10 +419,10 @@ end
 - `:avoid` → No trade executed
 
 **OHLC Reading:**
-- Reads from **in-memory cache** (`@ohlc_cache`) via `instrument.candle_series(interval:)`
-- Primary timeframe: `candle_series(interval: '1')` for 1m
-- Confirmation timeframe: `candle_series(interval: '5')` for 5m
-- Cache automatically refreshes when stale (configurable via `ohlc_cache_duration_minutes`)
+- Fetches directly from **DhanHQ API** via `instrument.candle_series(interval:)` → `intraday_ohlc()`
+- Primary timeframe: `candle_series(interval: '1')` → direct API call for 1m OHLC
+- Confirmation timeframe: `candle_series(interval: '5')` → direct API call for 5m OHLC
+- **No caching**: Every signal generation fetches fresh OHLC data from API
 
 **ADX Validation:**
 - Primary timeframe: Validates ADX ≥ `adx[:min_strength]` (default: 18)
@@ -1550,25 +1554,27 @@ end
 
 **Service:** `Signal::Scheduler` (singleton, runs in background thread)
 
-**AC 1: OHLC Reading & Signal Production** ⚠️
+**AC 1: OHLC Reading & Signal Production** ✅
 
 **AC Requirement:**
-- For each watchlisted index: read OHLC from Redis, produce one signal
+- For each watchlisted index: fetch OHLC directly from DhanHQ API on demand, produce one signal
+- **No caching**: Every signal generation fetches fresh OHLC via direct API calls only (no Redis, no in-memory cache)
 
 **Current Implementation:**
 - **Scheduler Loop**: Loops through indices from `AlgoConfig.fetch[:indices]` (not watchlist)
-- **OHLC Source**: Uses `instrument.candle_series(interval:)` which reads from **in-memory cache** (`@ohlc_cache`), NOT Redis
-- **No Redis caching**: OHLC is NOT cached in Redis for signal generation (per requirement - no caching in Redis)
+- **OHLC Source**: Uses `instrument.candle_series(interval:)` which:
+  - **Checks `disable_ohlc_caching` flag** in `config/algo.yml` → `data_freshness.disable_ohlc_caching`
+  - **If `disable_ohlc_caching: true`**: Calls `fetch_fresh_candles()` directly → `intraday_ohlc()` → **DhanHQ API** (no cache)
+  - **AC Requirement**: `disable_ohlc_caching: true` must be set to ensure direct API calls only
 - **Signal Production**: Calls `Signal::Engine.run_for(index_cfg)` which:
   1. Gets instrument via `IndexInstrumentCache.instance.get_or_fetch()`
-  2. Calls `instrument.candle_series(interval:)` for OHLC data (from in-memory cache or fetches fresh)
+  2. Calls `instrument.candle_series(interval:)` for OHLC data → direct DhanHQ API call
   3. Analyzes OHLC with Supertrend + ADX
   4. Produces one signal per index (direction: `:bullish`, `:bearish`, or `:avoid`)
 
 **Gap:**
 - **Not using watchlist**: Uses `AlgoConfig.fetch[:indices]` instead of `WatchlistItem.active`
-- **OHLC not from Redis**: Uses in-memory cache (`@ohlc_cache`) - per requirement, no Redis caching for OHLC
-- However, OHLC is cached in-memory and signals are produced correctly
+- **AC Requirement**: Ensure `disable_ohlc_caching: true` is set in `config/algo.yml` for direct API calls only
 
 **AC 2: Cooldown Per Symbol** ✅
 
@@ -1629,7 +1635,7 @@ end
 ```ruby
 # Signal::Engine.run_for(index_cfg)
 1. Get instrument: IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-2. Read OHLC: instrument.candle_series(interval: '1')  # From in-memory cache
+2. Read OHLC: instrument.candle_series(interval: '1')  # Direct DhanHQ API call (no cache)
 3. Analyze: Supertrend + ADX
 4. Validate: comprehensive_validation() (includes theta risk/cutoff check)
 5. Produce signal: TradingSignal.create_from_analysis()
@@ -1670,11 +1676,10 @@ end
 - **Auto-Start**: Via `config/initializers/market_stream.rb`
 
 **OHLC Data Source:**
-- **Method**: `instrument.candle_series(interval:)`
-- **Storage**: In-memory cache (`@ohlc_cache`) via `CandleExtension` concern
-- **NOT Redis**: OHLC is NOT cached in Redis (per requirement - no Redis caching for signals)
-- **Cache Duration**: Configurable via `algo.yml` → `data_freshness.ohlc_cache_duration_minutes`
-- **Note**: In-memory cache reduces API calls while avoiding Redis overhead
+- **Method**: `instrument.candle_series(interval:)` → `fetch_fresh_candles()` → `intraday_ohlc()` → **DhanHQ API**
+- **AC Requirement**: `disable_ohlc_caching: true` must be set in `config/algo.yml` → `data_freshness.disable_ohlc_caching`
+- **Behavior**: Direct DhanHQ API calls only - no caching (no Redis, no in-memory cache)
+- **Every call**: Fresh OHLC data fetched from DhanHQ API on demand
 
 **Cooldown Implementation:**
 - **Storage**: `Rails.cache.write("reentry:#{symbol}", Time.current)`
@@ -1706,9 +1711,12 @@ end
 **⚠️ Differences from AC:**
 
 1. **OHLC Source** ✅
-   - AC: Read OHLC from Redis
-   - **Implementation**: Reads from in-memory cache (`@ohlc_cache`) - per requirement, no Redis caching for OHLC
-   - **Status**: ✅ No Redis caching (as per requirement) - uses in-memory cache instead
+   - AC: Fetch OHLC directly from DhanHQ API on demand (no caching)
+   - **Implementation**:
+     - Uses `disable_ohlc_caching` flag from `config/algo.yml`
+     - AC requires `disable_ohlc_caching: true` → calls DhanHQ API directly (no cache)
+     - Every signal generation fetches fresh OHLC via `instrument.intraday_ohlc()`
+   - **Status**: ✅ Direct API calls only when `disable_ohlc_caching: true` is set
 
 2. **Index Source** ⚠️
    - AC: For each watchlisted index
@@ -1728,7 +1736,8 @@ end
 **Summary:**
 - Core functionality fully implemented ✅
 - Signals produced at fixed cadence with cooldown/pyramiding/cutoff gates ✅
-- OHLC source is in-memory cache (not Redis) - per requirement, no Redis caching for signals ✅
+- **OHLC Source**: Direct DhanHQ API calls only when `disable_ohlc_caching: true` is set ✅
+  - **AC Requirement**: `disable_ohlc_caching: true` ensures fresh OHLC fetched on demand (no caching)
 - Index source is config-based (not watchlist) but covers same indices
 - Entry cutoff configured at 14:30 (should be 15:00)
 
