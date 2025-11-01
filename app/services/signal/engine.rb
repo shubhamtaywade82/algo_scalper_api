@@ -256,9 +256,16 @@ module Signal
       end
 
       def multi_timeframe_direction(primary_direction, confirmation_direction)
+        # If no confirmation timeframe, use primary direction
+        return primary_direction if confirmation_direction.nil?
+
+        # If either is avoid, return avoid
         return :avoid if primary_direction == :avoid || confirmation_direction == :avoid
+
+        # If both align, return that direction
         return primary_direction if primary_direction == confirmation_direction
 
+        # Directions don't match
         :avoid
       end
 

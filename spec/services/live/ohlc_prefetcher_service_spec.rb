@@ -166,7 +166,7 @@ RSpec.describe Live::OhlcPrefetcherService, :vcr do
         expect(nifty.watchable).to eq(nifty_instrument)
         expect(banknifty.watchable).to eq(banknifty_instrument)
 
-        # Capture info, debug, and warn logs to see what's happening
+        # Capture logs to verify API calls via VCR cassettes
         info_calls = []
         debug_calls = []
         warn_calls = []
@@ -183,11 +183,9 @@ RSpec.describe Live::OhlcPrefetcherService, :vcr do
         service.send(:fetch_all_watchlist)
 
         # VCR cassettes exist - verify API calls were made
-        # The service should log info for each instrument fetch, even if data is empty
+        # The service should log info for each instrument fetch
         if warn_calls.any?
           # API error occurred - this should not happen with VCR cassettes
-          warn_msg = "API errors with VCR cassettes: #{warn_calls.map(&:to_s).join(', ')}"
-          puts warn_msg
           # Still check that we tried to fetch (debug logs would show instrument not found)
           expect(debug_calls.none? { |msg| msg.to_s.match(/Instrument not found/) }).to be_truthy,
                  "Instruments not found. Debug: #{debug_calls.map(&:to_s).join(', ')}"
@@ -206,9 +204,9 @@ RSpec.describe Live::OhlcPrefetcherService, :vcr do
         allow(Rails.logger).to receive(:info) { |*args, &block| info_calls << (block ? block.call : args.first) }
         allow(Rails.logger).to receive(:warn) # Allow warnings
         allow(Rails.logger).to receive(:debug) # Allow debug logs
-        
+
         service.send(:fetch_all_watchlist)
-        
+
         # With VCR cassettes, we should get exactly 2 logs (one per active item: nifty and banknifty)
         # Security ID '51' (inactive SENSEX) should not appear in any logs
         expect(info_calls.size).to eq(2),

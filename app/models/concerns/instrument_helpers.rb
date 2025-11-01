@@ -104,7 +104,7 @@ module InstrumentHelpers
     nil
   end
 
-  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 90)
+  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2)
     to_date ||= if defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
                   MarketCalendar.today_or_last_trading_day.to_s
                 else
@@ -113,7 +113,6 @@ module InstrumentHelpers
     from_date ||= (Date.parse(to_date) - days).to_s
 
     instrument_code = resolve_instrument_code
-
     DhanHQ::Models::HistoricalData.intraday(
       security_id: security_id,
       exchange_segment: exchange_segment,
