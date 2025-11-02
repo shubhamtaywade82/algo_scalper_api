@@ -96,12 +96,25 @@ RSpec.describe Live::RiskManagerService do
 
       it 'handles errors gracefully and stops running' do
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!).and_raise(StandardError, 'Error')
-        allow(Rails.logger).to receive(:error).and_call_original
-        expect(Rails.logger).to receive(:error).with(match(/RiskManagerService crashed/)).at_least(:once)
+        error_logs = []
+        allow(Rails.logger).to receive(:error).and_wrap_original do |method, *args, &block|
+          if block
+            message = nil
+            method.call(*args) do
+              message = block.call
+              message
+            end
+            error_logs << message
+          else
+            error_logs << args.first
+            method.call(*args)
+          end
+        end
 
         service.start!
         sleep 0.8 # Give thread time to execute and catch error
 
+        expect(error_logs.any? { |msg| msg.to_s.include?('RiskManagerService crashed') }).to be true
         expect(service.running?).to be false
       end
     end

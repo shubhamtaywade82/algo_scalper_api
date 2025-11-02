@@ -227,10 +227,13 @@ RSpec.describe Live::OhlcPrefetcherService, :vcr do
       end
 
       it 'returns early if WatchlistItem is not defined' do
-        # The method checks defined?(::WatchlistItem) before proceeding
-        # Since WatchlistItem is always defined in test environment, we'll skip this test
-        # The guard clause is tested implicitly through the other tests
-        skip 'WatchlistItem is always defined in test environment'
+        original_watchlist_item = WatchlistItem
+        Object.send(:remove_const, :WatchlistItem) if Object.const_defined?(:WatchlistItem)
+
+        expect(service).not_to receive(:fetch_one)
+        expect { service.send(:fetch_all_watchlist) }.not_to raise_error
+      ensure
+        Object.const_set(:WatchlistItem, original_watchlist_item)
       end
     end
 
@@ -418,4 +421,3 @@ RSpec.describe Live::OhlcPrefetcherService, :vcr do
     end
   end
 end
-
