@@ -93,6 +93,40 @@ TRANSIT PENDING REJECTED CANCELLED TRADED EXPIRED
 
 ---
 
+## 🎯 **Quick Summary**
+
+### **Recommended Approach: Use Convenience Methods**
+
+The system provides convenient model-level methods that automatically handle all database field extraction and calculations:
+
+```ruby
+# For derivatives (options)
+derivative.buy_option!(qty: nil, index_cfg: { key: 'NIFTY' })
+derivative.sell_option!(qty: nil)
+
+# For instruments (indices/futures)
+instrument.buy_market!(qty: 1)
+instrument.sell_market!(qty: nil)
+
+# Or use the admin facade
+Trading::AdminActions.buy_derivative!(derivative_id: 123, qty: 50)
+```
+
+**These methods automatically:**
+- Extract `security_id` and `exchangeSegment` from database
+- Calculate `quantity` using `Capital::Allocator` (if needed)
+- Resolve LTP from cache or meta
+- Create PositionTracker for tracking
+- Subscribe to WebSocket feeds
+- Handle all API field mapping
+
+**Database Fields Required:**
+- `security_id` (from `Derivative` or `Instrument`)
+- `exchange` + `segment` (to derive `exchangeSegment`)
+- `lot_size` (from `Derivative` for quantity validation)
+
+---
+
 ## Analysis: DhanHQ Order Placement API Requirements
 
 ### 📋 **1. REQUIRED Fields from Database (Instrument/Derivative Tables)**
@@ -186,7 +220,82 @@ The `exchangeSegment` API field is constructed from database fields:
 
 ## Current implementation flow
 
-### Entry Order (BUY):
+### **Method 1: Using Convenience Helpers (Recommended)**
+
+The system provides convenient model-level methods that abstract away the complexity:
+
+#### **Entry Order (BUY) - Derivative:**
+```ruby
+# Direct model helper - automatically handles all database fields and calculations
+derivative = Derivative.find(123)
+order = derivative.buy_option!(
+  qty: nil,                    # Auto-calculated via Capital::Allocator if nil
+  product_type: 'INTRADAY',
+  index_cfg: { key: 'NIFTY', segment: 'IDX_I' },
+  meta: { ltp: 120.5 }         # Optional: provide LTP or fetch from Redis cache
+)
+
+# Behind the scenes, this:
+# 1. Gets security_id from derivative.security_id (DB)
+# 2. Gets exchangeSegment from derivative.exchange_segment (DB - derived)
+# 3. Gets lot_size from derivative.lot_size (DB)
+# 4. Calculates quantity via Capital::Allocator.qty_for()
+# 5. Resolves LTP from meta or Redis cache
+# 6. Places order via Orders.config.place_market()
+# 7. Creates PositionTracker automatically
+# 8. Subscribes to WebSocket feed
+```
+
+#### **Entry Order (BUY) - Instrument:**
+```ruby
+# For underlying indices or futures
+instrument = Instrument.find(456)
+order = instrument.buy_market!(
+  qty: 1,                      # Defaults to 1 if not provided
+  product_type: 'INTRADAY',
+  meta: { ltp: 200.5 }
+)
+
+# Behind the scenes:
+# 1. Gets security_id from instrument.security_id (DB)
+# 2. Gets exchangeSegment from instrument.exchange_segment (DB - derived)
+# 3. Places order and creates PositionTracker
+```
+
+#### **Exit Order (SELL):**
+```ruby
+# Derivative exit
+derivative.sell_option!(qty: nil)  # Auto-uses PositionTracker quantity
+
+# Instrument exit
+instrument.sell_market!(qty: nil)   # Auto-uses PositionTracker quantity
+
+# Behind the scenes:
+# 1. Fetches active PositionTracker(s) for security_id
+# 2. Sums quantity from trackers
+# 3. Gets exchangeSegment from tracker or instrument
+# 4. Places SELL order via Orders.config.place_market()
+```
+
+#### **Using Admin Actions Facade:**
+```ruby
+# High-level facade for console/controllers
+Trading::AdminActions.buy_derivative!(
+  derivative_id: 123,
+  qty: 50,
+  index_key: 'NIFTY'
+)
+
+Trading::AdminActions.sell_derivative!(derivative_id: 123)
+```
+
+---
+
+### **Method 2: Direct Service Calls (Legacy/Low-Level)**
+
+For more control or programmatic usage:
+
+#### **Entry Order (BUY):**
 ```ruby
 # 1. Strike Selection (Options::ChainAnalyzer)
 pick = Options::ChainAnalyzer.pick_strikes(...)
@@ -196,20 +305,20 @@ pick = Options::ChainAnalyzer.pick_strikes(...)
 quantity = Capital::Allocator.qty_for(
   index_cfg: index_cfg,
   entry_price: pick[:ltp],
-  derivative_lot_size: pick[:lot_size]
+  derivative_lot_size: pick[:lot_size]  # From Derivative.lot_size (DB)
 )
 
 # 3. Order Placement (Orders::Placer)
 Orders::Placer.buy_market!(
-  seg: pick[:segment],        # From Derivative
-  sid: pick[:security_id],    # From Derivative
-  qty: quantity,               # Calculated
-  client_order_id: correlation_id, # Generated
-  product_type: 'INTRADAY'    # Hardcoded
+  seg: pick[:segment],              # From Derivative (via exchange_segment)
+  sid: pick[:security_id],          # From Derivative.security_id (DB)
+  qty: quantity,                     # Calculated
+  client_order_id: correlation_id,  # Generated
+  product_type: 'INTRADAY'
 )
 ```
 
-### Exit Order (SELL):
+#### **Exit Order (SELL):**
 ```ruby
 # 1. Fetch Position Details (from DhanHQ API)
 position_details = fetch_position_details(security_id)
@@ -222,6 +331,20 @@ Orders::Placer.exit_position!(
   client_order_id: correlation_id           # Generated
 )
 ```
+
+---
+
+### **Helper Methods in InstrumentHelpers**
+
+The convenience methods rely on helper methods that handle database field extraction:
+
+| Helper Method                                     | Purpose                               | Uses DB Fields                           |
+| ------------------------------------------------- | ------------------------------------- | ---------------------------------------- |
+| `resolve_ltp(segment:, security_id:, meta:)`      | Resolves LTP from meta or Redis cache | Uses `segment` and `security_id`         |
+| `exchange_segment`                                | Derives API segment from DB fields    | `exchange` + `segment` → `NSE_FNO`, etc. |
+| `default_client_order_id(side:, security_id:)`    | Generates correlation ID              | Uses `security_id`                       |
+| `ensure_ws_subscription!(segment:, security_id:)` | Ensures WebSocket subscription        | Uses `segment` and `security_id`         |
+| `after_order_track!(...)`                         | Creates PositionTracker after order   | Uses `segment`, `security_id`, `symbol`  |
 
 ---
 
@@ -342,11 +465,34 @@ Orders::Placer.exit_position!(
 - ✅ All **required** fields from database are properly sourced (`securityId`, `exchangeSegment`)
 - ✅ All **required** calculated fields are implemented (`quantity` via `Capital::Allocator`)
 - ✅ All **required** configuration fields are set (though hardcoded)
+- ✅ **Convenience methods** added for simplified order placement (`Derivative#buy_option!`, `Instrument#buy_market!`, etc.)
+- ✅ **Automatic tracking** - PositionTracker creation and WebSocket subscription handled automatically
 - ⚠️ Several **conditional** fields are not implemented (LIMIT, STOP_LOSS, BO orders)
 - ✅ Basic MARKET order placement is fully functional
 
 **The system successfully places MARKET orders using:**
+
+### **Via Convenience Methods (Recommended):**
+1. **Database fields** extracted automatically:
+   - `security_id` from `Derivative.security_id` or `Instrument.security_id`
+   - `exchangeSegment` derived from `exchange` + `segment` fields
+   - `lot_size` from `Derivative.lot_size` (for quantity validation)
+2. **Calculated `quantity`** via `Capital::Allocator.qty_for()` (if not provided)
+3. **LTP resolution** from `meta[:ltp]` or Redis cache
+4. **Automatic tracking** - PositionTracker creation, WebSocket subscription, cache clearing
+5. **Generated `correlationId`** via `default_client_order_id()` helper
+6. **Hardcoded but functional** configuration (`INTRADAY`, `MARKET`, `DAY`)
+
+### **Via Direct Service Calls:**
 1. `security_id` and `exchange_segment` from `Derivative` table
 2. Calculated `quantity` respecting lot size constraints
 3. Generated `correlationId` for order tracking
 4. Hardcoded but functional configuration (`INTRADAY`, `MARKET`, `DAY`)
+
+**Key Improvements with Convenience Methods:**
+- ✅ Simplified API - no need to manually extract database fields
+- ✅ Automatic PositionTracker management
+- ✅ Automatic WebSocket subscription for real-time updates
+- ✅ Automatic Redis cache management
+- ✅ Consistent with algorithmic entry flow
+- ✅ Reuses same risk management and tracking infrastructure
