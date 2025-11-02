@@ -228,10 +228,22 @@ module Options
             next
           end
 
-          # Check IV
-          unless iv && iv >= min_iv && iv <= max_iv
+          # Check IV with relaxed thresholds for ATM and ATM-1 strikes
+          # ATM strikes often have lower IV but are critical for trade entry
+          iv_threshold = if strike == atm_strike
+                          # ATM: Allow lower IV (minimum 5% instead of default min_iv)
+                          [5.0, min_iv * 0.6].max
+                        elsif (strike - atm_strike).abs <= strike_interval
+                          # ATM±1: Slightly relaxed IV threshold (80% of min_iv)
+                          [7.0, min_iv * 0.8].max
+                        else
+                          # ATM-2 and beyond: Use strict IV threshold
+                          min_iv
+                        end
+
+          unless iv && iv >= iv_threshold && iv <= max_iv
             rejected_count += 1
-            Rails.logger.debug { "[Options] Rejected #{strike}: IV #{iv} not in range #{min_iv}-#{max_iv}" }
+            Rails.logger.debug { "[Options] Rejected #{strike}: IV #{iv} not in range #{iv_threshold.round(2)}-#{max_iv} (relaxed for #{strike_type}: #{iv_threshold.round(2)})" }
             next
           end
 
@@ -480,6 +492,10 @@ module Options
 
         # 4. IV Score (0-20)
         # Moderate IV is preferred (not too high, not too low)
+        # ATM strikes get bonus for proximity even with lower IV
+        # Use distance_from_atm to determine if it's ATM or ATM±1 (typically 50-100 points for NIFTY)
+        is_atm_or_near = distance_from_atm <= (atm_strike * 0.005) # Within 0.5% of ATM (~125 points for NIFTY)
+
         iv_score = if iv.between?(15, 25)
                      20 # Sweet spot
                    elsif iv.between?(10, 30)
@@ -489,6 +505,10 @@ module Options
                    else
                      5 # Poor IV
                    end
+        # Bonus for ATM strikes with acceptable IV (even if lower)
+        if is_atm_or_near && iv >= 5 && iv < 10
+          iv_score += 5 # Boost score for ATM strikes with low but acceptable IV
+        end
 
         # 5. Price Efficiency Score (0-10)
         # Lower price per point of delta is better
