@@ -212,16 +212,15 @@ module Live
     end
 
     def enforce_time_based_exit(positions = fetch_positions_indexed)
-      # Check if it's time for market close exit (3:20 PM)
-      current_time = Time.current
-      exit_time = Time.zone.parse('15:20') # 3:20 PM
+      risk = risk_config
+      exit_time = parse_time_hhmm(risk[:time_exit_hhmm] || '15:20')
+      return unless exit_time
 
-      # Only enforce time-based exit during trading hours and after 3:20 PM
+      current_time = Time.current
       return unless current_time >= exit_time
 
-      # Check if we're still in trading hours (before 3:30 PM)
-      market_close_time = Time.zone.parse('15:30') # 3:30 PM
-      return if current_time >= market_close_time
+      market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+      return if market_close_time && current_time >= market_close_time
 
       Rails.logger.info("[TimeExit] Enforcing time-based exit at #{current_time.strftime('%H:%M:%S')}")
 
@@ -232,7 +231,7 @@ module Live
           next unless tracker.status == PositionTracker::STATUSES[:active]
 
           Rails.logger.info("[TimeExit] Triggering time-based exit for #{tracker.order_no}")
-          execute_exit(position, tracker, reason: 'time-based exit (3:20 PM)')
+          execute_exit(position, tracker, reason: "time-based exit (#{exit_time.strftime('%H:%M')})")
         end
       end
     rescue StandardError => e
@@ -504,8 +503,30 @@ module Live
       Rails.logger.warn("Failed to persist exit reason for #{tracker.order_no}: #{e.class} - #{e.message}")
     end
 
+    def parse_time_hhmm(value)
+      return nil if value.blank?
+
+      Time.zone.parse(value.to_s)
+    rescue StandardError
+      Rails.logger.warn("[RiskManager] Invalid time format provided: #{value}")
+      nil
+    end
+
     def risk_config
-      AlgoConfig.fetch[:risk] || {}
+      raw = AlgoConfig.fetch[:risk]
+      return {} unless raw.present?
+
+      config = raw.dup
+      config[:stop_loss_pct] = raw[:stop_loss_pct] || raw[:sl_pct]
+      config[:take_profit_pct] = raw[:take_profit_pct] || raw[:tp_pct]
+      config[:sl_pct] = config[:stop_loss_pct]
+      config[:tp_pct] = config[:take_profit_pct]
+      config[:breakeven_after_gain] = raw.key?(:breakeven_after_gain) ? raw[:breakeven_after_gain] : 0
+      config[:trail_step_pct] = raw[:trail_step_pct] if raw.key?(:trail_step_pct)
+      config[:exit_drop_pct] = raw[:exit_drop_pct] if raw.key?(:exit_drop_pct)
+      config[:time_exit_hhmm] = raw[:time_exit_hhmm] if raw.key?(:time_exit_hhmm)
+      config[:market_close_hhmm] = raw[:market_close_hhmm] if raw.key?(:market_close_hhmm)
+      config
     end
 
     def cancel_remote_order(order_id)

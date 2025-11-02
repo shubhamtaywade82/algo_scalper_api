@@ -14,12 +14,27 @@ module Entries
         return false unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
         return false if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
 
-        ensure_ws_connection!
+        # Never block due to WebSocket - always allow REST API fallback
+        # Log WebSocket status for monitoring but don't block
+        hub = Live::MarketFeedHub.instance
+        unless hub.running? && hub.connected?
+          Rails.logger.info('[EntryGuard] WebSocket not connected - will use REST API fallback for LTP')
+        end
 
         Rails.logger.debug { "[EntryGuard] Pick data: #{pick.inspect}" }
+        # Resolve LTP with REST API fallback if WebSocket unavailable
+        ltp = pick[:ltp]
+        if ltp.blank? || needs_api_ltp?(pick)
+          # Fetch fresh LTP from REST API when WS unavailable or pick LTP is stale
+          resolved_ltp = resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)
+          ltp = resolved_ltp if resolved_ltp.present?
+        end
+
+        return false unless ltp.present? && ltp.to_f.positive?
+
         quantity = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
-          entry_price: pick[:ltp].to_f,
+          entry_price: ltp.to_f,
           derivative_lot_size: pick[:lot_size],
           scale_multiplier: multiplier
         )
@@ -32,7 +47,7 @@ module Entries
           qty: quantity,
           meta: {
             client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
-            ltp: pick[:ltp] # Pass LTP from signal to avoid API call
+            ltp: ltp # Pass resolved LTP (from WS or API)
           }
         )
 
@@ -45,14 +60,12 @@ module Entries
           pick: pick,
           side: side,
           quantity: quantity,
-          index_cfg: index_cfg
+          index_cfg: index_cfg,
+          ltp: ltp
         )
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
         true
-      rescue Live::FeedHealthService::FeedStaleError => e
-        Rails.logger.warn("[EntryGuard] Blocked entry for #{index_cfg[:key]}: #{e.message}")
-        false
       rescue StandardError => e
         Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
         false
@@ -99,27 +112,53 @@ module Entries
         last.present? && (Time.current - last) < cooldown
       end
 
-      private
+      # Checks if we need to fetch LTP from REST API
+      # @param pick [Hash] Pick data from signal
+      # @return [Boolean]
+      def needs_api_ltp?(pick)
+        hub = Live::MarketFeedHub.instance
+        return true unless hub.running? && hub.connected?
 
-      def ensure_ws_connection!
-        # Require WebSocket connection for live trading
-        unless Live::MarketFeedHub.instance.running?
-          Rails.logger.warn('[EntryGuard] Blocked entry: WebSocket market feed not running')
-          raise Live::FeedHealthService::FeedStaleError.new(
-            feed: :ws_connection,
-            last_seen_at: nil,
-            threshold: 0,
-            last_error: nil
-          )
+        # If pick LTP is missing or zero, we need API fallback
+        pick[:ltp].blank? || pick[:ltp].to_f.zero?
+      end
+
+      # Resolves LTP for entry order, with REST API fallback
+      # @param instrument [Instrument]
+      # @param pick [Hash] Pick data from signal
+      # @param index_cfg [Hash] Index configuration
+      # @return [BigDecimal, nil]
+      def resolve_entry_ltp(instrument:, pick:, index_cfg:)
+        segment = pick[:segment] || index_cfg[:segment]
+        security_id = pick[:security_id]
+
+        return nil unless segment.present? && security_id.present?
+
+        # Try to resolve via instrument/derivative object
+        if pick[:derivative_id].present?
+          derivative = Derivative.find_by(id: pick[:derivative_id])
+          if derivative
+            api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+            return BigDecimal(api_ltp.to_s) if api_ltp.present?
+          end
         end
 
-        # Check funds and positions health (but skip ticks staleness)
-        Live::FeedHealthService.instance.assert_healthy!(%i[funds positions])
+        # Fallback to instrument method
+        api_ltp = instrument.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+        return BigDecimal(api_ltp.to_s) if api_ltp.present?
+
+        Rails.logger.warn("[EntryGuard] Failed to resolve LTP from API for #{segment}:#{security_id}")
+        nil
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Error resolving entry LTP: #{e.class} - #{e.message}")
+        nil
       end
 
-      def ensure_feed_health!
-        Live::FeedHealthService.instance.assert_healthy!(%i[funds positions ticks])
-      end
+      private
+
+      # Removed ensure_ws_connection! - no longer needed
+      # WebSocket status is checked inline in try_enter for logging only
+      # REST API fallback is always used when WS unavailable
 
       def find_instrument(index_cfg)
         segment_code = index_cfg[:segment]
@@ -158,7 +197,7 @@ module Entries
         end
       end
 
-      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:)
+      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:)
         PositionTracker.create!(
           instrument: instrument,
           order_no: order_no,
@@ -167,7 +206,7 @@ module Entries
           segment: pick[:segment] || index_cfg[:segment],
           side: side,
           quantity: quantity,
-          entry_price: pick[:ltp],
+          entry_price: ltp,
           meta: { index_key: index_cfg[:key], direction: side, placed_at: Time.current }
         )
       rescue ActiveRecord::RecordInvalid => e

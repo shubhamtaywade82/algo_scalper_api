@@ -133,6 +133,8 @@ RSpec.describe Live::RiskManagerService do
 
       before do
         allow(service).to receive(:risk_config).and_return(
+          stop_loss_pct: 0.30,
+          take_profit_pct: 0.60,
           sl_pct: 0.30,
           tp_pct: 0.60,
           per_trade_risk_pct: 0
@@ -370,16 +372,27 @@ RSpec.describe Live::RiskManagerService do
 
       before do
         allow(service).to receive(:fetch_positions_indexed).and_return({ '50074' => position })
+        allow(service).to receive(:risk_config).and_return({
+                                                               time_exit_hhmm: '15:20',
+                                                               market_close_hhmm: '15:30'
+                                                             })
       end
 
       context 'when time is 15:20 IST or later' do
         it 'exits all active positions at 15:20 IST' do
           Time.use_zone('Asia/Kolkata') do
-            allow(Time).to receive(:current).and_return(Time.zone.parse('2025-11-01 15:20:00'))
+            current_time = Time.zone.parse('2025-11-01 15:20:00')
+            exit_time = Time.zone.parse('2025-11-01 15:20:00')
+            market_close_time = Time.zone.parse('2025-11-01 15:30:00')
+
+            allow(Time).to receive(:current).and_return(current_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:20').and_return(exit_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:30').and_return(market_close_time)
+
             expect(service).to receive(:execute_exit).with(
               position,
               tracker,
-              reason: 'time-based exit (3:20 PM)'
+              reason: 'time-based exit (15:20)'
             )
 
             service.send(:enforce_time_based_exit)
@@ -388,11 +401,18 @@ RSpec.describe Live::RiskManagerService do
 
         it 'exits positions between 15:20 and 15:30' do
           Time.use_zone('Asia/Kolkata') do
-            allow(Time).to receive(:current).and_return(Time.zone.parse('2025-11-01 15:25:00'))
+            current_time = Time.zone.parse('2025-11-01 15:25:00')
+            exit_time = Time.zone.parse('2025-11-01 15:20:00')
+            market_close_time = Time.zone.parse('2025-11-01 15:30:00')
+
+            allow(Time).to receive(:current).and_return(current_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:20').and_return(exit_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:30').and_return(market_close_time)
+
             expect(service).to receive(:execute_exit).with(
               position,
               tracker,
-              reason: 'time-based exit (3:20 PM)'
+              reason: 'time-based exit (15:20)'
             )
 
             service.send(:enforce_time_based_exit)
@@ -401,7 +421,14 @@ RSpec.describe Live::RiskManagerService do
 
         it 'does not exit after 15:30 (market close)' do
           Time.use_zone('Asia/Kolkata') do
-            allow(Time).to receive(:current).and_return(Time.zone.parse('2025-11-01 15:30:00'))
+            current_time = Time.zone.parse('2025-11-01 15:30:00')
+            exit_time = Time.zone.parse('2025-11-01 15:20:00')
+            market_close_time = Time.zone.parse('2025-11-01 15:30:00')
+
+            allow(Time).to receive(:current).and_return(current_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:20').and_return(exit_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:30').and_return(market_close_time)
+
             expect(service).not_to receive(:execute_exit)
 
             service.send(:enforce_time_based_exit)
@@ -410,7 +437,13 @@ RSpec.describe Live::RiskManagerService do
 
         it 'logs time-based exit enforcement' do
           Time.use_zone('Asia/Kolkata') do
-            allow(Time).to receive(:current).and_return(Time.zone.parse('2025-11-01 15:20:00'))
+            current_time = Time.zone.parse('2025-11-01 15:20:00')
+            exit_time = Time.zone.parse('2025-11-01 15:20:00')
+            market_close_time = Time.zone.parse('2025-11-01 15:30:00')
+
+            allow(Time).to receive(:current).and_return(current_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:20').and_return(exit_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:30').and_return(market_close_time)
             allow(service).to receive(:exit_position).and_return(true)
             allow(tracker).to receive(:mark_exited!)
             allow(Live::RedisPnlCache.instance).to receive(:clear_tracker)
@@ -428,7 +461,12 @@ RSpec.describe Live::RiskManagerService do
       context 'when time is before 15:20 IST' do
         it 'does not exit positions' do
           Time.use_zone('Asia/Kolkata') do
-            allow(Time).to receive(:current).and_return(Time.zone.parse('2025-11-01 15:19:00'))
+            current_time = Time.zone.parse('2025-11-01 15:19:00')
+            exit_time = Time.zone.parse('2025-11-01 15:20:00')
+
+            allow(Time).to receive(:current).and_return(current_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:20').and_return(exit_time)
+
             expect(service).not_to receive(:execute_exit)
 
             service.send(:enforce_time_based_exit)
@@ -440,7 +478,13 @@ RSpec.describe Live::RiskManagerService do
         it 'does not attempt exit' do
           tracker.update(status: 'exited')
           Time.use_zone('Asia/Kolkata') do
-            allow(Time).to receive(:current).and_return(Time.zone.parse('2025-11-01 15:20:00'))
+            current_time = Time.zone.parse('2025-11-01 15:20:00')
+            exit_time = Time.zone.parse('2025-11-01 15:20:00')
+            market_close_time = Time.zone.parse('2025-11-01 15:30:00')
+
+            allow(Time).to receive(:current).and_return(current_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:20').and_return(exit_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:30').and_return(market_close_time)
             # Exited trackers won't be in PositionTracker.active scope, so execute_exit won't be called
             expect(service).not_to receive(:execute_exit)
 
@@ -452,7 +496,13 @@ RSpec.describe Live::RiskManagerService do
       context 'error handling' do
         it 'handles errors gracefully' do
           Time.use_zone('Asia/Kolkata') do
-            allow(Time).to receive(:current).and_return(Time.zone.parse('2025-11-01 15:20:00'))
+            current_time = Time.zone.parse('2025-11-01 15:20:00')
+            exit_time = Time.zone.parse('2025-11-01 15:20:00')
+            market_close_time = Time.zone.parse('2025-11-01 15:30:00')
+
+            allow(Time).to receive(:current).and_return(current_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:20').and_return(exit_time)
+            allow(service).to receive(:parse_time_hhmm).with('15:30').and_return(market_close_time)
             allow(PositionTracker).to receive(:active).and_raise(StandardError, 'Database error')
             allow(Rails.logger).to receive(:error).and_call_original
             expect(Rails.logger).to receive(:error).with(match(/Time-based exit enforcement failed/)).at_least(:once)
@@ -504,7 +554,7 @@ RSpec.describe Live::RiskManagerService do
         it 'marks tracker as exited' do
           expect(tracker).to receive(:mark_exited!)
 
-          service.send(:execute_exit, position, tracker, reason: 'time-based exit (3:20 PM)')
+          service.send(:execute_exit, position, tracker, reason: 'time-based exit (15:20)')
         end
 
         it 'logs success message' do

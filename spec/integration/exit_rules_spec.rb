@@ -23,12 +23,13 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
     # Mock AlgoConfig for risk parameters
     allow(AlgoConfig).to receive(:fetch).and_return({
                                                       risk: {
-                                                        sl_pct: 0.30,           # 30% stop loss
-                                                        tp_pct: 0.50,           # 50% take profit
-                                                        per_trade_risk_pct: 0.01, # 1% per trade risk
-                                                        trail_step_pct: 0.10,    # 10% trail step
-                                                        exit_drop_pct: 0.03,     # 3% exit drop
-                                                        breakeven_after_gain: 0.35 # 35% breakeven lock
+                                                        stop_loss_pct: 0.30,           # 30% stop loss
+                                                        take_profit_pct: 0.50,         # 50% take profit
+                                                        per_trade_risk_pct: 0.01,      # 1% per trade risk
+                                                        trail_step_pct: 0.10,          # 10% trail step
+                                                        exit_drop_pct: 0.03,           # 3% exit drop
+                                                        breakeven_after_gain: 0.35,    # 35% breakeven lock
+                                                        time_exit_hhmm: '15:20'
                                                       }
                                                     })
 
@@ -608,8 +609,8 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
       it 'handles invalid risk configuration gracefully' do
         allow(AlgoConfig).to receive(:fetch).and_return({
                                                           risk: {
-                                                            sl_pct: 'invalid',
-                                                            tp_pct: nil
+                                                            stop_loss_pct: 'invalid',
+                                                            take_profit_pct: nil
                                                           }
                                                         })
 

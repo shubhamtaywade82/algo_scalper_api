@@ -69,4 +69,88 @@ class Derivative < ApplicationRecord
 
   scope :options, -> { where.not(option_type: [nil, '']) }
   scope :futures, -> { where(option_type: [nil, '']) }
+
+  # Places a market BUY order for the derivative (CE/PE) with risk-aware sizing.
+  # @param qty [Integer, nil]
+  # @param product_type [String]
+  # @param index_cfg [Hash, nil]
+  # @param meta [Hash]
+  # @return [Object, nil]
+  def buy_option!(qty: nil, product_type: 'INTRADAY', index_cfg: nil, meta: {})
+    segment_code = exchange_segment
+    security = security_id.to_s
+    raise 'Derivative missing segment/security_id' if segment_code.blank? || security.blank?
+
+    ltp = resolve_ltp(segment: segment_code, security_id: security, meta: meta)
+    raise 'LTP unavailable' unless ltp
+
+    quantity = if qty.to_i.positive?
+                 qty.to_i
+               else
+                 config = index_cfg || { key: underlying_symbol, segment: segment_code }
+                 Capital::Allocator.qty_for(
+                   index_cfg: config,
+                   entry_price: ltp.to_f,
+                   derivative_lot_size: lot_size.to_i,
+                   scale_multiplier: 1
+                 )
+               end
+    return nil if quantity.to_i <= 0
+
+    order = Orders.config.place_market(
+      side: 'buy',
+      segment: segment_code,
+      security_id: security,
+      qty: quantity,
+      meta: {
+        client_order_id: meta[:client_order_id] || default_client_order_id(side: :buy, security_id: security),
+        ltp: ltp,
+        product_type: product_type
+      }
+    )
+    return nil unless order&.respond_to?(:order_id) && order.order_id.present?
+
+    side_label = option_type.to_s.upcase == 'CE' ? 'long_ce' : 'long_pe'
+
+    after_order_track!(
+      instrument: instrument,
+      order_no: order.order_id,
+      segment: segment_code,
+      security_id: security,
+      side: side_label,
+      qty: quantity,
+      entry_price: ltp,
+      symbol: symbol_name || display_name,
+      index_key: (index_cfg || {})[:key]
+    )
+
+    order
+  end
+
+  # Places a market SELL order to exit the derivative position.
+  # @param qty [Integer, nil]
+  # @param meta [Hash]
+  # @return [Object, nil]
+  def sell_option!(qty: nil, meta: {})
+    segment_code = exchange_segment
+    security = security_id.to_s
+    raise 'Derivative missing segment/security_id' if segment_code.blank? || security.blank?
+
+    quantity = if qty.to_i.positive?
+                 qty.to_i
+               else
+                 PositionTracker.active.where(instrument_id: instrument_id, security_id: security).sum(:quantity).to_i
+               end
+    return nil if quantity <= 0
+
+    Orders.config.place_market(
+      side: 'sell',
+      segment: segment_code,
+      security_id: security,
+      qty: quantity,
+      meta: {
+        client_order_id: meta[:client_order_id] || default_client_order_id(side: :sell, security_id: security)
+      }
+    )
+  end
 end

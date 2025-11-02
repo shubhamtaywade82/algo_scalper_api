@@ -123,6 +123,75 @@ class Instrument < ApplicationRecord
     price.present? ? BigDecimal(price.to_s) : nil
   end
 
+  # Places a market BUY order for the underlying instrument and tracks it.
+  # @param qty [Integer, nil]
+  # @param product_type [String]
+  # @param meta [Hash]
+  # @return [Object, nil] Order response from gateway
+  def buy_market!(qty: nil, product_type: 'INTRADAY', meta: {})
+    segment_code = exchange_segment
+    security = security_id.to_s
+    raise 'Instrument missing segment/security_id' if segment_code.blank? || security.blank?
+
+    ltp = resolve_ltp(segment: segment_code, security_id: security, meta: meta)
+    raise 'LTP unavailable' unless ltp
+
+    quantity = qty.to_i.positive? ? qty.to_i : 1
+
+    order = Orders.config.place_market(
+      side: 'buy',
+      segment: segment_code,
+      security_id: security,
+      qty: quantity,
+      meta: {
+        client_order_id: meta[:client_order_id] || default_client_order_id(side: :buy, security_id: security),
+        ltp: ltp,
+        product_type: product_type
+      }
+    )
+    return nil unless order&.respond_to?(:order_id) && order.order_id.present?
+
+    after_order_track!(
+      instrument: self,
+      order_no: order.order_id,
+      segment: segment_code,
+      security_id: security,
+      side: 'LONG',
+      qty: quantity,
+      entry_price: ltp,
+      symbol: symbol_name || display_name
+    )
+
+    order
+  end
+
+  # Places a market SELL order to exit the underlying position.
+  # @param qty [Integer, nil]
+  # @param meta [Hash]
+  # @return [Object, nil]
+  def sell_market!(qty: nil, meta: {})
+    segment_code = exchange_segment
+    security = security_id.to_s
+    raise 'Instrument missing segment/security_id' if segment_code.blank? || security.blank?
+
+    quantity = if qty.to_i.positive?
+                 qty.to_i
+               else
+                 PositionTracker.active.where(instrument_id: id, security_id: security).sum(:quantity).to_i
+               end
+    return nil if quantity <= 0
+
+    Orders.config.place_market(
+      side: 'sell',
+      segment: segment_code,
+      security_id: security,
+      qty: quantity,
+      meta: {
+        client_order_id: meta[:client_order_id] || default_client_order_id(side: :sell, security_id: security)
+      }
+    )
+  end
+
   # API Methods
   def fetch_option_chain(expiry = nil)
     expiry ||= expiry_list.first

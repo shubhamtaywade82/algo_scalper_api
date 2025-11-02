@@ -8,9 +8,14 @@ module Signal
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        confirmation_tf = signals_cfg[:confirmation_timeframe].presence&.to_s
+        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
+        confirmation_tf = if enable_confirmation
+                            signals_cfg[:confirmation_timeframe].presence&.to_s
+                          else
+                            nil
+                          end
 
-        Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'}" }
+        Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
 
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         unless instrument
@@ -25,12 +30,16 @@ module Signal
         end
 
         adx_cfg = signals_cfg[:adx] || {}
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+        # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
+        adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
+
         primary_analysis = analyze_timeframe(
           index_cfg: index_cfg,
           instrument: instrument,
           timeframe: primary_tf,
           supertrend_cfg: supertrend_cfg,
-          adx_min_strength: adx_cfg[:min_strength]
+          adx_min_strength: adx_min_strength
         )
 
         unless primary_analysis[:status] == :ok
@@ -44,7 +53,12 @@ module Signal
 
         if confirmation_tf.present?
           mode_config = get_validation_mode_config
-          confirmation_adx_min = mode_config[:adx_confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+          # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
+          confirmation_adx_min = if enable_adx_filter
+                                   mode_config[:adx_confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+                                 else
+                                   0
+                                 end
 
           confirmation_analysis = analyze_timeframe(
             index_cfg: index_cfg,
@@ -197,7 +211,12 @@ module Signal
       def analyze_multi_timeframe(index_cfg:, instrument:)
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        confirmation_tf = signals_cfg[:confirmation_timeframe].presence&.to_s
+        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
+        confirmation_tf = if enable_confirmation
+                            signals_cfg[:confirmation_timeframe].presence&.to_s
+                          else
+                            nil
+                          end
 
         supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
@@ -206,6 +225,9 @@ module Signal
         end
 
         adx_cfg = signals_cfg[:adx] || {}
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+        # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
+        adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
 
         # Analyze primary timeframe
         primary_analysis = analyze_timeframe(
@@ -213,7 +235,7 @@ module Signal
           instrument: instrument,
           timeframe: primary_tf,
           supertrend_cfg: supertrend_cfg,
-          adx_min_strength: adx_cfg[:min_strength]
+          adx_min_strength: adx_min_strength
         )
 
         unless primary_analysis[:status] == :ok
@@ -225,7 +247,12 @@ module Signal
         confirmation_direction = nil
 
         if confirmation_tf.present?
-          confirmation_adx_min = adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+          # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
+          confirmation_adx_min = if enable_adx_filter
+                                   adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+                                 else
+                                   0
+                                 end
 
           confirmation_analysis = analyze_timeframe(
             index_cfg: index_cfg,
@@ -296,9 +323,16 @@ module Signal
           validation_checks << theta_risk_result
         end
 
-        # 3. Enhanced ADX Confirmation - Ensure strong trend
-        adx_result = validate_adx_strength(adx, supertrend_result, mode_config)
-        validation_checks << adx_result
+        # 3. Enhanced ADX Confirmation - Ensure strong trend (if enabled)
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+        if enable_adx_filter
+          adx_result = validate_adx_strength(adx, supertrend_result, mode_config)
+          validation_checks << adx_result
+        else
+          Rails.logger.debug('[Signal] ADX validation skipped (filter disabled)')
+          validation_checks << { valid: true, name: 'ADX Strength', message: 'ADX filter disabled' }
+        end
 
         # 4. Trend Confirmation - Multiple signal validation (if enabled)
         if mode_config[:require_trend_confirmation]
@@ -519,6 +553,7 @@ module Signal
 
         Rails.logger.debug { "[Signal] ADX check(#{timeframe_label}): value=#{adx_numeric}, min_required=#{min_required}" }
 
+        # Only apply ADX filter if min_required is positive (i.e., ADX filter is enabled)
         if min_required.positive? && adx_numeric < min_required
           Rails.logger.info("[Signal] ADX too weak on #{timeframe_label}: #{adx_numeric} < #{min_required}")
           return :avoid
