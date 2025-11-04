@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_10_26_104459) do
+ActiveRecord::Schema[8.0].define(version: 2025_10_30_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -112,6 +112,116 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_26_104459) do
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
   end
 
+  create_table "paper_daily_wallets", force: :cascade do |t|
+    t.date "trading_date", null: false
+    t.decimal "opening_cash", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "closing_cash", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "gross_pnl", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "fees_total", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "net_pnl", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "max_drawdown", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "max_equity", precision: 18, scale: 2, default: "0.0", null: false
+    t.decimal "min_equity", precision: 18, scale: 2, default: "0.0", null: false
+    t.integer "trades_count", default: 0, null: false
+    t.jsonb "meta", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["trading_date"], name: "index_paper_daily_wallets_on_trading_date", unique: true
+  end
+
+  create_table "paper_fills_logs", force: :cascade do |t|
+    t.date "trading_date", null: false
+    t.string "exchange_segment", null: false
+    t.bigint "security_id", null: false
+    t.string "side", null: false
+    t.integer "qty", null: false
+    t.decimal "price", precision: 12, scale: 2, null: false
+    t.decimal "charge", precision: 10, scale: 2, default: "20.0", null: false
+    t.decimal "gross_value", precision: 14, scale: 2, null: false
+    t.decimal "net_value", precision: 14, scale: 2, null: false
+    t.datetime "executed_at", null: false
+    t.jsonb "meta", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["trading_date", "exchange_segment", "security_id"], name: "index_paper_fills_on_date_seg_sid"
+  end
+
+  create_table "paper_orders", force: :cascade do |t|
+    t.bigint "instrument_id", null: false
+    t.string "order_no", null: false
+    t.string "correlation_id"
+    t.string "security_id", null: false
+    t.string "segment", null: false
+    t.string "symbol"
+    t.string "transaction_type", null: false
+    t.string "order_type", default: "MARKET"
+    t.string "product_type", default: "INTRADAY"
+    t.integer "quantity", null: false
+    t.decimal "price", precision: 15, scale: 2
+    t.decimal "executed_price", precision: 15, scale: 2
+    t.string "status", default: "pending"
+    t.text "error_message"
+    t.jsonb "meta", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_paper_orders_on_instrument_id"
+    t.index ["order_no"], name: "index_paper_orders_on_order_no", unique: true
+    t.index ["security_id"], name: "index_paper_orders_on_security_id"
+    t.index ["status"], name: "index_paper_orders_on_status"
+  end
+
+  create_table "paper_positions", force: :cascade do |t|
+    t.bigint "instrument_id", null: false
+    t.bigint "paper_order_id", null: false
+    t.string "security_id", null: false
+    t.string "symbol"
+    t.string "segment"
+    t.string "side", null: false
+    t.integer "quantity", null: false
+    t.decimal "entry_price", precision: 15, scale: 2, null: false
+    t.decimal "current_price", precision: 15, scale: 2
+    t.decimal "pnl_rupees", precision: 15, scale: 2, default: "0.0"
+    t.decimal "pnl_percent", precision: 10, scale: 4, default: "0.0"
+    t.decimal "high_water_mark_pnl", precision: 15, scale: 2, default: "0.0"
+    t.string "status", default: "active"
+    t.jsonb "meta", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_id"], name: "index_paper_positions_on_instrument_id"
+    t.index ["paper_order_id"], name: "index_paper_positions_on_paper_order_id"
+    t.index ["security_id"], name: "index_paper_positions_on_security_id"
+    t.index ["status"], name: "index_paper_positions_on_status"
+  end
+
+  create_table "paper_trades", force: :cascade do |t|
+    t.bigint "paper_position_id", null: false
+    t.bigint "paper_order_id", null: false
+    t.decimal "entry_price", precision: 15, scale: 2, null: false
+    t.decimal "exit_price", precision: 15, scale: 2, null: false
+    t.decimal "pnl_rupees", precision: 15, scale: 2, default: "0.0"
+    t.decimal "pnl_percent", precision: 10, scale: 4, default: "0.0"
+    t.decimal "brokerage", precision: 10, scale: 2, default: "0.0"
+    t.decimal "net_pnl", precision: 15, scale: 2, default: "0.0"
+    t.datetime "entry_time"
+    t.datetime "exit_time"
+    t.integer "duration_seconds"
+    t.string "signal_source"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["paper_order_id"], name: "index_paper_trades_on_paper_order_id"
+    t.index ["paper_position_id"], name: "index_paper_trades_on_paper_position_id"
+  end
+
+  create_table "paper_wallets", force: :cascade do |t|
+    t.decimal "initial_capital", precision: 15, scale: 2, default: "0.0", null: false
+    t.decimal "available_capital", precision: 15, scale: 2, default: "0.0", null: false
+    t.decimal "invested_capital", precision: 15, scale: 2, default: "0.0", null: false
+    t.decimal "total_pnl", precision: 15, scale: 2, default: "0.0", null: false
+    t.string "mode", default: "paper", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "position_trackers", force: :cascade do |t|
     t.bigint "instrument_id", null: false
     t.string "order_no", null: false
@@ -176,5 +286,10 @@ ActiveRecord::Schema[8.0].define(version: 2025_10_26_104459) do
   end
 
   add_foreign_key "derivatives", "instruments"
+  add_foreign_key "paper_orders", "instruments"
+  add_foreign_key "paper_positions", "instruments"
+  add_foreign_key "paper_positions", "paper_orders"
+  add_foreign_key "paper_trades", "paper_orders"
+  add_foreign_key "paper_trades", "paper_positions"
   add_foreign_key "position_trackers", "instruments"
 end

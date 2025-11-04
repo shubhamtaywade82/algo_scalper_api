@@ -94,6 +94,9 @@ REDIS_URL=redis://localhost:6379/0
 DHANHQ_ENABLED=true
 DHANHQ_WS_ENABLED=true
 DHANHQ_ORDER_WS_ENABLED=true
+
+# Trading Mode (PAPER or LIVE)
+PAPER_MODE=false  # Set to 'true' for paper trading, 'false' for live trading
 ```
 
 ### Start the Application
@@ -132,20 +135,57 @@ indices:
 
 ### Environment Variables
 
-| Variable                  | Purpose                                  | Default                    |
-| ------------------------- | ---------------------------------------- | -------------------------- |
-| `DHANHQ_ENABLED`          | Master toggle for DhanHQ integration     | `true`                     |
-| `DHANHQ_CLIENT_ID`        | DhanHQ API client ID                     | Required                   |
-| `DHANHQ_ACCESS_TOKEN`     | DhanHQ API access token                  | Required                   |
-| `DHANHQ_WS_ENABLED`       | Enable WebSocket market feed             | `true`                     |
-| `DHANHQ_ORDER_WS_ENABLED` | Enable order update WebSocket            | `true`                     |
-| `DHANHQ_WS_MODE`          | WebSocket mode (`quote`/`ticker`/`full`) | `quote`                    |
-| `RAILS_LOG_LEVEL`         | Application log level                    | `info`                     |
-| `REDIS_URL`               | Redis connection URL                     | `redis://localhost:6379/0` |
+| Variable                  | Purpose                                   | Default                    |
+| ------------------------- | ----------------------------------------- | -------------------------- |
+| `DHANHQ_ENABLED`          | Master toggle for DhanHQ integration      | `true`                     |
+| `DHANHQ_CLIENT_ID`        | DhanHQ API client ID                      | Required                   |
+| `DHANHQ_ACCESS_TOKEN`     | DhanHQ API access token                   | Required                   |
+| `DHANHQ_WS_ENABLED`       | Enable WebSocket market feed              | `true`                     |
+| `DHANHQ_ORDER_WS_ENABLED` | Enable order update WebSocket             | `true`                     |
+| `DHANHQ_WS_MODE`          | WebSocket mode (`quote`/`ticker`/`full`)  | `quote`                    |
+| `PAPER_MODE`              | Trading mode (`true`=paper, `false`=live) | `false` (live)             |
+| `RAILS_LOG_LEVEL`         | Application log level                     | `info`                     |
+| `REDIS_URL`               | Redis connection URL                      | `redis://localhost:6379/0` |
 
 ---
 
 ## 📊 Trading System
+
+### Paper Trading Mode
+
+The system supports **two trading modes** via the `PAPER_MODE` environment variable:
+
+#### Paper Trading (`PAPER_MODE=true`)
+- **Simulated orders**: No real money is used
+- **Virtual wallet**: Tracks capital, PnL, and positions locally
+- **Live market data**: Uses real-time DhanHQ WebSocket feeds for prices
+- **Performance reports**: Detailed statistics and analytics
+- **Safe testing**: Perfect for strategy development and backtesting
+
+#### Live Trading (`PAPER_MODE=false`)
+- **Real orders**: Places actual trades through DhanHQ API
+- **Real money**: Uses your actual DhanHQ account funds
+- **Position tracking**: Monitored via DhanHQ position API
+- **Production mode**: Use with caution and proper risk management
+
+**Usage:**
+
+```bash
+# Enable paper trading
+export PAPER_MODE=true
+bin/dev
+
+# Enable live trading (default)
+export PAPER_MODE=false
+bin/dev
+```
+
+**Important Notes:**
+- Paper trading uses the same PositionTracker model for position tracking
+- All risk management rules apply to paper positions
+- Market data comes from live WebSocket feeds
+- Only order execution is simulated
+- Initialize wallet once: `PaperWallet.wallet` (auto-created on first trade)
 
 ### Signal Generation
 

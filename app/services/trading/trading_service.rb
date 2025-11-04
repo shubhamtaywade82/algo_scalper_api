@@ -42,7 +42,7 @@ module Trading
       order = submit_market_order(instrument, derivative)
       persist_tracker(instrument, derivative, order)
     rescue StandardError => e
-      Rails.logger.error("Trading cycle failed for #{instrument.symbol_name}: #{e.class} - #{e.message}")
+      # Rails.logger.error("Trading cycle failed for #{instrument.symbol_name}: #{e.class} - #{e.message}")
     end
 
     def submit_market_order(instrument, derivative)

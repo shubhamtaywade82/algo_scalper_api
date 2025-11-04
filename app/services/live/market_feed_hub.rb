@@ -13,6 +13,10 @@ module Live
       @callbacks = Concurrent::Array.new
       @watchlist = nil
       @lock = Mutex.new
+      @last_tick_at = nil
+      @connection_state = :disconnected
+      @last_error = nil
+      @started_at = nil
     end
 
     def start!
@@ -24,16 +28,25 @@ module Live
 
         @watchlist = load_watchlist || []
         @ws_client = build_client
+
+        # Set up event handlers for connection monitoring
+        setup_connection_handlers
+
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
         @ws_client.start
         subscribe_watchlist
         @running = true
+        @started_at = Time.current
+        @connection_state = :connecting
+        @last_error = nil
+
+        # NOTE: Connection state will be updated to :connected when first tick is received
       end
 
-      Rails.logger.info("DhanHQ market feed started (mode=#{mode}, watchlist=#{@watchlist}).")
+      # Rails.logger.info("DhanHQ market feed started (mode=#{mode}, watchlist=#{@watchlist.count} instruments).")
       true
     rescue StandardError => e
-      Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
+      # Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
       stop!
       false
     end
@@ -41,12 +54,13 @@ module Live
     def stop!
       @lock.synchronize do
         @running = false
+        @connection_state = :disconnected
         return unless @ws_client
 
         begin
           @ws_client.disconnect!
         rescue StandardError => e
-          Rails.logger.warn("Error while stopping DhanHQ market feed: #{e.message}")
+          # Rails.logger.warn("Error while stopping DhanHQ market feed: #{e.message}")
         ensure
           @ws_client = nil
         end
@@ -55,6 +69,62 @@ module Live
 
     def running?
       @running
+    end
+
+    # Returns true if the WebSocket connection is actually connected (not just started)
+    def connected?
+      return false unless running?
+      return false unless @ws_client
+
+      # Check if client has a connection state method
+      if @ws_client.respond_to?(:connected?)
+        @ws_client.connected?
+      else
+        # Fallback: check if we've received ticks recently (within last 30 seconds)
+        @last_tick_at && (Time.current - @last_tick_at) < 30.seconds
+      end
+    rescue StandardError => e
+      # Rails.logger.warn("Error checking WebSocket connection: #{e.message}")
+      false
+    end
+
+    # Get connection health status
+    def health_status
+      {
+        running: running?,
+        connected: connected?,
+        connection_state: @connection_state,
+        started_at: @started_at,
+        last_tick_at: @last_tick_at,
+        ticks_received: @last_tick_at ? true : false,
+        last_error: @last_error,
+        watchlist_size: @watchlist&.count || 0
+      }
+    end
+
+    # Diagnostic information for troubleshooting
+    def diagnostics
+      status = health_status
+      result = {
+        hub_status: status,
+        credentials: {
+          client_id: ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence ? '✅ Set' : '❌ Missing',
+          access_token: ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence ? '✅ Set' : '❌ Missing'
+        },
+        mode: mode,
+        enabled: enabled?
+      }
+
+      if status[:last_tick_at]
+        seconds_ago = (Time.current - status[:last_tick_at]).round(1)
+        result[:last_tick] = "#{seconds_ago} seconds ago"
+      else
+        result[:last_tick] = 'Never'
+      end
+
+      result[:last_error_details] = status[:last_error] if status[:last_error]
+
+      result
     end
 
     def subscribe(segment:, security_id:)
@@ -76,8 +146,16 @@ module Live
         end
       end
 
-      @ws_client.subscribe_many(req: mode, list: list)
-      Rails.logger.info("[MarketFeedHub] Batch subscribed to #{list.count} instruments")
+      # Convert to format expected by DhanHQ client: ExchangeSegment and SecurityId keys
+      normalized_list = list.map do |item|
+        {
+          ExchangeSegment: item[:segment] || item['segment'],
+          SecurityId: (item[:security_id] || item['security_id']).to_s
+        }
+      end
+
+      @ws_client.subscribe_many(normalized_list)
+      # Rails.logger.info("[MarketFeedHub] Batch subscribed to #{list.count} instruments")
       list
     end
 
@@ -101,8 +179,16 @@ module Live
         end
       end
 
-      @ws_client.unsubscribe_many(req: mode, list: list)
-      Rails.logger.info("[MarketFeedHub] Batch unsubscribed from #{list.count} instruments")
+      # Convert to format expected by DhanHQ client: ExchangeSegment and SecurityId keys
+      normalized_list = list.map do |item|
+        {
+          ExchangeSegment: item[:segment] || item['segment'],
+          SecurityId: (item[:security_id] || item['security_id']).to_s
+        }
+      end
+
+      @ws_client.unsubscribe_many(normalized_list)
+      # Rails.logger.info("[MarketFeedHub] Batch unsubscribed from #{list.count} instruments")
       list
     end
 
@@ -127,13 +213,22 @@ module Live
     end
 
     def handle_tick(tick)
-      # pp tick
+      # Update connection health indicators
+      @last_tick_at = Time.current
+      @connection_state = :connected
+
+      # Update FeedHealthService
+      begin
+        Live::FeedHealthService.instance.mark_success!(:ticks)
+      rescue StandardError
+        nil
+      end
+
+      # pp tick  # Uncomment only for debugging - very noisy!
       # Log every tick (segment:security_id and LTP) for verification during development
-      # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
+      # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
       Live::TickCache.put(tick)
       ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
-      # Broadcast to Action Cable subscribers if channel is present
-      ::TickerChannel.broadcast_to(::TickerChannel::CHANNEL_ID, tick) if defined?(::TickerChannel)
       @callbacks.each do |callback|
         safe_invoke(callback, tick)
       end
@@ -142,24 +237,53 @@ module Live
     def safe_invoke(callback, payload)
       callback.call(payload)
     rescue StandardError => e
-      Rails.logger.error("DhanHQ tick callback failed: #{e.class} - #{e.message}")
+      # Rails.logger.error("DhanHQ tick callback failed: #{e.class} - #{e.message}")
     end
 
     def subscribe_watchlist
       return if @watchlist.empty?
 
       # Use subscribe_many for efficient batch subscription (up to 100 instruments per message)
-      @ws_client.subscribe_many(req: mode, list: @watchlist)
-      Rails.logger.info("[MarketFeedHub] Subscribed to #{@watchlist.count} instruments using subscribe_many")
+      # DhanHQ client expects ExchangeSegment and SecurityId keys (capitalized)
+      normalized_list = @watchlist.map do |item|
+        {
+          ExchangeSegment: item[:segment] || item['segment'],
+          SecurityId: (item[:security_id] || item['security_id']).to_s
+        }
+      end
+
+      @ws_client.subscribe_many(normalized_list)
+      # Rails.logger.info("[MarketFeedHub] Subscribed to #{@watchlist.count} instruments using subscribe_many")
     end
 
     def load_watchlist
       # Prefer DB watchlist if present; fall back to ENV for bootstrap-only
       if ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items') &&
          WatchlistItem.exists?
-        return WatchlistItem.order(:segment, :security_id).pluck(:segment, :security_id).map do |seg, sid|
-          { segment: seg, security_id: sid }
-        end
+        # Only load active watchlist items for subscription
+        scope = WatchlistItem.active
+
+        pairs = if scope.respond_to?(:order) && scope.respond_to?(:pluck)
+                  scope.order(:segment, :security_id).pluck(:segment, :security_id)
+                else
+                  Array(scope).filter_map do |record|
+                    seg = if record.respond_to?(:segment)
+                            record.segment
+                          elsif record.is_a?(Hash)
+                            record[:segment]
+                          end
+                    sid = if record.respond_to?(:security_id)
+                            record.security_id
+                          elsif record.is_a?(Hash)
+                            record[:security_id]
+                          end
+                    next if seg.blank? || sid.blank?
+
+                    [seg, sid]
+                  end
+                end
+
+        return pairs.map { |seg, sid| { segment: seg, security_id: sid } }
       end
 
       raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '')
@@ -183,6 +307,23 @@ module Live
       allowed = %i[ticker quote full]
       selected = config&.ws_mode || DEFAULT_MODE
       allowed.include?(selected) ? selected : DEFAULT_MODE
+    end
+
+    def setup_connection_handlers
+      # DhanHQ WebSocket client only supports :tick events
+      # Connection/disconnection monitoring is handled via tick activity tracking
+      # and connection state is inferred from tick reception
+
+      # NOTE: The DhanHQ client handles reconnection internally
+      # We track connection state via:
+      # - Tick reception (sets @connection_state = :connected)
+      # - Time-based fallback (connected? checks if ticks received recently)
+      # - Explicit stop! calls (sets @connection_state = :disconnected)
+
+      # Connection will be marked as :connected when first tick is received
+      # in handle_tick method
+
+      # Rails.logger.debug('[MarketFeedHub] Connection handlers: Using tick-based connection monitoring')
     end
 
     def config

@@ -8,9 +8,10 @@ module Api
         watchlist: WatchlistItem.where(active: true).count,
         active_positions: PositionTracker.where(status: PositionTracker::STATUSES[:active]).count,
         scheduler: scheduler_status,
-        circuit_breaker: Risk::CircuitBreaker.instance.status,
+        # circuit_breaker: Risk::CircuitBreaker.instance.status, # Disabled - removed per requirement
         websocket: {
           market_feed_running: Live::MarketFeedHub.instance.running?,
+          # NOTE: Order updates use PositionSyncService polling (not WebSocket)
           order_update_running: Live::OrderUpdateHub.instance.running?,
           tick_cache_size: Live::TickCache.all.size,
           sample_ltps: {

@@ -14,7 +14,7 @@ module Live
       return if @running
 
       @running = true
-      Rails.logger.info('[TestMockData] Starting test mock data service')
+      # Rails.logger.info('[TestMockData] Starting test mock data service')
 
       # Generate initial test data
       generate_test_data
@@ -23,7 +23,7 @@ module Live
     def stop!
       @running = false
       @thread&.join
-      Rails.logger.info('[TestMockData] Test mock data service stopped')
+      # Rails.logger.info('[TestMockData] Test mock data service stopped')
     end
 
     def running?

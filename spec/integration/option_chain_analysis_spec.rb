@@ -94,7 +94,7 @@ RSpec.describe 'Option Chain Analysis Integration', :vcr, type: :integration do
     ]
   end
   let(:chain_analyzer) { Options::ChainAnalyzer }
-  let(:atm_options_service) { Live::AtmOptionsService.instance }
+  let(:atm_options_service) { instance_double('AtmOptionsService') }
   let(:index_config) { { key: 'nifty', segment: 'NSE_FNO', security_id: '12345' } }
 
   before do
@@ -107,6 +107,8 @@ RSpec.describe 'Option Chain Analysis Integration', :vcr, type: :integration do
 
     # Mock Market::Calendar
     allow(Market::Calendar).to receive(:next_trading_day).and_return(Date.current + 3.days)
+
+    allow(atm_options_service).to receive(:get_atm_option).and_return(nil)
   end
 
   describe 'Chain Analyzer Integration' do

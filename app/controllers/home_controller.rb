@@ -124,33 +124,9 @@ class HomeController < ApplicationController
             }
 
             setupSubscription() {
-              console.log('Setting up subscription...');
-
-              if (!window.tickerCable) {
-                console.log('Creating ActionCable consumer...');
-                window.tickerCable = ActionCable.createConsumer("/cable");
-
-                console.log('Creating subscription...');
-                window.tickerSubscription = window.tickerCable.subscriptions.create({ channel: "TickerChannel" }, {
-                  received: (data) => {
-                    console.log('Received tick:', data);
-                    // Update all ticker displays
-                    window.updateAllTickers(data);
-                  },
-                  connected: () => {
-                    console.log('WebSocket connected!');
-                    window.updateAllConnectionStatus('connected');
-                  },
-                  disconnected: () => {
-                    console.log('WebSocket disconnected!');
-                    window.updateAllConnectionStatus('disconnected');
-                  },
-                  rejected: () => {
-                    console.log('WebSocket connection rejected!');
-                    window.updateAllConnectionStatus('disconnected');
-                  }
-                });
-              }
+              // TickerChannel removed - no ActionCable broadcasting
+              console.log('TickerChannel broadcasting has been removed. Data is only available via TickCache API.');
+              window.updateAllConnectionStatus('not_available');
             }
 
             handleTick(data) {

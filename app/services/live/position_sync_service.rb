@@ -14,18 +14,18 @@ module Live
     def sync_positions!
       return unless should_sync?
 
-      Rails.logger.info('[PositionSync] Starting position synchronization')
+      # Rails.logger.info('[PositionSync] Starting position synchronization')
 
       begin
         # Fetch all active positions from DhanHQ
         dhan_positions = DhanHQ::Models::Position.active
-        Rails.logger.info("[PositionSync] Found #{dhan_positions.size} active positions in DhanHQ")
+        # Rails.logger.info("[PositionSync] Found #{dhan_positions.size} active positions in DhanHQ")
 
         # Get all tracked positions from database with proper preloading
         tracked_positions = PositionTracker.active.eager_load(:instrument).to_a
         tracked_security_ids = tracked_positions.map { |p| p.security_id.to_s }
 
-        Rails.logger.info("[PositionSync] Found #{tracked_positions.size} tracked positions in database")
+        # Rails.logger.info("[PositionSync] Found #{tracked_positions.size} tracked positions in database")
 
         # Find positions that exist in DhanHQ but not in our database
         untracked_positions = []
@@ -36,7 +36,7 @@ module Live
 
           unless tracked_security_ids.include?(security_id.to_s)
             untracked_positions << dhan_pos
-            Rails.logger.warn("[PositionSync] Found untracked position: #{security_id} - #{extract_symbol(dhan_pos)}")
+            # Rails.logger.warn("[PositionSync] Found untracked position: #{security_id} - #{extract_symbol(dhan_pos)}")
           end
         end
 
@@ -51,15 +51,15 @@ module Live
         end
 
         orphaned_trackers.each do |tracker|
-          Rails.logger.warn("[PositionSync] Found orphaned tracker: #{tracker.order_no} - marking as exited")
+          # Rails.logger.warn("[PositionSync] Found orphaned tracker: #{tracker.order_no} - marking as exited")
           tracker.mark_exited!
         end
 
         @last_sync = Time.current
-        Rails.logger.info("[PositionSync] Synchronization completed - created #{untracked_positions.size} trackers, marked #{orphaned_trackers.size} as exited")
+        # Rails.logger.info("[PositionSync] Synchronization completed - created #{untracked_positions.size} trackers, marked #{orphaned_trackers.size} as exited")
       rescue StandardError => e
-        Rails.logger.error("[PositionSync] Failed to sync positions: #{e.class} - #{e.message}")
-        Rails.logger.error("[PositionSync] Backtrace: #{e.backtrace.first(5).join(', ')}")
+        # Rails.logger.error("[PositionSync] Failed to sync positions: #{e.class} - #{e.message}")
+        # Rails.logger.error("[PositionSync] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
     end
 
@@ -138,7 +138,7 @@ module Live
         )
 
         unless derivative
-          Rails.logger.error("[PositionSync] Could not find derivative for #{security_id} (#{exchange_segment})")
+          # Rails.logger.error("[PositionSync] Could not find derivative for #{security_id} (#{exchange_segment})")
           return
         end
 
@@ -152,7 +152,7 @@ module Live
         )
 
         unless instrument
-          Rails.logger.error("[PositionSync] Could not find instrument for #{security_id} (#{exchange_segment})")
+          # Rails.logger.error("[PositionSync] Could not find instrument for #{security_id} (#{exchange_segment})")
           return
         end
       end
@@ -186,9 +186,10 @@ module Live
       # Subscribe to market feed
       tracker.subscribe
 
-      Rails.logger.info("[PositionSync] Created tracker #{tracker.id} for untracked position #{security_id}")
+      # Rails.logger.info("[PositionSync] Created tracker #{tracker.id} for untracked position #{security_id}")
     rescue StandardError => e
-      Rails.logger.error("[PositionSync] Failed to create tracker for position #{security_id}: #{e.class} - #{e.message}")
+      # Rails.logger.error("[PositionSync] Failed to create tracker for position #{security_id}: #{e.class} - #{e.message}")
     end
+
   end
 end

@@ -2,6 +2,7 @@
 
 require 'bigdecimal'
 require 'singleton'
+require 'ostruct'
 
 module Live
   class RiskManagerService
@@ -29,10 +30,20 @@ module Live
 
     def stop!
       @mutex.synchronize do
+
         @running = false
-        @thread&.wakeup
+        if @thread&.alive?
+          begin
+            @thread.wakeup
+          rescue StandardError
+            nil
+          end
+        end
         @thread = nil
       end
+    rescue ThreadError
+      # Thread may already be killed, just clear it
+      @thread = nil
     end
 
     def running?
@@ -79,6 +90,8 @@ module Live
     private
 
     def monitor_loop
+      logger = Rails.logger
+
       while running?
         # Sync positions first to ensure we have all active positions tracked
         Live::PositionSyncService.instance.sync_positions!
@@ -87,12 +100,19 @@ module Live
         enforce_hard_limits(positions)
         enforce_trailing_stops(positions)
         enforce_time_based_exit(positions)
-        enforce_daily_circuit_breaker
+        # Circuit breaker disabled - removed per requirement
         sleep LOOP_INTERVAL
       end
     rescue StandardError => e
-      Rails.logger.error("RiskManagerService crashed: #{e.class} - #{e.message}")
+      message = "RiskManagerService crashed: #{e.class} - #{e.message}"
+      logger.error(message)
+      global_logger = Rails.logger
+      global_logger.error(message) unless global_logger.equal?(logger)
       @running = false
+    end
+
+    def sleep(seconds)
+      Kernel.sleep(seconds)
     end
 
     def enforce_trailing_stops(positions = fetch_positions_indexed)
@@ -185,25 +205,24 @@ module Live
         tracker.with_lock do
           next unless tracker.status == PositionTracker::STATUSES[:active]
 
-          Rails.logger.info("Triggering exit for #{tracker.order_no} due to #{reason}.")
+          Rails.logger.info("[RiskManager] Exiting #{tracker.order_no} (#{tracker.symbol}): #{reason}")
           execute_exit(position, tracker, reason: reason)
         end
       end
     end
 
     def enforce_time_based_exit(positions = fetch_positions_indexed)
-      # Check if it's time for market close exit (3:20 PM)
-      current_time = Time.current
-      exit_time = Time.zone.parse('15:20') # 3:20 PM
+      risk = risk_config
+      exit_time = parse_time_hhmm(risk[:time_exit_hhmm] || '15:20')
+      return unless exit_time
 
-      # Only enforce time-based exit during trading hours and after 3:20 PM
+      current_time = Time.current
       return unless current_time >= exit_time
 
-      # Check if we're still in trading hours (before 3:30 PM)
-      market_close_time = Time.zone.parse('15:30') # 3:30 PM
-      return if current_time >= market_close_time
+      market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+      return if market_close_time && current_time >= market_close_time
 
-      Rails.logger.info("[TimeExit] Enforcing time-based exit at #{current_time.strftime('%H:%M:%S')}")
+      # Rails.logger.info("[TimeExit] Enforcing time-based exit at #{current_time.strftime('%H:%M:%S')}")
 
       PositionTracker.active.includes(:instrument).find_each do |tracker|
         position = positions[tracker.security_id.to_s]
@@ -211,52 +230,18 @@ module Live
         tracker.with_lock do
           next unless tracker.status == PositionTracker::STATUSES[:active]
 
-          Rails.logger.info("[TimeExit] Triggering time-based exit for #{tracker.order_no}")
-          execute_exit(position, tracker, reason: 'time-based exit (3:20 PM)')
+          Rails.logger.info("[RiskManager] Time-based exit for #{tracker.order_no} (#{tracker.symbol})")
+          execute_exit(position, tracker, reason: "time-based exit (#{exit_time.strftime('%H:%M')})")
         end
       end
     rescue StandardError => e
       Rails.logger.error("Time-based exit enforcement failed: #{e.class} - #{e.message}")
     end
 
-    def enforce_daily_circuit_breaker
-      risk = risk_config
-      limit_pct = BigDecimal((risk[:daily_loss_limit_pct] || 0).to_s)
-      return if limit_pct <= 0
-
-      begin
-        funds = DhanHQ::Models::Funds.fetch
-        Live::FeedHealthService.instance.mark_success!(:funds)
-        pnl_today = if funds.respond_to?(:day_pnl)
-                      BigDecimal(funds.day_pnl.to_s)
-                    elsif funds.is_a?(Hash)
-                      BigDecimal((funds[:day_pnl] || 0).to_s)
-                    else
-                      BigDecimal(0)
-                    end
-
-        balance = if funds.respond_to?(:net_balance)
-                    BigDecimal(funds.net_balance.to_s)
-                  elsif funds.respond_to?(:net_cash)
-                    BigDecimal(funds.net_cash.to_s)
-                  elsif funds.is_a?(Hash)
-                    BigDecimal((funds[:net_balance] || funds[:net_cash] || 0).to_s)
-                  else
-                    BigDecimal(0)
-                  end
-
-        return if balance <= 0
-
-        loss_pct = (pnl_today / balance) * -1
-        if pnl_today.negative? && loss_pct >= limit_pct
-          Risk::CircuitBreaker.instance.trip!(reason: "daily loss limit reached: #{(loss_pct * 100).round(2)}%")
-          Rails.logger.warn("Circuit breaker TRIPPED due to daily loss: #{pnl_today.to_s('F')} against balance #{balance.to_s('F')}")
-        end
-      rescue StandardError => e
-        Rails.logger.warn("Daily circuit breaker check failed: #{e.class} - #{e.message}")
-        Live::FeedHealthService.instance.mark_failure!(:funds, error: e)
-      end
-    end
+    # Circuit breaker disabled - removed per requirement
+    # def enforce_daily_circuit_breaker
+    #   # Method removed - circuit breaker functionality no longer needed
+    # end
 
     def fetch_positions_indexed
       positions = DhanHQ::Models::Position.active.each_with_object({}) do |position, map|
@@ -280,7 +265,7 @@ module Live
             option_data = response.dig('data', 'NSE_FNO', tracker.security_id)
             if option_data && option_data['last_price']
               ltp = BigDecimal(option_data['last_price'].to_s)
-              Rails.logger.info("Fetched option LTP for #{tracker.security_id}: #{ltp}")
+              # Rails.logger.info("Fetched option LTP for #{tracker.security_id}: #{ltp}")
 
               # Store in Redis for future use
               Live::RedisPnlCache.instance.store_tick(
@@ -301,7 +286,7 @@ module Live
             cached = Live::TickCache.ltp('NSE_FNO', tracker.security_id)
             if cached
               ltp = BigDecimal(cached.to_s)
-              Rails.logger.info("Using cached option LTP for #{tracker.security_id}: #{ltp}")
+              # Rails.logger.info("Using cached option LTP for #{tracker.security_id}: #{ltp}")
 
               # Store in Redis for future use
               Live::RedisPnlCache.instance.store_tick(
@@ -391,7 +376,7 @@ module Live
         # Correct PnL calculation for options: (Current LTP - Cost Price) × Position Quantity
         pnl = (ltp - BigDecimal(cost_price.to_s)) * quantity
 
-        Rails.logger.debug { "Option PnL calculation: (#{ltp} - #{cost_price}) × #{quantity} = #{pnl}" }
+        # Rails.logger.debug { "Option PnL calculation: (#{ltp} - #{cost_price}) × #{quantity} = #{pnl}" }
         return pnl
       end
 
@@ -465,7 +450,7 @@ module Live
 
     def execute_exit(position, tracker, reason: 'manual')
       pnl_display = tracker.last_pnl_rupees ? tracker.last_pnl_rupees.to_s : 'N/A'
-      Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{pnl_display}).")
+      Rails.logger.info("[RiskManager] Exiting #{tracker.order_no} (#{tracker.symbol}): #{reason}, PnL=#{pnl_display}")
       store_exit_reason(tracker, reason)
 
       # Attempt to exit position and check if successful
@@ -477,7 +462,7 @@ module Live
 
         # Mark as exited only if order was placed successfully
         tracker.mark_exited!
-        Rails.logger.info("Successfully exited position #{tracker.order_no}")
+        # Rails.logger.info("Successfully exited position #{tracker.order_no}")
       else
         Rails.logger.error("Failed to place exit order for #{tracker.order_no} - position remains active")
         # Don't mark as exited if order placement failed
@@ -496,10 +481,9 @@ module Live
       else
         segment = tracker.segment.presence || tracker.instrument&.exchange_segment
         if segment.present?
-          order = Orders::Placer.exit_position!(
-            seg: segment,
-            sid: tracker.security_id,
-            client_order_id: "AS-EXIT-#{tracker.order_no[-8..]}-#{Time.current.to_i.to_s[-4..]}"
+          order = Orders.config.flat_position(
+            segment: segment,
+            security_id: tracker.security_id
           )
           order.present?
         else
@@ -519,8 +503,30 @@ module Live
       Rails.logger.warn("Failed to persist exit reason for #{tracker.order_no}: #{e.class} - #{e.message}")
     end
 
+    def parse_time_hhmm(value)
+      return nil if value.blank?
+
+      Time.zone.parse(value.to_s)
+    rescue StandardError
+      Rails.logger.warn("[RiskManager] Invalid time format provided: #{value}")
+      nil
+    end
+
     def risk_config
-      AlgoConfig.fetch[:risk] || {}
+      raw = AlgoConfig.fetch[:risk]
+      return {} unless raw.present?
+
+      config = raw.dup
+      config[:stop_loss_pct] = raw[:stop_loss_pct] || raw[:sl_pct]
+      config[:take_profit_pct] = raw[:take_profit_pct] || raw[:tp_pct]
+      config[:sl_pct] = config[:stop_loss_pct]
+      config[:tp_pct] = config[:take_profit_pct]
+      config[:breakeven_after_gain] = raw.key?(:breakeven_after_gain) ? raw[:breakeven_after_gain] : 0
+      config[:trail_step_pct] = raw[:trail_step_pct] if raw.key?(:trail_step_pct)
+      config[:exit_drop_pct] = raw[:exit_drop_pct] if raw.key?(:exit_drop_pct)
+      config[:time_exit_hhmm] = raw[:time_exit_hhmm] if raw.key?(:time_exit_hhmm)
+      config[:market_close_hhmm] = raw[:market_close_hhmm] if raw.key?(:market_close_hhmm)
+      config
     end
 
     def cancel_remote_order(order_id)

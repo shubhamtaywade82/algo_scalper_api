@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'bigdecimal'
 require 'date'
 
 module InstrumentHelpers
@@ -27,7 +28,7 @@ module InstrumentHelpers
 
     def subscribe
       Live::WsHub.instance.subscribe(seg: exchange_segment, sid: security_id.to_s)
-      Rails.logger.info("Subscribed #{self.class.name} #{security_id} to WS feed.")
+      # Rails.logger.info("Subscribed #{self.class.name} #{security_id} to WS feed.")
       true
     rescue StandardError => e
       Rails.logger.error("Failed to subscribe #{self.class.name} #{security_id}: #{e.message}")
@@ -36,7 +37,7 @@ module InstrumentHelpers
 
     def unsubscribe
       Live::WsHub.instance.unsubscribe(seg: exchange_segment, sid: security_id.to_s)
-      Rails.logger.info("Unsubscribed #{self.class.name} #{security_id} from WS feed.")
+      # Rails.logger.info("Unsubscribed #{self.class.name} #{security_id} from WS feed.")
       true
     rescue StandardError => e
       Rails.logger.error("Failed to unsubscribe #{self.class.name} #{security_id}: #{e.message}")
@@ -49,6 +50,116 @@ module InstrumentHelpers
   rescue StandardError => e
     Rails.logger.error("Failed to fetch LTP for #{self.class.name} #{security_id}: #{e.message}")
     nil
+  end
+
+  # Resolves an actionable LTP for downstream order placement.
+  # Priority order:
+  # 1. `meta[:ltp]` if provided
+  # 2. WebSocket tick cache via Live::RedisPnlCache (if WS connected and fresh)
+  # 3. REST API via instrument/derivative object (fallback when WS unavailable)
+  # 4. nil (if all methods fail)
+  #
+  # @param segment [String]
+  # @param security_id [String, Integer]
+  # @param meta [Hash]
+  # @param fallback_to_api [Boolean] Whether to fallback to REST API if WS unavailable
+  # @return [BigDecimal, nil]
+  def resolve_ltp(segment:, security_id:, meta: {}, fallback_to_api: true)
+    ltp_from_meta = meta&.dig(:ltp)
+    return BigDecimal(ltp_from_meta.to_s) if ltp_from_meta.present?
+
+    # Try WebSocket cache if hub is connected and ticks are fresh
+    hub = Live::MarketFeedHub.instance
+    if hub.running? && hub.connected?
+      tick = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+      return BigDecimal(tick[:ltp].to_s) if tick&.dig(:ltp)
+    end
+
+    # Fallback to REST API when WebSocket unavailable or cache miss
+    if fallback_to_api
+      api_ltp = fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+      return BigDecimal(api_ltp.to_s) if api_ltp.present?
+    end
+
+    nil
+  rescue StandardError => e
+    Rails.logger.error("Failed to resolve LTP for #{segment}:#{security_id} - #{e.message}")
+    nil
+  end
+
+  # Fetches LTP from REST API for a specific segment and security_id
+  # @param segment [String] Exchange segment (e.g., "IDX_I", "NSE_FNO")
+  # @param security_id [String, Integer] Security ID
+  # @return [Numeric, nil]
+  def fetch_ltp_from_api_for_segment(segment:, security_id:)
+    # Build segment enum for API call
+    segment_enum = segment.to_s.upcase
+    response = DhanHQ::Models::MarketFeed.ltp(segment_enum)
+
+    return nil unless response.is_a?(Hash) && response['status'] == 'success'
+
+    data = response.dig('data', segment, security_id.to_s)
+    data&.dig('last_price')
+  rescue StandardError => e
+    Rails.logger.error("Failed to fetch LTP from API for #{segment}:#{security_id} - #{e.message}")
+    nil
+  end
+
+  # Generates a short, gateway-safe client order identifier.
+  # @param side [Symbol, String]
+  # @param security_id [String]
+  # @return [String]
+  def default_client_order_id(side:, security_id:)
+    ts = Time.current.to_i.to_s[-6..]
+    "AS-#{side.to_s.upcase[0..2]}-#{security_id}-#{ts}"
+  end
+
+  # Ensures the WebSocket hub is actively streaming ticks for the instrument.
+  # Raises if the hub is offline to avoid blind entries.
+  # @param segment [String]
+  # @param security_id [String]
+  # @return [true]
+  def ensure_ws_subscription!(segment:, security_id:)
+    hub = Live::WsHub.instance
+    unless hub.running?
+      Rails.logger.error('[InstrumentHelpers] WebSocket hub is not running. Aborting subscription.')
+      raise 'WebSocket hub not running'
+    end
+
+    hub.subscribe(seg: segment, sid: security_id.to_s)
+    true
+  end
+
+  # Creates a PositionTracker immediately after order placement and primes caches.
+  # @param instrument [Instrument]
+  # @param order_no [String]
+  # @param segment [String]
+  # @param security_id [String]
+  # @param side [String]
+  # @param qty [Integer]
+  # @param entry_price [Numeric]
+  # @param symbol [String]
+  # @param index_key [String, nil]
+  # @return [PositionTracker]
+  def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:,
+                         index_key: nil)
+    tracker = PositionTracker.create!(
+      instrument: instrument,
+      order_no: order_no,
+      security_id: security_id.to_s,
+      symbol: symbol,
+      segment: segment,
+      side: side,
+      status: PositionTracker::STATUSES[:active],
+      quantity: qty.to_i,
+      entry_price: BigDecimal(entry_price.to_s),
+      meta: index_key ? { 'index_key' => index_key } : {}
+    )
+
+    ensure_ws_subscription!(segment: segment, security_id: security_id)
+    Live::RedisPnlCache.instance.clear_tick(segment: segment, security_id: security_id.to_s)
+
+    tracker
   end
 
   def quote_ltp
@@ -104,7 +215,7 @@ module InstrumentHelpers
     nil
   end
 
-  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 90)
+  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2)
     to_date ||= if defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
                   MarketCalendar.today_or_last_trading_day.to_s
                 else
@@ -113,7 +224,6 @@ module InstrumentHelpers
     from_date ||= (Date.parse(to_date) - days).to_s
 
     instrument_code = resolve_instrument_code
-
     DhanHQ::Models::HistoricalData.intraday(
       security_id: security_id,
       exchange_segment: exchange_segment,

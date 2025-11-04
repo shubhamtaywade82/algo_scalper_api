@@ -28,7 +28,8 @@ module Signal
         @thread = Thread.new do
           Thread.current.name = 'signal-scheduler'
           loop do
-            break if Risk::CircuitBreaker.instance.tripped?
+            # Circuit breaker check disabled - removed per requirement
+            # break if Risk::CircuitBreaker.instance.tripped?
 
             indices.each_with_index do |index_cfg, idx|
               sleep(idx.zero? ? 0 : 5)
@@ -59,7 +60,7 @@ module Signal
       thread.kill
       thread.join(2)
     rescue StandardError => e
-      Rails.logger.warn("Signal::Scheduler stop encountered: #{e.class} - #{e.message}")
+      # Rails.logger.warn("Signal::Scheduler stop encountered: #{e.class} - #{e.message}")
     end
 
     # Indicates whether the scheduler thread is alive.

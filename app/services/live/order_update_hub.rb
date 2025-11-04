@@ -25,10 +25,10 @@ module Live
         @running = true
       end
 
-      Rails.logger.info('DhanHQ order update feed started.')
+      # Rails.logger.info('DhanHQ order update feed started.')
       true
     rescue StandardError => e
-      Rails.logger.error("Failed to start DhanHQ order update feed: #{e.class} - #{e.message}")
+      # Rails.logger.error("Failed to start DhanHQ order update feed: #{e.class} - #{e.message}")
       stop!
       false
     end
@@ -41,7 +41,7 @@ module Live
         begin
           @ws_client.stop
         rescue StandardError => e
-          Rails.logger.warn("Error while stopping DhanHQ order update feed: #{e.message}")
+          # Rails.logger.warn("Error while stopping DhanHQ order update feed: #{e.message}")
         ensure
           @ws_client = nil
         end
@@ -86,7 +86,7 @@ module Live
     def safe_invoke(callback, payload)
       callback.call(payload)
     rescue StandardError => e
-      Rails.logger.error("DhanHQ order update callback failed: #{e.class} - #{e.message}")
+      # Rails.logger.error("DhanHQ order update callback failed: #{e.class} - #{e.message}")
     end
   end
 end
