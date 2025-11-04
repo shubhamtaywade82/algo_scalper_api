@@ -22,7 +22,7 @@ module Live
           client_order_id: meta[:client_order_id] || generate_client_order_id(segment, security_id, side)
         )
       else
-        Rails.logger.error("[Live::Gateway] Invalid side: #{side}")
+        # Rails.logger.error("[Live::Gateway] Invalid side: #{side}")
         nil
       end
     end
@@ -60,7 +60,7 @@ module Live
         last_ltp: ltp ? BigDecimal(ltp.to_s) : (entry_price || BigDecimal(0))
       }
     rescue StandardError => e
-      Rails.logger.error("[Live::Gateway] position failed: #{e.message}")
+      # Rails.logger.error("[Live::Gateway] position failed: #{e.message}")
       nil
     end
 
@@ -76,7 +76,7 @@ module Live
         exposure: BigDecimal(0) # Would need to calculate from positions
       }
     rescue StandardError => e
-      Rails.logger.error("[Live::Gateway] wallet_snapshot failed: #{e.message}")
+      # Rails.logger.error("[Live::Gateway] wallet_snapshot failed: #{e.message}")
       default_wallet
     end
 

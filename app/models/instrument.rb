@@ -201,7 +201,7 @@ class Instrument < ApplicationRecord
     disable_caching = freshness_config[:disable_option_chain_caching] || false
 
     if disable_caching
-      Rails.logger.debug { "[Instrument] Fresh data mode - bypassing option chain cache for #{symbol_name}" }
+      # Rails.logger.debug { "[Instrument] Fresh data mode - bypassing option chain cache for #{symbol_name}" }
       return fetch_fresh_option_chain(expiry)
     end
 
@@ -210,7 +210,7 @@ class Instrument < ApplicationRecord
     cached_data = Rails.cache.read(cache_key)
 
     if cached_data && !option_chain_stale?(expiry)
-      Rails.logger.debug { "[Instrument] Using cached option chain for #{symbol_name} #{expiry}" }
+      # Rails.logger.debug { "[Instrument] Using cached option chain for #{symbol_name} #{expiry}" }
       return cached_data
     end
 
@@ -220,7 +220,7 @@ class Instrument < ApplicationRecord
       cache_duration_minutes = freshness_config[:option_chain_cache_duration_minutes] || 2
       Rails.cache.write(cache_key, fresh_data, expires_in: cache_duration_minutes.minutes)
       Rails.cache.write("#{cache_key}:timestamp", Time.current, expires_in: cache_duration_minutes.minutes)
-      Rails.logger.debug { "[Instrument] Cached fresh option chain for #{symbol_name} #{expiry}" }
+      # Rails.logger.debug { "[Instrument] Cached fresh option chain for #{symbol_name} #{expiry}" }
     end
 
     fresh_data

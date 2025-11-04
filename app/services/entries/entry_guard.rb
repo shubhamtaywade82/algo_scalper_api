@@ -8,7 +8,7 @@ module Entries
         return false unless instrument
 
         multiplier = [scale_multiplier.to_i, 1].max
-        Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
+        # Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
 
         side = direction == :bullish ? 'long_ce' : 'long_pe'
         return false unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
@@ -18,10 +18,10 @@ module Entries
         # Log WebSocket status for monitoring but don't block
         hub = Live::MarketFeedHub.instance
         unless hub.running? && hub.connected?
-          Rails.logger.info('[EntryGuard] WebSocket not connected - will use REST API fallback for LTP')
+          # Rails.logger.info('[EntryGuard] WebSocket not connected - will use REST API fallback for LTP')
         end
 
-        Rails.logger.debug { "[EntryGuard] Pick data: #{pick.inspect}" }
+        # Rails.logger.debug { "[EntryGuard] Pick data: #{pick.inspect}" }
         # Resolve LTP with REST API fallback if WebSocket unavailable
         ltp = pick[:ltp]
         if ltp.blank? || needs_api_ltp?(pick)
@@ -98,7 +98,7 @@ module Entries
         min_profit_duration = 5.minutes
         return false unless first_position.updated_at < min_profit_duration.ago
 
-        Rails.logger.info("[Pyramiding] Allowing second position - first position profitable: #{first_position.last_pnl_rupees}")
+        # Rails.logger.info("[Pyramiding] Allowing second position - first position profitable: #{first_position.last_pnl_rupees}")
         true
       rescue StandardError => e
         Rails.logger.error("Pyramiding check failed: #{e.message}")
@@ -169,9 +169,9 @@ module Entries
         )
 
         unless instrument
-          Rails.logger.warn(
-            "[EntryGuard] Instrument lookup failed for #{index_cfg[:key]} (segment: #{segment_code}, sid: #{index_cfg[:sid]})"
-          )
+          # Rails.logger.warn(
+          #   "[EntryGuard] Instrument lookup failed for #{index_cfg[:key]} (segment: #{segment_code}, sid: #{index_cfg[:sid]})"
+          # )
         end
 
         instrument

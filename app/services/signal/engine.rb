@@ -4,7 +4,7 @@ module Signal
   class Engine
     class << self
       def run_for(index_cfg)
-        Rails.logger.info("[Signal] Starting analysis for #{index_cfg[:key]} (#{index_cfg[:segment]})")
+        # Rails.logger.info("[Signal] Starting analysis for #{index_cfg[:key]} (#{index_cfg[:segment]})")
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
@@ -15,7 +15,7 @@ module Signal
                             nil
                           end
 
-        Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
+        # Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
 
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         unless instrument
@@ -75,11 +75,11 @@ module Signal
           end
 
           final_direction = multi_timeframe_direction(primary_analysis[:direction], confirmation_analysis[:direction])
-          Rails.logger.info("[Signal] Multi-timeframe decision for #{index_cfg[:key]}: primary=#{primary_analysis[:direction]} confirmation=#{confirmation_analysis[:direction]} final=#{final_direction}")
+          # Rails.logger.info("[Signal] Multi-timeframe decision for #{index_cfg[:key]}: primary=#{primary_analysis[:direction]} confirmation=#{confirmation_analysis[:direction]} final=#{final_direction}")
         end
 
         if final_direction == :avoid
-          Rails.logger.info("[Signal] Avoiding trade for #{index_cfg[:key]} - multi-timeframe bias mismatch or weak trend")
+          Rails.logger.info("[Signal] NOT proceeding for #{index_cfg[:key]}: multi-timeframe bias mismatch or weak trend")
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
@@ -88,7 +88,7 @@ module Signal
         validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
                                                      primary_analysis[:supertrend], { value: primary_analysis[:adx_value] })
         unless validation_result[:valid]
-          Rails.logger.warn("[Signal] Comprehensive validation failed for #{index_cfg[:key]}: #{validation_result[:reason]}")
+          Rails.logger.warn("[Signal] NOT proceeding for #{index_cfg[:key]}: #{validation_result[:reason]}")
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
@@ -127,7 +127,7 @@ module Signal
           }
         )
 
-        Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
+        # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
 
         picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: final_direction)
 
@@ -136,10 +136,10 @@ module Signal
           return
         end
 
-        Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.map { |p| "#{p[:symbol]}@#{p[:strike]}" }.join(', ')}")
+        Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.map { |p| p[:symbol] }.join(', ')}")
 
         picks.each_with_index do |pick, index|
-          Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
+          # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
           result = Entries::EntryGuard.try_enter(
             index_cfg: index_cfg,
             pick: pick,
@@ -148,13 +148,13 @@ module Signal
           )
 
           if result
-            Rails.logger.info("[Signal] Entry successful for #{index_cfg[:key]}: #{pick[:symbol]}")
+            # Rails.logger.info("[Signal] Entry successful for #{index_cfg[:key]}: #{pick[:symbol]}")
           else
             Rails.logger.warn("[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]}")
           end
         end
 
-        Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
+        # Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
       rescue StandardError => e
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
         Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
@@ -175,18 +175,18 @@ module Signal
           return { status: :no_data, message: message }
         end
 
-        Rails.logger.info("[Signal] Fetched #{series.candles.size} candles for #{index_cfg[:key]} @ #{timeframe}")
-        Rails.logger.debug { "[Signal] Adaptive Supertrend config: #{supertrend_cfg}" }
+        # Rails.logger.info("[Signal] Fetched #{series.candles.size} candles for #{index_cfg[:key]} @ #{timeframe}")
+        # Rails.logger.debug { "[Signal] Adaptive Supertrend config: #{supertrend_cfg}" }
 
         st_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)
         st = st_service.call
         last_multiplier = st[:adaptive_multipliers]&.compact&.last
-        Rails.logger.info(
-          "[Signal] Supertrend(#{timeframe}) for #{index_cfg[:key]}: trend=#{st[:trend]} last_value=#{st[:last_value]} multiplier=#{last_multiplier}"
-        )
+        # Rails.logger.info(
+        #   "[Signal] Supertrend(#{timeframe}) for #{index_cfg[:key]}: trend=#{st[:trend]} last_value=#{st[:last_value]} multiplier=#{last_multiplier}"
+        # )
 
         adx_value = instrument.adx(14, interval: interval)
-        Rails.logger.info("[Signal] ADX(#{timeframe}) for #{index_cfg[:key]}: #{adx_value}")
+        # Rails.logger.info("[Signal] ADX(#{timeframe}) for #{index_cfg[:key]}: #{adx_value}")
 
         direction = decide_direction(
           st,
@@ -307,7 +307,7 @@ module Signal
       # Comprehensive validation checks before proceeding with trades
       def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx)
         mode_config = get_validation_mode_config
-        Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction} (mode: #{mode_config[:mode]})")
+        # Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction} (mode: #{mode_config[:mode]})")
 
         validation_checks = []
 
@@ -330,7 +330,7 @@ module Signal
           adx_result = validate_adx_strength(adx, supertrend_result, mode_config)
           validation_checks << adx_result
         else
-          Rails.logger.debug('[Signal] ADX validation skipped (filter disabled)')
+          # Rails.logger.debug('[Signal] ADX validation skipped (filter disabled)')
           validation_checks << { valid: true, name: 'ADX Strength', message: 'ADX filter disabled' }
         end
 
@@ -345,17 +345,17 @@ module Signal
         validation_checks << timing_result
 
         # Log all validation results
-        Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
+        # Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
         validation_checks.each do |check|
           status = check[:valid] ? '✅' : '❌'
-          Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
+          # Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
         end
 
         # Determine overall validation result
         failed_checks = validation_checks.reject { |check| check[:valid] }
 
         if failed_checks.empty?
-          Rails.logger.info("[Signal] All validation checks passed for #{index_cfg[:key]} (#{mode_config[:mode]} mode)")
+          # Rails.logger.info("[Signal] All validation checks passed for #{index_cfg[:key]} (#{mode_config[:mode]} mode)")
           { valid: true, reason: 'All checks passed' }
         else
           failed_reasons = failed_checks.pluck(:name).join(', ')
@@ -551,11 +551,11 @@ module Signal
         min_required = min_strength.to_f
         adx_numeric = adx_value.to_f
 
-        Rails.logger.debug { "[Signal] ADX check(#{timeframe_label}): value=#{adx_numeric}, min_required=#{min_required}" }
+        # Rails.logger.debug { "[Signal] ADX check(#{timeframe_label}): value=#{adx_numeric}, min_required=#{min_required}" }
 
         # Only apply ADX filter if min_required is positive (i.e., ADX filter is enabled)
         if min_required.positive? && adx_numeric < min_required
-          Rails.logger.info("[Signal] ADX too weak on #{timeframe_label}: #{adx_numeric} < #{min_required}")
+          # Rails.logger.info("[Signal] ADX too weak on #{timeframe_label}: #{adx_numeric} < #{min_required}")
           return :avoid
         end
 
@@ -565,18 +565,18 @@ module Signal
         end
 
         trend = supertrend_result[:trend]
-        Rails.logger.debug { "[Signal] Supertrend trend(#{timeframe_label}): #{trend}" }
+        # Rails.logger.debug { "[Signal] Supertrend trend(#{timeframe_label}): #{trend}" }
 
         # Use the trend from Supertrend calculation
         case trend
         when :bullish
-          Rails.logger.info("[Signal] Bullish signal confirmed on #{timeframe_label}: ADX=#{adx_numeric}, Supertrend=#{trend}")
+          # Rails.logger.info("[Signal] Bullish signal confirmed on #{timeframe_label}: ADX=#{adx_numeric}, Supertrend=#{trend}")
           :bullish
         when :bearish
-          Rails.logger.info("[Signal] Bearish signal confirmed on #{timeframe_label}: ADX=#{adx_numeric}, Supertrend=#{trend}")
+          # Rails.logger.info("[Signal] Bearish signal confirmed on #{timeframe_label}: ADX=#{adx_numeric}, Supertrend=#{trend}")
           :bearish
         else
-          Rails.logger.info("[Signal] Neutral/unknown trend on #{timeframe_label}: #{trend}")
+          # Rails.logger.info("[Signal] Neutral/unknown trend on #{timeframe_label}: #{trend}")
           :avoid
         end
       end

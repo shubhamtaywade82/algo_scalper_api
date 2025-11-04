@@ -58,7 +58,7 @@ module Live
         sleep LOOP_INTERVAL_SECONDS
       end
     rescue StandardError => e
-      Rails.logger.error("OhlcPrefetcherService crashed: #{e.class} - #{e.message}")
+      # Rails.logger.error("OhlcPrefetcherService crashed: #{e.class} - #{e.message}")
       @running = false
     end
 
@@ -80,7 +80,7 @@ module Live
         segment_code: wl.segment
       )
       unless instrument
-        Rails.logger.debug { "[OHLC prefetch] Instrument not found for #{wl.segment}:#{wl.security_id}" }
+        # Rails.logger.debug { "[OHLC prefetch] Instrument not found for #{wl.segment}:#{wl.security_id}" }
         return
       end
 
@@ -121,9 +121,9 @@ module Live
         end
       end
 
-      Rails.logger.info("[OHLC prefetch] #{instrument.exchange_segment}:#{instrument.security_id} fetched=#{count} first=#{first_time} last=#{last_time} last_close=#{last_close}")
+      # Rails.logger.info("[OHLC prefetch] #{instrument.exchange_segment}:#{instrument.security_id} fetched=#{count} first=#{first_time} last=#{last_time} last_close=#{last_close}")
     rescue StandardError => e
-      Rails.logger.warn("[OHLC prefetch] Failed for #{wl.segment}:#{wl.security_id} - #{e.class}: #{e.message}")
+      # Rails.logger.warn("[OHLC prefetch] Failed for #{wl.segment}:#{wl.security_id} - #{e.class}: #{e.message}")
     end
   end
 end

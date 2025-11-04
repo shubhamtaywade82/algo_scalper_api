@@ -43,10 +43,10 @@ module Live
         # NOTE: Connection state will be updated to :connected when first tick is received
       end
 
-      Rails.logger.info("DhanHQ market feed started (mode=#{mode}, watchlist=#{@watchlist.count} instruments).")
+      # Rails.logger.info("DhanHQ market feed started (mode=#{mode}, watchlist=#{@watchlist.count} instruments).")
       true
     rescue StandardError => e
-      Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
+      # Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
       stop!
       false
     end
@@ -60,7 +60,7 @@ module Live
         begin
           @ws_client.disconnect!
         rescue StandardError => e
-          Rails.logger.warn("Error while stopping DhanHQ market feed: #{e.message}")
+          # Rails.logger.warn("Error while stopping DhanHQ market feed: #{e.message}")
         ensure
           @ws_client = nil
         end
@@ -84,7 +84,7 @@ module Live
         @last_tick_at && (Time.current - @last_tick_at) < 30.seconds
       end
     rescue StandardError => e
-      Rails.logger.warn("Error checking WebSocket connection: #{e.message}")
+      # Rails.logger.warn("Error checking WebSocket connection: #{e.message}")
       false
     end
 
@@ -155,7 +155,7 @@ module Live
       end
 
       @ws_client.subscribe_many(normalized_list)
-      Rails.logger.info("[MarketFeedHub] Batch subscribed to #{list.count} instruments")
+      # Rails.logger.info("[MarketFeedHub] Batch subscribed to #{list.count} instruments")
       list
     end
 
@@ -188,7 +188,7 @@ module Live
       end
 
       @ws_client.unsubscribe_many(normalized_list)
-      Rails.logger.info("[MarketFeedHub] Batch unsubscribed from #{list.count} instruments")
+      # Rails.logger.info("[MarketFeedHub] Batch unsubscribed from #{list.count} instruments")
       list
     end
 
@@ -226,7 +226,7 @@ module Live
 
       # pp tick  # Uncomment only for debugging - very noisy!
       # Log every tick (segment:security_id and LTP) for verification during development
-      # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
+      # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
       Live::TickCache.put(tick)
       ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
       @callbacks.each do |callback|
@@ -237,7 +237,7 @@ module Live
     def safe_invoke(callback, payload)
       callback.call(payload)
     rescue StandardError => e
-      Rails.logger.error("DhanHQ tick callback failed: #{e.class} - #{e.message}")
+      # Rails.logger.error("DhanHQ tick callback failed: #{e.class} - #{e.message}")
     end
 
     def subscribe_watchlist
@@ -253,7 +253,7 @@ module Live
       end
 
       @ws_client.subscribe_many(normalized_list)
-      Rails.logger.info("[MarketFeedHub] Subscribed to #{@watchlist.count} instruments using subscribe_many")
+      # Rails.logger.info("[MarketFeedHub] Subscribed to #{@watchlist.count} instruments using subscribe_many")
     end
 
     def load_watchlist
@@ -323,7 +323,7 @@ module Live
       # Connection will be marked as :connected when first tick is received
       # in handle_tick method
 
-      Rails.logger.debug('[MarketFeedHub] Connection handlers: Using tick-based connection monitoring')
+      # Rails.logger.debug('[MarketFeedHub] Connection handlers: Using tick-based connection monitoring')
     end
 
     def config

@@ -36,8 +36,8 @@ risk:
 signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
-  enable_confirmation_timeframe: false # Enable/disable 5m confirmation analysis
-  enable_adx_filter: false # Enable/disable ADX strength filtering
+  enable_confirmation_timeframe: true # Enable/disable 5m confirmation analysis
+  enable_adx_filter: true # Enable/disable ADX strength filtering
   validation_mode: "aggressive" # conservative | balanced | aggressive
   supertrend:
     period: 10

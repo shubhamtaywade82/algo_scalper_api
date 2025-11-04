@@ -41,7 +41,7 @@ module Trading
         indices = Array(AlgoConfig.fetch[:indices])
         indices.find { |cfg| cfg[:key].to_s.casecmp?(key) }
       rescue StandardError => e
-        Rails.logger.error("[AdminActions] Failed to resolve index config for #{key}: #{e.message}")
+        # Rails.logger.error("[AdminActions] Failed to resolve index config for #{key}: #{e.message}")
         nil
       end
     end

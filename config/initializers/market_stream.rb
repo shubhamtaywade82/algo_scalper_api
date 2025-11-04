@@ -43,11 +43,11 @@ Rails.application.config.to_prepare do
 
     # Perform initial position sync to ensure all DhanHQ positions are tracked
     MarketStreamLifecycle.safely_start do
-      Rails.logger.info("[PositionSync] Performing initial position synchronization...")
+      # Rails.logger.info("[PositionSync] Performing initial position synchronization...")
       Live::PositionSyncService.instance.force_sync!
     end
   else
-    Rails.logger.info("[MarketStream] Skipping automated trading services in #{Rails.const_defined?(:Console) ? 'console' : 'test'} mode")
+    # Rails.logger.info("[MarketStream] Skipping automated trading services in #{Rails.const_defined?(:Console) ? 'console' : 'test'} mode")
   end
 end
 

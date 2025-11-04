@@ -35,30 +35,30 @@ class InstrumentsImporter
     # ← NEW helper
     def fetch_csv_with_cache
       if CACHE_PATH.exist? && Time.current - CACHE_PATH.mtime < CACHE_MAX_AGE
-        Rails.logger.info "Using cached CSV (#{CACHE_PATH})"
+        # Rails.logger.info "Using cached CSV (#{CACHE_PATH})"
         return CACHE_PATH.read
       end
 
-      Rails.logger.info 'Downloading fresh CSV from Dhan…'
+      # Rails.logger.info 'Downloading fresh CSV from Dhan…'
       csv_text = URI.open(CSV_URL, &:read) # rubocop:disable Security/Open
 
       CACHE_PATH.dirname.mkpath
       File.write(CACHE_PATH, csv_text)
-      Rails.logger.info "Saved CSV to #{CACHE_PATH}"
+      # Rails.logger.info "Saved CSV to #{CACHE_PATH}"
 
       csv_text
     rescue StandardError => e
-      Rails.logger.warn "CSV download failed: #{e.message}"
+      # Rails.logger.warn "CSV download failed: #{e.message}"
       raise e if CACHE_PATH.exist? == false   # don’t swallow if no fallback
 
-      Rails.logger.warn 'Falling back to cached CSV (may be stale)'
+      # Rails.logger.warn 'Falling back to cached CSV (may be stale)'
       CACHE_PATH.read
     end
     private :fetch_csv_with_cache             # keep helper private
 
     def import_from_csv(csv_content)
       instruments_rows, derivatives_rows = build_batches(csv_content)
-      Rails.logger.debug do
+      # Rails.logger.debug do
         "instrument rows: #{instruments_rows.size}; derivative rows: #{derivatives_rows.size}"
       end
       # instruments_rows.uniq!  { |r| r.values_at(:security_id, :symbol_name, :exchange, :segment) }
@@ -163,7 +163,7 @@ class InstrumentsImporter
           ]
         }
       ).tap do |res|
-        Rails.logger.info "Upserted Instruments: #{res.ids.size}"
+        # Rails.logger.info "Upserted Instruments: #{res.ids.size}"
       end
     end
 
@@ -173,8 +173,8 @@ class InstrumentsImporter
     def import_derivatives!(rows)
       with_parent, without_parent = attach_instrument_ids(rows)
 
-      Rails.logger.info "Derivatives w/ parent: #{with_parent.size}"
-      Rails.logger.info "Derivatives w/o parent: #{without_parent.size}"
+      # Rails.logger.info "Derivatives w/ parent: #{with_parent.size}"
+      # Rails.logger.info "Derivatives w/o parent: #{without_parent.size}"
 
       return if with_parent.empty?
 
@@ -189,7 +189,7 @@ class InstrumentsImporter
           ]
         }
       ).tap do |res|
-        Rails.logger.info "Upserted Derivatives: #{res.ids.size}"
+        # Rails.logger.info "Upserted Derivatives: #{res.ids.size}"
       end
     end
 
@@ -210,7 +210,7 @@ class InstrumentsImporter
         h[key]   = id
       end
 
-      Rails.logger.debug { "lookup size: #{lookup.size}" }
+      # Rails.logger.debug { "lookup size: #{lookup.size}" }
 
       with_parent    = []
       without_parent = []

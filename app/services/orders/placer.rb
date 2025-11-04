@@ -20,7 +20,7 @@ module Orders
           Rails.logger.warn("[Orders] client_order_id truncated to '#{normalized_id}' (was '#{client_order_id}')")
         end
 
-        Rails.logger.info("[Orders] Placing BUY order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{normalized_id}")
+        # Rails.logger.info("[Orders] Placing BUY order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{normalized_id}")
 
         payload = {
           transaction_type: 'BUY',
@@ -43,13 +43,14 @@ module Orders
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info('[Orders] BUY Order placed successfully')
+            Rails.logger.info("[Orders] BUY Order Response: #{order.inspect}")
+            # Rails.logger.info('[Orders] BUY Order placed successfully')
           rescue StandardError => e
             Rails.logger.error("[Orders] Failed to place order: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          Rails.logger.info('[Orders] BUY Order NOT placed - ENABLE_ORDER=false (dry run mode)')
+          # Rails.logger.info('[Orders] BUY Order NOT placed - ENABLE_ORDER=false (dry run mode)')
           order = nil
         end
 
@@ -97,7 +98,7 @@ module Orders
           Rails.logger.warn("[Orders] Unknown position type: #{position_type} - proceeding with SELL order")
         end
 
-        Rails.logger.info("[Orders] Placing SELL order: seg=#{actual_segment}, sid=#{sid}, qty=#{actual_qty}, client_order_id=#{normalized_id}, product_type=#{position_details[:product_type]}, position_type=#{position_type}")
+        # Rails.logger.info("[Orders] Placing SELL order: seg=#{actual_segment}, sid=#{sid}, qty=#{actual_qty}, client_order_id=#{normalized_id}, product_type=#{position_details[:product_type]}, position_type=#{position_type}")
 
         payload = {
           transaction_type: 'SELL',
@@ -117,13 +118,14 @@ module Orders
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info('[Orders] SELL Order placed successfully')
+            Rails.logger.info("[Orders] SELL Order Response: #{order.inspect}")
+            # Rails.logger.info('[Orders] SELL Order placed successfully')
           rescue StandardError => e
             Rails.logger.error("[Orders] Failed to place order: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          Rails.logger.info('[Orders] SELL Order NOT placed - ENABLE_ORDER=false (dry run mode)')
+          # Rails.logger.info('[Orders] SELL Order NOT placed - ENABLE_ORDER=false (dry run mode)')
           order = nil
         end
         remember(normalized_id)
@@ -168,7 +170,7 @@ module Orders
                              return nil
                            end
 
-        Rails.logger.info("[Orders] Placing EXIT order: #{transaction_type} #{actual_segment}:#{sid} qty=#{actual_qty}, product_type=#{position_details[:product_type]}, position_type=#{position_type}")
+        # Rails.logger.info("[Orders] Placing EXIT order: #{transaction_type} #{actual_segment}:#{sid} qty=#{actual_qty}, product_type=#{position_details[:product_type]}, position_type=#{position_type}")
 
         payload = {
           transaction_type: transaction_type,
@@ -188,13 +190,14 @@ module Orders
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info('[Orders] EXIT Order placed successfully')
+            Rails.logger.info("[Orders] EXIT Order Response: #{order.inspect}")
+            # Rails.logger.info('[Orders] EXIT Order placed successfully')
           rescue StandardError => e
             Rails.logger.error("[Orders] Failed to place exit order: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          Rails.logger.info('[Orders] EXIT Order NOT placed - ENABLE_ORDER=false (dry run mode)')
+          # Rails.logger.info('[Orders] EXIT Order NOT placed - ENABLE_ORDER=false (dry run mode)')
           order = nil
         end
 
@@ -209,7 +212,7 @@ module Orders
         position = positions.find { |p| p.security_id.to_s == security_id.to_s }
 
         if position
-          Rails.logger.debug { "[Orders] Found position for #{security_id}: product_type=#{position.product_type}, net_qty=#{position.net_qty}" }
+          # Rails.logger.debug { "[Orders] Found position for #{security_id}: product_type=#{position.product_type}, net_qty=#{position.net_qty}" }
           {
             product_type: position.product_type,
             net_qty: position.net_qty,

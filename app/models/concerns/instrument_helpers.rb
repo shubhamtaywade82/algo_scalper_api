@@ -28,7 +28,7 @@ module InstrumentHelpers
 
     def subscribe
       Live::WsHub.instance.subscribe(seg: exchange_segment, sid: security_id.to_s)
-      Rails.logger.info("Subscribed #{self.class.name} #{security_id} to WS feed.")
+      # Rails.logger.info("Subscribed #{self.class.name} #{security_id} to WS feed.")
       true
     rescue StandardError => e
       Rails.logger.error("Failed to subscribe #{self.class.name} #{security_id}: #{e.message}")
@@ -37,7 +37,7 @@ module InstrumentHelpers
 
     def unsubscribe
       Live::WsHub.instance.unsubscribe(seg: exchange_segment, sid: security_id.to_s)
-      Rails.logger.info("Unsubscribed #{self.class.name} #{security_id} from WS feed.")
+      # Rails.logger.info("Unsubscribed #{self.class.name} #{security_id} from WS feed.")
       true
     rescue StandardError => e
       Rails.logger.error("Failed to unsubscribe #{self.class.name} #{security_id}: #{e.message}")

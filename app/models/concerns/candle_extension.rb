@@ -12,7 +12,7 @@ module CandleExtension
       disable_caching = freshness_config[:disable_ohlc_caching] || false
 
       if disable_caching
-        Rails.logger.debug { "[CandleExtension] Fresh data mode - bypassing cache for #{symbol_name}" }
+        # Rails.logger.debug { "[CandleExtension] Fresh data mode - bypassing cache for #{symbol_name}" }
         return fetch_fresh_candles(interval)
       end
 

@@ -68,7 +68,7 @@ module Live
         tracker.mark_cancelled!
       end
     rescue StandardError => e
-      Rails.logger.error("Failed to process Dhan order update: #{e.class} - #{e.message}")
+      # Rails.logger.error("Failed to process Dhan order update: #{e.class} - #{e.message}")
     end
 
     def safe_decimal(value)

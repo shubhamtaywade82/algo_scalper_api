@@ -12,7 +12,7 @@ module Live
     def initialize
       @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/0'))
     rescue StandardError => e
-      Rails.logger.error("Failed to initialize Redis PnL cache: #{e.message}")
+      # Rails.logger.error("Failed to initialize Redis PnL cache: #{e.message}")
       @redis = nil
     end
 
@@ -31,9 +31,9 @@ module Live
       @redis.hset(key, data)
       @redis.expire(key, TTL_SECONDS)
 
-      Rails.logger.debug { "[RedisPnL] Stored PnL for tracker #{tracker_id}: #{pnl}" }
+      # Rails.logger.debug { "[RedisPnL] Stored PnL for tracker #{tracker_id}: #{pnl}" }
     rescue StandardError => e
-      Rails.logger.error("Failed to store PnL in Redis for tracker #{tracker_id}: #{e.message}")
+      # Rails.logger.error("Failed to store PnL in Redis for tracker #{tracker_id}: #{e.message}")
     end
 
     def fetch_pnl(tracker_id)
@@ -51,7 +51,7 @@ module Live
         updated_at: data['updated_at']&.to_i
       }
     rescue StandardError => e
-      Rails.logger.error("Failed to fetch PnL from Redis for tracker #{tracker_id}: #{e.message}")
+      # Rails.logger.error("Failed to fetch PnL from Redis for tracker #{tracker_id}: #{e.message}")
       nil
     end
 
@@ -68,9 +68,9 @@ module Live
       @redis.hset(key, data)
       @redis.expire(key, TTL_SECONDS)
 
-      Rails.logger.debug { "[RedisPnL] Stored tick for #{segment}:#{security_id}: #{ltp}" }
+      # Rails.logger.debug { "[RedisPnL] Stored tick for #{segment}:#{security_id}: #{ltp}" }
     rescue StandardError => e
-      Rails.logger.error("Failed to store tick in Redis for #{segment}:#{security_id}: #{e.message}")
+      # Rails.logger.error("Failed to store tick in Redis for #{segment}:#{security_id}: #{e.message}")
     end
 
     def fetch_tick(segment:, security_id:)
@@ -86,7 +86,7 @@ module Live
         updated_at: data['updated_at']&.to_i
       }
     rescue StandardError => e
-      Rails.logger.error("Failed to fetch tick from Redis for #{segment}:#{security_id}: #{e.message}")
+      # Rails.logger.error("Failed to fetch tick from Redis for #{segment}:#{security_id}: #{e.message}")
       nil
     end
 
@@ -97,7 +97,7 @@ module Live
       age_seconds = Time.current.to_i - tick_data[:timestamp]
       age_seconds <= max_age_seconds
     rescue StandardError => e
-      Rails.logger.error("Failed to check tick freshness for #{segment}:#{security_id}: #{e.message}")
+      # Rails.logger.error("Failed to check tick freshness for #{segment}:#{security_id}: #{e.message}")
       false
     end
 
@@ -106,9 +106,9 @@ module Live
 
       pnl_key = pnl_key(tracker_id)
       @redis.del(pnl_key)
-      Rails.logger.info("[RedisPnL] Cleared PnL cache for tracker #{tracker_id}")
+      # Rails.logger.info("[RedisPnL] Cleared PnL cache for tracker #{tracker_id}")
     rescue StandardError => e
-      Rails.logger.error("Failed to clear Redis PnL cache for tracker #{tracker_id}: #{e.message}")
+      # Rails.logger.error("Failed to clear Redis PnL cache for tracker #{tracker_id}: #{e.message}")
     end
 
     def clear_tick(segment:, security_id:)
@@ -116,9 +116,9 @@ module Live
 
       key = tick_key(segment, security_id)
       @redis.del(key)
-      Rails.logger.info("[RedisPnL] Cleared tick cache for #{segment}:#{security_id}")
+      # Rails.logger.info("[RedisPnL] Cleared tick cache for #{segment}:#{security_id}")
     rescue StandardError => e
-      Rails.logger.error("Failed to clear Redis tick cache for #{segment}:#{security_id}: #{e.message}")
+      # Rails.logger.error("Failed to clear Redis tick cache for #{segment}:#{security_id}: #{e.message}")
     end
 
     def health_check

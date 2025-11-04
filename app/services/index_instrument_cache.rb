@@ -15,7 +15,7 @@ class IndexInstrumentCache
 
     # Return cached instrument if still valid
     if cached?(cache_key)
-      Rails.logger.debug { "[IndexCache] Using cached instrument for #{index_cfg[:key]} (#{index_cfg[:segment]})" }
+      # Rails.logger.debug { "[IndexCache] Using cached instrument for #{index_cfg[:key]} (#{index_cfg[:segment]})" }
       return @cache[cache_key]
     end
 
@@ -24,7 +24,7 @@ class IndexInstrumentCache
     if instrument
       @cache[cache_key] = instrument
       @cache_timestamps[cache_key] = Time.current
-      Rails.logger.info("[IndexCache] Cached instrument for #{index_cfg[:key]} (#{index_cfg[:segment]}): #{instrument.symbol_name}")
+      # Rails.logger.info("[IndexCache] Cached instrument for #{index_cfg[:key]} (#{index_cfg[:segment]}): #{instrument.symbol_name}")
     end
 
     instrument
@@ -35,11 +35,11 @@ class IndexInstrumentCache
       cache_key = "#{index_cfg[:key]}_#{index_cfg[:sid]}_#{index_cfg[:segment]}"
       @cache.delete(cache_key)
       @cache_timestamps.delete(cache_key)
-      Rails.logger.info("[IndexCache] Cleared cache for #{index_cfg[:key]} (#{index_cfg[:segment]})")
+      # Rails.logger.info("[IndexCache] Cleared cache for #{index_cfg[:key]} (#{index_cfg[:segment]})")
     else
       @cache.clear
       @cache_timestamps.clear
-      Rails.logger.info('[IndexCache] Cleared all cached instruments')
+      # Rails.logger.info('[IndexCache] Cleared all cached instruments')
     end
   end
 
@@ -70,12 +70,12 @@ class IndexInstrumentCache
     )
 
     if instrument
-      Rails.logger.debug { "[IndexCache] Found existing instrument in DB: #{instrument.symbol_name} (#{segment_key})" }
+      # Rails.logger.debug { "[IndexCache] Found existing instrument in DB: #{instrument.symbol_name} (#{segment_key})" }
       return instrument
     end
 
     # If not found, create a temporary instrument object with the config
-    Rails.logger.info("[IndexCache] Creating temporary instrument for #{index_cfg[:key]} (SID: #{index_cfg[:sid]}, Segment: #{index_cfg[:segment]})")
+    # Rails.logger.info("[IndexCache] Creating temporary instrument for #{index_cfg[:key]} (SID: #{index_cfg[:sid]}, Segment: #{index_cfg[:segment]})")
 
     exchange = determine_exchange(index_cfg)
     Instrument.new(

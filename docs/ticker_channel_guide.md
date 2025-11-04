@@ -24,7 +24,7 @@ class TickerChannel < ApplicationCable::Channel
 
   def subscribed
     stream_for CHANNEL_ID
-    Rails.logger.info("TickerChannel subscription established")
+    # Rails.logger.info("TickerChannel subscription established")
   end
 
   def unsubscribed

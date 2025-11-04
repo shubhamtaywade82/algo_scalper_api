@@ -14,7 +14,7 @@ module Live
 
       @running = true
       @thread = Thread.new do
-        Rails.logger.info('[MockData] Starting mock data service')
+        # Rails.logger.info('[MockData] Starting mock data service')
 
         while @running
           begin
@@ -37,12 +37,12 @@ module Live
               # Populate TickCache (like real WebSocket does)
               Live::TickCache.put(tick_data)
 
-              Rails.logger.debug { "[MockData] Generated tick for #{data[:name]}: #{data[:ltp]}" }
+              # Rails.logger.debug { "[MockData] Generated tick for #{data[:name]}: #{data[:ltp]}" }
             end
 
             sleep 2 # Update every 2 seconds
           rescue StandardError => e
-            Rails.logger.error("[MockData] Error: #{e.message}")
+            # Rails.logger.error("[MockData] Error: #{e.message}")
             sleep 5
           end
         end
@@ -52,7 +52,7 @@ module Live
     def stop!
       @running = false
       @thread&.join
-      Rails.logger.info('[MockData] Mock data service stopped')
+      # Rails.logger.info('[MockData] Mock data service stopped')
     end
 
     def running?

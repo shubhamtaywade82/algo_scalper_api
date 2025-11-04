@@ -205,7 +205,7 @@ module Live
         tracker.with_lock do
           next unless tracker.status == PositionTracker::STATUSES[:active]
 
-          Rails.logger.info("Triggering exit for #{tracker.order_no} due to #{reason}.")
+          Rails.logger.info("[RiskManager] Exiting #{tracker.order_no} (#{tracker.symbol}): #{reason}")
           execute_exit(position, tracker, reason: reason)
         end
       end
@@ -222,7 +222,7 @@ module Live
       market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
       return if market_close_time && current_time >= market_close_time
 
-      Rails.logger.info("[TimeExit] Enforcing time-based exit at #{current_time.strftime('%H:%M:%S')}")
+      # Rails.logger.info("[TimeExit] Enforcing time-based exit at #{current_time.strftime('%H:%M:%S')}")
 
       PositionTracker.active.includes(:instrument).find_each do |tracker|
         position = positions[tracker.security_id.to_s]
@@ -230,7 +230,7 @@ module Live
         tracker.with_lock do
           next unless tracker.status == PositionTracker::STATUSES[:active]
 
-          Rails.logger.info("[TimeExit] Triggering time-based exit for #{tracker.order_no}")
+          Rails.logger.info("[RiskManager] Time-based exit for #{tracker.order_no} (#{tracker.symbol})")
           execute_exit(position, tracker, reason: "time-based exit (#{exit_time.strftime('%H:%M')})")
         end
       end
@@ -265,7 +265,7 @@ module Live
             option_data = response.dig('data', 'NSE_FNO', tracker.security_id)
             if option_data && option_data['last_price']
               ltp = BigDecimal(option_data['last_price'].to_s)
-              Rails.logger.info("Fetched option LTP for #{tracker.security_id}: #{ltp}")
+              # Rails.logger.info("Fetched option LTP for #{tracker.security_id}: #{ltp}")
 
               # Store in Redis for future use
               Live::RedisPnlCache.instance.store_tick(
@@ -286,7 +286,7 @@ module Live
             cached = Live::TickCache.ltp('NSE_FNO', tracker.security_id)
             if cached
               ltp = BigDecimal(cached.to_s)
-              Rails.logger.info("Using cached option LTP for #{tracker.security_id}: #{ltp}")
+              # Rails.logger.info("Using cached option LTP for #{tracker.security_id}: #{ltp}")
 
               # Store in Redis for future use
               Live::RedisPnlCache.instance.store_tick(
@@ -376,7 +376,7 @@ module Live
         # Correct PnL calculation for options: (Current LTP - Cost Price) × Position Quantity
         pnl = (ltp - BigDecimal(cost_price.to_s)) * quantity
 
-        Rails.logger.debug { "Option PnL calculation: (#{ltp} - #{cost_price}) × #{quantity} = #{pnl}" }
+        # Rails.logger.debug { "Option PnL calculation: (#{ltp} - #{cost_price}) × #{quantity} = #{pnl}" }
         return pnl
       end
 
@@ -450,7 +450,7 @@ module Live
 
     def execute_exit(position, tracker, reason: 'manual')
       pnl_display = tracker.last_pnl_rupees ? tracker.last_pnl_rupees.to_s : 'N/A'
-      Rails.logger.info("Triggering exit for #{tracker.order_no} (reason: #{reason}, PnL=#{pnl_display}).")
+      Rails.logger.info("[RiskManager] Exiting #{tracker.order_no} (#{tracker.symbol}): #{reason}, PnL=#{pnl_display}")
       store_exit_reason(tracker, reason)
 
       # Attempt to exit position and check if successful
@@ -462,7 +462,7 @@ module Live
 
         # Mark as exited only if order was placed successfully
         tracker.mark_exited!
-        Rails.logger.info("Successfully exited position #{tracker.order_no}")
+        # Rails.logger.info("Successfully exited position #{tracker.order_no}")
       else
         Rails.logger.error("Failed to place exit order for #{tracker.order_no} - position remains active")
         # Don't mark as exited if order placement failed

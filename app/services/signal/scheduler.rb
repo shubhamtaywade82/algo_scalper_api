@@ -60,7 +60,7 @@ module Signal
       thread.kill
       thread.join(2)
     rescue StandardError => e
-      Rails.logger.warn("Signal::Scheduler stop encountered: #{e.class} - #{e.message}")
+      # Rails.logger.warn("Signal::Scheduler stop encountered: #{e.class} - #{e.message}")
     end
 
     # Indicates whether the scheduler thread is alive.

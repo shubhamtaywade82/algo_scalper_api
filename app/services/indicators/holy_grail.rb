@@ -99,19 +99,19 @@ module Indicators
         case bias
         when :bullish
           passed = adx14 >= adx_gate && momentum == :up
-          Rails.logger.debug { "[HolyGrail] Not proceeding (bullish): adx=#{adx14} gate=#{adx_gate}, momentum=#{momentum}" } unless passed
+          # Rails.logger.debug { "[HolyGrail] Not proceeding (bullish): adx=#{adx14} gate=#{adx_gate}, momentum=#{momentum}" } unless passed
           passed
         when :bearish
           passed = adx14 >= adx_gate && momentum == :down
-          Rails.logger.debug { "[HolyGrail] Not proceeding (bearish): adx=#{adx14} gate=#{adx_gate}, momentum=#{momentum}" } unless passed
+          # Rails.logger.debug { "[HolyGrail] Not proceeding (bearish): adx=#{adx14} gate=#{adx_gate}, momentum=#{momentum}" } unless passed
           passed
         else
-          Rails.logger.debug { "[HolyGrail] Not proceeding (#{bias}): neutral bias, adx=#{adx14}, momentum=#{momentum}, gate=#{adx_gate}" }
+          # Rails.logger.debug { "[HolyGrail] Not proceeding (#{bias}): neutral bias, adx=#{adx14}, momentum=#{momentum}, gate=#{adx_gate}" }
           false
         end
 
       latest_time = Time.zone.at(stamps.last)
-      Rails.logger.debug { "[HolyGrail] (#{latest_time}) proceed?=#{proceed}" }
+      # Rails.logger.debug { "[HolyGrail] (#{latest_time}) proceed?=#{proceed}" }
 
       trend =
         if ema200 < closes.last && sma50 > ema200 then :up

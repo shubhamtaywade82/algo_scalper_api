@@ -4,7 +4,7 @@
 RSpec.configure do |config|
   config.before(:suite) do
     # Ensure all trading services are stopped before running tests
-    Rails.logger.info('[TestHelper] Ensuring trading services are stopped for test suite')
+    # Rails.logger.info('[TestHelper] Ensuring trading services are stopped for test suite')
 
     begin
       Live::MarketFeedHub.instance.stop! if Live::MarketFeedHub.instance.running?
@@ -24,13 +24,13 @@ RSpec.configure do |config|
         Live::MockDataService.instance.stop!
       end
     rescue StandardError => e
-      Rails.logger.warn("[TestHelper] Error stopping services: #{e.message}")
+      # Rails.logger.warn("[TestHelper] Error stopping services: #{e.message}")
     end
   end
 
   config.after(:suite) do
     # Clean up any remaining services after test suite
-    Rails.logger.info('[TestHelper] Cleaning up trading services after test suite')
+    # Rails.logger.info('[TestHelper] Cleaning up trading services after test suite')
 
     begin
       Live::MarketFeedHub.instance.stop! if Live::MarketFeedHub.instance.running?
@@ -50,7 +50,7 @@ RSpec.configure do |config|
         Live::MockDataService.instance.stop!
       end
     rescue StandardError => e
-      Rails.logger.warn("[TestHelper] Error cleaning up services: #{e.message}")
+      # Rails.logger.warn("[TestHelper] Error cleaning up services: #{e.message}")
     end
   end
 end
