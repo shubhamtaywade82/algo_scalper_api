@@ -5,20 +5,30 @@ module Entries
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1)
         instrument = find_instrument(index_cfg)
-        return false unless instrument
+        unless instrument
+          Rails.logger.warn("[EntryGuard] Instrument not found for #{index_cfg[:key]} (segment: #{index_cfg[:segment]}, sid: #{index_cfg[:sid]})")
+          return false
+        end
 
         multiplier = [scale_multiplier.to_i, 1].max
-        # Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
+        Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
 
         side = direction == :bullish ? 'long_ce' : 'long_pe'
-        return false unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
-        return false if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
+        unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
+          Rails.logger.warn("[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})")
+          return false
+        end
+
+        if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
+          Rails.logger.warn("[EntryGuard] Cooldown active for #{index_cfg[:key]}: #{pick[:symbol]}")
+          return false
+        end
 
         # Never block due to WebSocket - always allow REST API fallback
         # Log WebSocket status for monitoring but don't block
         hub = Live::MarketFeedHub.instance
         unless hub.running? && hub.connected?
-          # Rails.logger.info('[EntryGuard] WebSocket not connected - will use REST API fallback for LTP')
+          Rails.logger.info('[EntryGuard] WebSocket not connected - will use REST API fallback for LTP')
         end
 
         # Rails.logger.debug { "[EntryGuard] Pick data: #{pick.inspect}" }
@@ -30,7 +40,10 @@ module Entries
           ltp = resolved_ltp if resolved_ltp.present?
         end
 
-        return false unless ltp.present? && ltp.to_f.positive?
+        unless ltp.present? && ltp.to_f.positive?
+          Rails.logger.warn("[EntryGuard] Invalid LTP for #{index_cfg[:key]}: #{pick[:symbol]} (ltp: #{ltp.inspect})")
+          return false
+        end
 
         quantity = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
@@ -38,7 +51,10 @@ module Entries
           derivative_lot_size: pick[:lot_size],
           scale_multiplier: multiplier
         )
-        return false if quantity <= 0
+        if quantity <= 0
+          Rails.logger.warn("[EntryGuard] Invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, ltp: #{ltp}, lot_size: #{pick[:lot_size]})")
+          return false
+        end
 
         response = Orders.config.place_market(
           side: 'buy',
@@ -52,7 +68,10 @@ module Entries
         )
 
         order_no = extract_order_no(response)
-        return false unless order_no
+        unless order_no
+          Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+          return false
+        end
 
         create_tracker!(
           instrument: instrument,
@@ -72,20 +91,40 @@ module Entries
       end
 
       def exposure_ok?(instrument:, side:, max_same_side:)
+        max_allowed = max_same_side.to_i
+
+        # Safety check: if max_same_side is not configured (nil or 0), default to 1
+        if max_allowed <= 0
+          Rails.logger.warn("[EntryGuard] Invalid max_same_side value: #{max_same_side.inspect}, defaulting to 1")
+          max_allowed = 1
+        end
+
         # Use efficient query with index
         active_positions = PositionTracker.where(
           instrument: instrument,
           side: side,
           status: PositionTracker::STATUSES[:active]
-        ).limit(max_same_side.to_i + 1) # Only fetch what we need
+        ).limit(max_allowed + 1) # Only fetch what we need
         current_count = active_positions.count
 
+        Rails.logger.debug { "[EntryGuard] Exposure check for #{instrument.symbol_name}: side=#{side}, current=#{current_count}, max=#{max_allowed}" }
+
         # Check if we've reached the maximum allowed positions
-        return false if current_count >= max_same_side.to_i
+        if current_count >= max_allowed
+          Rails.logger.warn("[EntryGuard] Exposure limit reached for #{instrument.symbol_name}: #{current_count} >= #{max_allowed} (side: #{side})")
+          return false
+        end
 
         # If this would be the second position, check pyramiding rules
-        return pyramiding_allowed?(active_positions.first) if current_count == 1
+        if current_count == 1
+          first_position = active_positions.first
+          unless pyramiding_allowed?(first_position)
+            Rails.logger.warn("[EntryGuard] Pyramiding not allowed for #{instrument.symbol_name}: first position PnL=#{first_position.last_pnl_rupees}, updated_at=#{first_position.updated_at}")
+            return false
+          end
+        end
 
+        Rails.logger.debug { "[EntryGuard] Exposure check passed for #{instrument.symbol_name}: #{current_count} < #{max_allowed}" }
         true
       end
 
@@ -98,7 +137,7 @@ module Entries
         min_profit_duration = 5.minutes
         return false unless first_position.updated_at < min_profit_duration.ago
 
-        # Rails.logger.info("[Pyramiding] Allowing second position - first position profitable: #{first_position.last_pnl_rupees}")
+        Rails.logger.info("[Pyramiding] Allowing second position - first position profitable: #{first_position.last_pnl_rupees}")
         true
       rescue StandardError => e
         Rails.logger.error("Pyramiding check failed: #{e.message}")

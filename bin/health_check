@@ -298,7 +298,6 @@ class HealthChecker
         "Live::MarketFeedHub",
         "Orders::Placer",
         "Signal::Engine",
-        "Trading::DataFetcherService"
       ]
 
       services.each do |service_name|

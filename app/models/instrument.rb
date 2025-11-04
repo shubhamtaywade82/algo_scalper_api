@@ -278,9 +278,6 @@ class Instrument < ApplicationRecord
   end
 
   def option_chain(expiry: nil)
-    Trading::DataFetcherService.new.fetch_option_chain(
-      instrument: self,
-      expiry: expiry
-    )
+    fetch_option_chain(expiry)
   end
 end

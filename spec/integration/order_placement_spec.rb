@@ -7,7 +7,7 @@ require 'rails_helper'
 # rubocop:disable RSpec/StubbedMock
 RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
   let(:order_placer) { Orders::Placer }
-  let(:trading_service) { Trading::TradingService.new }
+  # Removed: Trading::TradingService (redundant legacy implementation)
   let(:entry_guard) { Entries::EntryGuard }
   let(:mock_order) { double('Order', id: 'ORD123456', order_id: 'ORD123456') }
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
@@ -212,84 +212,8 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
     end
   end
 
-  describe 'Trading Service Integration' do
-    let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
-    let(:derivative) { create(:derivative, security_id: '12345CE', lot_size: 50) }
-
-    before do
-      allow(instrument).to receive(:subscribe!)
-      allow(derivative).to receive(:subscribe)
-      allow(trading_service).to receive_messages(active_positions_for: 0, active_positions_for_security: 0,
-                                                 dhanhq_enabled?: true, global_position_limit_reached?: false)
-    end
-
-    context 'when executing trading cycle' do
-      it 'processes instruments and places orders' do
-        allow(Instrument).to receive(:enabled).and_return(Instrument.where(id: instrument.id))
-        allow(trading_service).to receive(:process_instrument)
-
-        trading_service.execute_cycle!
-
-        # Test passes if no exception is raised - service calls mocked method
-        expect(trading_service).to have_received(:process_instrument)
-      end
-
-      it 'skips processing when DhanHQ is disabled' do
-        allow(trading_service).to receive(:dhanhq_enabled?).and_return(false)
-
-        trading_service.execute_cycle!
-
-        # Test passes if no exception is raised - no processing when disabled
-        expect { trading_service.execute_cycle! }.not_to raise_error
-      end
-
-      it 'skips processing when position limit reached' do
-        allow(trading_service).to receive(:global_position_limit_reached?).and_return(true)
-
-        trading_service.execute_cycle!
-
-        # Test passes if no exception is raised - no processing when limit reached
-        expect { trading_service.execute_cycle! }.not_to raise_error
-      end
-    end
-
-    context 'when processing individual instruments' do
-      it 'places market order for long signal' do
-        expect { trading_service.send(:process_instrument, instrument) }.not_to raise_error
-      end
-
-      it 'skips processing for non-long signals' do
-        allow(trading_service.instance_variable_get(:@trend_identifier)).to receive(:signal_for).and_return(:short)
-
-        expect { trading_service.send(:process_instrument, instrument) }.not_to raise_error
-      end
-
-      it 'skips processing when no derivative selected' do
-        allow(trading_service.instance_variable_get(:@trend_identifier)).to receive(:signal_for).and_return(:long)
-        allow(trading_service.instance_variable_get(:@strike_selector)).to receive(:select_for).and_return(nil)
-
-        expect { trading_service.send(:process_instrument, instrument) }.not_to raise_error
-      end
-
-      it 'handles processing errors gracefully' do
-        # Mock the trend identifier to raise an error
-        allow(trading_service.instance_variable_get(:@trend_identifier)).to receive(:signal_for).and_raise(
-          StandardError, 'Processing error'
-        )
-
-        # Verify that the method can be called without crashing
-        expect { trading_service.send(:process_instrument, instrument) }.not_to raise_error
-      end
-    end
-
-    context 'when submitting market orders' do
-      it 'creates order with correct parameters' do
-        result = trading_service.send(:submit_market_order, instrument, derivative)
-
-        expect(result).to eq(mock_order)
-      end
-    end
-  end
+  # Removed: Trading Service Integration tests (service removed as redundant)
+  # Current system uses Signal::Engine + Signal::Scheduler for signal generation
 
   describe 'Entry Guard Integration' do
     let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
@@ -585,27 +509,15 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
 
     context 'when managing order risk' do
       it 'implements position size limits' do
-        # Test that position limits are enforced
-        # This is a simplified test that doesn't trigger complex service interactions
-
-        # Mock the trading service to return position count
-        allow(trading_service).to receive(:active_positions_for).and_return(3)
-
-        # Test that the service can check position limits
-        position_count = trading_service.send(:active_positions_for, '12345')
-        expect(position_count).to eq(3)
+        # Position limits are enforced by EntryGuard and PositionTracker
+        # This functionality is tested in EntryGuard specs
+        expect(PositionTracker).to respond_to(:active)
       end
 
       it 'implements per-security position limits' do
-        # Test that position limits are enforced
-        # This is a simplified test that doesn't trigger complex service interactions
-
-        # Mock the trading service to return position count
-        allow(trading_service).to receive(:active_positions_for_security).and_return(3)
-
-        # Test that the service can check position limits
-        position_count = trading_service.send(:active_positions_for_security, '12345')
-        expect(position_count).to eq(3)
+        # Position limits are enforced by EntryGuard and PositionTracker
+        # This functionality is tested in EntryGuard specs
+        expect(PositionTracker).to respond_to(:active)
       end
     end
   end

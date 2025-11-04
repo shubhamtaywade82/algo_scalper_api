@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integration do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
   let(:signal_engine) { Signal::Engine }
-  let(:trend_identifier) { Trading::TrendIdentifier.new }
+  # Removed: Trading::TrendIdentifier (redundant legacy implementation)
   let(:holy_grail_service) { Indicators::HolyGrail.new(candles: candle_data, config: Indicators::HolyGrail.demo_config) }
   let(:candle_data) do
     {
@@ -250,45 +250,8 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
     end
   end
 
-  describe 'Trend Identifier Integration' do
-    context 'when identifying trends' do
-      it 'identifies bullish trend' do
-        allow(trend_identifier).to receive(:signal_for).with(instrument).and_return(:long)
-
-        signal = trend_identifier.signal_for(instrument)
-
-        expect(signal).to eq(:long)
-      end
-
-      it 'identifies bearish trend' do
-        allow(trend_identifier).to receive(:signal_for).with(instrument).and_return(:short)
-
-        signal = trend_identifier.signal_for(instrument)
-
-        expect(signal).to eq(:short)
-      end
-
-      it 'identifies neutral trend' do
-        allow(trend_identifier).to receive(:signal_for).with(instrument).and_return(:neutral)
-
-        signal = trend_identifier.signal_for(instrument)
-
-        expect(signal).to eq(:neutral)
-      end
-    end
-
-    context 'when analyzing trend strength' do
-      it 'analyzes trend strength correctly' do
-        # Test that the trend identifier can generate signals
-        # Since analyze_trend_strength doesn't exist, test the signal_for method instead
-        allow(trend_identifier).to receive(:signal_for).with(instrument).and_return(:long)
-
-        signal = trend_identifier.signal_for(instrument)
-
-        expect(signal).to eq(:long)
-      end
-    end
-  end
+  # Removed: Trend Identifier Integration tests (service removed as redundant)
+  # Current system uses Signal::Engine for signal generation with Supertrend + ADX
 
   describe 'Holy Grail Strategy Integration' do
     context 'when computing Holy Grail signals' do

@@ -4,7 +4,7 @@ module Signal
   class Engine
     class << self
       def run_for(index_cfg)
-        # Rails.logger.info("[Signal] Starting analysis for #{index_cfg[:key]} (#{index_cfg[:segment]})")
+        Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for SENSEX (IDX_I) --------------------------------------------------------")
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
@@ -150,7 +150,7 @@ module Signal
           if result
             # Rails.logger.info("[Signal] Entry successful for #{index_cfg[:key]}: #{pick[:symbol]}")
           else
-            Rails.logger.warn("[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]}")
+            Rails.logger.warn("[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]} #{result}")
           end
         end
 

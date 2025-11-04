@@ -1,9 +1,9 @@
 GIT
   remote: https://github.com/shubhamtaywade82/dhanhq-client.git
-  revision: 41eb6f8b0b8fbf17e16a8dafaa2bb5f7fd266fb1
+  revision: d62f3877f2e27cc1c2256b5c586255e7bda62ee8
   branch: main
   specs:
-    DhanHQ (2.1.6)
+    DhanHQ (2.1.9)
       activesupport
       base64
       bindata
@@ -458,7 +458,7 @@ GEM
     unicode-display_width (3.2.0)
       unicode-emoji (~> 4.1)
     unicode-emoji (4.1.0)
-    uri (1.0.4)
+    uri (1.1.1)
     useragent (0.16.11)
     vcr (6.3.1)
       base64

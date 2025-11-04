@@ -11,7 +11,6 @@ RSpec.configure do |config|
       if Live::OrderUpdateHandler.instance.respond_to?(:running?) && Live::OrderUpdateHandler.instance.running?
         Live::OrderUpdateHandler.instance.stop!
       end
-      Live::OhlcPrefetcherService.instance.stop! if Live::OhlcPrefetcherService.instance.running?
       if Signal::Scheduler.instance.respond_to?(:running?) && Signal::Scheduler.instance.running?
         Signal::Scheduler.instance.stop!
       end
@@ -37,7 +36,6 @@ RSpec.configure do |config|
       if Live::OrderUpdateHandler.instance.respond_to?(:running?) && Live::OrderUpdateHandler.instance.running?
         Live::OrderUpdateHandler.instance.stop!
       end
-      Live::OhlcPrefetcherService.instance.stop! if Live::OhlcPrefetcherService.instance.running?
       if Signal::Scheduler.instance.respond_to?(:running?) && Signal::Scheduler.instance.running?
         Signal::Scheduler.instance.stop!
       end
