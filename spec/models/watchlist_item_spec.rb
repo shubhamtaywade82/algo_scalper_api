@@ -56,7 +56,7 @@ RSpec.describe WatchlistItem do
       end
 
       it 'allows valid segments' do
-        WatchlistItem::ALLOWED_SEGMENTS.each do |segment|
+        DhanHQ::Constants::EXCHANGE_SEGMENTS.each do |segment|
           watchlist_item = build(:watchlist_item, segment: segment)
           expect(watchlist_item).to be_valid, "Segment #{segment} should be valid"
         end
@@ -227,8 +227,8 @@ RSpec.describe WatchlistItem do
 
       it 'can be formatted for WebSocket subscription' do
         watchlist_data = described_class.active.order(:segment, :security_id)
-          .pluck(:segment, :security_id)
-          .map { |seg, sid| { segment: seg, security_id: sid } }
+                                        .pluck(:segment, :security_id)
+                                        .map { |seg, sid| { segment: seg, security_id: sid } }
 
         expect(watchlist_data).to be_an(Array)
         expect(watchlist_data.first).to have_key(:segment)
@@ -285,4 +285,3 @@ RSpec.describe WatchlistItem do
     end
   end
 end
-

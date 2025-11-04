@@ -33,9 +33,6 @@ Rails.application.config.to_prepare do
     # If you need real-time order updates (< 1s latency), uncomment the line below:
     # MarketStreamLifecycle.safely_start { Live::OrderUpdateHandler.instance.start! }
 
-    # Start staggered OHLC intraday prefetch loop for watchlist
-    MarketStreamLifecycle.safely_start { Live::OhlcPrefetcherService.instance.start! }
-
     # Start trading scheduler (signals → entries)
     MarketStreamLifecycle.safely_start { Signal::Scheduler.instance.start! }
 
@@ -57,7 +54,6 @@ at_exit do
     MarketStreamLifecycle.safely_stop { Live::MarketFeedHub.instance.stop! }
     # DISABLED: Order Update Handler stop (not started - see above)
     # MarketStreamLifecycle.safely_stop { Live::OrderUpdateHandler.instance.stop! }
-    MarketStreamLifecycle.safely_stop { Live::OhlcPrefetcherService.instance.stop! }
     MarketStreamLifecycle.safely_stop { Signal::Scheduler.instance.stop! }
     MarketStreamLifecycle.safely_stop { DhanHQ::WS.disconnect_all_local! }
   end

@@ -267,10 +267,10 @@ module Live
                   scope.order(:segment, :security_id).pluck(:segment, :security_id)
                 else
                   Array(scope).filter_map do |record|
-                    seg = if record.respond_to?(:segment)
-                            record.segment
+                    seg = if record.respond_to?(:exchange_segment)
+                            record.exchange_segment
                           elsif record.is_a?(Hash)
-                            record[:segment]
+                            record[:exchange_segment] || record[:segment]
                           end
                     sid = if record.respond_to?(:security_id)
                             record.security_id

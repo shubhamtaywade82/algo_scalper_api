@@ -30,12 +30,7 @@ class WatchlistItem < ApplicationRecord
   # belongs_to :instrument, polymorphic: true, optional: true
   # belongs_to :derivative, polymorphic: true, optional: true
 
-  # TODO: Remove this once we have a proper mapping of segments to exchanges
-  ALLOWED_SEGMENTS = %w[
-    IDX_I NSE_EQ NSE_FNO NSE_CURRENCY BSE_EQ MCX_COMM BSE_CURRENCY BSE_FNO
-  ].freeze
-
-  validates :segment, presence: true, inclusion: { in: ALLOWED_SEGMENTS }
+  validates :segment, presence: true, inclusion: { in: DhanHQ::Constants::EXCHANGE_SEGMENTS }
   validates :security_id, presence: true
   validates :security_id, uniqueness: { scope: :segment }
 
@@ -54,6 +49,15 @@ class WatchlistItem < ApplicationRecord
   scope :by_segment, ->(seg) { where(segment: seg) }
   scope :for, ->(seg, sid) { where(segment: seg, security_id: sid) }
 
+  # Alias: segment stores exchange_segment values (IDX_I, NSE_FNO, etc.)
+  def exchange_segment
+    segment
+  end
+
+  def exchange_segment=(value)
+    self.segment = value
+  end
+
   # Convenience accessors for the polymorphic association
   def instrument
     watchable if watchable_type == 'Instrument'
@@ -65,7 +69,7 @@ class WatchlistItem < ApplicationRecord
 
   def kind=(value)
     @invalid_kind_value = nil
-    super(value)
+    super
   rescue ArgumentError
     @invalid_kind_value = value
     super(nil)

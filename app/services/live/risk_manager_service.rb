@@ -9,6 +9,7 @@ module Live
     include Singleton
 
     LOOP_INTERVAL = 5
+    API_CALL_STAGGER_SECONDS = 1.0 # Stagger API calls to avoid rate limits
 
     def initialize
       @mutex = Mutex.new
@@ -30,7 +31,6 @@ module Live
 
     def stop!
       @mutex.synchronize do
-
         @running = false
         if @thread&.alive?
           begin
@@ -121,7 +121,10 @@ module Live
       # Load all trackers with instruments in a single query with proper preloading
       trackers = PositionTracker.active.eager_load(:instrument).to_a
 
-      trackers.each do |tracker|
+      trackers.each_with_index do |tracker, index|
+        # Stagger API calls to avoid rate limits
+        sleep API_CALL_STAGGER_SECONDS if index.positive?
+
         position = positions[tracker.security_id.to_s]
         ltp = current_ltp_with_freshness_check(tracker, position)
         next unless ltp
@@ -160,7 +163,10 @@ module Live
       # Load all trackers with instruments in a single query with proper preloading
       trackers = PositionTracker.active.eager_load(:instrument).to_a
 
-      trackers.each do |tracker|
+      trackers.each_with_index do |tracker, index|
+        # Stagger API calls to avoid rate limits
+        sleep API_CALL_STAGGER_SECONDS if index.positive?
+
         position = positions[tracker.security_id.to_s]
         ltp = current_ltp(tracker, position)
         next unless ltp
@@ -514,7 +520,7 @@ module Live
 
     def risk_config
       raw = AlgoConfig.fetch[:risk]
-      return {} unless raw.present?
+      return {} if raw.blank?
 
       config = raw.dup
       config[:stop_loss_pct] = raw[:stop_loss_pct] || raw[:sl_pct]
