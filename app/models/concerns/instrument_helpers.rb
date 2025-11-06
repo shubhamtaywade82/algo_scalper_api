@@ -46,10 +46,28 @@ module InstrumentHelpers
   end
 
   def ltp
+    # Priority: WebSocket TickCache > REST API
+    hub = Live::MarketFeedHub.instance
+
+    # Check WebSocket cache first
+    if hub.running? && hub.connected?
+      cached_ltp = ws_ltp
+      return cached_ltp if cached_ltp.present? && cached_ltp.to_f.positive?
+    end
+
+    # Fallback to REST API
     fetch_ltp_from_api
   rescue StandardError => e
-    Rails.logger.error("Failed to fetch LTP for #{self.class.name} #{security_id}: #{e.message}")
+    # Suppress 429 rate limit errors (expected during high load)
+    error_msg = e.message.to_s
+    is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit')
+    Rails.logger.error("Failed to fetch LTP for #{self.class.name} #{security_id}: #{error_msg}") unless is_rate_limit
     nil
+  end
+
+  def latest_ltp
+    price = ws_ltp || quote_ltp || fetch_ltp_from_api
+    price.present? ? BigDecimal(price.to_s) : nil
   end
 
   # Resolves an actionable LTP for downstream order placement.
@@ -88,20 +106,54 @@ module InstrumentHelpers
   end
 
   # Fetches LTP from REST API for a specific segment and security_id
+  # Prioritizes WebSocket/TickCache to avoid API rate limits
   # @param segment [String] Exchange segment (e.g., "IDX_I", "NSE_FNO")
   # @param security_id [String, Integer] Security ID
   # @return [Numeric, nil]
   def fetch_ltp_from_api_for_segment(segment:, security_id:)
-    # Build segment enum for API call
+    hub = Live::MarketFeedHub.instance
+
+    # Strategy 1: Check WebSocket TickCache first (fastest, no API rate limits)
+    if hub.running? && hub.connected?
+      cached_ltp = Live::TickCache.ltp(segment, security_id)
+      if cached_ltp.present? && cached_ltp.to_f.positive?
+        Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_ltp}" }
+        return cached_ltp.to_f
+      end
+
+      # If not in cache, try subscribing and waiting briefly for a tick
+      begin
+        hub.subscribe(segment: segment, security_id: security_id)
+        # Wait up to 200ms for tick to arrive
+        4.times do
+          sleep(0.05) # 50ms intervals
+          cached_ltp = Live::TickCache.ltp(segment, security_id)
+          if cached_ltp.present? && cached_ltp.to_f.positive?
+            Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_ltp}" }
+            return cached_ltp.to_f
+          end
+        end
+      rescue StandardError => e
+        Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API" }
+      end
+    end
+
+    # Strategy 2: REST API fallback (only if WebSocket unavailable or no tick received)
     segment_enum = segment.to_s.upcase
-    response = DhanHQ::Models::MarketFeed.ltp(segment_enum)
+    payload = { segment_enum => [security_id.to_i] }
+    response = DhanHQ::Models::MarketFeed.ltp(payload)
 
     return nil unless response.is_a?(Hash) && response['status'] == 'success'
 
-    data = response.dig('data', segment, security_id.to_s)
+    data = response.dig('data', segment_enum, security_id.to_s)
     data&.dig('last_price')
   rescue StandardError => e
-    Rails.logger.error("Failed to fetch LTP from API for #{segment}:#{security_id} - #{e.message}")
+    # Suppress 429 rate limit errors (expected during high load)
+    error_msg = e.message.to_s
+    is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit')
+    unless is_rate_limit
+      Rails.logger.error("Failed to fetch LTP from API for #{self.class.name} #{security_id}: #{error_msg}")
+    end
     nil
   end
 
@@ -143,8 +195,12 @@ module InstrumentHelpers
   # @return [PositionTracker]
   def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:,
                          index_key: nil)
+    # Determine watchable: if self is a Derivative, use self; otherwise use instrument
+    watchable = is_a?(Derivative) ? self : instrument
+
     tracker = PositionTracker.create!(
-      instrument: instrument,
+      watchable: watchable,
+      instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
       order_no: order_no,
       security_id: security_id.to_s,
       symbol: symbol,
@@ -173,10 +229,41 @@ module InstrumentHelpers
   end
 
   def fetch_ltp_from_api
+    # This method is called by ltp() which already checks WebSocket first
+    # But we still check here as a safety net in case called directly
+    hub = Live::MarketFeedHub.instance
+
+    if hub.running? && hub.connected?
+      cached_ltp = ws_ltp
+      return cached_ltp if cached_ltp.present? && cached_ltp.to_f.positive?
+
+      # Try subscribing and waiting for tick
+      begin
+        segment = exchange_segment
+        return nil unless segment.present? && security_id.present?
+
+        hub.subscribe(segment: segment, security_id: security_id.to_s)
+        # Wait up to 200ms for tick
+        4.times do
+          sleep(0.05)
+          cached_ltp = ws_ltp
+          return cached_ltp if cached_ltp.present? && cached_ltp.to_f.positive?
+        end
+      rescue StandardError => e
+        Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}" }
+      end
+    end
+
+    # REST API fallback
     response = DhanHQ::Models::MarketFeed.ltp(exch_segment_enum)
     response.dig('data', exchange_segment, security_id.to_s, 'last_price') if response['status'] == 'success'
   rescue StandardError => e
-    Rails.logger.error("Failed to fetch LTP from API for #{self.class.name} #{security_id}: #{e.message}")
+    # Suppress 429 rate limit errors (expected during high load)
+    error_msg = e.message.to_s
+    is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit')
+    unless is_rate_limit
+      Rails.logger.error("Failed to fetch LTP from API for #{self.class.name} #{security_id}: #{error_msg}")
+    end
     nil
   end
 

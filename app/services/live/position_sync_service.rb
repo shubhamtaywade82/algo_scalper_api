@@ -46,7 +46,9 @@ module Live
         end
 
         # Check for positions that exist in database but not in DhanHQ (should be marked as exited)
-        orphaned_trackers = tracked_positions.reject do |tracker|
+        # IMPORTANT: Only check live positions - paper positions don't exist in DhanHQ by design
+        live_tracked_positions = tracked_positions.select { |t| t.live? }
+        orphaned_trackers = live_tracked_positions.reject do |tracker|
           dhan_positions.any? { |dp| extract_security_id(dp).to_s == tracker.security_id.to_s }
         end
 
@@ -160,9 +162,17 @@ module Live
       # Generate a synthetic order number for untracked positions
       synthetic_order_no = "SYNC-#{security_id}-#{Time.current.to_i}"
 
+      # Determine watchable: derivative for options, instrument for indices
+      watchable = if segment == 'derivatives' && derivative
+                    derivative
+                  else
+                    instrument
+                  end
+
       # Create PositionTracker
       tracker = PositionTracker.create!(
-        instrument: instrument,
+        watchable: watchable,
+        instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
         order_no: synthetic_order_no,
         security_id: security_id.to_s,
         symbol: symbol,
@@ -189,6 +199,76 @@ module Live
       # Rails.logger.info("[PositionSync] Created tracker #{tracker.id} for untracked position #{security_id}")
     rescue StandardError => e
       # Rails.logger.error("[PositionSync] Failed to create tracker for position #{security_id}: #{e.class} - #{e.message}")
+    end
+
+    def calculate_paper_pnl_before_exit(tracker)
+      return unless tracker.paper? && tracker.entry_price.present? && tracker.quantity.present?
+
+      # Try to get current LTP using the same method as RiskManagerService
+      ltp = get_paper_ltp(tracker)
+      return unless ltp
+
+      exit_price = BigDecimal(ltp.to_s)
+      entry = BigDecimal(tracker.entry_price.to_s)
+      qty = tracker.quantity.to_i
+      pnl = (exit_price - entry) * qty
+      pnl_pct = ((exit_price - entry) / entry * 100).round(2)
+
+      hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+      hwm = [hwm, pnl].max
+
+      tracker.update!(
+        last_pnl_rupees: pnl,
+        last_pnl_pct: pnl_pct,
+        high_water_mark_pnl: hwm,
+        avg_price: exit_price,
+        meta: (tracker.meta || {}).merge(
+          'exit_price' => exit_price.to_f,
+          'exited_at' => Time.current,
+          'exit_reason' => 'position_sync_orphaned'
+        )
+      )
+
+      Rails.logger.info("[PositionSync] Paper exit PnL calculated for #{tracker.order_no}: exit_price=₹#{exit_price}, pnl=₹#{pnl}, pnl_pct=#{pnl_pct}%")
+    rescue StandardError => e
+      Rails.logger.error("[PositionSync] Failed to calculate PnL for paper position #{tracker.order_no}: #{e.message}")
+    end
+
+    def get_paper_ltp(tracker)
+      segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+      security_id = tracker.security_id
+      return nil unless segment.present? && security_id.present?
+
+      # Try WebSocket cache first
+      cached = Live::TickCache.ltp(segment, security_id)
+      return BigDecimal(cached.to_s) if cached
+
+      # Try Redis PnL cache
+      tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+      if tick_data&.dig(:ltp)
+        return BigDecimal(tick_data[:ltp].to_s)
+      end
+
+      # Try tradable's fetch method (derivative or instrument)
+      tradable = tracker.tradable
+      if tradable
+        ltp = tradable.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+        return BigDecimal(ltp.to_s) if ltp
+      end
+
+      # Fallback: Direct API call
+      begin
+        response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
+        if response['status'] == 'success'
+          option_data = response.dig('data', segment, security_id.to_s)
+          if option_data && option_data['last_price']
+            return BigDecimal(option_data['last_price'].to_s)
+          end
+        end
+      rescue StandardError => e
+        Rails.logger.error("[PositionSync] Failed to fetch paper LTP for #{tracker.order_no}: #{e.message}")
+      end
+      nil
     end
 
   end

@@ -115,29 +115,38 @@ module Capital
       end
 
       def available_cash
+        # Check if paper trading is enabled
+        if paper_trading_enabled?
+          balance = paper_trading_balance
+          Rails.logger.debug { "[Capital] Paper trading mode: Available cash: ₹#{balance}" }
+          return balance
+        end
+
         # Fetch cash from broker funds API for live trading
         data = DhanHQ::Models::Funds.fetch
-        value = if data.respond_to?(:available_balance)
-                  data.available_balance
-                elsif data.respond_to?(:available_cash)
-                  data.available_cash
-                elsif data.is_a?(Hash)
-                  data[:available_balance] || data[:available_cash]
-                end
+        value = data.available_balance
 
         if value.nil?
-          Rails.logger.warn("[Capital] Failed to extract available cash from funds data: #{data.inspect}")
+          Rails.logger.warn("[Capital] Failed to extract available_balance from funds data: #{data.inspect}")
           return BigDecimal(0)
         end
 
         result = value.is_a?(BigDecimal) ? value : BigDecimal(value.to_s)
         Rails.logger.debug { "[Capital] Available cash: ₹#{result}" }
         result
-        BigDecimal(100_000)
       rescue StandardError => e
         Rails.logger.error("[Capital] Failed to fetch available cash: #{e.class} - #{e.message}")
         Rails.logger.error("[Capital] Backtrace: #{e.backtrace.first(3).join(', ')}")
         BigDecimal(0)
+      end
+
+      def paper_trading_enabled?
+        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      end
+
+      def paper_trading_balance
+        balance = AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000
+        BigDecimal(balance.to_s)
       end
     end
   end

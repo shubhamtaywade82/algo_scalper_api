@@ -14,6 +14,35 @@ module MarketStreamLifecycle
   rescue NameError
     nil
   end
+
+  # Resubscribe to all active PositionTracker positions after server restart
+  def resubscribe_active_positions
+    return unless defined?(PositionTracker)
+
+    # Wait a moment for MarketFeedHub to be ready
+    sleep(0.5)
+
+    # Can't eagerly load polymorphic :watchable, so just load instrument
+    active_positions = PositionTracker.active.includes(:instrument).to_a
+    return if active_positions.empty?
+
+    subscribed_count = 0
+    failed_count = 0
+
+    active_positions.each do |tracker|
+      begin
+        tracker.subscribe
+        subscribed_count += 1
+      rescue StandardError => e
+        Rails.logger.error("[MarketStream] Failed to resubscribe position #{tracker.order_no}: #{e.message}")
+        failed_count += 1
+      end
+    end
+
+    Rails.logger.info("[MarketStream] Resubscribed to #{subscribed_count} active positions#{failed_count.positive? ? " (#{failed_count} failed)" : ''}")
+  rescue StandardError => e
+    Rails.logger.error("[MarketStream] Failed to resubscribe active positions: #{e.class} - #{e.message}")
+  end
 end
 
 Rails.application.config.to_prepare do
@@ -37,6 +66,11 @@ Rails.application.config.to_prepare do
     MarketStreamLifecycle.safely_start { Signal::Scheduler.instance.start! }
 
     MarketStreamLifecycle.safely_start { Live::RiskManagerService.instance.start! }
+
+    # Resubscribe to all active positions after MarketFeedHub starts
+    MarketStreamLifecycle.safely_start do
+      resubscribe_active_positions
+    end
 
     # Perform initial position sync to ensure all DhanHQ positions are tracked
     MarketStreamLifecycle.safely_start do

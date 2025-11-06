@@ -1,3 +1,10 @@
+# Paper Trading Mode
+# Set to true to enable paper trading (simulated trading with ₹1 lakh balance)
+# Paper positions are tracked but no real orders are placed
+paper_trading:
+  enabled: true
+  balance: 100000 # ₹1 lakh
+
 indices:
   - {
       key: NIFTY,
@@ -26,10 +33,10 @@ indices:
 
 risk:
   # daily_loss_limit_pct: 0.06 # Circuit breaker disabled - removed per requirement
-  per_trade_risk_pct: 0.01
-  sl_pct: 0.30
-  tp_pct: 0.60
-  trail_step_pct: 0.10
+  per_trade_risk_pct: 0.15
+  sl_pct: 0.25 # 25% stop loss for options (high volatility)
+  tp_pct: 0.60 # 60% take profit target
+  trail_step_pct: 0.05 # 5% trailing step for options
   breakeven_after_gain: 0.10 # trigger breakeven lock at +10% gain
   exit_drop_pct: 0.03 # trigger trailing exit after 3% pullback from high-water mark
 
@@ -37,7 +44,7 @@ signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
   enable_confirmation_timeframe: false # Enable/disable 5m confirmation analysis
-  enable_adx_filter: false # Enable/disable ADX strength filtering
+  enable_adx_filter: true # Enable/disable ADX strength filtering
   validation_mode: "aggressive" # conservative | balanced | aggressive
   supertrend:
     period: 10

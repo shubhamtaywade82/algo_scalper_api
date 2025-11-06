@@ -56,6 +56,19 @@ module Entries
           return false
         end
 
+        # Paper trading mode: Skip real order placement, create PositionTracker directly
+        if paper_trading_enabled?
+          return create_paper_tracker!(
+            instrument: instrument,
+            pick: pick,
+            side: side,
+            quantity: quantity,
+            index_cfg: index_cfg,
+            ltp: ltp
+          )
+        end
+
+        # Live trading: Place real order
         response = Orders.config.place_market(
           side: 'buy',
           segment: pick[:segment] || index_cfg[:segment],
@@ -99,12 +112,13 @@ module Entries
           max_allowed = 1
         end
 
-        # Use efficient query with index
-        active_positions = PositionTracker.where(
-          instrument: instrument,
-          side: side,
-          status: PositionTracker::STATUSES[:active]
-        ).limit(max_allowed + 1) # Only fetch what we need
+        # Check positions by underlying instrument (for derivatives, check their underlying instrument)
+        # This ensures all positions on the same index count together, regardless of strike
+        # Query by instrument_id (for direct positions) OR by watchable_type='Derivative' with instrument_id
+        active_positions = PositionTracker.active.where(side: side).where(
+          "(instrument_id = ? OR (watchable_type = 'Derivative' AND watchable_id IN (SELECT id FROM derivatives WHERE instrument_id = ?)))",
+          instrument.id, instrument.id
+        ).limit(max_allowed + 1)
         current_count = active_positions.count
 
         Rails.logger.debug { "[EntryGuard] Exposure check for #{instrument.symbol_name}: side=#{side}, current=#{current_count}, max=#{max_allowed}" }
@@ -118,8 +132,15 @@ module Entries
         # If this would be the second position, check pyramiding rules
         if current_count == 1
           first_position = active_positions.first
+
+          # Calculate PnL if not present (especially for paper positions)
+          if first_position.last_pnl_rupees.nil? && first_position.entry_price.present? && first_position.quantity.present?
+            calculate_current_pnl(first_position)
+          end
+
           unless pyramiding_allowed?(first_position)
-            Rails.logger.warn("[EntryGuard] Pyramiding not allowed for #{instrument.symbol_name}: first position PnL=#{first_position.last_pnl_rupees}, updated_at=#{first_position.updated_at}")
+            pnl_display = first_position.last_pnl_rupees ? "₹#{first_position.last_pnl_rupees.round(2)}" : 'N/A'
+            Rails.logger.warn("[EntryGuard] Pyramiding not allowed for #{instrument.symbol_name}: first position PnL=#{pnl_display}, updated_at=#{first_position.updated_at}")
             return false
           end
         end
@@ -137,11 +158,100 @@ module Entries
         min_profit_duration = 5.minutes
         return false unless first_position.updated_at < min_profit_duration.ago
 
-        Rails.logger.info("[Pyramiding] Allowing second position - first position profitable: #{first_position.last_pnl_rupees}")
+        Rails.logger.info("[Pyramiding] Allowing second position - first position profitable: ₹#{first_position.last_pnl_rupees.round(2)}")
         true
       rescue StandardError => e
         Rails.logger.error("Pyramiding check failed: #{e.message}")
         false
+      end
+
+      def calculate_current_pnl(tracker)
+        return unless tracker.entry_price.present? && tracker.quantity.present?
+
+        # For paper positions, use get_paper_ltp method
+        if tracker.paper?
+          ltp = get_paper_ltp_for_tracker(tracker)
+          return unless ltp
+
+          entry = BigDecimal(tracker.entry_price.to_s)
+          exit_price = BigDecimal(ltp.to_s)
+          qty = tracker.quantity.to_i
+          pnl = (exit_price - entry) * qty
+          pnl_pct = ((exit_price - entry) / entry * 100).round(2)
+
+          hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+          hwm = [hwm, pnl].max
+
+          tracker.update!(
+            last_pnl_rupees: pnl,
+            last_pnl_pct: pnl_pct,
+            high_water_mark_pnl: hwm,
+            avg_price: exit_price
+          )
+
+          Rails.logger.debug { "[EntryGuard] Calculated PnL for paper position #{tracker.order_no}: PnL=₹#{pnl.round(2)}" }
+          return
+        end
+
+        # For live positions, try to get from Redis cache or calculate from position
+        # This is a simplified version - RiskManagerService should handle this normally
+        segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+        security_id = tracker.security_id
+        return unless segment.present? && security_id.present?
+
+        # Try Redis cache first
+        tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+        if tick_data&.dig(:ltp)
+          ltp = BigDecimal(tick_data[:ltp].to_s)
+          entry = BigDecimal(tracker.entry_price.to_s)
+          qty = tracker.quantity.to_i
+          pnl = (ltp - entry) * qty
+          pnl_pct = ((ltp - entry) / entry * 100).round(2)
+
+          hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+          hwm = [hwm, pnl].max
+
+          tracker.update!(
+            last_pnl_rupees: pnl,
+            last_pnl_pct: pnl_pct,
+            high_water_mark_pnl: hwm
+          )
+        end
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Failed to calculate PnL for #{tracker.order_no}: #{e.message}")
+      end
+
+      def get_paper_ltp_for_tracker(tracker)
+        segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+        security_id = tracker.security_id
+        return nil unless segment.present? && security_id.present?
+
+        # Try WebSocket cache first
+        cached = Live::TickCache.ltp(segment, security_id)
+        return BigDecimal(cached.to_s) if cached
+
+        # Try Redis PnL cache
+        tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+        return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
+
+        # Try tradable's fetch method (derivative or instrument)
+        tradable = tracker.tradable
+        if tradable
+          ltp = tradable.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+          return BigDecimal(ltp.to_s) if ltp
+        end
+
+        # Fallback: Direct API call
+        begin
+          response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
+          if response['status'] == 'success'
+            option_data = response.dig('data', segment, security_id.to_s)
+            return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
+          end
+        rescue StandardError => e
+          Rails.logger.error("[EntryGuard] Failed to fetch LTP for #{tracker.order_no}: #{e.message}")
+        end
+        nil
       end
 
       def cooldown_active?(symbol, cooldown)
@@ -162,7 +272,9 @@ module Entries
         pick[:ltp].blank? || pick[:ltp].to_f.zero?
       end
 
-      # Resolves LTP for entry order, with REST API fallback
+      # Resolves LTP for entry order, prioritizing WebSocket subscription over API polling
+      # Strategy: Subscribe to WebSocket feed, wait for tick, read from TickCache
+      # Falls back to REST API only if WebSocket unavailable or tick doesn't arrive
       # @param instrument [Instrument]
       # @param pick [Hash] Pick data from signal
       # @param index_cfg [Hash] Index configuration
@@ -173,6 +285,38 @@ module Entries
 
         return nil unless segment.present? && security_id.present?
 
+        hub = Live::MarketFeedHub.instance
+
+        # Strategy 1: WebSocket subscription + TickCache (fastest, no API rate limits)
+        if hub.running? && hub.connected?
+          # Subscribe to the strike/derivative immediately
+          begin
+            hub.subscribe(segment: segment, security_id: security_id)
+            Rails.logger.debug { "[EntryGuard] Subscribed to #{segment}:#{security_id} for LTP resolution" }
+
+            # Wait briefly for tick to arrive (typically < 100ms)
+            max_wait_ms = 300
+            poll_interval_ms = 50
+            attempts = (max_wait_ms / poll_interval_ms).to_i
+
+            attempts.times do
+              cached_ltp = Live::TickCache.ltp(segment, security_id)
+              if cached_ltp.present? && cached_ltp.to_f.positive?
+                Rails.logger.debug { "[EntryGuard] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_ltp}" }
+                return BigDecimal(cached_ltp.to_s)
+              end
+              sleep(poll_interval_ms / 1000.0) # Convert ms to seconds
+            end
+
+            Rails.logger.debug { "[EntryGuard] No tick received from WebSocket for #{segment}:#{security_id} after #{max_wait_ms}ms, falling back to API" }
+          rescue StandardError => e
+            Rails.logger.warn("[EntryGuard] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API")
+          end
+        else
+          Rails.logger.debug { "[EntryGuard] WebSocket not available, using API fallback for #{segment}:#{security_id}" }
+        end
+
+        # Strategy 2: REST API fallback (only if WebSocket unavailable or no tick received)
         # Try to resolve via instrument/derivative object
         if pick[:derivative_id].present?
           derivative = Derivative.find_by(id: pick[:derivative_id])
@@ -236,9 +380,55 @@ module Entries
         end
       end
 
+      def paper_trading_enabled?
+        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      end
+
+      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:)
+        # Generate synthetic order number for paper trading
+        order_no = "PAPER-#{index_cfg[:key]}-#{pick[:security_id]}-#{Time.current.to_i}"
+
+        # Determine watchable: derivative for options, instrument for indices
+        watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
+
+        tracker = PositionTracker.create!(
+          watchable: watchable,
+          instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
+          order_no: order_no,
+          security_id: pick[:security_id].to_s,
+          symbol: pick[:symbol],
+          segment: pick[:segment] || index_cfg[:segment],
+          side: side,
+          quantity: quantity,
+          entry_price: ltp,
+          avg_price: ltp,
+          status: PositionTracker::STATUSES[:active],
+          paper: true,
+          meta: {
+            index_key: index_cfg[:key],
+            direction: side,
+            placed_at: Time.current,
+            paper_trading: true
+          }
+        )
+
+        # Subscribe to market feed for paper position
+        tracker.subscribe
+
+        Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")
+        true
+      rescue ActiveRecord::RecordInvalid => e
+        Rails.logger.error("Failed to persist paper tracker: #{e.record.errors.full_messages.to_sentence}")
+        false
+      end
+
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:)
+        # Determine watchable: derivative for options, instrument for indices
+        watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
+
         PositionTracker.create!(
-          instrument: instrument,
+          watchable: watchable,
+          instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
           order_no: order_no,
           security_id: pick[:security_id].to_s,
           symbol: pick[:symbol],
@@ -250,6 +440,28 @@ module Entries
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")
+      end
+
+      def find_watchable_for_pick(pick:, instrument:)
+        # If derivative_id is provided in pick, use it
+        if pick[:derivative_id].present?
+          derivative = Derivative.find_by(id: pick[:derivative_id])
+          return derivative if derivative
+        end
+
+        # Try to find derivative by security_id and segment
+        segment = pick[:segment] || instrument.exchange_segment
+        if segment.present? && pick[:security_id].present?
+          derivative = Derivative.find_by(
+            security_id: pick[:security_id].to_s,
+            exchange: instrument.exchange,
+            segment: segment
+          )
+          return derivative if derivative
+        end
+
+        # Fallback to instrument (for index positions)
+        instrument
       end
     end
   end

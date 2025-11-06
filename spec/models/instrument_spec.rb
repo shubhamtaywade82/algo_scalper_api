@@ -1,3 +1,58 @@
+# == Schema Information
+#
+# Table name: instruments
+#
+#  id                            :integer          not null, primary key
+#  exchange                      :string           not null
+#  segment                       :string           not null
+#  security_id                   :string           not null
+#  isin                          :string
+#  instrument_code               :string
+#  underlying_security_id        :string
+#  underlying_symbol             :string
+#  symbol_name                   :string
+#  display_name                  :string
+#  instrument_type               :string
+#  series                        :string
+#  lot_size                      :integer
+#  expiry_date                   :date
+#  strike_price                  :decimal(15, 5)
+#  option_type                   :string
+#  tick_size                     :decimal(, )
+#  expiry_flag                   :string
+#  bracket_flag                  :string
+#  cover_flag                    :string
+#  asm_gsm_flag                  :string
+#  asm_gsm_category              :string
+#  buy_sell_indicator            :string
+#  buy_co_min_margin_per         :decimal(8, 2)
+#  sell_co_min_margin_per        :decimal(8, 2)
+#  buy_co_sl_range_max_perc      :decimal(8, 2)
+#  sell_co_sl_range_max_perc     :decimal(8, 2)
+#  buy_co_sl_range_min_perc      :decimal(8, 2)
+#  sell_co_sl_range_min_perc     :decimal(8, 2)
+#  buy_bo_min_margin_per         :decimal(8, 2)
+#  sell_bo_min_margin_per        :decimal(8, 2)
+#  buy_bo_sl_range_max_perc      :decimal(8, 2)
+#  sell_bo_sl_range_max_perc     :decimal(8, 2)
+#  buy_bo_sl_range_min_perc      :decimal(8, 2)
+#  sell_bo_sl_min_range          :decimal(8, 2)
+#  buy_bo_profit_range_max_perc  :decimal(8, 2)
+#  sell_bo_profit_range_max_perc :decimal(8, 2)
+#  buy_bo_profit_range_min_perc  :decimal(8, 2)
+#  sell_bo_profit_range_min_perc :decimal(8, 2)
+#  mtf_leverage                  :decimal(8, 2)
+#  created_at                    :datetime         not null
+#  updated_at                    :datetime         not null
+#
+# Indexes
+#
+#  index_instruments_on_instrument_code                    (instrument_code)
+#  index_instruments_on_symbol_name                        (symbol_name)
+#  index_instruments_on_underlying_symbol_and_expiry_date  (underlying_symbol,expiry_date)
+#  index_instruments_unique                                (security_id,symbol_name,exchange,segment) UNIQUE
+#
+
 # frozen_string_literal: true
 
 require 'rails_helper'

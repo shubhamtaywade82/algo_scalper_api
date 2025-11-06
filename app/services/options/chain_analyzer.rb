@@ -80,7 +80,7 @@ module Options
         end
 
         legs.first(2).map do |leg|
-          leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size)
+          leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id)
         end
       end
 
@@ -333,7 +333,8 @@ module Options
             spread: spread_ratio,
             delta: delta,
             distance_from_atm: (strike - atm).abs,
-            lot_size: derivative&.lot_size || index_cfg[:lot].to_i
+            lot_size: derivative&.lot_size || index_cfg[:lot].to_i,
+            derivative_id: derivative&.id
           }
 
           # Rails.logger.debug { "[Options] Accepted #{strike}: #{legs.last[:symbol]}" }

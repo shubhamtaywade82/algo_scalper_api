@@ -118,8 +118,8 @@ module Live
     def enforce_trailing_stops(positions = fetch_positions_indexed)
       risk = risk_config
 
-      # Load all trackers with instruments in a single query with proper preloading
-      trackers = PositionTracker.active.eager_load(:instrument).to_a
+      # Load all trackers - can't eagerly load polymorphic :watchable, so load instrument separately
+      trackers = PositionTracker.active.includes(:instrument).to_a
 
       trackers.each_with_index do |tracker, index|
         # Stagger API calls to avoid rate limits
@@ -160,8 +160,8 @@ module Live
 
       return if sl_pct <= 0 && tp_pct <= 0 && per_trade_pct <= 0
 
-      # Load all trackers with instruments in a single query with proper preloading
-      trackers = PositionTracker.active.eager_load(:instrument).to_a
+      # Load all trackers - can't eagerly load polymorphic :watchable, so load instrument separately
+      trackers = PositionTracker.active.includes(:instrument).to_a
 
       trackers.each_with_index do |tracker, index|
         # Stagger API calls to avoid rate limits
@@ -308,8 +308,9 @@ module Live
       end
 
       # Fallback to original method for non-options
-      if tracker.instrument
-        ltp = tracker.instrument.latest_ltp
+      tradable = tracker.tradable
+      if tradable
+        ltp = tradable.ltp
         return ltp if ltp
       end
 
@@ -320,7 +321,7 @@ module Live
                   elsif position.is_a?(Hash)
                     position[:exchange_segment]
                   end
-      segment ||= tracker.instrument&.exchange_segment
+      segment ||= tradable&.exchange_segment || tracker.instrument&.exchange_segment
 
       cached = Live::TickCache.ltp(segment, tracker.security_id)
       return BigDecimal(cached.to_s) if cached
@@ -478,6 +479,40 @@ module Live
     end
 
     def exit_position(position, tracker)
+      # Paper trading: Just update the position with exit price, no real order
+      if tracker.paper?
+        current_ltp_value = get_paper_ltp(tracker)
+        if current_ltp_value
+          exit_price = BigDecimal(current_ltp_value.to_s)
+          entry = BigDecimal(tracker.entry_price.to_s)
+          qty = tracker.quantity.to_i
+          pnl = (exit_price - entry) * qty
+          pnl_pct = ((exit_price - entry) / entry * 100).round(2)
+
+          # Calculate high water mark
+          hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+          hwm = [hwm, pnl].max
+
+          tracker.update!(
+            last_pnl_rupees: pnl,
+            last_pnl_pct: pnl_pct,
+            high_water_mark_pnl: hwm,
+            avg_price: exit_price,
+            meta: (tracker.meta || {}).merge(
+              'exit_price' => exit_price.to_f,
+              'exited_at' => Time.current
+            )
+          )
+
+          Rails.logger.info("[RiskManager] Paper exit for #{tracker.order_no}: exit_price=₹#{exit_price}, pnl=₹#{pnl}, pnl_pct=#{pnl_pct}%")
+          return true
+        else
+          Rails.logger.warn("[RiskManager] Cannot get LTP for paper exit of #{tracker.order_no}")
+          return false
+        end
+      end
+
+      # Live trading: Place real exit order
       if position.respond_to?(:exit!)
         position.exit!
         true
@@ -485,7 +520,7 @@ module Live
         cancel_remote_order(position.order_id)
         true
       else
-        segment = tracker.segment.presence || tracker.instrument&.exchange_segment
+        segment = tracker.segment.presence || tracker.tradable&.exchange_segment || tracker.instrument&.exchange_segment
         if segment.present?
           order = Orders.config.flat_position(
             segment: segment,
@@ -500,6 +535,54 @@ module Live
     rescue StandardError => e
       Rails.logger.error("Error in exit_position for #{tracker.order_no}: #{e.class} - #{e.message}")
       false
+    end
+
+    def get_paper_ltp(tracker)
+      segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+      security_id = tracker.security_id
+
+      return nil unless segment.present? && security_id.present?
+
+      # Try WebSocket cache first (fastest)
+      cached = Live::TickCache.ltp(segment, security_id)
+      if cached
+        Rails.logger.debug { "[RiskManager] Paper LTP from cache for #{tracker.order_no}: ₹#{cached}" }
+        return BigDecimal(cached.to_s)
+      end
+
+      # Try Redis PnL cache
+      tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+      if tick_data&.dig(:ltp)
+        Rails.logger.debug { "[RiskManager] Paper LTP from Redis for #{tracker.order_no}: ₹#{tick_data[:ltp]}" }
+        return BigDecimal(tick_data[:ltp].to_s)
+      end
+
+      # Try tradable's fetch method (derivative or instrument)
+      tradable = tracker.tradable
+      if tradable
+        ltp = tradable.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+        if ltp
+          Rails.logger.debug { "[RiskManager] Paper LTP from API for #{tracker.order_no}: ₹#{ltp}" }
+          return BigDecimal(ltp.to_s)
+        end
+      end
+
+      # Fallback: Direct API call
+      begin
+        response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
+        if response['status'] == 'success'
+          option_data = response.dig('data', segment, security_id.to_s)
+          if option_data && option_data['last_price']
+            ltp = BigDecimal(option_data['last_price'].to_s)
+            Rails.logger.debug { "[RiskManager] Paper LTP from direct API for #{tracker.order_no}: ₹#{ltp}" }
+            return ltp
+          end
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] Failed to fetch paper LTP for #{tracker.order_no}: #{e.message}")
+      end
+
+      nil
     end
 
     def store_exit_reason(tracker, reason)

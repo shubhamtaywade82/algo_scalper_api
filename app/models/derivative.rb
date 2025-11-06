@@ -63,6 +63,7 @@ class Derivative < ApplicationRecord
   belongs_to :instrument
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
   has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: 'WatchlistItem'
+  has_many :position_trackers, as: :watchable, dependent: :destroy
 
   validates :security_id, presence: true, uniqueness: { scope: %i[symbol_name exchange segment] }
   validates :option_type, inclusion: { in: %w[CE PE], allow_blank: true }
@@ -139,7 +140,10 @@ class Derivative < ApplicationRecord
     quantity = if qty.to_i.positive?
                  qty.to_i
                else
-                 PositionTracker.active.where(instrument_id: instrument_id, security_id: security).sum(:quantity).to_i
+                 PositionTracker.active.where(
+                   "(watchable_type = 'Derivative' AND watchable_id = ?) OR instrument_id = ?",
+                   id, instrument_id
+                 ).where(security_id: security).sum(:quantity).to_i
                end
     return nil if quantity <= 0
 

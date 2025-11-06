@@ -61,6 +61,7 @@ class Instrument < ApplicationRecord
   include InstrumentHelpers
 
   has_many :derivatives, dependent: :destroy
+  has_many :position_trackers, as: :watchable, dependent: :destroy
   accepts_nested_attributes_for :derivatives, allow_destroy: true
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
   has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: 'WatchlistItem'
@@ -118,11 +119,6 @@ class Instrument < ApplicationRecord
     unsubscribe
   end
 
-  def latest_ltp
-    price = ws_ltp || quote_ltp || fetch_ltp_from_api
-    price.present? ? BigDecimal(price.to_s) : nil
-  end
-
   # Places a market BUY order for the underlying instrument and tracks it.
   # @param qty [Integer, nil]
   # @param product_type [String]
@@ -177,7 +173,10 @@ class Instrument < ApplicationRecord
     quantity = if qty.to_i.positive?
                  qty.to_i
                else
-                 PositionTracker.active.where(instrument_id: id, security_id: security).sum(:quantity).to_i
+                 PositionTracker.active.where(
+                   "(watchable_type = 'Instrument' AND watchable_id = ?) OR instrument_id = ?",
+                   id, id
+                 ).where(security_id: security).sum(:quantity).to_i
                end
     return nil if quantity <= 0
 
