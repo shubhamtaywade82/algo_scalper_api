@@ -21,14 +21,32 @@ module Indicators
       @performance_alpha = performance_alpha.to_f
       @multiplier_candidates = Array(multiplier_candidates).map(&:to_f)
       @performance_scores = Hash.new(0.0)
-      @adaptive_multipliers = Array.new(series.candles.size, @base_multiplier)
+      # Initialize with size from candles or 0 if not available yet
+      candles_size = series.respond_to?(:candles) ? (series.candles&.size || 0) : 0
+      @adaptive_multipliers = Array.new(candles_size, @base_multiplier)
       @atr_values = []
     end
 
     def call
-      highs = series.highs
-      lows = series.lows
-      closes = series.closes
+      # Handle both CandleSeries objects and objects with candles array
+      if series.respond_to?(:highs) && series.respond_to?(:lows) && series.respond_to?(:closes)
+        highs = series.highs
+        lows = series.lows
+        closes = series.closes
+      elsif series.respond_to?(:candles)
+        # Extract from candles array
+        candles = series.candles
+        return default_result if candles.nil? || candles.empty?
+
+        highs = candles.map(&:high)
+        lows = candles.map(&:low)
+        closes = candles.map(&:close)
+      else
+        return default_result
+      end
+
+      return default_result if highs.nil? || lows.nil? || closes.nil?
+      return default_result if highs.empty? || lows.empty? || closes.empty?
 
       minimum_required = [training_period, period + 1].max
       return default_result if closes.size < minimum_required
