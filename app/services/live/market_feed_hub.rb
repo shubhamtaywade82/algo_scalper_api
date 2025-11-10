@@ -46,7 +46,7 @@ module Live
       # Rails.logger.info("DhanHQ market feed started (mode=#{mode}, watchlist=#{@watchlist.count} instruments).")
       true
     rescue StandardError => e
-      # Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
+      Rails.logger.error("Failed to start DhanHQ market feed: #{_e.class} - #{_e.message}")
       stop!
       false
     end
@@ -57,13 +57,18 @@ module Live
         @connection_state = :disconnected
         return unless @ws_client
 
+        ws_client = @ws_client
+        @ws_client = nil # Clear reference first to prevent new operations
+
         begin
-          @ws_client.disconnect!
+          # Attempt graceful disconnect
+          ws_client.disconnect! if ws_client.respond_to?(:disconnect!)
         rescue StandardError => e
-          # Rails.logger.warn("Error while stopping DhanHQ market feed: #{e.message}")
-        ensure
-          @ws_client = nil
+          Rails.logger.warn("[MarketFeedHub] Error during disconnect: #{e.message}") if defined?(Rails.logger)
         end
+
+        # Clear callbacks
+        @callbacks.clear
       end
     end
 
@@ -83,8 +88,8 @@ module Live
         # Fallback: check if we've received ticks recently (within last 30 seconds)
         @last_tick_at && (Time.current - @last_tick_at) < 30.seconds
       end
-    rescue StandardError => e
-      # Rails.logger.warn("Error checking WebSocket connection: #{e.message}")
+    rescue StandardError => _e
+      # Rails.logger.warn("Error checking WebSocket connection: #{_e.message}")
       false
     end
 
@@ -227,8 +232,27 @@ module Live
       # pp tick  # Uncomment only for debugging - very noisy!
       # Log every tick (segment:security_id and LTP) for verification during development
       # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
+
+      # Store in in-memory cache (primary)
       Live::TickCache.put(tick)
+
+      # Store in Redis for PnL tracking (secondary)
+      # Only store if we have valid segment, security_id, and LTP
+      if tick[:segment].present? && tick[:security_id].present? && tick[:ltp].present? && tick[:ltp].to_f.positive?
+        begin
+          Live::RedisPnlCache.instance.store_tick(
+            segment: tick[:segment],
+            security_id: tick[:security_id].to_s,
+            ltp: tick[:ltp],
+            timestamp: Time.current
+          )
+        rescue StandardError => e
+          Rails.logger.debug { "[MarketFeedHub] Failed to store tick in Redis: #{e.message}" } if defined?(Rails.logger)
+        end
+      end
+
       ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
+
       @callbacks.each do |callback|
         safe_invoke(callback, tick)
       end
@@ -236,8 +260,8 @@ module Live
 
     def safe_invoke(callback, payload)
       callback.call(payload)
-    rescue StandardError => e
-      # Rails.logger.error("DhanHQ tick callback failed: #{e.class} - #{e.message}")
+    rescue StandardError => _e
+      # Rails.logger.error("DhanHQ tick callback failed: #{_e.class} - #{_e.message}")
     end
 
     def subscribe_watchlist

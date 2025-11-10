@@ -82,13 +82,37 @@ Rails.application.config.to_prepare do
   end
 end
 
-at_exit do
-  # Only stop services if they were started (not in console mode or test environment)
-  unless Rails.const_defined?(:Console) || Rails.env.test?
-    MarketStreamLifecycle.safely_stop { Live::MarketFeedHub.instance.stop! }
-    # DISABLED: Order Update Handler stop (not started - see above)
-    # MarketStreamLifecycle.safely_stop { Live::OrderUpdateHandler.instance.stop! }
-    MarketStreamLifecycle.safely_stop { Signal::Scheduler.instance.stop! }
-    MarketStreamLifecycle.safely_stop { DhanHQ::WS.disconnect_all_local! }
+# Graceful shutdown handler
+def shutdown_services
+  return if Rails.const_defined?(:Console) || Rails.env.test?
+
+  Rails.logger.info('[MarketStream] Shutting down services...') if defined?(Rails.logger)
+
+  # Stop all services in reverse order of startup
+  MarketStreamLifecycle.safely_stop { Live::RiskManagerService.instance.stop! }
+  MarketStreamLifecycle.safely_stop { Signal::Scheduler.instance.stop! }
+  MarketStreamLifecycle.safely_stop { Live::MarketFeedHub.instance.stop! }
+  # DISABLED: Order Update Handler stop (not started - see above)
+  # MarketStreamLifecycle.safely_stop { Live::OrderUpdateHandler.instance.stop! }
+
+  # Disconnect all WebSocket connections
+  MarketStreamLifecycle.safely_stop { DhanHQ::WS.disconnect_all_local! }
+
+  Rails.logger.info('[MarketStream] Services shut down successfully') if defined?(Rails.logger)
+rescue StandardError => e
+  Rails.logger.error("[MarketStream] Error during shutdown: #{e.class} - #{e.message}") if defined?(Rails.logger)
+end
+
+# Register signal handlers for graceful shutdown on Ctrl+C (SIGINT) or kill (SIGTERM)
+%w[INT TERM].each do |signal|
+  Signal.trap(signal) do
+    Rails.logger.info("[MarketStream] Received #{signal} signal, shutting down...") if defined?(Rails.logger)
+    shutdown_services
+    exit(0)
   end
+end
+
+# Also register at_exit hook as fallback
+at_exit do
+  shutdown_services
 end

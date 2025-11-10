@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_11_05_042636) do
+ActiveRecord::Schema[8.0].define(version: 2025_11_08_092647) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -242,6 +242,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_05_042636) do
     t.boolean "paper", default: false, null: false
     t.string "watchable_type", null: false
     t.bigint "watchable_id", null: false
+    t.decimal "exit_price", precision: 12, scale: 4
+    t.datetime "exited_at"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"

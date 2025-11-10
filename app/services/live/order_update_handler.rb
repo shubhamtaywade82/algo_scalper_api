@@ -60,15 +60,16 @@ module Live
 
       if FILL_STATUSES.include?(status)
         if transaction_type == 'SELL'
-          tracker.mark_exited!
+          # Use avg_price from order update as exit_price
+          tracker.mark_exited!(exit_price: avg_price)
         else
           tracker.mark_active!(avg_price: avg_price, quantity: quantity)
         end
       elsif CANCELLED_STATUSES.include?(status)
         tracker.mark_cancelled!
       end
-    rescue StandardError => e
-      # Rails.logger.error("Failed to process Dhan order update: #{e.class} - #{e.message}")
+    rescue StandardError => _e
+      # Rails.logger.error("Failed to process Dhan order update: #{_e.class} - #{_e.message}")
     end
 
     def safe_decimal(value)

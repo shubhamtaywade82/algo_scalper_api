@@ -37,6 +37,9 @@ module Live
               # Populate TickCache (like real WebSocket does)
               Live::TickCache.put(tick_data)
 
+              # Simulate notification flow
+              ActiveSupport::Notifications.instrument('dhanhq.tick', tick_data)
+
               # Rails.logger.debug { "[MockData] Generated tick for #{data[:name]}: #{data[:ltp]}" }
             end
 

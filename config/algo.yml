@@ -39,12 +39,13 @@ risk:
   trail_step_pct: 0.05 # 5% trailing step for options
   breakeven_after_gain: 0.10 # trigger breakeven lock at +10% gain
   exit_drop_pct: 0.03 # trigger trailing exit after 3% pullback from high-water mark
+  min_profit_rupees: 1000 # Minimum profit required per position before allowing profit-based exits (₹1000)
 
 signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
   enable_confirmation_timeframe: false # Enable/disable 5m confirmation analysis
-  enable_adx_filter: true # Enable/disable ADX strength filtering
+  enable_adx_filter: false # Enable/disable ADX strength filtering
   validation_mode: "aggressive" # conservative | balanced | aggressive
   supertrend:
     period: 10

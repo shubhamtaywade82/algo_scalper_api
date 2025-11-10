@@ -195,5 +195,23 @@ RSpec.describe PositionTracker do
         expect(tracker.reload.status).to eq('exited')
       end
     end
+
+    describe 'callbacks' do
+      it 'clears Redis cache when status transitions to exited via update' do
+        tracker.update!(status: 'active')
+
+        redis_cache = Live::RedisPnlCache.instance
+        expect(redis_cache).to receive(:clear_tracker).with(tracker.id).and_call_original
+
+        tracker.update!(status: 'exited')
+      end
+
+      it 'clears Redis cache after destroy' do
+        redis_cache = Live::RedisPnlCache.instance
+        expect(redis_cache).to receive(:clear_tracker).with(tracker.id).and_call_original
+
+        tracker.destroy!
+      end
+    end
   end
 end

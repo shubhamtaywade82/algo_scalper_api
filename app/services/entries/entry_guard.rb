@@ -133,9 +133,17 @@ module Entries
         if current_count == 1
           first_position = active_positions.first
 
-          # Calculate PnL if not present (especially for paper positions)
-          if first_position.last_pnl_rupees.nil? && first_position.entry_price.present? && first_position.quantity.present?
+          # Reload to get latest data
+          first_position.reload
+
+          # Try to hydrate PnL from Redis cache first (has live PnL data)
+          first_position.hydrate_pnl_from_cache!
+
+          # If PnL is still nil or zero, calculate it (especially for paper positions or if Redis cache is empty)
+          if (first_position.last_pnl_rupees.nil? || first_position.last_pnl_rupees.zero?) && first_position.entry_price.present? && first_position.quantity.present?
             calculate_current_pnl(first_position)
+            # Reload after calculation to get updated PnL
+            first_position.reload
           end
 
           unless pyramiding_allowed?(first_position)
@@ -193,20 +201,33 @@ module Entries
           return
         end
 
-        # For live positions, try to get from Redis cache or calculate from position
-        # This is a simplified version - RiskManagerService should handle this normally
+        # For live positions, try to get from Redis PnL cache first (has pre-calculated PnL)
+        # Then fall back to calculating from tick data
+        pnl_cache = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+        if pnl_cache && pnl_cache[:pnl]
+          # Use pre-calculated PnL from Redis
+          tracker.update!(
+            last_pnl_rupees: BigDecimal(pnl_cache[:pnl].to_s),
+            last_pnl_pct: pnl_cache[:pnl_pct] ? BigDecimal(pnl_cache[:pnl_pct].to_s) : nil,
+            high_water_mark_pnl: pnl_cache[:hwm_pnl] ? BigDecimal(pnl_cache[:hwm_pnl].to_s) : tracker.high_water_mark_pnl
+          )
+          Rails.logger.debug { "[EntryGuard] Loaded PnL from Redis cache for #{tracker.order_no}: PnL=₹#{pnl_cache[:pnl].round(2)}" }
+          return
+        end
+
+        # Fallback: Calculate from tick data if Redis PnL cache is empty
         segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
         security_id = tracker.security_id
         return unless segment.present? && security_id.present?
 
-        # Try Redis cache first
+        # Try Redis tick cache
         tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
         if tick_data&.dig(:ltp)
           ltp = BigDecimal(tick_data[:ltp].to_s)
           entry = BigDecimal(tracker.entry_price.to_s)
           qty = tracker.quantity.to_i
           pnl = (ltp - entry) * qty
-          pnl_pct = ((ltp - entry) / entry * 100).round(2)
+          pnl_pct = entry.positive? ? ((ltp - entry) / entry * 100).round(2) : nil
 
           hwm = tracker.high_water_mark_pnl || BigDecimal(0)
           hwm = [hwm, pnl].max
@@ -216,6 +237,7 @@ module Entries
             last_pnl_pct: pnl_pct,
             high_water_mark_pnl: hwm
           )
+          Rails.logger.debug { "[EntryGuard] Calculated PnL from tick data for #{tracker.order_no}: PnL=₹#{pnl.round(2)}" }
         end
       rescue StandardError => e
         Rails.logger.error("[EntryGuard] Failed to calculate PnL for #{tracker.order_no}: #{e.message}")
@@ -414,6 +436,18 @@ module Entries
 
         # Subscribe to market feed for paper position
         tracker.subscribe
+
+        # Initialize PnL in Redis (will be 0 initially since entry_price = ltp)
+        # This ensures the position is tracked in Redis from the start
+        initial_pnl = BigDecimal(0)
+        Live::RedisPnlCache.instance.store_pnl(
+          tracker_id: tracker.id,
+          pnl: initial_pnl,
+          pnl_pct: 0.0,
+          ltp: ltp,
+          hwm: initial_pnl,
+          timestamp: Time.current
+        )
 
         Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")
         true

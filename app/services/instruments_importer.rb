@@ -49,18 +49,18 @@ class InstrumentsImporter
       csv_text
     rescue StandardError => e
       # Rails.logger.warn "CSV download failed: #{e.message}"
-      raise e if CACHE_PATH.exist? == false   # don’t swallow if no fallback
+      raise e if CACHE_PATH.exist? == false # don’t swallow if no fallback
 
       # Rails.logger.warn 'Falling back to cached CSV (may be stale)'
       CACHE_PATH.read
     end
-    private :fetch_csv_with_cache             # keep helper private
+    private :fetch_csv_with_cache # keep helper private
 
     def import_from_csv(csv_content)
       instruments_rows, derivatives_rows = build_batches(csv_content)
       # Rails.logger.debug do
-        "instrument rows: #{instruments_rows.size}; derivative rows: #{derivatives_rows.size}"
-      end
+      #   "instrument rows: #{instruments_rows.size}; derivative rows: #{derivatives_rows.size}"
+      # end
       # instruments_rows.uniq!  { |r| r.values_at(:security_id, :symbol_name, :exchange, :segment) }
       # derivatives_rows.uniq!  { |r| r.values_at(:security_id, :symbol_name, :exchange, :segment) }
 
