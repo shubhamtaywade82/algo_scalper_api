@@ -109,8 +109,8 @@ namespace :backtest do
   #   puts "\n#{'=' * 80}"
   # end
 
-  desc "Compare strategies on an instrument"
-  task :compare, [:symbol, :interval, :days] => :environment do |_t, args|
+  desc 'Compare strategies on an instrument'
+  task :compare, %i[symbol interval days] => :environment do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
@@ -119,9 +119,9 @@ namespace :backtest do
     puts "Symbol: #{symbol} | Interval: #{interval}min | Days: #{days}"
 
     strategies = {
-      "SimpleMomentumStrategy" => -> (series) { SimpleMomentumStrategy.new(series: series) },
-      "InsideBarStrategy" => -> (series) { InsideBarStrategy.new(series: series) },
-      "SupertrendAdxStrategy" => -> (series) {
+      'SimpleMomentumStrategy' => ->(series) { SimpleMomentumStrategy.new(series: series) },
+      'InsideBarStrategy' => ->(series) { InsideBarStrategy.new(series: series) },
+      'SupertrendAdxStrategy' => lambda { |series|
         SupertrendAdxStrategy.new(
           series: series,
           supertrend_cfg: AlgoConfig.fetch.dig(:signals, :supertrend) || { period: 7, multiplier: 3 },
@@ -133,7 +133,7 @@ namespace :backtest do
     strategies.each do |name, strategy_lambda|
       puts "\n============================================================"
       puts "📊 Running #{name}..."
-      puts "--------------------------------------------------------------------------------"
+      puts '--------------------------------------------------------------------------------'
 
       result = BacktestService.run(
         symbol: symbol,
@@ -146,8 +146,8 @@ namespace :backtest do
     end
 
     puts "\n================================================================================"
-    puts "📈 Comparison complete"
-    puts "================================================================================"
+    puts '📈 Comparison complete'
+    puts '================================================================================'
   end
 
   desc 'Run comprehensive backtest on all indices and timeframes'
@@ -160,7 +160,7 @@ namespace :backtest do
     strategies = {
       'SimpleMomentumStrategy' => ->(series) { SimpleMomentumStrategy.new(series: series) },
       'InsideBarStrategy' => ->(series) { InsideBarStrategy.new(series: series) },
-      'SupertrendAdxStrategy' => ->(series) {
+      'SupertrendAdxStrategy' => lambda { |series|
         SupertrendAdxStrategy.new(
           series: series,
           supertrend_cfg: AlgoConfig.fetch.dig(:signals, :supertrend) || { period: 7, multiplier: 3 },
@@ -169,7 +169,7 @@ namespace :backtest do
       }
     }
 
-    puts "\n" + '=' * 100
+    puts "\n" + ('=' * 100)
     puts '🚀 COMPREHENSIVE BACKTEST: All Indices × All Timeframes × All Strategies'
     puts '=' * 100
     puts "Days: #{days} | Symbols: #{symbols.join(', ')} | Intervals: #{intervals.join(', ')}min"
@@ -177,12 +177,12 @@ namespace :backtest do
 
     symbols.each do |symbol|
       intervals.each do |interval|
-        puts "\n" + '=' * 100
+        puts "\n" + ('=' * 100)
         puts "📊 #{symbol} - #{interval}min Timeframe"
         puts '=' * 100
 
         strategies.each do |strategy_name, strategy_lambda|
-          puts "\n" + '-' * 100
+          puts "\n" + ('-' * 100)
           puts "  Strategy: #{strategy_name}"
           puts '-' * 100
 
@@ -206,8 +206,8 @@ namespace :backtest do
 
             puts "  Total Trades:    #{summary[:total_trades]}"
             puts "  Win Rate:        #{summary[:win_rate]}%"
-            puts "  Total P&L:       #{summary[:total_pnl_percent].positive? ? '+' : ''}#{summary[:total_pnl_percent]}%"
-            puts "  Expectancy:      #{summary[:expectancy].positive? ? '+' : ''}#{summary[:expectancy]}% per trade"
+            puts "  Total P&L:       #{'+' if summary[:total_pnl_percent].positive?}#{summary[:total_pnl_percent]}%"
+            puts "  Expectancy:      #{'+' if summary[:expectancy].positive?}#{summary[:expectancy]}% per trade"
             puts "  Avg Win:         +#{summary[:avg_win_percent]}%"
             puts "  Avg Loss:        #{summary[:avg_loss_percent]}%"
           rescue StandardError => e
@@ -221,7 +221,7 @@ namespace :backtest do
     end
 
     # Summary of best results
-    puts "\n" + '=' * 100
+    puts "\n" + ('=' * 100)
     puts '🏆 BEST RESULTS SUMMARY'
     puts '=' * 100
 
@@ -249,7 +249,7 @@ namespace :backtest do
     puts "  Win Rate: #{best_winrate[:summary][:win_rate]}% | Expectancy: #{best_winrate[:summary][:expectancy]}% | Trades: #{best_winrate[:summary][:total_trades]}"
 
     # Top 5 by Expectancy
-    puts "\n" + '-' * 100
+    puts "\n" + ('-' * 100)
     puts '📊 Top 5 by Expectancy:'
     puts '-' * 100
     top_5 = all_results.sort_by { |r| -(r[:summary][:expectancy] || -999) }.first(5)
@@ -258,7 +258,7 @@ namespace :backtest do
       puts "     Expectancy: #{result[:summary][:expectancy]}% | P&L: #{result[:summary][:total_pnl_percent]}% | Win Rate: #{result[:summary][:win_rate]}% | Trades: #{result[:summary][:total_trades]}"
     end
 
-    puts "\n" + '=' * 100
+    puts "\n" + ('=' * 100)
     puts "✅ Completed #{all_results.size} successful backtests"
     puts '=' * 100
   end

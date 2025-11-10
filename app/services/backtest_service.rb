@@ -36,11 +36,13 @@ class BacktestService
     # Fetch historical OHLC data
     ohlc_data = instrument_event('ohlc.fetch') { fetch_ohlc_data }
     return { error: 'No OHLC data available' } if ohlc_data.blank?
+
     instrument_event('ohlc.received', candles: ohlc_data.size)
 
     # Create CandleSeries
     series = instrument_event('series.build', raw_candles: ohlc_data.size) { build_candle_series(ohlc_data) }
     return { error: 'Failed to build candle series' } if series.candles.empty?
+
     instrument_event('series.ready', candles: series.candles.size)
 
     # Initialize strategy
@@ -83,7 +85,7 @@ class BacktestService
 
   def print_summary
     s = summary
-    return puts "No trades executed" if s.empty?
+    return puts 'No trades executed' if s.empty?
 
     separator = '=' * 60
     divider = '-' * 60
@@ -102,8 +104,8 @@ class BacktestService
     puts "Max Win:           +#{s[:max_win]}%"
     puts "Max Loss:          #{s[:max_loss]}%"
     puts divider
-    puts "Total P&L:         #{s[:total_pnl_percent] > 0 ? '+' : ''}#{s[:total_pnl_percent]}%"
-    puts "Expectancy:        #{s[:expectancy] > 0 ? '+' : ''}#{s[:expectancy]}% per trade"
+    puts "Total P&L:         #{'+' if s[:total_pnl_percent] > 0}#{s[:total_pnl_percent]}%"
+    puts "Expectancy:        #{'+' if s[:expectancy] > 0}#{s[:expectancy]}% per trade"
     puts "#{separator}\n"
   end
 
@@ -150,21 +152,19 @@ class BacktestService
       # Check entry if no position
       if open_position.nil?
         signal = strategy.generate_signal(i)
-        if signal
-          open_position = enter_position(signal, candle, i)
-        end
+        open_position = enter_position(signal, candle, i) if signal
       end
 
       i += 1
     end
 
     # Close any remaining position at end
-    if open_position
-      last_candle = series.candles.last
-      exit_result = force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
-      @results << exit_result
-      instrument_event('trade.exited', exit_result.merge(force_exit: true))
-    end
+    return unless open_position
+
+    last_candle = series.candles.last
+    exit_result = force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
+    @results << exit_result
+    instrument_event('trade.exited', exit_result.merge(force_exit: true))
   end
 
   def enter_position(signal, candle, index)
@@ -204,27 +204,23 @@ class BacktestService
     signal_type = position[:signal_type]
 
     # Calculate P&L %
-    if signal_type == :ce
-      pnl_percent = ((current_price - entry_price) / entry_price * 100)
-    else # :pe
-      pnl_percent = ((entry_price - current_price) / entry_price * 100)
-    end
+    pnl_percent = if signal_type == :ce
+                    ((current_price - entry_price) / entry_price * 100)
+                  else # :pe
+                    ((entry_price - current_price) / entry_price * 100)
+                  end
 
     # Check target hit
     target_hit =
       (signal_type == :ce && current_price >= position[:target]) ||
       (signal_type == :pe && current_price <= position[:target])
-    if target_hit
-      return build_exit_result(position, candle, index, pnl_percent, 'target')
-    end
+    return build_exit_result(position, candle, index, pnl_percent, 'target') if target_hit
 
     # Check stop loss
     stop_loss_hit =
       (signal_type == :ce && current_price <= position[:stop_loss]) ||
       (signal_type == :pe && current_price >= position[:stop_loss])
-    if stop_loss_hit
-      return build_exit_result(position, candle, index, pnl_percent, 'stop_loss')
-    end
+    return build_exit_result(position, candle, index, pnl_percent, 'stop_loss') if stop_loss_hit
 
     # Activate trailing stop at 40% profit
     if pnl_percent >= 40 && !position[:trailing_activated]
@@ -266,11 +262,11 @@ class BacktestService
     entry_price = position[:entry_price]
     signal_type = position[:signal_type]
 
-    if signal_type == :ce
-      pnl_percent = ((current_price - entry_price) / entry_price * 100)
-    else
-      pnl_percent = ((entry_price - current_price) / entry_price * 100)
-    end
+    pnl_percent = if signal_type == :ce
+                    ((current_price - entry_price) / entry_price * 100)
+                  else
+                    ((entry_price - current_price) / entry_price * 100)
+                  end
 
     build_exit_result(position, candle, index, pnl_percent, reason)
   end
@@ -290,10 +286,10 @@ class BacktestService
     result
   end
 
-  def instrument_event(event, extra_payload = {})
+  def instrument_event(event, extra_payload = {}, &)
     payload = base_payload.merge(extra_payload)
     if block_given?
-      ActiveSupport::Notifications.instrument("backtest.#{event}", payload) { yield }
+      ActiveSupport::Notifications.instrument("backtest.#{event}", payload, &)
     else
       ActiveSupport::Notifications.instrument("backtest.#{event}", payload)
     end
