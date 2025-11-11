@@ -193,15 +193,19 @@ module Live
         tracker.hydrate_pnl_from_cache!
 
         ltp = current_ltp(tracker, position)
-        next unless ltp
+        # Compute PnL using LTP when available
+        pnl_value = compute_pnl(tracker, position, ltp) if ltp
+        pnl_pct_value = compute_pnl_pct(tracker, ltp, position) if ltp
+        # Fallback for paper positions: if no fresh LTP, use last persisted PnL%
+        if ltp.nil? && pnl_pct_value.nil? && tracker.paper? && tracker.last_pnl_pct
+          pnl_pct_value = BigDecimal(tracker.last_pnl_pct.to_s) / 100
+        end
+        # If we have neither LTP nor fallback basis, skip
+        if ltp.nil? && pnl_pct_value.nil?
+          Rails.logger.debug { "[RiskManager] Skipping #{tracker.order_no} - no LTP and no fallback PnL% available" }
+          next
+        end
 
-        # Use compute_pnl to correctly handle both paper and live positions
-        # For live positions, it uses position.cost_price from DhanHQ
-        # For paper positions, it uses tracker.entry_price
-        pnl_value = compute_pnl(tracker, position, ltp)
-        next unless pnl_value
-
-        pnl_pct_value = compute_pnl_pct(tracker, ltp, position)
         reason = nil
 
         # Update PnL in Redis for all positions (not just those exiting)
@@ -239,28 +243,33 @@ module Live
         next if quantity <= 0
 
         entry = BigDecimal(entry_price.to_s)
-        ltp_value = BigDecimal(ltp.to_s)
+        ltp_value = BigDecimal(ltp.to_s) if ltp
 
         # Check exit conditions
         if sl_pct.positive?
-          stop_price = entry * (BigDecimal(1) - sl_pct)
-          reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%)" if ltp_value <= stop_price
+          if ltp
+            stop_price = entry * (BigDecimal(1) - sl_pct)
+            reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%)" if ltp_value <= stop_price
+          elsif pnl_pct_value && pnl_pct_value <= -sl_pct
+            # Fallback: enforce SL using last known PnL% when LTP is unavailable
+            reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%)"
+          end
         end
 
         if reason.nil? && per_trade_pct.positive?
           invested = entry * quantity
-          loss = [entry - ltp_value, BigDecimal(0)].max * quantity
+          loss = [entry - (ltp_value || entry), BigDecimal(0)].max * quantity
           if invested.positive? && loss >= invested * per_trade_pct
             reason = "per-trade risk #{(per_trade_pct * 100).round(2)}%"
           end
         end
 
-        if reason.nil? && tp_pct.positive?
+        if reason.nil? && tp_pct.positive? && ltp
           target_price = entry * (BigDecimal(1) + tp_pct)
           if ltp_value >= target_price
             # Check minimum profit requirement before allowing take-profit exit
             min_profit = BigDecimal((risk[:min_profit_rupees] || 0).to_s)
-            if min_profit.positive? && pnl_value < min_profit
+            if min_profit.positive? && pnl_value && pnl_value < min_profit
               Rails.logger.debug { "[RiskManager] Take-profit target reached for #{tracker.order_no}, but PnL (₹#{pnl_value.round(2)}) < minimum profit (₹#{min_profit}) - holding position" }
               next # Skip exit, wait for minimum profit
             end
