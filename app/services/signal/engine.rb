@@ -620,15 +620,20 @@ module Signal
           strategy_config: strategy_config
         )
 
+        pp series.candles.last
+        pp series.candles.first
         if result[:status] == :ok && result[:direction] == :avoid
           Rails.logger.info("[Signal] #{strategy_recommendation[:strategy_name]} did not generate a signal for #{index_cfg[:key]} - checking conditions...")
           # Log why signal might not be generated
           last_candle = series.candles[current_index]
           if last_candle
-            hour = last_candle.timestamp.hour
-            minute = last_candle.timestamp.min
-            in_trading_hours = hour >= 10 && hour <= 14 && !(hour == 14 && minute > 30)
-            Rails.logger.info("[Signal] Last candle time: #{last_candle.timestamp.strftime('%H:%M')} | In trading hours: #{in_trading_hours} | Candles available: #{series.candles.size}")
+            # Convert timestamp to IST timezone explicitly
+            ist_time = last_candle.timestamp.in_time_zone('Asia/Kolkata')
+            hour = ist_time.hour
+            minute = ist_time.min
+            # Market hours: 9:15 AM to 3:30 PM IST (checking up to 3:30 PM)
+            in_trading_hours = (hour > 9 || (hour == 9 && minute >= 15)) && (hour < 15 || (hour == 15 && minute < 30))
+            Rails.logger.info("[Signal] Last candle time: #{ist_time.strftime('%H:%M %Z')} | In trading hours: #{in_trading_hours} | Candles available: #{series.candles.size}")
           end
         end
 

@@ -62,10 +62,12 @@ class SupertrendAdxStrategy
   end
 
   def trading_hours?(candle)
-    hour = candle.timestamp.hour
-    minute = candle.timestamp.min
+    # Convert timestamp to IST timezone explicitly
+    ist_time = candle.timestamp.in_time_zone('Asia/Kolkata')
+    hour = ist_time.hour
+    minute = ist_time.min
 
-    # Active between 10:00 AM and 2:30 PM
+    # Active between 10:00 AM and 2:30 PM IST
     return false if hour < 10
     return false if hour > 14
     return false if hour == 14 && minute > 30

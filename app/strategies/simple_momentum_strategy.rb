@@ -36,10 +36,12 @@ class SimpleMomentumStrategy
   private
 
   def trading_hours?(candle)
-    hour = candle.timestamp.hour
-    minute = candle.timestamp.min
+    # Convert timestamp to IST timezone explicitly
+    ist_time = candle.timestamp.in_time_zone('Asia/Kolkata')
+    hour = ist_time.hour
+    minute = ist_time.min
 
-    # Only trade between 10:00 AM - 2:30 PM
+    # Only trade between 10:00 AM - 2:30 PM IST
     return false if hour < 10
     return false if hour > 14
     return false if hour == 14 && minute > 30
