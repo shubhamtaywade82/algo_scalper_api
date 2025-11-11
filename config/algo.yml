@@ -46,6 +46,7 @@ signals:
   confirmation_timeframe: "5m"
   enable_confirmation_timeframe: false # Enable/disable 5m confirmation analysis
   enable_adx_filter: false # Enable/disable ADX strength filtering
+  use_strategy_recommendations: true # Enable/disable backtest-based strategy recommendations (SimpleMomentumStrategy, InsideBarStrategy, SupertrendAdxStrategy)
   validation_mode: "aggressive" # conservative | balanced | aggressive
   supertrend:
     period: 10

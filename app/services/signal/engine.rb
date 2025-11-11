@@ -4,16 +4,15 @@ module Signal
   class Engine
     class << self
       def run_for(index_cfg)
-        Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for SENSEX (IDX_I) --------------------------------------------------------")
+        Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for #{index_cfg[:key]} (IDX_I) --------------------------------------------------------")
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
-        confirmation_tf = if enable_confirmation
-                            signals_cfg[:confirmation_timeframe].presence&.to_s
-                          else
-                            nil
-                          end
+        confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
+
+        # Check if strategy-based recommendations are enabled
+        use_strategy_recommendations = signals_cfg.fetch(:use_strategy_recommendations, false)
 
         # Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
 
@@ -23,24 +22,53 @@ module Signal
           return
         end
 
-        supertrend_cfg = signals_cfg[:supertrend]
-        unless supertrend_cfg
-          Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
-          return
+        # Get strategy recommendation if enabled - use best strategy for this index
+        strategy_recommendation = nil
+        effective_timeframe = primary_tf
+        if use_strategy_recommendations
+          # Get best strategy for this index (across all timeframes)
+          strategy_recommendation = StrategyRecommender.best_for_index(symbol: index_cfg[:key])
+          if strategy_recommendation && strategy_recommendation[:recommended]
+            # Use the recommended strategy's timeframe instead of config timeframe
+            effective_timeframe = "#{strategy_recommendation[:interval]}m"
+            Rails.logger.info("[Signal] Using recommended strategy for #{index_cfg[:key]}: #{strategy_recommendation[:strategy_name]} (#{strategy_recommendation[:interval]}min) - Expectancy: #{strategy_recommendation[:expectancy]}% | Switching timeframe from #{primary_tf} to #{effective_timeframe}")
+          elsif strategy_recommendation
+            Rails.logger.warn("[Signal] Strategy recommendation found for #{index_cfg[:key]} but not recommended (negative expectancy: #{strategy_recommendation[:expectancy]}%) - falling back to Supertrend+ADX")
+            strategy_recommendation = nil
+          else
+            Rails.logger.warn("[Signal] No strategy recommendation found for #{index_cfg[:key]} - falling back to Supertrend+ADX")
+          end
         end
 
-        adx_cfg = signals_cfg[:adx] || {}
-        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
-        # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-        adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
+        # Use strategy-based analysis if recommendation is available and enabled
+        if use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
+          primary_analysis = analyze_with_recommended_strategy(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            timeframe: effective_timeframe,
+            strategy_recommendation: strategy_recommendation
+          )
+        else
+          # Fallback to traditional Supertrend + ADX analysis
+          supertrend_cfg = signals_cfg[:supertrend]
+          unless supertrend_cfg
+            Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
+            return
+          end
 
-        primary_analysis = analyze_timeframe(
-          index_cfg: index_cfg,
-          instrument: instrument,
-          timeframe: primary_tf,
-          supertrend_cfg: supertrend_cfg,
-          adx_min_strength: adx_min_strength
-        )
+          adx_cfg = signals_cfg[:adx] || {}
+          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+          # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
+          adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
+
+          primary_analysis = analyze_timeframe(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            timeframe: primary_tf,
+            supertrend_cfg: supertrend_cfg,
+            adx_min_strength: adx_min_strength
+          )
+        end
 
         unless primary_analysis[:status] == :ok
           Rails.logger.warn("[Signal] Primary timeframe analysis unavailable for #{index_cfg[:key]}: #{primary_analysis[:message]}")
@@ -51,7 +79,9 @@ module Signal
         final_direction = primary_analysis[:direction]
         confirmation_analysis = nil
 
-        if confirmation_tf.present?
+        # Skip confirmation timeframe when using strategy recommendations
+        # (strategies were backtested as standalone systems)
+        if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended])
           mode_config = get_validation_mode_config
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
@@ -76,10 +106,16 @@ module Signal
 
           final_direction = multi_timeframe_direction(primary_analysis[:direction], confirmation_analysis[:direction])
           # Rails.logger.info("[Signal] Multi-timeframe decision for #{index_cfg[:key]}: primary=#{primary_analysis[:direction]} confirmation=#{confirmation_analysis[:direction]} final=#{final_direction}")
+        elsif confirmation_tf.present? && use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
+          Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using strategy recommendation: #{strategy_recommendation[:strategy_name]})")
         end
 
         if final_direction == :avoid
-          Rails.logger.info("[Signal] NOT proceeding for #{index_cfg[:key]}: multi-timeframe bias mismatch or weak trend")
+          if use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
+            Rails.logger.info("[Signal] NOT proceeding for #{index_cfg[:key]}: #{strategy_recommendation[:strategy_name]} did not generate a signal (conditions not met)")
+          else
+            Rails.logger.info("[Signal] NOT proceeding for #{index_cfg[:key]}: multi-timeframe bias mismatch or weak trend")
+          end
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
@@ -113,7 +149,7 @@ module Signal
         TradingSignal.create_from_analysis(
           index_key: index_cfg[:key],
           direction: final_direction.to_s,
-          timeframe: primary_tf,
+          timeframe: effective_timeframe,
           supertrend_value: primary_analysis[:supertrend][:last_value],
           adx_value: primary_analysis[:adx_value],
           candle_timestamp: primary_analysis[:last_candle_timestamp],
@@ -123,7 +159,9 @@ module Signal
             confirmation_direction: confirmation_analysis&.dig(:direction),
             validation_passed: validation_result[:valid],
             state_count: state_snapshot[:count],
-            state_multiplier: state_snapshot[:multiplier]
+            state_multiplier: state_snapshot[:multiplier],
+            strategy_used: strategy_recommendation&.dig(:strategy_name),
+            original_timeframe: primary_tf
           }
         )
 
@@ -136,9 +174,9 @@ module Signal
           return
         end
 
-        Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.map { |p| p[:symbol] }.join(', ')}")
+        Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
-        picks.each_with_index do |pick, index|
+        picks.each_with_index do |pick, _index|
           # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
           result = Entries::EntryGuard.try_enter(
             index_cfg: index_cfg,
@@ -180,7 +218,7 @@ module Signal
 
         st_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)
         st = st_service.call
-        last_multiplier = st[:adaptive_multipliers]&.compact&.last
+        st[:adaptive_multipliers]&.compact&.last
         # Rails.logger.info(
         #   "[Signal] Supertrend(#{timeframe}) for #{index_cfg[:key]}: trend=#{st[:trend]} last_value=#{st[:last_value]} multiplier=#{last_multiplier}"
         # )
@@ -212,11 +250,7 @@ module Signal
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
-        confirmation_tf = if enable_confirmation
-                            signals_cfg[:confirmation_timeframe].presence&.to_s
-                          else
-                            nil
-                          end
+        confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
 
         supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
@@ -347,7 +381,7 @@ module Signal
         # Log all validation results
         # Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
         validation_checks.each do |check|
-          status = check[:valid] ? '✅' : '❌'
+          check[:valid] ? '✅' : '❌'
           # Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
         end
 
@@ -545,6 +579,76 @@ module Signal
 
         total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor
         [total_confidence, 1.0].min # Cap at 1.0
+      end
+
+      def analyze_with_recommended_strategy(index_cfg:, instrument:, timeframe:, strategy_recommendation:)
+        interval = normalize_interval(timeframe)
+        if interval.blank?
+          message = "Invalid timeframe '#{timeframe}'"
+          Rails.logger.error("[Signal] #{message} for #{index_cfg[:key]}")
+          return { status: :error, message: message }
+        end
+
+        series = instrument.candle_series(interval: interval)
+        unless series&.candles&.any?
+          message = "No candle data (#{timeframe})"
+          Rails.logger.warn("[Signal] #{message} for #{index_cfg[:key]}")
+          return { status: :no_data, message: message }
+        end
+
+        strategy_class = strategy_recommendation[:strategy_class]
+        strategy_config = {}
+
+        # Prepare strategy-specific configuration
+        if strategy_class == SupertrendAdxStrategy
+          signals_cfg = AlgoConfig.fetch[:signals] || {}
+          strategy_config = {
+            supertrend_cfg: signals_cfg[:supertrend] || { period: 7, multiplier: 3 },
+            adx_min_strength: signals_cfg.dig(:adx, :min_strength) || 20
+          }
+        end
+
+        # Use the last candle index for signal generation
+        current_index = series.candles.size - 1
+
+        Rails.logger.info("[Signal] Analyzing #{index_cfg[:key]} with #{strategy_recommendation[:strategy_name]} at index #{current_index} (#{series.candles.size} candles, timeframe: #{timeframe})")
+
+        result = Signal::StrategyAdapter.analyze_with_strategy(
+          strategy_class: strategy_class,
+          series: series,
+          index: current_index,
+          strategy_config: strategy_config
+        )
+
+        if result[:status] == :ok && result[:direction] == :avoid
+          Rails.logger.info("[Signal] #{strategy_recommendation[:strategy_name]} did not generate a signal for #{index_cfg[:key]} - checking conditions...")
+          # Log why signal might not be generated
+          last_candle = series.candles[current_index]
+          if last_candle
+            hour = last_candle.timestamp.hour
+            minute = last_candle.timestamp.min
+            in_trading_hours = hour >= 10 && hour <= 14 && !(hour == 14 && minute > 30)
+            Rails.logger.info("[Signal] Last candle time: #{last_candle.timestamp.strftime('%H:%M')} | In trading hours: #{in_trading_hours} | Candles available: #{series.candles.size}")
+          end
+        end
+
+        # Convert to standard format with supertrend and adx placeholders for compatibility
+        if result[:status] == :ok
+          {
+            status: :ok,
+            series: result[:series],
+            supertrend: { trend: result[:direction] == :bullish ? :bullish : :bearish, last_value: nil },
+            adx_value: result[:confidence] || 0,
+            direction: result[:direction],
+            last_candle_timestamp: result[:last_candle_timestamp],
+            strategy_confidence: result[:confidence]
+          }
+        else
+          result
+        end
+      rescue StandardError => e
+        Rails.logger.error("[Signal] Strategy-based analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
+        { status: :error, message: e.message }
       end
 
       def decide_direction(supertrend_result, adx_value, min_strength:, timeframe_label:)

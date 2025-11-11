@@ -74,7 +74,7 @@ class PositionTracker < ApplicationRecord
 
     # Initialize PnL in Redis (will be 0 initially since entry_price = avg_price)
     # This ensures the position is tracked in Redis from the start
-    return unless price.present?
+    return if price.blank?
 
     initial_pnl = BigDecimal(0)
     Live::RedisPnlCache.instance.store_pnl(
@@ -359,16 +359,27 @@ class PositionTracker < ApplicationRecord
     end
 
     def clear_orphaned_redis_pnl!
+      return unless should_clear_orphaned?
+
       cache = Live::RedisPnlCache.instance
-      existing_ids = PositionTracker.pluck(:id).map(&:to_s)
-      existing_lookup = existing_ids.each_with_object({}) { |id, hash| hash[id] = true }
+      # Only check active positions (most common case) - faster query
+      existing_ids = PositionTracker.active.pluck(:id).to_set(&:to_s)
 
       cache.each_tracker_key do |_key, tracker_id|
-        next if existing_lookup.key?(tracker_id)
+        next if existing_ids.include?(tracker_id)
 
         Rails.logger.warn("[PositionTracker] Clearing orphaned Redis PnL cache for tracker #{tracker_id}")
         cache.clear_tracker(tracker_id)
       end
+
+      @last_clear = Time.current
+    end
+
+    def should_clear_orphaned?
+      @last_clear ||= 5.minutes.ago
+      return true if Time.current - @last_clear >= 5.minutes
+
+      false
     end
   end
 end
