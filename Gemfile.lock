@@ -1,9 +1,9 @@
 GIT
   remote: https://github.com/shubhamtaywade82/dhanhq-client.git
-  revision: 8efd3787678b170bdcd8c3f12353a40210f794c8
+  revision: cfcf20cfd718d7adafa0e0b4d86f3d90dd409a43
   branch: main
   specs:
-    DhanHQ (2.1.9)
+    DhanHQ (2.1.10)
       activesupport
       base64
       bindata
@@ -244,7 +244,7 @@ GEM
       net-smtp
     marcel (1.1.0)
     mini_mime (1.1.5)
-    minitest (5.26.0)
+    minitest (5.26.1)
     msgpack (1.8.0)
     multipart-post (2.4.1)
     net-imap (0.5.12)

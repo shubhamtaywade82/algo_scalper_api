@@ -41,6 +41,7 @@ class BacktestService
 
     # Create CandleSeries
     series = instrument_event('series.build', raw_candles: ohlc_data.size) { build_candle_series(ohlc_data) }
+    @series = series
     return { error: 'Failed to build candle series' } if series.candles.empty?
 
     instrument_event('series.ready', candles: series.candles.size)
@@ -132,55 +133,76 @@ class BacktestService
     series
   end
 
-  def simulate_trading(series, strategy)
-    open_position = nil
-    i = 0
+    # ----------------------------- UPDATED SECTION -----------------------------
+    def simulate_trading(series, strategy)
+      open_position = nil
+      i = 0
 
-    while i < series.candles.size
-      candle = series.candles[i]
+      while i < series.candles.size
+        candle = series.candles[i]
 
-      # Check exit first if position is open
-      if open_position
-        exit_result = check_exit(open_position, candle, i, series)
-        if exit_result
-          @results << exit_result
-          open_position = nil
-          instrument_event('trade.exited', exit_result)
+        if open_position
+          exit_result = check_exit(open_position, candle, i, series)
+          if exit_result
+            @results << exit_result
+            open_position = nil
+            instrument_event('trade.exited', exit_result)
+          end
         end
+
+        if open_position.nil?
+          signal = strategy.generate_signal(i)
+          open_position = enter_position(signal, candle, i) if signal
+        end
+
+        i += 1
       end
 
-      # Check entry if no position
-      if open_position.nil?
-        signal = strategy.generate_signal(i)
-        open_position = enter_position(signal, candle, i) if signal
+      if open_position
+        last_candle = series.candles.last
+        exit_result = force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
+        @results << exit_result
       end
-
-      i += 1
     end
 
-    # Close any remaining position at end
-    return unless open_position
+    def enter_position(signal, candle, index)
+      option_data = fetch_option_series(signal[:type], candle.timestamp)
+      return unless option_data.present?
+      entry_premium = fetch_premium_price(option_data, candle.timestamp)
 
-    last_candle = series.candles.last
-    exit_result = force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
-    @results << exit_result
-    instrument_event('trade.exited', exit_result.merge(force_exit: true))
-  end
+      position = {
+        signal_type: signal[:type],
+        entry_index: index,
+        entry_time: candle.timestamp,
+        entry_price: entry_premium,
+        option_data: option_data,
+        stop_loss: calculate_stop_loss(entry_premium, signal[:type]),
+        target: calculate_target(entry_premium, signal[:type])
+      }
 
-  def enter_position(signal, candle, index)
-    position = {
-      signal_type: signal[:type], # :ce or :pe
-      entry_index: index,
-      entry_time: candle.timestamp,
-      entry_price: candle.close, # Simulate entry at close of signal candle
-      stop_loss: calculate_stop_loss(candle.close, signal[:type]),
-      target: calculate_target(candle.close, signal[:type]),
-      trailing_activated: false,
-      trailing_stop: nil
-    }
-    instrument_event('trade.entered', position)
-    position
-  end
+      instrument_event('trade.entered', position)
+      position
+    end
+
+    # removed duplicate check_exit (option-premium based) to avoid method redefinition
+
+    # ------------------------- NEW METHODS --------------------------
+
+    def fetch_option_series(type, date)
+      fetcher = Options::ExpiredFetcher.call(symbol: @instrument.symbol_name, expiry_flag: 'WEEK', date: date)
+      fetcher[type]
+    rescue StandardError => e
+      Rails.logger.error("[Backtest] fetch_option_series failed: #{e.message}")
+      []
+    end
+
+    def fetch_premium_price(option_data, ts)
+      # get closest timestamp bar
+      return 0.0 if option_data.blank?
+      bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
+      bar[:close].to_f
+    end
+
 
   def calculate_stop_loss(entry_price, signal_type)
     if signal_type == :ce
@@ -199,7 +221,7 @@ class BacktestService
   end
 
   def check_exit(position, candle, index, _series)
-    current_price = candle.close
+    current_price = fetch_premium_price(position[:option_data], candle.timestamp)
     entry_price = position[:entry_price]
     signal_type = position[:signal_type]
 

@@ -47,7 +47,12 @@ end
 
 Rails.application.config.to_prepare do
   # Skip automated trading services in console mode and test environment
-  unless Rails.const_defined?(:Console) || Rails.env.test?
+  is_rake = defined?(Rake)
+  backtest_env = ENV['BACKTEST_MODE'] == '1'
+  backtest_task = is_rake && Rake.application.respond_to?(:top_level_tasks) && Rake.application.top_level_tasks.any? { |t| t.start_with?('backtest:') }
+  skip_services = Rails.const_defined?(:Console) || Rails.env.test? || backtest_env || backtest_task
+
+  unless skip_services
     # Start the live market feed hub
     MarketStreamLifecycle.safely_start { Live::MarketFeedHub.instance.start! }
 

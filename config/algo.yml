@@ -34,10 +34,10 @@ indices:
 risk:
   # daily_loss_limit_pct: 0.06 # Circuit breaker disabled - removed per requirement
   per_trade_risk_pct: 0.15
-  sl_pct: 0.25 # 25% stop loss for options (high volatility)
-  tp_pct: 0.60 # 60% take profit target
-  trail_step_pct: 0.05 # 5% trailing step for options
-  breakeven_after_gain: 0.10 # trigger breakeven lock at +10% gain
+  sl_pct: 0.10 # 25% stop loss for options (high volatility)
+  tp_pct: 0.20 # 60% take profit target
+  trail_step_pct: 0.03 # 5% trailing step for options
+  breakeven_after_gain: 0.05 # trigger breakeven lock at +10% gain
   exit_drop_pct: 0.03 # trigger trailing exit after 3% pullback from high-water mark
   min_profit_rupees: 1000 # Minimum profit required per position before allowing profit-based exits (₹1000)
 

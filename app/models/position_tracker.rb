@@ -311,6 +311,83 @@ class PositionTracker < ApplicationRecord
 
   # Class methods for paper trading statistics
   class << self
+    # == Extension for detailed paper trading reporting ==
+    def paper_trading_stats_with_pct
+      exited = exited_paper
+      active = paper.active
+
+      active_count = active.count
+      realized_pnl_rupees = exited.sum { |t| t.last_pnl_rupees.to_f }
+      realized_pnl_pct = exited.map { |t| t.last_pnl_pct.to_f }.compact.sum
+
+      unrealized_pnl_rupees = active.sum { |t| t.last_pnl_rupees.to_f }
+      unrealized_pnl_pct = active.map { |t| t.last_pnl_pct.to_f }.compact.sum
+
+      total_pnl_rupees = realized_pnl_rupees + unrealized_pnl_rupees
+      total_pnl_pct = realized_pnl_pct + unrealized_pnl_pct
+
+      {
+        total_trades: exited.count,
+        active_positions: active_count,
+        total_pnl_rupees: total_pnl_rupees.round(2),
+        total_pnl_pct: total_pnl_pct.round(2),
+        realized_pnl_rupees: realized_pnl_rupees.round(2),
+        realized_pnl_pct: realized_pnl_pct.round(2),
+        unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
+        unrealized_pnl_pct: unrealized_pnl_pct.round(2),
+        win_rate: paper_win_rate,
+        avg_realized_pnl_pct: exited.any? ? (realized_pnl_pct / exited.count.to_f).round(2) : 0.0,
+        avg_unrealized_pnl_pct: active.any? ? (unrealized_pnl_pct / active.count.to_f).round(2) : 0.0,
+        winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
+        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
+      }
+    end
+
+    # == Detailed breakdown of each paper trade ==
+    def paper_positions_details
+      paper.includes(:instrument).map do |t|
+        entry_price = t.entry_price.to_f
+        exit_price = t.last_pnl_rupees.present? && t.status == 'exited' ? t.exit_price.to_f : nil
+        current_price = exit_price || t.avg_price.to_f
+        side = t.side
+        qty = t.quantity.to_i
+        pnl_abs = t.last_pnl_rupees.to_f
+        pnl_pct = if t.last_pnl_pct.present?
+                    t.last_pnl_pct.to_f
+                  elsif entry_price.positive? && current_price.positive?
+                    if side == 'BUY'
+                      ((current_price - entry_price) / entry_price * 100.0)
+                    else
+                      ((entry_price - current_price) / entry_price * 100.0)
+                    end
+                  else
+                    0.0
+                  end
+
+        {
+          id: t.id,
+          order_no: t.order_no,
+          symbol: t.symbol,
+          side: side,
+          status: t.status,
+          quantity: qty,
+          entry_price: entry_price,
+          exit_price: exit_price,
+          avg_price: t.avg_price.to_f,
+          last_pnl_rupees: pnl_abs.round(2),
+          last_pnl_pct: pnl_pct.round(2),
+          high_water_mark_pnl: t.high_water_mark_pnl.to_f,
+          created_at: t.created_at&.strftime('%Y-%m-%d %H:%M'),
+          updated_at: t.updated_at&.strftime('%Y-%m-%d %H:%M'),
+          watchable_type: t.watchable_type,
+          segment: t.segment,
+          security_id: t.security_id,
+          paper: t.paper?,
+          unrealized?: t.status != 'exited'
+        }
+      end
+    end
+
     def total_paper_pnl
       exited_paper.sum do |tracker|
         tracker.last_pnl_rupees || BigDecimal(0)

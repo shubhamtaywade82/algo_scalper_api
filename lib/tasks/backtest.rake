@@ -2,8 +2,12 @@
 # frozen_string_literal: true
 
 namespace :backtest do
+  # Ensure services are disabled during backtests
+  task :env do
+    ENV['BACKTEST_MODE'] = '1'
+  end
   desc 'Run backtest on an instrument'
-  task :run, %i[symbol interval days] => :environment do |_t, args|
+  task :run, %i[symbol interval days] => [:env, :environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
@@ -22,7 +26,7 @@ namespace :backtest do
   end
 
   desc 'Run backtest on all indices'
-  task :indices, %i[interval days] => :environment do |_t, args|
+  task :indices, %i[interval days] => [:env, :environment] do |_t, args|
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
 
@@ -110,7 +114,7 @@ namespace :backtest do
   # end
 
   desc 'Compare strategies on an instrument'
-  task :compare, %i[symbol interval days] => :environment do |_t, args|
+  task :compare, %i[symbol interval days] => [:env, :environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
@@ -151,7 +155,7 @@ namespace :backtest do
   end
 
   desc 'Run comprehensive backtest on all indices and timeframes'
-  task :all_indices, [:days] => :environment do |_t, args|
+  task :all_indices, [:days] => [:env, :environment] do |_t, args|
     days = (args[:days] || '90').to_i
     symbols = %w[NIFTY BANKNIFTY SENSEX]
     intervals = %w[5 15]
@@ -264,7 +268,7 @@ namespace :backtest do
   end
 
   desc 'Export backtest results to CSV'
-  task :export, %i[symbol interval days output] => :environment do |_t, args|
+  task :export, %i[symbol interval days output] => [:env, :environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
