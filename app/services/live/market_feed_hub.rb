@@ -7,7 +7,7 @@ module Live
   class MarketFeedHub
     include Singleton
 
-    DEFAULT_MODE = :quote
+    DEFAULT_MODE = :ticker
 
     def initialize
       @callbacks = Concurrent::Array.new
@@ -229,23 +229,28 @@ module Live
         nil
       end
 
-      # pp tick  # Uncomment only for debugging - very noisy!
+      # puts tick  # Uncomment only for debugging - very noisy!
       # Log every tick (segment:security_id and LTP) for verification during development
       # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
 
       # Store in in-memory cache (primary)
-      Live::TickCache.put(tick)
+      # Always update in-memory TickCache
+      Live::TickCache.put(tick) if tick[:ltp].to_f.positive?
 
+
+      # puts Live::TickCache.ltp(tick[:segment], tick[:security_id])
       # Store in Redis for PnL tracking (secondary)
       # Only store if we have valid segment, security_id, and LTP
       if tick[:segment].present? && tick[:security_id].present? && tick[:ltp].present? && tick[:ltp].to_f.positive?
         begin
-          Live::RedisPnlCache.instance.store_tick(
-            segment: tick[:segment],
-            security_id: tick[:security_id].to_s,
-            ltp: tick[:ltp],
-            timestamp: Time.current
-          )
+          if tick[:ltp].present? && tick[:ltp].to_f.positive?
+            Live::RedisPnlCache.instance.store_tick(
+              segment: tick[:segment],
+              security_id: tick[:security_id].to_s,
+              ltp: tick[:ltp],
+              timestamp: Time.current
+            )
+          end
         rescue StandardError => e
           Rails.logger.debug { "[MarketFeedHub] Failed to store tick in Redis: #{e.message}" } if defined?(Rails.logger)
         end
@@ -256,6 +261,24 @@ module Live
       @callbacks.each do |callback|
         safe_invoke(callback, tick)
       end
+      # begin
+      #   trackers = PositionTracker.active.where(security_id: tick[:security_id].to_s)
+      #   trackers.each do |t|
+      #     next unless t.entry_price && t.quantity
+      #     pnl = (tick[:ltp].to_f - t.entry_price.to_f) * t.quantity
+      #     pnl_pct = (tick[:ltp].to_f - t.entry_price.to_f) / t.entry_price.to_f
+      #     Live::RedisPnlCache.instance.store_pnl(
+      #       tracker_id: t.id,
+      #       pnl: pnl,
+      #       pnl_pct: pnl_pct,
+      #       ltp: tick[:ltp],
+      #       hwm: [t.high_water_mark_pnl.to_f, pnl].max,
+      #       timestamp: Time.current
+      #     )
+      #   end
+      # rescue => e
+      #   Rails.logger.error("[MarketFeedHub] Failed to live-update Redis PnL: #{e.message}")
+      # end
     end
 
     def safe_invoke(callback, payload)
@@ -329,8 +352,9 @@ module Live
 
     def mode
       allowed = %i[ticker quote full]
-      selected = config&.ws_mode || DEFAULT_MODE
+      selected = :full || config&.ws_mode || DEFAULT_MODE
       allowed.include?(selected) ? selected : DEFAULT_MODE
+      :full
     end
 
     def setup_connection_handlers

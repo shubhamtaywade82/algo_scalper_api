@@ -53,7 +53,7 @@ Rails.application.config.to_prepare do
   skip_services = Rails.const_defined?(:Console) || Rails.env.test? || backtest_env || backtest_task
 
   unless skip_services
-    # Start the live market feed hub
+    # 1️⃣ Start Market Feed Hub
     MarketStreamLifecycle.safely_start { Live::MarketFeedHub.instance.start! }
 
     # DISABLED: Order Update WebSocket Handler
@@ -67,21 +67,27 @@ Rails.application.config.to_prepare do
     # If you need real-time order updates (< 1s latency), uncomment the line below:
     # MarketStreamLifecycle.safely_start { Live::OrderUpdateHandler.instance.start! }
 
-    # Start trading scheduler (signals → entries)
+    # 2️⃣ Start Signal Scheduler # Start trading scheduler (signals → entries)
     MarketStreamLifecycle.safely_start { Signal::Scheduler.instance.start! }
 
+    # 3️⃣ Start Risk Manager Service
     MarketStreamLifecycle.safely_start { Live::RiskManagerService.instance.start! }
 
-    # Resubscribe to all active positions after MarketFeedHub starts
+    # 4️⃣ Start new PnL Updater Service # Start real-time PnL updater (computes pnl:tracker data every second from TickCache)
+    # Start PnL updater service (batch writer) — start after market feed hub is up
     MarketStreamLifecycle.safely_start do
-      resubscribe_active_positions
+      # tiny delay to let MarketFeedHub/TickCache populate initial ticks
+      Thread.new do
+        sleep 0.5
+        Live::PnlUpdaterService.instance.start!
+      end
     end
 
+    # 5️⃣ Resubscribe & Sync Positions (syncs positions from DhanHQ and creates PositionTracker records) # Resubscribe to all active positions after MarketFeedHub starts
+    MarketStreamLifecycle.safely_start { resubscribe_active_positions }
+
     # Perform initial position sync to ensure all DhanHQ positions are tracked
-    MarketStreamLifecycle.safely_start do
-      # Rails.logger.info("[PositionSync] Performing initial position synchronization...")
-      Live::PositionSyncService.instance.force_sync!
-    end
+    MarketStreamLifecycle.safely_start { Live::PositionSyncService.instance.force_sync! }
   else
     # Rails.logger.info("[MarketStream] Skipping automated trading services in #{Rails.const_defined?(:Console) ? 'console' : 'test'} mode")
   end
@@ -94,6 +100,7 @@ def shutdown_services
   Rails.logger.info('[MarketStream] Shutting down services...') if defined?(Rails.logger)
 
   # Stop all services in reverse order of startup
+  MarketStreamLifecycle.safely_stop { Live::PnlUpdaterService.instance.stop! }
   MarketStreamLifecycle.safely_stop { Live::RiskManagerService.instance.stop! }
   MarketStreamLifecycle.safely_stop { Signal::Scheduler.instance.stop! }
   MarketStreamLifecycle.safely_stop { Live::MarketFeedHub.instance.stop! }

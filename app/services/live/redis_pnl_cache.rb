@@ -7,43 +7,66 @@ module Live
     include Singleton
 
     REDIS_KEY_PREFIX = 'pnl:tracker'
-    TTL_SECONDS = 1.hour.to_i
+    TTL_SECONDS = 6.hours.to_i
 
     def initialize
       @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/0'))
     rescue StandardError
-      # Rails.logger.error('Failed to initialize Redis PnL cache')
       @redis = nil
     end
 
-    def store_pnl(tracker_id:, pnl:, pnl_pct: nil, ltp: nil, hwm: nil, timestamp: Time.current)
+    # ------------------------------------------------------------
+    # ONLY STORE PNL — NEVER STORE TICK HERE
+    # ------------------------------------------------------------
+    def store_pnl(tracker_id:, pnl:, pnl_pct:, ltp:, hwm:, timestamp: Time.current)
       return unless @redis
 
       key = pnl_key(tracker_id)
 
-      # Convert all values to strings for Redis (Redis stores everything as strings)
-      data = {}
-      data['pnl'] = pnl.to_f.to_s if pnl
-      data['pnl_pct'] = pnl_pct.to_f.to_s if pnl_pct
-      data['hwm_pnl'] = hwm.to_f.to_s if hwm
-      data['ltp'] = ltp.to_f.to_s if ltp
-      data['timestamp'] = timestamp.to_i.to_s
-      data['updated_at'] = Time.current.to_i.to_s
+      data = {
+        'pnl' => pnl.to_f.to_s,
+        'pnl_pct' => pnl_pct.to_f.to_s,
+        'ltp' => ltp.to_f.to_s,
+        'hwm_pnl' => hwm.to_f.to_s,
+        'timestamp' => timestamp.to_i.to_s,
+        'updated_at' => Time.current.to_i.to_s
+      }
 
-      return if data.empty?
+      @redis.hset(key, **data)
+
+      ttl = @redis.ttl(key).to_i
+      @redis.expire(key, TTL_SECONDS) if ttl < TTL_SECONDS / 2
+    rescue StandardError => e
+      Rails.logger.error("[RedisPnL] Failed to store PnL #{tracker_id}: #{e.message}")
+    end
+
+    def store_tick(segment:, security_id:, ltp:, timestamp: Time.current)
+      return unless @redis
+      return unless ltp && ltp.to_f.positive?
+
+      key = tick_key(segment, security_id)
+
+      # Convert all values to strings for Redis
+      data = {
+        'ltp' => ltp.to_f.to_s,
+        'timestamp' => timestamp.to_i.to_s,
+        'updated_at' => Time.current.to_i.to_s
+      }
 
       @redis.hset(key, data)
       @redis.expire(key, TTL_SECONDS)
 
-      # Rails.logger.debug { "[RedisPnL] Stored PnL for tracker #{tracker_id}: pnl=#{pnl}, hwm=#{hwm}, ltp=#{ltp}" }
+      # Rails.logger.debug { "[RedisPnL] Stored tick for #{segment}:#{security_id}: #{ltp}" }
     rescue StandardError => e
-      Rails.logger.error("[RedisPnL] Failed to store PnL in Redis for tracker #{tracker_id}: #{e.message}") if defined?(Rails.logger)
+      Rails.logger.error("[RedisPnL] Failed to store tick in Redis for #{segment}:#{security_id}: #{e.message}") if defined?(Rails.logger)
     end
+
 
     def fetch_pnl(tracker_id)
       return nil unless @redis
 
       key = pnl_key(tracker_id)
+
       data = @redis.hgetall(key)
       return nil if data.empty?
 
@@ -56,7 +79,6 @@ module Live
         updated_at: data['updated_at']&.to_i
       }
     rescue StandardError
-      # Rails.logger.error("Failed to fetch PnL from Redis for tracker #{tracker_id}")
       nil
     end
 
@@ -109,14 +131,22 @@ module Live
       false
     end
 
+    # ------------------------------------------------------------
+    # REMOVE TICK HANDLING COMPLETELY
+    # ------------------------------------------------------------
+
     def clear_tracker(tracker_id)
       return unless @redis
 
-      pnl_key = pnl_key(tracker_id)
-      @redis.del(pnl_key)
-      # Rails.logger.info("[RedisPnL] Cleared PnL cache for tracker #{tracker_id}")
-    rescue StandardError
-      # Rails.logger.error("Failed to clear Redis PnL cache for tracker #{tracker_id}")
+      @redis.del(pnl_key(tracker_id))
+    end
+
+    def clear
+      pattern = "#{REDIS_KEY_PREFIX}:*"
+      @redis.scan_each(match: pattern) do |key|
+        @redis.del(key)
+      end
+      true
     end
 
     def each_tracker_key
@@ -127,18 +157,6 @@ module Live
         tracker_id = key.split(':').last
         yield(key, tracker_id)
       end
-    rescue StandardError
-      # Rails.logger.error('[RedisPnL] Failed to iterate tracker keys')
-    end
-
-    def clear_tick(segment:, security_id:)
-      return unless @redis
-
-      key = tick_key(segment, security_id)
-      @redis.del(key)
-      # Rails.logger.info("[RedisPnL] Cleared tick cache for #{segment}:#{security_id}")
-    rescue StandardError
-      # Rails.logger.error("Failed to clear Redis tick cache for #{segment}:#{security_id}")
     end
 
     def health_check
@@ -152,12 +170,12 @@ module Live
 
     private
 
-    def pnl_key(tracker_id)
-      "#{REDIS_KEY_PREFIX}:#{tracker_id}"
-    end
-
     def tick_key(segment, security_id)
       "tick:#{segment}:#{security_id}"
+    end
+
+    def pnl_key(id)
+      "#{REDIS_KEY_PREFIX}:#{id}"
     end
   end
 end

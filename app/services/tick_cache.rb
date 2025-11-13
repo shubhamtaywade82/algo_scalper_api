@@ -10,68 +10,127 @@ class TickCache
     @map = Concurrent::Map.new
   end
 
-  def put(tick)
-    key = cache_key(tick[:segment], tick[:security_id])
-    existing = @map[key]
+  # ------------------------
+  # MASTER TICK HANDLER
+  # ------------------------
+  def put(raw_tick)
+    tick = normalize(raw_tick)
+    return if tick.nil?
 
-    if existing
-      # Merge new tick data into existing, keeping latest values
-      # This handles cases where we receive multiple packets (ticker, prev_close, quote, OI, etc.)
-      # for the same instrument in quote/full mode
-      merged = existing.dup
+    seg = tick[:segment]
+    sid = tick[:security_id]
+    key = cache_key(seg, sid)
 
-      # Merge all fields from new tick into existing
+    merged = @map.compute(key) do |_, existing|
+      existing ||= {}
+      previous_ltp = existing[:ltp]
+
+      new_hash = existing.dup
+
       tick.each do |k, v|
-        next if v.nil? # Skip nil values
+        next if v.nil?
 
         case k
-        when :ts
-          # For timestamp, prefer newer value
-          merged[k] = v if merged[k].nil? || v > merged[k]
-        when :kind
-          # Keep track of all kinds received, but prefer most recent for primary kind
-          # Store all kinds in an array or just keep latest
-          merged[:kinds] ||= [merged[:kind]].compact
-          merged[:kinds] << v unless merged[:kinds].include?(v)
-          merged[k] = v # Use latest kind as primary
         when :segment, :security_id
-          # Never change these - they're the key
-          next
+          new_hash[k] = v
+
+        when :ltp
+          # LTP only updates if > 0
+          new_hash[:ltp] = v.to_f if v.to_f.positive?
+
         else
-          # For all other fields, update with new value
-          # This includes: ltp, prev_close, oi, oi_prev, vol, atp, day_open, day_high, day_low, day_close, bid, ask, etc.
-          merged[k] = v
+          new_hash[k] = v
         end
       end
 
-      @map[key] = merged
-    else
-      @map[key] = tick.dup
+      # Restore previous LTP if missing
+      new_hash[:ltp] = previous_ltp if new_hash[:ltp].nil? && previous_ltp
+
+      new_hash
     end
 
-    Live::FeedHealthService.instance.mark_success!(:ticks)
+    # Also update Redis TickCache for HA + PnL consumers
+    Live::RedisTickCache.instance.store_tick(
+      segment: seg,
+      security_id: sid,
+      data: merged
+    )
+
+    merged
   end
 
+  # ------------------------
+  # FETCH WITH REDIS FALLBACK
+  # ------------------------
   def fetch(segment, security_id)
-    @map[cache_key(segment, security_id)]
+    key = cache_key(segment, security_id)
+
+    # Try memory first
+    # mem = @map[key]
+    # return mem if mem.present?
+
+    # Then fallback to Redis
+    redis_tick = Live::RedisTickCache.instance.fetch_tick(segment, security_id)
+
+    return nil if redis_tick.empty?
+
+    # Hydrate memory so next calls are fast
+    @map[key] = redis_tick
+
+    redis_tick
   end
 
+  # ------------------------
+  # LTP WITH REDIS FALLBACK
+  # ------------------------
   def ltp(segment, security_id)
-    fetch(segment, security_id)&.dig(:ltp)
+    tick = fetch(segment, security_id)
+    tick && tick[:ltp]
+  end
+
+  def all
+    mem = {}
+    @map.each_pair { |k, v| mem[k] = v }
+
+    redis = Live::RedisTickCache.instance.fetch_all
+
+    # merge redis into memory snapshot (memory overrides for live session)
+    redis.merge(mem)
   end
 
   delegate :clear, to: :@map
 
-  # Return a snapshot of all cached ticks as a plain Hash
-  def all
-    snapshot = {}
-    @map.each_pair { |k, v| snapshot[k] = v }
-    snapshot
-  end
-
   private
 
-  def cache_key(segment, security_id)
-    "#{segment}:#{security_id}"
+  # ------------------------
+  # Normalization
+  # ------------------------
+  def normalize(h)
+    return nil unless h.is_a?(Hash)
+
+    out = {}
+
+    h.each do |k, v|
+      sym = k.to_sym
+
+      out[sym] =
+        case sym
+        when :ltp, :prev_close, :oi, :oi_prev
+          v.to_f
+        else
+          v
+        end
+    end
+
+    return nil if out[:segment].nil? || out[:security_id].nil?
+
+    out[:segment] = out[:segment].to_s
+    out[:security_id] = out[:security_id].to_s
+
+    out
+  end
+
+  def cache_key(seg, sid)
+    "#{seg}:#{sid}"
   end
 end

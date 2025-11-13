@@ -15,6 +15,15 @@ module Live
       @mutex = Mutex.new
       @running = false
       @thread = nil
+      @watchdog_thread = Thread.new do
+        loop do
+          unless @thread&.alive?
+            Rails.logger.warn("[RiskManagerService] Watchdog detected dead thread — restarting...")
+            start!
+          end
+          sleep 10
+        end
+      end
     end
 
     def start!
@@ -24,7 +33,18 @@ module Live
         return if @running
 
         @running = true
-        @thread = Thread.new { monitor_loop }
+        @thread = Thread.new do
+          loop do
+            begin
+              monitor_loop
+            rescue => e
+              Rails.logger.error("[RiskManagerService] Loop crashed: #{e.class} - #{e.message}")
+              sleep 5
+              retry
+            end
+          end
+        end
+
         @thread.name = 'risk-manager-service'
       end
     end
@@ -86,8 +106,6 @@ module Live
         recommended_stop_loss: recommended_stop_loss
       }
     end
-
-    private
 
     def monitor_loop
       logger = Rails.logger
@@ -454,21 +472,35 @@ module Live
       ltp
     end
 
-    def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
-      # Ensure all values are present before storing
-      return unless pnl && ltp
+    # def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
+    #   # Ensure all values are present before storing
+    #   return unless pnl && ltp && ltp.to_f.positive?
 
-      Live::RedisPnlCache.instance.store_pnl(
+    #   Live::RedisPnlCache.instance.store_pnl(
+    #     tracker_id: tracker.id,
+    #     pnl: pnl,
+    #     pnl_pct: pnl_pct,
+    #     ltp: ltp,
+    #     hwm: tracker.high_water_mark_pnl,
+    #     timestamp: Time.current
+    #   )
+    # rescue StandardError => e
+    #   Rails.logger.error("Failed to update PnL in Redis for tracker #{tracker.id}: #{e.message}")
+    # end
+
+    def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
+      # Defer to new updater; keep compatibility for now
+      return unless pnl && ltp && ltp.to_f.positive?
+
+      Live::PnlUpdaterService.instance.cache_intermediate_pnl(
         tracker_id: tracker.id,
         pnl: pnl,
         pnl_pct: pnl_pct,
         ltp: ltp,
-        hwm: tracker.high_water_mark_pnl,
-        timestamp: Time.current
+        hwm: tracker.high_water_mark_pnl
       )
-    rescue StandardError => e
-      Rails.logger.error("Failed to update PnL in Redis for tracker #{tracker.id}: #{e.message}")
     end
+
 
     def compute_pnl(tracker, position, ltp)
       # For options, use the actual position quantity and cost price from DhanHQ
@@ -699,7 +731,9 @@ module Live
         # Check if this tracker has PnL in Redis (check if key exists, not if pnl is truthy)
         redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
         # If Redis has data (even if pnl is 0), skip - it means it was already processed
-        next if redis_pnl
+        if redis_pnl && (Time.current.to_i - (redis_pnl[:timestamp] || 0)) < 10
+          next
+        end
 
         # Try to update it
         position = positions[tracker.security_id.to_s]
