@@ -460,7 +460,7 @@ module Entries
         # Determine watchable: derivative for options, instrument for indices
         watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
 
-        PositionTracker.create!(
+        PositionTracker.build_or_average!(
           watchable: watchable,
           instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
           order_no: order_no,

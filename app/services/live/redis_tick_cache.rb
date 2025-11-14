@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require "singleton"
+require 'singleton'
 
 module Live
   class RedisTickCache
     include Singleton
 
-    PREFIX = "tick".freeze
+    PREFIX = 'tick'
 
     def store_tick(segment:, security_id:, data:)
       key = "#{PREFIX}:#{segment}:#{security_id}"
@@ -43,7 +43,8 @@ module Live
         raw = redis.hgetall(key)
         next if raw.empty?
 
-        seg, sid = key.split(":")[1], key.split(":")[2]
+        seg = key.split(':')[1]
+        sid = key.split(':')[2]
         out["#{seg}:#{sid}"] = symbolize_and_cast(raw)
       end
 
@@ -68,6 +69,87 @@ module Live
       @cache.delete(key)
     end
 
+    def prune_stale(max_age: 30)
+      cutoff = Time.current.to_i - max_age
+      keys   = @redis.keys('tick:*')
+
+      protected = protected_keys_set
+
+      keys.each do |key|
+        _, seg, sid = key.split(':')
+        composite   = "#{seg}:#{sid}"
+
+        # --- NEVER prune index ticks ---
+        if seg == 'IDX_I'
+          Rails.logger.debug { "[RedisTickCache] SKIP prune #{key} (reason: index feed)" }
+          next
+        end
+
+        # --- NEVER prune protected/watchlist/active-position ticks ---
+        if protected.include?(composite)
+          Rails.logger.debug { "[RedisTickCache] SKIP prune #{key} (reason: protected key)" }
+          next
+        end
+
+        data = @redis.hgetall(key)
+
+        # --- Missing TS OR corrupted TS ---
+        if data.blank? || !data['timestamp']
+          Rails.logger.warn("[RedisTickCache] Pruning #{key} (reason: missing timestamp)")
+          @redis.del(key)
+          next
+        end
+
+        ts = data['timestamp'].to_i
+
+        # --- Timestamp stale ---
+        if ts < cutoff
+          age = Time.current.to_i - ts
+          Rails.logger.warn(
+            "[RedisTickCache] Pruning #{key} (reason: stale tick; age=#{age}s > #{max_age}s)"
+          )
+          @redis.del(key)
+          next
+        end
+
+        # --- KEEPING the tick ---
+        Rails.logger.debug { "[RedisTickCache] KEEP #{key} (reason: fresh tick)" }
+      end
+
+      true
+    rescue StandardError => e
+      Rails.logger.error("[RedisTickCache] prune_stale ERROR: #{e.class} - #{e.message}")
+      false
+    end
+
+    def protected_keys_set
+      set = Set.new
+
+      # 1. Index feeds
+      %w[IDX_I IDX_BELLS IDX_FO].each do |seg|
+        # If segment exists in your system
+        @redis.keys("tick:#{seg}:*").each do |key|
+          _, seg, sid = key.split(':')
+          set << "#{seg}:#{sid}"
+        end
+      end
+
+      # 2. Watchlist items
+      watchlist = Array(AlgoConfig.fetch[:watchlist])
+      watchlist.each do |item|
+        seg = item[:segment]
+        sid = item[:security_id]
+        set << "#{seg}:#{sid}"
+      end
+
+      # 3. Active positions
+      Live::PositionIndex.instance.all_keys.each do |k|
+        set << k # keys are already in "SEG:SID" format
+      end
+
+      set
+    end
+
     private
 
     def symbolize_and_cast(raw)
@@ -80,7 +162,7 @@ module Live
     end
 
     def redis
-      @redis ||= Redis.new(url: ENV.fetch("REDIS_URL", "redis://127.0.0.1:6379/0"))
+      @redis ||= Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
     end
   end
 end

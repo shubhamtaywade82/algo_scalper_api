@@ -117,6 +117,9 @@ Rails.application.config.to_prepare do
   supervisor.register(:signal_scheduler, Signal::Scheduler.new)
   supervisor.register(:risk_manager,     Live::RiskManagerService.new)
   supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
+  supervisor.register(:order_router, TradingSystem::OrderRouter.new)
+  supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
+
 
 
  # Future:

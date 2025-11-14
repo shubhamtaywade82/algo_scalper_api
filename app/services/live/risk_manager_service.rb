@@ -19,7 +19,7 @@ module Live
         loop do
           unless @thread&.alive?
             Rails.logger.warn("[RiskManagerService] Watchdog detected dead thread — restarting...")
-            start!
+            start
           end
           sleep 10
         end
@@ -99,7 +99,7 @@ module Live
 
       while running?
         # Sync positions first to ensure we have all active positions tracked
-        Live::PositionSyncService.instance.sync_positions!
+        # Live::PositionSyncService.instance.sync_positions!
 
         positions = fetch_positions_indexed
         enforce_hard_limits(positions)

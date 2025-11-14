@@ -198,7 +198,7 @@ module InstrumentHelpers
     # Determine watchable: if self is a Derivative, use self; otherwise use instrument
     watchable = is_a?(Derivative) ? self : instrument
 
-    tracker = PositionTracker.create!(
+    tracker = PositionTracker.build_or_average!(
       watchable: watchable,
       instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
       order_no: order_no,

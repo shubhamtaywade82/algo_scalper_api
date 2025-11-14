@@ -35,6 +35,8 @@
 require 'bigdecimal'
 
 class PositionTracker < ApplicationRecord
+  include PositionTrackerFactory
+
   STATUSES = {
     pending: 'pending',
     active: 'active',
@@ -46,6 +48,7 @@ class PositionTracker < ApplicationRecord
   after_commit :unregister_from_index, on: :destroy
   after_update_commit :refresh_index_if_relevant
   after_update_commit :cleanup_if_exited
+  after_create_commit :subscribe_to_feed
 
   def metadata_for_index
     {
@@ -57,12 +60,26 @@ class PositionTracker < ApplicationRecord
     }
   end
 
+  def self.active_for(seg, sid)
+    where(segment: seg, security_id: sid, status: STATUSES[:active]).first
+  end
+
+  def self.exited_for(seg, sid)
+    where(segment: seg, security_id: sid, status: STATUSES[:exited]).order(id: :desc).first
+  end
+
   def register_in_index
     return unless status == STATUSES[:active] && entry_price.present? && quantity.to_i > 0
 
     Live::PositionIndex.instance.add(metadata_for_index)
   rescue StandardError => e
     Rails.logger.warn("[PositionTracker] register_in_index failed for #{id}: #{e.message}")
+  end
+
+  def subscribe_to_feed
+    Live::MarketFeedHub.instance.subscribe(segment: segment, security_id: security_id)
+    Live::PositionIndex.instance.add(id: id, security_id: security_id, segment: segment, entry_price: entry_price,
+                                     quantity: quantity)
   end
 
   def unregister_from_index
@@ -115,6 +132,8 @@ class PositionTracker < ApplicationRecord
   scope :paper, -> { where(paper: true) }
   scope :live, -> { where(paper: false) }
   scope :exited_paper, -> { where(paper: true, status: STATUSES[:exited]) }
+  scope :exited, -> { where(status: STATUSES[:exited]) }
+
 
   def mark_active!(avg_price:, quantity:)
     price = avg_price.present? ? BigDecimal(avg_price.to_s) : nil
@@ -148,36 +167,63 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_exited!(exit_price: nil, exited_at: nil)
-    # Rails.logger.info("[PositionTracker] Exiting position #{order_no} - releasing capital and unsubscribing")
+  # -----------------------------
+  # 1) Get latest PnL before exit
+  # -----------------------------
+  persist_final_pnl_from_cache
 
-    # Unsubscribe from market feed
-    unsubscribe
-
-    # Ensure we have the latest PnL from Redis before persisting
-    persist_final_pnl_from_cache
-
-    # Update status and persist final PnL details in a single write
-    attrs = {
-      last_pnl_rupees: last_pnl_rupees,
-      last_pnl_pct: last_pnl_pct,
-      high_water_mark_pnl: high_water_mark_pnl
-    }.compact
-
-    # Store exit price and timestamp if provided
-    attrs[:exit_price] = BigDecimal(exit_price.to_s) if exit_price.present?
-    attrs[:exited_at] = exited_at || Time.current
-
-    attrs[:status] = STATUSES[:exited]
-    update!(attrs)
-
-    # Clear Redis cache now that data is persisted
-    Live::RedisPnlCache.instance.clear_tracker(id)
-
-    # Register cooldown to prevent immediate re-entry
-    register_cooldown!
-
-    # Rails.logger.info("[PositionTracker] Position #{order_no} successfully exited and capital released")
+  # If exit_price wasn't provided, use latest tick-based price
+  exit_price ||= begin
+    seg = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
+    Live::TickCache.instance.ltp(seg, security_id) ||
+      Live::RedisPnlCache.instance.fetch_tick(segment: seg, security_id: security_id)&.dig(:ltp)
   end
+
+  exit_price = BigDecimal(exit_price.to_s) if exit_price.present?
+
+  # -----------------------------------
+  # 2) Update DB with final exit record
+  # -----------------------------------
+  attrs = {
+    status: STATUSES[:exited],
+    exit_price: exit_price,
+    exited_at: exited_at || Time.current,
+    last_pnl_rupees: last_pnl_rupees,
+    last_pnl_pct: last_pnl_pct,
+    high_water_mark_pnl: high_water_mark_pnl
+  }.compact
+
+  update!(attrs)
+
+  # --------------------------------
+  # 3) Remove from supervisor caches
+  # --------------------------------
+
+  # a) Remove from PositionIndex
+  Live::PositionIndex.instance.remove(id, security_id)
+
+  # b) Clear Redis PnL cache
+  Live::RedisPnlCache.instance.clear_tracker(id)
+
+  # c) Clear Redis tick for this security
+  Live::RedisTickCache.instance.clear_tick(segment, security_id)
+
+  # d) Clear in-memory TickCache
+  Live::TickCache.instance.delete(segment, security_id)
+
+  # -----------------------------------------------------
+  # 4) Unsubscribe *after* PnL persistence & cache flush
+  # -----------------------------------------------------
+  unsubscribe
+
+  # ------------------------------------
+  # 5) Register re-entry cooldown (8 hrs)
+  # ------------------------------------
+  register_cooldown!
+
+  self
+end
+
 
   def cache_live_pnl(pnl, pnl_pct: nil)
     pnl_value = BigDecimal(pnl.to_s)

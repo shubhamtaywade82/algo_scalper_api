@@ -115,6 +115,31 @@ module Live
       end
     end
 
+    def purge_exited!
+      active_ids = PositionTracker.active.pluck(:id).map(&:to_s)
+
+      keys = @redis.keys('pnl:tracker:*')
+      keys.each do |key|
+        tracker_id = key.split(':').last
+        @redis.del(key) unless active_ids.include?(tracker_id)
+      end
+    end
+
+    # Remove all pnl/tick entries except those for the given tracker IDs
+    def prune_except(allowed_ids)
+      allowed_set = allowed_ids.map(&:to_s).to_set
+
+      # PnL cache keys
+      each_tracker_key do |key, tracker_id|
+        unless allowed_set.include?(tracker_id.to_s)
+          Rails.logger.warn("[RedisPnlCache] Pruning orphaned tracker_id=#{tracker_id}")
+          clear_tracker(tracker_id)
+        end
+      end
+
+      true
+    end
+
     private
 
     def pnl_key(id)
