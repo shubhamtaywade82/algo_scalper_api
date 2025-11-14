@@ -6,7 +6,7 @@ require 'ostruct'
 
 module Live
   class RiskManagerService
-    include Singleton
+    # include Singleton
 
     LOOP_INTERVAL = 5
     API_CALL_STAGGER_SECONDS = 1.0 # Stagger API calls to avoid rate limits
@@ -26,45 +26,31 @@ module Live
       end
     end
 
-    def start!
+    def start
       return if @running
+      @running = true
 
-      @mutex.synchronize do
-        return if @running
+      @thread = Thread.new do
+        loop do
+          break unless @running
 
-        @running = true
-        @thread = Thread.new do
-          loop do
-            begin
-              monitor_loop
-            rescue => e
-              Rails.logger.error("[RiskManagerService] Loop crashed: #{e.class} - #{e.message}")
-              sleep 5
-              retry
-            end
+          begin
+            monitor_loop
+          rescue => e
+            Rails.logger.error("[RiskManager] #{e.class} - #{e.message}")
           end
-        end
 
-        @thread.name = 'risk-manager-service'
+          sleep LOOP_INTERVAL
+        end
       end
     end
 
-    def stop!
-      @mutex.synchronize do
-        @running = false
-        if @thread&.alive?
-          begin
-            @thread.wakeup
-          rescue StandardError
-            nil
-          end
-        end
-        @thread = nil
-      end
-    rescue ThreadError
-      # Thread may already be killed, just clear it
+    def stop
+      @running = false
+      @thread&.kill
       @thread = nil
     end
+
 
     def running?
       @running

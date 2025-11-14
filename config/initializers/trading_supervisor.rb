@@ -110,11 +110,13 @@ end
 # INITIALIZER (runs on each reload in dev)
 # --------------------------------------------------------------------
 Rails.application.config.to_prepare do
- supervisor = TradingSystem::Supervisor.new
+  supervisor = TradingSystem::Supervisor.new
 
- # Register services through adapters
- supervisor.register(:market_feed, MarketFeedHubService.new)
- supervisor.register(:signal_scheduler, Signal::Scheduler.new)
+  # Register services through adapters
+  supervisor.register(:market_feed, MarketFeedHubService.new)
+  supervisor.register(:signal_scheduler, Signal::Scheduler.new)
+  supervisor.register(:risk_manager,     Live::RiskManagerService.new)
+  supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
 
 
  # Future:
