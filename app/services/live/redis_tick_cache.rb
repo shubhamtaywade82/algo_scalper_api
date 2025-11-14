@@ -58,6 +58,16 @@ module Live
       true
     end
 
+    def clear_tick(segment, security_id)
+      key = "tick:#{segment}:#{security_id}"
+      redis.del(key)
+    end
+
+    def self.delete(segment, security_id)
+      key = "#{segment}:#{security_id}"
+      @cache.delete(key)
+    end
+
     private
 
     def symbolize_and_cast(raw)

@@ -45,6 +45,7 @@ class PositionTracker < ApplicationRecord
   after_commit :register_in_index, on: %i[create update]
   after_commit :unregister_from_index, on: :destroy
   after_update_commit :refresh_index_if_relevant
+  after_update_commit :cleanup_if_exited
 
   def metadata_for_index
     {
@@ -58,23 +59,43 @@ class PositionTracker < ApplicationRecord
 
   def register_in_index
     return unless status == STATUSES[:active] && entry_price.present? && quantity.to_i > 0
+
     Live::PositionIndex.instance.add(metadata_for_index)
   rescue StandardError => e
     Rails.logger.warn("[PositionTracker] register_in_index failed for #{id}: #{e.message}")
   end
 
   def unregister_from_index
+    # Remove from in-memory index
     Live::PositionIndex.instance.remove(id, security_id)
+
+    # Remove Redis tick cache
+    Live::RedisTickCache.instance.clear_tick(segment, security_id)
+
+    # Remove in-memory TickCache
+    Live::TickCache.delete(segment, security_id)
+
+    # Unsubscribe websocket feed
+    unsubscribe
   rescue StandardError => e
     Rails.logger.warn("[PositionTracker] unregister_from_index failed for #{id}: #{e.message}")
   end
 
+  def cleanup_if_exited
+    return unless saved_change_to_status? && status == STATUSES[:exited]
+
+    unregister_from_index
+    clear_redis_pnl_cache
+  end
+
   def refresh_index_if_relevant
     # If status, security_id, entry_price or quantity changed, update index
-    if saved_change_to_status? || saved_change_to_security_id? || saved_change_to_entry_price? || saved_change_to_quantity?
-      unregister_from_index
-      register_in_index
+    unless saved_change_to_status? || saved_change_to_security_id? || saved_change_to_entry_price? || saved_change_to_quantity?
+      return
     end
+
+    unregister_from_index
+    register_in_index
   end
 
   belongs_to :instrument # Kept for backward compatibility during transition
@@ -217,6 +238,8 @@ class PositionTracker < ApplicationRecord
   end
 
   def unsubscribe
+    return unless Live::MarketFeedHub.instance.running?
+
     segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
     return unless segment_key && security_id
 
