@@ -178,6 +178,7 @@ module Live
       end
     end
 
+    # Replace the existing enforce_hard_limits method with this one
     def enforce_hard_limits(positions = fetch_positions_indexed)
       risk = risk_config
       sl_pct = pct_value(risk[:sl_pct])
@@ -186,112 +187,121 @@ module Live
 
       return if sl_pct <= 0 && tp_pct <= 0 && per_trade_pct <= 0
 
-      # Load all trackers - can't eagerly load polymorphic :watchable, so load instrument separately
       trackers = PositionTracker.active.includes(:instrument).to_a
 
       trackers.each_with_index do |tracker, index|
-        # Stagger API calls to avoid rate limits
+        # Stagger calls to be polite with rate limits
         sleep API_CALL_STAGGER_SECONDS if index.positive?
 
         position = positions[tracker.security_id.to_s]
         tracker.hydrate_pnl_from_cache!
 
+        # Try to resolve an actionable LTP (with freshness fallback inside)
         ltp = current_ltp(tracker, position)
-        # Compute PnL using LTP when available
-        pnl_value = compute_pnl(tracker, position, ltp) if ltp
-        pnl_pct_value = compute_pnl_pct(tracker, ltp, position) if ltp
-        # Fallback for paper positions: if no fresh LTP, use last persisted PnL%
-        if ltp.nil? && pnl_pct_value.nil? && tracker.paper? && tracker.last_pnl_pct
+        # Also try a freshness-checked LTP (used for strict comparisons)
+        fresh_ltp = current_ltp_with_freshness_check(tracker, position, max_age_seconds: 5) rescue ltp
+
+        # Prefer fresh if available
+        usable_ltp = fresh_ltp || ltp
+
+        # Attempt best-effort pnl% if we don't have LTP
+        pnl_value = (usable_ltp ? compute_pnl(tracker, position, usable_ltp) : nil)
+        pnl_pct_value = (usable_ltp ? compute_pnl_pct(tracker, usable_ltp, position) : nil)
+
+        # Fallback for paper: use last persisted pnl_pct
+        if usable_ltp.nil? && pnl_pct_value.nil? && tracker.paper? && tracker.last_pnl_pct
           pnl_pct_value = BigDecimal(tracker.last_pnl_pct.to_s) / 100
         end
-        # If we have neither LTP nor fallback basis, skip
-        if ltp.nil? && pnl_pct_value.nil?
-          Rails.logger.debug { "[RiskManager] Skipping #{tracker.order_no} - no LTP and no fallback PnL% available" }
+
+        Rails.logger.debug do
+          "[RiskManager][Check] tracker=#{tracker.id} seg=#{tracker.segment} sid=#{tracker.security_id} " \
+          "entry=#{tracker.entry_price.inspect} qty=#{tracker.quantity.to_i} ltp=#{usable_ltp.inspect} pnl=#{pnl_value.inspect} pnl_pct=#{pnl_pct_value.inspect}"
+        end
+
+        # Update redis pnl cache for monitor visibility even if we don't exit
+        tracker.with_lock do
+          next unless tracker.status == PositionTracker::STATUSES[:active]
+
+          tracker.cache_live_pnl(pnl_value, pnl_pct: pnl_pct_value)
+          update_pnl_in_redis(tracker, pnl_value, pnl_pct_value, usable_ltp)
+        end
+
+        # If we still have nothing usable, skip and log reason
+        if usable_ltp.nil? && pnl_pct_value.nil?
+          Rails.logger.debug("[RiskManager] Skipping #{tracker.order_no} (#{tracker.id}) - no LTP and no fallback PnL%")
           next
         end
 
         reason = nil
 
-        # Update PnL in Redis for all positions (not just those exiting)
-        # This ensures all active positions have their PnL cached in Redis
-        tracker.with_lock do
-          next unless tracker.status == PositionTracker::STATUSES[:active]
-
-          tracker.cache_live_pnl(pnl_value, pnl_pct: pnl_pct_value)
-          update_pnl_in_redis(tracker, pnl_value, pnl_pct_value, ltp)
-        end
-
-        # Get entry_price and quantity for exit condition calculations
         entry_price = tracker.entry_price || tracker.avg_price
         if entry_price.blank? && position
-          entry_price = if position.respond_to?(:cost_price)
-                          position.cost_price
-                        elsif position.respond_to?(:average_price)
-                          position.average_price
-                        else
-                          position[:average_price] || position[:cost_price]
-                        end
+          entry_price = position.respond_to?(:cost_price) ? position.cost_price : (position[:average_price] || position[:cost_price])
         end
         next if entry_price.blank?
 
         quantity = tracker.quantity.to_i
         if quantity.zero? && position
-          quantity = if position.respond_to?(:net_qty)
-                       position.net_qty.to_i
-                     elsif position.respond_to?(:quantity)
-                       position.quantity.to_i
-                     else
-                       position[:quantity]&.to_i || position[:net_qty]&.to_i || 0
-                     end
+          quantity = if position.respond_to?(:net_qty) then position.net_qty.to_i
+                    elsif position.respond_to?(:quantity) then position.quantity.to_i
+                    else (position[:quantity] || position[:net_qty] || 0).to_i
+                    end
         end
         next if quantity <= 0
 
         entry = BigDecimal(entry_price.to_s)
-        ltp_value = BigDecimal(ltp.to_s) if ltp
+        ltp_value = usable_ltp ? BigDecimal(usable_ltp.to_s) : nil
 
-        # Check exit conditions
+        # STOP LOSS: prefer live LTP comparison, fallback to PnL%
         if sl_pct.positive?
-          if ltp
+          if ltp_value
             stop_price = entry * (BigDecimal(1) - sl_pct)
-            reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%)" if ltp_value <= stop_price
+            if ltp_value <= stop_price
+              reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%) - ltp #{ltp_value} <= stop_price #{stop_price}"
+            end
           elsif pnl_pct_value && pnl_pct_value <= -sl_pct
-            # Fallback: enforce SL using last known PnL% when LTP is unavailable
-            reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%)"
+            reason = "hard stop-loss (#{(sl_pct * 100).round(2)}%) - pnl_pct #{(pnl_pct_value * 100).round(2)}%"
           end
         end
 
-        if reason.nil? && per_trade_pct.positive?
+        # PER-TRADE RISK (absolute rupee loss cap)
+        if reason.nil? && per_trade_pct.positive? && ltp_value
           invested = entry * quantity
-          loss = [entry - (ltp_value || entry), BigDecimal(0)].max * quantity
+          loss_per_unit = [entry - ltp_value, BigDecimal(0)].max
+          loss = loss_per_unit * quantity
           if invested.positive? && loss >= invested * per_trade_pct
-            reason = "per-trade risk #{(per_trade_pct * 100).round(2)}%"
+            reason = "per-trade risk #{(per_trade_pct * 100).round(2)}% - potential loss #{loss.to_f.round(2)} >= allowed #{(invested * per_trade_pct).to_f.round(2)}"
           end
         end
 
-        if reason.nil? && tp_pct.positive? && ltp
+        # TAKE PROFIT
+        if reason.nil? && tp_pct.positive? && ltp_value
           target_price = entry * (BigDecimal(1) + tp_pct)
           if ltp_value >= target_price
-            # Check minimum profit requirement before allowing take-profit exit
             min_profit = BigDecimal((risk[:min_profit_rupees] || 0).to_s)
             if min_profit.positive? && pnl_value && pnl_value < min_profit
-              Rails.logger.debug { "[RiskManager] Take-profit target reached for #{tracker.order_no}, but PnL (₹#{pnl_value.round(2)}) < minimum profit (₹#{min_profit}) - holding position" }
-              next # Skip exit, wait for minimum profit
+              Rails.logger.debug { "[RiskManager] TP reached for #{tracker.order_no}, but pnl ₹#{pnl_value.round(2)} < min_profit ₹#{min_profit}" }
+            else
+              reason = "take-profit (#{(tp_pct * 100).round(2)}%) - ltp #{ltp_value} >= target #{target_price}"
             end
-            reason = "take-profit (#{(tp_pct * 100).round(2)}%)"
           end
         end
 
-        # Execute exit if reason exists
-        next unless reason
-
-        tracker.with_lock do
-          next unless tracker.status == PositionTracker::STATUSES[:active]
-
-          Rails.logger.info("[RiskManager] Exiting #{tracker.order_no} (#{tracker.symbol}): #{reason}")
-          execute_exit(position, tracker, reason: reason)
+        # If reason found -> execute exit (inside lock)
+        if reason
+          Rails.logger.info("[RiskManager] Exit condition triggered for #{tracker.order_no} (#{tracker.id}): #{reason}")
+          tracker.with_lock do
+            next unless tracker.status == PositionTracker::STATUSES[:active]
+            begin
+              execute_exit(position, tracker, reason: reason)
+            rescue => e
+              Rails.logger.error("[RiskManager] Failed to execute exit for #{tracker.order_no}: #{e.class} - #{e.message}")
+            end
+          end
         end
       end
     end
+
 
     def enforce_time_based_exit(positions = fetch_positions_indexed)
       risk = risk_config

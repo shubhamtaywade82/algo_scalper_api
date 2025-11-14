@@ -69,7 +69,7 @@ module Live
       @cache.delete(key)
     end
 
-    def prune_stale(max_age: 30)
+    def prune_stale(max_age: 60)
       cutoff = Time.current.to_i - max_age
       keys   = @redis.keys('tick:*')
 
@@ -85,6 +85,8 @@ module Live
           next
         end
 
+        next if Live::PositionIndex.instance.tracked?(segment, security_id)
+
         # --- NEVER prune protected/watchlist/active-position ticks ---
         if protected.include?(composite)
           Rails.logger.debug { "[RedisTickCache] SKIP prune #{key} (reason: protected key)" }
@@ -93,24 +95,24 @@ module Live
 
         data = @redis.hgetall(key)
 
-        # --- Missing TS OR corrupted TS ---
-        if data.blank? || !data['timestamp']
-          Rails.logger.warn("[RedisTickCache] Pruning #{key} (reason: missing timestamp)")
-          @redis.del(key)
-          next
-        end
+        # # --- Missing TS OR corrupted TS ---
+        # if data.blank? # || !data['timestamp']
+        #   Rails.logger.warn("[RedisTickCache] Pruning #{key} (reason: missing timestamp)")
+        #   @redis.del(key)
+        #   next
+        # end
 
-        ts = data['timestamp'].to_i
+        # ts = data['timestamp'].to_i
 
-        # --- Timestamp stale ---
-        if ts < cutoff
-          age = Time.current.to_i - ts
-          Rails.logger.warn(
-            "[RedisTickCache] Pruning #{key} (reason: stale tick; age=#{age}s > #{max_age}s)"
-          )
-          @redis.del(key)
-          next
-        end
+        # # --- Timestamp stale ---
+        # if ts < cutoff
+        #   age = Time.current.to_i - ts
+        #   Rails.logger.warn(
+        #     "[RedisTickCache] Pruning #{key} (reason: stale tick; age=#{age}s > #{max_age}s)"
+        #   )
+        #   @redis.del(key)
+        #   next
+        # end
 
         # --- KEEPING the tick ---
         Rails.logger.debug { "[RedisTickCache] KEEP #{key} (reason: fresh tick)" }

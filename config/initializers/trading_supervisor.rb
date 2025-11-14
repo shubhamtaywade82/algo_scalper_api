@@ -112,13 +112,30 @@ end
 Rails.application.config.to_prepare do
   supervisor = TradingSystem::Supervisor.new
 
-  # Register services through adapters
-  supervisor.register(:market_feed, MarketFeedHubService.new)
+  # # Register services through adapters
+  # supervisor.register(:market_feed, MarketFeedHubService.new)
+  # supervisor.register(:signal_scheduler, Signal::Scheduler.new)
+  # supervisor.register(:risk_manager,     Live::RiskManagerService.new)
+  # supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
+  # supervisor.register(:order_router, TradingSystem::OrderRouter.new)
+  # supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
+  # supervisor.register(:paper_pnl_refresher, Live::PaperPnlRefresher.new)
+  # supervisor.register(
+  #   :exit_manager,
+  #   Live::ExitEngine.new(order_router: TradingSystem::OrderRouter.new)
+  # )
+
+  feed = MarketFeedHubService.new
+  router = TradingSystem::OrderRouter.new
+
+  supervisor.register(:market_feed, feed)
   supervisor.register(:signal_scheduler, Signal::Scheduler.new)
   supervisor.register(:risk_manager,     Live::RiskManagerService.new)
   supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
-  supervisor.register(:order_router, TradingSystem::OrderRouter.new)
-  supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
+  supervisor.register(:order_router, router)
+  supervisor.register(:paper_pnl_refresher, Live::PaperPnlRefresher.new)
+  supervisor.register(:exit_manager, Live::ExitEngine.new(order_router: router))
+
 
 
 
