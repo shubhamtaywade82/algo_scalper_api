@@ -1,33 +1,123 @@
 # frozen_string_literal: true
-# config/initializers/trading_supervisor.rb
 
-# Only run inside the Rails server (puma) process — prevents vite/webpack/other bin/dev processes from executing this file
+# Run ONLY inside Rails server, not in console/test/vite/webpack
 return unless defined?(Rails::Server)
 return if Rails.env.test?
 return if Rails.const_defined?(:Console)
 
-Rails.application.config.after_initialize do
-  # Force load the classes so initializer won't fail due to Zeitwerk ordering
-  # (adjust paths if you moved files)
-  require_dependency Rails.root.join('app/services/live/market_feed_hub').to_s
-  require_dependency Rails.root.join('app/services/tick_cache').to_s
-  require_dependency Rails.root.join('app/services/live/redis_tick_cache').to_s
-
-  logger = defined?(Rails) ? Rails.logger : Logger.new($stdout)
-
-  begin
-    # start the singleton MarketFeedHub (your current implementation uses Singleton)
-    # It will load watchlist internally and call subscribe_watchlist
-    started = Live::MarketFeedHub.instance.start!
-    logger.info("[trading_supervisor] MarketFeedHub.start! => #{started.inspect}")
-
-    # quick sanity: make sure TickCache is present
-    if defined?(Live::TickCache)
-      logger.info("[trading_supervisor] Live::TickCache ready")
-    else
-      logger.warn("[trading_supervisor] Live::TickCache NOT loaded")
+# A very small, controlled Supervisor (no Singletons here)
+module TradingSystem
+  class Supervisor
+    def initialize
+      @services = {}
+      @running  = false
     end
-  rescue Exception => e
-    logger.error("[trading_supervisor] failed to start MarketFeedHub: #{e.class} - #{e.message}\n#{e.backtrace.first(10).join("\n")}")
+
+    def register(name, instance)
+      @services[name] = instance
+    end
+
+    def [](name)
+      @services[name]
+    end
+
+    def start_all
+      return if @running
+
+      @services.each do |name, service|
+        begin
+          service.start
+          Rails.logger.info("[Supervisor] Started #{name}")
+        rescue => e
+          Rails.logger.error("[Supervisor] Failed starting #{name}: #{e.class} - #{e.message}")
+        end
+      end
+
+      @running = true
+    end
+
+    def stop_all
+      return unless @running
+
+      @services.reverse_each do |name, service|
+        begin
+          service.stop
+          Rails.logger.info("[Supervisor] Stopped #{name}")
+        rescue => e
+          Rails.logger.error("[Supervisor] Error stopping #{name}: #{e.class} - #{e.message}")
+        end
+      end
+
+      @running = false
+    end
   end
+end
+
+# --------------------------
+# Service Adapters
+# --------------------------
+
+# Wrap your existing Singleton MarketFeedHub in a Supervisor-friendly wrapper
+class MarketFeedHubService
+  def initialize
+    @hub = Live::MarketFeedHub.instance
+  end
+
+  def start
+    @hub.start!
+  end
+
+  def stop
+    @hub.stop!
+  end
+end
+
+# Wrap PnlUpdaterService (your existing class)
+class PnlUpdaterServiceAdapter
+  def initialize
+    @svc = Live::PnlUpdaterService.instance
+  end
+
+  def start
+    @svc.start!
+  end
+
+  def stop
+    @svc.stop!
+  end
+end
+
+Rails.application.config.after_initialize do
+  supervisor = TradingSystem::Supervisor.new
+
+  # 1) MARKET FEED HUB
+  supervisor.register(:market_feed, MarketFeedHubService.new)
+
+  # 2) PNL UPDATER SERVICE
+  supervisor.register(:pnl_updater, PnlUpdaterServiceAdapter.new)
+
+  # Load PositionIndex early (optional but good)
+  begin
+    Live::PositionIndex.instance.bulk_load_active!
+  rescue => e
+    Rails.logger.warn("[Supervisor] PositionIndex load failed: #{e.class} - #{e.message}")
+  end
+
+  # Start all services
+  supervisor.start_all
+
+  # Shutdown hooks
+  %w[INT TERM].each do |sig|
+    Signal.trap(sig) do
+      Rails.logger.info("[Supervisor] Received #{sig}, shutting down...")
+      supervisor.stop_all
+      exit(0)
+    end
+  end
+
+  at_exit do
+    supervisor.stop_all
+  end
+
+  Rails.application.config.x.trading_supervisor = supervisor
 end
