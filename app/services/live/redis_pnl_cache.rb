@@ -10,22 +10,20 @@ module Live
     TTL_SECONDS = 6.hours.to_i
 
     def initialize
-      @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/0'))
-    rescue StandardError
+      @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+    rescue StandardError => e
+      Rails.logger.error("[RedisPnL] init error: #{e.message}") if defined?(Rails)
       @redis = nil
     end
 
-    # ------------------------------------------------------------
-    # ONLY STORE PNL — NEVER STORE TICK HERE
-    # ------------------------------------------------------------
-    def store_pnl(tracker_id:, pnl:, pnl_pct:, ltp:, hwm:, timestamp: Time.current)
-      return unless @redis
+    # store only computed PnL (strings stored to Redis)
+    def store_pnl(tracker_id:, pnl:, ltp:, hwm:, pnl_pct: nil, timestamp: Time.current)
+      return false unless @redis
 
       key = pnl_key(tracker_id)
-
       data = {
         'pnl' => pnl.to_f.to_s,
-        'pnl_pct' => pnl_pct.to_f.to_s,
+        'pnl_pct' => pnl_pct&.to_f.to_s,
         'ltp' => ltp.to_f.to_s,
         'hwm_pnl' => hwm.to_f.to_s,
         'timestamp' => timestamp.to_i.to_s,
@@ -33,146 +31,91 @@ module Live
       }
 
       @redis.hset(key, **data)
-
+      # ensure TTL
       ttl = @redis.ttl(key).to_i
-      @redis.expire(key, TTL_SECONDS) if ttl < TTL_SECONDS / 2
+      @redis.expire(key, TTL_SECONDS) if ttl < (TTL_SECONDS / 2)
+      true
     rescue StandardError => e
-      Rails.logger.error("[RedisPnL] Failed to store PnL #{tracker_id}: #{e.message}")
+      Rails.logger.error("[RedisPnL] store_pnl error: #{e.message}") if defined?(Rails)
+      false
     end
-
-    def store_tick(segment:, security_id:, ltp:, timestamp: Time.current)
-      return unless @redis
-      return unless ltp && ltp.to_f.positive?
-
-      key = tick_key(segment, security_id)
-
-      # Convert all values to strings for Redis
-      data = {
-        'ltp' => ltp.to_f.to_s,
-        'timestamp' => timestamp.to_i.to_s,
-        'updated_at' => Time.current.to_i.to_s
-      }
-
-      @redis.hset(key, data)
-      @redis.expire(key, TTL_SECONDS)
-
-      # Rails.logger.debug { "[RedisPnL] Stored tick for #{segment}:#{security_id}: #{ltp}" }
-    rescue StandardError => e
-      Rails.logger.error("[RedisPnL] Failed to store tick in Redis for #{segment}:#{security_id}: #{e.message}") if defined?(Rails.logger)
-    end
-
 
     def fetch_pnl(tracker_id)
       return nil unless @redis
 
       key = pnl_key(tracker_id)
-
-      data = @redis.hgetall(key)
-      return nil if data.empty?
+      raw = @redis.hgetall(key)
+      return nil if raw.nil? || raw.empty?
 
       {
-        pnl: data['pnl']&.to_f,
-        pnl_pct: data['pnl_pct']&.to_f,
-        ltp: data['ltp']&.to_f,
-        hwm_pnl: data['hwm_pnl']&.to_f,
-        timestamp: data['timestamp']&.to_i,
-        updated_at: data['updated_at']&.to_i
+        pnl: raw['pnl']&.to_f,
+        pnl_pct: raw['pnl_pct']&.to_f,
+        ltp: raw['ltp']&.to_f,
+        hwm_pnl: raw['hwm_pnl']&.to_f,
+        timestamp: raw['timestamp']&.to_i,
+        updated_at: raw['updated_at']&.to_i
       }
-    rescue StandardError
-      nil
-    end
-
-    def store_tick(segment:, security_id:, ltp:, timestamp: Time.current)
-      return unless @redis
-      return unless ltp && ltp.to_f.positive?
-
-      key = tick_key(segment, security_id)
-
-      # Convert all values to strings for Redis
-      data = {
-        'ltp' => ltp.to_f.to_s,
-        'timestamp' => timestamp.to_i.to_s,
-        'updated_at' => Time.current.to_i.to_s
-      }
-
-      @redis.hset(key, data)
-      @redis.expire(key, TTL_SECONDS)
-
-      # Rails.logger.debug { "[RedisPnL] Stored tick for #{segment}:#{security_id}: #{ltp}" }
     rescue StandardError => e
-      Rails.logger.error("[RedisPnL] Failed to store tick in Redis for #{segment}:#{security_id}: #{e.message}") if defined?(Rails.logger)
-    end
-
-    def fetch_tick(segment:, security_id:)
-      return nil unless @redis
-
-      key = tick_key(segment, security_id)
-      data = @redis.hgetall(key)
-      return nil if data.empty?
-
-      {
-        ltp: data['ltp']&.to_f,
-        timestamp: data['timestamp']&.to_i,
-        updated_at: data['updated_at']&.to_i
-      }
-    rescue StandardError
-      # Rails.logger.error("Failed to fetch tick from Redis for #{segment}:#{security_id}")
+      Rails.logger.error("[RedisPnL] fetch_pnl error: #{e.message}") if defined?(Rails)
       nil
     end
 
-    def is_tick_fresh?(segment:, security_id:, max_age_seconds: 5)
-      tick_data = fetch_tick(segment: segment, security_id: security_id)
-      return false unless tick_data
+    # clear all pnl:* keys (dangerous but useful for tests/dev)
+    def clear
+      return false unless @redis
 
-      age_seconds = Time.current.to_i - tick_data[:timestamp]
-      age_seconds <= max_age_seconds
-    rescue StandardError
-      # Rails.logger.error("Failed to check tick freshness for #{segment}:#{security_id}")
+      pattern = "#{REDIS_KEY_PREFIX}:*"
+      @redis.scan_each(match: pattern) { |k| @redis.del(k) }
+      true
+    rescue StandardError => e
+      Rails.logger.error("[RedisPnL] clear error: #{e.message}") if defined?(Rails)
       false
     end
 
-    # ------------------------------------------------------------
-    # REMOVE TICK HANDLING COMPLETELY
-    # ------------------------------------------------------------
-
     def clear_tracker(tracker_id)
-      return unless @redis
+      return false unless @redis
 
       @redis.del(pnl_key(tracker_id))
+      true
+    rescue StandardError => e
+      Rails.logger.error("[RedisPnL] clear_tracker error: #{e.message}") if defined?(Rails)
+      false
     end
 
-    def clear
+    # fetch everything: returns hash tracker_id => data
+    def fetch_all
+      return {} unless @redis
+
+      out = {}
       pattern = "#{REDIS_KEY_PREFIX}:*"
       @redis.scan_each(match: pattern) do |key|
-        @redis.del(key)
+        id = key.split(':').last
+        out[id.to_i] = fetch_pnl(id)
       end
-      true
-    end
-
-    def each_tracker_key
-      return enum_for(:each_tracker_key) unless block_given?
-      return unless @redis
-
-      @redis.scan_each(match: "#{REDIS_KEY_PREFIX}:*") do |key|
-        tracker_id = key.split(':').last
-        yield(key, tracker_id)
-      end
+      out
+    rescue StandardError => e
+      Rails.logger.error("[RedisPnL] fetch_all error: #{e.message}") if defined?(Rails)
+      {}
     end
 
     def health_check
-      return { status: :error, message: 'Redis not initialized' } unless @redis
+      return { status: :error, message: 'redis not init' } unless @redis
 
       @redis.ping
-      { status: :ok, message: 'Redis PnL cache is healthy' }
-    rescue StandardError
-      { status: :error, message: 'Redis PnL cache error' }
+      { status: :ok, message: 'ok' }
+    rescue StandardError => e
+      { status: :error, message: e.message }
+    end
+
+    def each_tracker_key(&)
+      pattern = "#{REDIS_KEY_PREFIX}:*"
+      @redis.scan_each(match: pattern) do |key|
+        tracker_id = key.split(':').last
+        yield(key, tracker_id.to_s)
+      end
     end
 
     private
-
-    def tick_key(segment, security_id)
-      "tick:#{segment}:#{security_id}"
-    end
 
     def pnl_key(id)
       "#{REDIS_KEY_PREFIX}:#{id}"

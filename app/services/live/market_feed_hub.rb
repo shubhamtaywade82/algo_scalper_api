@@ -46,7 +46,7 @@ module Live
       # Rails.logger.info("DhanHQ market feed started (mode=#{mode}, watchlist=#{@watchlist.count} instruments).")
       true
     rescue StandardError => e
-      Rails.logger.error("Failed to start DhanHQ market feed: #{_e.class} - #{_e.message}")
+      Rails.logger.error("Failed to start DhanHQ market feed: #{_e.class} - #{e.message}")
       stop!
       false
     end
@@ -237,24 +237,23 @@ module Live
       # Always update in-memory TickCache
       Live::TickCache.put(tick) if tick[:ltp].to_f.positive?
 
-
-      # puts Live::TickCache.ltp(tick[:segment], tick[:security_id])
-      # Store in Redis for PnL tracking (secondary)
-      # Only store if we have valid segment, security_id, and LTP
-      if tick[:segment].present? && tick[:security_id].present? && tick[:ltp].present? && tick[:ltp].to_f.positive?
-        begin
-          if tick[:ltp].present? && tick[:ltp].to_f.positive?
-            Live::RedisPnlCache.instance.store_tick(
-              segment: tick[:segment],
-              security_id: tick[:security_id].to_s,
-              ltp: tick[:ltp],
-              timestamp: Time.current
-            )
-          end
-        rescue StandardError => e
-          Rails.logger.debug { "[MarketFeedHub] Failed to store tick in Redis: #{e.message}" } if defined?(Rails.logger)
-        end
-      end
+      # # puts Live::TickCache.ltp(tick[:segment], tick[:security_id])
+      # # Store in Redis for PnL tracking (secondary)
+      # # Only store if we have valid segment, security_id, and LTP
+      # if tick[:segment].present? && tick[:security_id].present? && tick[:ltp].present? && tick[:ltp].to_f.positive?
+      #   begin
+      #     if tick[:ltp].present? && tick[:ltp].to_f.positive?
+      #       Live::RedisPnlCache.instance.store_tick(
+      #         segment: tick[:segment],
+      #         security_id: tick[:security_id].to_s,
+      #         ltp: tick[:ltp],
+      #         timestamp: Time.current
+      #       )
+      #     end
+      #   rescue StandardError => e
+      #     Rails.logger.debug { "[MarketFeedHub] Failed to store tick in Redis: #{e.message}" } if defined?(Rails.logger)
+      #   end
+      # end
 
       ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
 
@@ -279,6 +278,28 @@ module Live
       # rescue => e
       #   Rails.logger.error("[MarketFeedHub] Failed to live-update Redis PnL: #{e.message}")
       # end
+      # fast-path: drop empty/invalid ticks
+return unless tick[:ltp].to_f.positive? && tick[:security_id].present?
+
+# get in-memory trackers snapshot (array of metadata)
+trackers = Live::PositionIndex.instance.trackers_for(tick[:security_id].to_s)
+if trackers.empty?
+  # nothing to do for this security
+  return
+end
+
+# For each metadata push minimal payload (last-wins)
+trackers.each do |meta|
+  # defensive checks
+  next unless meta[:entry_price] && meta[:quantity] && meta[:quantity].to_i > 0
+
+  Live::PnlUpdaterService.instance.cache_intermediate_pnl(
+    tracker_id: meta[:id],
+    ltp: tick[:ltp]
+  )
+end
+
+
     end
 
     def safe_invoke(callback, payload)

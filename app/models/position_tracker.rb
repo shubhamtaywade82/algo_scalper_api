@@ -42,6 +42,41 @@ class PositionTracker < ApplicationRecord
     cancelled: 'cancelled'
   }.freeze
 
+  after_commit :register_in_index, on: %i[create update]
+  after_commit :unregister_from_index, on: :destroy
+  after_update_commit :refresh_index_if_relevant
+
+  def metadata_for_index
+    {
+      id: id,
+      security_id: security_id.to_s,
+      entry_price: entry_price.present? ? entry_price.to_s : nil,
+      quantity: quantity.to_i,
+      segment: segment
+    }
+  end
+
+  def register_in_index
+    return unless status == STATUSES[:active] && entry_price.present? && quantity.to_i > 0
+    Live::PositionIndex.instance.add(metadata_for_index)
+  rescue StandardError => e
+    Rails.logger.warn("[PositionTracker] register_in_index failed for #{id}: #{e.message}")
+  end
+
+  def unregister_from_index
+    Live::PositionIndex.instance.remove(id, security_id)
+  rescue StandardError => e
+    Rails.logger.warn("[PositionTracker] unregister_from_index failed for #{id}: #{e.message}")
+  end
+
+  def refresh_index_if_relevant
+    # If status, security_id, entry_price or quantity changed, update index
+    if saved_change_to_status? || saved_change_to_security_id? || saved_change_to_entry_price? || saved_change_to_quantity?
+      unregister_from_index
+      register_in_index
+    end
+  end
+
   belongs_to :instrument # Kept for backward compatibility during transition
   belongs_to :watchable, polymorphic: true
 

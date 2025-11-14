@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_11_08_092647) do
+ActiveRecord::Schema[8.0].define(version: 2025_11_14_032025) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -248,6 +248,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_08_092647) do
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"
     t.index ["security_id", "status"], name: "index_position_trackers_on_security_id_and_status"
+    t.index ["status", "security_id"], name: "index_trackers_on_status_and_security_id"
     t.index ["status"], name: "index_position_trackers_on_status"
     t.index ["watchable_type", "watchable_id"], name: "index_position_trackers_on_watchable"
   end

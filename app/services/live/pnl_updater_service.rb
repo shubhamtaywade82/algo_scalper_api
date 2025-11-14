@@ -1,52 +1,71 @@
 # frozen_string_literal: true
 
 require 'singleton'
-require 'concurrent'
 require 'monitor'
+require 'bigdecimal'
+require 'logger'
 
 module Live
   class PnlUpdaterService
     include Singleton
 
-    # Tunables
     FLUSH_INTERVAL_SECONDS = 0.25
     MAX_BATCH = 200
+
+    attr_reader :running
 
     def initialize
       @queue = {} # tracker_id => payload (last-wins)
       @mutex = Monitor.new
       @running = false
       @thread = nil
+      @logger = defined?(Rails) ? Rails.logger : Logger.new($stdout)
     end
 
-    # Called by RiskManagerService.update_pnl_in_redis and by other callers
-    # Payload fields: tracker_id:, pnl:, pnl_pct:, ltp:, hwm:
-    def cache_intermediate_pnl(tracker_id:, pnl:, pnl_pct: nil, ltp: nil, hwm: nil)
+    # Accept arbitrary payload fields; last-wins for a tracker id
+    # Ensure all numeric fields are stored as BigDecimal (or nil)
+    def cache_intermediate_pnl(tracker_id:, pnl: nil, pnl_pct: nil, ltp: nil, hwm: nil)
       @mutex.synchronize do
         @queue[tracker_id.to_i] = {
-          pnl: BigDecimal(pnl.to_s),
-          pnl_pct: pnl_pct.nil? ? nil : BigDecimal(pnl_pct.to_s),
-          ltp: ltp.nil? ? nil : BigDecimal(ltp.to_s),
-          hwm: hwm.nil? ? nil : BigDecimal(hwm.to_s),
-          updated_at: Time.current.to_i
+          pnl: safe_decimal(pnl),
+          pnl_pct: safe_decimal(pnl_pct),
+          ltp: safe_decimal(ltp),
+          hwm: safe_decimal(hwm),
+          updated_at: Time.now.to_i
         }
       end
 
       start! unless running?
+      true
     rescue StandardError => e
-      Rails.logger.error("[PnlUpdater] cache_intermediate_pnl error: #{e.class} - #{e.message}")
+      @logger.error("[PnlUpdater] cache_intermediate_pnl error: #{e.class} - #{e.message}")
+      false
+    end
+
+    def safe_decimal(v)
+      return nil if v.nil?
+      s = v.respond_to?(:to_s) ? v.to_s.strip : ''
+      return nil if s == '' || s == ' '
+      BigDecimal(s)
+    rescue StandardError
+      nil
     end
 
     def start!
-      return if running?
+      return true if running?
 
       @mutex.synchronize do
-        return if running?
+        return true if running?
 
         @running = true
         @thread = Thread.new { run_loop }
-        @thread.name = 'pnl-updater-service'
+        begin
+          @thread.name = 'pnl-updater-service'
+        rescue StandardError
+          # some Rubies don't allow thread name setting — ignore
+        end
       end
+      true
     end
 
     def stop!
@@ -55,6 +74,7 @@ module Live
         if @thread&.alive?
           begin
             @thread.wakeup
+            @thread.join(1) # gently wait a bit
           rescue StandardError
             nil
           end
@@ -67,10 +87,15 @@ module Live
       @running
     end
 
+    # For tests/dev: force flush synchronously
+    def flush_now!
+      flush!
+    end
+
     private
 
     def run_loop
-      Rails.logger.info('[PnlUpdater] started') if defined?(Rails.logger)
+      @logger.info('[PnlUpdater] started') if @logger
       loop do
         break unless running?
 
@@ -78,81 +103,126 @@ module Live
         sleep FLUSH_INTERVAL_SECONDS
       end
     rescue StandardError => e
-      Rails.logger.error("[PnlUpdater] crashed: #{e.class} - #{e.message}")
+      @logger.error("[PnlUpdater] crashed: #{e.class} - #{e.message}")
       @running = false
     ensure
-      Rails.logger.info('[PnlUpdater] stopped') if defined?(Rails.logger)
+      @logger.info('[PnlUpdater] stopped') if @logger
     end
 
     def flush!
       batch = nil
+
       @mutex.synchronize do
         return if @queue.empty?
 
-        # take up to MAX_BATCH items
-        batch = @queue.shift(MAX_BATCH).to_h
+        # Preserve insertion order, take first MAX_BATCH
+        batch = @queue.first(MAX_BATCH).to_h
+
+        # Remove processed keys
+        batch.keys.each { |k| @queue.delete(k) }
       end
-      return unless batch&.any?
+
+      return unless batch && batch.any?
 
       batch.each do |tracker_id, payload|
-        # Load tracker to get segment/security_id and validate presence
-        tracker = PositionTracker.find_by(id: tracker_id)
-        unless tracker
-          # orphaned tracker - clear from redis if any
-          Live::RedisPnlCache.instance.clear_tracker(tracker_id)
+        begin
+          tracker = PositionTracker.find_by(id: tracker_id)
+        rescue StandardError => e
+          @logger.error("[PnlUpdater] DB lookup failed for tracker #{tracker_id}: #{e.message}")
+          Live::RedisPnlCache.instance.clear_tracker(tracker_id) rescue nil
           next
         end
 
-        # Prefer canonical LTP from TickCache (fast & reliable)
-        segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+        unless tracker
+          # No tracker => stale Redis entry must be cleared
+          Live::RedisPnlCache.instance.clear_tracker(tracker_id) rescue nil
+          next
+        end
+
+        # Resolve segment reliably (match PositionTracker.subscribe logic)
+        seg = (tracker.segment.presence ||
+               tracker.watchable&.exchange_segment ||
+               tracker.instrument&.exchange_segment ||
+               tracker.instrument&.segment).to_s
+
         security_id = tracker.security_id.to_s
 
-        ltp = nil
-        # 1) prefer TickCache
-        tick_ltp = begin
-          Live::TickCache.ltp(segment, security_id)
-        rescue StandardError
-          nil
-        end
-        ltp = BigDecimal(tick_ltp.to_s) if tick_ltp&.to_f&.positive?
-
-        # 2) fallback to payload.ltp if TickCache has nothing valid
-        ltp = BigDecimal(payload[:ltp].to_s) if ltp.nil? && payload[:ltp] && payload[:ltp].to_f.positive?
-
-        # If we don't have a valid positive LTP, skip writing to Redis (prevents 0 overwrites)
-        unless ltp&.to_f&.positive?
-          Rails.logger.debug { "[PnlUpdater] Skipping write for tracker #{tracker_id} - no valid LTP (tickcache/payload)" }
+        if seg.blank? || security_id.blank?
+          @logger.debug("[PnlUpdater] Skip #{tracker_id}: missing segment/security_id (seg=#{seg.inspect}, sid=#{security_id.inspect})")
           next
         end
 
-        # Recompute pnl_pct if missing using tracker.entry_price or payload
-        pnl_value = payload[:pnl]
-        pnl_pct = payload[:pnl_pct]
-        if pnl_pct.nil? && tracker.entry_price.present? && tracker.entry_price.to_f.positive?
+        # 1) Try TickCache (memory)
+        tick_ltp = nil
+        begin
+          tick_ltp = Live::TickCache.ltp(seg, security_id)
+        rescue StandardError => e
+          @logger.warn("[PnlUpdater] TickCache.ltp error for #{seg}:#{security_id} - #{e.message}")
+          tick_ltp = nil
+        end
+
+        # 2) RedisTickCache fallback
+        if tick_ltp.nil? || (tick_ltp.respond_to?(:to_f) && tick_ltp.to_f <= 0)
           begin
-            pnl_pct = (ltp - BigDecimal(tracker.entry_price.to_s)) / BigDecimal(tracker.entry_price.to_s)
-          rescue StandardError
-            pnl_pct = nil
+            redis_tick = Live::RedisTickCache.instance.fetch_tick(seg, security_id)
+            tick_ltp = redis_tick[:ltp] if redis_tick && redis_tick[:ltp].to_f.positive?
+          rescue StandardError => e
+            @logger.warn("[PnlUpdater] RedisTickCache.fetch_tick error for #{seg}:#{security_id} - #{e.message}")
+            tick_ltp = nil
           end
         end
 
-        hwm = payload[:hwm] || tracker.high_water_mark_pnl || BigDecimal(0)
+        # 3) Payload fallback
+        if (tick_ltp.nil? || (tick_ltp.respond_to?(:to_f) && tick_ltp.to_f <= 0)) && payload[:ltp] && payload[:ltp].to_f.positive?
+          tick_ltp = payload[:ltp]
+        end
 
-        # Final write to Redis
+        unless tick_ltp && tick_ltp.to_f.positive?
+          @logger.debug { "[PnlUpdater] Skip #{tracker_id}: no valid LTP (seg=#{seg} sid=#{security_id})" }
+          next
+        end
+
+        # Ensure entry_price & quantity exist and are numeric
+        if tracker.entry_price.blank? || tracker.quantity.blank? || tracker.quantity.to_i <= 0
+          @logger.warn("[PnlUpdater] Invalid tracker data for #{tracker_id} - entry_price=#{tracker.entry_price.inspect}, quantity=#{tracker.quantity.inspect}. Clearing redis key.")
+          Live::RedisPnlCache.instance.clear_tracker(tracker_id) rescue nil
+          next
+        end
+
+        # Calculate with BigDecimal (all safe)
+        ltp_bd = safe_decimal(tick_ltp) || BigDecimal('0')
+        entry_bd = safe_decimal(tracker.entry_price) || BigDecimal('0')
+        qty_bd = BigDecimal(tracker.quantity.to_i.to_s)
+
+        # Compute PnL (fresh) — allow payload override when present (payload values are BigDecimal already)
+        pnl_bd = payload[:pnl] || ((ltp_bd - entry_bd) * qty_bd)
+        pnl_pct_bd = payload[:pnl_pct] || ((ltp_bd - entry_bd) / entry_bd) rescue BigDecimal('0')
+
+        hwm_bd = payload[:hwm] || (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal('0'))
+        hwm_bd = BigDecimal('0') if hwm_bd.nil?
+
+        # Persist to Redis (use floats for storage to remain compatible)
         Live::RedisPnlCache.instance.store_pnl(
           tracker_id: tracker_id,
-          pnl: pnl_value.to_f,
-          pnl_pct: pnl_pct&.to_f,
-          ltp: ltp.to_f,
-          hwm: hwm.to_f,
-          timestamp: Time.current
+          pnl: pnl_bd.to_f,
+          pnl_pct: pnl_pct_bd.to_f,
+          ltp: ltp_bd.to_f,
+          hwm: hwm_bd.to_f,
+          timestamp: Time.now
         )
 
-        # Also update the AR model in-memory fields so callers reading `tracker.last_pnl_rupees` soon after see updated values
-        tracker.cache_live_pnl(pnl_value, pnl_pct: pnl_pct) if pnl_value
+        # Update in-memory tracker object (but don't persist DB here)
+        begin
+          tracker.cache_live_pnl(pnl_bd, pnl_pct: pnl_pct_bd)
+        rescue StandardError => e
+          @logger.warn("[PnlUpdater] tracker.cache_live_pnl failed for #{tracker_id}: #{e.message}")
+        end
       rescue StandardError => e
-        Rails.logger.error("[PnlUpdater] Failed to flush tracker #{tracker_id}: #{e.class} - #{e.message}")
+        @logger.error("[PnlUpdater] processing failed for tracker #{tracker_id}: #{e.class} - #{e.message}")
+        next
       end
+
+      true
     end
   end
 end
