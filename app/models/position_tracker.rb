@@ -69,7 +69,7 @@ class PositionTracker < ApplicationRecord
   end
 
   def register_in_index
-    return unless status == STATUSES[:active] && entry_price.present? && quantity.to_i > 0
+    return unless status == STATUSES[:active] && entry_price.present? && quantity.to_i.positive?
 
     Live::PositionIndex.instance.add(metadata_for_index)
   rescue StandardError => e
