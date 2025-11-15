@@ -54,6 +54,11 @@ module Live
       arr.dup
     end
 
+    def tracked?(segment, security_id)
+      trackers = trackers_for(security_id)
+      trackers.any? { |t| t[:segment] == segment.to_s }
+    end
+
     delegate :clear, to: :@index
 
     def active_instrument_pairs

@@ -89,7 +89,7 @@ module InstrumentHelpers
     # Try WebSocket cache if hub is connected and ticks are fresh
     hub = Live::MarketFeedHub.instance
     if hub.running? && hub.connected?
-      tick = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+      tick = Live::TickCache.get(segment: segment, security_id: security_id)
       return BigDecimal(tick[:ltp].to_s) if tick&.dig(:ltp)
     end
 

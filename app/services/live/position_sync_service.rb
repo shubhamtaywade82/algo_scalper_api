@@ -289,7 +289,7 @@ module Live
       return BigDecimal(cached.to_s) if cached
 
       # Try Redis PnL cache
-      tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+      tick_data = Live::TickCache.fetch(segment: segment, security_id: security_id)
       return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
 
       # Try tradable's fetch method (derivative or instrument)

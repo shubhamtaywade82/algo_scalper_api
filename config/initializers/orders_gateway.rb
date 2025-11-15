@@ -1,14 +1,27 @@
 # frozen_string_literal: true
 
-# Bind Orders.config to Live::Gateway for live trading
 Rails.application.config.to_prepare do
-  Orders.config = Live::Gateway.new
-end
-
-# Define Orders.config accessor
-module Orders
-  class << self
-    attr_accessor :config
+  module Orders
+    class << self
+      attr_accessor :config
+    end
   end
-end
 
+  paper_enabled =
+    begin
+      AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+    rescue
+      true
+    end
+
+  gateway = if paper_enabled
+              Orders::GatewayPaper.new
+            else
+              Orders::GatewayLive.new
+            end
+
+  # Set structured config, not raw gateway
+  Orders.config = Orders::Config.new(gateway: gateway)
+
+  Rails.logger.info("[Orders] Using #{gateway.class.name}")
+end

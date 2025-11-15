@@ -134,7 +134,6 @@ class PositionTracker < ApplicationRecord
   scope :exited_paper, -> { where(paper: true, status: STATUSES[:exited]) }
   scope :exited, -> { where(status: STATUSES[:exited]) }
 
-
   def mark_active!(avg_price:, quantity:)
     price = avg_price.present? ? BigDecimal(avg_price.to_s) : nil
     attrs = {
@@ -166,64 +165,70 @@ class PositionTracker < ApplicationRecord
     update!(status: STATUSES[:cancelled])
   end
 
-  def mark_exited!(exit_price: nil, exited_at: nil)
-  # -----------------------------
-  # 1) Get latest PnL before exit
-  # -----------------------------
-  persist_final_pnl_from_cache
-
-  # If exit_price wasn't provided, use latest tick-based price
-  exit_price ||= begin
-    seg = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    Live::TickCache.instance.ltp(seg, security_id) ||
-      Live::RedisPnlCache.instance.fetch_tick(segment: seg, security_id: security_id)&.dig(:ltp)
+  # Paper Trading Methods (must be public for EntryGuard and RiskManagerService)
+  def paper?
+    paper == true
   end
 
-  exit_price = BigDecimal(exit_price.to_s) if exit_price.present?
+  def live?
+    !paper?
+  end
 
-  # -----------------------------------
-  # 2) Update DB with final exit record
-  # -----------------------------------
-  attrs = {
-    status: STATUSES[:exited],
-    exit_price: exit_price,
-    exited_at: exited_at || Time.current,
-    last_pnl_rupees: last_pnl_rupees,
-    last_pnl_pct: last_pnl_pct,
-    high_water_mark_pnl: high_water_mark_pnl
-  }.compact
+  def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
+    persist_final_pnl_from_cache
 
-  update!(attrs)
+    exit_price = resolve_exit_price(exit_price)
+    metadata = prepare_exit_metadata(exit_reason)
 
-  # --------------------------------
-  # 3) Remove from supervisor caches
-  # --------------------------------
+    update_exit_attributes(exit_price, exited_at, metadata)
+    cleanup_exit_caches
+    unsubscribe
+    register_cooldown!
 
-  # a) Remove from PositionIndex
-  Live::PositionIndex.instance.remove(id, security_id)
+    self
+  end
 
-  # b) Clear Redis PnL cache
-  Live::RedisPnlCache.instance.clear_tracker(id)
+  private
 
-  # c) Clear Redis tick for this security
-  Live::RedisTickCache.instance.clear_tick(segment, security_id)
+  def resolve_exit_price(exit_price)
+    exit_price ||= fetch_ltp_from_cache
+    exit_price = BigDecimal(exit_price.to_s) if exit_price.present?
+    exit_price
+  end
 
-  # d) Clear in-memory TickCache
-  Live::TickCache.instance.delete(segment, security_id)
+  def fetch_ltp_from_cache
+    seg = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
+    Live::TickCache.ltp(seg, security_id)
+  end
 
-  # -----------------------------------------------------
-  # 4) Unsubscribe *after* PnL persistence & cache flush
-  # -----------------------------------------------------
-  unsubscribe
+  def prepare_exit_metadata(exit_reason)
+    exit_reason ||= meta.is_a?(Hash) ? meta['exit_reason'] : nil
+    metadata = meta.is_a?(Hash) ? meta.dup : {}
+    metadata['exit_reason'] = exit_reason if exit_reason.present?
+    metadata['exit_triggered_at'] ||= Time.current
+    metadata
+  end
 
-  # ------------------------------------
-  # 5) Register re-entry cooldown (8 hrs)
-  # ------------------------------------
-  register_cooldown!
+  def update_exit_attributes(exit_price, exited_at, metadata)
+    attrs = {
+      status: STATUSES[:exited],
+      exit_price: exit_price,
+      exited_at: exited_at || Time.current,
+      last_pnl_rupees: last_pnl_rupees,
+      last_pnl_pct: last_pnl_pct,
+      high_water_mark_pnl: high_water_mark_pnl,
+      meta: metadata
+    }.compact
 
-  self
-end
+    update!(attrs)
+  end
 
+  def cleanup_exit_caches
+    Live::PositionIndex.instance.remove(id, security_id)
+    Live::RedisPnlCache.instance.clear_tracker(id)
+    Live::RedisTickCache.instance.clear_tick(segment, security_id)
+    Live::TickCache.delete(segment, security_id)
+  end
 
   def cache_live_pnl(pnl, pnl_pct: nil)
     pnl_value = BigDecimal(pnl.to_s)
@@ -234,6 +239,8 @@ end
     current_hwm = high_water_mark_pnl.present? ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
     self.high_water_mark_pnl = [current_hwm, pnl_value].max
   end
+
+  public
 
   def hydrate_pnl_from_cache!
     cache = Live::RedisPnlCache.instance.fetch_pnl(id)
@@ -329,16 +336,6 @@ end
   rescue StandardError => e
     Rails.logger.error("[PositionTracker] Failed to subscribe #{order_no}: #{e.message}")
     nil
-  end
-
-  # Paper Trading Methods (must be public for EntryGuard to call)
-
-  def paper?
-    paper == true
-  end
-
-  def live?
-    !paper?
   end
 
   # Helper method to get the actual tradable object (derivative or instrument)

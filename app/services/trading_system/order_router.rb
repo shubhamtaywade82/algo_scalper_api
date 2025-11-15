@@ -1,37 +1,45 @@
 module TradingSystem
-  class OrderRouter
-    def initialize
-      @running = false
+  class OrderRouter < BaseService
+    RETRY_COUNT = 3
+    RETRY_BASE_SLEEP = 0.2
+
+    def initialize(gateway: Orders.config.gateway)
+      @gateway = gateway
     end
 
-    def start = @running = true
-    def stop = @running = false
+     # Required by BaseService (Supervisor calls start/stop)
+     def start
+      Rails.logger.info("[OrderRouter] ready (no-op)")
+      true
+    end
+
+    def stop
+      Rails.logger.info("[OrderRouter] stopped (no-op)")
+      true
+    end
+
 
     def exit_market(tracker)
-      segment     = tracker.segment
-      security_id = tracker.security_id.to_i
+      with_retries do
+        @gateway.exit_market(tracker)
+      end
+    rescue StandardError => e
+      Rails.logger.error("[OrderRouter] exit_market exception for #{tracker.order_no}: #{e.class} - #{e.message}")
+      { success: false, error: e.message }
+    end
 
-      # 1) PAPER → instant exit
-      return { success: true, paper: true } if tracker.paper?
+    private
 
-      # 2) LIVE → use your actual flat_position API
+    def with_retries
+      attempts = 0
       begin
-        # FIX: must call Orders::Service NOT Orders::Manager
-        order = Orders::Service.flat_position(
-          segment: segment,
-          security_id: security_id
-        )
-
-        if order.present?
-          Rails.logger.info("[OrderRouter] Flattened position #{tracker.order_no} SID=#{security_id}")
-          { success: true }
-        else
-          Rails.logger.error("[OrderRouter] FAILED to flatten #{tracker.order_no} SID=#{security_id}")
-          { success: false }
-        end
+        attempts += 1
+        yield
       rescue StandardError => e
-        Rails.logger.error("[OrderRouter] crash while exiting #{tracker.order_no}: #{e.class} - #{e.message}")
-        { success: false }
+        raise if attempts >= RETRY_COUNT
+
+        sleep RETRY_BASE_SLEEP * attempts
+        retry
       end
     end
   end
