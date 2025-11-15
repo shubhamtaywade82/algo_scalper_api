@@ -6,7 +6,7 @@ module Api
       render json: {
         mode: AlgoConfig.mode,
         watchlist: WatchlistItem.where(active: true).count,
-        active_positions: PositionTracker.where(status: PositionTracker::STATUSES[:active]).count,
+        active_positions: PositionTracker.active.count,
         scheduler: scheduler_status,
         # circuit_breaker: Risk::CircuitBreaker.instance.status, # Disabled - removed per requirement
         websocket: {

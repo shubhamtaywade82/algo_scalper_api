@@ -44,7 +44,7 @@ module PositionTrackerFactory
         quantity: quantity,
         entry_price: entry_price,
         avg_price: entry_price,
-        status: PositionTracker::STATUSES[:active],
+        status: 'active',
         meta: meta
       )
     end

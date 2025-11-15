@@ -99,9 +99,6 @@ module Live
     # Central monitoring loop: keep PnL and caches fresh.
     # DO NOT perform exit dispatching here when an external ExitEngine exists — ExitEngine will call enforcement methods.
     def monitor_loop(last_paper_pnl_update)
-      # Keep positions indexed (used by PnL fetchers)
-      positions = fetch_positions_indexed
-
       # Keep Redis/DB PnL fresh
       update_paper_positions_pnl_if_due(last_paper_pnl_update)
       ensure_all_positions_in_redis
@@ -300,7 +297,7 @@ module Live
 
     def update_paper_positions_pnl_if_due(last_update_time)
       # if last_update_time is nil or stale, update now
-      return unless Time.current - (last_update_time || Time.at(0)) >= 1.minute
+      return unless Time.current - (last_update_time || Time.zone.at(0)) >= 1.minute
 
       update_paper_positions_pnl
     rescue StandardError => e
@@ -345,9 +342,15 @@ module Live
     end
 
     # Ensure every active PositionTracker has an entry in Redis PnL cache (best-effort)
+    # Throttled to avoid excessive queries - only runs every 5 seconds
     def ensure_all_positions_in_redis
+      @last_ensure_all ||= Time.zone.at(0)
+      return if Time.current - @last_ensure_all < 5.seconds
+
       trackers = PositionTracker.active.includes(:instrument).to_a
       return if trackers.empty?
+
+      @last_ensure_all = Time.current
 
       positions = fetch_positions_indexed
 
@@ -420,7 +423,7 @@ module Live
       return BigDecimal(cached.to_s) if cached
 
       tick_data = begin
-        Live::TickCache.fetch(segment: segment, security_id: security_id)
+        Live::TickCache.fetch(segment, security_id)
       rescue StandardError
         nil
       end

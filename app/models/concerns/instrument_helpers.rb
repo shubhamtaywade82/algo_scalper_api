@@ -206,7 +206,7 @@ module InstrumentHelpers
       symbol: symbol,
       segment: segment,
       side: side,
-      status: PositionTracker::STATUSES[:active],
+      status: 'active',
       quantity: qty.to_i,
       entry_price: BigDecimal(entry_price.to_s),
       meta: index_key ? { 'index_key' => index_key } : {}

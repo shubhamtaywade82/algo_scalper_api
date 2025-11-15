@@ -42,10 +42,12 @@ module Live
       false
     end
 
-    def safe_decimal(v)
-      return nil if v.nil?
-      s = v.respond_to?(:to_s) ? v.to_s.strip : ''
-      return nil if s == '' || s == ' '
+    def safe_decimal(value)
+      return nil if value.nil?
+
+      s = value.respond_to?(:to_s) ? value.to_s.strip : ''
+      return nil if ['', ' '].include?(s)
+
       BigDecimal(s)
     rescue StandardError
       nil
@@ -124,18 +126,30 @@ module Live
 
       return unless batch && batch.any?
 
+      # Batch load all trackers in a single query to avoid N+1
+      tracker_ids = batch.keys
+      trackers_by_id = PositionTracker.includes(:watchable, :instrument).where(id: tracker_ids).index_by(&:id)
+
       batch.each do |tracker_id, payload|
         begin
-          tracker = PositionTracker.find_by(id: tracker_id)
+          tracker = trackers_by_id[tracker_id]
         rescue StandardError => e
           @logger.error("[PnlUpdater] DB lookup failed for tracker #{tracker_id}: #{e.message}")
-          Live::RedisPnlCache.instance.clear_tracker(tracker_id) rescue nil
+          begin
+            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
+          rescue StandardError
+            nil
+          end
           next
         end
 
         unless tracker
           # No tracker => stale Redis entry must be cleared
-          Live::RedisPnlCache.instance.clear_tracker(tracker_id) rescue nil
+          begin
+            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
+          rescue StandardError
+            nil
+          end
           next
         end
 
@@ -185,21 +199,29 @@ module Live
         # Ensure entry_price & quantity exist and are numeric
         if tracker.entry_price.blank? || tracker.quantity.blank? || tracker.quantity.to_i <= 0
           @logger.warn("[PnlUpdater] Invalid tracker data for #{tracker_id} - entry_price=#{tracker.entry_price.inspect}, quantity=#{tracker.quantity.inspect}. Clearing redis key.")
-          Live::RedisPnlCache.instance.clear_tracker(tracker_id) rescue nil
+          begin
+            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
+          rescue StandardError
+            nil
+          end
           next
         end
 
         # Calculate with BigDecimal (all safe)
-        ltp_bd = safe_decimal(tick_ltp) || BigDecimal('0')
-        entry_bd = safe_decimal(tracker.entry_price) || BigDecimal('0')
+        ltp_bd = safe_decimal(tick_ltp) || BigDecimal(0)
+        entry_bd = safe_decimal(tracker.entry_price) || BigDecimal(0)
         qty_bd = BigDecimal(tracker.quantity.to_i.to_s)
 
         # Compute PnL (fresh) — allow payload override when present (payload values are BigDecimal already)
         pnl_bd = payload[:pnl] || ((ltp_bd - entry_bd) * qty_bd)
-        pnl_pct_bd = payload[:pnl_pct] || ((ltp_bd - entry_bd) / entry_bd) rescue BigDecimal('0')
+        pnl_pct_bd = begin
+          payload[:pnl_pct] || ((ltp_bd - entry_bd) / entry_bd)
+        rescue StandardError
+          BigDecimal(0)
+        end
 
-        hwm_bd = payload[:hwm] || (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal('0'))
-        hwm_bd = BigDecimal('0') if hwm_bd.nil?
+        hwm_bd = payload[:hwm] || (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
+        hwm_bd = BigDecimal(0) if hwm_bd.nil?
 
         # Persist to Redis (use floats for storage to remain compatible)
         Live::RedisPnlCache.instance.store_pnl(

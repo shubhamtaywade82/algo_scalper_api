@@ -24,7 +24,7 @@ class Orders::GatewayPaper < Orders::Gateway
       symbol: meta[:symbol] || security_id.to_s,
       segment: segment,
       side: side.to_s.upcase,
-      status: PositionTracker::STATUSES[:active],
+      status: 'active',
       quantity: qty,
       avg_price: meta[:price] || 0
     )

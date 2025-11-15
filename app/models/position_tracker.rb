@@ -37,382 +37,50 @@ require 'bigdecimal'
 class PositionTracker < ApplicationRecord
   include PositionTrackerFactory
 
-  STATUSES = {
+  # Attribute accessors
+  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction
+
+  # Enums
+  enum :status, {
     pending: 'pending',
     active: 'active',
     exited: 'exited',
     cancelled: 'cancelled'
-  }.freeze
+  }
 
+  # Validations
+  validates :order_no, presence: true, uniqueness: true
+  validates :security_id, presence: true
+
+  # Callbacks
   after_commit :register_in_index, on: %i[create update]
   after_commit :unregister_from_index, on: :destroy
   after_update_commit :refresh_index_if_relevant
   after_update_commit :cleanup_if_exited
   after_create_commit :subscribe_to_feed
-
-  def metadata_for_index
-    {
-      id: id,
-      security_id: security_id.to_s,
-      entry_price: entry_price.present? ? entry_price.to_s : nil,
-      quantity: quantity.to_i,
-      segment: segment
-    }
-  end
-
-  def self.active_for(seg, sid)
-    where(segment: seg, security_id: sid, status: STATUSES[:active]).first
-  end
-
-  def self.exited_for(seg, sid)
-    where(segment: seg, security_id: sid, status: STATUSES[:exited]).order(id: :desc).first
-  end
-
-  def register_in_index
-    return unless status == STATUSES[:active] && entry_price.present? && quantity.to_i.positive?
-
-    Live::PositionIndex.instance.add(metadata_for_index)
-  rescue StandardError => e
-    Rails.logger.warn("[PositionTracker] register_in_index failed for #{id}: #{e.message}")
-  end
-
-  def subscribe_to_feed
-    Live::MarketFeedHub.instance.subscribe(segment: segment, security_id: security_id)
-    Live::PositionIndex.instance.add(id: id, security_id: security_id, segment: segment, entry_price: entry_price,
-                                     quantity: quantity)
-  end
-
-  def unregister_from_index
-    # Remove from in-memory index
-    Live::PositionIndex.instance.remove(id, security_id)
-
-    # Remove Redis tick cache
-    Live::RedisTickCache.instance.clear_tick(segment, security_id)
-
-    # Remove in-memory TickCache
-    Live::TickCache.delete(segment, security_id)
-
-    # Unsubscribe websocket feed
-    unsubscribe
-  rescue StandardError => e
-    Rails.logger.warn("[PositionTracker] unregister_from_index failed for #{id}: #{e.message}")
-  end
-
-  def cleanup_if_exited
-    return unless saved_change_to_status? && status == STATUSES[:exited]
-
-    unregister_from_index
-    clear_redis_pnl_cache
-  end
-
-  def refresh_index_if_relevant
-    # If status, security_id, entry_price or quantity changed, update index
-    unless saved_change_to_status? || saved_change_to_security_id? || saved_change_to_entry_price? || saved_change_to_quantity?
-      return
-    end
-
-    unregister_from_index
-    register_in_index
-  end
-
-  belongs_to :instrument # Kept for backward compatibility during transition
-  belongs_to :watchable, polymorphic: true
-
-  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction
-
-  validates :order_no, presence: true, uniqueness: true
-  validates :security_id, presence: true
-  validates :status, inclusion: { in: STATUSES.values }
-
   after_destroy_commit :clear_redis_pnl_cache
   after_update_commit :clear_redis_cache_if_exited
 
-  scope :active, -> { where(status: STATUSES[:active]) }
-  scope :pending, -> { where(status: STATUSES[:pending]) }
+  # Associations
+  belongs_to :instrument # Kept for backward compatibility during transition
+  belongs_to :watchable, polymorphic: true
+
+  # Scopes
+  # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled
   scope :paper, -> { where(paper: true) }
   scope :live, -> { where(paper: false) }
-  scope :exited_paper, -> { where(paper: true, status: STATUSES[:exited]) }
-  scope :exited, -> { where(status: STATUSES[:exited]) }
+  scope :exited_paper, -> { where(paper: true, status: :exited) }
 
-  def mark_active!(avg_price:, quantity:)
-    price = avg_price.present? ? BigDecimal(avg_price.to_s) : nil
-    attrs = {
-      status: STATUSES[:active],
-      avg_price: price,
-      entry_price: entry_price.presence || price,
-      quantity: quantity
-    }
-
-    update!(attrs.compact)
-    subscribe
-
-    # Initialize PnL in Redis (will be 0 initially since entry_price = avg_price)
-    # This ensures the position is tracked in Redis from the start
-    return if price.blank?
-
-    initial_pnl = BigDecimal(0)
-    Live::RedisPnlCache.instance.store_pnl(
-      tracker_id: id,
-      pnl: initial_pnl,
-      pnl_pct: 0.0,
-      ltp: price,
-      hwm: initial_pnl,
-      timestamp: Time.current
-    )
-  end
-
-  def mark_cancelled!
-    update!(status: STATUSES[:cancelled])
-  end
-
-  # Paper Trading Methods (must be public for EntryGuard and RiskManagerService)
-  def paper?
-    paper == true
-  end
-
-  def live?
-    !paper?
-  end
-
-  def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
-    persist_final_pnl_from_cache
-
-    exit_price = resolve_exit_price(exit_price)
-    metadata = prepare_exit_metadata(exit_reason)
-
-    update_exit_attributes(exit_price, exited_at, metadata)
-    cleanup_exit_caches
-    unsubscribe
-    register_cooldown!
-
-    self
-  end
-
-  private
-
-  def resolve_exit_price(exit_price)
-    exit_price ||= fetch_ltp_from_cache
-    exit_price = BigDecimal(exit_price.to_s) if exit_price.present?
-    exit_price
-  end
-
-  def fetch_ltp_from_cache
-    seg = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    Live::TickCache.ltp(seg, security_id)
-  end
-
-  def prepare_exit_metadata(exit_reason)
-    exit_reason ||= meta.is_a?(Hash) ? meta['exit_reason'] : nil
-    metadata = meta.is_a?(Hash) ? meta.dup : {}
-    metadata['exit_reason'] = exit_reason if exit_reason.present?
-    metadata['exit_triggered_at'] ||= Time.current
-    metadata
-  end
-
-  def update_exit_attributes(exit_price, exited_at, metadata)
-    attrs = {
-      status: STATUSES[:exited],
-      exit_price: exit_price,
-      exited_at: exited_at || Time.current,
-      last_pnl_rupees: last_pnl_rupees,
-      last_pnl_pct: last_pnl_pct,
-      high_water_mark_pnl: high_water_mark_pnl,
-      meta: metadata
-    }.compact
-
-    update!(attrs)
-  end
-
-  def cleanup_exit_caches
-    Live::PositionIndex.instance.remove(id, security_id)
-    Live::RedisPnlCache.instance.clear_tracker(id)
-    Live::RedisTickCache.instance.clear_tick(segment, security_id)
-    Live::TickCache.delete(segment, security_id)
-  end
-
-  def cache_live_pnl(pnl, pnl_pct: nil)
-    pnl_value = BigDecimal(pnl.to_s)
-    self.last_pnl_rupees = pnl_value
-
-    self.last_pnl_pct = pnl_pct.nil? ? nil : BigDecimal(pnl_pct.to_s)
-
-    current_hwm = high_water_mark_pnl.present? ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
-    self.high_water_mark_pnl = [current_hwm, pnl_value].max
-  end
-
-  public
-
-  def hydrate_pnl_from_cache!
-    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
-    return unless cache
-
-    cache_live_pnl(cache[:pnl], pnl_pct: cache[:pnl_pct]) if cache[:pnl]
-
-    self.high_water_mark_pnl = BigDecimal(cache[:hwm_pnl].to_s) if cache[:hwm_pnl]
-  rescue StandardError
-    nil
-  end
-
-  def update_pnl!(pnl, pnl_pct: nil)
-    pnl_value = BigDecimal(pnl.to_s)
-    current_hwm = high_water_mark_pnl ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
-    hwm = [current_hwm, pnl_value].max
-    attrs = { last_pnl_rupees: pnl_value, high_water_mark_pnl: hwm }
-    attrs[:last_pnl_pct] = BigDecimal(pnl_pct.to_s) if pnl_pct
-    update!(attrs)
-  end
-
-  def trailing_stop_triggered?(pnl, drop_pct)
-    return false if high_water_mark_pnl.blank? || BigDecimal(high_water_mark_pnl.to_s).zero?
-
-    pnl_value = BigDecimal(pnl.to_s)
-    hwm_value = BigDecimal(high_water_mark_pnl.to_s)
-    threshold = hwm_value * (1 - drop_pct)
-    pnl_value <= threshold
-  end
-
-  def ready_to_trail?(pnl, min_profit)
-    BigDecimal(pnl.to_s) >= min_profit
-  end
-
-  def min_profit_lock(trail_step_pct)
-    return BigDecimal(0) if trail_step_pct.to_f <= 0
-    return BigDecimal(0) if entry_price.blank? || quantity.to_i <= 0
-
-    BigDecimal(entry_price.to_s) * quantity.to_i * BigDecimal(trail_step_pct.to_s)
-  end
-
-  def breakeven_locked?
-    ActiveModel::Type::Boolean.new.cast(meta_hash.fetch('breakeven_locked', false))
-  end
-
-  def lock_breakeven!
-    update!(meta: meta_hash.merge('breakeven_locked' => true))
-  end
-
-  def unsubscribe
-    return unless Live::MarketFeedHub.instance.running?
-
-    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    return unless segment_key && security_id
-
-    # Rails.logger.debug { "[PositionTracker] Unsubscribing from market feed: #{segment_key}:#{security_id}" }
-    Live::MarketFeedHub.instance.unsubscribe(segment: segment_key, security_id: security_id)
-
-    # Also unsubscribe the underlying instrument if it's an option (derivative)
-    underlying = if watchable.is_a?(Derivative)
-                   watchable.instrument
-                 elsif instrument&.underlying_symbol
-                   Instrument.find_by(
-                     symbol_name: instrument.underlying_symbol,
-                     exchange: instrument.exchange,
-                     segment: instrument.segment
-                   )
-                 end
-    return unless underlying
-
-    underlying_segment = underlying.exchange_segment
-    return unless underlying_segment.present? && underlying.security_id.present?
-
-    Rails.logger.debug do
-      "[PositionTracker] Unsubscribing from underlying: #{underlying.symbol_name} " \
-        "(#{underlying_segment}:#{underlying.security_id})"
-    end
-    Live::MarketFeedHub.instance.unsubscribe(
-      segment: underlying_segment,
-      security_id: underlying.security_id
-    )
-  end
-
-  def subscribe
-    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    return unless segment_key && security_id
-
-    hub = Live::MarketFeedHub.instance
-    # Ensure hub is running (will start if not running)
-    hub.start! unless hub.running?
-
-    hub.subscribe(segment: segment_key, security_id: security_id)
-  rescue StandardError => e
-    Rails.logger.error("[PositionTracker] Failed to subscribe #{order_no}: #{e.message}")
-    nil
-  end
-
-  # Helper method to get the actual tradable object (derivative or instrument)
-  # Must be public as it's used by EntryGuard and RiskManagerService
-  def tradable
-    watchable
-  end
-
-  # Helper method to get the underlying instrument (for derivatives, get the instrument; for instruments, get itself)
-  # Must be public as it's used by EntryGuard for exposure checks
-  def underlying_instrument
-    if watchable.is_a?(Derivative)
-      watchable.instrument
-    elsif watchable.is_a?(Instrument)
-      watchable
-    else
-      instrument
-    end
-  end
-
-  private
-
-  def register_cooldown!
-    return if symbol.blank?
-
-    Rails.cache.write("reentry:#{symbol}", Time.current, expires_in: 8.hours)
-  end
-
-  def clear_redis_cache_if_exited
-    return unless saved_change_to_status? && status == STATUSES[:exited]
-
-    clear_redis_pnl_cache
-  end
-
-  def clear_redis_pnl_cache
-    Live::RedisPnlCache.instance.clear_tracker(id)
-  end
-
-  def persist_final_pnl_from_cache
-    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
-    return unless cache
-
-    if cache[:pnl]
-      pnl_value = BigDecimal(cache[:pnl].to_s)
-      self.last_pnl_rupees = pnl_value
-
-      current_hwm = high_water_mark_pnl.present? ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
-      self.high_water_mark_pnl = [current_hwm, pnl_value].max
-    end
-
-    self.last_pnl_pct = cache[:pnl_pct] ? BigDecimal(cache[:pnl_pct].to_s) : nil
-  end
-
-  def meta_hash
-    value = self[:meta]
-    value.is_a?(Hash) ? value : {}
-  end
-
-  # Calculate PnL for paper positions
-  def calculate_paper_pnl(exit_price = nil)
-    return BigDecimal(0) unless paper? && entry_price.present? && quantity.present?
-
-    exit = exit_price || last_pnl_rupees
-    return BigDecimal(0) unless exit
-
-    entry = BigDecimal(entry_price.to_s)
-    exit_value = BigDecimal(exit.to_s)
-    qty = quantity.to_i
-
-    # For long positions: PnL = (exit - entry) * quantity
-    pnl = (exit_value - entry) * qty
-    BigDecimal(pnl.to_s)
-  end
-
-  # Class methods for paper trading statistics
+  # Class Methods
   class << self
-    # == Extension for detailed paper trading reporting ==
+    def active_for(seg, sid)
+      where(segment: seg, security_id: sid, status: :active).first
+    end
+
+    def exited_for(seg, sid)
+      where(segment: seg, security_id: sid, status: :exited).order(id: :desc).first
+    end
+
     def paper_trading_stats_with_pct
       exited = exited_paper
       active = paper.active
@@ -444,7 +112,6 @@ class PositionTracker < ApplicationRecord
       }
     end
 
-    # == Detailed breakdown of each paper trade ==
     def paper_positions_details
       paper.includes(:instrument).map do |t|
         entry_price = t.entry_price.to_f
@@ -559,5 +226,323 @@ class PositionTracker < ApplicationRecord
 
       false
     end
+  end
+
+  # Instance Methods
+  def metadata_for_index
+    {
+      id: id,
+      security_id: security_id.to_s,
+      entry_price: entry_price.present? ? entry_price.to_s : nil,
+      quantity: quantity.to_i,
+      segment: segment
+    }
+  end
+
+  def mark_active!(avg_price:, quantity:)
+    price = avg_price.present? ? BigDecimal(avg_price.to_s) : nil
+    attrs = {
+      status: :active,
+      avg_price: price,
+      entry_price: entry_price.presence || price,
+      quantity: quantity
+    }
+
+    update!(attrs.compact)
+    subscribe
+
+    # Initialize PnL in Redis (will be 0 initially since entry_price = avg_price)
+    # This ensures the position is tracked in Redis from the start
+    return if price.blank?
+
+    initial_pnl = BigDecimal(0)
+    Live::RedisPnlCache.instance.store_pnl(
+      tracker_id: id,
+      pnl: initial_pnl,
+      pnl_pct: 0.0,
+      ltp: price,
+      hwm: initial_pnl,
+      timestamp: Time.current
+    )
+  end
+
+  def mark_cancelled!
+    update!(status: :cancelled)
+  end
+
+  def paper?
+    paper == true
+  end
+
+  def live?
+    !paper?
+  end
+
+  def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
+    persist_final_pnl_from_cache
+
+    exit_price = resolve_exit_price(exit_price)
+    metadata = prepare_exit_metadata(exit_reason)
+
+    update_exit_attributes(exit_price, exited_at, metadata)
+    cleanup_exit_caches
+    unsubscribe
+    register_cooldown!
+
+    self
+  end
+
+  def hydrate_pnl_from_cache!
+    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
+    return unless cache
+
+    cache_live_pnl(cache[:pnl], pnl_pct: cache[:pnl_pct]) if cache[:pnl]
+
+    self.high_water_mark_pnl = BigDecimal(cache[:hwm_pnl].to_s) if cache[:hwm_pnl]
+  rescue StandardError
+    nil
+  end
+
+  def update_pnl!(pnl, pnl_pct: nil)
+    pnl_value = BigDecimal(pnl.to_s)
+    current_hwm = high_water_mark_pnl ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
+    hwm = [current_hwm, pnl_value].max
+    attrs = { last_pnl_rupees: pnl_value, high_water_mark_pnl: hwm }
+    attrs[:last_pnl_pct] = BigDecimal(pnl_pct.to_s) if pnl_pct
+    update!(attrs)
+  end
+
+  def trailing_stop_triggered?(pnl, drop_pct)
+    return false if high_water_mark_pnl.blank? || BigDecimal(high_water_mark_pnl.to_s).zero?
+
+    pnl_value = BigDecimal(pnl.to_s)
+    hwm_value = BigDecimal(high_water_mark_pnl.to_s)
+    threshold = hwm_value * (1 - drop_pct)
+    pnl_value <= threshold
+  end
+
+  def ready_to_trail?(pnl, min_profit)
+    BigDecimal(pnl.to_s) >= min_profit
+  end
+
+  def min_profit_lock(trail_step_pct)
+    return BigDecimal(0) if trail_step_pct.to_f <= 0
+    return BigDecimal(0) if entry_price.blank? || quantity.to_i <= 0
+
+    BigDecimal(entry_price.to_s) * quantity.to_i * BigDecimal(trail_step_pct.to_s)
+  end
+
+  def breakeven_locked?
+    ActiveModel::Type::Boolean.new.cast(meta_hash.fetch('breakeven_locked', false))
+  end
+
+  def lock_breakeven!
+    update!(meta: meta_hash.merge('breakeven_locked' => true))
+  end
+
+  def unsubscribe
+    return unless Live::MarketFeedHub.instance.running?
+
+    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
+    return unless segment_key && security_id
+
+    # Never unsubscribe from IDX_I (index feeds) - they're needed for signal generation
+    # and may be used by multiple positions
+    if segment_key == 'IDX_I'
+      Rails.logger.debug { "[PositionTracker] Skipping unsubscribe for IDX_I:#{security_id} (index feed must stay subscribed)" }
+      return
+    end
+
+    # Rails.logger.debug { "[PositionTracker] Unsubscribing from market feed: #{segment_key}:#{security_id}" }
+    Live::MarketFeedHub.instance.unsubscribe(segment: segment_key, security_id: security_id)
+
+    # Never unsubscribe from underlying instruments (especially IDX_I)
+    # They are needed for signal generation and may be used by other positions
+    # The underlying index feeds should remain subscribed at all times
+  end
+
+  def subscribe
+    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
+    return unless segment_key && security_id
+
+    hub = Live::MarketFeedHub.instance
+    # Ensure hub is running (will start if not running)
+    hub.start! unless hub.running?
+
+    hub.subscribe(segment: segment_key, security_id: security_id)
+  rescue StandardError => e
+    Rails.logger.error("[PositionTracker] Failed to subscribe #{order_no}: #{e.message}")
+    nil
+  end
+
+  def tradable
+    watchable
+  end
+
+  def underlying_instrument
+    if watchable.is_a?(Derivative)
+      watchable.instrument
+    elsif watchable.is_a?(Instrument)
+      watchable
+    else
+      instrument
+    end
+  end
+
+  def cache_live_pnl(pnl, pnl_pct: nil)
+    pnl_value = BigDecimal(pnl.to_s)
+    self.last_pnl_rupees = pnl_value
+
+    self.last_pnl_pct = pnl_pct.nil? ? nil : BigDecimal(pnl_pct.to_s)
+
+    current_hwm = high_water_mark_pnl.present? ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
+    self.high_water_mark_pnl = [current_hwm, pnl_value].max
+  end
+
+  private
+
+  def register_in_index
+    return unless active? && entry_price.present? && quantity.to_i.positive?
+
+    Live::PositionIndex.instance.add(metadata_for_index)
+  rescue StandardError => e
+    Rails.logger.warn("[PositionTracker] register_in_index failed for #{id}: #{e.message}")
+  end
+
+  def subscribe_to_feed
+    # Use same segment resolution logic as subscribe method
+    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
+    return unless segment_key && security_id
+
+    hub = Live::MarketFeedHub.instance
+    hub.start! unless hub.running?
+    hub.subscribe(segment: segment_key, security_id: security_id)
+
+    Live::PositionIndex.instance.add(id: id, security_id: security_id, segment: segment_key, entry_price: entry_price,
+                                     quantity: quantity)
+  end
+
+  def unregister_from_index
+    # Remove from in-memory index
+    Live::PositionIndex.instance.remove(id, security_id)
+
+    # Remove Redis tick cache
+    Live::RedisTickCache.instance.clear_tick(segment, security_id)
+
+    # Remove in-memory TickCache
+    Live::TickCache.delete(segment, security_id)
+
+    # Unsubscribe websocket feed
+    unsubscribe
+  rescue StandardError => e
+    Rails.logger.warn("[PositionTracker] unregister_from_index failed for #{id}: #{e.message}")
+  end
+
+  def cleanup_if_exited
+    return unless saved_change_to_status? && exited?
+
+    unregister_from_index
+    clear_redis_pnl_cache
+  end
+
+  def refresh_index_if_relevant
+    # If status, security_id, entry_price or quantity changed, update index
+    unless saved_change_to_status? || saved_change_to_security_id? || saved_change_to_entry_price? || saved_change_to_quantity?
+      return
+    end
+
+    unregister_from_index
+    register_in_index
+  end
+
+  def resolve_exit_price(exit_price)
+    exit_price ||= fetch_ltp_from_cache
+    exit_price = BigDecimal(exit_price.to_s) if exit_price.present?
+    exit_price
+  end
+
+  def fetch_ltp_from_cache
+    seg = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
+    Live::TickCache.ltp(seg, security_id)
+  end
+
+  def prepare_exit_metadata(exit_reason)
+    exit_reason ||= meta.is_a?(Hash) ? meta['exit_reason'] : nil
+    metadata = meta.is_a?(Hash) ? meta.dup : {}
+    metadata['exit_reason'] = exit_reason if exit_reason.present?
+    metadata['exit_triggered_at'] ||= Time.current
+    metadata
+  end
+
+  def update_exit_attributes(exit_price, exited_at, metadata)
+    attrs = {
+      status: :exited,
+      exit_price: exit_price,
+      exited_at: exited_at || Time.current,
+      last_pnl_rupees: last_pnl_rupees,
+      last_pnl_pct: last_pnl_pct,
+      high_water_mark_pnl: high_water_mark_pnl,
+      meta: metadata
+    }.compact
+
+    update!(attrs)
+  end
+
+  def cleanup_exit_caches
+    Live::PositionIndex.instance.remove(id, security_id)
+    Live::RedisPnlCache.instance.clear_tracker(id)
+    Live::RedisTickCache.instance.clear_tick(segment, security_id)
+    Live::TickCache.delete(segment, security_id)
+  end
+
+  def register_cooldown!
+    return if symbol.blank?
+
+    Rails.cache.write("reentry:#{symbol}", Time.current, expires_in: 8.hours)
+  end
+
+  def clear_redis_cache_if_exited
+    return unless saved_change_to_status? && exited?
+
+    clear_redis_pnl_cache
+  end
+
+  def clear_redis_pnl_cache
+    Live::RedisPnlCache.instance.clear_tracker(id)
+  end
+
+  def persist_final_pnl_from_cache
+    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
+    return unless cache
+
+    if cache[:pnl]
+      pnl_value = BigDecimal(cache[:pnl].to_s)
+      self.last_pnl_rupees = pnl_value
+
+      current_hwm = high_water_mark_pnl.present? ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
+      self.high_water_mark_pnl = [current_hwm, pnl_value].max
+    end
+
+    self.last_pnl_pct = cache[:pnl_pct] ? BigDecimal(cache[:pnl_pct].to_s) : nil
+  end
+
+  def meta_hash
+    value = self[:meta]
+    value.is_a?(Hash) ? value : {}
+  end
+
+  def calculate_paper_pnl(exit_price = nil)
+    return BigDecimal(0) unless paper? && entry_price.present? && quantity.present?
+
+    exit = exit_price || last_pnl_rupees
+    return BigDecimal(0) unless exit
+
+    entry = BigDecimal(entry_price.to_s)
+    exit_value = BigDecimal(exit.to_s)
+    qty = quantity.to_i
+
+    # For long positions: PnL = (exit - entry) * quantity
+    pnl = (exit_value - entry) * qty
+    BigDecimal(pnl.to_s)
   end
 end

@@ -110,13 +110,13 @@ module Live
 
         # never prune index feeds
         if seg == 'IDX_I'
-          Rails.logger.debug { "[RedisTickCache] SKIP prune #{key} (index feed)" }
+          # Skip silently - index feeds should never be pruned
           next
         end
 
         # keep tracked positions
         if Live::PositionIndex.instance.tracked?(seg, sid)
-          Rails.logger.debug { "[RedisTickCache] SKIP prune #{key} (position index tracked)" }
+          # Skip silently - tracked positions should not be pruned
           next
         end
 

@@ -11,7 +11,7 @@ indices:
       segment: IDX_I,
       sid: "13",
       capital_alloc_pct: 0.30,
-      max_same_side: 2,
+      max_same_side: 1,
       cooldown_sec: 180,
     }
   - {
@@ -19,7 +19,7 @@ indices:
       segment: IDX_I,
       sid: "25",
       capital_alloc_pct: 0.30,
-      max_same_side: 2,
+      max_same_side: 1,
       cooldown_sec: 180,
     }
   - {
@@ -27,7 +27,7 @@ indices:
       segment: IDX_I,
       sid: "51",
       capital_alloc_pct: 0.30,
-      max_same_side: 2,
+      max_same_side: 1,
       cooldown_sec: 180,
     }
 
