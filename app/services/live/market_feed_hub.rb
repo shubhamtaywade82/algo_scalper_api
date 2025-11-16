@@ -205,6 +205,18 @@ module Live
 
     private
 
+    def wait_for_open(timeout = 3)
+      start_time = Time.now
+
+      until @ws_open
+        sleep 0.05
+        if Time.now - start_time > timeout
+          Rails.logger.warn("[MarketFeedHub] WebSocket open timeout, continuing anyway")
+          break
+        end
+      end
+    end
+
     def enabled?
       # Always enabled - just check for credentials
       client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence

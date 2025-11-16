@@ -3,37 +3,119 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  scan_ruby:
+  setup:
+    name: Setup Environment
     runs-on: ubuntu-latest
+    outputs:
+      ruby_version: ${{ steps.ruby_version.outputs.ruby }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: .ruby-version
-          bundler-cache: true
-
-      - name: Scan for common Rails security vulnerabilities using static analysis
-        run: bin/brakeman --no-pager
+      - name: Read Ruby Version
+        id: ruby_version
+        run: echo "ruby=$(cat .ruby-version)" >> $GITHUB_OUTPUT
 
   lint:
+    name: Ruby Style (Rubocop)
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+    needs: setup
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: .ruby-version
+          ruby-version: ${{ needs.setup.outputs.ruby_version }}
           bundler-cache: true
 
-      - name: Lint code for consistent style
-        run: bin/rubocop -f github
+      - name: Run RuboCop
+        run: |
+          bundle exec rubocop --parallel --format github
 
+  security:
+    name: Static Security Scan (Brakeman)
+    runs-on: ubuntu-latest
+    needs: setup
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ needs.setup.outputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Run Brakeman
+        run: bundle exec brakeman -q --no-exit-on-warn --format json --output brakeman.json
+
+      - name: Upload Brakeman Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: brakeman-report
+          path: brakeman.json
+
+  test:
+    name: RSpec Tests
+    runs-on: ubuntu-latest
+    needs: setup
+
+    services:
+      postgres:
+        image: postgres:15
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_DB: algo_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/algo_test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ needs.setup.outputs.ruby_version }}
+          bundler-cache: true
+
+      - name: Setup DB
+        run: |
+          bin/rails db:prepare
+
+      - name: Run Tests
+        run: |
+          bundle exec rspec --format documentation
+
+  docker-build:
+    name: Verify Docker Build
+    runs-on: ubuntu-latest
+    needs: [setup, lint, security, test]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build Docker Image
+        run: |
+          docker build . -t algo_scalper_api:test

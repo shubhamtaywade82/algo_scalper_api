@@ -151,7 +151,7 @@ module WsConnectionTest
         tick_cache_ltp = Live::TickCache.ltp(inst[:segment], inst[:security_id])
 
         # Try RedisPnlCache second
-        redis_tick = Live::RedisPnlCache.instance.fetch_tick(segment: inst[:segment], security_id: inst[:security_id])
+        redis_tick = Live::TickCache.fetch(segment: inst[:segment], security_id: inst[:security_id])
         redis_ltp = redis_tick&.dig(:ltp)
 
         # Check if we received tick during wait period

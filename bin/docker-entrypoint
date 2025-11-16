@@ -10,5 +10,5 @@ fi
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
   ./bin/rails db:prepare
 fi
-
+bundle exec rails db:migrate 2>/dev/null || bundle exec rails db:prepare
 exec "${@}"

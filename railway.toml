@@ -1,0 +1,11 @@
+# railway example - adapt fields to your Railway project
+project = "algo_scalper_api"
+service = "api"
+
+[build]
+  builder = "dockerfile"
+
+[deploy]
+  memory = "512"
+  restartPolicy = "on_failure"
+  env = { RAILS_ENV = "production" }

@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# disable completely?
+if ENV["DISABLE_TRADING_SUPERVISOR"].to_s == "true"
+  Rails.logger.info("[Supervisor] Disabled in this container")
+  return
+end
+
 # --------------------------------------------------------------------
 # RUN ONLY INSIDE PUMA/RAILS WEB SERVER (bin/dev or rails s)
 # --------------------------------------------------------------------
@@ -11,12 +17,16 @@ if Rails.env.test? ||
 end
 
 # bin/dev uses Puma, not Rails::Server
-is_web_process =
- $PROGRAM_NAME.include?("puma") ||
- $PROGRAM_NAME.include?("rails") ||
- ENV["WEB_CONCURRENCY"].present?
+# is_web_process =
+#  $PROGRAM_NAME.include?("puma") ||
+#  $PROGRAM_NAME.include?("rails") ||
+#  ENV["WEB_CONCURRENCY"].present?
 
-return unless is_web_process
+# Running inside worker, not web
+is_worker = ENV["WORKER_MODE"].to_s == "true"
+return unless is_worker
+
+# return unless is_web_process
 
 # --------------------------------------------------------------------
 # SUPERVISOR - NO SINGLETONS
