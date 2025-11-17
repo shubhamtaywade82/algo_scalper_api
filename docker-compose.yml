@@ -29,22 +29,22 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: algo_worker
-    command: >
-      # ./bin/exit_engine_runner
-      bundle exec rails runner 'puts "Worker started"'
+    entrypoint: ["ruby"]
+    command: ["config/worker_boot.rb"]
     env_file:
       - .env
+    environment:
+      RAILS_ENV: development
+      WORKER_MODE: "true"
+      DISABLE_TRADING_SUPERVISOR: "false"
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/algo_scalper_api
     depends_on:
       - postgres
       - redis
     volumes:
       - .:/rails:cached
       - bundle:/usr/local/bundle
-    environment:
-      RAILS_ENV: development
-      REDIS_URL: redis://redis:6379/0
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/algo_scalper_api
-      DISABLE_TRADING_SUPERVISOR: "false"
 
   redis:
     image: redis:7-alpine
