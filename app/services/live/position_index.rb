@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require 'singleton'
 require 'concurrent/map'
 require 'concurrent/array'
@@ -13,6 +14,10 @@ module Live
     def initialize
       @index = Concurrent::Map.new # security_id => Concurrent::Array of metadata
       @lock = Monitor.new
+    end
+
+    def all_keys
+      @index.keys
     end
 
     # metadata: { id:, entry_price:, quantity:, segment: }
@@ -44,12 +49,25 @@ module Live
     def trackers_for(security_id)
       arr = @index[security_id.to_s]
       return [] unless arr
+
       # Return a snapshot (dup) to avoid mutation issues
       arr.dup
     end
 
-    def clear
-      @index.clear
+    def tracked?(segment, security_id)
+      trackers = trackers_for(security_id)
+      trackers.any? { |t| t[:segment] == segment.to_s }
+    end
+
+    delegate :clear, to: :@index
+
+    def active_instrument_pairs
+      @index.filter_map do |sid, arr|
+        next if arr.empty?
+
+        meta = arr.first
+        { segment: meta[:segment], security_id: sid }
+      end
     end
 
     # For boot: populate from DB once

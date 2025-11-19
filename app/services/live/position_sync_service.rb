@@ -223,7 +223,7 @@ module Live
         symbol: symbol,
         segment: exchange_segment,
         side: 'long', # Default assumption - could be enhanced to detect actual side
-        status: PositionTracker::STATUSES[:active],
+        status: 'active',
         quantity: quantity,
         avg_price: average_price,
         entry_price: average_price,
@@ -289,7 +289,7 @@ module Live
       return BigDecimal(cached.to_s) if cached
 
       # Try Redis PnL cache
-      tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+      tick_data = Live::TickCache.fetch(segment, security_id)
       return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
 
       # Try tradable's fetch method (derivative or instrument)

@@ -15,7 +15,7 @@ module Entries
 
         side = direction == :bullish ? 'long_ce' : 'long_pe'
         unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
-          Rails.logger.warn("[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})")
+          Rails.logger.debug { "[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})" }
           return false
         end
 
@@ -221,7 +221,7 @@ module Entries
         return unless segment.present? && security_id.present?
 
         # Try Redis tick cache
-        tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+        tick_data = Live::TickCache.fetch(segment, security_id)
         if tick_data&.dig(:ltp)
           ltp = BigDecimal(tick_data[:ltp].to_s)
           entry = BigDecimal(tracker.entry_price.to_s)
@@ -253,7 +253,7 @@ module Entries
         return BigDecimal(cached.to_s) if cached
 
         # Try Redis PnL cache
-        tick_data = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+        tick_data = Live::TickCache.fetch(segment, security_id)
         return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
 
         # Try tradable's fetch method (derivative or instrument)
@@ -424,7 +424,7 @@ module Entries
           quantity: quantity,
           entry_price: ltp,
           avg_price: ltp,
-          status: PositionTracker::STATUSES[:active],
+          status: 'active',
           paper: true,
           meta: {
             index_key: index_cfg[:key],
@@ -434,8 +434,8 @@ module Entries
           }
         )
 
-        # Subscribe to market feed for paper position
-        tracker.subscribe
+        # Subscription is handled automatically by after_create_commit :subscribe_to_feed callback
+        # No need to call tracker.subscribe explicitly
 
         # Initialize PnL in Redis (will be 0 initially since entry_price = ltp)
         # This ensures the position is tracked in Redis from the start
@@ -460,7 +460,7 @@ module Entries
         # Determine watchable: derivative for options, instrument for indices
         watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
 
-        PositionTracker.create!(
+        PositionTracker.build_or_average!(
           watchable: watchable,
           instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
           order_no: order_no,

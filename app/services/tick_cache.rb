@@ -80,12 +80,33 @@ class TickCache
     redis_tick
   end
 
+  # alias for compatibility
+  def get(segment, security_id)
+    fetch(segment, security_id)
+  end
+
   # ------------------------
   # LTP WITH REDIS FALLBACK
   # ------------------------
   def ltp(segment, security_id)
     tick = fetch(segment, security_id)
-    tick && tick[:ltp]
+    val = tick && tick[:ltp]
+    val&.to_f
+  end
+
+  # ------------------------
+  # Delete in-memory entry (used when unsubscribing / cleanup)
+  # ------------------------
+  def delete(segment, security_id)
+    key = cache_key(segment, security_id)
+
+    # Delete in-memory cache
+    @map.delete(key)
+
+    # Delete Redis tick key
+    Live::RedisTickCache.instance.clear_tick(segment, security_id)
+
+    true
   end
 
   def all

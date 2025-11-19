@@ -6,51 +6,43 @@ module Orders
   class Placer
     class << self
       def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: 'INTRADAY', price: nil,
-                      target_price: nil, stop_loss_price: nil, trailing_jump: nil) # rubocop:disable Lint/UnusedMethodArgument
+                      target_price: nil, stop_loss_price: nil, trailing_jump: nil)
         normalized_id = normalize_client_order_id(client_order_id)
-        return if duplicate?(normalized_id)
+        return nil if duplicate?(normalized_id)
 
-        # Validate required parameters
         unless seg && sid && qty && normalized_id
-          Rails.logger.error("[Orders] Missing required parameters: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
+          Rails.logger.error("[Orders::Placer] Missing required parameters for buy_market!: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
           return nil
         end
 
-        if normalized_id.present? && normalized_id != client_order_id
-          Rails.logger.warn("[Orders] client_order_id truncated to '#{normalized_id}' (was '#{client_order_id}')")
-        end
-
-        # Rails.logger.info("[Orders] Placing BUY order: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{normalized_id}")
-
         payload = {
-          transaction_type: 'BUY',
-          exchange_segment: seg,
-          security_id: sid.to_s,
-          quantity: qty,
-          order_type: 'MARKET',
-          product_type: product_type,
+          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          transactionType: 'BUY',
+          exchangeSegment: seg,
+          securityId: sid.to_s,
+          quantity: qty.to_i,
+          orderType: 'MARKET',
+          productType: product_type,
           validity: 'DAY',
-          correlation_id: normalized_id,
-          disclosed_quantity: 0
+          correlationId: normalized_id,
+          disclosedQuantity: 0
         }
-
         payload[:price] = price if price.present?
+        payload[:boProfitValue] = target_price if target_price.present?
+        payload[:boStopLossValue] = stop_loss_price if stop_loss_price.present?
 
-        # Log order payload
-        Rails.logger.info("[Orders] BUY Order Payload: #{payload.inspect}")
+        Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
 
-        # Only place order if ENABLE_ORDER flag is set
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders] BUY Order Response: #{order.inspect}")
-            # Rails.logger.info('[Orders] BUY Order placed successfully')
+            Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}")
           rescue StandardError => e
-            Rails.logger.error("[Orders] Failed to place order: #{e.class} - #{e.message}")
+            Rails.logger.error("[Orders::Placer] BUY failed: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          # Rails.logger.info('[Orders] BUY Order NOT placed - ENABLE_ORDER=false (dry run mode)')
+          Rails.logger.debug('[Orders::Placer] BUY dry-run disabled order placement')
           order = nil
         end
 
@@ -58,94 +50,67 @@ module Orders
         order
       end
 
-      def sell_market!(seg:, sid:, qty:, client_order_id:)
+      def sell_market!(seg:, sid:, qty:, client_order_id:, product_type: nil)
         normalized_id = normalize_client_order_id(client_order_id)
-        return if duplicate?(normalized_id)
+        return nil if duplicate?(normalized_id)
 
-        # Validate required parameters
-        unless seg && sid && qty && normalized_id
-          Rails.logger.error("[Orders] Missing required parameters: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
+        unless seg && sid && normalized_id
+          Rails.logger.error("[Orders::Placer] Missing required parameters for sell_market!: seg=#{seg}, sid=#{sid}, client_order_id=#{client_order_id}")
           return nil
         end
 
-        if normalized_id.present? && normalized_id != client_order_id
-          Rails.logger.warn("[Orders] client_order_id truncated to '#{normalized_id}' (was '#{client_order_id}')")
-        end
+        position = fetch_position_details(sid)
 
-        # Fetch complete position details from DhanHQ to ensure exact matching
-        position_details = fetch_position_details(sid)
-        unless position_details
-          Rails.logger.error("[Orders] Cannot fetch position details for security_id #{sid} - aborting sell order")
-          return nil
-        end
-
-        # Use position's actual quantity instead of passed qty parameter
-        actual_qty = position_details[:net_qty]
-        actual_segment = position_details[:exchange_segment]
-
-        # Validate that the position exists and has quantity
-        if actual_qty.to_i <= 0
-          Rails.logger.error("[Orders] Position has zero or negative quantity (#{actual_qty}) for security_id #{sid} - aborting sell order")
-          return nil
-        end
-
-        # Validate position type for proper exit
-        position_type = position_details[:position_type]
-        if position_type == 'SHORT'
-          Rails.logger.error("[Orders] Position is SHORT (#{position_type}) - should use BUY order to cover, not SELL order")
-          return nil
-        elsif position_type != 'LONG'
-          Rails.logger.warn("[Orders] Unknown position type: #{position_type} - proceeding with SELL order")
-        end
-
-        # Rails.logger.info("[Orders] Placing SELL order: seg=#{actual_segment}, sid=#{sid}, qty=#{actual_qty}, client_order_id=#{normalized_id}, product_type=#{position_details[:product_type]}, position_type=#{position_type}")
+        actual_qty = if position && position[:net_qty].to_i > 0
+                       position[:net_qty]
+                     else
+                       qty
+                     end
 
         payload = {
-          transaction_type: 'SELL',
-          exchange_segment: actual_segment,
-          security_id: sid.to_s,
-          quantity: actual_qty,
-          order_type: 'MARKET',
-          product_type: position_details[:product_type],
+          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          transactionType: 'SELL',
+          exchangeSegment: position ? position[:exchange_segment] : seg,
+          securityId: sid.to_s,
+          quantity: actual_qty.to_i,
+          orderType: 'MARKET',
+          productType: position ? position[:product_type] : product_type,
           validity: 'DAY',
-          disclosed_quantity: 0
+          disclosedQuantity: 0,
+          correlationId: normalized_id
         }
 
-        # Log order payload
-        Rails.logger.info("[Orders] SELL Order Payload: #{payload.inspect}")
+        Rails.logger.info("[Orders::Placer] SELL payload: #{payload.inspect}")
 
-        # Only place order if ENABLE_ORDER flag is set
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders] SELL Order Response: #{order.inspect}")
-            # Rails.logger.info('[Orders] SELL Order placed successfully')
+            Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}")
           rescue StandardError => e
-            Rails.logger.error("[Orders] Failed to place order: #{e.class} - #{e.message}")
+            Rails.logger.error("[Orders::Placer] SELL failed: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          # Rails.logger.info('[Orders] SELL Order NOT placed - ENABLE_ORDER=false (dry run mode)')
+          Rails.logger.debug('[Orders::Placer] SELL dry-run disabled order placement')
           order = nil
         end
+
         remember(normalized_id)
         order
       end
 
       def exit_position!(seg:, sid:, client_order_id:)
         normalized_id = normalize_client_order_id(client_order_id)
-        return if duplicate?(normalized_id)
+        return nil if duplicate?(normalized_id)
 
-        # Validate required parameters
-        unless seg && sid && normalized_id
-          Rails.logger.error("[Orders] Missing required parameters: seg=#{seg}, sid=#{sid}, client_order_id=#{client_order_id}")
+        unless sid && normalized_id
+          Rails.logger.error("[Orders::Placer] Missing required parameters for exit_position!: sid=#{sid}, client_order_id=#{client_order_id}")
           return nil
         end
 
-        # Fetch complete position details from DhanHQ
         position_details = fetch_position_details(sid)
         unless position_details
-          Rails.logger.error("[Orders] Cannot fetch position details for security_id #{sid} - aborting exit order")
+          Rails.logger.error("[Orders::Placer] Cannot find position to exit for sid=#{sid}")
           return nil
         end
 
@@ -153,51 +118,39 @@ module Orders
         actual_segment = position_details[:exchange_segment]
         position_type = position_details[:position_type]
 
-        # Validate that the position exists and has quantity
-        if actual_qty.to_i <= 0
-          Rails.logger.error("[Orders] Position has zero or negative quantity (#{actual_qty}) for security_id #{sid} - aborting exit order")
-          return nil
-        end
-
-        # Determine transaction type based on position type
         transaction_type = case position_type
-                           when 'LONG'
-                             'SELL'
-                           when 'SHORT'
-                             'BUY'
+                           when 'LONG' then 'SELL'
+                           when 'SHORT' then 'BUY'
                            else
-                             Rails.logger.error("[Orders] Unknown position type: #{position_type} - cannot determine exit transaction type")
+                             Rails.logger.error("[Orders::Placer] Unknown position type #{position_type}")
                              return nil
                            end
 
-        # Rails.logger.info("[Orders] Placing EXIT order: #{transaction_type} #{actual_segment}:#{sid} qty=#{actual_qty}, product_type=#{position_details[:product_type]}, position_type=#{position_type}")
-
         payload = {
-          transaction_type: transaction_type,
-          exchange_segment: actual_segment,
-          security_id: sid.to_s,
-          quantity: actual_qty,
-          order_type: 'MARKET',
-          product_type: position_details[:product_type],
+          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          transactionType: transaction_type,
+          exchangeSegment: actual_segment,
+          securityId: sid.to_s,
+          quantity: actual_qty.to_i,
+          orderType: 'MARKET',
+          productType: position_details[:product_type],
           validity: 'DAY',
-          disclosed_quantity: 0
+          disclosedQuantity: 0,
+          correlationId: normalized_id
         }
 
-        # Log order payload
-        Rails.logger.info("[Orders] EXIT Order Payload: #{payload.inspect}")
+        Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")
 
-        # Only place order if ENABLE_ORDER flag is set
         if order_placement_enabled?
           begin
             order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders] EXIT Order Response: #{order.inspect}")
-            # Rails.logger.info('[Orders] EXIT Order placed successfully')
+            Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}")
           rescue StandardError => e
-            Rails.logger.error("[Orders] Failed to place exit order: #{e.class} - #{e.message}")
+            Rails.logger.error("[Orders::Placer] EXIT failed: #{e.class} - #{e.message}")
             order = nil
           end
         else
-          # Rails.logger.info('[Orders] EXIT Order NOT placed - ENABLE_ORDER=false (dry run mode)')
+          Rails.logger.debug('[Orders::Placer] EXIT dry-run disabled order placement')
           order = nil
         end
 
@@ -209,30 +162,31 @@ module Orders
 
       def fetch_position_details(security_id)
         positions = DhanHQ::Models::Position.active
-        position = positions.find { |p| p.security_id.to_s == security_id.to_s }
+        pos = positions.find { |p| p.security_id.to_s == security_id.to_s }
+        return nil unless pos
 
-        if position
-          # Rails.logger.debug { "[Orders] Found position for #{security_id}: product_type=#{position.product_type}, net_qty=#{position.net_qty}" }
-          {
-            product_type: position.product_type,
-            net_qty: position.net_qty,
-            exchange_segment: position.exchange_segment,
-            position_type: position.position_type,
-            buy_avg: position.buy_avg,
-            trading_symbol: position.trading_symbol
-          }
-        else
-          Rails.logger.warn("[Orders] No active position found for security_id #{security_id}")
-          nil
-        end
+        {
+          product_type: pos.respond_to?(:product_type) ? pos.product_type : pos[:product_type],
+          net_qty: pos.respond_to?(:net_qty) ? pos.net_qty.to_i : (pos[:net_qty] || pos[:quantity]).to_i,
+          exchange_segment: pos.respond_to?(:exchange_segment) ? pos.exchange_segment : pos[:exchange_segment],
+          position_type: pos.respond_to?(:position_type) ? pos.position_type : (pos[:position_type] || 'LONG'),
+          buy_avg: pos.respond_to?(:buy_avg) ? pos.buy_avg : nil,
+          trading_symbol: pos.respond_to?(:trading_symbol) ? pos.trading_symbol : pos[:trading_symbol]
+        }
       rescue StandardError => e
-        Rails.logger.error("[Orders] Error fetching position for #{security_id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[Orders::Placer] fetch_position_details error: #{e.class} - #{e.message}")
         nil
       end
 
       def order_placement_enabled?
-        config = Rails.application.config.x.dhanhq
-        config&.enable_order_logging == true
+        cfg = begin
+          Rails.application.config.x.dhanhq
+        rescue StandardError
+          nil
+        end
+        (cfg && cfg.enable_order_logging == true) || AlgoConfig.fetch.dig(:dhanhq, :enable_orders) == true
+      rescue StandardError
+        false
       end
 
       def duplicate?(client_order_id)

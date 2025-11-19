@@ -89,7 +89,7 @@ module InstrumentHelpers
     # Try WebSocket cache if hub is connected and ticks are fresh
     hub = Live::MarketFeedHub.instance
     if hub.running? && hub.connected?
-      tick = Live::RedisPnlCache.instance.fetch_tick(segment: segment, security_id: security_id)
+      tick = Live::TickCache.get(segment: segment, security_id: security_id)
       return BigDecimal(tick[:ltp].to_s) if tick&.dig(:ltp)
     end
 
@@ -198,7 +198,7 @@ module InstrumentHelpers
     # Determine watchable: if self is a Derivative, use self; otherwise use instrument
     watchable = is_a?(Derivative) ? self : instrument
 
-    tracker = PositionTracker.create!(
+    tracker = PositionTracker.build_or_average!(
       watchable: watchable,
       instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
       order_no: order_no,
@@ -206,7 +206,7 @@ module InstrumentHelpers
       symbol: symbol,
       segment: segment,
       side: side,
-      status: PositionTracker::STATUSES[:active],
+      status: 'active',
       quantity: qty.to_i,
       entry_price: BigDecimal(entry_price.to_s),
       meta: index_key ? { 'index_key' => index_key } : {}

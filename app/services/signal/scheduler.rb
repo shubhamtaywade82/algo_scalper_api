@@ -1,73 +1,53 @@
 # frozen_string_literal: true
 
-require 'singleton'
-
 module Signal
-  # Coordinates periodic signal evaluation for configured indices.
-  #
-  # This scheduler runs in a background thread, executing `Signal::Engine.run_for`
-  # at a fixed cadence for each configured index. It is a singleton to avoid
-  # spawning duplicate loops on code reloads.
   class Scheduler
-    include Singleton
+    DEFAULT_PERIOD = 30 # seconds
 
-    def initialize
-      @period = 30
-      @thread = nil
-      @lock = Mutex.new
+    def initialize(period: DEFAULT_PERIOD)
+      @period = period
+      @running = false
+      @thread  = nil
+      @mutex   = Mutex.new
     end
 
-    # Starts the scheduler thread if it is not already running.
-    #
-    # @return [void]
-    def start!
-      @lock.synchronize do
-        return if running?
+    def start
+      return if @running
 
-        indices = Array(AlgoConfig.fetch[:indices])
-        @thread = Thread.new do
-          Thread.current.name = 'signal-scheduler'
-          loop do
-            # Circuit breaker check disabled - removed per requirement
-            # break if Risk::CircuitBreaker.instance.tripped?
+      @mutex.synchronize do
+        return if @running
 
-            indices.each_with_index do |index_cfg, idx|
+        @running = true
+      end
+
+      indices = Array(AlgoConfig.fetch[:indices])
+
+      @thread = Thread.new do
+        Thread.current.name = 'signal-scheduler'
+
+        loop do
+          break unless @running
+
+          begin
+            indices.each_with_index do |idx_cfg, idx|
+              break unless @running
+
               sleep(idx.zero? ? 0 : 5)
-              Signal::Engine.run_for(index_cfg)
+              Signal::Engine.run_for(idx_cfg)
             end
-
-            sleep(@period)
+          rescue StandardError => e
+            Rails.logger.error("[SignalScheduler] #{e.class} - #{e.message}")
           end
-        ensure
-          @lock.synchronize { @thread = nil }
+
+          sleep @period
         end
       end
     end
 
-    # Stops the scheduler thread if it is running.
-    #
-    # @return [void]
-    def stop!
-      thread = nil
-
-      @lock.synchronize do
-        thread = @thread
-        @thread = nil
-      end
-
-      return unless thread
-
-      thread.kill
-      thread.join(2)
-    rescue StandardError => e
-      # Rails.logger.warn("Signal::Scheduler stop encountered: #{e.class} - #{e.message}")
-    end
-
-    # Indicates whether the scheduler thread is alive.
-    #
-    # @return [Boolean]
-    def running?
-      @thread&.alive?
+    def stop
+      @mutex.synchronize { @running = false }
+      @thread&.kill
+      @thread = nil
     end
   end
 end
