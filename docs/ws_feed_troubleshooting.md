@@ -111,7 +111,7 @@ puts hub.diagnostics
 **Solutions:**
 1. Check credentials:
    ```ruby
-   ENV['DHANHQ_CLIENT_ID']
+   ENV['CLIENT_ID']
    ENV['DHANHQ_ACCESS_TOKEN']
    ```
 2. Verify credentials are valid and not expired
@@ -134,7 +134,7 @@ puts "Last Error: #{status[:last_error]}"
 ```
 
 **Common Causes:**
-1. **Invalid credentials** - Verify `DHANHQ_CLIENT_ID` and `DHANHQ_ACCESS_TOKEN`
+1. **Invalid credentials** - Verify `CLIENT_ID` and `DHANHQ_ACCESS_TOKEN`
 2. **Expired access token** - Regenerate from DhanHQ developer portal
 3. **Network/firewall** - Ensure outbound WebSocket connections (port 443/80) are allowed
 4. **Market closed** - Some endpoints may reject connections outside market hours

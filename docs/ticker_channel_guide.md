@@ -132,7 +132,7 @@ development:
 ### **Environment Variables**
 ```bash
 # Required for DhanHQ WebSocket
-DHANHQ_CLIENT_ID=your_client_id
+CLIENT_ID=your_client_id
 DHANHQ_ACCESS_TOKEN=your_access_token
 DHANHQ_WS_ENABLED=true
 ```

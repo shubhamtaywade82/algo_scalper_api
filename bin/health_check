@@ -67,11 +67,12 @@ class HealthChecker
 
   def check_dhanhq_configuration
     check("DhanHQ Configuration") do
+      # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
       client_id = ENV["DHANHQ_CLIENT_ID"] || ENV["CLIENT_ID"]
       access_token = ENV["DHANHQ_ACCESS_TOKEN"] || ENV["ACCESS_TOKEN"]
 
       if client_id.blank? || access_token.blank?
-        raise "Missing DhanHQ credentials. Set DHANHQ_CLIENT_ID and DHANHQ_ACCESS_TOKEN"
+        raise "Missing DhanHQ credentials. Set CLIENT_ID (or DHANHQ_CLIENT_ID) and ACCESS_TOKEN (or DHANHQ_ACCESS_TOKEN)"
       end
 
       "DhanHQ credentials configured"

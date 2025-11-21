@@ -95,8 +95,8 @@ class PreStartupChecker
 
       # Check for critical environment variables
       critical_vars = %w[
-        DHANHQ_CLIENT_ID
-        DHANHQ_ACCESS_TOKEN
+        CLIENT_ID
+        ACCESS_TOKEN
         REDIS_URL
       ]
 

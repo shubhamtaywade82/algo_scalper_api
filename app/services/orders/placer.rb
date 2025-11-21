@@ -16,7 +16,7 @@ module Orders
         end
 
         payload = {
-          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: 'BUY',
           exchangeSegment: seg,
           securityId: sid.to_s,
@@ -68,7 +68,7 @@ module Orders
                      end
 
         payload = {
-          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: 'SELL',
           exchangeSegment: position ? position[:exchange_segment] : seg,
           securityId: sid.to_s,
@@ -127,7 +127,7 @@ module Orders
                            end
 
         payload = {
-          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: transaction_type,
           exchangeSegment: actual_segment,
           securityId: sid.to_s,

@@ -2,7 +2,7 @@
 
 - Initial boot
   - `config/initializers/dhanhq_config.rb`
-    - Loads DhanHQ gem and configures it from ENV (`DHANHQ_CLIENT_ID`, `DHANHQ_ACCESS_TOKEN`)
+    - Loads DhanHQ gem and configures it from ENV (`CLIENT_ID`, `DHANHQ_ACCESS_TOKEN`)
     - Sets `Rails.application.config.x.dhanhq` flags (always enabled, ws mode, etc.)
   - `config/initializers/market_stream.rb`
     - On `to_prepare`, starts the live stack unless console mode:
@@ -130,7 +130,7 @@
 ### Environment Variables
 
 #### Required (Essential)
-- `DHANHQ_CLIENT_ID` - Your DhanHQ client ID
+- `CLIENT_ID` - Your DhanHQ client ID
 - `DHANHQ_ACCESS_TOKEN` - Your DhanHQ access token
 
 #### Optional (Auto-configured)

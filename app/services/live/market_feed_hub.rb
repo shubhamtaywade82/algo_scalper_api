@@ -207,6 +207,7 @@ module Live
 
     def enabled?
       # Always enabled - just check for credentials
+      # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
       client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
       access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
@@ -279,27 +280,25 @@ module Live
       #   Rails.logger.error("[MarketFeedHub] Failed to live-update Redis PnL: #{e.message}")
       # end
       # fast-path: drop empty/invalid ticks
-return unless tick[:ltp].to_f.positive? && tick[:security_id].present?
+      return unless tick[:ltp].to_f.positive? && tick[:security_id].present?
 
-# get in-memory trackers snapshot (array of metadata)
-trackers = Live::PositionIndex.instance.trackers_for(tick[:security_id].to_s)
-if trackers.empty?
-  # nothing to do for this security
-  return
-end
+      # get in-memory trackers snapshot (array of metadata)
+      trackers = Live::PositionIndex.instance.trackers_for(tick[:security_id].to_s)
+      if trackers.empty?
+        # nothing to do for this security
+        return
+      end
 
-# For each metadata push minimal payload (last-wins)
-trackers.each do |meta|
-  # defensive checks
-  next unless meta[:entry_price] && meta[:quantity] && meta[:quantity].to_i > 0
+      # For each metadata push minimal payload (last-wins)
+      trackers.each do |meta|
+        # defensive checks
+        next unless meta[:entry_price] && meta[:quantity] && meta[:quantity].to_i > 0
 
-  Live::PnlUpdaterService.instance.cache_intermediate_pnl(
-    tracker_id: meta[:id],
-    ltp: tick[:ltp]
-  )
-end
-
-
+        Live::PnlUpdaterService.instance.cache_intermediate_pnl(
+          tracker_id: meta[:id],
+          ltp: tick[:ltp]
+        )
+      end
     end
 
     def safe_invoke(callback, payload)

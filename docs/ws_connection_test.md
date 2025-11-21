@@ -186,7 +186,7 @@ The test will attempt to start the hub automatically. If it fails, check:
 1. **Credentials are configured**:
    ```bash
    # Check if credentials are set
-   echo $DHANHQ_CLIENT_ID
+   echo $CLIENT_ID
    echo $DHANHQ_ACCESS_TOKEN
    ```
 
@@ -201,7 +201,7 @@ The test will attempt to start the hub automatically. If it fails, check:
    ```
 
    This indicates the WebSocket is connecting but immediately disconnecting. Possible causes:
-   - **Invalid credentials**: Verify `DHANHQ_CLIENT_ID` and `DHANHQ_ACCESS_TOKEN` are correct
+   - **Invalid credentials**: Verify `CLIENT_ID` and `DHANHQ_ACCESS_TOKEN` are correct
    - **Expired access token**: Regenerate access token from DhanHQ developer portal
    - **Network/firewall**: Ensure outbound WebSocket connections (port 443/80) are allowed
    - **DhanHQ service issues**: Check DhanHQ status page or support
@@ -229,7 +229,7 @@ Possible causes:
 
 If this occurs:
 1. **Verify hub is running**: `Live::MarketFeedHub.instance.running?`
-2. **Check credentials**: Ensure `DHANHQ_CLIENT_ID` and `DHANHQ_ACCESS_TOKEN` are set and valid
+2. **Check credentials**: Ensure `CLIENT_ID` and `DHANHQ_ACCESS_TOKEN` are set and valid
 3. **Review logs**: Look for WebSocket connection/disconnection messages
 4. **Check subscriptions**: Verify instruments are properly subscribed:
    ```ruby

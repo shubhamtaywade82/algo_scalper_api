@@ -62,6 +62,7 @@ module Live
 
     def enabled?
       # Always enabled - just check for credentials
+      # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
       client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
       access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?

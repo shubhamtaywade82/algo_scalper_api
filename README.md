@@ -76,7 +76,7 @@ cp .env.example .env
 Minimal `.env` setup:
 ```dotenv
 # DhanHQ API Credentials (Required)
-DHANHQ_CLIENT_ID=your_client_id
+CLIENT_ID=your_client_id
 DHANHQ_ACCESS_TOKEN=your_access_token
 
 # Application Settings
@@ -138,7 +138,7 @@ indices:
 | Variable                  | Purpose                                   | Default                    |
 | ------------------------- | ----------------------------------------- | -------------------------- |
 | `DHANHQ_ENABLED`          | Master toggle for DhanHQ integration      | `true`                     |
-| `DHANHQ_CLIENT_ID`        | DhanHQ API client ID                      | Required                   |
+| `CLIENT_ID`               | DhanHQ API client ID                      | Required                   |
 | `DHANHQ_ACCESS_TOKEN`     | DhanHQ API access token                   | Required                   |
 | `DHANHQ_WS_ENABLED`       | Enable WebSocket market feed              | `true`                     |
 | `DHANHQ_ORDER_WS_ENABLED` | Enable order update WebSocket             | `true`                     |
@@ -365,7 +365,7 @@ The application provides comprehensive logging:
 **DhanHQ Authentication Errors**
 ```bash
 # Check credentials
-echo $DHANHQ_CLIENT_ID
+echo $CLIENT_ID
 echo $DHANHQ_ACCESS_TOKEN
 
 # Verify environment

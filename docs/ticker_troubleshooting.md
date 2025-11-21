@@ -160,7 +160,7 @@ curl -X POST http://localhost:3000/api/test_broadcast \
 **Solutions:**
 1. **Check environment variables:**
    ```bash
-   echo $DHANHQ_CLIENT_ID
+   echo $CLIENT_ID
    echo $DHANHQ_ACCESS_TOKEN
    ```
 

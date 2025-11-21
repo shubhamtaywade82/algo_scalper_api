@@ -256,8 +256,8 @@ cp .env.example .env
 Fill values for:
 
 ```dotenv
-DHANHQ_CLIENT_ID=xxxx
-DHANHQ_ACCESS_TOKEN=xxxx
+CLIENT_ID=xxxx
+ACCESS_TOKEN=xxxx
 REDIS_URL=redis://127.0.0.1:6379/0
 PAPER_MODE=true
 RAILS_LOG_LEVEL=info
@@ -299,8 +299,8 @@ bin/rails server
 
 | Variable                  | Description                   |
 | ------------------------- | ----------------------------- |
-| `DHANHQ_CLIENT_ID`        | Required                      |
-| `DHANHQ_ACCESS_TOKEN`     | Required                      |
+| `CLIENT_ID`               | Required                      |
+| `ACCESS_TOKEN`     | Required                      |
 | `DHANHQ_WS_ENABLED`       | Enables WebSocket market feed |
 | `DHANHQ_ORDER_WS_ENABLED` | Enables order update feed     |
 | `PAPER_MODE`              | true = Paper trading          |
