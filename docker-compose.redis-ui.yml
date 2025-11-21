@@ -1,0 +1,11 @@
+services:
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    container_name: redisinsight
+    ports:
+      - "8001:8001"
+    volumes:
+      - redisinsight-data:/db
+
+volumes:
+  redisinsight-data:

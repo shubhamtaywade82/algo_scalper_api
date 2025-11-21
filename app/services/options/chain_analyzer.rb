@@ -1,9 +1,59 @@
 # frozen_string_literal: true
 
 require 'bigdecimal'
+require 'active_support/core_ext/hash'
+require 'active_support/core_ext/object/blank'
 
 module Options
   class ChainAnalyzer
+    DEFAULT_DIRECTION = :bullish
+
+    def initialize(index:, data_provider:, config: {})
+      @index_cfg = normalize_index(index)
+      @provider = data_provider
+      @config = config || {}
+    end
+
+    def select_candidates(limit: 2, direction: DEFAULT_DIRECTION)
+      picks = self.class.pick_strikes(
+        index_cfg: @index_cfg,
+        direction: direction.presence&.to_sym || DEFAULT_DIRECTION
+      )
+      return [] unless picks.present?
+
+      picks.first([limit.to_i, 1].max).map { |pick| decorate_pick(pick) }
+    rescue StandardError => e
+      Rails.logger.error("[Options::ChainAnalyzer] select_candidates failed: #{e.class} - #{e.message}")
+      []
+    end
+
+    private
+
+    def normalize_index(index)
+      return index.deep_symbolize_keys if index.respond_to?(:deep_symbolize_keys)
+
+      Array(index).each_with_object({}) do |(k, v), acc|
+        acc[k.to_sym] = v
+      end
+    end
+
+    def decorate_pick(pick)
+      pick.merge(
+        index_key: @index_cfg[:key],
+        underlying_spot: fetch_spot,
+        analyzer_config: @config.presence
+      ).compact
+    end
+
+    def fetch_spot
+      return unless @provider.respond_to?(:underlying_spot)
+
+      @provider.underlying_spot(@index_cfg[:key])
+    rescue StandardError => e
+      Rails.logger.debug("[Options::ChainAnalyzer] Spot fetch failed: #{e.class} - #{e.message}")
+      nil
+    end
+
     class << self
       def pick_strikes(index_cfg:, direction:)
         # Rails.logger.info("[Options] Starting strike selection for #{index_cfg[:key]} #{direction}")

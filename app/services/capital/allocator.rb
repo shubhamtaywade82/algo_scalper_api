@@ -95,6 +95,7 @@ module Capital
       end
 
       def calculate_and_apply_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+        @index_key = index_cfg[:key] || 'UNKNOWN'
         capital_available_f = capital_available.to_f
         entry_price_f = entry_price.to_f
         lot_size = derivative_lot_size.to_i
@@ -241,51 +242,22 @@ module Capital
       def log_allocation_breakdown(capital_available:, policy:, effective_alloc_pct:, effective_risk_pct:, multiplier:,
                                    entry_price_f:, lot_size:, final_quantity:)
         capital_available_f = capital_available.to_f
-        allocation = capital_available_f * effective_alloc_pct
-        risk_capital = capital_available_f * effective_risk_pct
-        scaled_allocation = [allocation * multiplier, capital_available_f].min
-        risk_capital_scaled = [risk_capital * multiplier, capital_available_f].min
         cost_per_lot = entry_price_f * lot_size
-        max_by_allocation = (scaled_allocation / cost_per_lot).floor * lot_size
-        max_by_risk = (risk_capital_scaled / (entry_price_f * 0.30)).floor * lot_size
+        total_buy_value = entry_price_f * final_quantity
+        index_key = @index_key || 'UNKNOWN'
 
-        log_capital_info(capital_available, policy)
-        log_allocation_info(effective_alloc_pct, allocation, effective_risk_pct, risk_capital)
-        log_scaling_info(multiplier, scaled_allocation, risk_capital_scaled)
-        log_pricing_info(entry_price_f, lot_size)
-        log_quantity_calculations(max_by_allocation, max_by_risk, final_quantity, entry_price_f)
-      end
+        reason = if final_quantity.zero?
+                   'insufficient_capital'
+                 elsif final_quantity < lot_size
+                   'below_minimum_lot'
+                 else
+                   'allocated'
+                 end
 
-      def log_capital_info(capital_available, policy)
-        Rails.logger.info('[Capital] Calculation breakdown:')
-        Rails.logger.info("  - Available capital: ₹#{capital_available}")
-        band_label = policy[:upto] == Float::INFINITY ? 'Large' : "Up to ₹#{policy[:upto]}"
-        Rails.logger.info("  - Capital band: #{band_label}")
-      end
-
-      def log_allocation_info(effective_alloc_pct, allocation, effective_risk_pct, risk_capital)
-        Rails.logger.info("  - Effective allocation %: #{effective_alloc_pct * 100}%")
-        Rails.logger.info("  - Allocation amount (per unit): ₹#{allocation}")
-        Rails.logger.info("  - Effective risk %: #{effective_risk_pct * 100}%")
-        Rails.logger.info("  - Risk capital amount (per unit): ₹#{risk_capital}")
-      end
-
-      def log_scaling_info(multiplier, scaled_allocation, risk_capital_scaled)
-        Rails.logger.info("  - Scale multiplier: x#{multiplier}")
-        Rails.logger.info("  - Scaled allocation: ₹#{scaled_allocation}")
-        Rails.logger.info("  - Scaled risk capital: ₹#{risk_capital_scaled}")
-      end
-
-      def log_pricing_info(entry_price_f, lot_size)
-        Rails.logger.info("  - Entry price: ₹#{entry_price_f}")
-        Rails.logger.info("  - Lot size: #{lot_size}")
-      end
-
-      def log_quantity_calculations(max_by_allocation, max_by_risk, final_quantity, entry_price_f)
-        Rails.logger.info("  - Max by allocation: #{max_by_allocation}")
-        Rails.logger.info("  - Max by risk: #{max_by_risk}")
-        Rails.logger.info("  - Final quantity: #{final_quantity}")
-        Rails.logger.info("  - Total buy value: ₹#{entry_price_f * final_quantity}")
+        Rails.logger.info(
+          "[Allocator] index:#{index_key} lot_cost:₹#{cost_per_lot.round(2)} " \
+          "capital:₹#{capital_available_f.round(2)} qty:#{final_quantity} reason:#{reason}"
+        )
       end
     end
   end
