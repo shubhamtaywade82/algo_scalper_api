@@ -77,12 +77,30 @@ module Live
 
       # Paper positions are managed entirely by our system
       # No sync needed - they're already tracked in PositionTracker
-      # Just ensure they're subscribed to market feed
+      # Just ensure they're subscribed to market feed (only if not already subscribed)
+      hub = Live::MarketFeedHub.instance
+      subscribed_count = 0
+      skipped_count = 0
+
       paper_positions.each do |tracker|
-        tracker.subscribe unless tracker.watchable.nil?
+        next if tracker.watchable.nil?
+
+        segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+        next unless segment_key && tracker.security_id
+
+        # Check if already subscribed before calling subscribe
+        if hub.subscribed?(segment: segment_key, security_id: tracker.security_id)
+          skipped_count += 1
+          next
+        end
+
+        result = tracker.subscribe
+        subscribed_count += 1 if result && !result[:already_subscribed]
       rescue StandardError => e
         Rails.logger.warn("[PositionSync] Failed to subscribe paper position #{tracker.order_no}: #{e.message}")
       end
+
+      Rails.logger.debug { "[PositionSync] Paper sync: #{subscribed_count} new subscriptions, #{skipped_count} already subscribed" } if subscribed_count > 0 || skipped_count > 0
 
       @last_sync = Time.current
       # Rails.logger.info("[PositionSync] Paper position sync completed - ensured #{paper_positions.size} positions are subscribed")

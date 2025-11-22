@@ -369,6 +369,12 @@ class PositionTracker < ApplicationRecord
     # Ensure hub is running (will start if not running)
     hub.start! unless hub.running?
 
+    # Check if already subscribed before calling hub
+    if hub.subscribed?(segment: segment_key, security_id: security_id)
+      Rails.logger.debug { "[PositionTracker] Already subscribed to #{segment_key}:#{security_id}, skipping" }
+      return { segment: segment_key, security_id: security_id, already_subscribed: true }
+    end
+
     hub.subscribe(segment: segment_key, security_id: security_id)
   rescue StandardError => e
     Rails.logger.error("[PositionTracker] Failed to subscribe #{order_no}: #{e.message}")
@@ -416,7 +422,13 @@ class PositionTracker < ApplicationRecord
 
     hub = Live::MarketFeedHub.instance
     hub.start! unless hub.running?
-    hub.subscribe(segment: segment_key, security_id: security_id)
+
+    # Check if already subscribed before calling hub
+    if hub.subscribed?(segment: segment_key, security_id: security_id)
+      Rails.logger.debug { "[PositionTracker] subscribe_to_feed: Already subscribed to #{segment_key}:#{security_id}, skipping" }
+    else
+      hub.subscribe(segment: segment_key, security_id: security_id)
+    end
 
     Live::PositionIndex.instance.add(id: id, security_id: security_id, segment: segment_key, entry_price: entry_price,
                                      quantity: quantity)

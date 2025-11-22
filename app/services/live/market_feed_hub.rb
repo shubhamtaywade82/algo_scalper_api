@@ -2,6 +2,7 @@
 
 require 'singleton'
 require 'concurrent/array'
+require 'concurrent/set'
 
 module Live
   class MarketFeedHub
@@ -17,6 +18,7 @@ module Live
       @connection_state = :disconnected
       @last_error = nil
       @started_at = nil
+      @subscribed_keys = Concurrent::Set.new # Track subscribed segment:security_id pairs
     end
 
     def start!
@@ -67,8 +69,9 @@ module Live
           Rails.logger.warn("[MarketFeedHub] Error during disconnect: #{e.message}") if defined?(Rails.logger)
         end
 
-        # Clear callbacks
+        # Clear callbacks and subscription tracking
         @callbacks.clear
+        @subscribed_keys.clear
       end
     end
 
@@ -132,10 +135,30 @@ module Live
       result
     end
 
+    def subscribed?(segment:, security_id:)
+      key = "#{segment}:#{security_id}"
+      @subscribed_keys.include?(key)
+    end
+
     def subscribe(segment:, security_id:)
       ensure_running!
+
+      # Create composite key for tracking
+      key = "#{segment}:#{security_id}"
+
+      # Check if already subscribed
+      if @subscribed_keys.include?(key)
+        Rails.logger.debug { "[MarketFeedHub] Already subscribed to #{key}, skipping duplicate subscription" }
+        return { segment: segment, security_id: security_id.to_s, already_subscribed: true }
+      end
+
+      # Subscribe via WebSocket
       @ws_client.subscribe_one(segment: segment, security_id: security_id.to_s)
-      { segment: segment, security_id: security_id.to_s }
+
+      # Track subscription
+      @subscribed_keys.add(key)
+
+      { segment: segment, security_id: security_id.to_s, already_subscribed: false }
     end
 
     def subscribe_many(instruments)
@@ -151,24 +174,54 @@ module Live
         end
       end
 
+      # Filter out already subscribed instruments
+      new_subscriptions = list.reject do |item|
+        key = "#{item[:segment]}:#{item[:security_id]}"
+        @subscribed_keys.include?(key)
+      end
+
+      return [] if new_subscriptions.empty?
+
       # Convert to format expected by DhanHQ client: ExchangeSegment and SecurityId keys
-      normalized_list = list.map do |item|
+      normalized_list = new_subscriptions.map do |item|
         {
           ExchangeSegment: item[:segment] || item['segment'],
           SecurityId: (item[:security_id] || item['security_id']).to_s
         }
       end
 
+      # Subscribe via WebSocket
       @ws_client.subscribe_many(normalized_list)
-      # Rails.logger.info("[MarketFeedHub] Batch subscribed to #{list.count} instruments")
-      list
+
+      # Track all new subscriptions
+      new_subscriptions.each do |item|
+        key = "#{item[:segment]}:#{item[:security_id]}"
+        @subscribed_keys.add(key)
+      end
+
+      skipped_count = list.size - new_subscriptions.size
+      if skipped_count > 0
+        Rails.logger.debug { "[MarketFeedHub] Skipped #{skipped_count} duplicate subscriptions, subscribed to #{new_subscriptions.size} new instruments" }
+      end
+
+      # Rails.logger.info("[MarketFeedHub] Batch subscribed to #{new_subscriptions.count} instruments")
+      new_subscriptions
     end
 
     def unsubscribe(segment:, security_id:)
-      return unless running?
+      return { segment: segment, security_id: security_id.to_s, was_subscribed: false } unless running?
 
-      @ws_client.unsubscribe_one(segment: segment, security_id: security_id.to_s)
-      { segment: segment, security_id: security_id.to_s }
+      # Create composite key for tracking
+      key = "#{segment}:#{security_id}"
+      was_subscribed = @subscribed_keys.include?(key)
+
+      # Unsubscribe via WebSocket
+      @ws_client.unsubscribe_one(segment: segment, security_id: security_id.to_s) if was_subscribed
+
+      # Remove from tracking
+      @subscribed_keys.delete(key)
+
+      { segment: segment, security_id: security_id.to_s, was_subscribed: was_subscribed }
     end
 
     def unsubscribe_many(instruments)
@@ -311,16 +364,10 @@ module Live
       return if @watchlist.empty?
 
       # Use subscribe_many for efficient batch subscription (up to 100 instruments per message)
-      # DhanHQ client expects ExchangeSegment and SecurityId keys (capitalized)
-      normalized_list = @watchlist.map do |item|
-        {
-          ExchangeSegment: item[:segment] || item['segment'],
-          SecurityId: (item[:security_id] || item['security_id']).to_s
-        }
-      end
+      # This will automatically deduplicate via subscribe_many
+      subscribe_many(@watchlist)
 
-      @ws_client.subscribe_many(normalized_list)
-      # Rails.logger.info("[MarketFeedHub] Subscribed to #{@watchlist.count} instruments using subscribe_many")
+      # Rails.logger.info("[MarketFeedHub] Subscribed to watchlist (#{@watchlist.count} instruments)")
     end
 
     def load_watchlist
@@ -372,9 +419,8 @@ module Live
 
     def mode
       allowed = %i[ticker quote full]
-      selected = :full || config&.ws_mode || DEFAULT_MODE
+      selected = config&.ws_mode || DEFAULT_MODE
       allowed.include?(selected) ? selected : DEFAULT_MODE
-      :full
     end
 
     def setup_connection_handlers

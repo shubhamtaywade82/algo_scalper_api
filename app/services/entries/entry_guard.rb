@@ -311,10 +311,14 @@ module Entries
 
         # Strategy 1: WebSocket subscription + TickCache (fastest, no API rate limits)
         if hub.running? && hub.connected?
-          # Subscribe to the strike/derivative immediately
+          # Subscribe to the strike/derivative immediately (only if not already subscribed)
           begin
-            hub.subscribe(segment: segment, security_id: security_id)
-            Rails.logger.debug { "[EntryGuard] Subscribed to #{segment}:#{security_id} for LTP resolution" }
+            unless hub.subscribed?(segment: segment, security_id: security_id)
+              hub.subscribe(segment: segment, security_id: security_id)
+              Rails.logger.debug { "[EntryGuard] Subscribed to #{segment}:#{security_id} for LTP resolution" }
+            else
+              Rails.logger.debug { "[EntryGuard] Already subscribed to #{segment}:#{security_id}, using existing subscription" }
+            end
 
             # Wait briefly for tick to arrive (typically < 100ms)
             max_wait_ms = 300
