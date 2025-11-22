@@ -2,6 +2,9 @@
 
 FactoryBot.define do
   factory :candle_series do
+    skip_create # CandleSeries is a PORO, not an ActiveRecord model
+    initialize_with { new(symbol: symbol, interval: interval) }
+
     symbol { 'NIFTY' }
     interval { '5' }
 

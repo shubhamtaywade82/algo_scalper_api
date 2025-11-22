@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module Signal
+  # rubocop:disable Metrics/ClassLength
   class Scheduler
     DEFAULT_PERIOD = 30 # seconds
     STRATEGY_MAP = {
@@ -76,7 +77,7 @@ module Signal
     end
 
     def load_enabled_strategies(index_cfg)
-      strategies_cfg = index_cfg[:strategies] || AlgoConfig.fetch.dig(:strategy) || {}
+      strategies_cfg = index_cfg[:strategies] || AlgoConfig.fetch[:strategy] || {}
       enabled = []
 
       STRATEGY_MAP.each do |key, engine_class|
@@ -97,9 +98,11 @@ module Signal
 
     def evaluate_strategies_priority(index_cfg, enabled_strategies)
       chain_cfg = AlgoConfig.fetch[:chain_analyzer] || {}
-      analyzer = Options::ChainAnalyzer.new(
-        index: index_cfg,
-        data_provider: @data_provider,
+
+      # Use DerivativeChainAnalyzer for better integration with Derivative records
+      analyzer = Options::DerivativeChainAnalyzer.new(
+        index_key: index_cfg[:key],
+        expiry: nil, # Auto-select nearest expiry
         config: chain_cfg
       )
 
@@ -179,4 +182,5 @@ module Signal
       nil
     end
   end
+  # rubocop:enable Metrics/ClassLength
 end

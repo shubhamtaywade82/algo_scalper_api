@@ -27,9 +27,9 @@ class SupertrendAdxStrategy
     trend_at_index = get_trend_at_index(index)
     return nil if trend_at_index.nil?
 
-    # Calculate ADX from candles up to current index
-    partial_candles = series.candles[0..index]
-    adx_value = calculate_adx(partial_candles, 14)
+    # Calculate ADX from candles up to current index using CandleSeries helper
+    partial_series = create_partial_series(index)
+    adx_value = partial_series&.adx(14)
     return nil if adx_value.nil? || adx_value < adx_min_strength
 
     # Determine direction from supertrend
@@ -82,31 +82,10 @@ class SupertrendAdxStrategy
     [base, 100].min
   end
 
-  def calculate_adx(candles, period)
-    return nil if candles.size < period + 1
-
-    trs = []
-    plus_dm = []
-    minus_dm = []
-
-    candles.each_cons(2) do |prev, curr|
-      high = curr.high
-      low = curr.low
-      prev_close = prev.close
-
-      tr = [high - low, (high - prev_close).abs, (low - prev_close).abs].max
-      trs << tr
-
-      up_move = high - prev.high
-      down_move = prev.low - low
-
-      plus_dm << (up_move > down_move && up_move.positive? ? up_move : 0)
-      minus_dm << (down_move > up_move && down_move.positive? ? down_move : 0)
-    end
-
-    atr = trs.last(period).sum / period
-    di_plus = 100 * (plus_dm.last(period).sum / period) / atr
-    di_minus = 100 * (minus_dm.last(period).sum / period) / atr
-    ((di_plus - di_minus).abs / (di_plus + di_minus)) * 100
+  def create_partial_series(index)
+    # Create a partial CandleSeries with candles up to the current index
+    partial_series = CandleSeries.new(symbol: series.symbol, interval: series.interval)
+    series.candles[0..index].each { |candle| partial_series.add_candle(candle) }
+    partial_series
   end
 end

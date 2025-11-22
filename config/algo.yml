@@ -182,6 +182,18 @@ strategy:
 
 chain_analyzer:
   max_candidates: 2
+  # DerivativeChainAnalyzer settings (uses Derivative records)
+  strike_distance_pct: 0.02 # Maximum distance from spot (2%)
+  min_oi: 10000 # Minimum open interest (lowered for better selection)
+  min_iv: 5.0 # Minimum implied volatility (%)
+  max_iv: 60.0 # Maximum implied volatility (%)
+  max_spread_pct: 0.03 # Maximum bid-ask spread (3%)
+  # Scoring weights (heuristic - must be backtested)
+  scoring_weights:
+    oi: 0.4 # Open Interest weight (40%)
+    spread: 0.25 # Spread weight (25%)
+    iv: 0.2 # IV weight (20%)
+    volume: 0.15 # Volume weight (15%)
 
 option_chain:
   atm_window_pct: 0.1 # Not used - now using fixed strike steps (ATM, ATM±1, ATM±2, ATM±3)

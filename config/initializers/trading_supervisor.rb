@@ -12,9 +12,9 @@ end
 
 # bin/dev uses Puma, not Rails::Server
 is_web_process =
- $PROGRAM_NAME.include?("puma") ||
- $PROGRAM_NAME.include?("rails") ||
- ENV["WEB_CONCURRENCY"].present?
+  $PROGRAM_NAME.include?('puma') ||
+  $PROGRAM_NAME.include?('rails') ||
+  ENV['WEB_CONCURRENCY'].present?
 
 return unless is_web_process
 
@@ -24,7 +24,7 @@ return unless is_web_process
 module TradingSystem
  class Supervisor
    def initialize
-     @services = {}     # { name => service_instance }
+      @services = {} # { name => service_instance }
      @running  = false
    end
 
@@ -32,20 +32,16 @@ module TradingSystem
      @services[name] = instance
    end
 
-   def [](name)
-     @services[name]
-   end
+    delegate :[], to: :@services
 
    def start_all
      return if @running
 
      @services.each do |name, service|
-       begin
          service.start
          Rails.logger.info("[Supervisor] started #{name}")
-       rescue => e
+      rescue StandardError => e
          Rails.logger.error("[Supervisor] failed starting #{name}: #{e.class} - #{e.message}")
-       end
      end
 
      @running = true
@@ -55,12 +51,10 @@ module TradingSystem
      return unless @running
 
      @services.reverse_each do |name, service|
-       begin
          service.stop
          Rails.logger.info("[Supervisor] stopped #{name}")
-       rescue => e
+      rescue StandardError => e
          Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
-       end
      end
 
      @running = false
@@ -86,9 +80,7 @@ class MarketFeedHubService
    @hub.stop!
  end
 
- def subscribe_many(list)
-   @hub.subscribe_many(list)
- end
+  delegate :subscribe_many, to: :@hub
 end
 
 # Wrap your existing PnlUpdaterService singleton
@@ -104,6 +96,21 @@ class PnlUpdaterServiceAdapter
  def stop
    @svc.stop!
  end
+end
+
+# ActiveCache service adapter
+class ActiveCacheService
+  def initialize
+    @cache = Positions::ActiveCache.instance
+  end
+
+  def start
+    @cache.start!
+  end
+
+  def stop
+    @cache.stop!
+  end
 end
 
 # --------------------------------------------------------------------
@@ -135,9 +142,7 @@ Rails.application.config.to_prepare do
   supervisor.register(:order_router, router)
   supervisor.register(:paper_pnl_refresher, Live::PaperPnlRefresher.new)
   supervisor.register(:exit_manager, Live::ExitEngine.new(order_router: router))
-
-
-
+  supervisor.register(:active_cache, ActiveCacheService.new)
 
  # Future:
  # supervisor.register(:pnl_updater, PnlUpdaterServiceAdapter.new)
@@ -153,13 +158,11 @@ Rails.application.config.to_prepare do
    # SUBSCRIBE ACTIVE POSITIONS VIA PositionIndex
    # ----------------------------------------------------
    active_pairs = Live::PositionIndex.instance.all_keys.map do |k|
-     seg, sid = k.split(":", 2)
+      seg, sid = k.split(':', 2)
      { segment: seg, security_id: sid }
    end
 
-   if active_pairs.any?
-     supervisor[:market_feed].subscribe_many(active_pairs)
-   end
+    supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 
    # ----------------------------------------------------
    # SIGNAL HANDLERS (CTRL+C)
@@ -168,7 +171,7 @@ Rails.application.config.to_prepare do
      Signal.trap(sig) do
        Rails.logger.info("[TradingSupervisor] Received #{sig}, shutting down...")
        supervisor.stop_all
-       exit(0)
+        exit(0) # rubocop:disable Rails/Exit
      end
    end
 

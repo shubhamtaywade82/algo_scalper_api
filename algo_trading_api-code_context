@@ -349,7 +349,35 @@ class CandleSeries
   end
 
   def atr(period = 14)
+    return nil if candles.size < period + 1
+
     TechnicalAnalysis::Atr.calculate(hlc, period: period).first.atr
+  rescue TechnicalAnalysis::Validation::ValidationError => e
+    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
+    nil
+  rescue ArgumentError, TypeError => e
+    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
+    nil
+  rescue StandardError => e
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
+    nil
+  end
+
+  def adx(period = 14)
+    return nil if candles.size < period + 1
+
+    result = TechnicalAnalysis::Adx.calculate(hlc, period: period)
+    return nil if result.empty?
+
+    result.last.adx
+  rescue ArgumentError, TypeError, StandardError => e
+    # Don't catch NoMethodError as it indicates programming errors
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    nil
   end
 
   def swing_high?(index, lookback = 2)
@@ -420,8 +448,10 @@ class CandleSeries
     return nil if candles.empty?
 
     RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: closes, period: period).call
-  rescue ArgumentError, TypeError, StandardError => e
-    # Don't catch NoMethodError as it indicates programming errors
+  rescue ArgumentError, TypeError => e
+    Rails.logger.warn("[CandleSeries] RSI calculation failed: #{e.message}")
+    nil
+  rescue StandardError => e
     raise if e.is_a?(NoMethodError)
 
     Rails.logger.warn("[CandleSeries] RSI calculation failed: #{e.message}")
@@ -447,9 +477,20 @@ class CandleSeries
   end
 
   def macd(fast_period = 12, slow_period = 26, signal_period = 9)
+    return nil if candles.empty?
+    return nil if closes.size < slow_period + signal_period
+
     macd = RubyTechnicalAnalysis::Macd.new(series: closes, fast_period: fast_period, slow_period: slow_period,
                                            signal_period: signal_period)
-    macd.call
+    result = macd.call
+    return nil if result.nil? || !result.is_a?(Array) || result.size < 3
+
+    result # Returns [macd, signal, histogram] array
+  rescue ArgumentError, TypeError, StandardError => e
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] MACD calculation failed: #{e.message}")
+    nil
   end
 
   def rate_of_change(period = 5)
@@ -522,6 +563,8 @@ class CandleSeries
   end
 
   def obv
+    return nil if candles.empty?
+
     dcv = candles.each_with_index.map do |c, _i|
       {
         date_time: Time.zone.at(c.timestamp || 0),
@@ -530,7 +573,18 @@ class CandleSeries
       }
     end
 
+    # OBV.calculate is a class method that takes an array of hashes
+    # The gem expects the data in a specific format
     TechnicalAnalysis::Obv.calculate(dcv)
+  rescue ArgumentError => e
+    # OBV.calculate might have different signature - try alternative approach
+    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
+    nil
+  rescue TypeError, StandardError => e
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
+    nil
   end
 end
 
@@ -606,22 +660,7 @@ module CandleExtension
 
     def adx(period = 14, interval: '5')
       cs = candles(interval: interval)
-      closes = cs&.closes
-      highs  = cs&.highs
-      lows   = cs&.lows
-      return nil unless closes && highs && lows
-
-      hlc = cs.candles.each_with_index.map do |c, _i|
-        {
-          date_time: Time.zone.at(c.timestamp || 0),
-          high: c.high,
-          low: c.low,
-          close: c.close
-        }
-      end
-
-      ta_adx = TechnicalAnalysis::Adx.calculate(hlc, period: period).first
-      ta_adx&.adx
+      cs&.adx(period)
     end
 
     def supertrend_signal(interval: '5')
@@ -3042,6 +3081,174 @@ module Capital
 end
 
 
+# File: app/services/core/event_bus.rb
+# frozen_string_literal: true
+
+require 'singleton'
+require 'concurrent/map'
+require 'concurrent/array'
+
+module Core
+  # Central pub/sub event bus for NEMESIS V3 architecture
+  # Provides internal event broadcasting for system components
+  # Thread-safe singleton for high-performance tick processing
+  # rubocop:disable Metrics/ClassLength
+  class EventBus
+    include Singleton
+
+    # Event types
+    EVENTS = {
+      ltp: :ltp,
+      entry_filled: :entry_filled,
+      sl_hit: :sl_hit,
+      tp_hit: :tp_hit,
+      structure_break: :structure_break,
+      exit_triggered: :exit_triggered,
+      risk_alert: :risk_alert,
+      breakeven_lock: :breakeven_lock,
+      trailing_triggered: :trailing_triggered,
+      danger_zone: :danger_zone,
+      volatility_spike: :volatility_spike,
+      trend_flip: :trend_flip
+    }.freeze
+
+    def initialize
+      @subscribers = Concurrent::Map.new { |h, k| h[k] = Concurrent::Array.new }
+      @lock = Mutex.new
+      @stats = {
+        events_published: 0,
+        events_delivered: 0,
+        errors: 0
+      }
+    end
+
+    # Subscribe to an event type
+    # @param event_type [Symbol] Event type (e.g., :ltp, :sl_hit)
+    # @param subscriber [Object, Proc] Subscriber object or proc
+    # @param method_name [Symbol, nil] Method name to call on subscriber (if object)
+    # @return [String] Subscription ID for unsubscribing
+    def subscribe(event_type, subscriber = nil, method_name: nil, &block)
+      raise ArgumentError, "Unknown event type: #{event_type}" unless EVENTS.value?(event_type)
+
+      handler = if block
+                  block
+                elsif subscriber.is_a?(Proc)
+                  subscriber
+                elsif subscriber && method_name
+                  ->(event) { subscriber.public_send(method_name, event) }
+                elsif subscriber.respond_to?(:call)
+                  ->(event) { subscriber.call(event) }
+                else
+                  raise ArgumentError, 'Must provide block, proc, or subscriber with method_name'
+                end
+
+      subscription_id = SecureRandom.uuid
+      @subscribers[event_type] << {
+        id: subscription_id,
+        handler: handler,
+        subscriber: subscriber
+      }
+
+      Rails.logger.debug { "[Core::EventBus] Subscribed to #{event_type} (#{subscription_id[0..7]})" }
+      subscription_id
+    end
+
+    # Publish an event to all subscribers
+    # @param event_type [Symbol] Event type
+    # @param event [Object] Event object (must respond to #to_h or be a Hash)
+    # @return [Integer] Number of subscribers notified
+    def publish(event_type, event)
+      raise ArgumentError, "Unknown event type: #{event_type}" unless EVENTS.value?(event_type)
+
+      subscribers = @subscribers[event_type]
+      return 0 if subscribers.empty?
+
+      @stats[:events_published] += 1
+      notified = 0
+
+      subscribers.each do |subscription|
+        subscription[:handler].call(event)
+        notified += 1
+        @stats[:events_delivered] += 1
+      rescue StandardError => e
+        @stats[:errors] += 1
+        Rails.logger.error(
+          "[Core::EventBus] Error delivering #{event_type} to subscriber: #{e.class} - #{e.message}"
+        )
+        Rails.logger.debug { e.backtrace.first(5).join("\n") }
+      end
+
+      notified
+    end
+
+    # Unsubscribe from an event
+    # @param subscription_id [String] Subscription ID returned from subscribe
+    # @return [Boolean] True if unsubscribed, false if not found
+    def unsubscribe(subscription_id)
+      found = false
+      @subscribers.each_value do |subs|
+        subs.delete_if do |sub|
+          if sub[:id] == subscription_id
+            found = true
+            true
+          else
+            false
+          end
+        end
+      end
+
+      Rails.logger.debug { "[Core::EventBus] Unsubscribed (#{subscription_id[0..7]})" } if found
+      found
+    end
+
+    # Unsubscribe all handlers for a specific subscriber object
+    # @param subscriber [Object] Subscriber object to remove
+    # @return [Integer] Number of subscriptions removed
+    def unsubscribe_all(subscriber)
+      removed = 0
+      @subscribers.each_value do |subs|
+        subs.delete_if do |sub|
+          if sub[:subscriber] == subscriber
+            removed += 1
+            true
+          else
+            false
+          end
+        end
+      end
+
+      Rails.logger.debug { "[Core::EventBus] Unsubscribed all for #{subscriber.class.name} (#{removed} subscriptions)" } if removed.positive?
+      removed
+    end
+
+    # Get statistics
+    # @return [Hash] Statistics hash
+    def stats
+      @stats.dup
+    end
+
+    # Clear all subscriptions (for testing/cleanup)
+    def clear
+      @subscribers.clear
+      @stats = {
+        events_published: 0,
+        events_delivered: 0,
+        errors: 0
+      }
+      Rails.logger.debug('[Core::EventBus] Cleared all subscriptions')
+    end
+
+    # Get subscriber count for an event type
+    # @param event_type [Symbol] Event type
+    # @return [Integer] Number of subscribers
+    def subscriber_count(event_type)
+      @subscribers[event_type]&.size || 0
+    end
+  end
+  # rubocop:enable Metrics/ClassLength
+end
+
+
 # File: app/services/entries/entry_guard.rb
 # frozen_string_literal: true
 
@@ -3671,23 +3878,18 @@ module Indicators
     end
 
     def rsi(period = 14)
-      RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: @series.closes, period:).call
+      # Use CandleSeries helper method instead of duplicating logic
+      @series.rsi(period)
     end
 
-    def macd
-      RubyTechnicalAnalysis::Macd.new(series: @series.closes).call
+    def macd(fast_period = 12, slow_period = 26, signal_period = 9)
+      # Use CandleSeries helper method instead of duplicating logic
+      @series.macd(fast_period, slow_period, signal_period)
     end
 
     def adx(period = 14)
-      hlc = @series.candles.each_with_index.map do |c, _i|
-        {
-          date_time: Time.zone.at(c.timestamp || 0),
-          high: c.high,
-          low: c.low,
-          close: c.close
-        }
-      end
-      TechnicalAnalysis::Adx.calculate(hlc, period:).last.adx
+      # Use CandleSeries helper method instead of duplicating hlc logic
+      @series.adx(period)
     end
 
     def bullish_signal?
@@ -4831,6 +5033,218 @@ module Live
 end
 
 
+# File: app/services/live/feed_listener.rb
+# frozen_string_literal: true
+
+require 'concurrent/executor'
+require 'concurrent/array'
+
+module Live
+  # Enhanced feed listener for NEMESIS V3 architecture
+  # Processes ticks from MarketFeedHub and emits structured events via EventBus
+  # Multi-threaded tick processing with composite key support
+  # rubocop:disable Metrics/ClassLength
+  class FeedListener
+    include Singleton
+
+    def initialize
+      @running = false
+      @lock = Mutex.new
+      @thread_pool = nil
+      @event_bus = Core::EventBus.instance
+      @tick_cache = Live::TickCache
+      @redis_cache = Live::RedisTickCache.instance
+      @stats = {
+        ticks_processed: 0,
+        events_emitted: 0,
+        errors: 0
+      }
+    end
+
+    # Start the feed listener
+    # Subscribes to MarketFeedHub and begins processing ticks
+    # @return [Boolean] True if started successfully
+    def start!
+      return false if @running
+
+      @lock.synchronize do
+        return false if @running
+
+        # Create thread pool for async processing
+        @thread_pool = Concurrent::FixedThreadPool.new(
+          thread_count,
+          name: 'feed-listener',
+          max_queue: 1000
+        )
+
+        # Subscribe to MarketFeedHub (non-blocking - hub may not be running yet)
+        hub = MarketFeedHub.instance
+        hub.on_tick { |tick| process_tick(tick) }
+
+        @running = true
+        Rails.logger.info('[Live::FeedListener] Started feed listener')
+        true
+      end
+    rescue StandardError => e
+      Rails.logger.error("[Live::FeedListener] Failed to start: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+      false
+    end
+
+    # Stop the feed listener
+    # @return [Boolean] True if stopped successfully
+    def stop!
+      return false unless @running
+
+      @lock.synchronize do
+        return false unless @running
+
+        @running = false
+        @thread_pool&.shutdown
+        @thread_pool&.wait_for_termination(5)
+        @thread_pool = nil
+
+        Rails.logger.info('[Live::FeedListener] Stopped feed listener')
+        true
+      end
+    rescue StandardError => e
+      Rails.logger.error("[Live::FeedListener] Error during stop: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Check if listener is running
+    # @return [Boolean]
+    def running?
+      @running
+    end
+
+    # Get statistics
+    # @return [Hash]
+    def stats
+      @stats.dup
+    end
+
+    private
+
+    # Process a single tick
+    # @param tick [Hash] Raw tick data from MarketFeedHub
+    def process_tick(tick)
+      return unless tick.is_a?(Hash)
+      return unless tick[:ltp].to_f.positive?
+      return unless tick[:segment].present? && tick[:security_id].present?
+
+      # Process asynchronously in thread pool
+      @thread_pool&.post do
+        process_tick_sync(tick)
+      end
+    rescue StandardError => e
+      @stats[:errors] += 1
+      Rails.logger.error("[Live::FeedListener] Error processing tick: #{e.class} - #{e.message}")
+    end
+
+    # Synchronous tick processing (runs in thread pool)
+    # @param tick [Hash] Raw tick data
+    def process_tick_sync(tick)
+      @stats[:ticks_processed] += 1
+
+      # Build LtpEvent with enriched data
+      event = build_ltp_event(tick)
+      return unless event.valid?
+
+      # Emit event via EventBus
+      @event_bus.publish(Core::EventBus::EVENTS[:ltp], event)
+      @stats[:events_emitted] += 1
+    rescue StandardError => e
+      @stats[:errors] += 1
+      Rails.logger.error("[Live::FeedListener] Error in process_tick_sync: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+    end
+
+    # Build LtpEvent from raw tick data
+    # Enriches tick with additional context (spot price, volatility state)
+    # @param tick [Hash] Raw tick data
+    # @return [LtpEvent]
+    # rubocop:disable Metrics/AbcSize
+    def build_ltp_event(tick)
+      segment = tick[:segment].to_s
+      security_id = tick[:security_id].to_s
+
+      # Get enriched tick data from cache
+      cached_tick = @tick_cache.fetch(segment, security_id) ||
+                    @redis_cache.fetch_tick(segment, security_id)
+
+      # Merge cached data with incoming tick
+      enriched = (cached_tick || {}).merge(tick)
+
+      # Determine spot price (for index instruments)
+      spot_price = determine_spot_price(segment, security_id, enriched)
+
+      # Determine volatility state
+      volatility_state = determine_volatility_state(enriched)
+
+      LtpEvent.new(
+        segment: segment,
+        security_id: security_id,
+        ltp: enriched[:ltp] || tick[:ltp],
+        timestamp: enriched[:timestamp] || Time.current,
+        spot_price: spot_price,
+        volatility_state: volatility_state,
+        bid: enriched[:bid] || tick[:bid],
+        ask: enriched[:ask] || tick[:ask],
+        oi: enriched[:oi] || tick[:oi],
+        oi_change: enriched[:oi_change] || tick[:oi_change],
+        volume: enriched[:volume] || tick[:volume],
+        high: enriched[:high] || tick[:high],
+        low: enriched[:low] || tick[:low],
+        open: enriched[:open] || tick[:open],
+        close: enriched[:close] || tick[:close]
+      )
+    end
+    # rubocop:enable Metrics/AbcSize
+
+    # Determine spot price for index instruments
+    # @param segment [String] Exchange segment
+    # @param _security_id [String] Security ID (unused for now)
+    # @param tick [Hash] Tick data
+    # @return [Float, nil]
+    def determine_spot_price(segment, _security_id, tick)
+      # If this is an index segment, use LTP as spot
+      return tick[:ltp].to_f if segment == 'IDX_I'
+
+      # For derivatives, try to get underlying spot
+      # This would require looking up the derivative's underlying
+      # For now, return nil (can be enhanced later)
+      nil
+    end
+
+    # Determine volatility state from tick data
+    # @param tick [Hash] Tick data
+    # @return [Symbol] :low, :normal, :high, or :extreme
+    def determine_volatility_state(tick)
+      # Simple heuristic based on price change
+      # Can be enhanced with ATR, IV, etc.
+      return :normal unless tick[:close]&.positive?
+
+      change_pct = ((tick[:ltp].to_f - tick[:close].to_f) / tick[:close].to_f * 100.0).abs
+
+      case change_pct
+      when 0.0..0.5 then :low
+      when 0.5..2.0 then :normal
+      when 2.0..5.0 then :high
+      else :extreme
+      end
+    end
+
+    # Thread pool size
+    # @return [Integer]
+    def thread_count
+      ENV.fetch('FEED_LISTENER_THREADS', '4').to_i
+    end
+  end
+  # rubocop:enable Metrics/ClassLength
+end
+
+
 # File: app/services/live/gateway.rb
 # frozen_string_literal: true
 
@@ -4930,6 +5344,101 @@ module Live
       }
     end
   end
+end
+
+
+# File: app/services/live/ltp_event.rb
+# frozen_string_literal: true
+
+module Live
+  # LTP (Last Traded Price) event data structure
+  # Carries tick data with additional context for NEMESIS V3 system
+  # rubocop:disable Metrics/AbcSize
+  class LtpEvent
+    attr_reader :segment, :security_id, :ltp, :timestamp, :spot_price, :volatility_state,
+                :bid, :ask, :oi, :oi_change, :volume, :high, :low, :open, :close
+
+    def initialize(segment:, security_id:, ltp:, timestamp: nil, **options) # rubocop:disable Metrics/AbcSize
+      @segment = segment.to_s
+      @security_id = security_id.to_s
+      @ltp = ltp.to_f
+      @timestamp = timestamp || Time.current
+
+      # Optional fields
+      @spot_price = options[:spot_price]&.to_f
+      @volatility_state = options[:volatility_state] || :normal # :low, :normal, :high, :extreme
+      @bid = options[:bid]&.to_f
+      @ask = options[:ask]&.to_f
+      @oi = options[:oi]&.to_i
+      @oi_change = options[:oi_change]&.to_i
+      @volume = options[:volume]&.to_i
+      @high = options[:high]&.to_f
+      @low = options[:low]&.to_f
+      @open = options[:open]&.to_f
+      @close = options[:close]&.to_f
+    end
+
+    # Composite key for caching/lookup
+    # @return [String] "SEGMENT:SECURITY_ID"
+    def composite_key
+      "#{@segment}:#{@security_id}"
+    end
+
+    # Check if event has valid LTP
+    # @return [Boolean]
+    def valid?
+      @ltp.positive? && @segment.present? && @security_id.present?
+    end
+
+    # Convert to hash for serialization
+    # @return [Hash]
+    def to_h
+      {
+        segment: @segment,
+        security_id: @security_id,
+        ltp: @ltp,
+        timestamp: @timestamp,
+        spot_price: @spot_price,
+        volatility_state: @volatility_state,
+        bid: @bid,
+        ask: @ask,
+        oi: @oi,
+        oi_change: @oi_change,
+        volume: @volume,
+        high: @high,
+        low: @low,
+        open: @open,
+        close: @close,
+        composite_key: composite_key
+      }.compact
+    end
+
+    # Convert to hash with string keys (for JSON/Redis)
+    # @return [Hash]
+    def to_json_hash
+      to_h.transform_keys(&:to_s)
+    end
+
+    # Spread percentage (bid-ask)
+    # @return [Float, nil]
+    def spread_pct
+      return nil unless @bid && @ask && @bid.positive?
+
+      mid = (@bid + @ask) / 2.0
+      return nil if mid <= 0
+
+      ((@ask - @bid) / mid * 100.0).round(4)
+    end
+
+    # Price change from previous close
+    # @return [Float, nil]
+    def price_change_pct
+      return nil unless @close&.positive?
+
+      ((@ltp - @close) / @close * 100.0).round(4)
+    end
+  end
+  # rubocop:enable Metrics/AbcSize
 end
 
 
@@ -5049,8 +5558,8 @@ module Live
       result = {
         hub_status: status,
         credentials: {
-          client_id: ENV['CLIENT_ID'].presence || ENV['CLIENT_ID'].presence ? '✅ Set' : '❌ Missing',
-          access_token: ENV['ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence ? '✅ Set' : '❌ Missing'
+          client_id: ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence ? '✅ Set' : '❌ Missing',
+          access_token: ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence ? '✅ Set' : '❌ Missing'
         },
         mode: mode,
         enabled: enabled?
@@ -5143,8 +5652,9 @@ module Live
 
     def enabled?
       # Always enabled - just check for credentials
-      client_id = ENV['CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-      access    = ENV['ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
+      client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
     end
 
@@ -5215,27 +5725,25 @@ module Live
       #   Rails.logger.error("[MarketFeedHub] Failed to live-update Redis PnL: #{e.message}")
       # end
       # fast-path: drop empty/invalid ticks
-return unless tick[:ltp].to_f.positive? && tick[:security_id].present?
+      return unless tick[:ltp].to_f.positive? && tick[:security_id].present?
 
-# get in-memory trackers snapshot (array of metadata)
-trackers = Live::PositionIndex.instance.trackers_for(tick[:security_id].to_s)
-if trackers.empty?
-  # nothing to do for this security
-  return
-end
+      # get in-memory trackers snapshot (array of metadata)
+      trackers = Live::PositionIndex.instance.trackers_for(tick[:security_id].to_s)
+      if trackers.empty?
+        # nothing to do for this security
+        return
+      end
 
-# For each metadata push minimal payload (last-wins)
-trackers.each do |meta|
-  # defensive checks
-  next unless meta[:entry_price] && meta[:quantity] && meta[:quantity].to_i > 0
+      # For each metadata push minimal payload (last-wins)
+      trackers.each do |meta|
+        # defensive checks
+        next unless meta[:entry_price] && meta[:quantity] && meta[:quantity].to_i > 0
 
-  Live::PnlUpdaterService.instance.cache_intermediate_pnl(
-    tracker_id: meta[:id],
-    ltp: tick[:ltp]
-  )
-end
-
-
+        Live::PnlUpdaterService.instance.cache_intermediate_pnl(
+          tracker_id: meta[:id],
+          ltp: tick[:ltp]
+        )
+      end
     end
 
     def safe_invoke(callback, payload)
@@ -5565,8 +6073,9 @@ module Live
 
     def enabled?
       # Always enabled - just check for credentials
-      client_id = ENV['CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-      access    = ENV['ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
+      client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
     end
 
@@ -8117,6 +8626,300 @@ module Options
 end
 
 
+# File: app/services/options/derivative_chain_analyzer.rb
+# frozen_string_literal: true
+
+module Options
+  # Enhanced ChainAnalyzer that uses Derivative records and integrates with existing infrastructure
+  # This replaces the need for raw option chain APIs by leveraging existing Derivative models
+  # rubocop:disable Metrics/ClassLength
+  class DerivativeChainAnalyzer
+    def initialize(index_key:, expiry: nil, config: {})
+      @index_key = index_key.to_s.upcase
+      @config = config || {}
+      @expiry = expiry
+      @index_cfg = AlgoConfig.fetch[:indices]&.find { |idx| idx[:key].to_s.upcase == @index_key }
+      raise "unknown_index:#{@index_key}" unless @index_cfg
+    end
+
+    # Select best option candidates using Derivative records
+    # @param limit [Integer] Maximum number of candidates to return
+    # @param direction [Symbol] :bullish (CE) or :bearish (PE)
+    # @return [Array<Hash>] Array of candidate hashes with derivative records
+    def select_candidates(limit: 5, direction: :bullish)
+      spot = spot_ltp
+      return [] unless spot&.positive?
+
+      expiry_date = @expiry || find_nearest_expiry
+      return [] unless expiry_date
+
+      chain = load_chain_for_expiry(expiry_date)
+      return [] if chain.empty?
+
+      atm = find_atm_strike(chain, spot)
+      scored = score_chain(chain, atm, spot, direction)
+      scored.sort_by { |c| -c[:score] }.first(limit)
+    rescue StandardError => e
+      Rails.logger.error("[Options::DerivativeChainAnalyzer] select_candidates failed: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+      []
+    end
+
+    private
+
+    # Get spot LTP from tick cache
+    def spot_ltp
+      seg = @index_cfg[:segment]
+      sid = @index_cfg[:sid]
+      Live::TickCache.ltp(seg, sid) || Live::RedisTickCache.instance.fetch_tick(seg, sid)&.dig(:ltp)&.to_f
+    end
+
+    # Find nearest expiry from Instrument's expiry list
+    def find_nearest_expiry
+      instrument = IndexInstrumentCache.instance.get_or_fetch(@index_cfg)
+      return nil unless instrument
+
+      expiry_list = instrument.expiry_list
+      return nil unless expiry_list&.any?
+
+      today = Time.zone.today
+      parsed = expiry_list.compact.filter_map do |raw|
+        case raw
+        when Date then raw
+        when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
+        when String
+          begin
+            Date.parse(raw)
+          rescue ArgumentError
+            nil
+          end
+        end
+      end
+
+      next_expiry = parsed.select { |date| date >= today }.min
+      next_expiry&.strftime('%Y-%m-%d')
+    end
+
+    # Load chain using Derivative records and merge with live data
+    def load_chain_for_expiry(expiry_date)
+      expiry_obj = Date.parse(expiry_date)
+
+      # Get all derivatives for this index and expiry
+      derivatives = Derivative.where(
+        underlying_symbol: @index_key,
+        expiry_date: expiry_obj
+      ).where.not(option_type: [nil, ''])
+
+      return [] if derivatives.empty?
+
+      # Fetch option chain data from API for OI/IV/Greeks
+      api_chain = fetch_api_chain(expiry_date)
+      return [] unless api_chain
+
+      # Merge Derivative records with API data and live ticks
+      derivatives.filter_map do |derivative|
+        strike_str = derivative.strike_price.to_s
+        option_type_lower = derivative.option_type.to_s.downcase
+        api_data = api_chain.dig(strike_str, option_type_lower)
+
+        # Get live tick data
+        tick = Live::RedisTickCache.instance.fetch_tick(derivative.segment, derivative.security_id)
+
+        build_option_data(derivative, api_data, tick)
+      end
+    end
+
+    # Fetch option chain from DhanHQ API
+    def fetch_api_chain(expiry_date)
+      instrument = IndexInstrumentCache.instance.get_or_fetch(@index_cfg)
+      return nil unless instrument
+
+      chain_data = instrument.fetch_option_chain(expiry_date)
+      return nil unless chain_data
+
+      # Transform to strike -> { ce: {...}, pe: {...} } format
+      oc = chain_data[:oc] || {}
+      oc.transform_keys(&:to_s)
+    rescue StandardError => e
+      Rails.logger.warn("[Options::DerivativeChainAnalyzer] API chain fetch failed: #{e.message}")
+      nil
+    end
+
+    # Build option data hash from Derivative, API data, and tick
+    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    def build_option_data(derivative, api_data, tick)
+      {
+        derivative: derivative,
+        strike: derivative.strike_price.to_f,
+        type: derivative.option_type,
+        expiry: derivative.expiry_date,
+        segment: derivative.segment,
+        security_id: derivative.security_id,
+        lot_size: derivative.lot_size.to_i,
+        ltp: tick&.dig(:ltp)&.to_f || api_data&.dig('last_price')&.to_f,
+        oi: tick&.dig(:oi)&.to_i || api_data&.dig('oi')&.to_i,
+        oi_change: tick&.dig(:oi_change)&.to_i,
+        bid: tick&.dig(:bid)&.to_f || api_data&.dig('top_bid_price')&.to_f,
+        ask: tick&.dig(:ask)&.to_f || api_data&.dig('top_ask_price')&.to_f,
+        iv: api_data&.dig('implied_volatility')&.to_f,
+        volume: tick&.dig(:volume)&.to_i || api_data&.dig('volume')&.to_i,
+        prev_close: api_data&.dig('previous_close_price')&.to_f,
+        delta: api_data&.dig('greeks', 'delta')&.to_f,
+        gamma: api_data&.dig('greeks', 'gamma')&.to_f,
+        theta: api_data&.dig('greeks', 'theta')&.to_f,
+        vega: api_data&.dig('greeks', 'vega')&.to_f
+      }
+    end
+    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+
+    # Find ATM strike from chain
+    def find_atm_strike(chain, spot)
+      return nil if chain.empty?
+
+      chain.min_by { |o| (o[:strike] - spot).abs }[:strike]
+    end
+
+    # Score chain options based on multiple factors
+    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    def score_chain(chain, atm, spot, direction)
+      @direction = direction # Store for use in reason_for
+      option_type = direction == :bullish ? 'CE' : 'PE'
+      max_distance_pct = (@config[:strike_distance_pct] || 0.02).to_f
+      max_distance = spot * max_distance_pct
+
+      min_oi = (@config[:min_oi] || 10_000).to_i
+      min_iv = (@config[:min_iv] || 5.0).to_f
+      max_iv = (@config[:max_iv] || 60.0).to_f
+      max_spread_pct = (@config[:max_spread_pct] || 0.03).to_f
+
+      chain.select { |o| o[:type] == option_type }.filter_map do |option|
+        # Filter criteria
+        next if (option[:strike] - spot).abs > max_distance * 2
+        next if option[:oi].to_i < min_oi
+        next if option[:iv].to_f < min_iv || option[:iv].to_f > max_iv
+
+        spread = calc_spread(option[:bid], option[:ask], option[:ltp])
+        next if spread.nil? || spread > max_spread_pct
+
+        # Calculate combined score
+        score = combined_score(option, atm, spot, direction)
+
+        {
+          derivative: option[:derivative],
+          strike: option[:strike],
+          type: option[:type],
+          score: score,
+          ltp: option[:ltp],
+          iv: option[:iv],
+          oi: option[:oi],
+          oi_change: option[:oi_change],
+          spread: spread,
+          delta: option[:delta],
+          segment: option[:segment],
+          security_id: option[:security_id],
+          lot_size: option[:lot_size],
+          symbol: build_symbol(option[:derivative], option[:strike], option[:type], option[:expiry]),
+          derivative_id: option[:derivative]&.id,
+          reason: reason_for(option, score, atm, spot)
+        }
+      end
+    end
+    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+
+    # Calculate bid-ask spread percentage
+    def calc_spread(bid, ask, _ltp)
+      return nil unless bid && ask && bid.positive?
+
+      mid = (bid + ask) / 2.0
+      return nil if mid <= 0
+
+      (ask - bid) / mid
+    end
+
+    # Combined scoring function (heuristic - must be backtested)
+    # rubocop:disable Metrics/AbcSize
+    def combined_score(option, atm, spot, _direction)
+      weights = @config[:scoring_weights] || {
+        oi: 0.4,
+        spread: 0.25,
+        iv: 0.2,
+        volume: 0.15
+      }
+
+      # Normalize OI (log scale, max ~1M = 6.0)
+      oi_norm = Math.log10([option[:oi].to_i, 1].max) / 6.0
+      oi_norm = [oi_norm, 1.0].min
+
+      # Normalize spread (lower is better, inverted)
+      spread = calc_spread(option[:bid], option[:ask], option[:ltp]) || 0.05
+      spread_norm = 1.0 - [spread, 1.0].min
+
+      # Normalize IV (prefer moderate IV around 20-25%)
+      iv = option[:iv].to_f
+      iv_norm = if iv.between?(15, 25)
+                  1.0
+                elsif iv.between?(10, 30)
+                  0.8
+                elsif iv.between?(5, 40)
+                  0.6
+                else
+                  0.3
+                end
+
+      # Normalize volume (log scale)
+      vol_norm = Math.log10([option[:volume].to_i, 1].max) / 6.0
+      vol_norm = [vol_norm, 1.0].min
+
+      # ATM preference bonus
+      distance_from_atm = (option[:strike] - atm).abs
+      atm_bonus = if distance_from_atm <= (spot * 0.005)
+                    0.2 # Within 0.5% of ATM
+                  elsif distance_from_atm <= (spot * 0.01)
+                    0.1 # Within 1% of ATM
+                  else
+                    0.0
+                  end
+
+      base_score = (oi_norm * weights[:oi]) +
+                   (spread_norm * weights[:spread]) +
+                   (iv_norm * weights[:iv]) +
+                   (vol_norm * weights[:volume])
+
+      base_score + atm_bonus
+    end
+    # rubocop:enable Metrics/AbcSize
+
+    # Build symbol string for candidate (compatible with BaseEngine)
+    def build_symbol(derivative, strike, type, _expiry)
+      return nil unless derivative
+
+      expiry_str = derivative.expiry_date.strftime('%b%Y')
+      "#{@index_key}-#{expiry_str}-#{strike.to_i}-#{type}"
+    end
+
+    # Generate human-readable reason for selection
+    def reason_for(option, score, atm, spot)
+      distance = (option[:strike] - spot).abs
+      distance_pct = (distance / spot * 100).round(2)
+      strike_type = if option[:strike] == atm
+                      'ATM'
+                    elsif option[:strike] > spot
+                      direction == :bullish ? 'OTM' : 'ITM'
+                    else
+                      direction == :bullish ? 'ITM' : 'OTM'
+                    end
+
+      spread_pct = calc_spread(option[:bid], option[:ask], option[:ltp])
+      spread_str = spread_pct ? "#{(spread_pct * 100).round(2)}%" : 'N/A'
+
+      "Score:#{score.round(3)} IV:#{option[:iv]&.round(2)}% OI:#{option[:oi]} " \
+        "Spread:#{spread_str} Strike:#{option[:strike]} (#{strike_type}, #{distance_pct}% from spot)"
+    end
+  end
+  # rubocop:enable Metrics/ClassLength
+end
+
+
 # File: app/services/options/expired_fetcher.rb
 # frozen_string_literal: true
 # app/services/options/expired_fetcher.rb
@@ -8241,6 +9044,733 @@ class Options::ExpiredFetcher < ApplicationService
       }
     end
   end
+end
+
+
+# File: app/services/options/index_rules/banknifty.rb
+# frozen_string_literal: true
+
+module Options
+  module IndexRules
+    # Index-specific rules for BANKNIFTY
+    class Banknifty
+      MIN_VOLUME = 50_000
+      MIN_PREMIUM = 40.0
+      MAX_SPREAD_PCT = 0.005 # 0.5%
+
+      def multiplier
+        1
+      end
+
+      def lot_size
+        15
+      end
+
+      def atm(spot)
+        (spot.to_f / 100).round * 100
+      end
+
+      def candidate_strikes(atm_strike, _strength = nil)
+        [atm_strike]
+      end
+
+      def option_type(direction)
+        direction == :bullish ? 'CE' : 'PE'
+      end
+
+      def valid_liquidity?(candidate)
+        volume = candidate[:volume] || candidate['volume'] || 0
+        volume.to_i >= MIN_VOLUME
+      end
+
+      def valid_spread?(candidate)
+        bid = (candidate[:bid] || candidate['bid'] || 0).to_f
+        ask = (candidate[:ask] || candidate['ask'] || 0).to_f
+        return false if bid <= 0 || ask <= 0
+
+        spread_pct = ((ask - bid) / ask.to_f)
+        spread_pct <= MAX_SPREAD_PCT
+      end
+
+      def valid_premium?(candidate)
+        premium = (candidate[:ltp] || candidate['ltp'] || 0).to_f
+        premium >= MIN_PREMIUM
+      end
+    end
+  end
+end
+
+
+# File: app/services/options/index_rules/nifty.rb
+# frozen_string_literal: true
+
+module Options
+  module IndexRules
+    # Index-specific rules for NIFTY
+    class Nifty
+      MIN_VOLUME = 30_000
+      MIN_PREMIUM = 25.0
+      MAX_SPREAD_PCT = 0.003 # 0.3%
+
+      def multiplier
+        1
+      end
+
+      def lot_size
+        75
+      end
+
+      def atm(spot)
+        (spot.to_f / 50).round * 50
+      end
+
+      def candidate_strikes(atm_strike, _strength = nil)
+        [atm_strike, atm_strike + 50]
+      end
+
+      def option_type(direction)
+        direction == :bullish ? 'CE' : 'PE'
+      end
+
+      def valid_liquidity?(candidate)
+        volume = candidate[:volume] || candidate['volume'] || 0
+        volume.to_i >= MIN_VOLUME
+      end
+
+      def valid_spread?(candidate)
+        bid = (candidate[:bid] || candidate['bid'] || 0).to_f
+        ask = (candidate[:ask] || candidate['ask'] || 0).to_f
+        return false if bid <= 0 || ask <= 0
+
+        spread_pct = ((ask - bid) / ask.to_f)
+        spread_pct <= MAX_SPREAD_PCT
+      end
+
+      def valid_premium?(candidate)
+        premium = (candidate[:ltp] || candidate['ltp'] || candidate[:last_price] || 0).to_f
+        premium >= MIN_PREMIUM
+      end
+    end
+  end
+end
+
+
+# File: app/services/options/index_rules/sensex.rb
+# frozen_string_literal: true
+
+module Options
+  module IndexRules
+    # Index-specific rules for SENSEX
+    class Sensex
+      MIN_VOLUME = 20_000
+      MIN_PREMIUM = 30.0
+      MAX_SPREAD_PCT = 0.003 # 0.3%
+
+      def multiplier
+        1
+      end
+
+      def lot_size
+        10
+      end
+
+      def atm(spot)
+        (spot.to_f / 100).round * 100
+      end
+
+      def candidate_strikes(atm_strike, _strength = nil)
+        [atm_strike]
+      end
+
+      def option_type(direction)
+        direction == :bullish ? 'CE' : 'PE'
+      end
+
+      def valid_liquidity?(candidate)
+        volume = candidate[:volume] || candidate['volume'] || 0
+        volume.to_i >= MIN_VOLUME
+      end
+
+      def valid_spread?(candidate)
+        bid = (candidate[:bid] || candidate['bid'] || 0).to_f
+        ask = (candidate[:ask] || candidate['ask'] || 0).to_f
+        return false if bid <= 0 || ask <= 0
+
+        spread_pct = ((ask - bid) / ask.to_f)
+        spread_pct <= MAX_SPREAD_PCT
+      end
+
+      def valid_premium?(candidate)
+        premium = (candidate[:ltp] || candidate['ltp'] || 0).to_f
+        premium >= MIN_PREMIUM
+      end
+    end
+  end
+end
+
+
+# File: app/services/options/strike_selector.rb
+# frozen_string_literal: true
+
+module Options
+  # StrikeSelector for NEMESIS V3 architecture
+  # Uses existing DerivativeChainAnalyzer and applies index-specific rules
+  # Returns normalized instrument hash for EntryManager/Orders::Placer
+  class StrikeSelector
+    class SelectionError < StandardError; end
+
+    def initialize(tick_cache: nil)
+      @tick_cache = tick_cache || Live::TickCache
+    end
+
+    # Select best strike for given index & direction
+    # @param index_key [String, Symbol] Index key (NIFTY, BANKNIFTY, SENSEX)
+    # @param direction [Symbol] :bullish (CE) or :bearish (PE)
+    # @param expiry [String, Date, nil] Expiry date (nil = auto-select nearest)
+    # @param config [Hash] Additional config for DerivativeChainAnalyzer
+    # @return [Hash, nil] Normalized instrument hash or nil if no valid strike
+    def select(index_key:, direction:, expiry: nil, config: {})
+      index_key = normalize_index(index_key)
+      rules = load_rules_for(index_key)
+
+      # Use existing DerivativeChainAnalyzer
+      analyzer = DerivativeChainAnalyzer.new(
+        index_key: index_key,
+        expiry: expiry,
+        config: config
+      )
+
+      # Get candidates (already scored and sorted)
+      candidates = analyzer.select_candidates(limit: 5, direction: direction)
+
+      if candidates.empty?
+        Rails.logger.warn("[Options::StrikeSelector] No candidates from DerivativeChainAnalyzer for #{index_key}")
+        return nil
+      end
+
+      # Apply index-specific rules to candidates
+      candidates.each do |candidate|
+        next unless candidate_valid?(candidate, rules)
+
+        # Resolve LTP from tick cache or candidate
+        ltp = resolve_ltp(candidate)
+        next unless ltp&.positive?
+
+        # Return normalized instrument hash
+        return build_instrument_hash(candidate, index_key, ltp, rules)
+      end
+
+      Rails.logger.warn("[Options::StrikeSelector] No valid strike passed index rules for #{index_key}")
+      nil
+    rescue SelectionError => e
+      Rails.logger.error("[Options::StrikeSelector] Selection error: #{e.message}")
+      nil
+    rescue StandardError => e
+      Rails.logger.error("[Options::StrikeSelector] Unexpected error: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+      nil
+    end
+
+    private
+
+    def normalize_index(index)
+      index.to_s.strip.upcase
+    end
+
+    def load_rules_for(index_key)
+      case index_key.to_s.upcase
+      when 'NIFTY' then IndexRules::Nifty.new
+      when 'BANKNIFTY' then IndexRules::Banknifty.new
+      when 'SENSEX' then IndexRules::Sensex.new
+      else
+        raise SelectionError, "Unknown index: #{index_key}"
+      end
+    end
+
+    def candidate_valid?(candidate, rules)
+      # Validate liquidity
+      return false unless rules.valid_liquidity?(candidate)
+
+      # Validate spread
+      return false unless rules.valid_spread?(candidate)
+
+      # Validate premium
+      return false unless rules.valid_premium?(candidate)
+
+      true
+    end
+
+    def resolve_ltp(candidate)
+      # Try tick cache first
+      segment = candidate[:segment]
+      security_id = candidate[:security_id]
+
+      if segment.present? && security_id.present?
+        cached_ltp = @tick_cache.ltp(segment, security_id)
+        return cached_ltp if cached_ltp&.positive?
+      end
+
+      # Fallback to candidate LTP
+      candidate[:ltp]&.to_f
+    end
+
+    def build_instrument_hash(candidate, index_key, ltp, rules)
+      {
+        index: index_key,
+        exchange_segment: candidate[:segment],
+        security_id: candidate[:security_id].to_s,
+        strike: candidate[:strike].to_i,
+        option_type: candidate[:type],
+        ltp: ltp.to_f,
+        lot_size: candidate[:lot_size] || rules.lot_size,
+        spot: nil, # Can be fetched separately if needed
+        multiplier: rules.multiplier,
+        derivative: candidate[:derivative],
+        derivative_id: candidate[:derivative_id],
+        symbol: candidate[:symbol],
+        iv: candidate[:iv],
+        oi: candidate[:oi],
+        score: candidate[:score],
+        reason: candidate[:reason]
+      }
+    end
+  end
+end
+
+
+# File: app/services/orders/bracket_placer.rb
+# frozen_string_literal: true
+
+module Orders
+  # BracketPlacer for NEMESIS V3 architecture
+  # Places and manages SL/TP bracket orders for positions
+  # Supports initial bracket placement and dynamic adjustments
+  # rubocop:disable Metrics/ClassLength
+  class BracketPlacer
+    def initialize(event_bus: Core::EventBus.instance, active_cache: Positions::ActiveCache.instance)
+      @event_bus = event_bus
+      @active_cache = active_cache
+      @stats = {
+        brackets_placed: 0,
+        brackets_modified: 0,
+        brackets_failed: 0,
+        sl_orders_placed: 0,
+        tp_orders_placed: 0
+      }
+    end
+
+    # Place bracket orders (SL/TP) for a position
+    # Note: DhanHQ bracket orders are placed WITH the entry order (boProfitValue, boStopLossValue)
+    # This method is for cases where bracket orders need to be placed separately or modified
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param sl_price [Float] Stop loss price
+    # @param tp_price [Float] Take profit price
+    # @param reason [String] Reason for bracket placement
+    # @return [Hash] Result hash with :success, :sl_order, :tp_order, :error
+    def place_bracket(tracker:, sl_price:, tp_price:, reason: nil)
+      return failure_result('Tracker not found') unless tracker
+      return failure_result('Tracker not active') unless tracker.active?
+      return failure_result('Invalid SL/TP prices') unless sl_price&.positive? && tp_price&.positive?
+
+      # For NEMESIS V3, bracket orders are typically placed WITH the entry order
+      # This method is primarily for adjustments or separate placement scenarios
+      # DhanHQ doesn't support modifying bracket orders - we'd need to cancel and replace
+      # For now, we'll update ActiveCache and log the bracket levels
+
+      # Update ActiveCache with SL/TP
+      @active_cache.update_position(
+        tracker.id,
+        sl_price: sl_price,
+        tp_price: tp_price
+      )
+
+      # Emit bracket placed event
+      emit_bracket_placed_event(tracker, sl_price, tp_price, reason)
+
+      @stats[:brackets_placed] += 1
+      @stats[:sl_orders_placed] += 1
+      @stats[:tp_orders_placed] += 1
+
+      success_result(sl_price: sl_price, tp_price: tp_price, reason: reason)
+    rescue StandardError => e
+      @stats[:brackets_failed] += 1
+      Rails.logger.error("[Orders::BracketPlacer] place_bracket failed: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+      failure_result(e.message)
+    end
+
+    # Update bracket orders (modify SL/TP)
+    # Since DhanHQ doesn't support modifying bracket orders, this updates ActiveCache
+    # The actual order modification would require canceling and replacing (not implemented here)
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param sl_price [Float, nil] New stop loss price (nil to keep existing)
+    # @param tp_price [Float, nil] New take profit price (nil to keep existing)
+    # @param reason [String] Reason for modification
+    # @return [Hash] Result hash with :success, :sl_price, :tp_price, :error
+    # rubocop:disable Metrics/AbcSize
+    def update_bracket(tracker:, sl_price: nil, tp_price: nil, reason: nil)
+      return failure_result('Tracker not found') unless tracker
+      return failure_result('Tracker not active') unless tracker.active?
+
+      # Get current bracket levels from ActiveCache
+      position = @active_cache.get_by_tracker_id(tracker.id)
+      return failure_result('Position not found in ActiveCache') unless position
+
+      new_sl = sl_price || position.sl_price
+      new_tp = tp_price || position.tp_price
+
+      return failure_result('Invalid SL/TP prices') unless new_sl&.positive? && new_tp&.positive?
+
+      # Update ActiveCache
+      updates = {}
+      updates[:sl_price] = new_sl if sl_price
+      updates[:tp_price] = new_tp if tp_price
+
+      @active_cache.update_position(tracker.id, **updates)
+
+      # Emit bracket modified event
+      emit_bracket_modified_event(tracker, new_sl, new_tp, reason)
+
+      @stats[:brackets_modified] += 1
+
+      success_result(sl_price: new_sl, tp_price: new_tp, reason: reason)
+    rescue StandardError => e
+      @stats[:brackets_failed] += 1
+      Rails.logger.error("[Orders::BracketPlacer] update_bracket failed: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+      failure_result(e.message)
+    end
+    # rubocop:enable Metrics/AbcSize
+
+    # Move SL to breakeven (entry price)
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param reason [String] Reason for breakeven move
+    # @return [Hash] Result hash
+    def move_to_breakeven(tracker:, reason: 'breakeven_lock')
+      return failure_result('Tracker not found') unless tracker
+      return failure_result('Tracker not active') unless tracker.active?
+
+      entry_price = tracker.entry_price.to_f
+      return failure_result('Invalid entry price') unless entry_price.positive?
+
+      # Update SL to entry price (breakeven)
+      update_bracket(tracker: tracker, sl_price: entry_price, reason: reason)
+    end
+
+    # Move SL to trailing stop price
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param trailing_price [Float] Trailing stop price
+    # @param reason [String] Reason for trailing move
+    # @return [Hash] Result hash
+    def move_to_trailing(tracker:, trailing_price:, reason: 'trailing_stop')
+      return failure_result('Tracker not found') unless tracker
+      return failure_result('Tracker not active') unless tracker.active?
+
+      return failure_result('Invalid trailing price') unless trailing_price&.positive?
+
+      # Update SL to trailing price
+      update_bracket(tracker: tracker, sl_price: trailing_price, reason: reason)
+    end
+
+    # Get statistics
+    # @return [Hash]
+    def stats
+      @stats.dup
+    end
+
+    private
+
+    # Emit bracket placed event via EventBus
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param sl_price [Float] Stop loss price
+    # @param tp_price [Float] Take profit price
+    # @param reason [String] Reason
+    def emit_bracket_placed_event(tracker, sl_price, tp_price, reason)
+      event_data = {
+        tracker_id: tracker.id,
+        order_no: tracker.order_no,
+        segment: tracker.segment,
+        security_id: tracker.security_id,
+        sl_price: sl_price,
+        tp_price: tp_price,
+        reason: reason,
+        timestamp: Time.current
+      }
+
+      @event_bus.publish(Core::EventBus::EVENTS[:bracket_placed] || :bracket_placed, event_data)
+      Rails.logger.info("[Orders::BracketPlacer] Emitted bracket_placed event for #{tracker.order_no}")
+    rescue StandardError => e
+      Rails.logger.error("[Orders::BracketPlacer] Failed to emit bracket_placed event: #{e.class} - #{e.message}")
+    end
+
+    # Emit bracket modified event via EventBus
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param sl_price [Float] New stop loss price
+    # @param tp_price [Float] New take profit price
+    # @param reason [String] Reason
+    def emit_bracket_modified_event(tracker, sl_price, tp_price, reason)
+      event_data = {
+        tracker_id: tracker.id,
+        order_no: tracker.order_no,
+        segment: tracker.segment,
+        security_id: tracker.security_id,
+        sl_price: sl_price,
+        tp_price: tp_price,
+        reason: reason,
+        timestamp: Time.current
+      }
+
+      @event_bus.publish(Core::EventBus::EVENTS[:bracket_modified] || :bracket_modified, event_data)
+      Rails.logger.info("[Orders::BracketPlacer] Emitted bracket_modified event for #{tracker.order_no}")
+    rescue StandardError => e
+      Rails.logger.error("[Orders::BracketPlacer] Failed to emit bracket_modified event: #{e.class} - #{e.message}")
+    end
+
+    # Build success result hash
+    # @param sl_price [Float] Stop loss price
+    # @param tp_price [Float] Take profit price
+    # @param reason [String] Reason
+    # @return [Hash]
+    def success_result(sl_price:, tp_price:, reason: nil)
+      {
+        success: true,
+        sl_price: sl_price,
+        tp_price: tp_price,
+        reason: reason
+      }
+    end
+
+    # Build failure result hash
+    # @param error [String] Error message
+    # @return [Hash]
+    def failure_result(error)
+      {
+        success: false,
+        error: error,
+        sl_price: nil,
+        tp_price: nil
+      }
+    end
+  end
+  # rubocop:enable Metrics/ClassLength
+end
+
+
+# File: app/services/orders/entry_manager.rb
+# frozen_string_literal: true
+
+module Orders
+  # EntryManager for NEMESIS V3 architecture
+  # Orchestrates entry order placement, validation, and position tracking
+  # Integrates with Capital::Allocator, EntryGuard, Orders::Placer, and ActiveCache
+  # rubocop:disable Metrics/ClassLength
+  class EntryManager
+    def initialize(event_bus: Core::EventBus.instance, active_cache: Positions::ActiveCache.instance)
+      @event_bus = event_bus
+      @active_cache = active_cache
+      @stats = {
+        entries_attempted: 0,
+        entries_successful: 0,
+        entries_failed: 0,
+        validation_failures: 0,
+        allocation_failures: 0
+      }
+    end
+
+    # Process entry signal and place order
+    # @param signal_result [Hash] Signal result with pick/candidate data
+    # @param index_cfg [Hash] Index configuration
+    # @param direction [Symbol] :bullish or :bearish
+    # @param scale_multiplier [Integer] Scale multiplier for position sizing
+    # @return [Hash] Result hash with :success, :tracker, :order_no, :error
+    # rubocop:disable Metrics/AbcSize
+    def process_entry(signal_result:, index_cfg:, direction:, scale_multiplier: 1)
+      @stats[:entries_attempted] += 1
+
+      # Extract pick/candidate from signal result
+      pick = extract_pick(signal_result)
+      return failure_result('No pick/candidate found in signal result') unless pick
+
+      # Validate entry using EntryGuard
+      unless Entries::EntryGuard.try_enter(
+        index_cfg: index_cfg,
+        pick: pick,
+        direction: direction,
+        scale_multiplier: scale_multiplier
+      )
+        @stats[:validation_failures] += 1
+        return failure_result('Entry validation failed')
+      end
+
+      # EntryGuard already placed the order and created PositionTracker
+      # We need to find the tracker and add it to ActiveCache
+      tracker = find_tracker_for_pick(pick, index_cfg)
+      unless tracker
+        @stats[:entries_failed] += 1
+        return failure_result('PositionTracker not found after entry')
+      end
+
+      # Calculate SL/TP prices
+      sl_price, tp_price = calculate_sl_tp(tracker.entry_price, direction)
+
+      # Add to ActiveCache
+      position_data = @active_cache.add_position(
+        tracker: tracker,
+        sl_price: sl_price,
+        tp_price: tp_price
+      )
+
+      unless position_data
+        Rails.logger.warn("[Orders::EntryManager] Failed to add position to ActiveCache: #{tracker.id}")
+      end
+
+      # Emit entry_filled event
+      emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price)
+
+      @stats[:entries_successful] += 1
+      success_result(tracker: tracker, position_data: position_data, sl_price: sl_price, tp_price: tp_price)
+    rescue StandardError => e
+      @stats[:entries_failed] += 1
+      Rails.logger.error("[Orders::EntryManager] process_entry failed: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+      failure_result(e.message)
+    end
+    # rubocop:enable Metrics/AbcSize
+
+    # Get statistics
+    # @return [Hash]
+    def stats
+      @stats.dup
+    end
+
+    private
+
+    # Extract pick/candidate from signal result
+    # Handles both old format (pick) and new format (candidate from DerivativeChainAnalyzer)
+    # @param signal_result [Hash] Signal result
+    # @return [Hash, nil] Pick/candidate hash
+    def extract_pick(signal_result)
+      # Try new format first (candidate from DerivativeChainAnalyzer)
+      return signal_result[:candidate] if signal_result[:candidate]
+
+      # Try old format (pick)
+      return signal_result[:pick] if signal_result[:pick]
+
+      # Try direct hash (signal_result itself might be the pick)
+      return signal_result if signal_result.is_a?(Hash) && signal_result[:security_id].present?
+
+      nil
+    end
+
+    # Find PositionTracker for a pick
+    # @param pick [Hash] Pick/candidate data
+    # @param index_cfg [Hash] Index configuration
+    # @return [PositionTracker, nil]
+    def find_tracker_for_pick(pick, index_cfg)
+      segment = pick[:segment] || index_cfg[:segment]
+      security_id = pick[:security_id]
+
+      return nil unless segment.present? && security_id.present?
+
+      # Try to find by security_id (most recent active)
+      tracker = PositionTracker.active
+                               .where(segment: segment, security_id: security_id.to_s)
+                               .order(created_at: :desc)
+                               .first
+
+      return tracker if tracker
+
+      # If not found, might be paper trading - check paper trackers
+      PositionTracker.paper.active
+                     .where(segment: segment, security_id: security_id.to_s)
+                     .order(created_at: :desc)
+                     .first
+    end
+
+    # Calculate SL/TP prices based on entry price and direction
+    # @param entry_price [BigDecimal, Float] Entry price
+    # @param direction [Symbol] :bullish or :bearish
+    # @return [Array<Float, Float>] [sl_price, tp_price]
+    def calculate_sl_tp(entry_price, direction)
+      entry = entry_price.to_f
+      return [nil, nil] unless entry.positive?
+
+      # Default NEMESIS V3 values: SL = 30% below, TP = 60% above for long positions
+      if direction == :bullish
+        sl = entry * 0.70  # 30% below entry
+        tp = entry * 1.60  # 60% above entry
+      else
+        # For bearish (PE), SL is above entry, TP is below entry
+        sl = entry * 1.30  # 30% above entry
+        tp = entry * 0.50  # 50% below entry (more conservative for PE)
+      end
+
+      [sl.round(2), tp.round(2)]
+    end
+
+    # Emit entry_filled event via EventBus
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param pick [Hash] Pick/candidate data
+    # @param index_cfg [Hash] Index configuration
+    # @param direction [Symbol] Direction
+    # @param sl_price [Float] Stop loss price
+    # @param tp_price [Float] Take profit price
+    # rubocop:disable Metrics/ParameterLists
+    def emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price)
+      event_data = {
+        tracker_id: tracker.id,
+        order_no: tracker.order_no,
+        segment: tracker.segment,
+        security_id: tracker.security_id,
+        symbol: pick[:symbol] || tracker.symbol,
+        entry_price: tracker.entry_price.to_f,
+        quantity: tracker.quantity.to_i,
+        direction: direction,
+        index_key: index_cfg[:key],
+        sl_price: sl_price,
+        tp_price: tp_price,
+        timestamp: Time.current
+      }
+
+      @event_bus.publish(Core::EventBus::EVENTS[:entry_filled], event_data)
+      Rails.logger.info("[Orders::EntryManager] Emitted entry_filled event for #{tracker.order_no}")
+    rescue StandardError => e
+      Rails.logger.error("[Orders::EntryManager] Failed to emit entry_filled event: #{e.class} - #{e.message}")
+    end
+    # rubocop:enable Metrics/ParameterLists
+
+    # Build success result hash
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param position_data [PositionData] ActiveCache position data
+    # @param sl_price [Float] Stop loss price
+    # @param tp_price [Float] Take profit price
+    # @return [Hash]
+    def success_result(tracker:, position_data:, sl_price:, tp_price:)
+      {
+        success: true,
+        tracker: tracker,
+        tracker_id: tracker.id,
+        order_no: tracker.order_no,
+        position_data: position_data,
+        sl_price: sl_price,
+        tp_price: tp_price
+      }
+    end
+
+    # Build failure result hash
+    # @param error [String] Error message
+    # @return [Hash]
+    def failure_result(error)
+      {
+        success: false,
+        error: error,
+        tracker: nil,
+        tracker_id: nil,
+        order_no: nil
+      }
+    end
+  end
+  # rubocop:enable Metrics/ClassLength
 end
 
 
@@ -8498,7 +10028,7 @@ module Orders
         end
 
         payload = {
-          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: 'BUY',
           exchangeSegment: seg,
           securityId: sid.to_s,
@@ -8550,7 +10080,7 @@ module Orders
                      end
 
         payload = {
-          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: 'SELL',
           exchangeSegment: position ? position[:exchange_segment] : seg,
           securityId: sid.to_s,
@@ -8609,7 +10139,7 @@ module Orders
                            end
 
         payload = {
-          dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.dig(:dhanhq, :client_id),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: transaction_type,
           exchangeSegment: actual_segment,
           securityId: sid.to_s,
@@ -8694,6 +10224,439 @@ module Orders
         base = value[0, 23]
         "#{base}-#{digest}"
       end
+    end
+  end
+end
+
+
+# File: app/services/positions/active_cache.rb
+# frozen_string_literal: true
+
+require 'singleton'
+require 'concurrent/map'
+
+module Positions
+  # Ultra-fast in-memory position cache for NEMESIS V3
+  # Mirrors Redis PnL + RedisTickCache for sub-millisecond lookups
+  # Subscribes to EventBus LTP events for real-time updates
+  # rubocop:disable Metrics/ClassLength
+  class ActiveCache
+    include Singleton
+
+    # Position data structure
+    PositionData = Struct.new(
+      :tracker_id,
+      :security_id,
+      :segment,
+      :entry_price,
+      :quantity,
+      :sl_price,
+      :tp_price,
+      :high_water_mark,
+      :current_ltp,
+      :pnl,
+      :pnl_pct,
+      :trend,
+      :time_in_position,
+      :breakeven_locked,
+      :trailing_stop_price,
+      :last_updated_at,
+      keyword_init: true
+    ) do
+      def composite_key
+        "#{segment}:#{security_id}"
+      end
+
+      def valid?
+        entry_price&.positive? && current_ltp&.positive?
+      end
+
+      def sl_hit?
+        return false unless sl_price && current_ltp
+
+        # For long positions (CE), SL is below entry
+        current_ltp <= sl_price
+      end
+
+      def tp_hit?
+        return false unless tp_price && current_ltp
+
+        # For long positions (CE), TP is above entry
+        current_ltp >= tp_price
+      end
+
+      def update_ltp(ltp, timestamp: Time.current)
+        self.current_ltp = ltp.to_f
+        self.last_updated_at = timestamp
+        recalculate_pnl
+      end
+
+      def recalculate_pnl
+        return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
+
+        self.pnl = (current_ltp - entry_price) * quantity
+        self.pnl_pct = ((current_ltp - entry_price) / entry_price * 100.0).round(4)
+
+        # Update HWM
+        self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
+      end
+    end
+
+    def initialize
+      @cache = Concurrent::Map.new # composite_key => PositionData
+      @tracker_index = Concurrent::Map.new # tracker_id => composite_key
+      @lock = Mutex.new
+      @event_bus = Core::EventBus.instance
+      @subscription_id = nil
+      @stats = {
+        positions_tracked: 0,
+        updates_processed: 0,
+        errors: 0
+      }
+    end
+
+    # Start the cache (subscribe to EventBus)
+    # @return [Boolean] True if started successfully
+    def start!
+      return true if @subscription_id
+
+      @subscription_id = @event_bus.subscribe(:ltp) { |event| handle_ltp_event(event) }
+      Rails.logger.info('[Positions::ActiveCache] Started and subscribed to LTP events')
+      true
+    rescue StandardError => e
+      Rails.logger.error("[Positions::ActiveCache] Failed to start: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Stop the cache (unsubscribe from EventBus)
+    # @return [Boolean] True if stopped successfully
+    def stop!
+      return false unless @subscription_id
+
+      @event_bus.unsubscribe(@subscription_id)
+      @subscription_id = nil
+      Rails.logger.info('[Positions::ActiveCache] Stopped and unsubscribed from LTP events')
+      true
+    rescue StandardError => e
+      Rails.logger.error("[Positions::ActiveCache] Failed to stop: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Add or update a position in the cache
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param sl_price [Float, nil] Stop loss price
+    # @param tp_price [Float, nil] Take profit price
+    # @return [PositionData] The cached position data
+    # rubocop:disable Metrics/AbcSize
+    def add_position(tracker:, sl_price: nil, tp_price: nil)
+      return nil unless tracker.active?
+      return nil unless tracker.entry_price&.positive?
+
+      composite_key = "#{tracker.segment}:#{tracker.security_id}"
+
+      position_data = PositionData.new(
+        tracker_id: tracker.id,
+        security_id: tracker.security_id.to_s,
+        segment: tracker.segment.to_s,
+        entry_price: tracker.entry_price.to_f,
+        quantity: tracker.quantity.to_i,
+        sl_price: sl_price&.to_f,
+        tp_price: tp_price&.to_f,
+        high_water_mark: tracker.high_water_mark_pnl.to_f,
+        current_ltp: nil, # Will be updated on next LTP event
+        pnl: 0.0,
+        pnl_pct: 0.0,
+        trend: :neutral, # Will be determined from price action
+        time_in_position: Time.current - tracker.created_at,
+        breakeven_locked: tracker.breakeven_locked?,
+        trailing_stop_price: tracker.trailing_stop_price&.to_f,
+        last_updated_at: Time.current
+      )
+
+      @cache[composite_key] = position_data
+      @tracker_index[tracker.id] = composite_key
+      @stats[:positions_tracked] = @cache.size
+
+      # Try to get current LTP from cache
+      ltp = Live::TickCache.ltp(tracker.segment, tracker.security_id)
+      position_data.update_ltp(ltp) if ltp&.positive?
+
+      Rails.logger.debug { "[Positions::ActiveCache] Added position #{tracker.id} (#{composite_key})" }
+      position_data
+    rescue StandardError => e
+      @stats[:errors] += 1
+      Rails.logger.error("[Positions::ActiveCache] Failed to add position #{tracker.id}: #{e.class} - #{e.message}")
+      nil
+    end
+    # rubocop:enable Metrics/AbcSize
+
+    # Remove a position from the cache
+    # @param tracker_id [Integer] PositionTracker ID
+    # @return [Boolean] True if removed
+    def remove_position(tracker_id)
+      composite_key = @tracker_index.delete(tracker_id)
+      return false unless composite_key
+
+      @cache.delete(composite_key)
+      @stats[:positions_tracked] = @cache.size
+      Rails.logger.debug { "[Positions::ActiveCache] Removed position #{tracker_id} (#{composite_key})" }
+      true
+    rescue StandardError => e
+      @stats[:errors] += 1
+      Rails.logger.error("[Positions::ActiveCache] Failed to remove position #{tracker_id}: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Get position data by composite key
+    # @param segment [String] Exchange segment
+    # @param security_id [String] Security ID
+    # @return [PositionData, nil]
+    def get(segment, security_id)
+      composite_key = "#{segment}:#{security_id}"
+      @cache[composite_key]
+    end
+
+    # Get position data by tracker ID
+    # @param tracker_id [Integer] PositionTracker ID
+    # @return [PositionData, nil]
+    def get_by_tracker_id(tracker_id)
+      composite_key = @tracker_index[tracker_id]
+      return nil unless composite_key
+
+      @cache[composite_key]
+    end
+
+    # Get all active positions
+    # @return [Array<PositionData>]
+    def all_positions
+      @cache.values
+    end
+
+    # Get positions for a specific security
+    # @param segment [String] Exchange segment
+    # @param security_id [String] Security ID
+    # @return [Array<PositionData>]
+    def positions_for(segment, security_id)
+      composite_key = "#{segment}:#{security_id}"
+      position = @cache[composite_key]
+      position ? [position] : []
+    end
+
+    # Update position metadata (SL, TP, breakeven, etc.)
+    # @param tracker_id [Integer] PositionTracker ID
+    # @param updates [Hash] Hash of updates (sl_price, tp_price, breakeven_locked, etc.)
+    # @return [Boolean] True if updated
+    def update_position(tracker_id, **updates)
+      position = get_by_tracker_id(tracker_id)
+      return false unless position
+
+      updates.each do |key, value|
+        position[key] = value if position.respond_to?("#{key}=")
+      end
+
+      position.last_updated_at = Time.current
+      Rails.logger.debug { "[Positions::ActiveCache] Updated position #{tracker_id}: #{updates.keys.join(', ')}" }
+      true
+    rescue StandardError => e
+      @stats[:errors] += 1
+      Rails.logger.error("[Positions::ActiveCache] Failed to update position #{tracker_id}: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Bulk load positions from database
+    # @return [Integer] Number of positions loaded
+    def bulk_load!
+      count = 0
+      PositionTracker.active.find_each do |tracker|
+        next unless tracker.entry_price&.positive?
+
+        # Try to get SL/TP from meta or calculate defaults
+        sl_price = calculate_default_sl(tracker)
+        tp_price = calculate_default_tp(tracker)
+
+        add_position(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
+        count += 1
+      end
+
+      Rails.logger.info("[Positions::ActiveCache] Bulk loaded #{count} positions")
+      count
+    rescue StandardError => e
+      Rails.logger.error("[Positions::ActiveCache] Bulk load failed: #{e.class} - #{e.message}")
+      0
+    end
+
+    # Clear all positions
+    # @return [Boolean]
+    def clear
+      @cache.clear
+      @tracker_index.clear
+      @stats[:positions_tracked] = 0
+      Rails.logger.info('[Positions::ActiveCache] Cleared all positions')
+      true
+    end
+
+    # Get statistics
+    # @return [Hash]
+    def stats
+      @stats.merge(positions_tracked: @cache.size)
+    end
+
+    private
+
+    # Handle LTP event from EventBus
+    # @param event [Live::LtpEvent] LTP event
+    def handle_ltp_event(event)
+      return unless event.valid?
+
+      positions = positions_for(event.segment, event.security_id)
+      return if positions.empty?
+
+      positions.each do |position|
+        position.update_ltp(event.ltp, timestamp: event.timestamp)
+        @stats[:updates_processed] += 1
+
+        # Check for SL/TP hits and emit events
+        check_exit_triggers(position, event)
+      end
+    rescue StandardError => e
+      @stats[:errors] += 1
+      Rails.logger.error("[Positions::ActiveCache] Error handling LTP event: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+    end
+
+    # Check for SL/TP hits and emit events
+    # @param position [PositionData] Position data
+    # @param event [Live::LtpEvent] LTP event
+    def check_exit_triggers(position, event)
+      if position.sl_hit?
+        @event_bus.publish(Core::EventBus::EVENTS[:sl_hit], {
+                             tracker_id: position.tracker_id,
+                             position: position,
+                             event: event
+                           })
+        return
+      end
+
+      return unless position.tp_hit?
+
+      @event_bus.publish(Core::EventBus::EVENTS[:tp_hit], {
+                           tracker_id: position.tracker_id,
+                           position: position,
+                           event: event
+                         })
+    end
+
+    # Calculate default SL from tracker (30% below entry for CE)
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @return [Float, nil]
+    def calculate_default_sl(tracker)
+      return nil unless tracker.entry_price&.positive?
+
+      # Default: 30% below entry for long positions
+      tracker.entry_price.to_f * 0.70
+    end
+
+    # Calculate default TP from tracker (60% above entry for CE)
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @return [Float, nil]
+    def calculate_default_tp(tracker)
+      return nil unless tracker.entry_price&.positive?
+
+      # Default: 60% above entry for long positions
+      tracker.entry_price.to_f * 1.60
+    end
+  end
+  # rubocop:enable Metrics/ClassLength
+end
+
+
+# File: app/services/positions/high_water_mark.rb
+# frozen_string_literal: true
+
+module Positions
+  # High Water Mark (HWM) tracking and calculation helper
+  # Provides utilities for trailing stop calculations and HWM-based exits
+  class HighWaterMark
+    # Calculate trailing stop threshold based on HWM
+    # @param hwm [Float] High water mark PnL
+    # @param drop_pct [Float] Percentage drop from HWM to trigger (e.g., 0.20 for 20%)
+    # @return [Float] Trailing stop threshold
+    def self.trailing_threshold(hwm, drop_pct)
+      return 0.0 unless hwm&.positive? && drop_pct&.positive?
+
+      hwm * (1.0 - drop_pct)
+    end
+
+    # Check if current PnL has dropped below trailing threshold
+    # @param current_pnl [Float] Current PnL
+    # @param hwm [Float] High water mark PnL
+    # @param drop_pct [Float] Percentage drop from HWM to trigger
+    # @return [Boolean] True if trailing stop should trigger
+    def self.trailing_triggered?(current_pnl, hwm, drop_pct)
+      return false unless hwm&.positive? && current_pnl
+
+      threshold = trailing_threshold(hwm, drop_pct)
+      current_pnl <= threshold
+    end
+
+    # Calculate HWM-based exit price for long positions
+    # @param entry_price [Float] Entry price
+    # @param hwm_pnl [Float] High water mark PnL (in rupees)
+    # @param quantity [Integer] Position quantity
+    # @return [Float] Exit price based on HWM
+    def self.hwm_exit_price(entry_price, hwm_pnl, quantity)
+      return nil unless entry_price&.positive? && hwm_pnl && quantity&.positive?
+
+      hwm_price = entry_price + (hwm_pnl / quantity.to_f)
+      hwm_price.round(2)
+    end
+
+    # Calculate percentage gain from entry to HWM
+    # @param entry_price [Float] Entry price
+    # @param hwm_price [Float] High water mark price
+    # @return [Float] Percentage gain
+    def self.hwm_gain_pct(entry_price, hwm_price)
+      return 0.0 unless entry_price&.positive? && hwm_price&.positive?
+
+      ((hwm_price - entry_price) / entry_price * 100.0).round(4)
+    end
+
+    # Calculate drawdown from HWM
+    # @param current_pnl [Float] Current PnL
+    # @param hwm [Float] High water mark PnL
+    # @return [Float] Drawdown percentage (0.0 to 1.0)
+    def self.drawdown_from_hwm(current_pnl, hwm)
+      return 0.0 unless hwm&.positive? && current_pnl
+
+      if current_pnl >= hwm
+        0.0
+      else
+        ((hwm - current_pnl) / hwm).round(4)
+      end
+    end
+
+    # Check if position should lock breakeven based on HWM
+    # @param hwm_pnl [Float] High water mark PnL
+    # @param min_profit_for_lock [Float] Minimum profit required to lock breakeven
+    # @return [Boolean] True if breakeven should be locked
+    def self.should_lock_breakeven?(hwm_pnl, min_profit_for_lock)
+      return false unless hwm_pnl && min_profit_for_lock
+
+      hwm_pnl >= min_profit_for_lock
+    end
+
+    # Calculate trailing stop price based on HWM
+    # @param entry_price [Float] Entry price
+    # @param hwm_price [Float] High water mark price
+    # @param trail_pct [Float] Trailing percentage (e.g., 0.20 for 20% from HWM)
+    # @return [Float] Trailing stop price
+    def self.trailing_stop_price(entry_price, hwm_price, trail_pct)
+      return nil unless entry_price&.positive? && hwm_price&.positive? && trail_pct&.positive?
+
+      # Trailing stop is trail_pct below HWM price
+      stop_price = hwm_price * (1.0 - trail_pct)
+      # But never below entry (for long positions)
+      [stop_price, entry_price].max.round(2)
     end
   end
 end
@@ -9688,6 +11651,7 @@ end
 # frozen_string_literal: true
 
 module Signal
+  # rubocop:disable Metrics/ClassLength
   class Scheduler
     DEFAULT_PERIOD = 30 # seconds
     STRATEGY_MAP = {
@@ -9763,7 +11727,7 @@ module Signal
     end
 
     def load_enabled_strategies(index_cfg)
-      strategies_cfg = index_cfg[:strategies] || AlgoConfig.fetch.dig(:strategy) || {}
+      strategies_cfg = index_cfg[:strategies] || AlgoConfig.fetch[:strategy] || {}
       enabled = []
 
       STRATEGY_MAP.each do |key, engine_class|
@@ -9784,9 +11748,11 @@ module Signal
 
     def evaluate_strategies_priority(index_cfg, enabled_strategies)
       chain_cfg = AlgoConfig.fetch[:chain_analyzer] || {}
-      analyzer = Options::ChainAnalyzer.new(
-        index: index_cfg,
-        data_provider: @data_provider,
+
+      # Use DerivativeChainAnalyzer for better integration with Derivative records
+      analyzer = Options::DerivativeChainAnalyzer.new(
+        index_key: index_cfg[:key],
+        expiry: nil, # Auto-select nearest expiry
         config: chain_cfg
       )
 
@@ -9866,6 +11832,7 @@ module Signal
       nil
     end
   end
+  # rubocop:enable Metrics/ClassLength
 end
 
 
@@ -10696,8 +12663,8 @@ class InsideBarStrategy
     prev1 = series.candles[index - 1]
     prev2 = series.candles[index - 2]
 
-    # Check if prev1 was an inside bar
-    return nil unless inside_bar?(prev1, prev2)
+    # Check if prev1 was an inside bar using CandleSeries helper method
+    return nil unless series.inside_bar?(index - 1)
 
     # CE Signal: Breakout above inside bar high
     if candle.high > prev1.high && candle.close > prev1.high
@@ -10728,9 +12695,6 @@ class InsideBarStrategy
     true
   end
 
-  def inside_bar?(candle, parent)
-    candle.high <= parent.high && candle.low >= parent.low
-  end
 
   def calculate_confidence(candle, inside_bar, parent, _direction)
     confidence = 60 # Base for inside bar breakout
@@ -10913,9 +12877,9 @@ class SupertrendAdxStrategy
     trend_at_index = get_trend_at_index(index)
     return nil if trend_at_index.nil?
 
-    # Calculate ADX from candles up to current index
-    partial_candles = series.candles[0..index]
-    adx_value = calculate_adx(partial_candles, 14)
+    # Calculate ADX from candles up to current index using CandleSeries helper
+    partial_series = create_partial_series(index)
+    adx_value = partial_series&.adx(14)
     return nil if adx_value.nil? || adx_value < adx_min_strength
 
     # Determine direction from supertrend
@@ -10968,32 +12932,11 @@ class SupertrendAdxStrategy
     [base, 100].min
   end
 
-  def calculate_adx(candles, period)
-    return nil if candles.size < period + 1
-
-    trs = []
-    plus_dm = []
-    minus_dm = []
-
-    candles.each_cons(2) do |prev, curr|
-      high = curr.high
-      low = curr.low
-      prev_close = prev.close
-
-      tr = [high - low, (high - prev_close).abs, (low - prev_close).abs].max
-      trs << tr
-
-      up_move = high - prev.high
-      down_move = prev.low - low
-
-      plus_dm << (up_move > down_move && up_move.positive? ? up_move : 0)
-      minus_dm << (down_move > up_move && down_move.positive? ? down_move : 0)
-    end
-
-    atr = trs.last(period).sum / period
-    di_plus = 100 * (plus_dm.last(period).sum / period) / atr
-    di_minus = 100 * (minus_dm.last(period).sum / period) / atr
-    ((di_plus - di_minus).abs / (di_plus + di_minus)) * 100
+  def create_partial_series(index)
+    # Create a partial CandleSeries with candles up to the current index
+    partial_series = CandleSeries.new(symbol: series.symbol, interval: series.interval)
+    series.candles[0..index].each { |candle| partial_series.add_candle(candle) }
+    partial_series
   end
 end
 
@@ -11847,13 +13790,13 @@ module WsConnectionTest
         puts "\nDiagnostics:"
 
         # Check if credentials are configured
-        client_id = ENV['CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-        access_token = ENV['ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+        client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+        access_token = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
 
         if client_id.blank? || access_token.blank?
           puts "   ❌ DhanHQ credentials not configured"
-          puts "      Required: CLIENT_ID (or CLIENT_ID)"
-          puts "      Required: ACCESS_TOKEN (or ACCESS_TOKEN)"
+          puts "      Required: DHANHQ_CLIENT_ID (or CLIENT_ID)"
+          puts "      Required: DHANHQ_ACCESS_TOKEN (or ACCESS_TOKEN)"
           puts "\n   To fix: Set credentials in environment variables or .env file"
           return { success: false, error: 'credentials_missing', message: 'DhanHQ credentials not configured' }
         else
@@ -12084,7 +14027,7 @@ module WsConnectionTest
         end
         if ticks_received.zero?
           puts "2. Verify WebSocket connection is active and receiving ticks"
-          puts "3. Check DhanHQ credentials: CLIENT_ID and ACCESS_TOKEN"
+          puts "3. Check DhanHQ credentials: DHANHQ_CLIENT_ID and DHANHQ_ACCESS_TOKEN"
         end
         puts "4. Review application logs for WebSocket errors"
         puts "=" * 80
@@ -12389,10 +14332,32 @@ end
 
 require "dhan_hq"
 
+# Normalize environment variables to support both naming conventions
+# The DhanHQ gem expects variables with DHAN_ prefix (or CLIENT_ID/ACCESS_TOKEN)
+# We support both DHANHQ_ and DHAN_ prefixes for flexibility
+
+# Required credentials - support both naming conventions
+ENV['CLIENT_ID'] ||= ENV['DHANHQ_CLIENT_ID'] if ENV['DHANHQ_CLIENT_ID'].present?
+ENV['ACCESS_TOKEN'] ||= ENV['DHANHQ_ACCESS_TOKEN'] if ENV['DHANHQ_ACCESS_TOKEN'].present?
+
+# Optional gem configuration - normalize DHANHQ_ prefix to DHAN_ prefix for gem compatibility
+# The gem's configure_with_env reads directly from ENV with DHAN_ prefix
+ENV['DHAN_BASE_URL'] ||= ENV['DHANHQ_BASE_URL'] if ENV['DHANHQ_BASE_URL'].present?
+ENV['DHAN_WS_VERSION'] ||= ENV['DHANHQ_WS_VERSION'] if ENV['DHANHQ_WS_VERSION'].present?
+ENV['DHAN_WS_ORDER_URL'] ||= ENV['DHANHQ_WS_ORDER_URL'] if ENV['DHANHQ_WS_ORDER_URL'].present?
+ENV['DHAN_WS_MARKET_FEED_URL'] ||= ENV['DHANHQ_WS_MARKET_FEED_URL'] if ENV['DHANHQ_WS_MARKET_FEED_URL'].present?
+ENV['DHAN_WS_MARKET_DEPTH_URL'] ||= ENV['DHANHQ_WS_MARKET_DEPTH_URL'] if ENV['DHANHQ_WS_MARKET_DEPTH_URL'].present?
+ENV['DHAN_MARKET_DEPTH_LEVEL'] ||= ENV['DHANHQ_MARKET_DEPTH_LEVEL'] if ENV['DHANHQ_MARKET_DEPTH_LEVEL'].present?
+ENV['DHAN_WS_USER_TYPE'] ||= ENV['DHANHQ_WS_USER_TYPE'] if ENV['DHANHQ_WS_USER_TYPE'].present?
+ENV['DHAN_PARTNER_ID'] ||= ENV['DHANHQ_PARTNER_ID'] if ENV['DHANHQ_PARTNER_ID'].present?
+ENV['DHAN_PARTNER_SECRET'] ||= ENV['DHANHQ_PARTNER_SECRET'] if ENV['DHANHQ_PARTNER_SECRET'].present?
+ENV['DHAN_LOG_LEVEL'] ||= ENV['DHANHQ_LOG_LEVEL'] if ENV['DHANHQ_LOG_LEVEL'].present?
+
 # Bootstrap DhanHQ from ENV only
-# expects CLIENT_ID/ACCESS_TOKEN or CLIENT_ID/ACCESS_TOKEN
+# The gem reads: CLIENT_ID, ACCESS_TOKEN, and all DHAN_* variables
 DhanHQ.configure_with_env
 
+# Set logger level (supports both DHAN_LOG_LEVEL and DHANHQ_LOG_LEVEL via normalization above)
 level_name = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase
 begin
   DhanHQ.logger.level = Logger.const_get(level_name)
@@ -12642,6 +14607,32 @@ Rails.application.config.after_initialize do
     # Rails.logger.info("[MockData] Starting mock data service (WebSocket disabled)")
     Live::MockDataService.instance.start!
   end
+end
+
+
+# File: config/initializers/nemesis_feed_listener.rb
+# frozen_string_literal: true
+
+# NEMESIS V3 FeedListener Initializer
+# Starts FeedListener to process ticks and emit events via EventBus
+# This is optional - FeedListener can also be started manually
+
+# Skip in console and tests
+return if Rails.const_defined?(:Console) || Rails.env.test?
+
+Rails.application.config.after_initialize do
+  # Start FeedListener after MarketFeedHub (if enabled)
+  # FeedListener subscribes to MarketFeedHub callbacks, so it's safe to start anytime
+
+  if ENV.fetch('NEMESIS_FEED_LISTENER_ENABLED', 'true') == 'true'
+    Live::FeedListener.instance.start!
+    Rails.logger.info('[Nemesis] FeedListener started')
+  else
+    Rails.logger.debug('[Nemesis] FeedListener disabled via NEMESIS_FEED_LISTENER_ENABLED')
+  end
+rescue StandardError => e
+  Rails.logger.warn("[Nemesis] Failed to start FeedListener: #{e.class} - #{e.message}")
+  # Non-fatal - system continues without FeedListener
 end
 
 

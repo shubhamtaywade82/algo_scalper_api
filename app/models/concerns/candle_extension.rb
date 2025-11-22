@@ -68,22 +68,7 @@ module CandleExtension
 
     def adx(period = 14, interval: '5')
       cs = candles(interval: interval)
-      closes = cs&.closes
-      highs  = cs&.highs
-      lows   = cs&.lows
-      return nil unless closes && highs && lows
-
-      hlc = cs.candles.each_with_index.map do |c, _i|
-        {
-          date_time: Time.zone.at(c.timestamp || 0),
-          high: c.high,
-          low: c.low,
-          close: c.close
-        }
-      end
-
-      ta_adx = TechnicalAnalysis::Adx.calculate(hlc, period: period).first
-      ta_adx&.adx
+      cs&.adx(period)
     end
 
     def supertrend_signal(interval: '5')

@@ -7,23 +7,18 @@ module Indicators
     end
 
     def rsi(period = 14)
-      RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: @series.closes, period:).call
+      # Use CandleSeries helper method instead of duplicating logic
+      @series.rsi(period)
     end
 
-    def macd
-      RubyTechnicalAnalysis::Macd.new(series: @series.closes).call
+    def macd(fast_period = 12, slow_period = 26, signal_period = 9)
+      # Use CandleSeries helper method instead of duplicating logic
+      @series.macd(fast_period, slow_period, signal_period)
     end
 
     def adx(period = 14)
-      hlc = @series.candles.each_with_index.map do |c, _i|
-        {
-          date_time: Time.zone.at(c.timestamp || 0),
-          high: c.high,
-          low: c.low,
-          close: c.close
-        }
-      end
-      TechnicalAnalysis::Adx.calculate(hlc, period:).last.adx
+      # Use CandleSeries helper method instead of duplicating hlc logic
+      @series.adx(period)
     end
 
     def bullish_signal?

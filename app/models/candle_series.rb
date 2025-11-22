@@ -97,7 +97,35 @@ class CandleSeries
   end
 
   def atr(period = 14)
+    return nil if candles.size < period + 1
+
     TechnicalAnalysis::Atr.calculate(hlc, period: period).first.atr
+  rescue TechnicalAnalysis::Validation::ValidationError => e
+    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
+    nil
+  rescue ArgumentError, TypeError => e
+    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
+    nil
+  rescue StandardError => e
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
+    nil
+  end
+
+  def adx(period = 14)
+    return nil if candles.size < period + 1
+
+    result = TechnicalAnalysis::Adx.calculate(hlc, period: period)
+    return nil if result.empty?
+
+    result.last.adx
+  rescue ArgumentError, TypeError, StandardError => e
+    # Don't catch NoMethodError as it indicates programming errors
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    nil
   end
 
   def swing_high?(index, lookback = 2)
@@ -168,8 +196,10 @@ class CandleSeries
     return nil if candles.empty?
 
     RubyTechnicalAnalysis::RelativeStrengthIndex.new(series: closes, period: period).call
-  rescue ArgumentError, TypeError, StandardError => e
-    # Don't catch NoMethodError as it indicates programming errors
+  rescue ArgumentError, TypeError => e
+    Rails.logger.warn("[CandleSeries] RSI calculation failed: #{e.message}")
+    nil
+  rescue StandardError => e
     raise if e.is_a?(NoMethodError)
 
     Rails.logger.warn("[CandleSeries] RSI calculation failed: #{e.message}")
@@ -195,9 +225,20 @@ class CandleSeries
   end
 
   def macd(fast_period = 12, slow_period = 26, signal_period = 9)
+    return nil if candles.empty?
+    return nil if closes.size < slow_period + signal_period
+
     macd = RubyTechnicalAnalysis::Macd.new(series: closes, fast_period: fast_period, slow_period: slow_period,
                                            signal_period: signal_period)
-    macd.call
+    result = macd.call
+    return nil if result.nil? || !result.is_a?(Array) || result.size < 3
+
+    result # Returns [macd, signal, histogram] array
+  rescue ArgumentError, TypeError, StandardError => e
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] MACD calculation failed: #{e.message}")
+    nil
   end
 
   def rate_of_change(period = 5)
@@ -270,6 +311,8 @@ class CandleSeries
   end
 
   def obv
+    return nil if candles.empty?
+
     dcv = candles.each_with_index.map do |c, _i|
       {
         date_time: Time.zone.at(c.timestamp || 0),
@@ -278,6 +321,17 @@ class CandleSeries
       }
     end
 
+    # OBV.calculate is a class method that takes an array of hashes
+    # The gem expects the data in a specific format
     TechnicalAnalysis::Obv.calculate(dcv)
+  rescue ArgumentError => e
+    # OBV.calculate might have different signature - try alternative approach
+    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
+    nil
+  rescue TypeError, StandardError => e
+    raise if e.is_a?(NoMethodError)
+
+    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
+    nil
   end
 end
