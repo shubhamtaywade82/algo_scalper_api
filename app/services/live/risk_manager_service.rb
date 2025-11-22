@@ -15,12 +15,16 @@ module Live
   class RiskManagerService
     LOOP_INTERVAL = 5
     API_CALL_STAGGER_SECONDS = 1.0
+    MAX_RETRIES_ON_RATE_LIMIT = 3
+    RATE_LIMIT_BACKOFF_BASE = 2.0 # seconds
 
     def initialize(exit_engine: nil)
       @exit_engine = exit_engine
       @mutex = Mutex.new
       @running = false
       @thread = nil
+      @last_api_call_time = Time.zone.at(0)
+      @rate_limit_errors = {} # Track rate limit errors per segment:security_id
 
       # Watchdog ensures service thread is restarted if it dies (lightweight)
       @watchdog_thread = Thread.new do
@@ -312,6 +316,9 @@ module Live
       paper_trackers.each do |tracker|
         next unless tracker.entry_price.present? && tracker.quantity.present?
 
+        # Stagger API calls to avoid rate limiting
+        stagger_api_calls
+
         ltp = get_paper_ltp(tracker)
         unless ltp
           Rails.logger.debug { "[RiskManager] No LTP for paper tracker #{tracker.order_no}" }
@@ -360,6 +367,9 @@ module Live
 
         position = positions[tracker.security_id.to_s]
         tracker.hydrate_pnl_from_cache!
+
+        # Stagger API calls to avoid rate limiting
+        stagger_api_calls
 
         ltp = if tracker.paper?
                 get_paper_ltp(tracker)
@@ -419,37 +429,96 @@ module Live
       security_id = tracker.security_id
       return nil unless segment.present? && security_id.present?
 
+      # Try WebSocket TickCache first (fastest, no API call)
       cached = Live::TickCache.ltp(segment, security_id)
       return BigDecimal(cached.to_s) if cached
 
+      # Try RedisTickCache (cached from WebSocket or previous API calls)
       tick_data = begin
-        Live::TickCache.fetch(segment, security_id)
+        Live::RedisTickCache.instance.fetch_tick(segment, security_id)
       rescue StandardError
         nil
       end
       return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
 
+      # Check if we're in rate limit cooldown for this security
+      cache_key = "#{segment}:#{security_id}"
+      if @rate_limit_errors[cache_key]
+        last_error_time = @rate_limit_errors[cache_key][:last_error]
+        backoff_seconds = @rate_limit_errors[cache_key][:backoff_seconds] || RATE_LIMIT_BACKOFF_BASE
+        if Time.current - last_error_time < backoff_seconds
+          Rails.logger.debug { "[RiskManager] Skipping API call for #{cache_key} (rate limit cooldown: #{backoff_seconds.round(1)}s)" }
+          return nil
+        end
+      end
+
+      # Try tradable's fetch method (may use cache)
       tradable = tracker.tradable
       if tradable
         ltp = begin
           tradable.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
-        rescue StandardError
+        rescue StandardError => e
+          handle_rate_limit_error(e, cache_key)
           nil
         end
         return BigDecimal(ltp.to_s) if ltp
       end
 
+      # Last resort: Direct API call (with rate limiting)
       begin
         response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
         if response['status'] == 'success'
           option_data = response.dig('data', segment, security_id.to_s)
-          return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
+          if option_data && option_data['last_price']
+            # Clear rate limit error on success
+            @rate_limit_errors.delete(cache_key)
+            return BigDecimal(option_data['last_price'].to_s)
+          end
         end
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] get_paper_ltp API error for #{tracker.order_no}: #{e.class} - #{e.message}")
+        handle_rate_limit_error(e, cache_key, tracker.order_no)
       end
 
       nil
+    end
+
+    # Stagger API calls to avoid rate limiting
+    def stagger_api_calls
+      @mutex.synchronize do
+        elapsed = Time.current - @last_api_call_time
+        if elapsed < API_CALL_STAGGER_SECONDS
+          sleep(API_CALL_STAGGER_SECONDS - elapsed)
+        end
+        @last_api_call_time = Time.current
+      end
+    end
+
+    # Handle rate limit errors with exponential backoff
+    def handle_rate_limit_error(error, cache_key, order_no = nil)
+      error_msg = error.message.to_s
+      is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit') || error.is_a?(DhanHQ::RateLimitError)
+
+      if is_rate_limit
+        # Exponential backoff: 2s, 4s, 8s, etc.
+        current_backoff = @rate_limit_errors[cache_key]&.dig(:backoff_seconds) || RATE_LIMIT_BACKOFF_BASE
+        retry_count = @rate_limit_errors[cache_key]&.dig(:retry_count) || 0
+
+        if retry_count < MAX_RETRIES_ON_RATE_LIMIT
+          new_backoff = current_backoff * 2
+          @rate_limit_errors[cache_key] = {
+            last_error: Time.current,
+            backoff_seconds: new_backoff,
+            retry_count: retry_count + 1
+          }
+          Rails.logger.warn("[RiskManager] Rate limit for #{cache_key} - backing off for #{new_backoff.round(1)}s (retry #{retry_count + 1}/#{MAX_RETRIES_ON_RATE_LIMIT})")
+        else
+          Rails.logger.error("[RiskManager] Rate limit exceeded max retries for #{cache_key} - skipping API calls")
+        end
+      else
+        # Non-rate-limit error - log normally
+        log_msg = order_no ? "get_paper_ltp API error for #{order_no}" : "get_paper_ltp API error for #{cache_key}"
+        Rails.logger.error("[RiskManager] #{log_msg}: #{error.class} - #{error.message}")
+      end
     end
 
     def fetch_ltp(position, tracker)
