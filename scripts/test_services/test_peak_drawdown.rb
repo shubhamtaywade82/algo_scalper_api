@@ -19,13 +19,43 @@ ServiceTestHelper.print_info("Exit triggers when: peak_profit_pct - current_prof
 
 # Test 2: Create test position and simulate profit
 ServiceTestHelper.print_section('2. Create Test Position with Profit')
-tracker = PositionTracker.active.first || create(:position_tracker,
-                                                  order_no: 'TEST-PEAK-001',
-                                                  security_id: '49081',
-                                                  segment: 'NSE_FNO',
-                                                  entry_price: 150.0,
-                                                  quantity: 75,
-                                                  status: 'active')
+# Try to find an existing paper PositionTracker, or create a new one
+tracker = PositionTracker.active.where(paper: true).first
+
+unless tracker
+  # Create a new paper PositionTracker using the helper
+  derivative = ServiceTestHelper.find_atm_or_otm_derivative(
+    underlying_symbol: 'NIFTY',
+    option_type: 'CE',
+    preference: :atm
+  )
+
+  if derivative
+    seg = derivative.exchange_segment || 'NSE_FNO'
+    sid = derivative.security_id
+    ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s, suppress_rate_limit_warning: true) || 150.0
+
+    tracker = ServiceTestHelper.create_position_tracker(
+      watchable: derivative,
+      segment: seg,
+      security_id: sid.to_s,
+      side: 'long_ce',
+      quantity: 75,
+      entry_price: ltp,
+      paper: true
+    )
+  end
+end
+
+unless tracker
+  ServiceTestHelper.print_error("Failed to find or create paper PositionTracker")
+  exit 1
+end
+
+ServiceTestHelper.print_info("Using paper PositionTracker ID: #{tracker.id}")
+ServiceTestHelper.print_info("  Symbol: #{tracker.symbol}")
+ServiceTestHelper.print_info("  Entry Price: ₹#{tracker.entry_price}")
+ServiceTestHelper.print_info("  Status: #{tracker.status}")
 
 active_cache = Positions::ActiveCache.instance
 position_data = active_cache.add_position(
@@ -84,30 +114,30 @@ position_data.update_ltp(187.5) # 25% profit (peak)
 position_data.update_ltp(177.0) # 18% profit (7% drawdown from 25%)
 
 trailing_engine = Live::TrailingEngine.new
-exit_engine = instance_double(Live::ExitEngine)
 
-# Mock exit execution
-exit_called = false
-exit_reason = nil
-allow(exit_engine).to receive(:execute_exit) do |tracker_arg, reason_arg|
-  exit_called = true
-  exit_reason = reason_arg
-  true
-end
-
-allow(PositionTracker).to receive(:find_by).and_return(tracker)
-allow(tracker).to receive(:active?).and_return(true)
-allow(tracker).to receive(:with_lock).and_yield
+# Create a real ExitEngine instance for testing
+order_router = TradingSystem::OrderRouter.new
+exit_engine = Live::ExitEngine.new(order_router: order_router)
 
 # Process tick - should trigger exit
 result = trailing_engine.process_tick(position_data, exit_engine: exit_engine)
 
-if result[:exit_triggered] && exit_called
+if result[:exit_triggered]
   ServiceTestHelper.print_success("Peak drawdown exit triggered successfully")
-  ServiceTestHelper.print_info("  Exit reason: #{exit_reason}")
+  ServiceTestHelper.print_info("  Exit reason: #{result[:reason]}")
   ServiceTestHelper.print_info("  Peak: #{position_data.peak_profit_pct.round(2)}%")
   ServiceTestHelper.print_info("  Current: #{position_data.pnl_pct.round(2)}%")
   ServiceTestHelper.print_info("  Drawdown: #{(position_data.peak_profit_pct - position_data.pnl_pct).round(2)}%")
+
+  # Check if position was actually exited
+  tracker.reload
+  if tracker.status == 'exited'
+    exit_reason = tracker.meta.is_a?(Hash) ? tracker.meta['exit_reason'] : nil
+    ServiceTestHelper.print_info("  Position status: exited")
+    ServiceTestHelper.print_info("  Database exit reason: #{exit_reason || 'N/A'}")
+  else
+    ServiceTestHelper.print_info("  Position status: #{tracker.status} (exit may have failed)")
+  end
 else
   ServiceTestHelper.print_warning("Exit not triggered (may need adjustment)")
 end
@@ -116,25 +146,29 @@ end
 ServiceTestHelper.print_section('5. Idempotency Test')
 ServiceTestHelper.print_info("Testing that exit is not triggered multiple times...")
 
-# Reset exit tracking
-exit_called = false
-exit_count = 0
-allow(exit_engine).to receive(:execute_exit) do
-  exit_count += 1
-  exit_called = true
-  true
-end
+# Reload tracker to get current status
+tracker.reload
+initial_status = tracker.status
 
-# Process tick multiple times with same drawdown
+# Process tick multiple times with same drawdown (position should already be exited)
+exit_triggered_count = 0
 3.times do |i|
   result = trailing_engine.process_tick(position_data, exit_engine: exit_engine)
+  exit_triggered_count += 1 if result[:exit_triggered]
   ServiceTestHelper.print_info("  Attempt #{i + 1}: Exit triggered: #{result[:exit_triggered]}")
 end
 
-if exit_count <= 1
-  ServiceTestHelper.print_success("Exit called at most once (idempotent)")
+# Check final status
+tracker.reload
+ServiceTestHelper.print_info("  Initial status: #{initial_status}")
+ServiceTestHelper.print_info("  Final status: #{tracker.status}")
+ServiceTestHelper.print_info("  Exit triggered count: #{exit_triggered_count}")
+
+# Idempotency: Once exited, status should remain 'exited' and no more exits should trigger
+if tracker.status == 'exited' && exit_triggered_count <= 1
+  ServiceTestHelper.print_success("Exit is idempotent (position stays exited, no double exit)")
 else
-  ServiceTestHelper.print_warning("Exit called #{exit_count} times (may need idempotency check)")
+  ServiceTestHelper.print_warning("Exit may not be fully idempotent (status: #{tracker.status}, triggers: #{exit_triggered_count})")
 end
 
 ServiceTestHelper.print_section('Summary')
