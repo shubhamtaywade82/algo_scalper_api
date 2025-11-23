@@ -99,6 +99,8 @@ module Signal
     def evaluate_strategies_priority(index_cfg, enabled_strategies)
       chain_cfg = AlgoConfig.fetch[:chain_analyzer] || {}
 
+      return evaluate_with_direction_priority(index_cfg, enabled_strategies, chain_cfg) if direction_first_enabled?
+
       # Use DerivativeChainAnalyzer for better integration with Derivative records
       analyzer = Options::DerivativeChainAnalyzer.new(
         index_key: index_cfg[:key],
@@ -149,7 +151,12 @@ module Signal
 
     def process_signal(index_cfg, signal)
       pick = build_pick_from_signal(signal)
-      direction = determine_direction(index_cfg)
+      direction_override = signal.dig(:meta, :direction)&.to_sym
+      direction = if direction_first_enabled? && direction_override
+                    direction_override
+                  else
+                    determine_direction(index_cfg)
+                  end
       multiplier = signal[:meta][:multiplier] || 1
 
       result = Entries::EntryGuard.try_enter(
@@ -167,8 +174,9 @@ module Signal
     end
 
     def build_pick_from_signal(signal)
+      segment = signal[:segment] || signal[:exchange_segment]
       {
-        segment: signal[:segment],
+        segment: segment,
         security_id: signal[:security_id],
         symbol: signal[:meta][:candidate_symbol] || 'UNKNOWN',
         lot_size: signal[:meta][:lot_size] || 1,
@@ -180,6 +188,81 @@ module Signal
       Providers::DhanhqProvider.new
     rescue NameError
       nil
+    end
+
+    def evaluate_with_direction_priority(index_cfg, enabled_strategies, chain_cfg)
+      trend_config = signal_config
+      dir_ctx = Signal::TrendScorer.compute_direction(
+        index_cfg: index_cfg,
+        primary_tf: trend_config[:primary_timeframe] || '1m',
+        confirmation_tf: trend_config[:confirmation_timeframe] || '5m',
+        bullish_threshold: direction_thresholds[:bullish],
+        bearish_threshold: direction_thresholds[:bearish]
+      )
+      direction = dir_ctx[:direction]
+      trend_score = dir_ctx[:trend_score]
+
+      unless direction
+        Rails.logger.debug { "[SignalScheduler] Skipping #{index_cfg[:key]} - direction undetermined" }
+        return nil
+      end
+
+      candidate = select_candidate_for_direction(index_cfg, direction, trend_score, chain_cfg)
+      return nil unless candidate
+
+      enabled_strategies.each do |strategy|
+        signal = evaluate_strategy(index_cfg, strategy, candidate)
+        next unless signal
+
+        signal[:meta] ||= {}
+        signal[:meta][:direction] ||= direction
+        signal[:meta][:trend_score] ||= trend_score if trend_score
+        return signal
+      end
+
+      nil
+    end
+
+    def select_candidate_for_direction(index_cfg, direction, trend_score, chain_cfg)
+      selector = Options::StrikeSelector.new
+      selection = selector.select(
+        index_key: index_cfg[:key],
+        direction: direction,
+        trend_score: trend_score,
+        config: chain_cfg
+      )
+      return unless selection
+
+      normalize_candidate(selection)
+    end
+
+    def normalize_candidate(selection)
+      candidate = selection.dup
+      candidate[:segment] ||= candidate[:exchange_segment]
+      candidate[:type] ||= candidate[:option_type]
+      candidate[:strike] ||= candidate[:strike_price]
+      candidate[:trend_score] ||= candidate[:score]
+      candidate
+    end
+
+    def direction_first_enabled?
+      feature_flags[:enable_direction_before_chain] == true
+    end
+
+    def feature_flags
+      AlgoConfig.fetch[:feature_flags] || {}
+    end
+
+    def signal_config
+      AlgoConfig.fetch[:signals] || {}
+    end
+
+    def direction_thresholds
+      thresholds = signal_config[:direction_thresholds] || {}
+      {
+        bullish: thresholds[:bullish]&.to_f || 14.0,
+        bearish: thresholds[:bearish]&.to_f || 7.0
+      }
     end
   end
   # rubocop:enable Metrics/ClassLength

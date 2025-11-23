@@ -78,47 +78,54 @@ module Entries
           return false
         end
 
-        # Paper trading mode: Skip real order placement, create PositionTracker directly
-        if paper_trading_enabled?
-          return create_paper_tracker!(
-            instrument: instrument,
-            pick: pick,
-            side: side,
-            quantity: quantity,
-            index_cfg: index_cfg,
-            ltp: ltp
-          )
-        end
+        tracker =
+          if paper_trading_enabled?
+            create_paper_tracker!(
+              instrument: instrument,
+              pick: pick,
+              side: side,
+              quantity: quantity,
+              index_cfg: index_cfg,
+              ltp: ltp
+            )
+          else
+            # Live trading: Place real order
+            response = Orders.config.place_market(
+              side: 'buy',
+              segment: segment,
+              security_id: pick[:security_id],
+              qty: quantity,
+              meta: {
+                client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
+                ltp: ltp # Pass resolved LTP (from WS or API)
+              }
+            )
 
-        # Live trading: Place real order
-        response = Orders.config.place_market(
-          side: 'buy',
-          segment: segment,
-          security_id: pick[:security_id],
-          qty: quantity,
-          meta: {
-            client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
-            ltp: ltp # Pass resolved LTP (from WS or API)
-          }
-        )
+            order_no = extract_order_no(response)
+            unless order_no
+              Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+              return false
+            end
 
-        order_no = extract_order_no(response)
-        unless order_no
-          Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+            created = create_tracker!(
+              instrument: instrument,
+              order_no: order_no,
+              pick: pick,
+              side: side,
+              quantity: quantity,
+              index_cfg: index_cfg,
+              ltp: ltp
+            )
+            Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}") if created
+            created
+          end
+
+        unless tracker
+          Rails.logger.warn("[EntryGuard] Failed to persist tracker for #{index_cfg[:key]}: #{pick[:symbol]}")
           return false
         end
 
-        create_tracker!(
-          instrument: instrument,
-          order_no: order_no,
-          pick: pick,
-          side: side,
-          quantity: quantity,
-          index_cfg: index_cfg,
-          ltp: ltp
-        )
-
-        Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
+        post_entry_wiring(tracker: tracker, side: side, index_cfg: index_cfg)
         true
       rescue StandardError => e
         Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
@@ -476,10 +483,10 @@ module Entries
         )
 
         Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")
-        true
+        tracker
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist paper tracker: #{e.record.errors.full_messages.to_sentence}")
-        false
+        nil
       end
 
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:)
@@ -500,6 +507,7 @@ module Entries
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")
+        nil
       end
 
       def find_watchable_for_pick(pick:, instrument:)
@@ -528,6 +536,85 @@ module Entries
         return false if segment.blank?
 
         Orders::Placer::VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
+      end
+
+      def post_entry_wiring(tracker:, side:, index_cfg:)
+        entry_price = tracker.entry_price.to_f
+        sl_price, tp_price = initial_bracket_prices(entry_price: entry_price, side: side, index_cfg: index_cfg)
+
+        if auto_subscribe_enabled?
+          subscribe_to_option_feed(tracker)
+          add_to_active_cache(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
+        end
+
+        place_initial_bracket(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
+      end
+
+      # rubocop:disable Lint/UnusedMethodArgument
+      def initial_bracket_prices(entry_price:, side:, index_cfg:)
+        return [nil, nil] unless entry_price&.positive?
+
+        risk_cfg = AlgoConfig.fetch[:risk] || {}
+        sl_pct = safe_percentage(risk_cfg[:sl_pct]) || 0.30
+        tp_pct = safe_percentage(risk_cfg[:tp_pct]) || 0.60
+
+        [
+          (entry_price * (1 - sl_pct)).round(2),
+          (entry_price * (1 + tp_pct)).round(2)
+        ]
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Failed to compute initial brackets: #{e.class} - #{e.message}")
+        [nil, nil]
+      end
+      # rubocop:enable Lint/UnusedMethodArgument
+
+      def safe_percentage(value)
+        pct = value.to_f
+        pct.positive? && pct < 1.0 ? pct : nil
+      end
+
+      def subscribe_to_option_feed(tracker)
+        return unless option_segment?(tracker.segment)
+
+        Live::MarketFeedHub.instance.subscribe_instrument(segment: tracker.segment, security_id: tracker.security_id)
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Feed subscribe failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def add_to_active_cache(tracker:, sl_price:, tp_price:)
+        Positions::ActiveCache.instance.add_position(
+          tracker: tracker,
+          sl_price: sl_price,
+          tp_price: tp_price
+        )
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] ActiveCache add_position failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def place_initial_bracket(tracker:, sl_price:, tp_price:)
+        Orders::BracketPlacer.place_bracket(
+          tracker: tracker,
+          sl_price: sl_price,
+          tp_price: tp_price,
+          reason: 'initial_bracket'
+        )
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Initial bracket placement failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def auto_subscribe_enabled?
+        feature_flags[:enable_auto_subscribe_unsubscribe] == true
+      end
+
+      def feature_flags
+        AlgoConfig.fetch[:feature_flags] || {}
+      rescue StandardError
+        {}
+      end
+
+      def option_segment?(segment)
+        seg = segment.to_s.upcase
+        seg.include?('FNO') || seg.include?('COMM') || seg.include?('CUR')
       end
     end
   end

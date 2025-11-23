@@ -26,6 +26,9 @@ module Live
       @thread = nil
       @last_api_call_time = Time.zone.at(0)
       @rate_limit_errors = {} # Track rate limit errors per segment:security_id
+      @sleep_mutex = Mutex.new
+      @sleep_cv = ConditionVariable.new
+      @position_subscriptions = []
 
       # Watchdog ensures service thread is restarted if it dies (lightweight)
       @watchdog_thread = Thread.new do
@@ -37,6 +40,8 @@ module Live
           sleep 10
         end
       end
+
+      subscribe_to_position_events
     end
 
     # Start monitoring loop (non-blocking)
@@ -53,13 +58,17 @@ module Live
           break unless @running
 
           begin
+            if demand_driven_enabled? && Positions::ActiveCache.instance.empty?
+              wait_for_interval(loop_sleep_interval(true))
+              next
+            end
+
             monitor_loop(last_paper_pnl_update)
-            # update timestamp after paper update occurred inside monitor_loop
             last_paper_pnl_update = Time.current
           rescue StandardError => e
             Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
           end
-          sleep LOOP_INTERVAL
+          wait_for_interval(loop_sleep_interval(false))
         end
       end
     end
@@ -68,6 +77,8 @@ module Live
       @running = false
       @thread&.kill
       @thread = nil
+      unsubscribe_from_position_events
+      wake_up!
     end
 
     def running?
@@ -164,21 +175,24 @@ module Live
         BigDecimal(0)
       end
 
-      PositionTracker.active.find_each do |tracker|
-        snap = pnl_snapshot(tracker)
-        next unless snap
+      positions = active_cache_positions
+      tracker_map = trackers_for_positions(positions)
 
-        pnl = snap[:pnl]
-        hwm = snap[:hwm_pnl]
-        next if hwm.nil? || hwm.zero?
+      positions.each do |position|
+        tracker = tracker_map[position.tracker_id]
+        next unless tracker&.active?
+
+        pnl = position.pnl
+        hwm = position.high_water_mark
+        next if pnl.nil? || hwm.nil? || hwm.zero?
 
         drop_pct = (hwm - pnl) / hwm
-        if drop_pct >= drop_threshold
-          reason = "TRAILING STOP drop=#{drop_pct.round(3)}"
-          dispatch_exit(exit_engine, tracker, reason)
-        end
+        next unless drop_pct >= drop_threshold
+
+        reason = "TRAILING STOP drop=#{drop_pct.round(3)}"
+        dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
       end
     end
 
@@ -195,26 +209,30 @@ module Live
         BigDecimal(0)
       end
 
-      PositionTracker.active.find_each do |tracker|
-        snapshot = pnl_snapshot(tracker)
-        next unless snapshot
+      positions = active_cache_positions
+      tracker_map = trackers_for_positions(positions)
 
-        pnl_pct = snapshot[:pnl_pct]
+      positions.each do |position|
+        tracker = tracker_map[position.tracker_id]
+        next unless tracker&.active?
+
+        pnl_pct = position.pnl_pct
         next if pnl_pct.nil?
 
-        if pnl_pct <= -sl_pct
-          reason = "SL HIT #{(pnl_pct * 100).round(2)}%"
+        normalized_pct = pnl_pct.to_f / 100.0
+
+        if normalized_pct <= -sl_pct.to_f
+          reason = "SL HIT #{pnl_pct.round(2)}%"
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
 
-        if pnl_pct >= tp_pct
-          reason = "TP HIT #{(pnl_pct * 100).round(2)}%"
-          dispatch_exit(exit_engine, tracker, reason)
-          next
-        end
+        next unless normalized_pct >= tp_pct.to_f
+
+        reason = "TP HIT #{pnl_pct.round(2)}%"
+        dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
       end
     end
 
@@ -229,15 +247,21 @@ module Live
       market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
       return if market_close_time && now >= market_close_time
 
-      PositionTracker.active.find_each do |tracker|
-        tracker.hydrate_pnl_from_cache!
-        if tracker.last_pnl_rupees.present? && tracker.last_pnl_rupees.positive?
+      positions = active_cache_positions
+      tracker_map = trackers_for_positions(positions)
+
+      positions.each do |position|
+        tracker = tracker_map[position.tracker_id]
+        next unless tracker&.active?
+
+        pnl_rupees = position.pnl
+        if pnl_rupees.to_f.positive?
           min_profit = begin
             BigDecimal((risk[:min_profit_rupees] || 0).to_s)
           rescue StandardError
             BigDecimal(0)
           end
-          if min_profit.positive? && tracker.last_pnl_rupees < min_profit
+          if min_profit.positive? && BigDecimal(pnl_rupees.to_s) < min_profit
             Rails.logger.info("[RiskManager] Time-based exit skipped for #{tracker.order_no} - PnL < min_profit")
             next
           end
@@ -246,7 +270,7 @@ module Live
         reason = "time-based exit (#{exit_time.strftime('%H:%M')})"
         dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_time_based_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] enforce_time_based_exit error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
       end
     end
 
@@ -767,6 +791,17 @@ module Live
       nil
     end
 
+    def active_cache_positions
+      Positions::ActiveCache.instance.all_positions
+    end
+
+    def trackers_for_positions(position_list)
+      ids = position_list.map(&:tracker_id).compact
+      return {} if ids.empty?
+
+      PositionTracker.where(id: ids).index_by(&:id)
+    end
+
     def risk_config
       raw = begin
         AlgoConfig.fetch[:risk]
@@ -807,6 +842,58 @@ module Live
       BigDecimal(value.to_s)
     rescue StandardError
       BigDecimal(0)
+    end
+
+    def demand_driven_enabled?
+      feature_flags[:enable_demand_driven_services] == true
+    end
+
+    def feature_flags
+      AlgoConfig.fetch[:feature_flags] || {}
+    rescue StandardError
+      {}
+    end
+
+    def loop_sleep_interval(active_cache_empty)
+      interval_ms =
+        if active_cache_empty
+          risk_config[:loop_interval_idle] || 5000
+        else
+          risk_config[:loop_interval_active] || 500
+        end
+      interval_ms.to_f / 1000.0
+    end
+
+    def wait_for_interval(seconds)
+      return sleep(seconds) unless demand_driven_enabled?
+
+      @sleep_mutex.synchronize do
+        @sleep_cv.wait(@sleep_mutex, seconds) if @running
+      end
+    end
+
+    def wake_up!
+      @sleep_mutex.synchronize do
+        @sleep_cv.broadcast
+      end
+    end
+
+    def subscribe_to_position_events
+      return if @position_subscriptions.any?
+
+      %w[positions.added positions.removed].each do |event|
+        token = ActiveSupport::Notifications.subscribe(event) { wake_up! }
+        @position_subscriptions << token
+      end
+    end
+
+    def unsubscribe_from_position_events
+      return if @position_subscriptions.empty?
+
+      @position_subscriptions.each do |token|
+        ActiveSupport::Notifications.unsubscribe(token)
+      end
+      @position_subscriptions.clear
     end
   end
 end

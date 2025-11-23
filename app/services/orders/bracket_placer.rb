@@ -6,6 +6,22 @@ module Orders
   # Supports initial bracket placement and dynamic adjustments
   # rubocop:disable Metrics/ClassLength
   class BracketPlacer
+    class << self
+      def place_bracket(...)
+        shared_instance.place_bracket(...)
+      end
+
+      def update_bracket(...)
+        shared_instance.update_bracket(...)
+      end
+
+      private
+
+      def shared_instance
+        @shared_instance ||= new
+      end
+    end
+
     def initialize(event_bus: Core::EventBus.instance, active_cache: Positions::ActiveCache.instance)
       @event_bus = event_bus
       @active_cache = active_cache

@@ -20,6 +20,8 @@ module Live
       @running = false
       @thread = nil
       @logger = defined?(Rails) ? Rails.logger : Logger.new($stdout)
+      @sleep_mutex = Mutex.new
+      @sleep_cv = ConditionVariable.new
     end
 
     # Accept arbitrary payload fields; last-wins for a tracker id
@@ -36,6 +38,7 @@ module Live
       end
 
       start! unless running?
+      wake_up!
       true
     rescue StandardError => e
       @logger.error("[PnlUpdater] cache_intermediate_pnl error: #{e.class} - #{e.message}")
@@ -82,6 +85,7 @@ module Live
           end
         end
         @thread = nil
+        wake_up!
       end
     end
 
@@ -101,8 +105,9 @@ module Live
       loop do
         break unless running?
 
-        flush!
-        sleep FLUSH_INTERVAL_SECONDS
+        processed = flush!
+        sleep_duration = next_interval(queue_empty: !processed && queue_empty?)
+        wait_for_interval(sleep_duration)
       end
     rescue StandardError => e
       @logger.error("[PnlUpdater] crashed: #{e.class} - #{e.message}")
@@ -115,7 +120,7 @@ module Live
       batch = nil
 
       @mutex.synchronize do
-        return if @queue.empty?
+        return false if @queue.empty?
 
         # Preserve insertion order, take first MAX_BATCH
         batch = @queue.first(MAX_BATCH).to_h
@@ -124,7 +129,7 @@ module Live
         batch.keys.each { |k| @queue.delete(k) }
       end
 
-      return unless batch && batch.any?
+      return false unless batch && batch.any?
 
       # Batch load all trackers in a single query to avoid N+1
       tracker_ids = batch.keys
@@ -245,6 +250,52 @@ module Live
       end
 
       true
+    end
+
+    def queue_empty?
+      @queue.empty?
+    end
+
+    def demand_driven_enabled?
+      feature_flags[:enable_demand_driven_services] == true
+    end
+
+    def feature_flags
+      AlgoConfig.fetch[:feature_flags] || {}
+    rescue StandardError
+      {}
+    end
+
+    def loop_intervals
+      risk = AlgoConfig.fetch[:risk] || {}
+      idle_ms = (risk[:loop_interval_idle] || 5000).to_i
+      active_ms = (risk[:loop_interval_active] || (FLUSH_INTERVAL_SECONDS * 1000)).to_i
+      [idle_ms.to_f / 1000.0, active_ms.to_f / 1000.0]
+    rescue StandardError
+      [5.0, FLUSH_INTERVAL_SECONDS]
+    end
+
+    def next_interval(queue_empty:)
+      idle, active = loop_intervals
+      if demand_driven_enabled? && queue_empty && Positions::ActiveCache.instance.empty?
+        idle
+      else
+        active
+      end
+    end
+
+    def wait_for_interval(seconds)
+      return sleep(seconds) unless demand_driven_enabled?
+
+      @sleep_mutex.synchronize do
+        @sleep_cv.wait(@sleep_mutex, seconds) if @running
+      end
+    end
+
+    def wake_up!
+      @sleep_mutex.synchronize do
+        @sleep_cv.broadcast
+      end
     end
   end
 end

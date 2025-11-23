@@ -11,6 +11,30 @@ module Signal
   class TrendScorer
     attr_reader :instrument, :primary_tf, :confirmation_tf
 
+    def self.compute_direction(index_cfg:, primary_tf: '1m', confirmation_tf: '5m',
+                               bullish_threshold: 14.0, bearish_threshold: 7.0)
+      instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+      return { direction: nil, trend_score: nil } unless instrument
+
+      scorer = new(instrument: instrument, primary_tf: primary_tf, confirmation_tf: confirmation_tf)
+      result = scorer.compute_trend_score
+      score = result[:trend_score].to_f
+
+      direction =
+        if score >= bullish_threshold
+          :bullish
+        elsif score <= bearish_threshold
+          :bearish
+        else
+          nil
+        end
+
+      { direction: direction, trend_score: score }
+    rescue StandardError => e
+      Rails.logger.error("[TrendScorer] compute_direction error: #{e.class} - #{e.message}")
+      { direction: nil, trend_score: nil }
+    end
+
     def initialize(instrument:, primary_tf: '1m', confirmation_tf: '5m')
       @instrument = instrument
       @primary_tf = normalize_timeframe(primary_tf)

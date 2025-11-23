@@ -4,6 +4,12 @@
 paper_trading:
   enabled: true
   balance: 100000 # ₹1 lakh
+  realtime_interval_seconds: 1
+
+feature_flags:
+  enable_direction_before_chain: true
+  enable_auto_subscribe_unsubscribe: true
+  enable_demand_driven_services: true
 
 indices:
   - key: NIFTY

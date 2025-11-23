@@ -19,6 +19,7 @@ module Live
       @last_error = nil
       @started_at = nil
       @subscribed_keys = Concurrent::Set.new # Track subscribed segment:security_id pairs
+      @watchlist_keys = Concurrent::Set.new
     end
 
     def start!
@@ -36,6 +37,7 @@ module Live
         return true if running?
 
         @watchlist = load_watchlist || []
+        refresh_watchlist_keys!
         Rails.logger.info("[MarketFeedHub] Loaded watchlist: #{@watchlist.count} instruments")
 
         @ws_client = build_client
@@ -86,6 +88,7 @@ module Live
         # Clear callbacks and subscription tracking
         @callbacks.clear
         @subscribed_keys.clear
+        @watchlist_keys = Concurrent::Set.new
       end
     end
 
@@ -280,6 +283,49 @@ module Live
       raise ArgumentError, 'block required' unless block
 
       @callbacks << block
+    end
+
+    def subscribe_instrument(segment:, security_id:)
+      return unless option_segment?(segment)
+      return if watchlist_instrument?(segment, security_id)
+
+      ensure_running!
+
+      key = subscription_key(segment, security_id)
+      @lock.synchronize do
+        if @subscribed_keys.include?(key)
+          Rails.logger.debug { "[MarketFeedHub] Option #{key} already subscribed" }
+          return
+        end
+
+        begin
+          @ws_client.subscribe_one(segment: segment, security_id: security_id.to_s)
+          @subscribed_keys.add(key)
+          Rails.logger.info("[MarketFeedHub] Option subscribed #{key}")
+        rescue StandardError => e
+          Rails.logger.error("[MarketFeedHub] subscribe_instrument failed for #{key}: #{e.class} - #{e.message}")
+        end
+      end
+    end
+
+    def unsubscribe_instrument(segment:, security_id:)
+      return unless option_segment?(segment)
+      return if watchlist_instrument?(segment, security_id)
+      return unless running?
+
+      key = subscription_key(segment, security_id)
+      @lock.synchronize do
+        return unless @subscribed_keys.include?(key)
+
+        begin
+          @ws_client.unsubscribe_one(segment: segment, security_id: security_id.to_s)
+          Rails.logger.info("[MarketFeedHub] Option unsubscribed #{key}")
+        rescue StandardError => e
+          Rails.logger.error("[MarketFeedHub] unsubscribe_instrument failed for #{key}: #{e.class} - #{e.message}")
+        ensure
+          @subscribed_keys.delete(key)
+        end
+      end
     end
 
     private
@@ -482,6 +528,50 @@ module Live
       cfg.is_a?(ActiveSupport::InheritableOptions) ? cfg : nil
     rescue StandardError
       nil
+    end
+
+    def refresh_watchlist_keys!
+      keys = Concurrent::Set.new
+      Array(@watchlist).each do |item|
+        seg = extract_segment(item)
+        sid = extract_security_id(item)
+        next unless seg && sid
+
+        keys.add(subscription_key(seg, sid))
+      end
+      @watchlist_keys = keys
+    end
+
+    def extract_segment(item)
+      if item.is_a?(Hash)
+        item[:segment] || item[:exchange_segment]
+      elsif item.respond_to?(:segment)
+        item.segment
+      end
+    end
+
+    def extract_security_id(item)
+      if item.is_a?(Hash)
+        item[:security_id]
+      elsif item.respond_to?(:security_id)
+        item.security_id
+      end
+    end
+
+    def watchlist_instrument?(segment, security_id)
+      return false unless segment && security_id
+
+      key = subscription_key(segment, security_id)
+      @watchlist_keys.include?(key)
+    end
+
+    def subscription_key(segment, security_id)
+      "#{segment}:#{security_id}"
+    end
+
+    def option_segment?(segment)
+      seg = segment.to_s.upcase
+      seg.include?('FNO') || seg.include?('COMM') || seg.include?('CUR')
     end
   end
 end

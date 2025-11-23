@@ -183,6 +183,11 @@ module Positions
       ltp = Live::TickCache.ltp(tracker.segment, tracker.security_id)
       position_data.update_ltp(ltp) if ltp&.positive?
 
+      if auto_subscribe_enabled?
+        safe_option_subscribe(segment: tracker.segment, security_id: tracker.security_id)
+      end
+
+      ActiveSupport::Notifications.instrument('positions.added', tracker_id: tracker.id)
       Rails.logger.debug { "[Positions::ActiveCache] Added position #{tracker.id} (#{composite_key})" }
       position_data
     rescue StandardError => e
@@ -201,6 +206,13 @@ module Positions
 
       @cache.delete(composite_key)
       @stats[:positions_tracked] = @cache.size
+      segment, security_id = composite_key.split(':', 2)
+
+      if auto_subscribe_enabled? && segment && security_id
+        safe_option_unsubscribe(segment: segment, security_id: security_id)
+      end
+
+      ActiveSupport::Notifications.instrument('positions.removed', tracker_id: tracker_id)
       Rails.logger.debug { "[Positions::ActiveCache] Removed position #{tracker_id} (#{composite_key})" }
       true
     rescue StandardError => e
@@ -312,6 +324,14 @@ module Positions
     # @return [Hash]
     def stats
       @stats.merge(positions_tracked: @cache.size)
+    end
+
+    def empty?
+      @cache.empty?
+    end
+
+    def size
+      @cache.size
     end
 
     private
@@ -433,6 +453,30 @@ module Positions
     rescue StandardError => e
       Rails.logger.error("[ActiveCache] Failed to reload peaks: #{e.class} - #{e.message}")
       0
+    end
+
+    def auto_subscribe_enabled?
+      feature_flags[:enable_auto_subscribe_unsubscribe] == true
+    end
+
+    def feature_flags
+      AlgoConfig.fetch[:feature_flags] || {}
+    end
+
+    def safe_option_subscribe(segment:, security_id:)
+      market_feed_hub.subscribe_instrument(segment: segment, security_id: security_id)
+    rescue StandardError => e
+      Rails.logger.error("[Positions::ActiveCache] subscribe_instrument failed: #{e.class} - #{e.message}")
+    end
+
+    def safe_option_unsubscribe(segment:, security_id:)
+      market_feed_hub.unsubscribe_instrument(segment: segment, security_id: security_id)
+    rescue StandardError => e
+      Rails.logger.error("[Positions::ActiveCache] unsubscribe_instrument failed: #{e.class} - #{e.message}")
+    end
+
+    def market_feed_hub
+      Live::MarketFeedHub.instance
     end
   end
   # rubocop:enable Metrics/ClassLength

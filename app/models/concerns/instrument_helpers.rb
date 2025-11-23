@@ -110,7 +110,7 @@ module InstrumentHelpers
   # @param segment [String] Exchange segment (e.g., "IDX_I", "NSE_FNO")
   # @param security_id [String, Integer] Security ID
   # @return [Numeric, nil]
-  def fetch_ltp_from_api_for_segment(segment:, security_id:)
+  def fetch_ltp_from_api_for_segment(segment:, security_id:, subscribe: false)
     hub = Live::MarketFeedHub.instance
 
     # Strategy 1: Check WebSocket TickCache first (fastest, no API rate limits)
@@ -121,20 +121,22 @@ module InstrumentHelpers
         return cached_ltp.to_f
       end
 
-      # If not in cache, try subscribing and waiting briefly for a tick
-      begin
-        hub.subscribe(segment: segment, security_id: security_id)
-        # Wait up to 200ms for tick to arrive
-        4.times do
-          sleep(0.05) # 50ms intervals
-          cached_ltp = Live::TickCache.ltp(segment, security_id)
-          if cached_ltp.present? && cached_ltp.to_f.positive?
-            Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_ltp}" }
-            return cached_ltp.to_f
+      if subscribe
+        # If not in cache, try subscribing and waiting briefly for a tick
+        begin
+          hub.subscribe(segment: segment, security_id: security_id)
+          # Wait up to 200ms for tick to arrive
+          4.times do
+            sleep(0.05) # 50ms intervals
+            cached_ltp = Live::TickCache.ltp(segment, security_id)
+            if cached_ltp.present? && cached_ltp.to_f.positive?
+              Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_ltp}" }
+              return cached_ltp.to_f
+            end
           end
+        rescue StandardError => e
+          Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API" }
         end
-      rescue StandardError => e
-        Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API" }
       end
     end
 

@@ -2,6 +2,9 @@
 
 module Providers
   class DhanhqProvider
+    SUPPORTED_API_TYPES = %i[order_api data_api quote_api option_chain non_trading_api].freeze
+    DEFAULT_API_TYPE = :option_chain
+
     def initialize(client: default_client)
       @client = client
       @tick_cache = Live::RedisTickCache.instance
@@ -43,10 +46,19 @@ module Providers
     end
 
     def default_client
-      DhanHQ::Client.new
+      api_type = fetch_api_type
+      DhanHQ::Client.new(api_type: api_type)
     rescue StandardError => e
       Rails.logger.warn("[Providers::DhanhqProvider] Failed to build client: #{e.message}")
       nil
+    end
+
+    def fetch_api_type
+      raw = ENV['DHAN_API_TYPE'] || ENV['DHANHQ_API_TYPE']
+      return DEFAULT_API_TYPE unless raw
+
+      candidate = raw.to_s.strip.downcase.to_sym
+      SUPPORTED_API_TYPES.include?(candidate) ? candidate : DEFAULT_API_TYPE
     end
   end
 end

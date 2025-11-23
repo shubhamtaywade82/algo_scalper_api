@@ -30,7 +30,7 @@ module Options
         return []
       end
 
-      chain = load_chain_for_expiry(expiry_date)
+      chain = load_chain_for_expiry(expiry_date, spot)
       if chain.empty?
         Rails.logger.warn("[Options::DerivativeChainAnalyzer] Empty chain for #{@index_key} expiry #{expiry_date}")
         return []
@@ -107,17 +107,18 @@ module Options
     end
 
     # Load chain using Derivative records and merge with live data
-    def load_chain_for_expiry(expiry_date)
+    def load_chain_for_expiry(expiry_date, spot)
       # Convert expiry_date to Date object if it's a string
       expiry_obj = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
 
       # Get all derivatives for this index and expiry
       # Exclude TEST_ security IDs completely - never use test derivatives
-      derivatives = Derivative.where(
+      derivatives_relation = Derivative.where(
         underlying_symbol: @index_key,
         expiry_date: expiry_obj
       ).where.not(option_type: [nil, ''])
-                              .where.not("security_id LIKE 'TEST_%'")
+                                       .where.not("security_id LIKE 'TEST_%'")
+      derivatives = derivatives_relation
 
       if derivatives.empty?
         Rails.logger.warn("[Options::DerivativeChainAnalyzer] No derivatives in DB for #{@index_key} expiry #{expiry_obj}")
@@ -138,10 +139,15 @@ module Options
 
         # Filter derivatives to only those with strikes in API chain
         original_count = derivatives.count
-        derivatives = derivatives.select do |d|
-          strike_bd = BigDecimal(d.strike_price.to_s)
-          api_strikes.include?(strike_bd)
-        end
+        derivatives = if derivatives.respond_to?(:where)
+                        derivatives.where(strike_price: api_strikes.to_a)
+                      else
+                        filtered_ids = Array(derivatives).select do |d|
+                          strike_bd = BigDecimal(d.strike_price.to_s)
+                          api_strikes.include?(strike_bd)
+                        end.map(&:id)
+                        Derivative.where(id: filtered_ids)
+                      end
 
         if derivatives.count < original_count
           Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Filtered derivatives: #{original_count} -> #{derivatives.count} (only strikes in API chain)" }
@@ -154,16 +160,44 @@ module Options
         # This allows the system to work even if API is unavailable
       end
 
-      # Calculate approximate ATM strike for limiting LTP fetches (performance optimization)
-      spot = spot_ltp
+      # Calculate approximate ATM strike for limiting queries/LTP fetches
+      strike_increment = strike_increment_for(spot)
       atm_strike_approx = nil
-      if spot&.positive?
-        # Estimate ATM strike (round to nearest 50 for NIFTY, 100 for BANKNIFTY)
-        strike_increment = spot >= 50_000 ? 100 : 50
+      if spot&.positive? && strike_increment.positive?
         atm_strike_approx = (spot / strike_increment).round * strike_increment
         Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Spot: ₹#{spot}, ATM strike approx: #{atm_strike_approx}, increment: #{strike_increment}" }
       else
         Rails.logger.warn('[Options::DerivativeChainAnalyzer] No spot price available for ATM calculation')
+      end
+
+      # Limit derivatives to a small strike window around ATM to avoid scanning entire chain
+      if atm_strike_approx
+        window = (@config[:strike_window_steps] || 3).to_i
+        window = 3 if window <= 0
+        target_strikes = (-window..window).map do |offset|
+          atm_strike_approx + (offset * strike_increment)
+        end.select { |strike| strike.positive? }.uniq
+
+        if target_strikes.any?
+          target_strikes_bd = target_strikes.map { |strike| BigDecimal(strike.to_s) }
+          filtered = if derivatives.respond_to?(:where)
+                       derivatives.where(strike_price: target_strikes_bd)
+                     else
+                       filtered_ids = Array(derivatives).select do |d|
+                         strike_bd = BigDecimal(d.strike_price.to_s)
+                         target_strikes_bd.include?(strike_bd)
+                       end.map(&:id)
+                       Derivative.where(id: filtered_ids)
+                     end
+
+          filtered_count = filtered.count
+          if filtered_count.positive?
+            Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Limiting strikes to ATM±#{window} (#{target_strikes.size} targets)" }
+            derivatives = filtered
+          else
+            Rails.logger.debug('[Options::DerivativeChainAnalyzer] Strike filtering found no records, using full derivative set')
+          end
+        end
       end
 
       # Merge Derivative records with API data and live ticks
@@ -215,6 +249,7 @@ module Options
 
                 # Use InstrumentHelpers method directly (includes WebSocket subscription + API fallback)
                 api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+                sleep(1)
                 if api_ltp&.positive?
                   tick = tick ? tick.dup : {}
                   tick[:ltp] = api_ltp
@@ -405,7 +440,7 @@ module Options
           lot_size: option[:lot_size],
           symbol: build_symbol(option[:derivative], option[:strike], option[:type], option[:expiry]),
           derivative_id: option[:derivative]&.id,
-          reason: reason_for(option, score, atm, spot)
+          reason: reason_for(option, score, atm, spot, direction)
         }
       end
 
@@ -422,6 +457,18 @@ module Options
       return nil if mid <= 0
 
       (ask - bid) / mid
+    end
+
+    def strike_increment_for(spot)
+      return 0 unless spot&.positive?
+
+      if spot >= 50_000
+        100
+      elsif spot >= 10_000
+        50
+      else
+        25
+      end
     end
 
     # Combined scoring function (heuristic - must be backtested)
@@ -486,15 +533,16 @@ module Options
     end
 
     # Generate human-readable reason for selection
-    def reason_for(option, score, atm, spot)
+    def reason_for(option, score, atm, spot, direction)
+      trade_direction = direction.to_s.downcase.to_sym
       distance = (option[:strike] - spot).abs
       distance_pct = (distance / spot * 100).round(2)
       strike_type = if option[:strike] == atm
                       'ATM'
                     elsif option[:strike] > spot
-                      direction == :bullish ? 'OTM' : 'ITM'
+                      trade_direction == :bullish ? 'OTM' : 'ITM'
                     else
-                      direction == :bullish ? 'ITM' : 'OTM'
+                      trade_direction == :bullish ? 'ITM' : 'OTM'
                     end
 
       spread_pct = calc_spread(option[:bid], option[:ask], option[:ltp])

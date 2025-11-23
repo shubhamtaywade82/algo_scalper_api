@@ -51,20 +51,23 @@ module Live
     # ExitEngine is authoritative for placing router exit orders, then marking trackers exited.
     # Primary method called by RiskManagerService
     def execute_exit(tracker, reason)
-      ltp = safe_ltp(tracker)
+      tracker.with_lock do
+        return if tracker.exited?
 
-      result = @router.exit_market(tracker)
-      success = (result == true) ||
-                (result.is_a?(Hash) && result[:success] == true)
+        ltp = safe_ltp(tracker)
+        result = @router.exit_market(tracker)
+        success = (result == true) ||
+                  (result.is_a?(Hash) && result[:success] == true)
 
-      if success
-        tracker.mark_exited!(
-          exit_price: ltp,
-          exit_reason: reason
-        )
-        Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
-      else
-        Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{result.inspect}")
+        if success
+          tracker.mark_exited!(
+            exit_price: ltp,
+            exit_reason: reason
+          )
+          Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
+        else
+          Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{result.inspect}")
+        end
       end
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] Failed executing exit for #{tracker.order_no}: #{e.class} - #{e.message}")
