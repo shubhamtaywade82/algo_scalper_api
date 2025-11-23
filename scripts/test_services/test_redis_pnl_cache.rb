@@ -156,8 +156,211 @@ else
   ServiceTestHelper.print_warning('No active PositionTracker found')
 end
 
-# Test 5: Clear tracker
-ServiceTestHelper.print_section('5. Clear Tracker Test')
+# Test 5: Test Profit/Loss Scenarios by Manipulating LTPs
+ServiceTestHelper.print_section('5. Profit/Loss Scenarios (LTP Manipulation)')
+tracker = PositionTracker.active.first
+
+if tracker && tracker.entry_price.present? && tracker.quantity.present?
+  entry_price = tracker.entry_price.to_f
+  quantity = tracker.quantity.to_i
+  seg = tracker.segment || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+  sid = tracker.security_id
+
+  ServiceTestHelper.print_info("Testing with tracker ID: #{tracker.id}")
+  ServiceTestHelper.print_info("Entry Price: ₹#{entry_price}, Quantity: #{quantity}")
+  ServiceTestHelper.print_info("Segment: #{seg}, Security ID: #{sid}")
+
+  # Scenario 1: PROFIT - LTP higher than entry
+  ServiceTestHelper.print_info('')
+  ServiceTestHelper.print_info('--- Scenario 1: PROFIT ---')
+  profit_ltp = entry_price * 1.10 # 10% profit
+  ServiceTestHelper.print_info("Setting LTP to ₹#{profit_ltp} (10% above entry)")
+
+  # Store LTP in RedisTickCache (simulating market movement)
+  Live::RedisTickCache.instance.store_tick(
+    segment: seg,
+    security_id: sid.to_s,
+    data: { ltp: profit_ltp, timestamp: Time.current.to_i }
+  )
+
+  # Wait a moment for cache to update
+  sleep 0.1
+
+  # Calculate expected PnL
+  expected_pnl = (profit_ltp - entry_price) * quantity
+  expected_pnl_pct = ((profit_ltp - entry_price) / entry_price) * 100
+
+  # Store PnL (simulating what RiskManagerService would do)
+  pnl_cache.store_pnl(
+    tracker_id: tracker.id,
+    pnl: expected_pnl,
+    pnl_pct: expected_pnl_pct,
+    ltp: profit_ltp,
+    hwm: expected_pnl, # First profit, so HWM = current PnL
+    timestamp: Time.current
+  )
+
+  # Verify
+  profit_data = pnl_cache.fetch_pnl(tracker.id)
+  if profit_data
+    profit_ok = (profit_data[:pnl].to_f - expected_pnl).abs < 0.01
+    pct_ok = (profit_data[:pnl_pct].to_f - expected_pnl_pct).abs < 0.01
+    hwm_ok = (profit_data[:hwm_pnl].to_f - expected_pnl).abs < 0.01
+
+    ServiceTestHelper.check_condition(
+      profit_ok && pct_ok && hwm_ok,
+      "Profit scenario: PnL=₹#{profit_data[:pnl]}, PnL%=#{profit_data[:pnl_pct].round(2)}%, HWM=₹#{profit_data[:hwm_pnl]}",
+      "Profit scenario failed - PnL: #{profit_ok ? '✅' : '❌'}, PnL%: #{pct_ok ? '✅' : '❌'}, HWM: #{hwm_ok ? '✅' : '❌'}"
+    )
+  else
+    ServiceTestHelper.print_error('Failed to fetch profit PnL data')
+  end
+
+  # Scenario 2: LOSS - LTP lower than entry
+  ServiceTestHelper.print_info('')
+  ServiceTestHelper.print_info('--- Scenario 2: LOSS ---')
+  loss_ltp = entry_price * 0.95 # 5% loss
+  ServiceTestHelper.print_info("Setting LTP to ₹#{loss_ltp} (5% below entry)")
+
+  # Store LTP in RedisTickCache
+  Live::RedisTickCache.instance.store_tick(
+    segment: seg,
+    security_id: sid.to_s,
+    data: { ltp: loss_ltp, timestamp: Time.current.to_i }
+  )
+
+  sleep 0.1
+
+  # Calculate expected PnL (negative)
+  expected_loss = (loss_ltp - entry_price) * quantity
+  expected_loss_pct = ((loss_ltp - entry_price) / entry_price) * 100
+
+  # Store PnL (HWM should remain at previous profit level)
+  previous_hwm = profit_data[:hwm_pnl].to_f
+  pnl_cache.store_pnl(
+    tracker_id: tracker.id,
+    pnl: expected_loss,
+    pnl_pct: expected_loss_pct,
+    ltp: loss_ltp,
+    hwm: previous_hwm, # HWM should remain at peak (previous profit)
+    timestamp: Time.current
+  )
+
+  # Verify
+  loss_data = pnl_cache.fetch_pnl(tracker.id)
+  if loss_data
+    loss_ok = (loss_data[:pnl].to_f - expected_loss).abs < 0.01
+    loss_pct_ok = (loss_data[:pnl_pct].to_f - expected_loss_pct).abs < 0.01
+    hwm_unchanged = (loss_data[:hwm_pnl].to_f - previous_hwm).abs < 0.01
+
+    ServiceTestHelper.check_condition(
+      loss_ok && loss_pct_ok && hwm_unchanged,
+      "Loss scenario: PnL=₹#{loss_data[:pnl]}, PnL%=#{loss_data[:pnl_pct].round(2)}%, HWM=₹#{loss_data[:hwm_pnl]} (unchanged)",
+      "Loss scenario failed - PnL: #{loss_ok ? '✅' : '❌'}, PnL%: #{loss_pct_ok ? '✅' : '❌'}, HWM unchanged: #{hwm_unchanged ? '✅' : '❌'}"
+    )
+  else
+    ServiceTestHelper.print_error('Failed to fetch loss PnL data')
+  end
+
+  # Scenario 3: BIGGER PROFIT - New HWM
+  ServiceTestHelper.print_info('')
+  ServiceTestHelper.print_info('--- Scenario 3: BIGGER PROFIT (New HWM) ---')
+  bigger_profit_ltp = entry_price * 1.15 # 15% profit (higher than previous 10%)
+  ServiceTestHelper.print_info("Setting LTP to ₹#{bigger_profit_ltp} (15% above entry)")
+
+  # Store LTP in RedisTickCache
+  Live::RedisTickCache.instance.store_tick(
+    segment: seg,
+    security_id: sid.to_s,
+    data: { ltp: bigger_profit_ltp, timestamp: Time.current.to_i }
+  )
+
+  sleep 0.1
+
+  # Calculate expected PnL
+  expected_bigger_pnl = (bigger_profit_ltp - entry_price) * quantity
+  expected_bigger_pnl_pct = ((bigger_profit_ltp - entry_price) / entry_price) * 100
+
+  # Store PnL (HWM should update to new higher value)
+  pnl_cache.store_pnl(
+    tracker_id: tracker.id,
+    pnl: expected_bigger_pnl,
+    pnl_pct: expected_bigger_pnl_pct,
+    ltp: bigger_profit_ltp,
+    hwm: expected_bigger_pnl, # New HWM = current higher profit
+    timestamp: Time.current
+  )
+
+  # Verify
+  bigger_profit_data = pnl_cache.fetch_pnl(tracker.id)
+  if bigger_profit_data
+    bigger_pnl_ok = (bigger_profit_data[:pnl].to_f - expected_bigger_pnl).abs < 0.01
+    bigger_pct_ok = (bigger_profit_data[:pnl_pct].to_f - expected_bigger_pnl_pct).abs < 0.01
+    hwm_updated = (bigger_profit_data[:hwm_pnl].to_f - expected_bigger_pnl).abs < 0.01
+    hwm_higher = bigger_profit_data[:hwm_pnl].to_f > previous_hwm
+
+    ServiceTestHelper.check_condition(
+      bigger_pnl_ok && bigger_pct_ok && hwm_updated && hwm_higher,
+      "Bigger profit scenario: PnL=₹#{bigger_profit_data[:pnl]}, PnL%=#{bigger_profit_data[:pnl_pct].round(2)}%, HWM=₹#{bigger_profit_data[:hwm_pnl]} (updated)",
+      "Bigger profit scenario failed - PnL: #{bigger_pnl_ok ? '✅' : '❌'}, PnL%: #{bigger_pct_ok ? '✅' : '❌'}, HWM updated: #{hwm_updated ? '✅' : '❌'}, HWM higher: #{hwm_higher ? '✅' : '❌'}"
+    )
+  else
+    ServiceTestHelper.print_error('Failed to fetch bigger profit PnL data')
+  end
+
+  # Scenario 4: Partial Recovery - HWM should remain at peak
+  ServiceTestHelper.print_info('')
+  ServiceTestHelper.print_info('--- Scenario 4: PARTIAL RECOVERY (HWM Preserved) ---')
+  recovery_ltp = entry_price * 1.12 # 12% profit (between 10% and 15%)
+  ServiceTestHelper.print_info("Setting LTP to ₹#{recovery_ltp} (12% above entry, but below peak)")
+
+  # Store LTP in RedisTickCache
+  Live::RedisTickCache.instance.store_tick(
+    segment: seg,
+    security_id: sid.to_s,
+    data: { ltp: recovery_ltp, timestamp: Time.current.to_i }
+  )
+
+  sleep 0.1
+
+  # Calculate expected PnL
+  expected_recovery_pnl = (recovery_ltp - entry_price) * quantity
+  expected_recovery_pnl_pct = ((recovery_ltp - entry_price) / entry_price) * 100
+  peak_hwm = bigger_profit_data[:hwm_pnl].to_f
+
+  # Store PnL (HWM should remain at previous peak, not update)
+  pnl_cache.store_pnl(
+    tracker_id: tracker.id,
+    pnl: expected_recovery_pnl,
+    pnl_pct: expected_recovery_pnl_pct,
+    ltp: recovery_ltp,
+    hwm: peak_hwm, # HWM should remain at peak (15% profit)
+    timestamp: Time.current
+  )
+
+  # Verify
+  recovery_data = pnl_cache.fetch_pnl(tracker.id)
+  if recovery_data
+    recovery_pnl_ok = (recovery_data[:pnl].to_f - expected_recovery_pnl).abs < 0.01
+    recovery_pct_ok = (recovery_data[:pnl_pct].to_f - expected_recovery_pnl_pct).abs < 0.01
+    hwm_preserved = (recovery_data[:hwm_pnl].to_f - peak_hwm).abs < 0.01
+
+    ServiceTestHelper.check_condition(
+      recovery_pnl_ok && recovery_pct_ok && hwm_preserved,
+      "Recovery scenario: PnL=₹#{recovery_data[:pnl]}, PnL%=#{recovery_data[:pnl_pct].round(2)}%, HWM=₹#{recovery_data[:hwm_pnl]} (preserved at peak)",
+      "Recovery scenario failed - PnL: #{recovery_pnl_ok ? '✅' : '❌'}, PnL%: #{recovery_pct_ok ? '✅' : '❌'}, HWM preserved: #{hwm_preserved ? '✅' : '❌'}"
+    )
+  else
+    ServiceTestHelper.print_error('Failed to fetch recovery PnL data')
+  end
+
+  ServiceTestHelper.print_success('All profit/loss scenarios completed')
+else
+  ServiceTestHelper.print_warning('Skipping profit/loss scenarios - no active tracker with entry_price/quantity')
+end
+
+# Test 6: Clear tracker
+ServiceTestHelper.print_section('6. Clear Tracker Test')
 pnl_cache.clear_tracker(test_tracker_id)
 cleared = pnl_cache.fetch_pnl(test_tracker_id)
 ServiceTestHelper.check_condition(
