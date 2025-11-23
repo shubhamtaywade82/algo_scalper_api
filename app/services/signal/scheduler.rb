@@ -98,35 +98,7 @@ module Signal
 
     def evaluate_strategies_priority(index_cfg, enabled_strategies)
       chain_cfg = AlgoConfig.fetch[:chain_analyzer] || {}
-
-      return evaluate_with_direction_priority(index_cfg, enabled_strategies, chain_cfg) if direction_first_enabled?
-
-      # Use DerivativeChainAnalyzer for better integration with Derivative records
-      analyzer = Options::DerivativeChainAnalyzer.new(
-        index_key: index_cfg[:key],
-        expiry: nil, # Auto-select nearest expiry
-        config: chain_cfg
-      )
-
-      direction = determine_direction(index_cfg)
-      limit = chain_cfg[:max_candidates] || 1
-      candidates = analyzer.select_candidates(limit: limit.to_i, direction: direction)
-
-      return nil if candidates.empty?
-
-      enabled_strategies.each do |strategy|
-        candidate = candidates.first
-        signal = evaluate_strategy(index_cfg, strategy, candidate)
-        next unless signal
-
-        Rails.logger.info(
-          "[Scheduler] strategy:#{strategy[:key]} emitted signal:#{signal[:meta][:candidate_symbol]} " \
-          "reason:#{signal[:reason]}"
-        )
-        return signal
-      end
-
-      nil
+      evaluate_with_direction_priority(index_cfg, enabled_strategies, chain_cfg)
     end
 
     def evaluate_strategy(index_cfg, strategy, candidate)
@@ -207,8 +179,8 @@ module Signal
         return nil
       end
 
-      candidate = select_candidate_for_direction(index_cfg, direction, trend_score, chain_cfg)
-      return nil unless candidate
+      candidate = select_candidate_for_direction(index_cfg, direction, chain_cfg, trend_score)
+      return nil unless candidate.present?
 
       enabled_strategies.each do |strategy|
         signal = evaluate_strategy(index_cfg, strategy, candidate)
@@ -223,26 +195,23 @@ module Signal
       nil
     end
 
-    def select_candidate_for_direction(index_cfg, direction, trend_score, chain_cfg)
-      selector = Options::StrikeSelector.new
-      selection = selector.select(
-        index_key: index_cfg[:key],
-        direction: direction,
-        trend_score: trend_score,
+    def select_candidate_for_direction(index_cfg, direction, chain_cfg, trend_score)
+      analyzer = Options::ChainAnalyzer.new(
+        index: index_cfg,
+        data_provider: @data_provider,
         config: chain_cfg
       )
-      return unless selection
 
-      normalize_candidate(selection)
-    end
+      limit = (chain_cfg[:max_candidates] || 3).to_i
+      candidates = analyzer.select_candidates(limit: limit, direction: direction)
+      return if candidates.blank?
 
-    def normalize_candidate(selection)
-      candidate = selection.dup
-      candidate[:segment] ||= candidate[:exchange_segment]
-      candidate[:type] ||= candidate[:option_type]
-      candidate[:strike] ||= candidate[:strike_price]
-      candidate[:trend_score] ||= candidate[:score]
+      candidate = candidates.first.dup
+      candidate[:trend_score] ||= trend_score
       candidate
+    rescue StandardError => e
+      Rails.logger.error("[SignalScheduler] Chain analyzer selection failed: #{e.class} - #{e.message}")
+      nil
     end
 
     def direction_first_enabled?

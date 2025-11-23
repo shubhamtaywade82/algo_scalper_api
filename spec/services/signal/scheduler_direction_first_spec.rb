@@ -16,31 +16,25 @@ RSpec.describe Signal::Scheduler do
     end
 
     let(:strategy) { { key: :open_interest, engine_class: double('EngineClass'), config: {} } }
+    let(:chain_analyzer) { instance_double(Options::ChainAnalyzer) }
 
-    let(:base_config) do
-      {
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return(
         indices: [index_cfg],
         chain_analyzer: {},
         signals: {
           direction_thresholds: { bullish: 14.0, bearish: 7.0 },
           primary_timeframe: '1m',
           confirmation_timeframe: '5m'
-        },
-        feature_flags: { enable_direction_before_chain: true }
-      }
+        }
+      )
+      allow(Options::ChainAnalyzer).to receive(:new).and_return(chain_analyzer)
     end
 
-    before do
-      allow(AlgoConfig).to receive(:fetch).and_return(base_config)
-      allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).and_return(double('Instrument'))
-    end
+    it 'skips option chain analysis when direction cannot be determined' do
+      allow(Signal::TrendScorer).to receive(:compute_direction).and_return({ direction: nil, trend_score: nil })
 
-    it 'skips strike selection when direction cannot be determined' do
-      scorer = instance_double(Signal::TrendScorer, compute_trend_score: { trend_score: 10 })
-      allow(Signal::TrendScorer).to receive(:new).and_return(scorer)
-
-      expect(Options::StrikeSelector).not_to receive(:new)
-      expect(Options::DerivativeChainAnalyzer).not_to receive(:new)
+      expect(Options::ChainAnalyzer).not_to receive(:new)
 
       scheduler = described_class.new
       result = scheduler.send(:evaluate_strategies_priority, index_cfg, [strategy])
@@ -48,19 +42,16 @@ RSpec.describe Signal::Scheduler do
       expect(result).to be_nil
     end
 
-    it 'invokes strike selector after direction resolves and enriches signal meta' do
-      scorer = instance_double(Signal::TrendScorer, compute_trend_score: { trend_score: 18 })
-      allow(Signal::TrendScorer).to receive(:new).and_return(scorer)
-
-      selector = instance_double(Options::StrikeSelector)
-      allow(Options::StrikeSelector).to receive(:new).and_return(selector)
-      allow(selector).to receive(:select).and_return(
-        exchange_segment: 'NSE_FNO',
-        security_id: '12345',
-        option_type: 'CE',
-        strike: 26_050,
-        derivative: double('Derivative')
-      )
+    it 'invokes option chain analyzer after direction resolves and enriches signal meta' do
+      allow(Signal::TrendScorer).to receive(:compute_direction).and_return({ direction: :bullish, trend_score: 18 })
+      allow(chain_analyzer).to receive(:select_candidates).and_return([
+                                                                         {
+                                                                           segment: 'NSE_FNO',
+                                                                           security_id: '12345',
+                                                                           symbol: 'TEST',
+                                                                           lot_size: 25
+                                                                         }
+                                                                       ])
 
       scheduler = described_class.new
       signal_response = {
@@ -71,7 +62,6 @@ RSpec.describe Signal::Scheduler do
       }
 
       allow(scheduler).to receive(:evaluate_strategy).and_return(signal_response)
-      expect(Options::DerivativeChainAnalyzer).not_to receive(:new)
 
       result = scheduler.send(:evaluate_strategies_priority, index_cfg, [strategy])
 

@@ -100,7 +100,7 @@ module Signal
 
       score = 0.0
       candles = series.candles
-      closes = series.closes
+      closes = normalize_numeric_series(series.closes)
       return 0 if closes.size < 3
 
       # 1. Momentum (0-2 points)
@@ -166,7 +166,7 @@ module Signal
       calculator = Indicators::Calculator.new(series)
 
       # 1. RSI (0-2 points)
-      rsi = calculator.rsi(14)
+      rsi = numeric(calculator.rsi(14))
       if rsi
         if rsi > 50 && rsi < 70
           score += 2.0 # Strong bullish RSI
@@ -180,9 +180,9 @@ module Signal
       # 2. MACD (0-2 points)
       macd_result = calculator.macd(12, 26, 9)
       if macd_result.is_a?(Array) && macd_result.size >= 3
-        macd_line = macd_result[0]
-        signal = macd_result[1]
-        histogram = macd_result[2]
+        macd_line = numeric(macd_result[0])
+        signal = numeric(macd_result[1])
+        histogram = numeric(macd_result[2])
         if macd_line && signal && histogram
           if macd_line > signal && histogram.positive?
             score += 2.0 # Strong bullish MACD
@@ -195,7 +195,7 @@ module Signal
       end
 
       # 3. ADX (0-2 points)
-      adx = calculator.adx(14)
+      adx = numeric(calculator.adx(14))
       if adx
         if adx > 25
           score += 2.0 # Very strong trend
@@ -239,8 +239,8 @@ module Signal
       confirmation_calculator = Indicators::Calculator.new(confirmation_series)
 
       # 1. RSI alignment (0-2 points)
-      primary_rsi = primary_calculator.rsi(14)
-      confirmation_rsi = confirmation_calculator.rsi(14)
+      primary_rsi = numeric(primary_calculator.rsi(14))
+      confirmation_rsi = numeric(confirmation_calculator.rsi(14))
       if primary_rsi && confirmation_rsi
         if primary_rsi > 50 && confirmation_rsi > 50
           score += 2.0 # Both bullish
@@ -261,9 +261,9 @@ module Signal
       end
 
       # 3. Price alignment (0-2 points)
-      primary_closes = primary_series.closes
-      confirmation_closes = confirmation_series.closes
-      if primary_closes.size >= 3 && confirmation_closes.size >= 3
+      primary_closes = normalize_numeric_series(primary_series.closes)
+      confirmation_closes = normalize_numeric_series(confirmation_series.closes)
+      if primary_closes.size >= 6 && confirmation_closes.size >= 6
         primary_trend = primary_closes.last(3).sum / 3.0 > primary_closes[-6..-4].sum / 3.0
         confirmation_trend = confirmation_closes.last(3).sum / 3.0 > confirmation_closes[-6..-4].sum / 3.0
         if primary_trend && confirmation_trend
@@ -283,6 +283,25 @@ module Signal
 
       st_service = Indicators::Supertrend.new(series: series, period: 10, base_multiplier: 2.0)
       st_service.call
+    rescue StandardError
+      nil
+    end
+    def normalize_numeric_series(values)
+      Array(values).filter_map { |val| numeric(val) }
+    end
+
+    def numeric(value)
+      return nil if value.nil?
+      return value.to_f if value.is_a?(Numeric)
+      if value.is_a?(Hash)
+        candidate = value[:value] || value['value'] || value[:close] || value['close']
+        return candidate.to_f if candidate
+      end
+      if value.respond_to?(:to_f)
+        float_value = value.to_f
+        return float_value if float_value.finite?
+      end
+      nil
     rescue StandardError
       nil
     end

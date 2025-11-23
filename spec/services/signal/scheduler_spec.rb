@@ -57,16 +57,17 @@ RSpec.describe Signal::Scheduler do
 
   describe '#evaluate_strategies_priority' do
     let(:enabled_strategies) { scheduler.send(:load_enabled_strategies, index_cfg) }
-    let(:candidate) { { security_id: 12345, segment: 'NSE_FNO', symbol: 'NIFTY24FEB20000CE', lot_size: 50 } }
+    let(:candidate) { { security_id: 12_345, segment: 'NSE_FNO', symbol: 'NIFTY24FEB20000CE', lot_size: 50 } }
     let(:mock_engine) { instance_double(Signal::Engines::OpenInterestBuyingEngine) }
 
     before do
+      allow(Signal::TrendScorer).to receive(:compute_direction).and_return({ direction: :bullish, trend_score: 15 })
       allow(mock_analyzer).to receive(:select_candidates).and_return([candidate])
       allow(Signal::Engines::OpenInterestBuyingEngine).to receive(:new).and_return(mock_engine)
     end
 
     it 'stops at first valid signal' do
-      signal = { segment: 'NSE_FNO', security_id: 12345, reason: 'OI buildup', meta: {} }
+      signal = { segment: 'NSE_FNO', security_id: 12_345, reason: 'OI buildup', meta: {} }
       allow(mock_engine).to receive(:evaluate).and_return(signal)
 
       result = scheduler.send(:evaluate_strategies_priority, index_cfg, enabled_strategies)
@@ -80,7 +81,7 @@ RSpec.describe Signal::Scheduler do
       allow(mock_engine).to receive(:evaluate).and_return(nil)
       allow(Signal::Engines::MomentumBuyingEngine).to receive(:new).and_return(momentum_engine)
 
-      signal = { segment: 'NSE_FNO', security_id: 12345, reason: 'Momentum breakout', meta: {} }
+      signal = { segment: 'NSE_FNO', security_id: 12_345, reason: 'Momentum breakout', meta: {} }
       allow(momentum_engine).to receive(:evaluate).and_return(signal)
 
       result = scheduler.send(:evaluate_strategies_priority, index_cfg, enabled_strategies)
@@ -114,7 +115,7 @@ RSpec.describe Signal::Scheduler do
     let(:signal) do
       {
         segment: 'NSE_FNO',
-        security_id: 12345,
+        security_id: 12_345,
         reason: 'OI buildup',
         meta: { candidate_symbol: 'NIFTY24FEB20000CE', lot_size: 50, multiplier: 1 }
       }
@@ -131,7 +132,7 @@ RSpec.describe Signal::Scheduler do
         index_cfg: index_cfg,
         pick: hash_including(
           segment: 'NSE_FNO',
-          security_id: 12345,
+          security_id: 12_345,
           symbol: 'NIFTY24FEB20000CE',
           lot_size: 50
         ),
