@@ -159,6 +159,41 @@ end
 ServiceTestHelper.print_section('4. Idempotency Test: No Double Exit')
 ServiceTestHelper.print_info("Testing that exit is not triggered multiple times...")
 
+# Check if position is already exited from previous test
+tracker.reload
+if tracker.status == 'exited'
+  ServiceTestHelper.print_info("  Position already exited from previous test, creating new position for idempotency test...")
+  # Create a new position for this test
+  derivative = ServiceTestHelper.find_atm_or_otm_derivative(
+    underlying_symbol: 'NIFTY',
+    option_type: 'CE',
+    preference: :atm
+  )
+
+  if derivative
+    seg = derivative.exchange_segment || 'NSE_FNO'
+    sid = derivative.security_id
+    ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s, suppress_rate_limit_warning: true) || 150.0
+
+    tracker = ServiceTestHelper.create_position_tracker(
+      watchable: derivative,
+      segment: seg,
+      security_id: sid.to_s,
+      side: 'long_ce',
+      quantity: 75,
+      entry_price: ltp,
+      paper: true
+    )
+
+    # Re-add to ActiveCache
+    position_data = active_cache.add_position(
+      tracker: tracker,
+      sl_price: 105.0,
+      tp_price: 240.0
+    )
+  end
+end
+
 # Reset to trigger condition
 position_data.update_ltp(187.5) # Peak
 trailing_engine.process_tick(position_data, exit_engine: exit_engine)
