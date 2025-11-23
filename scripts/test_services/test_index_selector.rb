@@ -72,7 +72,8 @@ indices.each do |index_cfg|
   index_key = index_cfg[:key] || index_cfg['key']
   next unless index_key
 
-  instrument = IndexInstrumentCache.instance.get_or_fetch(index_key: index_key.to_sym)
+  # get_or_fetch expects full index_cfg hash with :key, :sid, :segment
+  instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
   next unless instrument
 
   scorer = Signal::TrendScorer.new(instrument: instrument, primary_tf: '1m', confirmation_tf: '5m')

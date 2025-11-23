@@ -51,7 +51,8 @@ module Signal
         index_key = index_cfg[:key] || index_cfg['key']
         next unless index_key
 
-        instrument = IndexInstrumentCache.instance.get_or_fetch(index_key: index_key.to_sym)
+        # get_or_fetch expects full index_cfg hash with :key, :sid, :segment
+        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         next unless instrument
 
         # Get timeframes from config or use defaults

@@ -16,7 +16,8 @@ indices = AlgoConfig.fetch[:indices] || []
 nifty_index = indices.find { |idx| idx[:key] == 'NIFTY' || idx[:key] == :NIFTY }
 
 if nifty_index
-  nifty_instrument = IndexInstrumentCache.instance.get_or_fetch(index_key: :NIFTY)
+  # get_or_fetch expects full index_cfg hash with :key, :sid, :segment
+  nifty_instrument = IndexInstrumentCache.instance.get_or_fetch(nifty_index)
 
   if nifty_instrument
     ServiceTestHelper.print_success("Found NIFTY instrument: #{nifty_instrument.symbol_name}")
