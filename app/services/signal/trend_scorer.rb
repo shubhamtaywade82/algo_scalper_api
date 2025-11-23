@@ -119,10 +119,10 @@ module Signal
       # 2. Structure breaks (0-2 points)
       # Check for swing highs/lows (structure breaks)
       last_index = candles.size - 1
-      if series.swing_high?(last_index, lookback: 2)
+      if safe_swing_high?(series, last_index, lookback: 2)
         score += 1.0 # Bullish structure break
       end
-      if last_index >= 5 && series.swing_low?(last_index - 3, lookback: 2)
+      if last_index >= 5 && safe_swing_low?(series, last_index - 3, lookback: 2)
         score += 0.5 # Recent swing low (support)
       end
 
@@ -208,7 +208,8 @@ module Signal
 
       # 4. Supertrend (0-1 point)
       begin
-        st_service = Indicators::Supertrend.new(series: series, period: 10, base_multiplier: 2.0)
+        sanitized = sanitize_series(series) || series
+        st_service = Indicators::Supertrend.new(series: sanitized, period: 10, base_multiplier: 2.0)
         st = st_service.call
         if st[:trend] == :bullish
           score += 1.0 # Bullish Supertrend
@@ -281,11 +282,13 @@ module Signal
     def get_supertrend(series)
       return nil unless series
 
-      st_service = Indicators::Supertrend.new(series: series, period: 10, base_multiplier: 2.0)
+      sanitized = sanitize_series(series) || series
+      st_service = Indicators::Supertrend.new(series: sanitized, period: 10, base_multiplier: 2.0)
       st_service.call
     rescue StandardError
       nil
     end
+
     def normalize_numeric_series(values)
       Array(values).filter_map { |val| numeric(val) }
     end
@@ -293,9 +296,10 @@ module Signal
     def numeric(value)
       return nil if value.nil?
       return value.to_f if value.is_a?(Numeric)
+
       if value.is_a?(Hash)
         candidate = value[:value] || value['value'] || value[:close] || value['close']
-        return candidate.to_f if candidate
+        return candidate.to_f if candidate.respond_to?(:to_f)
       end
       if value.respond_to?(:to_f)
         float_value = value.to_f
@@ -304,6 +308,51 @@ module Signal
       nil
     rescue StandardError
       nil
+    end
+
+    def safe_swing_high?(series, index, lookback:)
+      return false unless series.respond_to?(:swing_high?)
+
+      series.swing_high?(index, lookback: lookback)
+    rescue StandardError => e
+      Rails.logger.debug { "[TrendScorer] swing_high? failed: #{e.message}" }
+      false
+    end
+
+    def safe_swing_low?(series, index, lookback:)
+      return false unless series.respond_to?(:swing_low?)
+
+      series.swing_low?(index, lookback: lookback)
+    rescue StandardError => e
+      Rails.logger.debug { "[TrendScorer] swing_low? failed: #{e.message}" }
+      false
+    end
+
+    def sanitize_series(series)
+      return nil unless series
+
+      highs = extract_series_component(series, :highs, :high)
+      lows = extract_series_component(series, :lows, :low)
+      closes = extract_series_component(series, :closes, :close)
+
+      return nil if highs.empty? || lows.empty? || closes.empty?
+
+      Struct.new(:highs, :lows, :closes).new(highs, lows, closes)
+    end
+
+    def extract_series_component(series, accessor, candle_attr)
+      values =
+        if series.respond_to?(accessor)
+          series.public_send(accessor)
+        elsif series.respond_to?(:candles)
+          series.candles&.map do |candle|
+            candle.respond_to?(candle_attr) ? candle.public_send(candle_attr) : candle[candle_attr] || candle[candle_attr.to_s]
+          end
+        else
+          []
+        end
+
+      normalize_numeric_series(values)
     end
   end
   # rubocop:enable Metrics/ClassLength
