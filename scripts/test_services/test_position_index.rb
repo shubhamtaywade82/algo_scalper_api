@@ -133,5 +133,29 @@ if active_positions.any?
   ServiceTestHelper.print_success("Index rebuilt: #{rebuilt_keys.size} keys (#{rebuilt_count} positions added)")
 end
 
+# Cleanup: Remove test position trackers created during this test
+ServiceTestHelper.print_section('8. Cleanup')
+begin
+  # Find test trackers created by setup_test_position_tracker
+  # They are identified by: paper=true, order_no starts with "TEST-", and created recently
+  test_trackers = PositionTracker.where(paper: true)
+                                  .where("order_no LIKE 'TEST-%'")
+                                  .where('created_at > ?', 10.minutes.ago)
+
+  if test_trackers.any?
+    deleted_count = test_trackers.count
+    test_trackers.destroy_all
+    ServiceTestHelper.print_success("Cleaned up #{deleted_count} test position tracker(s) from database")
+  else
+    ServiceTestHelper.print_info('No test position trackers to clean up (or they were already cleaned)')
+  end
+
+  # Also clear the index one more time to ensure it's clean
+  position_index.clear
+  ServiceTestHelper.print_info('PositionIndex cleared')
+rescue StandardError => e
+  ServiceTestHelper.print_warning("Cleanup error: #{e.message}")
+end
+
 ServiceTestHelper.print_success('PositionIndex test completed')
 

@@ -186,8 +186,27 @@ module Options
       segment = index_cfg[:segment]
       security_id = index_cfg[:sid]
 
-      @tick_cache.ltp(segment,
-                      security_id) || Live::RedisTickCache.instance.fetch_tick(segment, security_id)&.dig(:ltp)&.to_f
+      # Try tick cache first (fastest, no API rate limits)
+      spot = @tick_cache.ltp(segment, security_id)
+      return spot if spot&.positive?
+
+      # Try Redis tick cache
+      spot = Live::RedisTickCache.instance.fetch_tick(segment, security_id)&.dig(:ltp)&.to_f
+      return spot if spot&.positive?
+
+      # Fallback to API via Instrument.ltp() (same pattern as InstrumentHelpers)
+      # This ensures we can get spot price even when WebSocket is not running
+      begin
+        instrument = Instrument.find_by(exchange: 'nse', segment: 'index', security_id: security_id.to_s)
+        if instrument
+          spot = instrument.ltp&.to_f
+          return spot if spot&.positive?
+        end
+      rescue StandardError => e
+        Rails.logger.debug("[Options::StrikeSelector] API fallback failed for #{index_key}: #{e.message}")
+      end
+
+      nil
     end
 
     def candidate_valid?(candidate, rules, premium_filter)
