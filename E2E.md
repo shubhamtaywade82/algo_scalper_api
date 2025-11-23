@@ -550,6 +550,27 @@ flowchart TD
 
 ## Integration Evidence (Sample Snippets)
 
+scheduler.rb
+
+```
+sequenceDiagram
+  participant Puma
+  participant Supervisor
+  participant Services
+  participant PositionIndex
+  participant MarketFeed
+
+  Puma->>Supervisor: Rails config.to_prepare
+  Supervisor->>Services: register(:market_feed, ...)
+  Supervisor->>Services: start_all
+  Services->>MarketFeed: start!
+  Services->>SignalScheduler: start
+  Services->>RiskManager: start
+  Supervisor->>PositionIndex: all_keys
+  Supervisor->>MarketFeed: subscribe_many(active_pairs)
+  Supervisor->>Puma: install signal traps & at_exit
+```
+
 ```150:167:app/services/signal/scheduler.rb
       result = Entries::EntryGuard.try_enter(
         index_cfg: index_cfg,
@@ -568,6 +589,21 @@ flowchart TD
       bracket_placer = Orders::BracketPlacer.new
       bracket_result = bracket_placer.place_bracket(...)
 ```
+```
+sequenceDiagram
+  participant DhanWS
+  participant MarketFeedHub
+  participant TickCache
+  participant RedisTick
+  participant Callbacks
+
+  DhanWS-->>MarketFeedHub: tick
+  MarketFeedHub->>MarketFeedHub: update last_tick_at, connection_state
+  MarketFeedHub->>TickCache: put(tick)
+  TickCache->>RedisTick: store_tick
+  MarketFeedHub->>Callbacks: safe_invoke tick
+  MarketFeedHub->>PnlUpdater: cache_intermediate_pnl
+```
 
 ```16:60:app/services/tick_cache.rb
     merged = @map.compute(key) do |_, existing|
@@ -578,11 +614,54 @@ flowchart TD
         data: merged
       )
 ```
+```
+sequenceDiagram
+  participant Scheduler
+  participant StrategyEngines
+  participant ChainAnalyzer
+  participant EntryGuard
+
+  loop every 30s per index
+    Scheduler->>ChainAnalyzer: select_candidates
+    ChainAnalyzer-->>Scheduler: candidates[]
+    Scheduler->>StrategyEngines: evaluate(candidate)
+    StrategyEngines-->>Scheduler: signal / nil
+    alt signal emitted
+      Scheduler->>EntryGuard: try_enter(index_cfg, pick, direction)
+    else no signal
+      Scheduler->>Scheduler: continue
+    end
+  end
+```
 
 ```185:219:app/services/live/risk_manager_service.rb
         if pnl_pct <= -sl_pct
           reason = "SL HIT #{(pnl_pct * 100).round(2)}%"
           dispatch_exit(exit_engine, tracker, reason)
+```
+```
+sequenceDiagram
+  participant EntryGuard
+  participant DailyLimits
+  participant TickCache
+  participant Allocator
+  participant Broker/Paper
+  participant PositionTracker
+
+  EntryGuard->>DailyLimits: can_trade?
+  DailyLimits-->>EntryGuard: allowed?/reason
+  EntryGuard->>EntryGuard: exposure_ok?, cooldown?
+  EntryGuard->>TickCache: subscribe+ltp or API
+  EntryGuard->>Allocator: qty_for(index_cfg, entry_price,...)
+  Allocator-->>EntryGuard: quantity
+  alt paper trading
+    EntryGuard->>PositionTracker: create_paper_tracker!
+  else live trading
+    EntryGuard->>Broker/Paper: place_market
+    Broker/Paper-->>EntryGuard: order_no
+    EntryGuard->>PositionTracker: create_tracker!
+  end
+  EntryGuard->>Rails.logger: success/failure
 ```
 
 ---
