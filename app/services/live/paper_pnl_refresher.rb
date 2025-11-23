@@ -34,12 +34,17 @@ module Live
       Thread.current.name = "paper-pnl-refresher"
 
       loop do
-        refresh_all
+        break unless @running
+        begin
+          refresh_all
+        rescue StandardError => e
+          Rails.logger.error("[PaperPnlRefresher] ERROR in run_loop: #{e.class} - #{e.message}")
+        end
         sleep REFRESH_INTERVAL
       end
-    rescue => e
-      Rails.logger.error("[PaperPnlRefresher] ERROR: #{e.class} - #{e.message}")
-      retry
+    rescue StandardError => e
+      Rails.logger.error("[PaperPnlRefresher] FATAL ERROR: #{e.class} - #{e.message}")
+      @running = false
     end
 
     def refresh_all
@@ -78,8 +83,8 @@ module Live
         hwm: tracker.high_water_mark_pnl,
         timestamp: Time.current
       )
-    rescue => e
-      Rails.logger.warn("[PaperPnlRefresher] Failed refresh for #{tracker.id}: #{e.message}")
+    rescue StandardError => e
+      Rails.logger.warn("[PaperPnlRefresher] Failed refresh for #{tracker.id}: #{e.class} - #{e.message}")
     end
   end
 end

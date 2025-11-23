@@ -4,6 +4,21 @@ require 'digest'
 
 module Orders
   class Placer
+    # Valid tradable segments per DhanHQ API documentation
+    # Indices (IDX_I, BSE_IDX, NSE_IDX) are NOT tradable - they are reference values only
+    # NSE: NSE_EQ (Equity Cash), NSE_FNO (Futures & Options), NSE_CURRENCY (Currency)
+    # BSE: BSE_EQ (Equity Cash), BSE_FNO (Futures & Options), BSE_CURRENCY (Currency)
+    # MCX: MCX_COMM (Commodity)
+    VALID_TRADABLE_SEGMENTS = %w[
+      NSE_EQ
+      NSE_FNO
+      NSE_CURRENCY
+      BSE_EQ
+      BSE_FNO
+      BSE_CURRENCY
+      MCX_COMM
+    ].freeze
+
     class << self
       def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: 'INTRADAY', price: nil,
                       target_price: nil, stop_loss_price: nil, trailing_jump: nil)
@@ -12,6 +27,11 @@ module Orders
 
         unless seg && sid && qty && normalized_id
           Rails.logger.error("[Orders::Placer] Missing required parameters for buy_market!: seg=#{seg}, sid=#{sid}, qty=#{qty}, client_order_id=#{client_order_id}")
+          return nil
+        end
+
+        unless segment_tradable?(seg)
+          Rails.logger.error("[Orders::Placer] Segment #{seg} is not tradable. Valid segments: #{VALID_TRADABLE_SEGMENTS.join(', ')}")
           return nil
         end
 
@@ -60,6 +80,12 @@ module Orders
         end
 
         position = fetch_position_details(sid)
+        actual_segment = position ? position[:exchange_segment] : seg
+
+        unless segment_tradable?(actual_segment)
+          Rails.logger.error("[Orders::Placer] Segment #{actual_segment} is not tradable. Valid segments: #{VALID_TRADABLE_SEGMENTS.join(', ')}")
+          return nil
+        end
 
         actual_qty = if position && position[:net_qty].to_i > 0
                        position[:net_qty]
@@ -117,6 +143,11 @@ module Orders
         actual_qty = position_details[:net_qty]
         actual_segment = position_details[:exchange_segment]
         position_type = position_details[:position_type]
+
+        unless segment_tradable?(actual_segment)
+          Rails.logger.error("[Orders::Placer] Segment #{actual_segment} is not tradable. Valid segments: #{VALID_TRADABLE_SEGMENTS.join(', ')}")
+          return nil
+        end
 
         transaction_type = case position_type
                            when 'LONG' then 'SELL'
@@ -211,6 +242,12 @@ module Orders
         digest = Digest::SHA1.hexdigest(value)[0, 6]
         base = value[0, 23]
         "#{base}-#{digest}"
+      end
+
+      def segment_tradable?(segment)
+        return false if segment.blank?
+
+        VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
       end
     end
   end

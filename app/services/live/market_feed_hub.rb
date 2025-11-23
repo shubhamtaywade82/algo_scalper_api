@@ -22,13 +22,22 @@ module Live
     end
 
     def start!
-      return unless enabled?
-      return if running?
+      unless enabled?
+        Rails.logger.warn('[MarketFeedHub] Not enabled - missing credentials (DHANHQ_CLIENT_ID/CLIENT_ID or DHANHQ_ACCESS_TOKEN/ACCESS_TOKEN)')
+        return false
+      end
+
+      if running?
+        Rails.logger.debug('[MarketFeedHub] Already running, skipping start')
+        return true
+      end
 
       @lock.synchronize do
-        return if running?
+        return true if running?
 
         @watchlist = load_watchlist || []
+        Rails.logger.info("[MarketFeedHub] Loaded watchlist: #{@watchlist.count} instruments")
+
         @ws_client = build_client
 
         # Set up event handlers for connection monitoring
@@ -36,7 +45,8 @@ module Live
 
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
         @ws_client.start
-        subscribe_watchlist
+        Rails.logger.info('[MarketFeedHub] WebSocket client started')
+
         @running = true
         @started_at = Time.current
         @connection_state = :connecting
@@ -45,10 +55,14 @@ module Live
         # NOTE: Connection state will be updated to :connected when first tick is received
       end
 
-      # Rails.logger.info("DhanHQ market feed started (mode=#{mode}, watchlist=#{@watchlist.count} instruments).")
+      # Subscribe to watchlist OUTSIDE the lock to avoid deadlock
+      # (subscribe_many calls ensure_running! which might try to acquire the lock)
+      subscribe_watchlist
+
+      Rails.logger.info("[MarketFeedHub] DhanHQ market feed started (watchlist=#{@watchlist.count} instruments)")
       true
     rescue StandardError => e
-      Rails.logger.error("Failed to start DhanHQ market feed: #{_e.class} - #{e.message}")
+      Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
       stop!
       false
     end
@@ -163,7 +177,13 @@ module Live
 
     def subscribe_many(instruments)
       ensure_running!
-      return [] if instruments.empty?
+
+      if instruments.empty?
+        Rails.logger.warn('[MarketFeedHub] subscribe_many called with empty instruments list')
+        return []
+      end
+
+      Rails.logger.debug { "[MarketFeedHub] subscribe_many called with #{instruments.count} instruments" }
 
       # Convert to the format expected by DhanHQ WebSocket client
       list = instruments.map do |instrument|
@@ -180,7 +200,10 @@ module Live
         @subscribed_keys.include?(key)
       end
 
-      return [] if new_subscriptions.empty?
+      if new_subscriptions.empty?
+        Rails.logger.info("[MarketFeedHub] All #{list.count} instruments were already subscribed (duplicates skipped)")
+        return []
+      end
 
       # Convert to format expected by DhanHQ client: ExchangeSegment and SecurityId keys
       normalized_list = new_subscriptions.map do |item|
@@ -189,6 +212,8 @@ module Live
           SecurityId: (item[:security_id] || item['security_id']).to_s
         }
       end
+
+      Rails.logger.info("[MarketFeedHub] Subscribing to #{new_subscriptions.count} instruments via WebSocket...")
 
       # Subscribe via WebSocket
       @ws_client.subscribe_many(normalized_list)
@@ -201,10 +226,11 @@ module Live
 
       skipped_count = list.size - new_subscriptions.size
       if skipped_count > 0
-        Rails.logger.debug { "[MarketFeedHub] Skipped #{skipped_count} duplicate subscriptions, subscribed to #{new_subscriptions.size} new instruments" }
+        Rails.logger.info("[MarketFeedHub] Skipped #{skipped_count} duplicate subscriptions, subscribed to #{new_subscriptions.size} new instruments")
+      else
+        Rails.logger.info("[MarketFeedHub] Successfully subscribed to #{new_subscriptions.count} instruments")
       end
 
-      # Rails.logger.info("[MarketFeedHub] Batch subscribed to #{new_subscriptions.count} instruments")
       new_subscriptions
     end
 
@@ -361,13 +387,18 @@ module Live
     end
 
     def subscribe_watchlist
-      return if @watchlist.empty?
+      if @watchlist.empty?
+        Rails.logger.warn('[MarketFeedHub] Watchlist is empty, skipping subscription')
+        return
+      end
+
+      Rails.logger.info("[MarketFeedHub] Loading watchlist: #{@watchlist.count} instruments")
 
       # Use subscribe_many for efficient batch subscription (up to 100 instruments per message)
       # This will automatically deduplicate via subscribe_many
-      subscribe_many(@watchlist)
+      result = subscribe_many(@watchlist)
 
-      # Rails.logger.info("[MarketFeedHub] Subscribed to watchlist (#{@watchlist.count} instruments)")
+      Rails.logger.info("[MarketFeedHub] Subscribed to watchlist (#{@watchlist.count} total, #{result.count} new subscriptions)")
     end
 
     def load_watchlist

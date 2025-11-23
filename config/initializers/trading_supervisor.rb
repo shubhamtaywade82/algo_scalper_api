@@ -38,10 +38,12 @@ module TradingSystem
      return if @running
 
      @services.each do |name, service|
+       begin
          service.start
          Rails.logger.info("[Supervisor] started #{name}")
-      rescue StandardError => e
+       rescue StandardError => e
          Rails.logger.error("[Supervisor] failed starting #{name}: #{e.class} - #{e.message}")
+       end
      end
 
      @running = true
@@ -51,10 +53,12 @@ module TradingSystem
      return unless @running
 
      @services.reverse_each do |name, service|
+       begin
          service.stop
          Rails.logger.info("[Supervisor] stopped #{name}")
-      rescue StandardError => e
+       rescue StandardError => e
          Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
+       end
      end
 
      @running = false

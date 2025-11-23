@@ -41,12 +41,12 @@ module WsConnectionTest
         puts "\nDiagnostics:"
 
         # Check if credentials are configured
-        client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+        client_id = ENV['CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
         access_token = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
 
         if client_id.blank? || access_token.blank?
           puts "   ❌ DhanHQ credentials not configured"
-          puts "      Required: DHANHQ_CLIENT_ID (or CLIENT_ID)"
+          puts "      Required: CLIENT_ID (or CLIENT_ID)"
           puts "      Required: DHANHQ_ACCESS_TOKEN (or ACCESS_TOKEN)"
           puts "\n   To fix: Set credentials in environment variables or .env file"
           return { success: false, error: 'credentials_missing', message: 'DhanHQ credentials not configured' }
@@ -278,7 +278,7 @@ module WsConnectionTest
         end
         if ticks_received.zero?
           puts "2. Verify WebSocket connection is active and receiving ticks"
-          puts "3. Check DhanHQ credentials: DHANHQ_CLIENT_ID and DHANHQ_ACCESS_TOKEN"
+          puts "3. Check DhanHQ credentials: CLIENT_ID and DHANHQ_ACCESS_TOKEN"
         end
         puts "4. Review application logs for WebSocket errors"
         puts "=" * 80

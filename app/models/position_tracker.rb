@@ -51,6 +51,7 @@ class PositionTracker < ApplicationRecord
   # Validations
   validates :order_no, presence: true, uniqueness: true
   validates :security_id, presence: true
+  validate :segment_must_be_tradable
 
   # Callbacks
   after_commit :register_in_index, on: %i[create update]
@@ -556,5 +557,19 @@ class PositionTracker < ApplicationRecord
     # For long positions: PnL = (exit - entry) * quantity
     pnl = (exit_value - entry) * qty
     BigDecimal(pnl.to_s)
+  end
+
+  private
+
+  def segment_must_be_tradable
+    return if segment.blank? # Allow blank segments (will be validated elsewhere if needed)
+
+    unless Orders::Placer::VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
+      errors.add(
+        :segment,
+        "is not tradable. Segment '#{segment}' is an index segment and cannot be traded. " \
+        "Valid tradable segments: #{Orders::Placer::VALID_TRADABLE_SEGMENTS.join(', ')}"
+      )
+    end
   end
 end

@@ -3,6 +3,12 @@
 require 'rails_helper'
 
 RSpec.describe Entries::EntryGuard do
+  let(:daily_limits) { instance_double(Live::DailyLimits) }
+
+  before do
+    allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
+    allow(daily_limits).to receive(:can_trade?).and_return({ allowed: true, reason: nil })
+  end
   let(:nifty_instrument) { create(:instrument, :nifty_future, security_id: '9999', symbol_name: 'NIFTY') }
   let(:index_cfg) do
     {

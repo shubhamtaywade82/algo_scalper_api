@@ -24,6 +24,7 @@ module Positions
       :current_ltp,
       :pnl,
       :pnl_pct,
+      :peak_profit_pct,
       :trend,
       :time_in_position,
       :breakeven_locked,
@@ -59,6 +60,7 @@ module Positions
         recalculate_pnl
       end
 
+      # rubocop:disable Metrics/AbcSize
       def recalculate_pnl
         return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
 
@@ -67,7 +69,17 @@ module Positions
 
         # Update HWM
         self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
+
+        # Update peak profit percentage (highest profit % achieved)
+        old_peak = peak_profit_pct
+        self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
+
+        # NEW (Step 12): Persist peak if it was updated
+        return unless peak_profit_pct != old_peak && peak_profit_pct&.positive?
+
+        ActiveCache.instance.persist_peak(tracker_id, peak_profit_pct)
       end
+      # rubocop:enable Metrics/AbcSize
     end
 
     def initialize
@@ -80,6 +92,13 @@ module Positions
         updates_processed: 0,
         errors: 0
       }
+      # Redis connection for peak persistence (Step 12)
+      @redis = begin
+        Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+      rescue StandardError => e
+        Rails.logger.error("[ActiveCache] Redis init error: #{e.class} - #{e.message}")
+        nil
+      end
     end
 
     # Start the cache (subscribe to MarketFeedHub callbacks)
@@ -92,6 +111,10 @@ module Positions
       hub.on_tick { |tick| handle_tick(tick) }
 
       @subscription_id = 'market_feed_hub_callback' # Mark as subscribed
+
+      # NEW (Step 12): Reload peak values from Redis on startup
+      reload_peaks
+
       Rails.logger.info('[Positions::ActiveCache] Started and subscribed to MarketFeedHub callbacks')
       true
     rescue StandardError => e
@@ -138,6 +161,7 @@ module Positions
         current_ltp: nil, # Will be updated on next LTP event
         pnl: 0.0,
         pnl_pct: 0.0,
+        peak_profit_pct: 0.0, # Initial peak profit percentage
         trend: :neutral, # Will be determined from price action
         time_in_position: Time.current - tracker.created_at,
         breakeven_locked: tracker.breakeven_locked?,
@@ -148,6 +172,13 @@ module Positions
       @cache[composite_key] = position_data
       @tracker_index[tracker.id] = composite_key
       @stats[:positions_tracked] = @cache.size
+
+      # NEW (Step 12): Check for pending peak value from reload_peaks
+      if @pending_peaks && @pending_peaks[tracker.id]
+        peak_value = @pending_peaks.delete(tracker.id)
+        position_data.peak_profit_pct = peak_value if peak_value > (position_data.peak_profit_pct || 0)
+        Rails.logger.debug { "[ActiveCache] Applied pending peak for tracker #{tracker.id}: #{peak_value.round(2)}%" }
+      end
 
       # Try to get current LTP from cache
       ltp = Live::TickCache.ltp(tracker.segment, tracker.security_id)
@@ -222,8 +253,17 @@ module Positions
       position = get_by_tracker_id(tracker_id)
       return false unless position
 
+      # Track if peak_profit_pct is being updated
+      peak_updated = updates.key?(:peak_profit_pct)
+      old_peak = position.peak_profit_pct if peak_updated
+
       updates.each do |key, value|
         position[key] = value if position.respond_to?("#{key}=")
+      end
+
+      # NEW (Step 12): Persist peak if it was updated
+      if peak_updated && position.peak_profit_pct != old_peak && position.peak_profit_pct&.positive?
+        persist_peak(tracker_id, position.peak_profit_pct)
       end
 
       position.last_updated_at = Time.current
@@ -337,6 +377,63 @@ module Positions
 
       # Default: 60% above entry for long positions
       tracker.entry_price.to_f * 1.60
+    end
+
+    # NEW (Step 12): Persist peak profit percentage to Redis
+    # @param tracker_id [Integer] PositionTracker ID
+    # @param peak_profit_pct [Float] Peak profit percentage
+    # @return [Boolean] True if persisted successfully
+    def persist_peak(tracker_id, peak_profit_pct)
+      return false unless @redis && tracker_id && peak_profit_pct
+
+      redis_key = "position_peaks:#{tracker_id}"
+      ttl_seconds = 7.days.to_i # 7 days TTL (longer than typical position duration)
+
+      @redis.setex(redis_key, ttl_seconds, peak_profit_pct.to_s)
+      Rails.logger.debug { "[ActiveCache] Persisted peak for tracker #{tracker_id}: #{peak_profit_pct.round(2)}%" }
+      true
+    rescue StandardError => e
+      Rails.logger.error("[ActiveCache] Failed to persist peak for tracker #{tracker_id}: #{e.class} - #{e.message}")
+      false
+    end
+
+    # NEW (Step 12): Reload peak profit percentages from Redis for all active positions
+    # Called on startup to restore peak values after restart
+    # @return [Integer] Number of peaks reloaded
+    def reload_peaks
+      return 0 unless @redis
+
+      count = 0
+      PositionTracker.active.find_each do |tracker|
+        redis_key = "position_peaks:#{tracker.id}"
+        peak_str = @redis.get(redis_key)
+        next unless peak_str
+
+        peak_value = peak_str.to_f
+        next unless peak_value.positive?
+
+        # Get position from cache (may not exist if cache not loaded yet)
+        position = get_by_tracker_id(tracker.id)
+        if position
+          # Only update if persisted peak is higher than current
+          if position.peak_profit_pct.nil? || peak_value > position.peak_profit_pct
+            position.peak_profit_pct = peak_value
+            Rails.logger.debug { "[ActiveCache] Reloaded peak for tracker #{tracker.id}: #{peak_value.round(2)}%" }
+            count += 1
+          end
+        else
+          # Position not in cache yet - will be loaded when position is added
+          # Store in a temporary map for later use
+          @pending_peaks ||= {}
+          @pending_peaks[tracker.id] = peak_value
+        end
+      end
+
+      Rails.logger.info("[ActiveCache] Reloaded #{count} peak values from Redis") if count.positive?
+      count
+    rescue StandardError => e
+      Rails.logger.error("[ActiveCache] Failed to reload peaks: #{e.class} - #{e.message}")
+      0
     end
   end
   # rubocop:enable Metrics/ClassLength

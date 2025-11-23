@@ -18,8 +18,9 @@ module Live
     MAX_RETRIES_ON_RATE_LIMIT = 3
     RATE_LIMIT_BACKOFF_BASE = 2.0 # seconds
 
-    def initialize(exit_engine: nil)
+    def initialize(exit_engine: nil, trailing_engine: nil)
       @exit_engine = exit_engine
+      @trailing_engine = trailing_engine
       @mutex = Mutex.new
       @running = false
       @thread = nil
@@ -107,6 +108,10 @@ module Live
       update_paper_positions_pnl_if_due(last_paper_pnl_update)
       ensure_all_positions_in_redis
 
+      # NEW: Process trailing for all active positions (per-tick)
+      # Peak-drawdown check happens FIRST inside TrailingEngine.process_tick()
+      process_trailing_for_all_positions
+
       # Backwards-compatible enforcement: if there is no external ExitEngine, run enforcement here
       return unless @exit_engine.nil?
 
@@ -131,6 +136,10 @@ module Live
 
         if exit_successful
           tracker.mark_exited!(exit_price: exit_price, exit_reason: reason)
+
+          # NEW: Record loss in DailyLimits if position exited with loss
+          record_loss_if_applicable(tracker, exit_price)
+
           Rails.logger.info("[RiskManager] Successfully exited #{tracker.order_no} (#{tracker.id}) via internal executor")
           true
         else
@@ -242,6 +251,85 @@ module Live
     end
 
     private
+
+    # Process trailing stops for all active positions using TrailingEngine
+    def process_trailing_for_all_positions
+      @bracket_placer ||= Orders::BracketPlacer.new
+      @trailing_engine ||= Live::TrailingEngine.new(bracket_placer: @bracket_placer)
+      Positions::ActiveCache.instance.all_positions.each do |position|
+        # Peak-drawdown check happens inside TrailingEngine.process_tick()
+        @trailing_engine.process_tick(position, exit_engine: @exit_engine)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] TrailingEngine error for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Error in process_trailing_for_all_positions: #{e.class} - #{e.message}")
+    end
+
+    # Record loss in DailyLimits if position exited with loss
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_price [BigDecimal, Float, nil] Exit price
+    def record_loss_if_applicable(tracker, exit_price)
+      return unless tracker.entry_price && exit_price
+
+      entry = tracker.entry_price.to_f
+      exit = exit_price.to_f
+      return unless entry.positive? && exit.positive?
+
+      # Calculate PnL
+      pnl = (exit - entry) * tracker.quantity.to_i
+      return unless pnl.negative? # Only record losses
+
+      # Get index key from tracker or instrument
+      index_key = extract_index_key_from_tracker(tracker)
+      return unless index_key
+
+      # Record loss in DailyLimits
+      daily_limits = Live::DailyLimits.new
+      daily_limits.record_loss(index_key: index_key, amount: pnl.abs)
+
+      Rails.logger.info(
+        "[RiskManager] Recorded loss for #{index_key}: ₹#{pnl.abs.round(2)} " \
+        "(entry: ₹#{entry.round(2)}, exit: ₹#{exit.round(2)}, qty: #{tracker.quantity})"
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Failed to record loss: #{e.class} - #{e.message}")
+    end
+
+    # Extract index key from tracker
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @return [String, nil] Index key (e.g., 'NIFTY', 'BANKNIFTY')
+    def extract_index_key_from_tracker(tracker)
+      # Try to get from tracker's instrument or watchable
+      instrument = tracker.instrument || tracker.watchable
+      return nil unless instrument
+
+      # Check if instrument has index_key method or symbol_name
+      return instrument.index_key.to_s.upcase if instrument.respond_to?(:index_key)
+
+      # Try to infer from symbol_name (e.g., 'NIFTY-25Jan2024-25000-CE' -> 'NIFTY')
+      if instrument.respond_to?(:symbol_name) && instrument.symbol_name.present?
+        symbol = instrument.symbol_name.to_s
+        # Extract index from symbol (first part before dash)
+        index_key = symbol.split('-').first
+        return index_key.upcase if index_key.present?
+      end
+
+      # Try to get from AlgoConfig indices
+      indices = AlgoConfig.fetch[:indices] || []
+      indices.each do |idx_cfg|
+        segment = idx_cfg[:segment] || idx_cfg['segment']
+        sid = idx_cfg[:sid] || idx_cfg['sid']
+        if segment == tracker.segment && sid.to_s == tracker.security_id.to_s
+          return (idx_cfg[:key] || idx_cfg['key']).to_s.upcase
+        end
+      end
+
+      nil
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Failed to extract index key: #{e.class} - #{e.message}")
+      nil
+    end
 
     # Helper that centralizes exit dispatching logic.
     # If exit_engine is an object responding to execute_exit, delegate to it.
@@ -486,9 +574,7 @@ module Live
     def stagger_api_calls
       @mutex.synchronize do
         elapsed = Time.current - @last_api_call_time
-        if elapsed < API_CALL_STAGGER_SECONDS
-          sleep(API_CALL_STAGGER_SECONDS - elapsed)
-        end
+        sleep(API_CALL_STAGGER_SECONDS - elapsed) if elapsed < API_CALL_STAGGER_SECONDS
         @last_api_call_time = Time.current
       end
     end
@@ -561,7 +647,7 @@ module Live
     end
 
     def compute_pnl_pct(tracker, ltp, position = nil)
-      if position&.respond_to?(:cost_price)
+      if position && position.respond_to?(:cost_price)
         cost_price = position.cost_price.to_f
         return nil if cost_price.zero?
 

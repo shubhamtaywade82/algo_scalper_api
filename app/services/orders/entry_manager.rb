@@ -23,14 +23,32 @@ module Orders
     # @param index_cfg [Hash] Index configuration
     # @param direction [Symbol] :bullish or :bearish
     # @param scale_multiplier [Integer] Scale multiplier for position sizing
+    # @param trend_score [Float, nil] Trend score from TrendScorer (0-21)
     # @return [Hash] Result hash with :success, :tracker, :order_no, :error
-    # rubocop:disable Metrics/AbcSize
-    def process_entry(signal_result:, index_cfg:, direction:, scale_multiplier: 1)
+    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+    def process_entry(signal_result:, index_cfg:, direction:, scale_multiplier: 1, trend_score: nil)
       @stats[:entries_attempted] += 1
 
       # Extract pick/candidate from signal result
       pick = extract_pick(signal_result)
       return failure_result('No pick/candidate found in signal result') unless pick
+
+      # Get dynamic risk percentage based on trend score
+      risk_pct = if trend_score
+                   risk_allocator = Capital::DynamicRiskAllocator.new
+                   risk_allocator.risk_pct_for(
+                     index_key: index_cfg[:key],
+                     trend_score: trend_score
+                   )
+                 end
+
+      # Log risk allocation for monitoring
+      if risk_pct
+        Rails.logger.info(
+          "[Orders::EntryManager] Dynamic risk allocation for #{index_cfg[:key]}: " \
+          "risk_pct=#{risk_pct.round(4)} (trend_score=#{trend_score})"
+        )
+      end
 
       # Validate entry using EntryGuard
       unless Entries::EntryGuard.try_enter(
@@ -51,6 +69,14 @@ module Orders
         return failure_result('PositionTracker not found after entry')
       end
 
+      # Reject if quantity < 1 lot-equivalent
+      lot_size = pick[:lot_size] || tracker.quantity.to_i # Fallback to quantity if lot_size missing
+      if tracker.quantity.to_i < lot_size
+        @stats[:entries_failed] += 1
+        Rails.logger.warn("[Orders::EntryManager] Quantity #{tracker.quantity} < 1 lot (#{lot_size}) for #{tracker.order_no}")
+        return failure_result("Quantity #{tracker.quantity} < 1 lot (#{lot_size})")
+      end
+
       # Calculate SL/TP prices
       sl_price, tp_price = calculate_sl_tp(tracker.entry_price, direction)
 
@@ -65,18 +91,42 @@ module Orders
         Rails.logger.warn("[Orders::EntryManager] Failed to add position to ActiveCache: #{tracker.id}")
       end
 
+      # Place bracket orders via BracketPlacer
+      bracket_placer = Orders::BracketPlacer.new
+      bracket_result = bracket_placer.place_bracket(
+        tracker: tracker,
+        sl_price: sl_price,
+        tp_price: tp_price,
+        reason: 'initial_bracket'
+      )
+
+      unless bracket_result[:success]
+        Rails.logger.warn("[Orders::EntryManager] Bracket placement failed for #{tracker.order_no}: #{bracket_result[:error]}")
+      end
+
+      # NEW: Record trade in DailyLimits
+      daily_limits = Live::DailyLimits.new
+      daily_limits.record_trade(index_key: index_cfg[:key])
+
       # Emit entry_filled event
-      emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price)
+      emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price, risk_pct)
 
       @stats[:entries_successful] += 1
-      success_result(tracker: tracker, position_data: position_data, sl_price: sl_price, tp_price: tp_price)
+      success_result(
+        tracker: tracker,
+        position_data: position_data,
+        sl_price: sl_price,
+        tp_price: tp_price,
+        bracket_result: bracket_result,
+        risk_pct: risk_pct
+      )
     rescue StandardError => e
       @stats[:entries_failed] += 1
       Rails.logger.error("[Orders::EntryManager] process_entry failed: #{e.class} - #{e.message}")
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
       failure_result(e.message)
     end
-    # rubocop:enable Metrics/AbcSize
+    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     # Get statistics
     # @return [Hash]
@@ -96,7 +146,9 @@ module Orders
       return signal_result[:candidate] if signal_result[:candidate]
 
       # Try StrikeSelector format (normalized instrument hash)
-      return signal_result if signal_result.is_a?(Hash) && signal_result[:security_id].present? && signal_result[:index].present?
+      if signal_result.is_a?(Hash) && signal_result[:security_id].present? && signal_result[:index].present?
+        return signal_result
+      end
 
       # Try old format (pick)
       return signal_result[:pick] if signal_result[:pick]
@@ -160,8 +212,10 @@ module Orders
     # @param direction [Symbol] Direction
     # @param sl_price [Float] Stop loss price
     # @param tp_price [Float] Take profit price
+    # @param risk_pct [Float, nil] Dynamic risk percentage
     # rubocop:disable Metrics/ParameterLists
-    def emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price)
+    def emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price,
+                                risk_pct = nil)
       event_data = {
         tracker_id: tracker.id,
         order_no: tracker.order_no,
@@ -174,6 +228,7 @@ module Orders
         index_key: index_cfg[:key],
         sl_price: sl_price,
         tp_price: tp_price,
+        risk_pct: risk_pct,
         timestamp: Time.current
       }
 
@@ -189,8 +244,11 @@ module Orders
     # @param position_data [PositionData] ActiveCache position data
     # @param sl_price [Float] Stop loss price
     # @param tp_price [Float] Take profit price
+    # @param bracket_result [Hash, nil] Bracket placement result
+    # @param risk_pct [Float, nil] Dynamic risk percentage
     # @return [Hash]
-    def success_result(tracker:, position_data:, sl_price:, tp_price:)
+    # rubocop:disable Metrics/ParameterLists
+    def success_result(tracker:, position_data:, sl_price:, tp_price:, bracket_result: nil, risk_pct: nil)
       {
         success: true,
         tracker: tracker,
@@ -198,9 +256,12 @@ module Orders
         order_no: tracker.order_no,
         position_data: position_data,
         sl_price: sl_price,
-        tp_price: tp_price
+        tp_price: tp_price,
+        bracket_result: bracket_result,
+        risk_pct: risk_pct
       }
     end
+    # rubocop:enable Metrics/ParameterLists
 
     # Build failure result hash
     # @param error [String] Error message

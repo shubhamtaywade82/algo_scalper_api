@@ -73,7 +73,8 @@ module Options
 
     # Load chain using Derivative records and merge with live data
     def load_chain_for_expiry(expiry_date)
-      expiry_obj = Date.parse(expiry_date)
+      # Convert expiry_date to Date object if it's a string
+      expiry_obj = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
 
       # Get all derivatives for this index and expiry
       derivatives = Derivative.where(
@@ -84,7 +85,9 @@ module Options
       return [] if derivatives.empty?
 
       # Fetch option chain data from API for OI/IV/Greeks
-      api_chain = fetch_api_chain(expiry_date)
+      # Convert expiry_date to string format for API call (YYYY-MM-DD)
+      expiry_str = expiry_obj.is_a?(Date) ? expiry_obj.strftime('%Y-%m-%d') : expiry_date.to_s
+      api_chain = fetch_api_chain(expiry_str)
       return [] unless api_chain
 
       # Merge Derivative records with API data and live ticks

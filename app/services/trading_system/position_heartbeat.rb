@@ -21,7 +21,7 @@ module TradingSystem
           begin
             Live::PositionIndex.instance.bulk_load_active!
             Live::PositionTrackerPruner.call
-          rescue => e
+          rescue StandardError => e
             Rails.logger.error("[PositionHeartbeat] #{e.class} - #{e.message}")
           end
 

@@ -21,42 +21,55 @@ module Orders
     # Place bracket orders (SL/TP) for a position
     # Note: DhanHQ bracket orders are placed WITH the entry order (boProfitValue, boStopLossValue)
     # This method is for cases where bracket orders need to be placed separately or modified
+    # For NEMESIS V3: SL = 30% below entry (entry * 0.70), TP = 60% above entry (entry * 1.60)
     # @param tracker [PositionTracker] PositionTracker instance
-    # @param sl_price [Float] Stop loss price
-    # @param tp_price [Float] Take profit price
+    # @param sl_price [Float, nil] Stop loss price (nil = calculate from entry: entry * 0.70)
+    # @param tp_price [Float, nil] Take profit price (nil = calculate from entry: entry * 1.60)
     # @param reason [String] Reason for bracket placement
-    # @return [Hash] Result hash with :success, :sl_order, :tp_order, :error
-    def place_bracket(tracker:, sl_price:, tp_price:, reason: nil)
+    # @return [Hash] Result hash with :success, :sl_price, :tp_price, :error
+    # rubocop:disable Metrics/AbcSize
+    def place_bracket(tracker:, sl_price: nil, tp_price: nil, reason: nil)
       return failure_result('Tracker not found') unless tracker
       return failure_result('Tracker not active') unless tracker.active?
-      return failure_result('Invalid SL/TP prices') unless sl_price&.positive? && tp_price&.positive?
+
+      entry_price = tracker.entry_price.to_f
+      return failure_result('Invalid entry price') unless entry_price.positive?
+
+      # ENSURE: SL = 30% below entry, TP = 60% above entry (NEMESIS V3 fixed values)
+      # Calculate if not provided
+      calculated_sl = sl_price || (entry_price * 0.70)
+      calculated_tp = tp_price || (entry_price * 1.60)
+
+      return failure_result('Invalid SL/TP prices') unless calculated_sl&.positive? && calculated_tp&.positive?
 
       # For NEMESIS V3, bracket orders are typically placed WITH the entry order
       # This method is primarily for adjustments or separate placement scenarios
       # DhanHQ doesn't support modifying bracket orders - we'd need to cancel and replace
       # For now, we'll update ActiveCache and log the bracket levels
 
-      # Update ActiveCache with SL/TP
+      # Update ActiveCache with SL/TP and peak_profit_pct = 0 (initial)
       @active_cache.update_position(
         tracker.id,
-        sl_price: sl_price,
-        tp_price: tp_price
+        sl_price: calculated_sl,
+        tp_price: calculated_tp,
+        peak_profit_pct: 0.0
       )
 
       # Emit bracket placed event
-      emit_bracket_placed_event(tracker, sl_price, tp_price, reason)
+      emit_bracket_placed_event(tracker, calculated_sl, calculated_tp, reason)
 
       @stats[:brackets_placed] += 1
       @stats[:sl_orders_placed] += 1
       @stats[:tp_orders_placed] += 1
 
-      success_result(sl_price: sl_price, tp_price: tp_price, reason: reason)
+      success_result(sl_price: calculated_sl, tp_price: calculated_tp, reason: reason)
     rescue StandardError => e
       @stats[:brackets_failed] += 1
       Rails.logger.error("[Orders::BracketPlacer] place_bracket failed: #{e.class} - #{e.message}")
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
       failure_result(e.message)
     end
+    # rubocop:enable Metrics/AbcSize
 
     # Update bracket orders (modify SL/TP)
     # Since DhanHQ doesn't support modifying bracket orders, this updates ActiveCache

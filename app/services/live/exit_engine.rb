@@ -23,16 +23,14 @@ module Live
           loop do
             break unless @running
 
-            # begin
-            #   # Let RiskManager fetch positions itself. Pass the engine via keyword.
-            #   @risk_manager.enforce_hard_limits(exit_engine: self)
-            #   @risk_manager.enforce_trailing_stops(exit_engine: self)
-            #   @risk_manager.enforce_time_based_exit(exit_engine: self)
-            # rescue StandardError => e
-            #   Rails.logger.error("[ExitEngine] crash: #{e.class} - #{e.message}\n#{e.backtrace.first(6).join("\n")}")
-            # end
-            # sleep 1
-            sleep 0.5
+            begin
+              # ExitEngine thread is idle - RiskManager calls execute_exit() directly
+              # This thread exists for future use or monitoring
+              sleep 0.5
+            rescue StandardError => e
+              Rails.logger.error("[ExitEngine] Thread error: #{e.class} - #{e.message}")
+              Rails.logger.error("[ExitEngine] Backtrace: #{e.backtrace.first(5).join("\n")}")
+            end
           end
         end
       end

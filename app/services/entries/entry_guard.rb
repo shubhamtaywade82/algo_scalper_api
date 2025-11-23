@@ -10,6 +10,18 @@ module Entries
           return false
         end
 
+        # NEW: Check daily limits before allowing entry
+        daily_limits = Live::DailyLimits.new
+        limit_check = daily_limits.can_trade?(index_key: index_cfg[:key])
+        unless limit_check[:allowed]
+          Rails.logger.warn(
+            "[EntryGuard] Trading blocked for #{index_cfg[:key]}: #{limit_check[:reason]} " \
+            "(daily_loss: #{limit_check[:daily_loss]&.round(2)}, " \
+            "daily_trades: #{limit_check[:daily_trades]})"
+          )
+          return false
+        end
+
         multiplier = [scale_multiplier.to_i, 1].max
         Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
 
@@ -56,6 +68,16 @@ module Entries
           return false
         end
 
+        # Validate segment is tradable (indices are not tradable)
+        segment = pick[:segment] || index_cfg[:segment]
+        unless segment_tradable?(segment)
+          Rails.logger.error(
+            "[EntryGuard] Cannot create position for non-tradable segment #{segment} " \
+            "(#{index_cfg[:key]}: #{pick[:symbol]}). Indices are not tradable."
+          )
+          return false
+        end
+
         # Paper trading mode: Skip real order placement, create PositionTracker directly
         if paper_trading_enabled?
           return create_paper_tracker!(
@@ -71,7 +93,7 @@ module Entries
         # Live trading: Place real order
         response = Orders.config.place_market(
           side: 'buy',
-          segment: pick[:segment] || index_cfg[:segment],
+          segment: segment,
           security_id: pick[:security_id],
           qty: quantity,
           meta: {
@@ -500,6 +522,12 @@ module Entries
 
         # Fallback to instrument (for index positions)
         instrument
+      end
+
+      def segment_tradable?(segment)
+        return false if segment.blank?
+
+        Orders::Placer::VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
       end
     end
   end

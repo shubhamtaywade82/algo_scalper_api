@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Live::RiskManagerService do
-  let(:service) { described_class.instance }
+  let(:service) { described_class.new }
   let(:instrument) { create(:instrument, :nifty_future, security_id: '9999') }
   let(:tracker) do
     create(
@@ -60,6 +60,7 @@ RSpec.describe Live::RiskManagerService do
         allow(service).to receive(:enforce_hard_limits)
         allow(service).to receive(:enforce_trailing_stops)
         allow(service).to receive(:enforce_time_based_exit)
+        allow(service).to receive(:process_trailing_for_all_positions)
         allow(service).to receive(:sleep)
       end
 
@@ -81,6 +82,14 @@ RSpec.describe Live::RiskManagerService do
 
         expect(Live::PositionSyncService.instance).to receive(:sync_positions!).at_least(:once)
         sleep 0.1
+      end
+
+      it 'calls process_trailing_for_all_positions during loop iteration' do
+        service.start!
+        sleep 0.2 # Allow one iteration to complete
+
+        # Verify TrailingEngine integration is called
+        expect(service).to have_received(:process_trailing_for_all_positions).at_least(:once)
       end
 
       it 'calls enforce methods during loop iteration' do
@@ -1098,6 +1107,76 @@ RSpec.describe Live::RiskManagerService do
 
         # After error, service should stop running (rescue block sets @running = false)
         expect(service.running?).to be false
+      end
+    end
+
+    describe '#process_trailing_for_all_positions' do
+      let(:trailing_engine) { instance_double(Live::TrailingEngine) }
+      let(:active_cache) { instance_double(Positions::ActiveCache) }
+      let(:position_data) do
+        instance_double(
+          Positions::ActiveCache::PositionData,
+          tracker_id: tracker.id,
+          valid?: true
+        )
+      end
+
+      before do
+        allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
+        allow(active_cache).to receive(:all_positions).and_return([position_data])
+        allow(Live::TrailingEngine).to receive(:new).and_return(trailing_engine)
+        allow(trailing_engine).to receive(:process_tick).and_return(
+          { peak_updated: true, sl_updated: false, exit_triggered: false }
+        )
+        service.instance_variable_set(:@trailing_engine, trailing_engine)
+        service.instance_variable_set(:@exit_engine, nil)
+      end
+
+      it 'processes all active positions with TrailingEngine' do
+        service.send(:process_trailing_for_all_positions)
+
+        expect(trailing_engine).to have_received(:process_tick).with(
+          position_data,
+          exit_engine: nil
+        )
+      end
+
+      it 'passes exit_engine to TrailingEngine if available' do
+        exit_engine = instance_double(Live::ExitEngine)
+        service.instance_variable_set(:@exit_engine, exit_engine)
+
+        service.send(:process_trailing_for_all_positions)
+
+        expect(trailing_engine).to have_received(:process_tick).with(
+          position_data,
+          exit_engine: exit_engine
+        )
+      end
+
+      it 'handles empty positions gracefully' do
+        allow(active_cache).to receive(:all_positions).and_return([])
+
+        expect { service.send(:process_trailing_for_all_positions) }.not_to raise_error
+        expect(trailing_engine).not_to have_received(:process_tick)
+      end
+
+      it 'handles TrailingEngine errors gracefully' do
+        allow(trailing_engine).to receive(:process_tick).and_raise(StandardError, 'TrailingEngine error')
+        allow(Rails.logger).to receive(:error)
+
+        expect { service.send(:process_trailing_for_all_positions) }.not_to raise_error
+        expect(Rails.logger).to have_received(:error).with(
+          match(/TrailingEngine error for position/)
+        )
+      end
+
+      it 'creates TrailingEngine instance if not already initialized' do
+        service.instance_variable_set(:@trailing_engine, nil)
+
+        service.send(:process_trailing_for_all_positions)
+
+        expect(Live::TrailingEngine).to have_received(:new)
+        expect(trailing_engine).to have_received(:process_tick)
       end
     end
   end
