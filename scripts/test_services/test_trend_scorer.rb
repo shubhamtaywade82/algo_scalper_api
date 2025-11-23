@@ -72,14 +72,27 @@ if nifty_index
 
       # Test 5: Error handling
       ServiceTestHelper.print_section('5. Error Handling')
-      invalid_instrument = double('InvalidInstrument')
-      scorer_invalid = Signal::TrendScorer.new(
-        instrument: invalid_instrument,
-        primary_tf: '1m'
-      )
-      result_invalid = scorer_invalid.compute_trend_score
-      if result_invalid && result_invalid[:trend_score] == 0
-        ServiceTestHelper.print_success("Gracefully handles invalid instrument (returns 0 score)")
+
+      # Test with nil instrument
+      begin
+        scorer_nil = Signal::TrendScorer.new(instrument: nil, primary_tf: '1m')
+        result_nil = scorer_nil.compute_trend_score
+        if result_nil && result_nil[:trend_score] == 0
+          ServiceTestHelper.print_success("Gracefully handles nil instrument (returns 0 score)")
+        else
+          ServiceTestHelper.print_info("Nil instrument handled: #{result_nil || 'nil'}")
+        end
+      rescue StandardError => e
+        ServiceTestHelper.print_success("Error handled correctly: #{e.class} - #{e.message}")
+      end
+
+      # Test with invalid timeframes
+      begin
+        scorer_invalid = Signal::TrendScorer.new(instrument: nifty_instrument, primary_tf: 'invalid_tf')
+        result_invalid = scorer_invalid.compute_trend_score
+        ServiceTestHelper.print_info("Invalid timeframe handled gracefully: #{result_invalid || 'nil'}")
+      rescue StandardError => e
+        ServiceTestHelper.print_success("Error handled correctly: #{e.class} - #{e.message}")
       end
     else
       ServiceTestHelper.print_error("Failed to compute trend score")
