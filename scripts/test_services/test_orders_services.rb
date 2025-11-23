@@ -52,31 +52,34 @@ ServiceTestHelper.print_info('Creating PositionTracker record in DB (no real ord
 watchlist_item = WatchlistItem.where(active: true).includes(:watchable).first
 if watchlist_item
   watchable = watchlist_item.watchable
-  next unless watchable
 
-  symbol = watchable.respond_to?(:symbol_name) ? watchable.symbol_name : watchlist_item.label
-  seg = watchable.respond_to?(:exchange_segment) ? watchable.exchange_segment : watchlist_item.segment
-  sid = watchable.respond_to?(:security_id) ? watchable.security_id : watchlist_item.security_id
+  if watchable
+    symbol = watchable.respond_to?(:symbol_name) ? watchable.symbol_name : watchlist_item.label
+    seg = watchable.respond_to?(:exchange_segment) ? watchable.exchange_segment : watchlist_item.segment
+    sid = watchable.respond_to?(:security_id) ? watchable.security_id : watchlist_item.security_id
 
-  ServiceTestHelper.print_info("Test watchlist item: #{symbol}")
+    ServiceTestHelper.print_info("Test watchlist item: #{symbol}")
 
-  # Create PositionTracker in DB (simulating order placement)
-  tracker = ServiceTestHelper.create_position_tracker(
-    watchable: watchable,
-    segment: seg,
-    security_id: sid.to_s,
-    side: 'long',
-    quantity: 75,
-    paper: true
-  )
+    # Create PositionTracker in DB (simulating order placement)
+    tracker = ServiceTestHelper.create_position_tracker(
+      watchable: watchable,
+      segment: seg,
+      security_id: sid.to_s,
+      side: 'long',
+      quantity: 75,
+      paper: true
+    )
 
-  if tracker
-    ServiceTestHelper.print_success("Created PositionTracker (ID: #{tracker.id}) in DB")
-    ServiceTestHelper.print_info("  Symbol: #{symbol}")
-    ServiceTestHelper.print_info("  Entry Price: ₹#{tracker.entry_price}")
-    ServiceTestHelper.print_info("  Quantity: #{tracker.quantity}")
+    if tracker
+      ServiceTestHelper.print_success("Created PositionTracker (ID: #{tracker.id}) in DB")
+      ServiceTestHelper.print_info("  Symbol: #{symbol}")
+      ServiceTestHelper.print_info("  Entry Price: ₹#{tracker.entry_price}")
+      ServiceTestHelper.print_info("  Quantity: #{tracker.quantity}")
+    else
+      ServiceTestHelper.print_warning('Failed to create PositionTracker')
+    end
   else
-    ServiceTestHelper.print_warning('Failed to create PositionTracker')
+    ServiceTestHelper.print_warning('Watchlist item has no watchable (instrument/derivative)')
   end
 else
   ServiceTestHelper.print_warning('No active watchlist items for testing')
