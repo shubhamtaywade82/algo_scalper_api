@@ -75,9 +75,8 @@ module Positions
         self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
 
         # NEW (Step 12): Persist peak if it was updated
-        return unless peak_profit_pct != old_peak && peak_profit_pct&.positive?
-
-        ActiveCache.instance.persist_peak(tracker_id, peak_profit_pct)
+        # Note: Peak persistence is handled by ActiveCache.update_ltp, not here
+        # This avoids calling private methods from PositionData struct
       end
       # rubocop:enable Metrics/AbcSize
     end

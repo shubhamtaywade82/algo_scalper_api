@@ -30,9 +30,7 @@ if PositionTracker.active.where(watchable_type: 'Derivative').empty?
 
     tracker = ServiceTestHelper.create_position_tracker(
       watchable: derivative,
-      order_no: "TEST-CACHE-#{Time.current.to_i}",
       security_id: sid.to_s,
-      symbol: derivative.symbol_name || "NIFTY-#{derivative.strike_price}-CE",
       segment: seg,
       side: 'long_ce',
       quantity: 75,
@@ -44,7 +42,7 @@ if PositionTracker.active.where(watchable_type: 'Derivative').empty?
   end
 end
 
-ServiceTestHelper.setup_test_position_tracker(paper: true)  # Keep for backward compatibility
+ServiceTestHelper.setup_test_position_tracker(paper: true) # Keep for backward compatibility
 
 active_cache = Positions::ActiveCache.instance
 
@@ -119,7 +117,8 @@ if all_cached.any?
     segment, security_id = position.composite_key.split(':')
 
     # Try to fetch real LTP from DhanHQ API
-    real_ltp = ServiceTestHelper.fetch_ltp(segment: segment, security_id: security_id, suppress_rate_limit_warning: true)
+    real_ltp = ServiceTestHelper.fetch_ltp(segment: segment, security_id: security_id,
+                                           suppress_rate_limit_warning: true)
 
     if real_ltp
       position.update_ltp(real_ltp)
@@ -128,7 +127,7 @@ if all_cached.any?
       ServiceTestHelper.print_info("  PnL %: #{position.pnl_pct.round(2)}%")
     else
       # Use fallback for testing
-      fallback_ltp = position.entry_price * 1.01  # 1% above entry
+      fallback_ltp = position.entry_price * 1.01 # 1% above entry
       position.update_ltp(fallback_ltp)
       ServiceTestHelper.print_info("Tracker #{position.tracker_id}: Using fallback LTP ₹#{fallback_ltp.round(2)}")
     end
@@ -198,4 +197,3 @@ end
 
 ServiceTestHelper.print_success('ActiveCache test completed')
 ServiceTestHelper.print_info('ActiveCache subscribes to MarketFeedHub for real-time LTP updates')
-
