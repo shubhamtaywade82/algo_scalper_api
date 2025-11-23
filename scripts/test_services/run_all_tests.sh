@@ -22,6 +22,9 @@ QUICK_TESTS=(
   "test_position_index.rb"
   "test_options_services.rb"
   "test_active_cache.rb"
+  "test_daily_limits.rb"
+  "test_index_selector.rb"
+  "test_trend_scorer.rb"
 )
 
 # Long-running tests (require services, can timeout)
@@ -37,6 +40,9 @@ LONG_RUNNING_TESTS=(
   "test_orders_services.rb"
   "test_position_heartbeat.rb"
   "test_trading_supervisor.rb"
+  "test_trailing_engine.rb"
+  "test_peak_drawdown.rb"
+  "test_trailing_simulation.rb"
 )
 
 # Integration tests
