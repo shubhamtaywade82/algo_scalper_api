@@ -314,8 +314,9 @@ module Live
       # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
 
       # Store in in-memory cache (primary)
-      # Always update in-memory TickCache
-      Live::TickCache.put(tick) if tick[:ltp].to_f.positive?
+      # Update TickCache for both ticker (with LTP) and prev_close (with prev_close) ticks
+      # TickCache.put() handles merging of both types
+      Live::TickCache.put(tick) if tick[:ltp].to_f.positive? || tick[:prev_close].to_f.positive?
 
       # # puts Live::TickCache.ltp(tick[:segment], tick[:security_id])
       # # Store in Redis for PnL tracking (secondary)

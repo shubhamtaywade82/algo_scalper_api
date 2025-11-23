@@ -497,57 +497,169 @@ module ServiceTestHelper
     nil
   end
 
-  def self.setup_test_position_tracker(paper: true)
+  def self.setup_test_position_tracker(paper: true, index_key: 'NIFTY', direction: :bullish)
     # Create a test position tracker if none exist
+    # Uses ATM derivative of next expiry instead of index instrument
     if PositionTracker.active.any?
       print_info("Active position trackers already exist (#{PositionTracker.active.count})")
       return
     end
 
-    # Ensure instrument exists first
+    # Ensure instruments and derivatives exist first
     setup_test_instruments
+    setup_test_derivatives
 
-    # Find instrument by exchange + segment (not exchange_segment)
-    instrument = Instrument.find_by(exchange: 'nse', segment: 'index', security_id: '13')
-    unless instrument
-      print_warning("NIFTY instrument not found - cannot create test position")
-      return
-    end
+    # Use StrikeSelector to find ATM derivative for next expiry
+    print_info("Finding ATM derivative for #{index_key} (#{direction})...")
 
-    # Try to fetch real NIFTY LTP from API for entry price
-    entry_price = 25_000.0
-    begin
-      response = DhanHQ::Models::MarketFeed.ltp({ 'IDX_I' => [13] })
-      if response['status'] == 'success'
-        tick_data = response.dig('data', 'IDX_I', '13')
-        if tick_data && tick_data['last_price']
-          entry_price = tick_data['last_price'].to_f
-          print_info("Using real NIFTY LTP from API: ₹#{entry_price}")
+    strike_selector = Options::StrikeSelector.new
+    instrument_hash = strike_selector.select(
+      index_key: index_key,
+      direction: direction,
+      expiry: nil, # Auto-select nearest expiry
+      trend_score: nil # Use default (ATM only)
+    )
+
+    unless instrument_hash
+      print_warning("Could not find ATM derivative for #{index_key} - trying fallback method...")
+
+      # Fallback: Use find_atm_or_otm_derivative helper
+      option_type = direction == :bullish ? 'CE' : 'PE'
+      derivative = find_atm_or_otm_derivative(
+        underlying_symbol: index_key,
+        option_type: option_type,
+        preference: :atm
+      )
+
+      unless derivative
+        print_warning("Could not find ATM derivative using fallback - cannot create test position")
+        return
+      end
+
+      # Build instrument hash from derivative
+      # Use exchange_segment (NSE_FNO) not segment (derivatives) for PositionTracker
+      instrument_hash = {
+        segment: derivative.exchange_segment || 'NSE_FNO', # Use exchange_segment for tradable segment
+        security_id: derivative.security_id.to_s,
+        symbol: derivative.symbol_name,
+        lot_size: derivative.lot_size || 50,
+        ltp: nil # Will be resolved
+      }
+
+      print_info("Found ATM derivative via fallback: #{derivative.symbol_name}")
+    else
+      print_info("Found ATM derivative via StrikeSelector: #{instrument_hash[:symbol]}")
+      # StrikeSelector returns :exchange_segment, but we need :segment for PositionTracker
+      # Map exchange_segment to segment if needed
+      if instrument_hash[:exchange_segment].present?
+        instrument_hash[:segment] = instrument_hash[:exchange_segment]
+      elsif instrument_hash[:segment].blank? || instrument_hash[:segment] == 'derivatives'
+        # If segment is missing or 'derivatives', find the derivative and get its exchange_segment
+        derivative = Derivative.find_by(
+          security_id: instrument_hash[:security_id]
+        ) || Derivative.find_by(symbol_name: instrument_hash[:symbol])
+
+        if derivative
+          instrument_hash[:segment] = derivative.exchange_segment || 'NSE_FNO'
+          print_info("Updated segment to exchange_segment: #{instrument_hash[:segment]}")
+        else
+          instrument_hash[:segment] = 'NSE_FNO' # Default fallback
+          print_warning("Could not find derivative to get exchange_segment, using NSE_FNO")
         end
       end
-    rescue StandardError => e
-      print_info("Using test entry price (API error: #{e.message})")
     end
 
+    # Find or create the derivative instrument first (needed for ltp method)
+    derivative = Derivative.find_by(
+      segment: 'derivatives', # Derivatives use 'derivatives' as segment, not exchange_segment
+      security_id: instrument_hash[:security_id]
+    ) || Derivative.find_by(symbol_name: instrument_hash[:symbol])
+
+    # Get entry price (LTP) for the derivative
+    entry_price = nil
+    begin
+      # Try from instrument_hash first
+      entry_price = instrument_hash[:ltp].to_f if instrument_hash[:ltp]&.positive?
+
+      # Try using derivative.ltp() method (InstrumentHelpers - handles WebSocket + API)
+      if derivative
+        entry_price ||= derivative.ltp&.to_f
+        print_info("Got LTP from derivative.ltp(): ₹#{entry_price}") if entry_price&.positive?
+      end
+
+      # Try from TickCache (fallback if derivative.ltp() didn't work)
+      entry_price ||= Live::TickCache.ltp(instrument_hash[:segment], instrument_hash[:security_id])
+
+      # Try from API (last resort)
+      unless entry_price&.positive?
+        entry_price = fetch_ltp(
+          segment: instrument_hash[:segment],
+          security_id: instrument_hash[:security_id],
+          suppress_rate_limit_warning: true
+        )
+      end
+
+      # Fallback
+      entry_price ||= 100.0
+
+      if entry_price&.positive?
+        print_info("Using derivative LTP: ₹#{entry_price}")
+      else
+        print_warning("Could not fetch LTP, using fallback: ₹#{entry_price}")
+      end
+    rescue StandardError => e
+      print_warning("Failed to fetch LTP: #{e.message}, using fallback")
+      entry_price ||= 100.0
+    end
+
+    # Re-find derivative if not found above (for PositionTracker creation)
+    unless derivative
+      print_warning("Derivative not found in database for #{instrument_hash[:segment]}:#{instrument_hash[:security_id]}")
+      print_info("Attempting to find by symbol...")
+
+      # Try to find by symbol
+      derivative = Derivative.find_by(symbol_name: instrument_hash[:symbol])
+
+      unless derivative
+        print_warning("Cannot create test position - derivative not found in database")
+        print_info("  Segment: #{instrument_hash[:segment]}")
+        print_info("  Security ID: #{instrument_hash[:security_id]}")
+        print_info("  Symbol: #{instrument_hash[:symbol]}")
+        return
+      end
+    end
+
+    # Get the underlying instrument (for backward compatibility)
+    instrument = derivative.instrument || Instrument.find_by(
+      exchange: 'nse',
+      segment: 'index',
+      security_id: AlgoConfig.fetch[:indices]&.find { |idx| idx[:key].to_s.upcase == index_key.upcase }&.dig(:sid)
+    )
+
+    # Create position tracker with derivative
     tracker = PositionTracker.create!(
-      watchable: instrument,
-      instrument: instrument,
+      watchable: derivative,
+      instrument: instrument, # Backward compatibility - underlying index instrument
       order_no: "TEST-#{Time.current.to_i}",
-      security_id: '13',
-      symbol: 'NIFTY',
-      segment: instrument.exchange_segment, # Use exchange_segment (IDX_I)
+      security_id: instrument_hash[:security_id],
+      symbol: instrument_hash[:symbol],
+      segment: instrument_hash[:segment], # Use derivative segment (NSE_FNO, etc.)
       side: 'long',
       status: 'active',
-      quantity: 75,
+      quantity: instrument_hash[:lot_size] || 50,
       entry_price: entry_price,
       avg_price: entry_price,
       paper: paper
     )
 
     print_success("Test position tracker created (ID: #{tracker.id}, Paper: #{paper})")
+    print_info("  Derivative: #{derivative.symbol_name} (#{instrument_hash[:segment]}:#{instrument_hash[:security_id]})")
+    print_info("  Strike: #{derivative.strike_price}, Expiry: #{derivative.expiry_date}")
+    print_info("  Entry Price: ₹#{entry_price}, Quantity: #{tracker.quantity}")
   rescue StandardError => e
     print_warning("Position tracker setup failed: #{e.message}")
     print_info("Continuing without test position...")
+    Rails.logger.debug { e.backtrace.first(5).join("\n") } if defined?(Rails.logger)
   end
 
   def self.cleanup_test_data

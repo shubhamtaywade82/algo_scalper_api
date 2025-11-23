@@ -42,6 +42,7 @@ LONG_RUNNING_TESTS=(
 # Integration tests
 INTEGRATION_TESTS=(
   "test_integration_flow.rb"
+  "test_end_to_end_integration.rb"
 )
 
 # Track results

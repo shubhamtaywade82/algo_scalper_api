@@ -83,13 +83,27 @@ if tracker
 
   # Calculate PnL
   if tracker.entry_price.present? && tracker.quantity.present?
-    # Get LTP from cache (try cache first, then API)
-    seg = tracker.segment || tracker.watchable&.exchange_segment
-    sid = tracker.security_id
-    ltp = Live::TickCache.ltp(seg, sid) if seg && sid
+    # Get LTP using the watchable's (derivative/instrument) ltp() method
+    # This uses InstrumentHelpers.ltp() which handles WebSocket + API automatically
+    ltp = nil
 
-    # If no LTP in cache, fetch from DhanHQ API
+    if tracker.watchable.respond_to?(:ltp)
+      # Use the derivative/instrument's built-in ltp() method (InstrumentHelpers)
+      ltp = tracker.watchable.ltp&.to_f
+      ServiceTestHelper.print_info("Got LTP from watchable.ltp(): ₹#{ltp}") if ltp&.positive?
+    end
+
+    # Fallback: Try TickCache directly
     unless ltp&.positive?
+      seg = tracker.segment || tracker.watchable&.exchange_segment
+      sid = tracker.security_id
+      ltp = Live::TickCache.ltp(seg, sid)&.to_f if seg && sid
+    end
+
+    # Last resort: Direct API call
+    unless ltp&.positive?
+      seg = tracker.segment || tracker.watchable&.exchange_segment
+      sid = tracker.security_id
       ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s) if seg && sid
     end
 
