@@ -552,7 +552,17 @@ flowchart TD
 
 scheduler.rb
 
+
+
+```150:167:app/services/signal/scheduler.rb
+      result = Entries::EntryGuard.try_enter(
+        index_cfg: index_cfg,
+        pick: pick,
+        direction: direction,
+        scale_multiplier: multiplier
+      )
 ```
+```mermaid
 sequenceDiagram
   participant Puma
   participant Supervisor
@@ -571,15 +581,6 @@ sequenceDiagram
   Supervisor->>Puma: install signal traps & at_exit
 ```
 
-```150:167:app/services/signal/scheduler.rb
-      result = Entries::EntryGuard.try_enter(
-        index_cfg: index_cfg,
-        pick: pick,
-        direction: direction,
-        scale_multiplier: multiplier
-      )
-```
-
 ```33:101:app/services/orders/entry_manager.rb
       position_data = @active_cache.add_position(
         tracker: tracker,
@@ -589,7 +590,7 @@ sequenceDiagram
       bracket_placer = Orders::BracketPlacer.new
       bracket_result = bracket_placer.place_bracket(...)
 ```
-```
+```mermaid
 sequenceDiagram
   participant DhanWS
   participant MarketFeedHub
@@ -614,7 +615,7 @@ sequenceDiagram
         data: merged
       )
 ```
-```
+```mermaid
 sequenceDiagram
   participant Scheduler
   participant StrategyEngines
@@ -639,7 +640,7 @@ sequenceDiagram
           reason = "SL HIT #{(pnl_pct * 100).round(2)}%"
           dispatch_exit(exit_engine, tracker, reason)
 ```
-```
+```mermaid
 sequenceDiagram
   participant EntryGuard
   participant DailyLimits
