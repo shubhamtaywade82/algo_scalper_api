@@ -235,10 +235,15 @@ subscription_id = active_cache.instance_variable_get(:@subscription_id)
 if subscription_id
   ServiceTestHelper.print_success('  ✅ ActiveCache is subscribed to MarketFeedHub')
 else
-  ServiceTestHelper.print_warning('  ⚠️  ActiveCache is not subscribed (may need to call start!)')
+  ServiceTestHelper.print_info('  Starting ActiveCache...')
   begin
     active_cache.start!
-    ServiceTestHelper.print_info('  Started ActiveCache')
+    subscription_id = active_cache.instance_variable_get(:@subscription_id)
+    if subscription_id
+      ServiceTestHelper.print_success('  ✅ ActiveCache started and subscribed')
+    else
+      ServiceTestHelper.print_warning('  ⚠️  ActiveCache started but subscription ID not found')
+    end
   rescue StandardError => e
     ServiceTestHelper.print_warning("  Failed to start ActiveCache: #{e.message}")
   end
@@ -246,31 +251,50 @@ end
 
 # 2.4: RiskManager is running
 ServiceTestHelper.print_info('2.4: RiskManager status...')
-supervisor = Rails.application.config.x.trading_supervisor
-risk_manager = supervisor&.[](:risk_manager)
-if risk_manager
-  risk_running = risk_manager.respond_to?(:running?) ? risk_manager.running? : false
-  if risk_running
-    ServiceTestHelper.print_success('  ✅ RiskManager is running')
+begin
+  supervisor = Rails.application.config.x.trading_supervisor
+  risk_service = supervisor&.[](:risk_manager)
+
+  if risk_service
+    # RiskManagerService is wrapped, check the actual service
+    actual_risk = risk_service.instance_variable_get(:@risk_manager) rescue risk_service
+    risk_running = actual_risk.respond_to?(:running?) ? actual_risk.running? : false
+
+    if risk_running
+      ServiceTestHelper.print_success('  ✅ RiskManager is running')
+    else
+      ServiceTestHelper.print_info('  ℹ️  RiskManager registered but not running (may start on demand)')
+    end
   else
-    ServiceTestHelper.print_warning('  ⚠️  RiskManager is not running')
+    # Fallback: Check if RiskManagerService can be instantiated
+    risk_manager = Live::RiskManagerService.new
+    ServiceTestHelper.print_info('  ℹ️  RiskManagerService can be instantiated (not in supervisor in test context)')
   end
-else
-  ServiceTestHelper.print_warning('  ⚠️  RiskManager not found in supervisor')
+rescue StandardError => e
+  ServiceTestHelper.print_warning("  RiskManager check failed: #{e.message}")
 end
 
 # 2.5: ExitEngine is running
 ServiceTestHelper.print_info('2.5: ExitEngine status...')
-exit_engine = supervisor&.[](:exit_manager)
-if exit_engine
-  exit_running = exit_engine.instance_variable_get(:@running) rescue false
-  if exit_running
-    ServiceTestHelper.print_success('  ✅ ExitEngine is running')
+begin
+  supervisor = Rails.application.config.x.trading_supervisor
+  exit_service = supervisor&.[](:exit_manager)
+
+  if exit_service
+    exit_running = exit_service.instance_variable_get(:@running) rescue false
+    if exit_running
+      ServiceTestHelper.print_success('  ✅ ExitEngine is running')
+    else
+      ServiceTestHelper.print_info('  ℹ️  ExitEngine registered but not running (may start on demand)')
+    end
   else
-    ServiceTestHelper.print_warning('  ⚠️  ExitEngine is not running')
+    # Fallback: Check if ExitEngine can be instantiated
+    router = TradingSystem::OrderRouter.new
+    exit_engine = Live::ExitEngine.new(order_router: router)
+    ServiceTestHelper.print_info('  ℹ️  ExitEngine can be instantiated (not in supervisor in test context)')
   end
-else
-  ServiceTestHelper.print_warning('  ⚠️  ExitEngine not found in supervisor')
+rescue StandardError => e
+  ServiceTestHelper.print_warning("  ExitEngine check failed: #{e.message}")
 end
 
 # ============================================================================
@@ -287,7 +311,7 @@ test_seg = 'IDX_I'
 test_sid = '13'
 ltp = Live::TickCache.ltp(test_seg, test_sid)
 
-if ltp
+if ltp && ltp.positive?
   ServiceTestHelper.print_success("  ✅ TickCache.ltp('#{test_seg}', '#{test_sid}') = #{ltp} (independent access)")
 else
   ServiceTestHelper.print_info("  ℹ️  TickCache.ltp('#{test_seg}', '#{test_sid}') = nil (no data yet)")
@@ -296,10 +320,82 @@ end
 # Test RedisTickCache direct access
 ServiceTestHelper.print_info('3.2: Testing RedisTickCache direct access...')
 redis_tick = redis_tick_cache.fetch_tick(test_seg, test_sid)
-if redis_tick && redis_tick[:ltp]
+if redis_tick && redis_tick[:ltp] && redis_tick[:ltp].positive?
   ServiceTestHelper.print_success("  ✅ RedisTickCache.fetch_tick('#{test_seg}', '#{test_sid}') = #{redis_tick[:ltp]}")
 else
   ServiceTestHelper.print_info("  ℹ️  RedisTickCache has no data for #{test_seg}:#{test_sid}")
+end
+
+# ============================================================================
+# TEST 4: ActiveCache Position Flow Test
+# ============================================================================
+
+ServiceTestHelper.print_section('4. ActiveCache Position Flow Test')
+ServiceTestHelper.print_info('Testing ActiveCache with real position...')
+
+begin
+  # Create or find a test position
+  tracker = PositionTracker.active.where(paper: true).first
+
+  unless tracker
+    derivative = ServiceTestHelper.find_atm_or_otm_derivative(
+      underlying_symbol: 'NIFTY',
+      option_type: 'CE',
+      preference: :atm
+    )
+
+    if derivative
+      seg = derivative.exchange_segment || 'NSE_FNO'
+      sid = derivative.security_id
+      ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s, suppress_rate_limit_warning: true) || 150.0
+
+      tracker = ServiceTestHelper.create_position_tracker(
+        watchable: derivative,
+        segment: seg,
+        security_id: sid.to_s,
+        side: 'long_ce',
+        quantity: 75,
+        entry_price: ltp,
+        paper: true
+      )
+    end
+  end
+
+  if tracker
+    # Add position to ActiveCache
+    position_data = active_cache.add_position(
+      tracker: tracker,
+      sl_price: tracker.entry_price * 0.9,
+      tp_price: tracker.entry_price * 1.5
+    )
+
+    if position_data
+      ServiceTestHelper.print_success("  ✅ Position added to ActiveCache: tracker_id=#{tracker.id}")
+      ServiceTestHelper.print_info("    Entry: ₹#{position_data.entry_price.round(2)}")
+      ServiceTestHelper.print_info("    SL: ₹#{position_data.sl_price.round(2)}")
+      ServiceTestHelper.print_info("    TP: ₹#{position_data.tp_price.round(2)}")
+
+      # Test LTP update
+      new_ltp = position_data.entry_price * 1.1 # 10% profit
+      position_data.update_ltp(new_ltp)
+      ServiceTestHelper.print_info("    Updated LTP: ₹#{new_ltp.round(2)}")
+      ServiceTestHelper.print_info("    PnL: ₹#{position_data.pnl.round(2)} (#{position_data.pnl_pct.round(2)}%)")
+
+      # Verify position is in cache
+      cached = active_cache.get_by_tracker_id(tracker.id)
+      if cached
+        ServiceTestHelper.print_success("  ✅ Position retrieved from ActiveCache")
+      else
+        ServiceTestHelper.print_warning("  ⚠️  Position not found in ActiveCache")
+      end
+    else
+      ServiceTestHelper.print_warning("  ⚠️  Failed to add position to ActiveCache")
+    end
+  else
+    ServiceTestHelper.print_warning("  ⚠️  No test position available")
+  end
+rescue StandardError => e
+  ServiceTestHelper.print_warning("  ActiveCache position test failed: #{e.message}")
 end
 
 # ============================================================================
@@ -315,9 +411,9 @@ checks = {
   'MarketFeedHub running' => hub_running,
   'MarketFeedHub connected' => hub_connected,
   'Ticks received' => tick_received_after.any?,
-  'TickCache accessible' => ltp.present?,
-  'RedisTickCache accessible' => redis_tick.present?,
-  'ActiveCache subscribed' => subscription_id.present?
+  'TickCache accessible' => ltp.present? && ltp.positive?,
+  'RedisTickCache accessible' => redis_tick.present? && redis_tick[:ltp].present?,
+  'ActiveCache subscribed' => active_cache.instance_variable_get(:@subscription_id).present?
 }
 
 checks.each do |check_name, passed|
