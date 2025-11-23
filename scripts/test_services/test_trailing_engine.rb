@@ -16,15 +16,45 @@ ServiceTestHelper.print_section('1. TrailingEngine Initialization')
 trailing_engine = Live::TrailingEngine.new
 ServiceTestHelper.print_success("TrailingEngine initialized")
 
-# Test 2: Create test position in ActiveCache
+# Test 2: Use real paper PositionTracker or create one
 ServiceTestHelper.print_section('2. Create Test Position')
-tracker = PositionTracker.active.first || create(:position_tracker,
-                                                  order_no: 'TEST-TRAIL-001',
-                                                  security_id: '49081',
-                                                  segment: 'NSE_FNO',
-                                                  entry_price: 150.0,
-                                                  quantity: 75,
-                                                  status: 'active')
+# Try to find an existing paper PositionTracker, or create a new one
+tracker = PositionTracker.active.where(paper: true).first
+
+unless tracker
+  # Create a new paper PositionTracker using the helper
+  derivative = ServiceTestHelper.find_atm_or_otm_derivative(
+    underlying_symbol: 'NIFTY',
+    option_type: 'CE',
+    preference: :atm
+  )
+
+  if derivative
+    seg = derivative.exchange_segment || 'NSE_FNO'
+    sid = derivative.security_id
+    ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s, suppress_rate_limit_warning: true) || 150.0
+
+    tracker = ServiceTestHelper.create_position_tracker(
+      watchable: derivative,
+      segment: seg,
+      security_id: sid.to_s,
+      side: 'long_ce',
+      quantity: 75,
+      entry_price: ltp,
+      paper: true
+    )
+  end
+end
+
+unless tracker
+  ServiceTestHelper.print_error("Failed to find or create paper PositionTracker")
+  exit 1
+end
+
+ServiceTestHelper.print_info("Using paper PositionTracker ID: #{tracker.id}")
+ServiceTestHelper.print_info("  Symbol: #{tracker.symbol}")
+ServiceTestHelper.print_info("  Entry Price: ₹#{tracker.entry_price}")
+ServiceTestHelper.print_info("  Status: #{tracker.status}")
 
 active_cache = Positions::ActiveCache.instance
 position_data = active_cache.add_position(
@@ -64,10 +94,10 @@ profit_levels.each do |level|
   ServiceTestHelper.print_info("    Peak updated: #{result[:peak_updated]}")
   ServiceTestHelper.print_info("    SL updated: #{result[:sl_updated]}")
 
-  if result[:sl_updated]
-    new_sl = active_cache.get_by_tracker_id(tracker.id)&.sl_price
-    ServiceTestHelper.print_info("    New SL: ₹#{new_sl.round(2)}" if new_sl)
-  end
+    if result[:sl_updated]
+      new_sl = active_cache.get_by_tracker_id(tracker.id)&.sl_price
+      ServiceTestHelper.print_info("    New SL: ₹#{new_sl.round(2)}") if new_sl
+    end
 end
 
 # Test 4: Test tiered SL offsets
@@ -99,17 +129,41 @@ else
   ServiceTestHelper.print_info("SL behavior: #{result[:reason]}")
 end
 
-# Test 6: Test with exit engine (no actual exit, just verify integration)
-ServiceTestHelper.print_section('6. Exit Engine Integration')
-exit_engine = instance_double(Live::ExitEngine)
-allow(exit_engine).to receive(:execute_exit).and_return(true)
+# Test 6: Test with real ExitEngine and exit the position
+ServiceTestHelper.print_section('6. Exit Engine Integration - Real Exit Test')
+# Create a real ExitEngine instance for testing
+order_router = TradingSystem::OrderRouter.new
+exit_engine = Live::ExitEngine.new(order_router: order_router)
 
-# Simulate normal profit (no drawdown)
-position_data.update_ltp(165.0) # 10% profit
+# Simulate peak drawdown exit scenario
+ServiceTestHelper.print_info("Simulating peak drawdown exit scenario...")
+position_data.update_ltp(187.5) # High profit (61.5%)
+ServiceTestHelper.print_info("  Current profit: #{position_data.pnl_pct.round(2)}%")
+ServiceTestHelper.print_info("  Peak profit: #{position_data.peak_profit_pct.round(2)}%")
+
+# Simulate drawdown from peak (trigger exit)
+drawdown_ltp = position_data.entry_price * 1.20 # 20% profit (down from 61.5% peak)
+position_data.update_ltp(drawdown_ltp)
+ServiceTestHelper.print_info("  Drawdown LTP: ₹#{drawdown_ltp.round(2)} (profit: #{position_data.pnl_pct.round(2)}%)")
+
+# Process tick with exit engine
 result = trailing_engine.process_tick(position_data, exit_engine: exit_engine)
 
-ServiceTestHelper.print_info("  Exit triggered: #{result[:exit_triggered]}")
-ServiceTestHelper.print_success("Exit engine integration working (no exit for normal profit)")
+ServiceTestHelper.print_info("  Exit triggered: #{result[:exit_triggered] || false}")
+ServiceTestHelper.print_info("  Exit reason: #{result[:reason] || 'none'}")
+
+# Check if position was actually exited
+tracker.reload
+if tracker.status == 'exited'
+  ServiceTestHelper.print_success("✅ Position successfully exited!")
+  ServiceTestHelper.print_info("  Exit price: ₹#{tracker.exit_price}")
+  exit_reason = tracker.meta.is_a?(Hash) ? tracker.meta['exit_reason'] : nil
+  ServiceTestHelper.print_info("  Exit reason: #{exit_reason || 'N/A'}")
+  ServiceTestHelper.print_info("  Final PnL: ₹#{tracker.last_pnl_rupees&.round(2) || 0.0} (#{tracker.last_pnl_pct&.round(2) || 0.0}%)")
+else
+  ServiceTestHelper.print_info("  Position still active (exit not triggered or failed)")
+  ServiceTestHelper.print_info("  Current status: #{tracker.status}")
+end
 
 ServiceTestHelper.print_section('Summary')
 ServiceTestHelper.print_info("TrailingEngine test completed")
