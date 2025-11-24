@@ -313,7 +313,7 @@ module Signal
     def safe_swing_high?(series, index, lookback:)
       return false unless series.respond_to?(:swing_high?)
 
-      series.swing_high?(index, lookback: lookback)
+      series.swing_high?(index, lookback)
     rescue StandardError => e
       Rails.logger.debug { "[TrendScorer] swing_high? failed: #{e.message}" }
       false
@@ -322,7 +322,7 @@ module Signal
     def safe_swing_low?(series, index, lookback:)
       return false unless series.respond_to?(:swing_low?)
 
-      series.swing_low?(index, lookback: lookback)
+      series.swing_low?(index, lookback)
     rescue StandardError => e
       Rails.logger.debug { "[TrendScorer] swing_low? failed: #{e.message}" }
       false
@@ -331,28 +331,43 @@ module Signal
     def sanitize_series(series)
       return nil unless series
 
-      highs = extract_series_component(series, :highs, :high)
-      lows = extract_series_component(series, :lows, :low)
-      closes = extract_series_component(series, :closes, :close)
+      raw_highs = extract_raw_component(series, :highs, :high)
+      raw_lows = extract_raw_component(series, :lows, :low)
+      raw_closes = extract_raw_component(series, :closes, :close)
+
+      unless requires_sanitization?(raw_highs) || requires_sanitization?(raw_lows) || requires_sanitization?(raw_closes)
+        return nil
+      end
+
+      highs = normalize_numeric_series(raw_highs)
+      lows = normalize_numeric_series(raw_lows)
+      closes = normalize_numeric_series(raw_closes)
 
       return nil if highs.empty? || lows.empty? || closes.empty?
 
       Struct.new(:highs, :lows, :closes).new(highs, lows, closes)
     end
 
-    def extract_series_component(series, accessor, candle_attr)
-      values =
-        if series.respond_to?(accessor)
-          series.public_send(accessor)
-        elsif series.respond_to?(:candles)
-          series.candles&.map do |candle|
-            candle.respond_to?(candle_attr) ? candle.public_send(candle_attr) : candle[candle_attr] || candle[candle_attr.to_s]
+    def extract_raw_component(series, accessor, candle_attr)
+      if series.respond_to?(accessor)
+        series.public_send(accessor)
+      elsif series.respond_to?(:candles)
+        series.candles&.map do |candle|
+          if candle.respond_to?(candle_attr)
+            candle.public_send(candle_attr)
+          elsif candle.is_a?(Hash)
+            candle[candle_attr] || candle[candle_attr.to_s]
+          else
+            nil
           end
-        else
-          []
         end
+      else
+        []
+      end
+    end
 
-      normalize_numeric_series(values)
+    def requires_sanitization?(values)
+      Array(values).any? { |val| !val.is_a?(Numeric) }
     end
   end
   # rubocop:enable Metrics/ClassLength

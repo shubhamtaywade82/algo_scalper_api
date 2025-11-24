@@ -201,6 +201,44 @@ RSpec.describe Options::ChainAnalyzer do
         end
       end
 
+      context 'when the matching derivative only has a TEST security id' do
+        let(:test_chain) do
+          {
+            last_price: 18_500.0,
+            oc: {
+              '18500' => {
+                'ce' => {
+                  'last_price' => 150.0,
+                  'implied_volatility' => 0.25,
+                  'oi' => 80_000,
+                  'top_bid_price' => 148.0,
+                  'top_ask_price' => 152.0,
+                  'greeks' => { 'delta' => 0.6 }
+                }
+              }
+            }
+          }
+        end
+
+        it 'skips the strike instead of returning a placeholder security id' do
+          test_derivative = instance_double(
+            'Derivative',
+            strike_price: 18_500.0,
+            expiry_date: Date.parse('2024-01-25'),
+            option_type: 'CE',
+            security_id: 'TEST_18500_CE_20250125',
+            lot_size: 75,
+            exchange_segment: 'NSE_FNO'
+          )
+          allow(instrument).to receive(:derivatives).and_return([test_derivative])
+          allow(instrument).to receive(:fetch_option_chain).with('2024-01-25').and_return(test_chain)
+          allow(Derivative).to receive(:find_security_id).and_return(nil)
+
+          result = described_class.pick_strikes(index_cfg: index_cfg, direction: :bullish)
+          expect(result).to eq([])
+        end
+      end
+
       context 'when ATM price is not available' do
         before do
           allow(instrument).to receive(:fetch_option_chain).with('2024-01-25').and_return({ oc: {} })
@@ -413,7 +451,8 @@ RSpec.describe Options::ChainAnalyzer do
       it 'calculates ATM strike from spot price and strike interval' do
         # Spot price: 18500, strike interval: 100 (from mock chain data)
         # ATM should be rounded to nearest 100: 18500
-        result = described_class.pick_strikes(index_cfg: index_cfg, direction: :bullish)
+          result = described_class.pick_strikes(index_cfg: index_cfg, direction: :bullish)
+          puts "DEBUG result after ATM test: #{result.inspect}"
 
         # ATM strike should be 18500 (based on mock data)
         atm_strikes = result.select { |r| r[:symbol].include?('18500') }

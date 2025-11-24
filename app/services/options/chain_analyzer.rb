@@ -50,7 +50,7 @@ module Options
 
       @provider.underlying_spot(@index_cfg[:key])
     rescue StandardError => e
-      Rails.logger.debug("[Options::ChainAnalyzer] Spot fetch failed: #{e.class} - #{e.message}")
+      Rails.logger.debug { "[Options::ChainAnalyzer] Spot fetch failed: #{e.class} - #{e.message}" }
       nil
     end
 
@@ -61,7 +61,7 @@ module Options
         # Get cached index instrument
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         unless instrument
-          # Rails.logger.warn("[Options] No instrument found for #{index_cfg[:key]}")
+          Rails.logger.warn("[Options] No instrument found for #{index_cfg[:key]}") if defined?(Rails)
           return []
         end
 
@@ -70,7 +70,7 @@ module Options
         # Use instrument's existing methods to get expiry list and option chain
         expiry_list = instrument.expiry_list
         unless expiry_list&.any?
-          # Rails.logger.warn("[Options] No expiry list available for #{index_cfg[:key]}")
+          Rails.logger.warn("[Options] No expiry list available for #{index_cfg[:key]}") if defined?(Rails)
           return []
         end
 
@@ -79,7 +79,7 @@ module Options
         # Get the next upcoming expiry
         expiry_date = find_next_expiry(expiry_list)
         unless expiry_date
-          # Rails.logger.warn("[Options] Could not determine next expiry for #{index_cfg[:key]}")
+          Rails.logger.warn("[Options] Could not determine next expiry for #{index_cfg[:key]}") if defined?(Rails)
           return []
         end
 
@@ -88,12 +88,12 @@ module Options
         # Fetch option chain using instrument's method
         chain_data = begin
           instrument.fetch_option_chain(expiry_date)
-        rescue StandardError
-          # Rails.logger.warn("[Options] Could not determine next expiry for #{index_cfg[:key]} #{expiry_date}: #{e.message}")
+        rescue StandardError => e
+          Rails.logger.warn("[Options] Could not determine next expiry for #{index_cfg[:key]} #{expiry_date}: #{e.message}") if defined?(Rails)
           nil
         end
         unless chain_data
-          # Rails.logger.warn("[Options] No option chain data for #{index_cfg[:key]} #{expiry_date}")
+          Rails.logger.warn("[Options] No option chain data for #{index_cfg[:key]} #{expiry_date}") if defined?(Rails)
           return []
         end
 
@@ -110,7 +110,7 @@ module Options
 
         atm_price = chain_data[:last_price]
         unless atm_price
-          # Rails.logger.warn("[Options] No ATM price available for #{index_cfg[:key]}")
+          Rails.logger.warn("[Options] No ATM price available for #{index_cfg[:key]}") if defined?(Rails)
           return []
         end
 
@@ -335,16 +335,21 @@ module Options
           # Use BigDecimal for accurate float comparison
           strike_bd = BigDecimal(strike.to_s)
 
-          derivative = if instrument.persisted?
-                         # If instrument is persisted, use association
-                         instrument.derivatives.detect do |d|
+          derivative_scope =
+            if instrument.respond_to?(:derivatives) && instrument.derivatives.present?
+              instrument.derivatives
+            elsif instrument.persisted?
+              instrument.derivatives
+            end
+
+          derivative = if derivative_scope
+                         Array(derivative_scope).detect do |d|
                            d.expiry_date == expiry_date_obj &&
                              d.option_type == option_type &&
                              BigDecimal(d.strike_price.to_s) == strike_bd
                          end
                        else
-                         # If instrument is not persisted, query Derivative directly
-                         # Use underlying_symbol or underlying_security_id to match
+                         # Fall back to querying the Derivative model when association is unavailable
                          Derivative.where(
                            underlying_symbol: instrument.symbol_name,
                            exchange: instrument.exchange,
@@ -356,12 +361,28 @@ module Options
                          end
                        end
 
-          if derivative
-            # Rails.logger.debug { "[Options] Found derivative for #{index_cfg[:key]} #{strike} #{side}: security_id=#{derivative.security_id}, lot_size=#{derivative.lot_size}" }
-            security_id = derivative.security_id
-          else
-            # Rails.logger.warn("[Options] No derivative found for #{index_cfg[:key]} #{strike} #{side} #{expiry_date}")
-            security_id = nil
+          security_id = if derivative
+                          derived_id = derivative.security_id.to_s
+                          valid_security_id?(derived_id) ? derived_id : nil
+                        end
+
+          if security_id.blank?
+            fallback_id = Derivative.find_security_id(
+              underlying_symbol: index_cfg[:key],
+              strike_price: strike,
+              expiry_date: expiry_date_obj,
+              option_type: option_type
+            )
+            security_id = fallback_id if valid_security_id?(fallback_id)
+          end
+
+          unless security_id.present?
+            Rails.logger.debug do
+              "[Options::ChainAnalyzer] Skipping #{index_cfg[:key]} #{strike} #{side} - " \
+                "missing tradable security_id (found=#{derivative&.security_id})"
+            end
+            rejected_count += 1
+            next
           end
 
           derivative_segment = if derivative.respond_to?(:exchange_segment) && derivative.exchange_segment.present?
@@ -431,6 +452,14 @@ module Options
         return 0.10 if h >= 11  # After 11 AM - even lower delta
 
         0.08                    # Before 11 AM - very low delta acceptable for OTM
+      end
+
+      def valid_security_id?(value)
+        id = value.to_s
+        return false if id.blank?
+        return false if id.start_with?('TEST_')
+
+        true
       end
 
       # Dynamic ATM range based on volatility (IV rank)
