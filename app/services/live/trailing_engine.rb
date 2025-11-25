@@ -60,7 +60,14 @@ module Live
 
       return false unless Positions::TrailingConfig.peak_drawdown_triggered?(peak, current)
 
-      # Immediate exit - no candle close wait
+      if peak_drawdown_activation_enabled?
+        activation_ready = Positions::TrailingConfig.peak_drawdown_active?(
+          profit_pct: current,
+          current_sl_offset_pct: current_sl_offset_pct(position_data)
+        )
+        return false unless activation_ready
+      end
+
       tracker = PositionTracker.find_by(id: position_data.tracker_id)
       unless tracker&.active?
         Rails.logger.warn("[TrailingEngine] Tracker #{position_data.tracker_id} not found or inactive for peak-drawdown exit")
@@ -114,14 +121,14 @@ module Live
       current_profit_pct = position_data.pnl_pct.to_f
       current_sl = position_data.sl_price.to_f
 
-      # Calculate new SL based on tiered offsets
-      new_sl_price = Positions::TrailingConfig.calculate_sl_price(entry_price, current_profit_pct)
-      return { updated: false, new_sl_price: nil, reason: 'invalid_sl_calculation' } unless new_sl_price&.positive?
+      sl_offset_pct = Positions::TrailingConfig.sl_offset_for(current_profit_pct)
+      return { updated: false, new_sl_price: current_sl, reason: 'tier_not_reached' } unless sl_offset_pct
 
-      # Only move SL if new_sl > current_sl (for long positions - trailing up)
+      new_sl_price = Positions::TrailingConfig.sl_price_from_entry(entry_price, sl_offset_pct)
+      return { updated: false, new_sl_price: nil, reason: 'invalid_sl_calculation' } unless new_sl_price.positive?
+
       return { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved' } unless new_sl_price > current_sl
 
-      # Update SL via BracketPlacer
       tracker = PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
@@ -132,6 +139,14 @@ module Live
       )
 
       if bracket_result[:success]
+        @active_cache.update_position(
+          position_data.tracker_id,
+          sl_price: new_sl_price,
+          sl_offset_pct: sl_offset_pct
+        )
+        position_data.sl_price = new_sl_price if position_data.respond_to?(:sl_price=)
+        position_data.sl_offset_pct = sl_offset_pct if position_data.respond_to?(:sl_offset_pct=)
+
         Rails.logger.info(
           "[TrailingEngine] Updated SL for #{tracker.order_no}: " \
           "₹#{current_sl.round(2)} → ₹#{new_sl_price.round(2)} " \
@@ -160,6 +175,28 @@ module Live
         exit_triggered: false,
         error: error
       }
+    end
+
+    def peak_drawdown_activation_enabled?
+      feature_flags[:enable_peak_drawdown_activation] == true
+    end
+
+    def feature_flags
+      @feature_flags ||= begin
+        AlgoConfig.fetch[:feature_flags] || {}
+      rescue StandardError
+        {}
+      end
+    end
+
+    def current_sl_offset_pct(position_data)
+      return position_data.sl_offset_pct if position_data.sl_offset_pct
+
+      entry = position_data.entry_price.to_f
+      sl_price = position_data.sl_price.to_f
+      return nil unless entry.positive? && sl_price.positive?
+
+      ((sl_price - entry) / entry) * 100.0
     end
   end
   # rubocop:enable Metrics/ClassLength

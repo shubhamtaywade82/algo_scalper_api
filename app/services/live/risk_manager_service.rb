@@ -287,7 +287,7 @@ module Live
       return if positions.empty?
 
       tracker_map = trackers_for_positions(positions)
-      trailing_exit_engine = peak_drawdown_activation_enabled? ? nil : @exit_engine
+      trailing_exit_engine = @exit_engine
 
       positions.each do |position|
         tracker = tracker_map[position.tracker_id]
@@ -298,8 +298,6 @@ module Live
 
         next if handle_underlying_exit(position, tracker, exit_engine)
         next if enforce_bracket_limits(position, tracker, exit_engine)
-        next if enforce_peak_drawdown_gate(position, tracker, exit_engine, active_cache: active_cache)
-
         @trailing_engine.process_tick(position, exit_engine: trailing_exit_engine)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] TrailingEngine error for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
@@ -876,10 +874,6 @@ module Live
       feature_flags[:enable_underlying_aware_exits] == true
     end
 
-    def peak_drawdown_activation_enabled?
-      feature_flags[:enable_peak_drawdown_activation] == true
-    end
-
     def ensure_position_snapshot(position)
       return if position.current_ltp&.positive?
 
@@ -940,43 +934,6 @@ module Live
       end
 
       false
-    end
-
-    def enforce_peak_drawdown_gate(position, tracker, exit_engine, active_cache:)
-      return false unless peak_drawdown_activation_enabled?
-      return false unless position.peak_profit_pct && position.pnl_pct
-
-      sl_offset = update_sl_offset_pct(position, active_cache)
-      return false unless Positions::TrailingConfig.peak_drawdown_active?(
-        profit_pct: position.peak_profit_pct,
-        current_sl_offset_pct: sl_offset.to_f
-      )
-
-      drawdown = position.peak_profit_pct.to_f - position.pnl_pct.to_f
-      return false unless drawdown >= Positions::TrailingConfig::PEAK_DRAWDOWN_PCT
-
-      increment_metric(:peak_drawdown_exit_count)
-      log_peak_drawdown_exit(tracker, position, drawdown)
-      reason = format('peak_drawdown_exit (drawdown: %.2f%%)', drawdown)
-      guarded_exit(tracker, reason, exit_engine)
-      true
-    end
-
-    def update_sl_offset_pct(position, active_cache)
-      return position.sl_offset_pct unless position.pnl_pct
-
-      desired = Positions::TrailingConfig.sl_offset_for(position.pnl_pct.to_f)
-      return position.sl_offset_pct if desired.nil?
-
-      if position.sl_offset_pct.to_f != desired.to_f
-        active_cache.update_position(position.tracker_id, sl_offset_pct: desired)
-        position.sl_offset_pct = desired
-      end
-
-      desired
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] update_sl_offset_pct failed for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
-      position.sl_offset_pct
     end
 
     def structure_break_against_position?(position, tracker, underlying_state)
