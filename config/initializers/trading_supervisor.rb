@@ -156,6 +156,7 @@ Rails.application.config.to_prepare do
   supervisor.register(:paper_pnl_refresher, Live::PaperPnlRefresher.new)
   supervisor.register(:exit_manager, exit_engine)
   supervisor.register(:active_cache, ActiveCacheService.new)
+  supervisor.register(:reconciliation, Live::ReconciliationService.instance)
 
  # Future:
  # supervisor.register(:pnl_updater, PnlUpdaterServiceAdapter.new)

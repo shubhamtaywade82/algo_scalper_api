@@ -31,6 +31,9 @@ module Live
         'updated_at' => Time.current.to_i.to_s
       }
 
+      # Sync PnL to database immediately (use Redis as source of truth)
+      sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm) if tracker_id
+
       # Add additional metadata if tracker is provided
       if tracker
         # Direct fields from PositionTracker
@@ -141,6 +144,29 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[RedisPnL] clear error: #{e.message}") if defined?(Rails)
       false
+    end
+
+    # Sync PnL from Redis to PositionTracker database
+    # This ensures DB stays in sync with Redis (source of truth)
+    def sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm)
+      return unless tracker_id
+
+      begin
+        tracker = PositionTracker.find_by(id: tracker_id)
+        return unless tracker&.active?
+
+        # Update DB with Redis PnL data
+        tracker.update!(
+          last_pnl_rupees: BigDecimal(pnl.to_s),
+          last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
+          high_water_mark_pnl: hwm ? BigDecimal(hwm.to_s) : tracker.high_water_mark_pnl
+        )
+      rescue ActiveRecord::RecordNotFound
+        # Tracker doesn't exist, skip
+        nil
+      rescue StandardError => e
+        Rails.logger.error("[RedisPnL] sync_pnl_to_database failed for tracker #{tracker_id}: #{e.class} - #{e.message}")
+      end
     end
 
     def clear_tracker(tracker_id)

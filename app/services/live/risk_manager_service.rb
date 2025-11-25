@@ -899,7 +899,7 @@ module Live
     # Ensure all active positions are in ActiveCache
     def ensure_all_positions_in_active_cache
       @last_ensure_active_cache ||= Time.zone.at(0)
-      return if Time.current - @last_ensure_active_cache < 10.seconds
+      return if Time.current - @last_ensure_active_cache < 5.seconds
 
       @last_ensure_active_cache = Time.current
       active_cache = Positions::ActiveCache.instance
@@ -921,7 +921,7 @@ module Live
     # Ensure all active positions are subscribed to market data
     def ensure_all_positions_subscribed
       @last_ensure_subscribed ||= Time.zone.at(0)
-      return if Time.current - @last_ensure_subscribed < 30.seconds
+      return if Time.current - @last_ensure_subscribed < 5.seconds
 
       @last_ensure_subscribed = Time.current
       hub = Live::MarketFeedHub.instance

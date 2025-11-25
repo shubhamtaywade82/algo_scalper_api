@@ -166,7 +166,8 @@ module Live
 
       if segment.blank? || security_id.blank?
         Rails.logger.error("[MarketFeedHub] Invalid subscription: segment=#{segment.inspect}, security_id=#{security_id.inspect}")
-        return { segment: segment, security_id: security_id, already_subscribed: false, error: 'Invalid segment or security_id' }
+        return { segment: segment, security_id: security_id, already_subscribed: false,
+                 error: 'Invalid segment or security_id' }
       end
 
       # Create composite key for tracking
@@ -380,9 +381,7 @@ module Live
       @connection_state = :connected
 
       # If we just reconnected (was not connected, now connected), resubscribe all active positions
-      unless was_connected
-        resubscribe_active_positions_after_reconnect
-      end
+      resubscribe_active_positions_after_reconnect unless was_connected
 
       # Update FeedHealthService
       begin

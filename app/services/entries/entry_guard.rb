@@ -504,6 +504,12 @@ module Entries
           tracker: tracker
         )
 
+        # Add to ActiveCache immediately (ensures exit conditions work)
+        # Calculate default SL/TP if needed
+        sl_price = calculate_default_sl(tracker, ltp)
+        tp_price = calculate_default_tp(tracker, ltp)
+        add_to_active_cache(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
+
         Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")
         tracker
       rescue ActiveRecord::RecordInvalid => e
@@ -675,10 +681,34 @@ module Entries
         Rails.logger.warn("[EntryGuard] Failed to tag fallback tracker #{tracker.id}: #{e.class} - #{e.message}")
       end
 
-      def feature_flags
-        AlgoConfig.fetch[:feature_flags] || {}
-      rescue StandardError
-        {}
+      # Calculate default stop loss price
+      def calculate_default_sl(tracker, entry_price)
+        risk_cfg = AlgoConfig.fetch.dig(:risk) || {}
+        sl_pct = risk_cfg[:sl_pct] || 5.0 # Default 5% stop loss
+
+        entry = BigDecimal(entry_price.to_s)
+        sl_offset = entry * (BigDecimal(sl_pct.to_s) / 100.0)
+
+        # For long positions, SL is below entry
+        entry - sl_offset
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] calculate_default_sl failed: #{e.class} - #{e.message}")
+        nil
+      end
+
+      # Calculate default take profit price
+      def calculate_default_tp(tracker, entry_price)
+        risk_cfg = AlgoConfig.fetch.dig(:risk) || {}
+        tp_pct = risk_cfg[:tp_pct] || 10.0 # Default 10% take profit
+
+        entry = BigDecimal(entry_price.to_s)
+        tp_offset = entry * (BigDecimal(tp_pct.to_s) / 100.0)
+
+        # For long positions, TP is above entry
+        entry + tp_offset
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] calculate_default_tp failed: #{e.class} - #{e.message}")
+        nil
       end
     end
   end
