@@ -59,8 +59,13 @@ module Signal
 
           adx_cfg = signals_cfg[:adx] || {}
           enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
+
+          # Get per-index ADX thresholds (if specified) or fall back to global
+          index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+          primary_adx_threshold = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength]
+
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-          adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
+          adx_min_strength = enable_adx_filter ? primary_adx_threshold : 0
 
           primary_analysis = analyze_timeframe(
             index_cfg: index_cfg,
@@ -87,9 +92,17 @@ module Signal
         # (strategies were backtested as standalone systems)
         if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended])
           mode_config = get_validation_mode_config
+
+          # Get per-index ADX thresholds (if specified) or fall back to global
+          index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+          confirmation_adx_threshold = index_adx_thresholds[:confirmation_min_strength] ||
+                                       mode_config[:adx_confirmation_min_strength] ||
+                                       adx_cfg[:confirmation_min_strength] ||
+                                       adx_cfg[:min_strength]
+
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
-                                   mode_config[:adx_confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+                                   confirmation_adx_threshold
                                  else
                                    0
                                  end
@@ -270,8 +283,14 @@ module Signal
 
         adx_cfg = signals_cfg[:adx] || {}
         enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
+
+        # Get per-index ADX thresholds (if specified) or fall back to global
+        index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+        primary_adx_threshold = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength]
+        confirmation_adx_threshold = index_adx_thresholds[:confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+
         # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-        adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
+        adx_min_strength = enable_adx_filter ? primary_adx_threshold : 0
 
         # Analyze primary timeframe
         primary_analysis = analyze_timeframe(
@@ -293,7 +312,7 @@ module Signal
         if confirmation_tf.present?
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
-                                   adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+                                   confirmation_adx_threshold
                                  else
                                    0
                                  end

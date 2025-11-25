@@ -88,13 +88,31 @@ class PositionTracker < ApplicationRecord
 
       active_count = active.count
       realized_pnl_rupees = exited.sum { |t| t.last_pnl_rupees.to_f }
-      realized_pnl_pct = exited.map { |t| t.last_pnl_pct.to_f }.compact.sum
-
       unrealized_pnl_rupees = active.sum { |t| t.last_pnl_rupees.to_f }
-      unrealized_pnl_pct = active.map { |t| t.last_pnl_pct.to_f }.compact.sum
 
       total_pnl_rupees = realized_pnl_rupees + unrealized_pnl_rupees
-      total_pnl_pct = realized_pnl_pct + unrealized_pnl_pct
+
+      # Calculate PnL percentages based on initial capital, not by summing individual trade percentages
+      initial_capital = Capital::Allocator.paper_trading_balance.to_f
+      realized_pnl_pct = initial_capital.positive? ? (realized_pnl_rupees / initial_capital * 100.0) : 0.0
+      unrealized_pnl_pct = initial_capital.positive? ? (unrealized_pnl_rupees / initial_capital * 100.0) : 0.0
+      total_pnl_pct = initial_capital.positive? ? (total_pnl_rupees / initial_capital * 100.0) : 0.0
+
+      # Calculate average per-trade percentages (for reference)
+      avg_realized_pnl_pct = if exited.any?
+                               (exited.map do |t|
+                                 t.last_pnl_pct.to_f
+                               end.compact.sum / exited.count.to_f).round(2)
+                             else
+                               0.0
+                             end
+      avg_unrealized_pnl_pct = if active.any?
+                                 (active.map do |t|
+                                   t.last_pnl_pct.to_f
+                                 end.compact.sum / active.count.to_f).round(2)
+                               else
+                                 0.0
+                               end
 
       {
         total_trades: exited.count,
@@ -106,8 +124,8 @@ class PositionTracker < ApplicationRecord
         unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
         unrealized_pnl_pct: unrealized_pnl_pct.round(2),
         win_rate: paper_win_rate,
-        avg_realized_pnl_pct: exited.any? ? (realized_pnl_pct / exited.count.to_f).round(2) : 0.0,
-        avg_unrealized_pnl_pct: active.any? ? (unrealized_pnl_pct / active.count.to_f).round(2) : 0.0,
+        avg_realized_pnl_pct: avg_realized_pnl_pct,
+        avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
         losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
       }
@@ -263,7 +281,8 @@ class PositionTracker < ApplicationRecord
       pnl_pct: 0.0,
       ltp: price,
       hwm: initial_pnl,
-      timestamp: Time.current
+      timestamp: Time.current,
+      tracker: self
     )
   end
 
@@ -564,12 +583,12 @@ class PositionTracker < ApplicationRecord
   def segment_must_be_tradable
     return if segment.blank? # Allow blank segments (will be validated elsewhere if needed)
 
-    unless Orders::Placer::VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
-      errors.add(
-        :segment,
-        "is not tradable. Segment '#{segment}' is an index segment and cannot be traded. " \
-        "Valid tradable segments: #{Orders::Placer::VALID_TRADABLE_SEGMENTS.join(', ')}"
-      )
-    end
+    return if Orders::Placer::VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
+
+    errors.add(
+      :segment,
+      "is not tradable. Segment '#{segment}' is an index segment and cannot be traded. " \
+      "Valid tradable segments: #{Orders::Placer::VALID_TRADABLE_SEGMENTS.join(', ')}"
+    )
   end
 end

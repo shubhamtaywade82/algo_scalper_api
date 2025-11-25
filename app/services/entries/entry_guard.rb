@@ -500,7 +500,8 @@ module Entries
           pnl_pct: 0.0,
           ltp: ltp,
           hwm: initial_pnl,
-          timestamp: Time.current
+          timestamp: Time.current,
+          tracker: tracker
         )
 
         Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")

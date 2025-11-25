@@ -37,6 +37,11 @@ indices:
     trade_limits:
       max_trades_per_day: 3
 
+    # Per-index ADX thresholds (overrides global if specified)
+    adx_thresholds:
+      primary_min_strength: 14 # 1m ADX threshold (70% of typical ~20)
+      confirmation_min_strength: 11 # 5m ADX threshold (70% of typical ~15.5)
+
     strategies:
       open_interest:
         enabled: true
@@ -75,6 +80,11 @@ indices:
     trade_limits:
       max_trades_per_day: 1
 
+    # Per-index ADX thresholds (overrides global if specified)
+    adx_thresholds:
+      primary_min_strength: 18 # 1m ADX threshold (use global default)
+      confirmation_min_strength: 31 # 5m ADX threshold (70% of typical ~44)
+
     strategies:
       open_interest:
         enabled: true
@@ -112,6 +122,11 @@ indices:
 
     trade_limits:
       max_trades_per_day: 2
+
+    # Per-index ADX thresholds (overrides global if specified)
+    adx_thresholds:
+      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~25.5)
+      confirmation_min_strength: 10 # 5m ADX threshold (70% of typical ~13.5)
 
     strategies:
       open_interest:
@@ -170,8 +185,8 @@ signals:
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
-  enable_adx_filter: false # Enable ADX strength filter (default: false)
-  enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
+  enable_adx_filter: true # Enable ADX strength filter (default: false)
+  enable_confirmation_timeframe: true # Enable 5m HTF confirmation (default: false)
 
   trend_scorer:
     min_trend_score: 14
@@ -184,8 +199,10 @@ signals:
     base_multiplier: 3.0
 
   adx:
+    # Global ADX thresholds (used as fallback if per-index thresholds not specified)
     min_strength: 18 # ADX threshold for 1m timeframe (when enabled)
     confirmation_min_strength: 20 # ADX threshold for 5m confirmation (when enabled)
+    # Note: Per-index thresholds in indices[].adx_thresholds override these values
 
 # ============================================
 # OPTION CHAIN SETTINGS

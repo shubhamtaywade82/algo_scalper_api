@@ -93,7 +93,8 @@ module Live
         pnl_pct: pct,
         ltp: ltp,
         hwm: tracker.high_water_mark_pnl,
-        timestamp: Time.current
+        timestamp: Time.current,
+        tracker: tracker
       )
     rescue StandardError => e
       Rails.logger.warn("[PaperPnlRefresher] Failed refresh for #{tracker.id}: #{e.class} - #{e.message}")
