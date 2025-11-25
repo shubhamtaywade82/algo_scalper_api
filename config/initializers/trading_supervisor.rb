@@ -166,17 +166,31 @@ Rails.application.config.to_prepare do
  unless defined?($trading_supervisor_started) && $trading_supervisor_started
    $trading_supervisor_started = true
 
-   supervisor.start_all
+   # Check if market is closed - if so, only start WebSocket connection
+   market_closed = TradingSession::Service.market_closed?
+
+   if market_closed
+     Rails.logger.info('[TradingSupervisor] Market is closed - only starting WebSocket connection')
+     # Only start MarketFeedHub (WebSocket connection)
+     supervisor[:market_feed]&.start
+     Rails.logger.info('[Supervisor] started market_feed (WebSocket only)')
+   else
+     # Market is open - start all services
+     supervisor.start_all
+   end
 
    # ----------------------------------------------------
    # SUBSCRIBE ACTIVE POSITIONS VIA PositionIndex
    # ----------------------------------------------------
-   active_pairs = Live::PositionIndex.instance.all_keys.map do |k|
-      seg, sid = k.split(':', 2)
-     { segment: seg, security_id: sid }
-   end
+   # Only subscribe active positions if market is open
+   unless market_closed
+     active_pairs = Live::PositionIndex.instance.all_keys.map do |k|
+        seg, sid = k.split(':', 2)
+       { segment: seg, security_id: sid }
+     end
 
-    supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
+      supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
+   end
 
    # ----------------------------------------------------
    # SIGNAL HANDLERS (CTRL+C)
