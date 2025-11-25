@@ -964,9 +964,7 @@ module Live
       position.high_water_mark = redis_pnl[:hwm_pnl].to_f if redis_pnl[:hwm_pnl]
 
       # Update LTP if available
-      if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
-        position.current_ltp = redis_pnl[:ltp].to_f
-      end
+      position.current_ltp = redis_pnl[:ltp].to_f if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
 
       # Update peak profit if available
       if redis_pnl[:peak_profit_pct] && redis_pnl[:peak_profit_pct].to_f > (position.peak_profit_pct || 0)

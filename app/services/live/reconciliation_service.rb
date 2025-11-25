@@ -127,10 +127,10 @@ module Live
       # 4. Sync ActiveCache PnL from Redis
       sync_activecache_pnl(tracker, active_cache, redis_cache)
 
-      if fixes_applied.any?
-        @stats[:positions_fixed] += 1
-        Rails.logger.info("[ReconciliationService] Fixed tracker #{tracker.id}: #{fixes_applied.join(', ')}")
-      end
+      return unless fixes_applied.any?
+
+      @stats[:positions_fixed] += 1
+      Rails.logger.info("[ReconciliationService] Fixed tracker #{tracker.id}: #{fixes_applied.join(', ')}")
     end
 
     def subscribed?(tracker, hub)
@@ -188,15 +188,12 @@ module Live
       position.high_water_mark = redis_pnl[:hwm_pnl].to_f if redis_pnl[:hwm_pnl]
 
       # Update LTP if available
-      if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
-        position.current_ltp = redis_pnl[:ltp].to_f
-      end
+      position.current_ltp = redis_pnl[:ltp].to_f if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
 
       # Update peak profit if available
-      if redis_pnl[:peak_profit_pct] && redis_pnl[:peak_profit_pct].to_f > (position.peak_profit_pct || 0)
-        position.peak_profit_pct = redis_pnl[:peak_profit_pct].to_f
-      end
+      return unless redis_pnl[:peak_profit_pct] && redis_pnl[:peak_profit_pct].to_f > (position.peak_profit_pct || 0)
+
+      position.peak_profit_pct = redis_pnl[:peak_profit_pct].to_f
     end
   end
 end
-
