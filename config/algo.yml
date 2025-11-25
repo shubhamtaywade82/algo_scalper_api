@@ -1,10 +1,6 @@
-# Paper Trading Mode
-# Set to true to enable paper trading (simulated trading with ₹1 lakh balance)
-# Paper positions are tracked but no real orders are placed
 paper_trading:
   enabled: true
-  balance: 100000 # ₹1 lakh
-  realtime_interval_seconds: 1
+  balance: 100000
 
 feature_flags:
   enable_direction_before_chain: true
@@ -13,6 +9,9 @@ feature_flags:
   enable_underlying_aware_exits: false
   enable_peak_drawdown_activation: false
 
+# ============================================
+# INDEX CONFIG (TREND-SCORE DRIVEN)
+# ============================================
 indices:
   - key: NIFTY
     segment: IDX_I
@@ -20,202 +19,187 @@ indices:
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
-    direction: "bullish"
+    direction: bullish
+
+    premium_band:
+      min: 30
+      max: 120
+
+    otm_rules:
+      max_otm: 2         # ATM → +1 OTM → +2 OTM
+
+    risk_model:
+      base_risk_pct: 0.01   # 1% base
+      strong_trend_pct: 0.01
+      weak_trend_pct: 0.005
+
+    trade_limits:
+      max_trades_per_day: 3
+
     strategies:
       open_interest:
         enabled: true
         priority: 1
-        # multiplier: 1  # Optional, defaults to 1 if not specified
-        capital_alloc_pct: 0.20
       momentum_buying:
         enabled: true
         priority: 2
-        # multiplier: 1  # Optional, defaults to 1 if not specified
         min_rsi: 60
       btst:
         enabled: true
         priority: 3
-        # multiplier: 1  # Optional, defaults to 1 if not specified
       swing_buying:
         enabled: true
         priority: 4
-        # multiplier: 1  # Optional, defaults to 1 if not specified
+
   - key: BANKNIFTY
     segment: IDX_I
     sid: "25"
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
-    direction: "bullish"
+    direction: bullish
+
+    premium_band:
+      min: 60
+      max: 180
+
+    otm_rules:
+      max_otm: 2
+
+    risk_model:
+      base_risk_pct: 0.02     # 2% base
+      strong_trend_pct: 0.02
+      weak_trend_pct: 0.01
+
+    trade_limits:
+      max_trades_per_day: 1
+
     strategies:
       open_interest:
         enabled: true
         priority: 1
-        # multiplier: 1  # Optional, defaults to 1 if not specified
-        capital_alloc_pct: 0.20
       momentum_buying:
         enabled: true
         priority: 2
-        # multiplier: 1  # Optional, defaults to 1 if not specified
         min_rsi: 60
       btst:
         enabled: true
         priority: 3
-        # multiplier: 1  # Optional, defaults to 1 if not specified
       swing_buying:
         enabled: true
         priority: 4
-        # multiplier: 1  # Optional, defaults to 1 if not specified
+
   - key: SENSEX
     segment: IDX_I
     sid: "51"
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
-    direction: "bullish"
+    direction: bullish
+
+    premium_band:
+      min: 40
+      max: 150
+
+    otm_rules:
+      max_otm: 2
+
+    risk_model:
+      base_risk_pct: 0.005   # 0.5% base
+      strong_trend_pct: 0.005
+      weak_trend_pct: 0.0025
+
+    trade_limits:
+      max_trades_per_day: 2
+
     strategies:
       open_interest:
         enabled: true
         priority: 1
-        # multiplier: 1  # Optional, defaults to 1 if not specified
-        capital_alloc_pct: 0.20
       momentum_buying:
         enabled: true
         priority: 2
-        # multiplier: 1  # Optional, defaults to 1 if not specified
         min_rsi: 60
       btst:
         enabled: true
         priority: 3
-        # multiplier: 1  # Optional, defaults to 1 if not specified
       swing_buying:
         enabled: true
         priority: 4
-        # multiplier: 1  # Optional, defaults to 1 if not specified
 
-# risk:
-#   sl_pct: 0.03        # -3% STOP LOSS
-#   tp_pct: 0.05        # +5% TAKE PROFIT
-#   per_trade_risk_pct: 0.15
+trade_limits:
+  global_max_trades_per_day: 8
 
-#   # Disable trailing, breakeven, and min-profit logic for pure quick test
-#   trail_step_pct: 0.0
-#   breakeven_after_gain: 999     # effectively disabled
-#   exit_drop_pct: 999            # no trailing exits
-#   min_profit_rupees: 0          # allow immediate TP exits
-
+# ============================================
+# RISK MODEL (NEMESIS V3)
+# ============================================
 risk:
-  # daily_loss_limit_pct: 0.06 # Circuit breaker disabled - removed per requirement
-  per_trade_risk_pct: 0.15
-  sl_pct: 0.10 # 25% stop loss for options (high volatility)
-  tp_pct: 0.20 # 60% take profit target
-  trail_step_pct: 0.03 # 5% trailing step for options
-  breakeven_after_gain: 0.05 # trigger breakeven lock at +10% gain
-  exit_drop_pct: 0.03 # trigger trailing exit after 3% pullback from high-water mark
-  min_profit_rupees: 1000 # Minimum profit required per position before allowing profit-based exits (₹1000)
-  underlying_trend_score_threshold: 10
-  underlying_atr_collapse_multiplier: 0.65
-  peak_drawdown_activation_profit_pct: 25.0
-  peak_drawdown_activation_sl_offset_pct: 10.0
+  sl_pct: 0.30      # 30% fixed SL (entry * 0.70)
+  tp_pct: 0.60      # 60% fixed TP (entry * 1.60)
 
+  # Micro-Trailing model (tiered)
+  trailing_tiers:
+    - { trigger_pct: 5,  sl_offset_pct: -15 }
+    - { trigger_pct: 10, sl_offset_pct: -5 }
+    - { trigger_pct: 15, sl_offset_pct: 0 }
+    - { trigger_pct: 25, sl_offset_pct: 10 }
+    - { trigger_pct: 40, sl_offset_pct: 20 }
+    - { trigger_pct: 60, sl_offset_pct: 30 }
+    - { trigger_pct: 80, sl_offset_pct: 40 }
+    - { trigger_pct: 120, sl_offset_pct: 60 }
+
+  peak_drawdown_exit_pct: 5  # Instant exit on -5% drop from peak
+
+  daily_limits:
+    enable: true
+    per_index:
+      NIFTY: 0.02       # 2% max loss for NIFTY
+      BANKNIFTY: 0.04   # 4% max loss for BANKNIFTY
+      SENSEX: 0.01      # 1% max loss for SENSEX
+    global_limit_pct: 0.04
+
+# ============================================
+# SIGNAL SETTINGS
+# ============================================
 signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
-  enable_confirmation_timeframe: false # Enable/disable 5m confirmation analysis
-  enable_adx_filter: false # Enable/disable ADX strength filtering
-  use_strategy_recommendations: false # Enable/disable backtest-based strategy recommendations (SimpleMomentumStrategy, InsideBarStrategy, SupertrendAdxStrategy)
-  validation_mode: "aggressive" # conservative | balanced | aggressive
-  supertrend:
-    period: 10
-    base_multiplier: 2.0
-    training_period: 50
-    num_clusters: 3
-    performance_alpha: 0.1
-    multiplier_candidates: [1.5, 2.0, 2.5, 3.0, 3.5]
+
+  trend_scorer:
+    min_trend_score: 14
+    mtf_enabled: true
+
+  validation_mode: balanced
+
   adx:
     min_strength: 18
     confirmation_min_strength: 20
-  scaling:
-    enabled: true
-    max_multiplier: 3
-    decay_seconds: 900
-  validation_modes:
-    conservative:
-      adx_min_strength: 25
-      adx_confirmation_min_strength: 30
-      iv_rank_max: 0.6
-      iv_rank_min: 0.15
-      theta_risk_cutoff_hour: 14
-      theta_risk_cutoff_minute: 0
-      require_trend_confirmation: true
-      require_iv_rank_check: true
-      require_theta_risk_check: true
-    balanced:
-      adx_min_strength: 18
-      adx_confirmation_min_strength: 20
-      iv_rank_max: 0.8
-      iv_rank_min: 0.1
-      theta_risk_cutoff_hour: 14
-      theta_risk_cutoff_minute: 30
-      require_trend_confirmation: true
-      require_iv_rank_check: true
-      require_theta_risk_check: true
-    aggressive:
-      adx_min_strength: 15
-      adx_confirmation_min_strength: 18
-      iv_rank_max: 0.9
-      iv_rank_min: 0.05
-      theta_risk_cutoff_hour: 15
-      theta_risk_cutoff_minute: 0
-      require_trend_confirmation: false
-      require_iv_rank_check: true
-      require_theta_risk_check: false
 
-# Legacy strategy config (fallback if index-level strategies not defined)
-strategy:
-  direction: "bullish"
-  open_interest:
-    enabled: false
-    priority: 1
-    # multiplier: 1  # Optional, defaults to 1 if not specified
-  momentum_buying:
-    enabled: false
-    priority: 2
-    # multiplier: 1  # Optional, defaults to 1 if not specified
-    min_rsi: 60
-  btst:
-    enabled: false
-    priority: 3
-    # multiplier: 1  # Optional, defaults to 1 if not specified
-  swing_buying:
-    enabled: false
-    priority: 4
-    # multiplier: 1  # Optional, defaults to 1 if not specified
-
+# ============================================
+# OPTION CHAIN SETTINGS
+# ============================================
 chain_analyzer:
   max_candidates: 2
-  # DerivativeChainAnalyzer settings (uses Derivative records)
-  strike_distance_pct: 0.02 # Maximum distance from spot (2%)
-  min_oi: 10000 # Minimum open interest (lowered for better selection)
-  min_iv: 5.0 # Minimum implied volatility (%)
-  max_iv: 60.0 # Maximum implied volatility (%)
-  max_spread_pct: 0.03 # Maximum bid-ask spread (3%)
-  # Scoring weights (heuristic - must be backtested)
+  strike_distance_pct: 0.02
+  min_oi: 10000
+  min_iv: 5.0
+  max_iv: 60.0
+  max_spread_pct: 0.03
+
   scoring_weights:
-    oi: 0.4 # Open Interest weight (40%)
-    spread: 0.25 # Spread weight (25%)
-    iv: 0.2 # IV weight (20%)
-    volume: 0.15 # Volume weight (15%)
+    oi: 0.4
+    spread: 0.25
+    iv: 0.2
+    volume: 0.15
 
 option_chain:
-  atm_window_pct: 0.1 # Not used - now using fixed strike steps (ATM, ATM±1, ATM±2, ATM±3)
-  min_iv: 10 # Minimum implied volatility
-  max_iv: 60 # Maximum implied volatility
-  min_oi: 50000 # Minimum open interest
-  max_spread_pct: 3.0 # Maximum bid-ask spread percentage
+  min_iv: 10
+  max_iv: 60
+  min_oi: 50000
+  max_spread_pct: 3.0
 
 data_freshness:
-  disable_ohlc_caching: false # Set to true to always fetch fresh OHLC data
-  disable_option_chain_caching: false # Set to true to always fetch fresh option chain data
-  ohlc_cache_duration_minutes: 5 # Cache OHLC data for 5 minutes
-  option_chain_cache_duration_minutes: 2 # Cache option chain data for 2 minutes
+  disable_ohlc_caching: false
+  disable_option_chain_caching: false
+  ohlc_cache_duration_minutes: 5
+  option_chain_cache_duration_minutes: 2
