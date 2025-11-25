@@ -33,12 +33,15 @@ module Live
 
       # Watchdog ensures service thread is restarted if it dies (lightweight)
       @watchdog_thread = Thread.new do
+        Thread.current.name = 'risk-manager-watchdog'
         loop do
-          unless @thread&.alive?
-            Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
-            start
-          end
           sleep 10
+          # Only restart if service was running and thread is dead
+          next unless @running && (@thread.nil? || !@thread.alive?)
+
+          Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
+          @running = false # Reset flag before restarting
+          start
         end
       end
 
@@ -298,6 +301,7 @@ module Live
 
         next if handle_underlying_exit(position, tracker, exit_engine)
         next if enforce_bracket_limits(position, tracker, exit_engine)
+
         @trailing_engine.process_tick(position, exit_engine: trailing_exit_engine)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] TrailingEngine error for tracker #{position.tracker_id}: #{e.class} - #{e.message}")

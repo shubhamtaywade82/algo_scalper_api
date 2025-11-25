@@ -27,10 +27,10 @@ indices:
       max: 120
 
     otm_rules:
-      max_otm: 2         # ATM → +1 OTM → +2 OTM
+      max_otm: 2 # ATM → +1 OTM → +2 OTM
 
     risk_model:
-      base_risk_pct: 0.01   # 1% base
+      base_risk_pct: 0.01 # 1% base
       strong_trend_pct: 0.01
       weak_trend_pct: 0.005
 
@@ -68,7 +68,7 @@ indices:
       max_otm: 2
 
     risk_model:
-      base_risk_pct: 0.02     # 2% base
+      base_risk_pct: 0.02 # 2% base
       strong_trend_pct: 0.02
       weak_trend_pct: 0.01
 
@@ -106,7 +106,7 @@ indices:
       max_otm: 2
 
     risk_model:
-      base_risk_pct: 0.005   # 0.5% base
+      base_risk_pct: 0.005 # 0.5% base
       strong_trend_pct: 0.005
       weak_trend_pct: 0.0025
 
@@ -135,12 +135,12 @@ trade_limits:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.30      # 30% fixed SL (entry * 0.70)
-  tp_pct: 0.60      # 60% fixed TP (entry * 1.60)
+  sl_pct: 0.30 # 30% fixed SL (entry * 0.70)
+  tp_pct: 0.60 # 60% fixed TP (entry * 1.60)
 
   # Micro-Trailing model (tiered)
   trailing_tiers:
-    - { trigger_pct: 5,  sl_offset_pct: -15 }
+    - { trigger_pct: 5, sl_offset_pct: -15 }
     - { trigger_pct: 10, sl_offset_pct: -5 }
     - { trigger_pct: 15, sl_offset_pct: 0 }
     - { trigger_pct: 25, sl_offset_pct: 10 }
@@ -149,14 +149,14 @@ risk:
     - { trigger_pct: 80, sl_offset_pct: 40 }
     - { trigger_pct: 120, sl_offset_pct: 60 }
 
-  peak_drawdown_exit_pct: 5  # Instant exit on -5% drop from peak
+  peak_drawdown_exit_pct: 5 # Instant exit on -5% drop from peak
 
   daily_limits:
     enable: true
     per_index:
-      NIFTY: 0.02       # 2% max loss for NIFTY
-      BANKNIFTY: 0.04   # 4% max loss for BANKNIFTY
-      SENSEX: 0.01      # 1% max loss for SENSEX
+      NIFTY: 0.02 # 2% max loss for NIFTY
+      BANKNIFTY: 0.04 # 4% max loss for BANKNIFTY
+      SENSEX: 0.01 # 1% max loss for SENSEX
     global_limit_pct: 0.04
 
 # ============================================
@@ -171,6 +171,10 @@ signals:
     mtf_enabled: true
 
   validation_mode: balanced
+
+  supertrend:
+    period: 7
+    base_multiplier: 3.0
 
   adx:
     min_strength: 18

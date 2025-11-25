@@ -7,7 +7,6 @@ module Live
       @running = false
       @thread = nil
       @lock = Mutex.new
-      @risk_manager = Live::RiskManagerService.new(exit_engine: self)
     end
 
     # ExitEngine DOES NOT call risk logic.
