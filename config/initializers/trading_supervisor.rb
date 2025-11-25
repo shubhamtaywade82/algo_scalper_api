@@ -6,16 +6,24 @@
 
 if Rails.env.test? ||
   defined?(Rails::Console) ||
-  (defined?(Rails::Generators) && Rails::Generators.const_defined?(:Base))
+  (defined?(Rails::Generators) && Rails::Generators.const_defined?(:Base)) ||
+  ENV['BACKTEST_MODE'] == '1' ||
+  ENV['SCRIPT_MODE'] == '1' ||
+  ENV['DISABLE_TRADING_SERVICES'] == '1'
  return
 end
 
 # bin/dev uses Puma, not Rails::Server
+# Skip if running as script (rails runner) or in backtest/script mode
+is_runner = $PROGRAM_NAME.include?('runner') || File.basename($PROGRAM_NAME) == 'runner'
+skip_services = is_runner || ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1' || ENV['DISABLE_TRADING_SERVICES'] == '1'
+
 is_web_process =
   $PROGRAM_NAME.include?('puma') ||
-  $PROGRAM_NAME.include?('rails') ||
+  ($PROGRAM_NAME.include?('rails') && !is_runner) ||
   ENV['WEB_CONCURRENCY'].present?
 
+return if skip_services
 return unless is_web_process
 
 # --------------------------------------------------------------------

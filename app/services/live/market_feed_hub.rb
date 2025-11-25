@@ -160,22 +160,36 @@ module Live
     def subscribe(segment:, security_id:)
       ensure_running!
 
+      # Validate inputs
+      segment = segment.to_s.strip
+      security_id = security_id.to_s.strip
+
+      if segment.blank? || security_id.blank?
+        Rails.logger.error("[MarketFeedHub] Invalid subscription: segment=#{segment.inspect}, security_id=#{security_id.inspect}")
+        return { segment: segment, security_id: security_id, already_subscribed: false, error: 'Invalid segment or security_id' }
+      end
+
       # Create composite key for tracking
       key = "#{segment}:#{security_id}"
 
       # Check if already subscribed
       if @subscribed_keys.include?(key)
         Rails.logger.debug { "[MarketFeedHub] Already subscribed to #{key}, skipping duplicate subscription" }
-        return { segment: segment, security_id: security_id.to_s, already_subscribed: true }
+        return { segment: segment, security_id: security_id, already_subscribed: true }
       end
 
       # Subscribe via WebSocket
-      @ws_client.subscribe_one(segment: segment, security_id: security_id.to_s)
+      begin
+        @ws_client.subscribe_one(segment: segment, security_id: security_id)
+      rescue StandardError => e
+        Rails.logger.error("[MarketFeedHub] WebSocket subscription failed for #{key}: #{e.class} - #{e.message}")
+        return { segment: segment, security_id: security_id, already_subscribed: false, error: e.message }
+      end
 
       # Track subscription
       @subscribed_keys.add(key)
 
-      { segment: segment, security_id: security_id.to_s, already_subscribed: false }
+      { segment: segment, security_id: security_id, already_subscribed: false }
     end
 
     def subscribe_many(instruments)
@@ -197,22 +211,34 @@ module Live
         end
       end
 
+      # Filter out invalid entries (blank segment or security_id)
+      valid_list = list.reject do |item|
+        segment = item[:segment].to_s.strip
+        security_id = item[:security_id].to_s.strip
+        segment.blank? || security_id.blank?
+      end
+
+      if valid_list.size < list.size
+        invalid_count = list.size - valid_list.size
+        Rails.logger.warn("[MarketFeedHub] Filtered out #{invalid_count} invalid watchlist entries (blank segment or security_id)")
+      end
+
       # Filter out already subscribed instruments
-      new_subscriptions = list.reject do |item|
+      new_subscriptions = valid_list.reject do |item|
         key = "#{item[:segment]}:#{item[:security_id]}"
         @subscribed_keys.include?(key)
       end
 
       if new_subscriptions.empty?
-        Rails.logger.info("[MarketFeedHub] All #{list.count} instruments were already subscribed (duplicates skipped)")
+        Rails.logger.info("[MarketFeedHub] All #{valid_list.count} instruments were already subscribed (duplicates skipped)")
         return []
       end
 
       # Convert to format expected by DhanHQ client: ExchangeSegment and SecurityId keys
       normalized_list = new_subscriptions.map do |item|
         {
-          ExchangeSegment: item[:segment] || item['segment'],
-          SecurityId: (item[:security_id] || item['security_id']).to_s
+          ExchangeSegment: item[:segment].to_s.strip,
+          SecurityId: item[:security_id].to_s.strip
         }
       end
 
@@ -331,6 +357,10 @@ module Live
     private
 
     def enabled?
+      # Disable in script/backtest mode
+      return false if ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1' || ENV['DISABLE_TRADING_SERVICES'] == '1'
+      return false if defined?($PROGRAM_NAME) && $PROGRAM_NAME.include?('runner')
+
       # Always enabled - just check for credentials
       # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
       client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
@@ -345,8 +375,14 @@ module Live
 
     def handle_tick(tick)
       # Update connection health indicators
+      was_connected = @connection_state == :connected
       @last_tick_at = Time.current
       @connection_state = :connected
+
+      # If we just reconnected (was not connected, now connected), resubscribe all active positions
+      unless was_connected
+        resubscribe_active_positions_after_reconnect
+      end
 
       # Update FeedHealthService
       begin
@@ -475,20 +511,22 @@ module Live
                   end
                 end
 
-        return pairs.map { |seg, sid| { segment: seg, security_id: sid } }
+        # Filter out any pairs with blank segment or security_id
+        pairs.filter_map { |seg, sid| { segment: seg, security_id: sid } if seg.present? && sid.present? }
       end
 
-      raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '')
-               .split(/[;\n,]/)
-               .map(&:strip)
-               .compact_blank
+      raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '').strip
+      return [] if raw.blank?
 
-      raw.filter_map do |entry|
-        segment, security_id = entry.split(':', 2)
-        next if segment.blank? || security_id.blank?
+      raw.split(/[;\n,]/)
+         .map(&:strip)
+         .compact_blank
+         .filter_map do |entry|
+           segment, security_id = entry.split(':', 2)
+           next if segment.blank? || security_id.blank?
 
-        { segment: segment, security_id: security_id }
-      end
+           { segment: segment.strip, security_id: security_id.strip }
+         end
     end
 
     def build_client
@@ -572,6 +610,36 @@ module Live
     def option_segment?(segment)
       seg = segment.to_s.upcase
       seg.include?('FNO') || seg.include?('COMM') || seg.include?('CUR')
+    end
+
+    # Resubscribe all active positions after WebSocket reconnect
+    # This ensures our tracking stays in sync with the WebSocket state
+    def resubscribe_active_positions_after_reconnect
+      return unless running?
+      return if @resubscribing # Prevent recursive calls
+
+      @resubscribing = true
+      begin
+        # Get all active positions that should be subscribed
+        positions = PositionTracker.active.includes(:instrument).to_a
+        return if positions.empty?
+
+        Rails.logger.info("[MarketFeedHub] Reconnecting: Resubscribing #{positions.size} active positions")
+
+        positions.each do |tracker|
+          next unless tracker.security_id.present?
+
+          segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+          next unless segment_key
+
+          # Resubscribe (will skip if already in tracking, but ensures WebSocket has it)
+          subscribe(segment: segment_key, security_id: tracker.security_id)
+        rescue StandardError => e
+          Rails.logger.error("[MarketFeedHub] Failed to resubscribe position #{tracker.id}: #{e.class} - #{e.message}")
+        end
+      ensure
+        @resubscribing = false
+      end
     end
   end
 end

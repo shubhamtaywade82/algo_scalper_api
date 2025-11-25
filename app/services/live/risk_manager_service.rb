@@ -123,6 +123,12 @@ module Live
       update_paper_positions_pnl_if_due(last_paper_pnl_update)
       ensure_all_positions_in_redis
 
+      # Ensure all active positions are in ActiveCache (for exit checking)
+      ensure_all_positions_in_active_cache
+
+      # Ensure all active positions are subscribed to market data
+      ensure_all_positions_subscribed
+
       # NEW: Process trailing for all active positions (per-tick)
       # Peak-drawdown check happens FIRST inside TrailingEngine.process_tick()
       process_trailing_for_all_positions
@@ -216,9 +222,16 @@ module Live
       positions = active_cache_positions
       tracker_map = trackers_for_positions(positions)
 
+      # Also check positions not in ActiveCache (fallback)
+      all_trackers = PositionTracker.active.includes(:instrument).to_a
+      trackers_not_in_cache = all_trackers.reject { |t| tracker_map[t.id] }
+
       positions.each do |position|
         tracker = tracker_map[position.tracker_id]
         next unless tracker&.active?
+
+        # Sync PnL from Redis cache if ActiveCache is stale
+        sync_position_pnl_from_redis(position, tracker)
 
         pnl_pct = position.pnl_pct
         next if pnl_pct.nil?
@@ -237,6 +250,30 @@ module Live
         dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
+      end
+
+      # Check positions not in ActiveCache using Redis PnL directly
+      trackers_not_in_cache.each do |tracker|
+        next unless tracker.active?
+
+        redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+        next unless redis_pnl && redis_pnl[:pnl_pct]
+
+        pnl_pct = redis_pnl[:pnl_pct].to_f
+        normalized_pct = pnl_pct / 100.0
+
+        if normalized_pct <= -sl_pct.to_f
+          reason = "SL HIT #{pnl_pct.round(2)}% (from Redis)"
+          dispatch_exit(exit_engine, tracker, reason)
+          next
+        end
+
+        next unless normalized_pct >= tp_pct.to_f
+
+        reason = "TP HIT #{pnl_pct.round(2)}% (from Redis)"
+        dispatch_exit(exit_engine, tracker, reason)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_hard_limits (fallback) error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
     end
 
@@ -257,6 +294,9 @@ module Live
       positions.each do |position|
         tracker = tracker_map[position.tracker_id]
         next unless tracker&.active?
+
+        # Sync PnL from Redis cache if ActiveCache is stale
+        sync_position_pnl_from_redis(position, tracker)
 
         pnl_rupees = position.pnl
         if pnl_rupees.to_f.positive?
@@ -854,6 +894,86 @@ module Live
       position.update_ltp(ltp) if ltp
     rescue StandardError => e
       Rails.logger.error("[RiskManager] ensure_position_snapshot failed for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
+    end
+
+    # Ensure all active positions are in ActiveCache
+    def ensure_all_positions_in_active_cache
+      @last_ensure_active_cache ||= Time.zone.at(0)
+      return if Time.current - @last_ensure_active_cache < 10.seconds
+
+      @last_ensure_active_cache = Time.current
+      active_cache = Positions::ActiveCache.instance
+
+      PositionTracker.active.find_each do |tracker|
+        next unless tracker.entry_price&.positive?
+
+        # Check if already in cache
+        existing = active_cache.get_by_tracker_id(tracker.id)
+        next if existing
+
+        # Add to cache
+        active_cache.add_position(tracker: tracker)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] ensure_all_positions_in_active_cache failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
+    # Ensure all active positions are subscribed to market data
+    def ensure_all_positions_subscribed
+      @last_ensure_subscribed ||= Time.zone.at(0)
+      return if Time.current - @last_ensure_subscribed < 30.seconds
+
+      @last_ensure_subscribed = Time.current
+      hub = Live::MarketFeedHub.instance
+      return unless hub.enabled?
+
+      hub.start! unless hub.running?
+
+      PositionTracker.active.find_each do |tracker|
+        next unless tracker.security_id.present?
+
+        segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+        next unless segment_key
+
+        # Check if already subscribed
+        next if hub.subscribed?(segment: segment_key, security_id: tracker.security_id)
+
+        # Subscribe
+        tracker.subscribe
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] ensure_all_positions_subscribed failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
+    # Sync position PnL from Redis cache to ActiveCache
+    # This ensures exit conditions use the latest PnL data
+    def sync_position_pnl_from_redis(position, tracker)
+      return unless position && tracker
+
+      redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+      return unless redis_pnl && redis_pnl[:pnl]
+
+      # Update ActiveCache position with Redis PnL data
+      # Only update if Redis has fresher data (within last 30 seconds)
+      redis_timestamp = redis_pnl[:timestamp] || 0
+      return if (Time.current.to_i - redis_timestamp) > 30
+
+      # Update PnL in ActiveCache
+      position.pnl = redis_pnl[:pnl].to_f
+      position.pnl_pct = redis_pnl[:pnl_pct].to_f if redis_pnl[:pnl_pct]
+      position.high_water_mark = redis_pnl[:hwm_pnl].to_f if redis_pnl[:hwm_pnl]
+
+      # Update LTP if available
+      if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
+        position.current_ltp = redis_pnl[:ltp].to_f
+      end
+
+      # Update peak profit if available
+      if redis_pnl[:peak_profit_pct] && redis_pnl[:peak_profit_pct].to_f > (position.peak_profit_pct || 0)
+        position.peak_profit_pct = redis_pnl[:peak_profit_pct].to_f
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] sync_position_pnl_from_redis failed for tracker #{tracker&.id}: #{e.class} - #{e.message}")
     end
 
     def handle_underlying_exit(position, tracker, exit_engine)
