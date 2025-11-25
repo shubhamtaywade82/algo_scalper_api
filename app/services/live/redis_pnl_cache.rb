@@ -17,7 +17,8 @@ module Live
     end
 
     # store only computed PnL (strings stored to Redis)
-    def store_pnl(tracker_id:, pnl:, ltp:, hwm:, pnl_pct: nil, timestamp: Time.current)
+    # @param tracker [PositionTracker, nil] Optional tracker instance for additional metadata
+    def store_pnl(tracker_id:, pnl:, ltp:, hwm:, pnl_pct: nil, timestamp: Time.current, tracker: nil)
       return false unless @redis
 
       key = pnl_key(tracker_id)
@@ -29,6 +30,62 @@ module Live
         'timestamp' => timestamp.to_i.to_s,
         'updated_at' => Time.current.to_i.to_s
       }
+
+      # Sync PnL to database immediately (use Redis as source of truth)
+      sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm) if tracker_id
+
+      # Add additional metadata if tracker is provided
+      if tracker
+        # Direct fields from PositionTracker
+        data['entry_price'] = tracker.entry_price&.to_f.to_s if tracker.entry_price.present?
+        data['quantity'] = tracker.quantity.to_i.to_s if tracker.quantity.present?
+        data['segment'] = tracker.segment.to_s if tracker.segment.present?
+        data['security_id'] = tracker.security_id.to_s if tracker.security_id.present?
+        data['symbol'] = tracker.symbol.to_s if tracker.symbol.present?
+        data['side'] = tracker.side.to_s if tracker.side.present?
+        data['order_no'] = tracker.order_no.to_s if tracker.order_no.present?
+        data['paper'] = (tracker.paper? ? '1' : '0')
+        data['entry_timestamp'] = tracker.created_at.to_i.to_s if tracker.created_at.present?
+
+        # Calculated fields
+        if tracker.entry_price.present? && ltp.to_f.positive?
+          price_change = ((ltp.to_f - tracker.entry_price.to_f) / tracker.entry_price.to_f * 100.0)
+          data['price_change_pct'] = price_change.round(4).to_s
+        end
+
+        if tracker.entry_price.present? && tracker.quantity.present?
+          capital_deployed = tracker.entry_price.to_f * tracker.quantity.to_i
+          data['capital_deployed'] = capital_deployed.round(2).to_s
+        end
+
+        if tracker.created_at.present?
+          time_in_position = Time.current.to_i - tracker.created_at.to_i
+          data['time_in_position_sec'] = time_in_position.to_s
+        end
+
+        # Drawdown calculations
+        if hwm.to_f.positive?
+          drawdown_rupees = hwm.to_f - pnl.to_f
+          data['drawdown_rupees'] = drawdown_rupees.round(2).to_s
+          drawdown_pct = (drawdown_rupees / hwm.to_f * 100.0)
+          data['drawdown_pct'] = drawdown_pct.round(4).to_s
+        end
+
+        # Resolved metadata via MetadataResolver
+        begin
+          index_key = Positions::MetadataResolver.index_key(tracker)
+          data['index_key'] = index_key.to_s if index_key.present?
+        rescue StandardError
+          nil
+        end
+
+        begin
+          direction = Positions::MetadataResolver.direction(tracker)
+          data['direction'] = direction.to_s if direction.present?
+        rescue StandardError
+          nil
+        end
+      end
 
       @redis.hset(key, **data)
       # ensure TTL
@@ -53,7 +110,24 @@ module Live
         ltp: raw['ltp']&.to_f,
         hwm_pnl: raw['hwm_pnl']&.to_f,
         timestamp: raw['timestamp']&.to_i,
-        updated_at: raw['updated_at']&.to_i
+        updated_at: raw['updated_at']&.to_i,
+        # Additional metadata (may be nil if not stored)
+        entry_price: raw['entry_price']&.to_f,
+        quantity: raw['quantity']&.to_i,
+        segment: raw['segment'],
+        security_id: raw['security_id'],
+        symbol: raw['symbol'],
+        side: raw['side'],
+        order_no: raw['order_no'],
+        paper: raw['paper'] == '1',
+        entry_timestamp: raw['entry_timestamp']&.to_i,
+        price_change_pct: raw['price_change_pct']&.to_f,
+        capital_deployed: raw['capital_deployed']&.to_f,
+        time_in_position_sec: raw['time_in_position_sec']&.to_i,
+        drawdown_rupees: raw['drawdown_rupees']&.to_f,
+        drawdown_pct: raw['drawdown_pct']&.to_f,
+        index_key: raw['index_key'],
+        direction: raw['direction']&.to_sym
       }
     rescue StandardError => e
       Rails.logger.error("[RedisPnL] fetch_pnl error: #{e.message}") if defined?(Rails)
@@ -70,6 +144,29 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[RedisPnL] clear error: #{e.message}") if defined?(Rails)
       false
+    end
+
+    # Sync PnL from Redis to PositionTracker database
+    # This ensures DB stays in sync with Redis (source of truth)
+    def sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm)
+      return unless tracker_id
+
+      begin
+        tracker = PositionTracker.find_by(id: tracker_id)
+        return unless tracker&.active?
+
+        # Update DB with Redis PnL data
+        tracker.update!(
+          last_pnl_rupees: BigDecimal(pnl.to_s),
+          last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
+          high_water_mark_pnl: hwm ? BigDecimal(hwm.to_s) : tracker.high_water_mark_pnl
+        )
+      rescue ActiveRecord::RecordNotFound
+        # Tracker doesn't exist, skip
+        nil
+      rescue StandardError => e
+        Rails.logger.error("[RedisPnL] sync_pnl_to_database failed for tracker #{tracker_id}: #{e.class} - #{e.message}")
+      end
     end
 
     def clear_tracker(tracker_id)
@@ -130,7 +227,7 @@ module Live
       allowed_set = allowed_ids.map(&:to_s).to_set
 
       # PnL cache keys
-      each_tracker_key do |key, tracker_id|
+      each_tracker_key do |_key, tracker_id|
         unless allowed_set.include?(tracker_id.to_s)
           Rails.logger.warn("[RedisPnlCache] Pruning orphaned tracker_id=#{tracker_id}")
           clear_tracker(tracker_id)

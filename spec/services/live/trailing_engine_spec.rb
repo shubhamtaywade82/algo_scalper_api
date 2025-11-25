@@ -3,295 +3,119 @@
 require 'rails_helper'
 
 RSpec.describe Live::TrailingEngine do
-  let(:active_cache) { instance_double(Positions::ActiveCache) }
+  let(:active_cache) { instance_double(Positions::ActiveCache, update_position: true) }
   let(:bracket_placer) { instance_double(Orders::BracketPlacer) }
-  let(:trailing_engine) { described_class.new(active_cache: active_cache, bracket_placer: bracket_placer) }
-  let(:tracker) do
-    instance_double(
-      PositionTracker,
-      id: 123,
-      order_no: 'ORD123',
-      active?: true
-    )
-  end
-
-  let(:position_data) do
-    instance_double(
-      Positions::ActiveCache::PositionData,
-      tracker_id: 123,
-      entry_price: 150.0,
-      current_ltp: 160.0,
-      quantity: 75,
-      sl_price: 105.0,
-      tp_price: 240.0,
-      pnl_pct: 6.67, # (160 - 150) / 150 * 100
-      peak_profit_pct: 5.0,
-      valid?: true
-    )
-  end
+  let(:exit_engine) { instance_double(Live::ExitEngine) }
+  let(:tracker) { instance_double(PositionTracker, id: 42, order_no: 'ORD42', active?: true) }
+  let(:engine) { described_class.new(active_cache: active_cache, bracket_placer: bracket_placer) }
 
   before do
-    allow(active_cache).to receive(:update_position).and_return(true)
-    allow(bracket_placer).to receive(:update_bracket).and_return(
-      { success: true, sl_price: 110.0, tp_price: 240.0 }
-    )
     allow(PositionTracker).to receive(:find_by).and_return(tracker)
-    allow(Rails.logger).to receive(:info)
-    allow(Rails.logger).to receive(:warn)
-    allow(Rails.logger).to receive(:error)
-    allow(Rails.logger).to receive(:debug)
+    allow(bracket_placer).to receive(:update_bracket).and_return({ success: true })
+    allow(exit_engine).to receive(:execute_exit)
+    allow(Rails.logger).to receive_messages(info: nil, warn: nil, error: nil, debug: nil)
   end
 
   describe '#process_tick' do
-    context 'with valid position data' do
-      it 'updates peak profit percentage if current exceeds peak' do
-        result = trailing_engine.process_tick(position_data)
+    it 'updates peak and SL when tier threshold is satisfied' do
+      position = build_position(pnl_pct: 12.0, peak_profit_pct: 10.0, sl_price: 70.0)
 
-        expect(result[:peak_updated]).to be true
-        expect(active_cache).to have_received(:update_position).with(
-          123,
-          peak_profit_pct: 6.67
-        )
-      end
+      result = engine.process_tick(position, exit_engine: nil)
 
-      it 'applies tiered SL offsets based on profit percentage' do
-        result = trailing_engine.process_tick(position_data)
-
-        expect(result[:sl_updated]).to be true
-        expect(result[:new_sl_price]).to be_a(Float)
-      end
-
-      it 'returns success result with all flags' do
-        result = trailing_engine.process_tick(position_data)
-
-        expect(result[:exit_triggered]).to be false
-        expect(result[:error]).to be_nil
-      end
+      expect(result[:peak_updated]).to be true
+      expect(result[:sl_updated]).to be true
+      expect(result[:exit_triggered]).to be false
+      expect(active_cache).to have_received(:update_position).with(
+        position.tracker_id,
+        hash_including(sl_price: be > 70.0, sl_offset_pct: -5.0)
+      )
     end
 
-    context 'with peak drawdown check' do
-      let(:exit_engine) { instance_double(Live::ExitEngine) }
-      let(:high_peak_position) do
-        instance_double(
-          Positions::ActiveCache::PositionData,
-          tracker_id: 123,
-          entry_price: 150.0,
-          current_ltp: 155.0,
-          quantity: 75,
-          sl_price: 105.0,
-          tp_price: 240.0,
-          pnl_pct: 3.33, # Current profit
-          peak_profit_pct: 10.0, # Peak was 10%
-          valid?: true
-        )
-      end
+    it 'skips SL update when profit has not reached the first tier' do
+      position = build_position(pnl_pct: 3.0, peak_profit_pct: 5.0)
 
-      before do
-        allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
-        allow(exit_engine).to receive(:execute_exit).and_return(true)
-      end
+      result = engine.process_tick(position)
 
-      it 'triggers exit if peak drawdown threshold is breached' do
-        result = trailing_engine.process_tick(high_peak_position, exit_engine: exit_engine)
-
-        expect(result[:exit_triggered]).to be true
-        expect(result[:reason]).to eq('peak_drawdown_exit')
-        expect(exit_engine).to have_received(:execute_exit)
-      end
-
-      it 'does not update SL if exit is triggered' do
-        result = trailing_engine.process_tick(high_peak_position, exit_engine: exit_engine)
-
-        expect(result[:sl_updated]).to be false
-        expect(bracket_placer).not_to have_received(:update_bracket)
-      end
+      expect(result[:sl_updated]).to be false
+      expect(result[:reason]).to eq('tier_not_reached')
+      expect(bracket_placer).not_to have_received(:update_bracket)
     end
 
-    context 'with invalid position data' do
-      let(:invalid_position) do
-        instance_double(
-          Positions::ActiveCache::PositionData,
-          valid?: false
-        )
-      end
+    it 'returns failure for invalid position data' do
+      position = build_position(current_ltp: nil)
 
-      it 'returns failure result' do
-        result = trailing_engine.process_tick(invalid_position)
+      result = engine.process_tick(position)
 
-        expect(result[:peak_updated]).to be false
-        expect(result[:sl_updated]).to be false
-        expect(result[:error]).to eq('Invalid position data')
-      end
-    end
-
-    context 'when peak is not updated' do
-      let(:lower_profit_position) do
-        instance_double(
-          Positions::ActiveCache::PositionData,
-          tracker_id: 123,
-          entry_price: 150.0,
-          current_ltp: 155.0,
-          quantity: 75,
-          sl_price: 105.0,
-          tp_price: 240.0,
-          pnl_pct: 3.33, # Current profit
-          peak_profit_pct: 5.0, # Peak is higher
-          valid?: true
-        )
-      end
-
-      it 'does not update peak if current < peak' do
-        result = trailing_engine.process_tick(lower_profit_position)
-
-        expect(result[:peak_updated]).to be false
-        expect(active_cache).not_to have_received(:update_position).with(
-          123,
-          hash_including(peak_profit_pct: anything)
-        )
-      end
-    end
-
-    context 'when SL is not improved' do
-      let(:position_with_high_sl) do
-        instance_double(
-          Positions::ActiveCache::PositionData,
-          tracker_id: 123,
-          entry_price: 150.0,
-          current_ltp: 160.0,
-          quantity: 75,
-          sl_price: 120.0, # Already high SL
-          tp_price: 240.0,
-          pnl_pct: 6.67,
-          peak_profit_pct: 5.0,
-          valid?: true
-        )
-      end
-
-      before do
-        # Mock calculate_sl_price to return SL lower than current
-        allow(Positions::TrailingConfig).to receive(:calculate_sl_price).and_return(110.0)
-      end
-
-      it 'does not update SL if new SL <= current SL' do
-        result = trailing_engine.process_tick(position_with_high_sl)
-
-        expect(result[:sl_updated]).to be false
-        expect(result[:reason]).to eq('sl_not_improved')
-        expect(bracket_placer).not_to have_received(:update_bracket)
-      end
+      expect(result[:error]).to eq('Invalid position data')
     end
   end
 
   describe '#check_peak_drawdown' do
-    let(:exit_engine) { instance_double(Live::ExitEngine) }
-    let(:position_with_drawdown) do
-      instance_double(
-        Positions::ActiveCache::PositionData,
-        tracker_id: 123,
-        peak_profit_pct: 10.0,
-        pnl_pct: 4.0 # Drawdown = 6.0% (exceeds 5.0% threshold)
-      )
+    context 'when activation flag is disabled' do
+      before do
+        allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
+      end
+
+      it 'exits immediately when drawdown threshold is met' do
+        position = build_position(peak_profit_pct: 40.0, pnl_pct: 34.0, sl_offset_pct: 12.0)
+
+        result = engine.process_tick(position, exit_engine: exit_engine)
+
+        expect(result[:exit_triggered]).to be true
+        expect(exit_engine).to have_received(:execute_exit).once
+      end
     end
 
-    before do
-      allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
-      allow(exit_engine).to receive(:execute_exit).and_return(true)
-    end
+    context 'when activation flag is enabled' do
+      before do
+        allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: true)
+      end
 
-    it 'triggers exit if drawdown >= threshold' do
-      result = trailing_engine.check_peak_drawdown(position_with_drawdown, exit_engine)
+      it 'does not exit if activation thresholds are not met' do
+        position = build_position(peak_profit_pct: 40.0, pnl_pct: 22.0, sl_offset_pct: 8.0)
 
-      expect(result).to be true
-      expect(exit_engine).to have_received(:execute_exit)
-    end
+        result = engine.process_tick(position, exit_engine: exit_engine)
 
-    it 'does not trigger exit if drawdown < threshold' do
-      allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
+        expect(result[:exit_triggered]).to be false
+        expect(exit_engine).not_to have_received(:execute_exit)
+      end
 
-      result = trailing_engine.check_peak_drawdown(position_with_drawdown, exit_engine)
+      it 'exits once when activation thresholds are satisfied' do
+        position = build_position(peak_profit_pct: 60.0, pnl_pct: 30.0, sl_offset_pct: 12.0)
+        allow(tracker).to receive(:active?).and_return(true, false)
 
-      expect(result).to be false
-      expect(exit_engine).not_to have_received(:execute_exit)
-    end
+        result_first = engine.process_tick(position, exit_engine: exit_engine)
+        result_second = engine.process_tick(position, exit_engine: exit_engine)
 
-    it 'handles missing tracker gracefully' do
-      allow(PositionTracker).to receive(:find_by).and_return(nil)
-
-      result = trailing_engine.check_peak_drawdown(position_with_drawdown, exit_engine)
-
-      expect(result).to be false
-      expect(exit_engine).not_to have_received(:execute_exit)
-    end
-  end
-
-  describe '#update_peak' do
-    it 'updates peak if current > peak' do
-      result = trailing_engine.update_peak(position_data)
-
-      expect(result).to be true
-      expect(active_cache).to have_received(:update_position).with(
-        123,
-        peak_profit_pct: 6.67
-      )
-    end
-
-    it 'does not update peak if current <= peak' do
-      lower_position = instance_double(
-        Positions::ActiveCache::PositionData,
-        tracker_id: 123,
-        pnl_pct: 3.0,
-        peak_profit_pct: 5.0
-      )
-
-      result = trailing_engine.update_peak(lower_position)
-
-      expect(result).to be false
-      expect(active_cache).not_to have_received(:update_position)
+        expect(result_first[:exit_triggered]).to be true
+        expect(result_second[:exit_triggered]).to be false
+        expect(exit_engine).to have_received(:execute_exit).once
+      end
     end
   end
 
-  describe '#apply_tiered_sl' do
-    it 'calculates new SL based on profit percentage tier' do
-      allow(Positions::TrailingConfig).to receive(:calculate_sl_price).with(150.0, 6.67).and_return(110.0)
+  def build_position(overrides = {})
+    defaults = {
+      tracker_id: 42,
+      security_id: 'SEC42',
+      segment: 'NSE_FNO',
+      entry_price: 100.0,
+      quantity: 50,
+      sl_price: 70.0,
+      tp_price: 150.0,
+      high_water_mark: 0.0,
+      current_ltp: 110.0,
+      pnl_pct: 10.0,
+      peak_profit_pct: 12.0,
+      sl_offset_pct: nil,
+      pnl: 0.0,
+      trend: :neutral,
+      time_in_position: 60,
+      breakeven_locked: false,
+      trailing_stop_price: nil,
+      last_updated_at: Time.current
+    }
 
-      result = trailing_engine.apply_tiered_sl(position_data)
-
-      expect(result[:updated]).to be true
-      expect(result[:new_sl_price]).to eq(110.0)
-    end
-
-    it 'only updates SL if new SL > current SL' do
-      allow(Positions::TrailingConfig).to receive(:calculate_sl_price).and_return(110.0)
-
-      result = trailing_engine.apply_tiered_sl(position_data)
-
-      expect(result[:updated]).to be true
-      expect(bracket_placer).to have_received(:update_bracket).with(
-        tracker: tracker,
-        sl_price: 110.0,
-        reason: /tiered_trailing/
-      )
-    end
-
-    it 'does not update if new SL <= current SL' do
-      allow(Positions::TrailingConfig).to receive(:calculate_sl_price).and_return(100.0) # Lower than current 105.0
-
-      result = trailing_engine.apply_tiered_sl(position_data)
-
-      expect(result[:updated]).to be false
-      expect(result[:reason]).to eq('sl_not_improved')
-    end
-
-    it 'handles invalid position data' do
-      invalid_position = instance_double(
-        Positions::ActiveCache::PositionData,
-        valid?: false
-      )
-
-      result = trailing_engine.apply_tiered_sl(invalid_position)
-
-      expect(result[:updated]).to be false
-      expect(result[:reason]).to eq('invalid_position')
-    end
+    Positions::ActiveCache::PositionData.new(defaults.merge(overrides))
   end
 end

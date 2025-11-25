@@ -6,16 +6,24 @@
 
 if Rails.env.test? ||
   defined?(Rails::Console) ||
-  (defined?(Rails::Generators) && Rails::Generators.const_defined?(:Base))
+  (defined?(Rails::Generators) && Rails::Generators.const_defined?(:Base)) ||
+  ENV['BACKTEST_MODE'] == '1' ||
+  ENV['SCRIPT_MODE'] == '1' ||
+  ENV['DISABLE_TRADING_SERVICES'] == '1'
  return
 end
 
 # bin/dev uses Puma, not Rails::Server
+# Skip if running as script (rails runner) or in backtest/script mode
+is_runner = $PROGRAM_NAME.include?('runner') || File.basename($PROGRAM_NAME) == 'runner'
+skip_services = is_runner || ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1' || ENV['DISABLE_TRADING_SERVICES'] == '1'
+
 is_web_process =
   $PROGRAM_NAME.include?('puma') ||
-  $PROGRAM_NAME.include?('rails') ||
+  ($PROGRAM_NAME.include?('rails') && !is_runner) ||
   ENV['WEB_CONCURRENCY'].present?
 
+return if skip_services
 return unless is_web_process
 
 # --------------------------------------------------------------------
@@ -138,15 +146,17 @@ Rails.application.config.to_prepare do
 
   feed = MarketFeedHubService.new
   router = TradingSystem::OrderRouter.new
+  exit_engine = Live::ExitEngine.new(order_router: router)
 
   supervisor.register(:market_feed, feed)
   supervisor.register(:signal_scheduler, Signal::Scheduler.new)
-  supervisor.register(:risk_manager,     Live::RiskManagerService.new)
+  supervisor.register(:risk_manager, Live::RiskManagerService.new(exit_engine: exit_engine))
   supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
   supervisor.register(:order_router, router)
   supervisor.register(:paper_pnl_refresher, Live::PaperPnlRefresher.new)
-  supervisor.register(:exit_manager, Live::ExitEngine.new(order_router: router))
+  supervisor.register(:exit_manager, exit_engine)
   supervisor.register(:active_cache, ActiveCacheService.new)
+  supervisor.register(:reconciliation, Live::ReconciliationService.instance)
 
  # Future:
  # supervisor.register(:pnl_updater, PnlUpdaterServiceAdapter.new)

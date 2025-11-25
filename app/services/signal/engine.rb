@@ -8,7 +8,8 @@ module Signal
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
+        enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
+        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, false)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
 
         # Check if strategy-based recommendations are enabled
@@ -48,8 +49,8 @@ module Signal
             timeframe: effective_timeframe,
             strategy_recommendation: strategy_recommendation
           )
-        else
-          # Fallback to traditional Supertrend + ADX analysis
+        elsif enable_supertrend_signal
+          # Traditional Supertrend + ADX analysis (1m signal)
           supertrend_cfg = signals_cfg[:supertrend]
           unless supertrend_cfg
             Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
@@ -57,9 +58,14 @@ module Signal
           end
 
           adx_cfg = signals_cfg[:adx] || {}
-          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
+
+          # Get per-index ADX thresholds (if specified) or fall back to global
+          index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+          primary_adx_threshold = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength]
+
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-          adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
+          adx_min_strength = enable_adx_filter ? primary_adx_threshold : 0
 
           primary_analysis = analyze_timeframe(
             index_cfg: index_cfg,
@@ -68,6 +74,9 @@ module Signal
             supertrend_cfg: supertrend_cfg,
             adx_min_strength: adx_min_strength
           )
+        else
+          Rails.logger.warn("[Signal] Supertrend signal disabled for #{index_cfg[:key]} - skipping analysis")
+          return
         end
 
         unless primary_analysis[:status] == :ok
@@ -83,9 +92,17 @@ module Signal
         # (strategies were backtested as standalone systems)
         if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended])
           mode_config = get_validation_mode_config
+
+          # Get per-index ADX thresholds (if specified) or fall back to global
+          index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+          confirmation_adx_threshold = index_adx_thresholds[:confirmation_min_strength] ||
+                                       mode_config[:adx_confirmation_min_strength] ||
+                                       adx_cfg[:confirmation_min_strength] ||
+                                       adx_cfg[:min_strength]
+
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
-                                   mode_config[:adx_confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+                                   confirmation_adx_threshold
                                  else
                                    0
                                  end
@@ -188,7 +205,7 @@ module Signal
           if result
             # Rails.logger.info("[Signal] Entry successful for #{index_cfg[:key]}: #{pick[:symbol]}")
           else
-            Rails.logger.debug("[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]} #{result}")
+            Rails.logger.debug { "[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]} #{result}" }
           end
         end
 
@@ -249,8 +266,14 @@ module Signal
       def analyze_multi_timeframe(index_cfg:, instrument:)
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
+        enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
+        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, false)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
+
+        unless enable_supertrend_signal
+          Rails.logger.warn("[Signal] Supertrend signal disabled for #{index_cfg[:key]}")
+          return { status: :error, message: 'Supertrend signal disabled' }
+        end
 
         supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
@@ -259,9 +282,15 @@ module Signal
         end
 
         adx_cfg = signals_cfg[:adx] || {}
-        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
+
+        # Get per-index ADX thresholds (if specified) or fall back to global
+        index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+        primary_adx_threshold = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength]
+        confirmation_adx_threshold = index_adx_thresholds[:confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+
         # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-        adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
+        adx_min_strength = enable_adx_filter ? primary_adx_threshold : 0
 
         # Analyze primary timeframe
         primary_analysis = analyze_timeframe(
@@ -283,7 +312,7 @@ module Signal
         if confirmation_tf.present?
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
-                                   adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+                                   confirmation_adx_threshold
                                  else
                                    0
                                  end

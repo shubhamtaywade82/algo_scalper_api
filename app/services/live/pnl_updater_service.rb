@@ -235,7 +235,8 @@ module Live
           pnl_pct: pnl_pct_bd.to_f,
           ltp: ltp_bd.to_f,
           hwm: hwm_bd.to_f,
-          timestamp: Time.now
+          timestamp: Time.now,
+          tracker: tracker
         )
 
         # Update in-memory tracker object (but don't persist DB here)

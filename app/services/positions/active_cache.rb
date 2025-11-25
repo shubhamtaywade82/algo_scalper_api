@@ -29,6 +29,14 @@ module Positions
       :time_in_position,
       :breakeven_locked,
       :trailing_stop_price,
+      :sl_offset_pct,
+      :position_direction,
+      :index_key,
+      :underlying_segment,
+      :underlying_security_id,
+      :underlying_symbol,
+      :underlying_trend_score,
+      :underlying_ltp,
       :last_updated_at,
       keyword_init: true
     ) do
@@ -148,6 +156,9 @@ module Positions
 
       composite_key = "#{tracker.segment}:#{tracker.security_id}"
 
+      index_key = Positions::MetadataResolver.index_key(tracker)
+      position_direction = Positions::MetadataResolver.direction(tracker)
+
       position_data = PositionData.new(
         tracker_id: tracker.id,
         security_id: tracker.security_id.to_s,
@@ -165,6 +176,14 @@ module Positions
         time_in_position: Time.current - tracker.created_at,
         breakeven_locked: tracker.breakeven_locked?,
         trailing_stop_price: tracker.trailing_stop_price&.to_f,
+        sl_offset_pct: nil,
+        position_direction: position_direction,
+        index_key: index_key,
+        underlying_segment: nil,
+        underlying_security_id: nil,
+        underlying_symbol: nil,
+        underlying_trend_score: nil,
+        underlying_ltp: nil,
         last_updated_at: Time.current
       )
 
@@ -182,6 +201,8 @@ module Positions
       # Try to get current LTP from cache
       ltp = Live::TickCache.ltp(tracker.segment, tracker.security_id)
       position_data.update_ltp(ltp) if ltp&.positive?
+
+      attach_underlying_metadata(position_data, tracker)
 
       if auto_subscribe_enabled?
         safe_option_subscribe(segment: tracker.segment, security_id: tracker.security_id)
@@ -478,6 +499,25 @@ module Positions
     def market_feed_hub
       Live::MarketFeedHub.instance
     end
+
+    def attach_underlying_metadata(position_data, tracker)
+      meta = Positions::MetadataResolver.underlying_meta(tracker, index_key: position_data.index_key)
+      return unless meta
+
+      position_data.underlying_segment = meta[:segment]
+      position_data.underlying_security_id = meta[:security_id]
+      position_data.underlying_symbol = meta[:symbol]
+      position_data.index_key ||= meta[:index_key]
+      begin
+        ltp = Live::TickCache.ltp(meta[:segment], meta[:security_id])
+        position_data.underlying_ltp = ltp.to_f if ltp
+      rescue StandardError
+        nil
+      end
+    rescue StandardError => e
+      Rails.logger.error("[Positions::ActiveCache] Failed to attach underlying metadata for tracker #{tracker.id}: #{e.class} - #{e.message}")
+    end
+
   end
   # rubocop:enable Metrics/ClassLength
 end
