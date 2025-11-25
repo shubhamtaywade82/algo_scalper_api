@@ -181,6 +181,34 @@ RSpec.describe Positions::TrailingConfig do
     end
   end
 
+  describe '.peak_drawdown_active?' do
+    let(:base_config) do
+      {
+        feature_flags: {},
+        risk: {
+          peak_drawdown_activation_profit_pct: 25.0,
+          peak_drawdown_activation_sl_offset_pct: 10.0
+        }
+      }
+    end
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return(base_config)
+    end
+
+    it 'returns true when profit and sl offset meet thresholds' do
+      expect(described_class.peak_drawdown_active?(profit_pct: 30.0, current_sl_offset_pct: 12.0)).to be true
+    end
+
+    it 'returns false when profit is below threshold' do
+      expect(described_class.peak_drawdown_active?(profit_pct: 20.0, current_sl_offset_pct: 12.0)).to be false
+    end
+
+    it 'returns false when sl offset is below threshold' do
+      expect(described_class.peak_drawdown_active?(profit_pct: 30.0, current_sl_offset_pct: 5.0)).to be false
+    end
+  end
+
   describe '.calculate_sl_price' do
     context 'with valid entry price and profit' do
       it 'calculates SL for 0% profit (first tier)' do

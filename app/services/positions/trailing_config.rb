@@ -63,6 +63,19 @@ module Positions
         drawdown >= PEAK_DRAWDOWN_PCT
       end
 
+      def peak_drawdown_active?(profit_pct:, current_sl_offset_pct:)
+        config = begin
+          AlgoConfig.fetch[:risk] || {}
+        rescue StandardError
+          {}
+        end
+
+        required_profit = config.fetch(:peak_drawdown_activation_profit_pct, 25.0).to_f
+        required_sl_offset = config.fetch(:peak_drawdown_activation_sl_offset_pct, 10.0).to_f
+
+        profit_pct.to_f >= required_profit && current_sl_offset_pct.to_f >= required_sl_offset
+      end
+
       # Calculate SL price based on entry price and profit percentage
       # @param entry_price [Float] Entry price
       # @param profit_pct [Float] Current profit percentage

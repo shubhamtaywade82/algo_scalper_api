@@ -29,6 +29,7 @@ module Live
       @sleep_mutex = Mutex.new
       @sleep_cv = ConditionVariable.new
       @position_subscriptions = []
+      @metrics = Hash.new(0)
 
       # Watchdog ensures service thread is restarted if it dies (lightweight)
       @watchdog_thread = Thread.new do
@@ -280,9 +281,26 @@ module Live
     def process_trailing_for_all_positions
       @bracket_placer ||= Orders::BracketPlacer.new
       @trailing_engine ||= Live::TrailingEngine.new(bracket_placer: @bracket_placer)
-      Positions::ActiveCache.instance.all_positions.each do |position|
-        # Peak-drawdown check happens inside TrailingEngine.process_tick()
-        @trailing_engine.process_tick(position, exit_engine: @exit_engine)
+
+      active_cache = Positions::ActiveCache.instance
+      positions = active_cache.all_positions
+      return if positions.empty?
+
+      tracker_map = trackers_for_positions(positions)
+      trailing_exit_engine = peak_drawdown_activation_enabled? ? nil : @exit_engine
+
+      positions.each do |position|
+        tracker = tracker_map[position.tracker_id]
+        next unless tracker&.active?
+
+        ensure_position_snapshot(position)
+        exit_engine = @exit_engine || self
+
+        next if handle_underlying_exit(position, tracker, exit_engine)
+        next if enforce_bracket_limits(position, tracker, exit_engine)
+        next if enforce_peak_drawdown_gate(position, tracker, exit_engine, active_cache: active_cache)
+
+        @trailing_engine.process_tick(position, exit_engine: trailing_exit_engine)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] TrailingEngine error for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
       end
@@ -852,6 +870,190 @@ module Live
       AlgoConfig.fetch[:feature_flags] || {}
     rescue StandardError
       {}
+    end
+
+    def underlying_exits_enabled?
+      feature_flags[:enable_underlying_aware_exits] == true
+    end
+
+    def peak_drawdown_activation_enabled?
+      feature_flags[:enable_peak_drawdown_activation] == true
+    end
+
+    def ensure_position_snapshot(position)
+      return if position.current_ltp&.positive?
+
+      ltp = Live::TickCache.ltp(position.segment, position.security_id)
+      unless ltp
+        tick = Live::RedisTickCache.instance.fetch_tick(position.segment, position.security_id)
+        ltp = tick[:ltp] if tick&.dig(:ltp)
+      end
+      position.update_ltp(ltp) if ltp
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] ensure_position_snapshot failed for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
+    end
+
+    def handle_underlying_exit(position, tracker, exit_engine)
+      return false unless underlying_exits_enabled?
+
+      underlying_state = Live::UnderlyingMonitor.evaluate(position)
+      return false unless underlying_state
+
+      if structure_break_against_position?(position, tracker, underlying_state)
+        log_underlying_exit(tracker, position, 'underlying_structure_break', underlying_state)
+        increment_metric(:underlying_exit_count)
+        guarded_exit(tracker, 'underlying_structure_break', exit_engine)
+        return true
+      end
+
+      if underlying_state.trend_score &&
+         underlying_state.trend_score.to_f < underlying_trend_score_threshold
+        log_underlying_exit(tracker, position, 'underlying_trend_weak', underlying_state)
+        increment_metric(:underlying_exit_count)
+        guarded_exit(tracker, 'underlying_trend_weak', exit_engine)
+        return true
+      end
+
+      if atr_collapse?(underlying_state)
+        log_underlying_exit(tracker, position, 'underlying_atr_collapse', underlying_state)
+        increment_metric(:underlying_exit_count)
+        guarded_exit(tracker, 'underlying_atr_collapse', exit_engine)
+        return true
+      end
+
+      false
+    end
+
+    def enforce_bracket_limits(position, tracker, exit_engine)
+      return false unless position.current_ltp&.positive?
+
+      if position.sl_hit?
+        reason = format('SL HIT %.2f%%', position.pnl_pct.to_f)
+        guarded_exit(tracker, reason, exit_engine)
+        return true
+      end
+
+      if position.tp_hit?
+        reason = format('TP HIT %.2f%%', position.pnl_pct.to_f)
+        guarded_exit(tracker, reason, exit_engine)
+        return true
+      end
+
+      false
+    end
+
+    def enforce_peak_drawdown_gate(position, tracker, exit_engine, active_cache:)
+      return false unless peak_drawdown_activation_enabled?
+      return false unless position.peak_profit_pct && position.pnl_pct
+
+      sl_offset = update_sl_offset_pct(position, active_cache)
+      return false unless Positions::TrailingConfig.peak_drawdown_active?(
+        profit_pct: position.peak_profit_pct,
+        current_sl_offset_pct: sl_offset.to_f
+      )
+
+      drawdown = position.peak_profit_pct.to_f - position.pnl_pct.to_f
+      return false unless drawdown >= Positions::TrailingConfig::PEAK_DRAWDOWN_PCT
+
+      increment_metric(:peak_drawdown_exit_count)
+      log_peak_drawdown_exit(tracker, position, drawdown)
+      reason = format('peak_drawdown_exit (drawdown: %.2f%%)', drawdown)
+      guarded_exit(tracker, reason, exit_engine)
+      true
+    end
+
+    def update_sl_offset_pct(position, active_cache)
+      return position.sl_offset_pct unless position.pnl_pct
+
+      desired = Positions::TrailingConfig.sl_offset_for(position.pnl_pct.to_f)
+      return position.sl_offset_pct if desired.nil?
+
+      if position.sl_offset_pct.to_f != desired.to_f
+        active_cache.update_position(position.tracker_id, sl_offset_pct: desired)
+        position.sl_offset_pct = desired
+      end
+
+      desired
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] update_sl_offset_pct failed for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
+      position.sl_offset_pct
+    end
+
+    def structure_break_against_position?(position, tracker, underlying_state)
+      return false unless underlying_state&.bos_state == :broken
+
+      direction = normalized_position_direction(position, tracker)
+      (direction == :bullish && underlying_state.bos_direction == :bearish) ||
+        (direction == :bearish && underlying_state.bos_direction == :bullish)
+    end
+
+    def normalized_position_direction(position, tracker)
+      direction = position.position_direction || tracker.direction
+      return direction.to_s.downcase.to_sym if direction.present?
+
+      side = tracker.side.to_s.downcase
+      return :bearish if side.include?('sell') || side.include?('short')
+
+      if tracker.watchable.is_a?(Derivative) && tracker.watchable.option_type.to_s.upcase == 'PE'
+        return :bearish
+      end
+
+      :bullish
+    end
+
+    def underlying_trend_score_threshold
+      risk_config[:underlying_trend_score_threshold].to_f.positive? ? risk_config[:underlying_trend_score_threshold].to_f : 10.0
+    end
+
+    def underlying_atr_ratio_threshold
+      value = risk_config[:underlying_atr_collapse_multiplier]
+      value ? value.to_f : 0.65
+    end
+
+    def atr_collapse?(underlying_state)
+      return false unless underlying_state
+
+      underlying_state.atr_trend == :falling &&
+        underlying_state.atr_ratio &&
+        underlying_state.atr_ratio.to_f < underlying_atr_ratio_threshold
+    end
+
+    def log_underlying_exit(tracker, position, reason, underlying_state)
+      Rails.logger.info(
+        "[UNDERLYING_EXIT] reason=#{reason} tracker_id=#{tracker.id} order=#{tracker.order_no} " \
+        "pnl_pct=#{position.pnl_pct&.round(2)} peak_pct=#{position.peak_profit_pct&.round(2)} " \
+        "trend_score=#{underlying_state.trend_score} bos_state=#{underlying_state.bos_state} " \
+        "bos_direction=#{underlying_state.bos_direction} atr_trend=#{underlying_state.atr_trend} " \
+        "atr_ratio=#{underlying_state.atr_ratio} mtf_confirm=#{underlying_state.mtf_confirm}"
+      )
+    end
+
+    def log_peak_drawdown_exit(tracker, position, drawdown)
+      Rails.logger.warn(
+        "[RiskManager] [PEAK_DRAWDOWN] tracker_id=#{tracker.id} order=#{tracker.order_no} " \
+        "peak_pct=#{position.peak_profit_pct&.round(2)} current_pct=#{position.pnl_pct&.round(2)} " \
+        "drawdown=#{drawdown.round(2)}%"
+      )
+    end
+
+    def increment_metric(key)
+      @metrics[key] += 1
+    end
+
+    def guarded_exit(tracker, reason, exit_engine)
+      if exit_engine && exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
+        return if tracker.exited?
+
+        exit_engine.execute_exit(tracker, reason)
+      else
+        tracker.with_lock do
+          return if tracker.exited?
+
+          dispatch_exit(self, tracker, reason)
+        end
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] guarded_exit failed for #{tracker.order_no}: #{e.class} - #{e.message}")
     end
 
     def loop_sleep_interval(active_cache_empty)

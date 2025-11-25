@@ -10,6 +10,8 @@ feature_flags:
   enable_direction_before_chain: true
   enable_auto_subscribe_unsubscribe: true
   enable_demand_driven_services: true
+  enable_underlying_aware_exits: false
+  enable_peak_drawdown_activation: false
 
 indices:
   - key: NIFTY
@@ -111,6 +113,10 @@ risk:
   breakeven_after_gain: 0.05 # trigger breakeven lock at +10% gain
   exit_drop_pct: 0.03 # trigger trailing exit after 3% pullback from high-water mark
   min_profit_rupees: 1000 # Minimum profit required per position before allowing profit-based exits (₹1000)
+  underlying_trend_score_threshold: 10
+  underlying_atr_collapse_multiplier: 0.65
+  peak_drawdown_activation_profit_pct: 25.0
+  peak_drawdown_activation_sl_offset_pct: 10.0
 
 signals:
   primary_timeframe: "1m"
