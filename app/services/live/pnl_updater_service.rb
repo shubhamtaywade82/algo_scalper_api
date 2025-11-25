@@ -105,6 +105,17 @@ module Live
       loop do
         break unless running?
 
+        # Skip processing if market is closed and no active positions
+        if TradingSession::Service.market_closed?
+          active_count = PositionTracker.active.count
+          if active_count.zero?
+            # Market closed and no active positions - sleep longer
+            sleep 60 # Check every minute when market is closed and no positions
+            next
+          end
+          # Market closed but positions exist - continue processing (needed for PnL updates)
+        end
+
         processed = flush!
         sleep_duration = next_interval(queue_empty: !processed && queue_empty?)
         wait_for_interval(sleep_duration)

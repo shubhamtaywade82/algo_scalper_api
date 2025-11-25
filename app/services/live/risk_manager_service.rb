@@ -62,6 +62,17 @@ module Live
           break unless @running
 
           begin
+            # Skip monitoring if market is closed and no active positions
+            if TradingSession::Service.market_closed?
+              active_count = PositionTracker.active.count
+              if active_count.zero?
+                # Market closed and no active positions - sleep longer
+                sleep 60 # Check every minute when market is closed and no positions
+                next
+              end
+              # Market closed but positions exist - continue monitoring (needed for exits)
+            end
+
             if demand_driven_enabled? && Positions::ActiveCache.instance.empty?
               wait_for_interval(loop_sleep_interval(true))
               next

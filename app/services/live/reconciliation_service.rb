@@ -60,6 +60,19 @@ module Live
         break unless @running
 
         begin
+          # Skip reconciliation if market is closed and no active positions
+          if TradingSession::Service.market_closed?
+            active_count = PositionTracker.active.count
+            if active_count.zero?
+              # Market closed and no active positions - no need to reconcile
+              # Sleep longer to reduce CPU usage
+              sleep 60 # Check every minute when market is closed and no positions
+              next
+            end
+            # Market closed but positions exist - continue reconciliation
+            # (still need to monitor for exits and data consistency)
+          end
+
           reconcile_all_positions if should_reconcile?
         rescue StandardError => e
           @stats[:errors] += 1

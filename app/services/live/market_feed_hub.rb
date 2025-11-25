@@ -645,13 +645,20 @@ module Live
       @resubscribing = true
       begin
         # First, resubscribe watchlist items (NIFTY, BANKNIFTY, SENSEX, etc.)
+        # Always resubscribe watchlist items (needed for next trading day)
         watchlist = load_watchlist || []
         unless watchlist.empty?
           Rails.logger.info("[MarketFeedHub] Reconnecting: Resubscribing #{watchlist.size} watchlist items")
           subscribe_many(watchlist)
         end
 
-        # Then, resubscribe all active positions
+        # Skip resubscribing active positions if market is closed
+        if TradingSession::Service.market_closed?
+          Rails.logger.debug('[MarketFeedHub] Market closed - skipping resubscribe of active positions')
+          return
+        end
+
+        # Then, resubscribe all active positions (only if market is open)
         positions = PositionTracker.active.includes(:instrument).to_a
         unless positions.empty?
           Rails.logger.info("[MarketFeedHub] Reconnecting: Resubscribing #{positions.size} active positions")
