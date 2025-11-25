@@ -96,7 +96,7 @@ module Live
           return { key: index_key, segment: segment, sid: sid }
         end
 
-        cfg = index_config_for(index_key)
+        cfg = Positions::MetadataResolver.index_config_for_key(index_key)
         return unless cfg
 
         {
@@ -106,18 +106,6 @@ module Live
         }
       rescue StandardError => e
         Rails.logger.error("[UnderlyingMonitor] determine_index_cfg failed: #{e.class} - #{e.message}")
-        nil
-      end
-
-      def index_config_for(index_key)
-        return nil if index_key.blank?
-
-        (AlgoConfig.fetch[:indices] || []).find do |cfg|
-          candidate = cfg[:key] || cfg['key']
-          candidate.to_s.casecmp?(index_key.to_s)
-        end
-      rescue StandardError => e
-        Rails.logger.error("[UnderlyingMonitor] index_config lookup failed: #{e.class} - #{e.message}")
         nil
       end
 

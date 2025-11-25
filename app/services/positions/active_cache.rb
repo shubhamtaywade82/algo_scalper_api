@@ -156,6 +156,9 @@ module Positions
 
       composite_key = "#{tracker.segment}:#{tracker.security_id}"
 
+      index_key = Positions::MetadataResolver.index_key(tracker)
+      position_direction = Positions::MetadataResolver.direction(tracker)
+
       position_data = PositionData.new(
         tracker_id: tracker.id,
         security_id: tracker.security_id.to_s,
@@ -174,8 +177,8 @@ module Positions
         breakeven_locked: tracker.breakeven_locked?,
         trailing_stop_price: tracker.trailing_stop_price&.to_f,
         sl_offset_pct: nil,
-        position_direction: resolve_position_direction(tracker),
-        index_key: extract_index_key(tracker),
+        position_direction: position_direction,
+        index_key: index_key,
         underlying_segment: nil,
         underlying_security_id: nil,
         underlying_symbol: nil,
@@ -498,7 +501,7 @@ module Positions
     end
 
     def attach_underlying_metadata(position_data, tracker)
-      meta = resolve_underlying_meta(tracker)
+      meta = Positions::MetadataResolver.underlying_meta(tracker, index_key: position_data.index_key)
       return unless meta
 
       position_data.underlying_segment = meta[:segment]
@@ -515,86 +518,6 @@ module Positions
       Rails.logger.error("[Positions::ActiveCache] Failed to attach underlying metadata for tracker #{tracker.id}: #{e.class} - #{e.message}")
     end
 
-    def resolve_underlying_meta(tracker)
-      derivative = tracker.watchable if tracker.watchable.is_a?(Derivative)
-      if derivative&.underlying_security_id.present?
-        segment = derivative.instrument&.exchange_segment || 'IDX_I'
-        return {
-          segment: segment,
-          security_id: derivative.underlying_security_id.to_s,
-          symbol: derivative.underlying_symbol || tracker.symbol,
-          index_key: derivative.underlying_symbol || tracker.symbol
-        }
-      end
-
-      instrument = tracker.instrument
-      if instrument&.exchange_segment&.to_s&.upcase == 'IDX_I'
-        return {
-          segment: instrument.exchange_segment,
-          security_id: instrument.security_id.to_s,
-          symbol: instrument.symbol_name,
-          index_key: instrument.symbol_name
-        }
-      end
-
-      index_cfg = index_config_for_key(extract_index_key(tracker))
-      return unless index_cfg
-
-      {
-        segment: (index_cfg[:segment] || index_cfg['segment']).to_s,
-        security_id: (index_cfg[:sid] || index_cfg['sid']).to_s,
-        symbol: (index_cfg[:key] || index_cfg['key']).to_s,
-        index_key: (index_cfg[:key] || index_cfg['key']).to_s
-      }
-    rescue StandardError => e
-      Rails.logger.error("[Positions::ActiveCache] resolve_underlying_meta failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
-      nil
-    end
-
-    def extract_index_key(tracker)
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      key = meta['index_key'] || meta[:index_key]
-      return key if key.present?
-
-      derivative = tracker.watchable if tracker.watchable.is_a?(Derivative)
-      return derivative.underlying_symbol if derivative&.underlying_symbol.present?
-
-      instrument = tracker.instrument
-      return instrument.underlying_symbol if instrument&.respond_to?(:underlying_symbol) && instrument.underlying_symbol.present?
-
-      tracker.symbol
-    rescue StandardError
-      nil
-    end
-
-    def resolve_position_direction(tracker)
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      direction = tracker.direction || meta['direction'] || meta[:direction]
-      return direction.to_s.downcase.to_sym if direction.present?
-
-      side = tracker.side.to_s.downcase
-      return :bearish if side.include?('sell') || side.include?('short')
-
-      derivative = tracker.watchable if tracker.watchable.is_a?(Derivative)
-      return :bearish if derivative&.option_type.to_s.upcase == 'PE'
-
-      :bullish
-    rescue StandardError
-      :bullish
-    end
-
-    def index_config_for_key(key)
-      return nil if key.blank?
-
-      indices = AlgoConfig.fetch[:indices] || []
-      indices.find do |cfg|
-        candidate = cfg[:key] || cfg['key']
-        candidate.to_s.casecmp?(key.to_s)
-      end
-    rescue StandardError => e
-      Rails.logger.error("[Positions::ActiveCache] Failed to load index config for #{key}: #{e.class} - #{e.message}")
-      nil
-    end
   end
   # rubocop:enable Metrics/ClassLength
 end

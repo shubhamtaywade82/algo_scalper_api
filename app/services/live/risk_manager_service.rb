@@ -321,7 +321,7 @@ module Live
       return unless pnl.negative? # Only record losses
 
       # Get index key from tracker or instrument
-      index_key = extract_index_key_from_tracker(tracker)
+      index_key = Positions::MetadataResolver.index_key(tracker)
       return unless index_key
 
       # Record loss in DailyLimits
@@ -334,41 +334,6 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.error("[RiskManager] Failed to record loss: #{e.class} - #{e.message}")
-    end
-
-    # Extract index key from tracker
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @return [String, nil] Index key (e.g., 'NIFTY', 'BANKNIFTY')
-    def extract_index_key_from_tracker(tracker)
-      # Try to get from tracker's instrument or watchable
-      instrument = tracker.instrument || tracker.watchable
-      return nil unless instrument
-
-      # Check if instrument has index_key method or symbol_name
-      return instrument.index_key.to_s.upcase if instrument.respond_to?(:index_key)
-
-      # Try to infer from symbol_name (e.g., 'NIFTY-25Jan2024-25000-CE' -> 'NIFTY')
-      if instrument.respond_to?(:symbol_name) && instrument.symbol_name.present?
-        symbol = instrument.symbol_name.to_s
-        # Extract index from symbol (first part before dash)
-        index_key = symbol.split('-').first
-        return index_key.upcase if index_key.present?
-      end
-
-      # Try to get from AlgoConfig indices
-      indices = AlgoConfig.fetch[:indices] || []
-      indices.each do |idx_cfg|
-        segment = idx_cfg[:segment] || idx_cfg['segment']
-        sid = idx_cfg[:sid] || idx_cfg['sid']
-        if segment == tracker.segment && sid.to_s == tracker.security_id.to_s
-          return (idx_cfg[:key] || idx_cfg['key']).to_s.upcase
-        end
-      end
-
-      nil
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] Failed to extract index key: #{e.class} - #{e.message}")
-      nil
     end
 
     # Helper that centralizes exit dispatching logic.
@@ -945,17 +910,10 @@ module Live
     end
 
     def normalized_position_direction(position, tracker)
-      direction = position.position_direction || tracker.direction
+      direction = position.position_direction
       return direction.to_s.downcase.to_sym if direction.present?
 
-      side = tracker.side.to_s.downcase
-      return :bearish if side.include?('sell') || side.include?('short')
-
-      if tracker.watchable.is_a?(Derivative) && tracker.watchable.option_type.to_s.upcase == 'PE'
-        return :bearish
-      end
-
-      :bullish
+      Positions::MetadataResolver.direction(tracker)
     end
 
     def underlying_trend_score_threshold
