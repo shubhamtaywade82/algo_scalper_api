@@ -363,11 +363,11 @@ module Entries
         if hub.running? && hub.connected?
           # Subscribe to the strike/derivative immediately (only if not already subscribed)
           begin
-            unless hub.subscribed?(segment: segment, security_id: security_id)
+            if hub.subscribed?(segment: segment, security_id: security_id)
+              Rails.logger.debug { "[EntryGuard] Already subscribed to #{segment}:#{security_id}, using existing subscription" }
+            else
               hub.subscribe(segment: segment, security_id: security_id)
               Rails.logger.debug { "[EntryGuard] Subscribed to #{segment}:#{security_id} for LTP resolution" }
-            else
-              Rails.logger.debug { "[EntryGuard] Already subscribed to #{segment}:#{security_id}, using existing subscription" }
             end
 
             # Wait briefly for tick to arrive (typically < 100ms)
