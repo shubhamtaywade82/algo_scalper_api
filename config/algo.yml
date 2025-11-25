@@ -166,6 +166,13 @@ signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
 
+  # Supertrend+ADX Strategy Configuration
+  # By default: 1m Supertrend signal is enabled (no config needed)
+  # ADX filter and 5m confirmation are toggleable
+  enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
+  enable_adx_filter: false # Enable ADX strength filter (default: false)
+  enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
+
   trend_scorer:
     min_trend_score: 14
     mtf_enabled: true
@@ -177,8 +184,8 @@ signals:
     base_multiplier: 3.0
 
   adx:
-    min_strength: 18
-    confirmation_min_strength: 20
+    min_strength: 18 # ADX threshold for 1m timeframe (when enabled)
+    confirmation_min_strength: 20 # ADX threshold for 5m confirmation (when enabled)
 
 # ============================================
 # OPTION CHAIN SETTINGS

@@ -8,7 +8,8 @@ module Signal
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
+        enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
+        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, false)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
 
         # Check if strategy-based recommendations are enabled
@@ -48,8 +49,8 @@ module Signal
             timeframe: effective_timeframe,
             strategy_recommendation: strategy_recommendation
           )
-        else
-          # Fallback to traditional Supertrend + ADX analysis
+        elsif enable_supertrend_signal
+          # Traditional Supertrend + ADX analysis (1m signal)
           supertrend_cfg = signals_cfg[:supertrend]
           unless supertrend_cfg
             Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
@@ -57,7 +58,7 @@ module Signal
           end
 
           adx_cfg = signals_cfg[:adx] || {}
-          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
 
@@ -68,6 +69,9 @@ module Signal
             supertrend_cfg: supertrend_cfg,
             adx_min_strength: adx_min_strength
           )
+        else
+          Rails.logger.warn("[Signal] Supertrend signal disabled for #{index_cfg[:key]} - skipping analysis")
+          return
         end
 
         unless primary_analysis[:status] == :ok
@@ -249,8 +253,14 @@ module Signal
       def analyze_multi_timeframe(index_cfg:, instrument:)
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
+        enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
+        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, false)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
+
+        unless enable_supertrend_signal
+          Rails.logger.warn("[Signal] Supertrend signal disabled for #{index_cfg[:key]}")
+          return { status: :error, message: 'Supertrend signal disabled' }
+        end
 
         supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
@@ -259,7 +269,7 @@ module Signal
         end
 
         adx_cfg = signals_cfg[:adx] || {}
-        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
         # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
         adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
 
