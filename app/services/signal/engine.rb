@@ -192,7 +192,7 @@ module Signal
           if result
             # Rails.logger.info("[Signal] Entry successful for #{index_cfg[:key]}: #{pick[:symbol]}")
           else
-            Rails.logger.debug("[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]} #{result}")
+            Rails.logger.debug { "[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]} #{result}" }
           end
         end
 
