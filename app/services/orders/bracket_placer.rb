@@ -107,7 +107,18 @@ module Orders
       new_sl = sl_price || position.sl_price
       new_tp = tp_price || position.tp_price
 
-      return failure_result('Invalid SL/TP prices') unless new_sl&.positive? && new_tp&.positive?
+      # If only updating SL, don't require TP to be valid
+      # If only updating TP, don't require SL to be valid
+      # If updating both, both must be valid
+      if sl_price && tp_price
+        return failure_result('Invalid SL/TP prices') unless new_sl&.positive? && new_tp&.positive?
+      elsif sl_price
+        return failure_result('Invalid SL price') unless new_sl&.positive?
+      elsif tp_price
+        return failure_result('Invalid TP price') unless new_tp&.positive?
+      else
+        return failure_result('No SL or TP price provided')
+      end
 
       # Update ActiveCache
       updates = {}

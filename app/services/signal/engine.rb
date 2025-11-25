@@ -4,6 +4,12 @@ module Signal
   class Engine
     class << self
       def run_for(index_cfg)
+        # Skip signal generation if market is closed (after 3:30 PM IST)
+        if TradingSession::Service.market_closed?
+          Rails.logger.debug { "[Signal] Market closed - skipping analysis for #{index_cfg[:key]}" }
+          return
+        end
+
         Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for #{index_cfg[:key]} (IDX_I) --------------------------------------------------------")
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}

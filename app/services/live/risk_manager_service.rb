@@ -133,6 +133,9 @@ module Live
       # Peak-drawdown check happens FIRST inside TrailingEngine.process_tick()
       process_trailing_for_all_positions
 
+      # Enforce session end exit (before 3:15 PM IST) - takes priority
+      enforce_session_end_exit(exit_engine: @exit_engine || self)
+
       # Backwards-compatible enforcement: if there is no external ExitEngine, run enforcement here
       return unless @exit_engine.nil?
 
@@ -275,6 +278,35 @@ module Live
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_hard_limits (fallback) error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
+    end
+
+    # Enforce session end exit (before 3:15 PM IST)
+    # This is separate from time-based exit and takes priority
+    def enforce_session_end_exit(exit_engine:)
+      session_check = TradingSession::Service.should_force_exit?
+      return unless session_check[:should_exit]
+
+      positions = active_cache_positions
+      return if positions.empty?
+
+      tracker_map = trackers_for_positions(positions)
+      exited_count = 0
+
+      positions.each do |position|
+        tracker = tracker_map[position.tracker_id]
+        next unless tracker&.active?
+
+        # Sync PnL from Redis cache if ActiveCache is stale
+        sync_position_pnl_from_redis(position, tracker)
+
+        reason = 'session end (deadline: 3:15 PM IST)'
+        dispatch_exit(exit_engine, tracker, reason)
+        exited_count += 1
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_session_end_exit error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
+      end
+
+      Rails.logger.info("[RiskManager] Session end exit: #{exited_count} positions exited") if exited_count.positive?
     end
 
     def enforce_time_based_exit(exit_engine:)
@@ -925,7 +957,7 @@ module Live
 
       @last_ensure_subscribed = Time.current
       hub = Live::MarketFeedHub.instance
-      return unless hub.enabled?
+      return unless hub.running?
 
       hub.start! unless hub.running?
 

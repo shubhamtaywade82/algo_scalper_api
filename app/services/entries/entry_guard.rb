@@ -10,6 +10,13 @@ module Entries
           return false
         end
 
+        # Check trading session timing (9:20 AM to 3:15 PM IST)
+        session_check = TradingSession::Service.entry_allowed?
+        unless session_check[:allowed]
+          Rails.logger.warn("[EntryGuard] Entry blocked: #{session_check[:reason]}")
+          return false
+        end
+
         # NEW: Check daily limits before allowing entry
         daily_limits = Live::DailyLimits.new
         limit_check = daily_limits.can_trade?(index_key: index_cfg[:key])
@@ -682,7 +689,7 @@ module Entries
       end
 
       # Calculate default stop loss price
-      def calculate_default_sl(tracker, entry_price)
+      def calculate_default_sl(_tracker, entry_price)
         risk_cfg = AlgoConfig.fetch.dig(:risk) || {}
         sl_pct = risk_cfg[:sl_pct] || 5.0 # Default 5% stop loss
 
@@ -697,7 +704,7 @@ module Entries
       end
 
       # Calculate default take profit price
-      def calculate_default_tp(tracker, entry_price)
+      def calculate_default_tp(_tracker, entry_price)
         risk_cfg = AlgoConfig.fetch.dig(:risk) || {}
         tp_pct = risk_cfg[:tp_pct] || 10.0 # Default 10% take profit
 

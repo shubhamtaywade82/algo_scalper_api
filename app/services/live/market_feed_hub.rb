@@ -469,12 +469,29 @@ module Live
     end
 
     def subscribe_watchlist
+      # Reload watchlist in case it changed since startup
+      @watchlist = load_watchlist || []
+      refresh_watchlist_keys!
+
       if @watchlist.empty?
         Rails.logger.warn('[MarketFeedHub] Watchlist is empty, skipping subscription')
         return
       end
 
-      Rails.logger.info("[MarketFeedHub] Loading watchlist: #{@watchlist.count} instruments")
+      Rails.logger.info("[MarketFeedHub] Subscribing to watchlist: #{@watchlist.count} instruments")
+
+      # Wait for connection to be established before subscribing
+      # Give WebSocket a moment to connect (max 5 seconds)
+      max_wait = 5 # seconds
+      waited = 0
+      while !connected? && waited < max_wait
+        sleep 0.5
+        waited += 0.5
+      end
+
+      unless connected?
+        Rails.logger.warn('[MarketFeedHub] WebSocket not connected yet, attempting watchlist subscription anyway')
+      end
 
       # Use subscribe_many for efficient batch subscription (up to 100 instruments per message)
       # This will automatically deduplicate via subscribe_many
@@ -510,10 +527,18 @@ module Live
                   end
                 end
 
-        # Filter out any pairs with blank segment or security_id
-        pairs.filter_map { |seg, sid| { segment: seg, security_id: sid } if seg.present? && sid.present? }
+        # Filter out any pairs with blank segment or security_id and convert to hash format
+        result = pairs.filter_map do |seg, sid|
+          next if seg.blank? || sid.blank?
+
+          { segment: seg.to_s.strip, security_id: sid.to_s.strip }
+        end
+
+        Rails.logger.info("[MarketFeedHub] Loaded #{result.count} watchlist items from database") if result.any?
+        return result
       end
 
+      # Fallback to ENV-based watchlist if DB watchlist is empty
       raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '').strip
       return [] if raw.blank?
 
@@ -611,7 +636,7 @@ module Live
       seg.include?('FNO') || seg.include?('COMM') || seg.include?('CUR')
     end
 
-    # Resubscribe all active positions after WebSocket reconnect
+    # Resubscribe all active positions and watchlist items after WebSocket reconnect
     # This ensures our tracking stays in sync with the WebSocket state
     def resubscribe_active_positions_after_reconnect
       return unless running?
@@ -619,22 +644,29 @@ module Live
 
       @resubscribing = true
       begin
-        # Get all active positions that should be subscribed
+        # First, resubscribe watchlist items (NIFTY, BANKNIFTY, SENSEX, etc.)
+        watchlist = load_watchlist || []
+        unless watchlist.empty?
+          Rails.logger.info("[MarketFeedHub] Reconnecting: Resubscribing #{watchlist.size} watchlist items")
+          subscribe_many(watchlist)
+        end
+
+        # Then, resubscribe all active positions
         positions = PositionTracker.active.includes(:instrument).to_a
-        return if positions.empty?
+        unless positions.empty?
+          Rails.logger.info("[MarketFeedHub] Reconnecting: Resubscribing #{positions.size} active positions")
 
-        Rails.logger.info("[MarketFeedHub] Reconnecting: Resubscribing #{positions.size} active positions")
+          positions.each do |tracker|
+            next unless tracker.security_id.present?
 
-        positions.each do |tracker|
-          next unless tracker.security_id.present?
+            segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+            next unless segment_key
 
-          segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
-          next unless segment_key
-
-          # Resubscribe (will skip if already in tracking, but ensures WebSocket has it)
-          subscribe(segment: segment_key, security_id: tracker.security_id)
-        rescue StandardError => e
-          Rails.logger.error("[MarketFeedHub] Failed to resubscribe position #{tracker.id}: #{e.class} - #{e.message}")
+            # Resubscribe (will skip if already in tracking, but ensures WebSocket has it)
+            subscribe(segment: segment_key, security_id: tracker.security_id)
+          rescue StandardError => e
+            Rails.logger.error("[MarketFeedHub] Failed to resubscribe position #{tracker.id}: #{e.class} - #{e.message}")
+          end
         end
       ensure
         @resubscribing = false

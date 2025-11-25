@@ -55,6 +55,9 @@ module Signal
     private
 
     def process_index(index_cfg)
+      # Skip signal generation if market is closed (after 3:30 PM IST)
+      return if TradingSession::Service.market_closed?
+
       signal = evaluate_supertrend_signal(index_cfg)
       return unless signal
 

@@ -134,7 +134,7 @@ module Live
     end
 
     def subscribed?(tracker, hub)
-      return false unless hub.enabled? && hub.running?
+      return false unless hub.running?
 
       segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
       return false unless segment && tracker.security_id
@@ -143,7 +143,7 @@ module Live
     end
 
     def fix_subscription(tracker, hub)
-      return unless hub.enabled?
+      return unless hub.running? || hub.respond_to?(:start!)
 
       hub.start! unless hub.running?
       tracker.subscribe
@@ -170,16 +170,16 @@ module Live
       (db_pnl - redis_pnl_value).abs > 1.0
     end
 
-    def fix_pnl_sync(tracker, redis_cache)
+    def fix_pnl_sync(tracker, _redis_cache)
       tracker.hydrate_pnl_from_cache!
       tracker.reload
     end
 
-    def sync_activecache_pnl(tracker, active_cache, redis_cache)
+    def sync_activecache_pnl(tracker, active_cache, _redis_cache = nil)
       position = active_cache.get_by_tracker_id(tracker.id)
       return unless position
 
-      redis_pnl = redis_cache.fetch_pnl(tracker.id)
+      redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
       return unless redis_pnl && redis_pnl[:pnl]
 
       # Update ActiveCache with Redis PnL data
