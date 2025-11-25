@@ -57,6 +57,9 @@ module Entries
           return false
         end
 
+        paper_mode = paper_trading_enabled?
+        force_paper = false
+
         quantity = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
           entry_price: ltp.to_f,
@@ -64,8 +67,24 @@ module Entries
           scale_multiplier: multiplier
         )
         if quantity <= 0
-          Rails.logger.warn("[EntryGuard] Invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, ltp: #{ltp}, lot_size: #{pick[:lot_size]})")
-          return false
+          if !paper_mode && auto_paper_fallback_enabled? &&
+             insufficient_live_balance?(entry_price: ltp, lot_size: pick[:lot_size])
+            fallback_qty = fallback_quantity(pick: pick, multiplier: multiplier)
+            if fallback_qty <= 0
+              Rails.logger.warn("[EntryGuard] Paper fallback calculated invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (lot_size: #{pick[:lot_size]}, multiplier: #{multiplier})")
+              return false
+            end
+            quantity = fallback_qty
+            paper_mode = true
+            force_paper = true
+            Rails.logger.warn(
+              "[EntryGuard] Insufficient live balance for #{index_cfg[:key]} (symbol: #{pick[:symbol]}). " \
+              "Falling back to paper mode with quantity #{quantity}."
+            )
+          else
+            Rails.logger.warn("[EntryGuard] Invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, ltp: #{ltp}, lot_size: #{pick[:lot_size]})")
+            return false
+          end
         end
 
         # Validate segment is tradable (indices are not tradable)
@@ -79,7 +98,7 @@ module Entries
         end
 
         tracker =
-          if paper_trading_enabled?
+          if paper_mode
             create_paper_tracker!(
               instrument: instrument,
               pick: pick,
@@ -124,6 +143,8 @@ module Entries
           Rails.logger.warn("[EntryGuard] Failed to persist tracker for #{index_cfg[:key]}: #{pick[:symbol]}")
           return false
         end
+
+        tag_fallback_tracker(tracker, reason: 'insufficient_live_balance') if force_paper && tracker
 
         post_entry_wiring(tracker: tracker, side: side, index_cfg: index_cfg)
         true
@@ -615,6 +636,48 @@ module Entries
       def option_segment?(segment)
         seg = segment.to_s.upcase
         seg.include?('FNO') || seg.include?('COMM') || seg.include?('CUR')
+      end
+
+      def auto_paper_fallback_enabled?
+        feature_flags[:auto_paper_on_insufficient_balance] == true
+      rescue StandardError
+        false
+      end
+
+      def insufficient_live_balance?(entry_price:, lot_size:)
+        lot = lot_size.to_i
+        return false unless lot.positive?
+
+        price = entry_price.to_f
+        return false unless price.positive?
+
+        capital_available = Capital::Allocator.available_cash
+        return false unless capital_available
+
+        required = price * lot
+        capital_available.to_f < required
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Failed to evaluate live balance: #{e.class} - #{e.message}")
+        false
+      end
+
+      def fallback_quantity(pick:, multiplier:)
+        lot = pick[:lot_size].to_i
+        lot = 1 if lot <= 0
+        [lot * multiplier, lot].max
+      end
+
+      def tag_fallback_tracker(tracker, reason:)
+        meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
+        tracker.update!(meta: meta.merge('fallback_to_paper' => true, 'fallback_reason' => reason))
+      rescue StandardError => e
+        Rails.logger.warn("[EntryGuard] Failed to tag fallback tracker #{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def feature_flags
+        AlgoConfig.fetch[:feature_flags] || {}
+      rescue StandardError
+        {}
       end
     end
   end

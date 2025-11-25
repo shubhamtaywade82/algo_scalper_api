@@ -8,6 +8,7 @@ feature_flags:
   enable_demand_driven_services: true
   enable_underlying_aware_exits: false
   enable_peak_drawdown_activation: false
+  auto_paper_on_insufficient_balance: false
 
 # ============================================
 # INDEX CONFIG (TREND-SCORE DRIVEN)

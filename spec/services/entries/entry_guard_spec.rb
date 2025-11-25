@@ -249,6 +249,26 @@ RSpec.describe Entries::EntryGuard do
 
           expect(result).to be false
         end
+
+        it 'falls back to paper mode when enabled and live balance is insufficient' do
+          allow(Capital::Allocator).to receive(:qty_for).and_return(0)
+          allow(described_class).to receive(:paper_trading_enabled?).and_return(false)
+          allow(described_class).to receive(:auto_paper_fallback_enabled?).and_return(true)
+          allow(described_class).to receive(:insufficient_live_balance?).and_return(true)
+
+          expect {
+            described_class.try_enter(
+              index_cfg: index_cfg,
+              pick: pick,
+              direction: :bullish
+            )
+          }.to change(PositionTracker, :count).by(1)
+
+          tracker = PositionTracker.last
+          expect(tracker.paper?).to be true
+          expect(tracker.meta['fallback_to_paper']).to be true
+          expect(tracker.quantity).to eq(pick[:lot_size])
+        end
       end
 
       context 'when order placement fails' do
