@@ -8,9 +8,12 @@ module Live
 
     REDIS_KEY_PREFIX = 'pnl:tracker'
     TTL_SECONDS = 6.hours.to_i
+    SYNC_THROTTLE_SECONDS = 30 # Only sync to DB every 30 seconds per tracker
 
     def initialize
       @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+      @sync_timestamps = {} # tracker_id => last_sync_time (in-memory cache)
+      @sync_mutex = Mutex.new
     rescue StandardError => e
       Rails.logger.error("[RedisPnL] init error: #{e.message}") if defined?(Rails)
       @redis = nil
@@ -32,8 +35,8 @@ module Live
         'updated_at' => Time.current.to_i.to_s
       }
 
-      # Sync PnL to database immediately (use Redis as source of truth)
-      sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct) if tracker_id
+      # Sync PnL to database (throttled - only every 30 seconds per tracker)
+      sync_pnl_to_database_throttled(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct) if tracker_id
 
       # Add additional metadata if tracker is provided
       if tracker
@@ -148,8 +151,28 @@ module Live
       false
     end
 
-    # Sync PnL from Redis to PositionTracker database
-    # This ensures DB stays in sync with Redis (source of truth)
+    # Sync PnL from Redis to PositionTracker database (throttled)
+    # Only syncs every SYNC_THROTTLE_SECONDS (30s) per tracker to reduce DB hits
+    def sync_pnl_to_database_throttled(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct = nil)
+      return unless tracker_id
+
+      @sync_mutex.synchronize do
+        last_sync = @sync_timestamps[tracker_id]
+        now = Time.current
+
+        # Skip if synced recently (within throttle window)
+        return if last_sync && (now - last_sync) < SYNC_THROTTLE_SECONDS
+
+        # Update timestamp
+        @sync_timestamps[tracker_id] = now
+      end
+
+      # Perform actual sync
+      sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct)
+    end
+
+    # Force sync PnL from Redis to PositionTracker database (no throttling)
+    # Use this when you need immediate DB sync (e.g., on exit)
     def sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct = nil)
       return unless tracker_id
 
@@ -172,6 +195,11 @@ module Live
         end
 
         tracker.update!(attrs)
+
+        # Update sync timestamp
+        @sync_mutex.synchronize do
+          @sync_timestamps[tracker_id] = Time.current
+        end
       rescue ActiveRecord::RecordNotFound
         # Tracker doesn't exist, skip
         nil

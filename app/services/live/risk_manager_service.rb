@@ -579,7 +579,7 @@ module Live
         next unless pnl
 
         pnl_pct = compute_pnl_pct(tracker, ltp, position)
-        
+
         # Calculate hwm_pnl_pct for ensure_all_positions_in_redis
         hwm = tracker.high_water_mark_pnl || BigDecimal(0)
         hwm = [hwm, pnl].max
@@ -588,7 +588,7 @@ module Live
                         qty = tracker.quantity.to_i
                         entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
                       end
-        
+
         update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] ensure_all_positions_in_redis failed for #{tracker.order_no}: #{e.class} - #{e.message}")

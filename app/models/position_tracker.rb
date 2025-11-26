@@ -108,7 +108,7 @@ class PositionTracker < ApplicationRecord
                              end
       avg_unrealized_pnl_pct = if active.any?
                                  (active.map do |t|
-                                   t.last_pnl_pct.to_f
+                                   (t.current_pnl_pct || 0).to_f
                                  end.compact.sum / active.count.to_f).round(2)
                                else
                                  0.0
@@ -201,10 +201,10 @@ class PositionTracker < ApplicationRecord
       # Calculate realized PnL from exited positions
       realized_pnl = total_paper_pnl.to_f
 
-      # Calculate unrealized PnL from active positions
+      # Calculate unrealized PnL from active positions (use Redis cache)
       unrealized_pnl = active.sum do |tracker|
-        tracker.last_pnl_rupees || BigDecimal(0)
-      end.to_f
+        tracker.current_pnl_rupees.to_f
+      end
 
       # Total PnL = realized (exited) + unrealized (active)
       total_pnl = realized_pnl + unrealized_pnl
@@ -299,6 +299,7 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
+    # Persist final PnL from Redis cache to DB (force sync, no throttling)
     persist_final_pnl_from_cache
 
     exit_price = resolve_exit_price(exit_price)
@@ -308,6 +309,18 @@ class PositionTracker < ApplicationRecord
     cleanup_exit_caches
     unsubscribe
     register_cooldown!
+
+    # Force final sync to DB (bypass throttling) to ensure final values are persisted
+    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
+    if cache && cache[:pnl]
+      Live::RedisPnlCache.instance.sync_pnl_to_database(
+        id,
+        cache[:pnl],
+        cache[:pnl_pct],
+        cache[:hwm_pnl],
+        cache[:hwm_pnl_pct]
+      )
+    end
 
     self
   end
@@ -321,6 +334,55 @@ class PositionTracker < ApplicationRecord
     self.high_water_mark_pnl = BigDecimal(cache[:hwm_pnl].to_s) if cache[:hwm_pnl]
   rescue StandardError
     nil
+  end
+
+  # Get current PnL from Redis cache (preferred) or fallback to DB
+  # This avoids frequent DB reads - Redis is the source of truth for active positions
+  def current_pnl_rupees
+    return last_pnl_rupees if exited? # Exited positions: use DB (final value)
+
+    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
+    return BigDecimal(cache[:pnl].to_s) if cache && cache[:pnl]
+
+    last_pnl_rupees || BigDecimal(0)
+  rescue StandardError
+    last_pnl_rupees || BigDecimal(0)
+  end
+
+  # Get current PnL percentage from Redis cache (preferred) or fallback to DB
+  def current_pnl_pct
+    return last_pnl_pct if exited? # Exited positions: use DB (final value)
+
+    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
+    return BigDecimal(cache[:pnl_pct].to_s) if cache && cache[:pnl_pct]
+
+    last_pnl_pct
+  rescue StandardError
+    last_pnl_pct
+  end
+
+  # Get current high water mark from Redis cache (preferred) or fallback to DB
+  def current_hwm_pnl
+    return high_water_mark_pnl if exited? # Exited positions: use DB (final value)
+
+    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
+    return BigDecimal(cache[:hwm_pnl].to_s) if cache && cache[:hwm_pnl]
+
+    high_water_mark_pnl || BigDecimal(0)
+  rescue StandardError
+    high_water_mark_pnl || BigDecimal(0)
+  end
+
+  # Get current high water mark percentage from Redis cache (preferred) or fallback to meta
+  def current_hwm_pnl_pct
+    return meta_hash['hwm_pnl_pct'] if exited? # Exited positions: use meta (final value)
+
+    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
+    return cache[:hwm_pnl_pct].to_f if cache && cache[:hwm_pnl_pct]
+
+    meta_hash['hwm_pnl_pct']
+  rescue StandardError
+    meta_hash['hwm_pnl_pct']
   end
 
   def update_pnl!(pnl, pnl_pct: nil)
@@ -552,7 +614,15 @@ class PositionTracker < ApplicationRecord
       self.last_pnl_rupees = pnl_value
 
       current_hwm = high_water_mark_pnl.present? ? BigDecimal(high_water_mark_pnl.to_s) : BigDecimal(0)
-      self.high_water_mark_pnl = [current_hwm, pnl_value].max
+      hwm = cache[:hwm_pnl] ? BigDecimal(cache[:hwm_pnl].to_s) : current_hwm
+      self.high_water_mark_pnl = [current_hwm, hwm, pnl_value].max
+
+      # Store hwm_pnl_pct in meta if available
+      if cache[:hwm_pnl_pct]
+        meta = meta_hash.dup
+        meta['hwm_pnl_pct'] = cache[:hwm_pnl_pct].to_f
+        self.meta = meta
+      end
     end
 
     self.last_pnl_pct = cache[:pnl_pct] ? BigDecimal(cache[:pnl_pct].to_s) : nil
@@ -577,8 +647,6 @@ class PositionTracker < ApplicationRecord
     pnl = (exit_value - entry) * qty
     BigDecimal(pnl.to_s)
   end
-
-  private
 
   def segment_must_be_tradable
     return if segment.blank? # Allow blank segments (will be validated elsewhere if needed)
