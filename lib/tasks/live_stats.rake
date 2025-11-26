@@ -98,17 +98,32 @@ namespace :trading do
   task live_stats_table: :environment do
     require 'io/console'
 
-    puts '📊 Live Paper Trading Statistics'
-    puts 'Press Ctrl+C to stop'
-    puts '=' * 80
+    # Ensure stdout is not buffered
+    $stdout.sync = true
+    $stderr.sync = true
+
+    # Check if we're in a TTY (interactive terminal)
+    is_tty = $stdout.tty?
+
+    # Print header once (only if TTY)
+    if is_tty
+      puts '📊 Live Paper Trading Statistics'
+      puts 'Press Ctrl+C to stop'
+      puts '=' * 80
+    end
+
+    # Number of lines in the table (header + separator + 11 data rows + separator + timestamp + instruction)
+    table_lines = 16
 
     begin
       loop do
         stats = PositionTracker.paper_trading_stats_with_pct
 
-        # Move cursor up to clear previous output (assuming ~15 lines)
-        print "\e[15A" # Move up 15 lines
-        print "\e[J"   # Clear from cursor to end of screen
+        if is_tty
+          # Move cursor up to clear previous table output
+          print "\e[#{table_lines}A" # Move up N lines
+          print "\e[J"                # Clear from cursor to end of screen
+        end
 
         # Print formatted table
         puts '=' * 80
