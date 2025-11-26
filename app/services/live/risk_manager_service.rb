@@ -364,6 +364,7 @@ module Live
     private
 
     # Process trailing stops for all active positions using TrailingEngine
+    # Enhanced with underlying-aware exits and peak-drawdown gating
     def process_trailing_for_all_positions
       @bracket_placer ||= Orders::BracketPlacer.new
       @trailing_engine ||= Live::TrailingEngine.new(bracket_placer: @bracket_placer)
@@ -373,7 +374,7 @@ module Live
       return if positions.empty?
 
       tracker_map = trackers_for_positions(positions)
-      trailing_exit_engine = @exit_engine
+      trailing_exit_engine = @exit_engine || self
 
       positions.each do |position|
         tracker = tracker_map[position.tracker_id]
@@ -382,9 +383,23 @@ module Live
         ensure_position_snapshot(position)
         exit_engine = @exit_engine || self
 
+        # 1. Recalculate PnL and peak (ensure fresh data)
+        recalculate_position_metrics(position, tracker)
+
+        # 2. Check underlying-aware exits FIRST (if enabled)
         next if handle_underlying_exit(position, tracker, exit_engine)
+
+        # 3. Enforce hard SL/TP limits (always active)
         next if enforce_bracket_limits(position, tracker, exit_engine)
 
+        # 4. Apply tiered trailing SL offsets
+        desired_sl_offset_pct = Positions::TrailingConfig.sl_offset_for(position.pnl_pct)
+        if desired_sl_offset_pct
+          position.sl_offset_pct = desired_sl_offset_pct
+          active_cache.update_position(position.tracker_id, sl_offset_pct: desired_sl_offset_pct)
+        end
+
+        # 5. Process trailing with peak-drawdown gating (via TrailingEngine)
         @trailing_engine.process_tick(position, exit_engine: trailing_exit_engine)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] TrailingEngine error for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
@@ -1176,6 +1191,31 @@ module Live
         ActiveSupport::Notifications.unsubscribe(token)
       end
       @position_subscriptions.clear
+    end
+
+    # Recalculate position metrics (PnL, peak) from current LTP
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    def recalculate_position_metrics(position, tracker)
+      return unless position && tracker
+
+      # Sync from Redis cache first (most up-to-date)
+      sync_position_pnl_from_redis(position, tracker)
+
+      # Ensure LTP is current
+      ensure_position_snapshot(position)
+
+      # Recalculate if needed
+      if position.current_ltp&.positive? && position.entry_price&.positive?
+        position.recalculate_pnl
+        # Update peak if current exceeds it
+        if position.pnl_pct && position.peak_profit_pct && position.pnl_pct > position.peak_profit_pct
+          active_cache = Positions::ActiveCache.instance
+          active_cache.update_position(position.tracker_id, peak_profit_pct: position.pnl_pct)
+        end
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] recalculate_position_metrics failed for tracker #{tracker&.id}: #{e.class} - #{e.message}")
     end
   end
 end

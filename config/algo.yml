@@ -165,6 +165,12 @@ risk:
     - { trigger_pct: 120, sl_offset_pct: 60 }
 
   peak_drawdown_exit_pct: 5 # Instant exit on -5% drop from peak
+  peak_drawdown_activation_profit_pct: 25.0 # Minimum profit % to activate peak-drawdown gating
+  peak_drawdown_activation_sl_offset_pct: 10.0 # Minimum SL offset % to activate peak-drawdown gating
+
+  # Underlying-aware exit thresholds
+  underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
+  underlying_atr_collapse_multiplier: 0.65 # Exit if ATR ratio < this value (falling volatility)
 
   daily_limits:
     enable: true

@@ -49,6 +49,7 @@ module Live
     end
 
     # Check if peak drawdown threshold is breached
+    # Enhanced with peak-drawdown activation gating
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @param exit_engine [Live::ExitEngine] Exit engine instance
     # @return [Boolean] True if exit was triggered
@@ -58,14 +59,24 @@ module Live
       peak = position_data.peak_profit_pct.to_f
       current = position_data.pnl_pct.to_f
 
+      # Check if drawdown threshold is breached
       return false unless Positions::TrailingConfig.peak_drawdown_triggered?(peak, current)
 
+      # Apply peak-drawdown activation gating (if enabled)
       if peak_drawdown_activation_enabled?
+        # Use peak profit % (not current) for activation check
         activation_ready = Positions::TrailingConfig.peak_drawdown_active?(
-          profit_pct: current,
+          profit_pct: peak, # Use peak, not current
           current_sl_offset_pct: current_sl_offset_pct(position_data)
         )
-        return false unless activation_ready
+        unless activation_ready
+          Rails.logger.debug(
+            "[TrailingEngine] Peak drawdown gating: peak=#{peak.round(2)}% " \
+            "sl_offset=#{current_sl_offset_pct(position_data)&.round(2)}% " \
+            "not activated (drawdown=#{(peak - current).round(2)}%)"
+          )
+          return false
+        end
       end
 
       tracker = PositionTracker.find_by(id: position_data.tracker_id)
@@ -75,12 +86,17 @@ module Live
       end
 
       drawdown = peak - current
-      reason = "peak_drawdown_exit (drawdown: #{drawdown.round(2)}%)"
+      reason = "peak_drawdown_exit (drawdown: #{drawdown.round(2)}%, peak: #{peak.round(2)}%)"
 
-      exit_engine.execute_exit(tracker, reason)
-      Rails.logger.warn("[TrailingEngine] Peak drawdown exit triggered for #{tracker.order_no}: #{reason}")
+      # Wrap exit in tracker lock for idempotency
+      tracker.with_lock do
+        return false if tracker.exited?
 
-      true
+        exit_engine.execute_exit(tracker, reason)
+        Rails.logger.warn("[TrailingEngine] Peak drawdown exit triggered for #{tracker.order_no}: #{reason}")
+        increment_peak_drawdown_metric
+        true
+      end
     rescue StandardError => e
       Rails.logger.error("[TrailingEngine] Peak drawdown check failed: #{e.class} - #{e.message}")
       false
@@ -197,6 +213,12 @@ module Live
       return nil unless entry.positive? && sl_price.positive?
 
       ((sl_price - entry) / entry) * 100.0
+    end
+
+    def increment_peak_drawdown_metric
+      # Track peak-drawdown exits for observability
+      # This could be integrated with a metrics service if available
+      Rails.logger.info('[TrailingEngine] Peak drawdown exit metric incremented')
     end
   end
   # rubocop:enable Metrics/ClassLength
