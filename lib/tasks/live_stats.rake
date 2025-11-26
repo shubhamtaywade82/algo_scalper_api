@@ -5,6 +5,14 @@ namespace :trading do
   task live_stats: :environment do
     require 'io/console'
 
+    # Ensure stdout is not buffered
+    $stdout.sync = true
+    $stderr.sync = true
+
+    # Check if we're in a TTY (interactive terminal)
+    is_tty = $stdout.tty?
+
+    # Print header once
     puts '📊 Live Paper Trading Statistics'
     puts 'Press Ctrl+C to stop'
     puts '-' * 80
@@ -12,9 +20,6 @@ namespace :trading do
     begin
       loop do
         stats = PositionTracker.paper_trading_stats_with_pct
-
-        # Clear line and move cursor to beginning
-        print "\r\e[K" # \r = return to start, \e[K = clear to end of line
 
         # Format the output nicely
         output = format(
@@ -34,7 +39,15 @@ namespace :trading do
           stats[:losers]
         )
 
-        print output
+        if is_tty
+          # Move cursor to beginning of line, clear to end, print output
+          # \r = carriage return (move to start), \033[K = clear to end of line
+          print "\r\033[K#{output}"
+        else
+          # Fallback: just print with newline if not a TTY
+          puts output
+        end
+
         $stdout.flush
 
         sleep 2 # Update every 2 seconds
@@ -46,20 +59,31 @@ namespace :trading do
 
   desc 'Display live paper trading statistics (full hash format, updates in place)'
   task live_stats_hash: :environment do
+    # Ensure stdout is not buffered
+    $stdout.sync = true
+    $stderr.sync = true
+
+    # Check if we're in a TTY (interactive terminal)
+    is_tty = $stdout.tty?
+
+    # Print header once
     puts '📊 Live Paper Trading Statistics (Hash Format)'
     puts 'Press Ctrl+C to stop'
     puts '-' * 80
-    puts ''
 
     begin
       loop do
         stats = PositionTracker.paper_trading_stats_with_pct
+        hash_output = stats.inspect
 
-        # Clear line and move cursor to beginning
-        print "\r\e[K" # \r = return to start, \e[K = clear to end of line
-
-        # Print the hash exactly as requested
-        print stats.inspect
+        if is_tty
+          # Move cursor to beginning of line, clear to end, print hash
+          # \r = carriage return (move to start), \033[K = clear to end of line
+          print "\r\033[K#{hash_output}"
+        else
+          # Fallback: just print with newline if not a TTY
+          puts hash_output
+        end
 
         $stdout.flush
 
