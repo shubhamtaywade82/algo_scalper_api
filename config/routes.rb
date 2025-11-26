@@ -10,6 +10,14 @@ Rails.application.routes.draw do
     post :test_broadcast, to: "test#broadcast"
   end
 
+  # Redis UI (development only)
+  if Rails.env.development?
+    get 'redis_ui', to: 'redis_ui#index'
+    get 'redis_ui/info', to: 'redis_ui#info'
+    get 'redis_ui/:id', to: 'redis_ui#show', as: :redis_ui_key
+    delete 'redis_ui/:id', to: 'redis_ui#destroy'
+  end
+
   # Quietly handle browser/devtools well-known probes with 204 No Content
   get "/.well-known/*path", to: proc { [ 204, { "Content-Type" => "text/plain" }, [ "" ] ] }
 end

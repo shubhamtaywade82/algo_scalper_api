@@ -50,8 +50,18 @@ module TradingSystem
       # Skip if market is closed
       return if TradingSession::Service.market_closed?
 
-      # This is equivalent to: Signal::Scheduler.instance.perform!
-      ::Signal::Scheduler.new.perform!
+      # Signal::Scheduler processes indices in its start method's loop
+      # For this wrapper, we just trigger one cycle of processing
+      # by creating a temporary scheduler instance and processing indices
+      indices = Array(AlgoConfig.fetch[:indices])
+      return if indices.empty?
+
+      scheduler = ::Signal::Scheduler.new(period: 1)
+      indices.each do |idx_cfg|
+        scheduler.send(:process_index, idx_cfg)
+      rescue StandardError => e
+        Rails.logger.error("[SignalScheduler] Error processing #{idx_cfg[:key]}: #{e.class} - #{e.message}")
+      end
     end
   end
 end
