@@ -18,7 +18,7 @@ module Live
 
     # store only computed PnL (strings stored to Redis)
     # @param tracker [PositionTracker, nil] Optional tracker instance for additional metadata
-    def store_pnl(tracker_id:, pnl:, ltp:, hwm:, pnl_pct: nil, timestamp: Time.current, tracker: nil)
+    def store_pnl(tracker_id:, pnl:, ltp:, hwm:, pnl_pct: nil, hwm_pnl_pct: nil, timestamp: Time.current, tracker: nil)
       return false unless @redis
 
       key = pnl_key(tracker_id)
@@ -27,12 +27,13 @@ module Live
         'pnl_pct' => pnl_pct&.to_f.to_s,
         'ltp' => ltp.to_f.to_s,
         'hwm_pnl' => hwm.to_f.to_s,
+        'hwm_pnl_pct' => hwm_pnl_pct&.to_f.to_s,
         'timestamp' => timestamp.to_i.to_s,
         'updated_at' => Time.current.to_i.to_s
       }
 
       # Sync PnL to database immediately (use Redis as source of truth)
-      sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm) if tracker_id
+      sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct) if tracker_id
 
       # Add additional metadata if tracker is provided
       if tracker
@@ -109,6 +110,7 @@ module Live
         pnl_pct: raw['pnl_pct']&.to_f,
         ltp: raw['ltp']&.to_f,
         hwm_pnl: raw['hwm_pnl']&.to_f,
+        hwm_pnl_pct: raw['hwm_pnl_pct']&.to_f,
         timestamp: raw['timestamp']&.to_i,
         updated_at: raw['updated_at']&.to_i,
         # Additional metadata (may be nil if not stored)
@@ -148,7 +150,7 @@ module Live
 
     # Sync PnL from Redis to PositionTracker database
     # This ensures DB stays in sync with Redis (source of truth)
-    def sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm)
+    def sync_pnl_to_database(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct = nil)
       return unless tracker_id
 
       begin
@@ -156,11 +158,20 @@ module Live
         return unless tracker&.active?
 
         # Update DB with Redis PnL data
-        tracker.update!(
+        attrs = {
           last_pnl_rupees: BigDecimal(pnl.to_s),
           last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
           high_water_mark_pnl: hwm ? BigDecimal(hwm.to_s) : tracker.high_water_mark_pnl
-        )
+        }
+
+        # Store hwm_pnl_pct in meta if provided
+        if hwm_pnl_pct
+          meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+          meta['hwm_pnl_pct'] = hwm_pnl_pct.to_f
+          attrs[:meta] = meta
+        end
+
+        tracker.update!(attrs)
       rescue ActiveRecord::RecordNotFound
         # Tracker doesn't exist, skip
         nil

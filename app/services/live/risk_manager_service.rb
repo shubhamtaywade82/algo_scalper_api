@@ -528,6 +528,7 @@ module Live
 
         hwm = tracker.high_water_mark_pnl || BigDecimal(0)
         hwm = [hwm, pnl].max
+        hwm_pnl_pct = entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
 
         tracker.update!(
           last_pnl_rupees: pnl,
@@ -535,7 +536,7 @@ module Live
           high_water_mark_pnl: hwm
         )
 
-        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
+        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] update_paper_positions_pnl failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
@@ -578,7 +579,17 @@ module Live
         next unless pnl
 
         pnl_pct = compute_pnl_pct(tracker, ltp, position)
-        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
+        
+        # Calculate hwm_pnl_pct for ensure_all_positions_in_redis
+        hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+        hwm = [hwm, pnl].max
+        hwm_pnl_pct = if tracker.entry_price.present? && tracker.quantity.present?
+                        entry = BigDecimal(tracker.entry_price.to_s)
+                        qty = tracker.quantity.to_i
+                        entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
+                      end
+        
+        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] ensure_all_positions_in_redis failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
@@ -769,15 +780,24 @@ module Live
       nil
     end
 
-    def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
+    def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct = nil)
       return unless pnl && ltp && ltp.to_f.positive?
+
+      # Calculate hwm_pnl_pct if not provided
+      if hwm_pnl_pct.nil? && tracker.entry_price.present? && tracker.quantity.present?
+        entry = BigDecimal(tracker.entry_price.to_s)
+        qty = tracker.quantity.to_i
+        hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+        hwm_pnl_pct = entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
+      end
 
       Live::PnlUpdaterService.instance.cache_intermediate_pnl(
         tracker_id: tracker.id,
         pnl: pnl,
         pnl_pct: pnl_pct,
         ltp: ltp,
-        hwm: tracker.high_water_mark_pnl
+        hwm: tracker.high_water_mark_pnl,
+        hwm_pnl_pct: hwm_pnl_pct
       )
     rescue StandardError => e
       Rails.logger.error("[RiskManager] update_pnl_in_redis failed for #{tracker.order_no}: #{e.class} - #{e.message}")

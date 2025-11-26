@@ -26,13 +26,14 @@ module Live
 
     # Accept arbitrary payload fields; last-wins for a tracker id
     # Ensure all numeric fields are stored as BigDecimal (or nil)
-    def cache_intermediate_pnl(tracker_id:, pnl: nil, pnl_pct: nil, ltp: nil, hwm: nil)
+    def cache_intermediate_pnl(tracker_id:, pnl: nil, pnl_pct: nil, ltp: nil, hwm: nil, hwm_pnl_pct: nil)
       @mutex.synchronize do
         @queue[tracker_id.to_i] = {
           pnl: safe_decimal(pnl),
           pnl_pct: safe_decimal(pnl_pct),
           ltp: safe_decimal(ltp),
           hwm: safe_decimal(hwm),
+          hwm_pnl_pct: safe_decimal(hwm_pnl_pct),
           updated_at: Time.now.to_i
         }
       end
@@ -239,6 +240,12 @@ module Live
         hwm_bd = payload[:hwm] || (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
         hwm_bd = BigDecimal(0) if hwm_bd.nil?
 
+        # Calculate hwm_pnl_pct if not provided
+        hwm_pnl_pct_bd = payload[:hwm_pnl_pct]
+        if hwm_pnl_pct_bd.nil? && entry_bd.positive? && qty_bd.positive? && hwm_bd.positive?
+          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd)) * 100
+        end
+
         # Persist to Redis (use floats for storage to remain compatible)
         Live::RedisPnlCache.instance.store_pnl(
           tracker_id: tracker_id,
@@ -246,6 +253,7 @@ module Live
           pnl_pct: pnl_pct_bd.to_f,
           ltp: ltp_bd.to_f,
           hwm: hwm_bd.to_f,
+          hwm_pnl_pct: hwm_pnl_pct_bd ? hwm_pnl_pct_bd.to_f : nil,
           timestamp: Time.now,
           tracker: tracker
         )

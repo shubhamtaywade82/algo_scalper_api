@@ -92,10 +92,13 @@ module Live
       pnl   = (ltp.to_d - entry) * qty.to_d
       pct   = entry.positive? ? ((ltp.to_d - entry) / entry * 100) : 0
 
+      hwm_pnl = [tracker.high_water_mark_pnl.to_d, pnl].max
+      hwm_pnl_pct = entry.positive? ? ((hwm_pnl / (entry * qty)) * 100) : 0
+
       tracker.update!(
         last_pnl_rupees: pnl,
         last_pnl_pct: pct.round(2),
-        high_water_mark_pnl: [tracker.high_water_mark_pnl.to_d, pnl].max
+        high_water_mark_pnl: hwm_pnl
       )
 
       Live::RedisPnlCache.instance.store_pnl(
@@ -103,7 +106,8 @@ module Live
         pnl: pnl,
         pnl_pct: pct,
         ltp: ltp,
-        hwm: tracker.high_water_mark_pnl,
+        hwm: hwm_pnl,
+        hwm_pnl_pct: hwm_pnl_pct.round(2),
         timestamp: Time.current,
         tracker: tracker
       )

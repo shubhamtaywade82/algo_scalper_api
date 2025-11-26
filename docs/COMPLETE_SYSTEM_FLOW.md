@@ -1,6 +1,6 @@
 # Complete System Flow: From Initializer to Exit/EOD
 
-**Last Updated:** Based on actual codebase analysis  
+**Last Updated:** 2025-01-16 - Added TrendScorer toggle, market close checks, Redis UI
 **Repository:** https://github.com/shubhamtaywade82/algo_scalper_api/tree/new_trailing
 
 ---
@@ -19,6 +19,7 @@
 10. [Service Intervals & Frequencies](#10-service-intervals--frequencies)
 11. [Redis Cache Architecture](#11-redis-cache-architecture)
 12. [Session Checks](#12-session-checks)
+13. [Redis UI](#13-redis-ui)
 
 ---
 
@@ -113,36 +114,36 @@ end
 1. MarketFeedHub (WebSocket connection)
    └── Subscribes to watchlist (indices: NIFTY, BANKNIFTY, SENSEX)
    └── Thread: 'market-feed-hub'
-   
+
 2. ActiveCache
    └── Starts → subscribes to MarketFeedHub callbacks
    └── Reloads peak values from Redis
    └── Thread: N/A (event-driven callbacks)
-   
+
 3. Signal::Scheduler
    └── Starts periodic loop (default: 30s interval)
    └── Thread: 'signal-scheduler'
-   
+
 4. RiskManagerService
    └── Starts monitoring loop (default: 5s interval, demand-driven)
    └── Thread: 'risk-manager'
    └── Watchdog thread: 'risk-manager-watchdog' (restarts if dead)
-   
+
 5. PositionHeartbeat
    └── Starts heartbeat monitoring
    └── Thread: 'position-heartbeat'
-   
+
 6. OrderRouter
    └── Initializes (no background thread)
-   
+
 7. PaperPnlRefresher
    └── Starts PnL refresh loop (if paper trading enabled)
    └── Thread: 'paper-pnl-refresher'
-   
+
 8. ExitEngine
    └── Starts idle thread (waits for exit requests)
    └── Thread: 'exit-engine'
-   
+
 9. ReconciliationService
    └── Starts reconciliation loop (every 5 seconds)
    └── Thread: 'reconciliation-service'
@@ -166,23 +167,23 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 
 ### 2.1 Independent Services (Run Continuously)
 
-| Service | Thread Name | Responsibility | Frequency |
-|---------|-------------|---------------|-----------|
-| **MarketFeedHub** | `market-feed-hub` | WebSocket connection, tick reception, subscription management | Continuous |
-| **Signal::Scheduler** | `signal-scheduler` | Generate trading signals for indices | 30s (configurable) |
-| **RiskManagerService** | `risk-manager` | Monitor positions, enforce exits, update PnL | 500ms active / 5000ms idle |
-| **PaperPnlRefresher** | `paper-pnl-refresher` | Refresh paper position PnL | 1s (configurable) |
-| **PnlUpdaterService** | `pnl-updater-service` | Batch write PnL to Redis | 250ms flush interval |
-| **ReconciliationService** | `reconciliation-service` | Data consistency checks | Every 5 seconds |
-| **ExitEngine** | `exit-engine` | Execute exit orders (idle thread) | On-demand |
+| Service                   | Thread Name              | Responsibility                                                | Frequency                  |
+| ------------------------- | ------------------------ | ------------------------------------------------------------- | -------------------------- |
+| **MarketFeedHub**         | `market-feed-hub`        | WebSocket connection, tick reception, subscription management | Continuous                 |
+| **Signal::Scheduler**     | `signal-scheduler`       | Generate trading signals for indices                          | 30s (configurable)         |
+| **RiskManagerService**    | `risk-manager`           | Monitor positions, enforce exits, update PnL                  | 500ms active / 5000ms idle |
+| **PaperPnlRefresher**     | `paper-pnl-refresher`    | Refresh paper position PnL                                    | 1s (configurable)          |
+| **PnlUpdaterService**     | `pnl-updater-service`    | Batch write PnL to Redis                                      | 250ms flush interval       |
+| **ReconciliationService** | `reconciliation-service` | Data consistency checks                                       | Every 5 seconds            |
+| **ExitEngine**            | `exit-engine`            | Execute exit orders (idle thread)                             | On-demand                  |
 
 ### 2.2 Integrated Services (Event-Driven)
 
-| Service | Trigger | Responsibility |
-|---------|---------|---------------|
-| **ActiveCache** | MarketFeedHub ticks | Update position PnL in-memory, emit events |
-| **PositionSyncService** | Periodic (30s) | Sync positions from DhanHQ to DB |
-| **PositionHeartbeat** | Periodic | Monitor position health |
+| Service                 | Trigger             | Responsibility                             |
+| ----------------------- | ------------------- | ------------------------------------------ |
+| **ActiveCache**         | MarketFeedHub ticks | Update position PnL in-memory, emit events |
+| **PositionSyncService** | Periodic (30s)      | Sync positions from DhanHQ to DB           |
+| **PositionHeartbeat**   | Periodic            | Monitor position health                    |
 
 ### 2.3 Service Dependencies
 
@@ -226,9 +227,9 @@ PnlUpdaterService
 
 ### 3.1 Scheduler Loop
 
-**Service:** `Signal::Scheduler`  
-**File:** `app/services/signal/scheduler.rb`  
-**Thread:** `signal-scheduler`  
+**Service:** `Signal::Scheduler`
+**File:** `app/services/signal/scheduler.rb`
+**Thread:** `signal-scheduler`
 **Frequency:** 30 seconds (`DEFAULT_PERIOD`)
 
 **Process:**
@@ -257,9 +258,12 @@ PnlUpdaterService
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 3.2 Signal Evaluation (Direction-First Path)
+### 3.2 Signal Evaluation (TrendScorer vs Legacy Path)
 
-**When:** `enable_direction_before_chain: true` (feature flag)
+**Toggle:** `enable_trend_scorer` feature flag (new explicit toggle)
+**Legacy Toggle:** `enable_direction_before_chain` (backward compatibility)
+
+**Logic:** If `enable_trend_scorer: false`, TrendScorer is disabled regardless of legacy flag.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -268,15 +272,24 @@ PnlUpdaterService
 │ Step 1: Get Instrument                                      │
 │   instrument = IndexInstrumentCache.instance.get_or_fetch()│
 │                                                             │
-│ Step 2: Direction-First Check (if enabled)                 │
-│   if direction_before_chain_enabled?                        │
+│ Step 2: TrendScorer Path (if enabled)                       │
+│   if trend_scorer_enabled?                                  │
+│     # Check: enable_trend_scorer != false (explicit check)  │
+│     # AND (enable_trend_scorer == true OR                   │
+│     #      enable_direction_before_chain == true)            │
+│                                                             │
 │     trend_result = Signal::TrendScorer.compute_direction()   │
 │       ├── Computes trend_score (0-21)                      │
+│       │   ├── pa_score (0-7): Price action patterns        │
+│       │   ├── ind_score (0-7): Technical indicators        │
+│       │   └── mtf_score (0-7): Multi-timeframe alignment   │
 │       ├── Determines direction (:bullish, :bearish, nil)   │
-│       └── Returns: { trend_score: X, direction: :bullish } │
+│       └── Returns: { trend_score: X, direction: :bullish,   │
+│                     breakdown: { pa: Y, ind: Z, mtf: W } } │
 │                                                             │
-│     min_trend_score = 14.0 (default)                       │
+│     min_trend_score = 14.0 (default, configurable)         │
 │     If trend_score < min_trend_score OR direction nil:      │
+│       → Log warning with breakdown                          │
 │       → Return nil (skip chain analysis)                    │
 │                                                             │
 │     # Direction confirmed - proceed to chain analysis       │
@@ -287,8 +300,15 @@ PnlUpdaterService
 │                                                             │
 │     Return signal hash with candidate                       │
 │                                                             │
-│ Step 3: Legacy Path (if direction-first disabled)         │
+│ Step 3: Legacy Supertrend+ADX Path (if TrendScorer disabled)│
 │   indicator_result = Signal::Engine.analyze_multi_timeframe()│
+│     ├── Checks enable_supertrend_signal flag               │
+│     ├── Checks enable_adx_filter flag                      │
+│     ├── Checks enable_confirmation_timeframe flag          │
+│     ├── Analyzes 1m Supertrend (if enabled)               │
+│     ├── Analyzes ADX strength (if enabled)                 │
+│     └── Analyzes 5m confirmation (if enabled)             │
+│                                                             │
 │   direction = indicator_result[:final_direction]            │
 │   If direction nil or :avoid → return nil                   │
 │   candidate = select_candidate_from_chain()                │
@@ -321,8 +341,8 @@ PnlUpdaterService
 
 ### 4.1 EntryGuard Validation
 
-**Service:** `Entries::EntryGuard`  
-**File:** `app/services/entries/entry_guard.rb`  
+**Service:** `Entries::EntryGuard`
+**File:** `app/services/entries/entry_guard.rb`
 **Method:** `try_enter()`
 
 **Validation Checks (in order):**
@@ -380,8 +400,8 @@ PnlUpdaterService
 
 ### 4.2 EntryManager Processing
 
-**Service:** `Orders::EntryManager`  
-**File:** `app/services/orders/entry_manager.rb`  
+**Service:** `Orders::EntryManager`
+**File:** `app/services/orders/entry_manager.rb`
 **Method:** `process_entry()`
 
 **Complete Flow:**
@@ -448,8 +468,8 @@ PnlUpdaterService
 
 ### 4.3 Capital Allocation
 
-**Service:** `Capital::Allocator`  
-**File:** `app/services/capital/allocator.rb`  
+**Service:** `Capital::Allocator`
+**File:** `app/services/capital/allocator.rb`
 **Method:** `qty_for()`
 
 **Process:**
@@ -482,8 +502,8 @@ PnlUpdaterService
 
 **Dynamic Risk Allocator:**
 
-**Service:** `Capital::DynamicRiskAllocator`  
-**File:** `app/services/capital/dynamic_risk_allocator.rb`  
+**Service:** `Capital::DynamicRiskAllocator`
+**File:** `app/services/capital/dynamic_risk_allocator.rb`
 **Method:** `risk_pct_for()`
 
 ```
@@ -510,8 +530,8 @@ PnlUpdaterService
 
 ### 4.4 ActiveCache Position Addition
 
-**Service:** `Positions::ActiveCache`  
-**File:** `app/services/positions/active_cache.rb`  
+**Service:** `Positions::ActiveCache`
+**File:** `app/services/positions/active_cache.rb`
 **Method:** `add_position()`
 
 **Detailed Process:**
@@ -578,8 +598,8 @@ PnlUpdaterService
 
 ### 5.1 WebSocket Tick Reception
 
-**Service:** `Live::MarketFeedHub`  
-**File:** `app/services/live/market_feed_hub.rb`  
+**Service:** `Live::MarketFeedHub`
+**File:** `app/services/live/market_feed_hub.rb`
 **Thread:** `market-feed-hub`
 
 **Flow:**
@@ -618,8 +638,8 @@ PnlUpdaterService
 
 ### 5.2 ActiveCache Tick Handling
 
-**Service:** `Positions::ActiveCache`  
-**File:** `app/services/positions/active_cache.rb`  
+**Service:** `Positions::ActiveCache`
+**File:** `app/services/positions/active_cache.rb`
 **Method:** `handle_tick()`
 
 **Callback Flow:**
@@ -667,9 +687,9 @@ PnlUpdaterService
 
 ### 6.1 PaperPnlRefresher
 
-**Service:** `Live::PaperPnlRefresher`  
-**File:** `app/services/live/paper_pnl_refresher.rb`  
-**Thread:** `paper-pnl-refresher`  
+**Service:** `Live::PaperPnlRefresher`
+**File:** `app/services/live/paper_pnl_refresher.rb`
+**Thread:** `paper-pnl-refresher`
 **Frequency:** 1 second (configurable via `realtime_interval_seconds`)
 
 **Flow:**
@@ -703,9 +723,9 @@ PnlUpdaterService
 
 ### 6.2 PnlUpdaterService
 
-**Service:** `Live::PnlUpdaterService`  
-**File:** `app/services/live/pnl_updater_service.rb`  
-**Thread:** `pnl-updater-service`  
+**Service:** `Live::PnlUpdaterService`
+**File:** `app/services/live/pnl_updater_service.rb`
+**Thread:** `pnl-updater-service`
 **Frequency:** 250ms flush interval
 
 **Flow:**
@@ -746,8 +766,8 @@ MarketFeedHub.handle_tick()
 
 ### 6.3 RiskManagerService PnL Updates
 
-**Service:** `Live::RiskManagerService`  
-**File:** `app/services/live/risk_manager_service.rb`  
+**Service:** `Live::RiskManagerService`
+**File:** `app/services/live/risk_manager_service.rb`
 **Method:** `update_paper_positions_pnl_if_due()`
 
 **Frequency:** Every 1 minute
@@ -780,10 +800,10 @@ MarketFeedHub.handle_tick()
 
 ### 7.1 RiskManagerService Monitoring Loop
 
-**Service:** `Live::RiskManagerService`  
-**File:** `app/services/live/risk_manager_service.rb`  
-**Thread:** `risk-manager`  
-**Frequency:** 
+**Service:** `Live::RiskManagerService`
+**File:** `app/services/live/risk_manager_service.rb`
+**Thread:** `risk-manager`
+**Frequency:**
 - Active positions: 500ms (`loop_interval_active`)
 - No positions (demand-driven): 5000ms (`loop_interval_idle`)
 
@@ -834,7 +854,7 @@ MarketFeedHub.handle_tick()
 
 ### 7.2 Trailing Processing (Per Position)
 
-**Service:** `Live::RiskManagerService`  
+**Service:** `Live::RiskManagerService`
 **Method:** `process_trailing_for_all_positions()`
 
 **Detailed Flow:**
@@ -950,7 +970,7 @@ MarketFeedHub.handle_tick()
 
 ### 8.2 Guarded Exit Execution
 
-**Service:** `Live::RiskManagerService`  
+**Service:** `Live::RiskManagerService`
 **Method:** `guarded_exit()`
 
 **Flow:**
@@ -973,8 +993,8 @@ MarketFeedHub.handle_tick()
 
 ### 8.3 ExitEngine Execution
 
-**Service:** `Live::ExitEngine`  
-**File:** `app/services/live/exit_engine.rb`  
+**Service:** `Live::ExitEngine`
+**File:** `app/services/live/exit_engine.rb`
 **Method:** `execute_exit()`
 
 **Flow:**
@@ -1048,7 +1068,7 @@ MarketFeedHub.handle_tick()
 
 ### 9.1 Session End Exit
 
-**Service:** `Live::RiskManagerService`  
+**Service:** `Live::RiskManagerService`
 **Method:** `enforce_session_end_exit()`
 
 **Flow:**
@@ -1080,13 +1100,41 @@ MarketFeedHub.handle_tick()
 
 **All Services Check:** `TradingSession::Service.market_closed?`
 
+**Market Close Time:** 3:30 PM IST (`MARKET_CLOSE_HOUR = 15`, `MARKET_CLOSE_MINUTE = 30`)
+
 **Behavior:**
 
-- **Signal::Scheduler:** Skips signal generation
-- **RiskManagerService:** Sleeps 60s if no positions, continues monitoring if positions exist
-- **PaperPnlRefresher:** Sleeps 60s if no positions, continues refresh if positions exist
-- **PnlUpdaterService:** Sleeps 60s if no positions, continues processing if positions exist
-- **ReconciliationService:** Sleeps 60s if no positions, continues reconciliation if positions exist
+- **MarketFeedHub:** Always runs (WebSocket connection maintained)
+  - Resubscribes watchlist items on reconnect
+  - Skips resubscribing active positions when market is closed
+
+- **Signal::Scheduler:**
+  - Skips signal generation if market closed
+  - Sleeps 60s when market closed
+
+- **RiskManagerService:**
+  - Sleeps 60s if market closed AND no active positions
+  - Continues monitoring if positions exist (needed for exits)
+
+- **PaperPnlRefresher:**
+  - Sleeps 60s if market closed AND no active positions
+  - Continues refresh if positions exist (needed for PnL updates)
+
+- **PnlUpdaterService:**
+  - Sleeps 60s if market closed AND no active positions
+  - Continues processing if positions exist
+
+- **ReconciliationService:**
+  - Sleeps 60s if market closed AND no active positions
+  - Continues reconciliation if positions exist
+
+- **PositionHeartbeat:**
+  - Sleeps 60s if market closed AND no active positions
+  - Continues heartbeat if positions exist
+
+**Supervisor Initialization:**
+- If market closed on startup: Only starts `MarketFeedHub` (WebSocket only)
+- If market open on startup: Starts all services
 
 ---
 
@@ -1094,14 +1142,14 @@ MarketFeedHub.handle_tick()
 
 ### 10.1 Service Loop Intervals
 
-| Service | Active Interval | Idle Interval | Config Key |
-|---------|----------------|---------------|------------|
-| **Signal::Scheduler** | 30s | N/A | `DEFAULT_PERIOD` |
-| **RiskManagerService** | 500ms | 5000ms | `risk.loop_interval_active` / `risk.loop_interval_idle` |
-| **PaperPnlRefresher** | 1000ms | 5000ms | `paper_trading.realtime_interval_seconds` / `risk.loop_interval_idle` |
-| **PnlUpdaterService** | 250ms | 60s | `FLUSH_INTERVAL_SECONDS` |
-| **ReconciliationService** | 5s | 60s | `RECONCILIATION_INTERVAL` |
-| **PositionSyncService** | 30s | N/A | `@sync_interval` |
+| Service                   | Active Interval | Idle Interval | Config Key                                                            |
+| ------------------------- | --------------- | ------------- | --------------------------------------------------------------------- |
+| **Signal::Scheduler**     | 30s             | N/A           | `DEFAULT_PERIOD`                                                      |
+| **RiskManagerService**    | 500ms           | 5000ms        | `risk.loop_interval_active` / `risk.loop_interval_idle`               |
+| **PaperPnlRefresher**     | 1000ms          | 5000ms        | `paper_trading.realtime_interval_seconds` / `risk.loop_interval_idle` |
+| **PnlUpdaterService**     | 250ms           | 60s           | `FLUSH_INTERVAL_SECONDS`                                              |
+| **ReconciliationService** | 5s              | 60s           | `RECONCILIATION_INTERVAL`                                             |
+| **PositionSyncService**   | 30s             | N/A           | `@sync_interval`                                                      |
 
 ### 10.2 Demand-Driven Behavior
 
@@ -1125,7 +1173,7 @@ ActiveSupport::Notifications.subscribe('positions.removed') { wake_up! }
 
 ### 11.1 RedisPnlCache
 
-**Service:** `Live::RedisPnlCache`  
+**Service:** `Live::RedisPnlCache`
 **Key Format:** `pnl:tracker:#{tracker_id}`
 
 **Data Structure:**
@@ -1154,7 +1202,7 @@ ActiveSupport::Notifications.subscribe('positions.removed') { wake_up! }
 
 ### 11.2 RedisTickCache
 
-**Service:** `Live::RedisTickCache`  
+**Service:** `Live::RedisTickCache`
 **Key Format:** `tick:#{segment}:#{security_id}`
 
 **Data Structure:**
@@ -1178,7 +1226,7 @@ ActiveSupport::Notifications.subscribe('positions.removed') { wake_up! }
 
 ### 11.3 Peak Profit Cache
 
-**Service:** `Positions::ActiveCache`  
+**Service:** `Positions::ActiveCache`
 **Key Format:** `peak_profit:tracker:#{tracker_id}`
 
 **Data Structure:**
@@ -1210,12 +1258,12 @@ ActiveSupport::Notifications.subscribe('positions.removed') { wake_up! }
 
 **Methods:**
 
-| Method | Purpose | Time Range |
-|--------|---------|------------|
-| `entry_allowed?` | Check if entry is allowed | 9:20 AM - 3:15 PM IST |
-| `should_force_exit?` | Check if exit should be forced | After 3:15 PM IST |
-| `market_closed?` | Check if market is closed | After 3:30 PM IST |
-| `in_session?` | Check if in trading session | 9:20 AM - 3:15 PM IST |
+| Method               | Purpose                        | Time Range            |
+| -------------------- | ------------------------------ | --------------------- |
+| `entry_allowed?`     | Check if entry is allowed      | 9:20 AM - 3:15 PM IST |
+| `should_force_exit?` | Check if exit should be forced | After 3:15 PM IST     |
+| `market_closed?`     | Check if market is closed      | After 3:30 PM IST     |
+| `in_session?`        | Check if in trading session    | 9:20 AM - 3:15 PM IST |
 
 **Time Constants:**
 
@@ -1300,9 +1348,14 @@ return unless session_check[:should_exit]
          │         │
          │         ├──→ TradingSession.market_closed? → Skip
          │         │
-         │         ├──→ TrendScorer.compute_direction()
+         │         ├──→ Check enable_trend_scorer flag
          │         │         │
-         │         │         └──→ If trend_score < 14: SKIP
+         │         │         ├──→ If enabled: TrendScorer.compute_direction()
+         │         │         │         │
+         │         │         │         └──→ If trend_score < 14: SKIP
+         │         │         │
+         │         │         └──→ If disabled: Signal::Engine.analyze_multi_timeframe()
+         │         │                   (Legacy Supertrend+ADX path)
          │         │
          │         ├──→ ChainAnalyzer.select_candidates()
          │         │
@@ -1402,6 +1455,80 @@ return unless session_check[:should_exit]
 
 ---
 
-**Document Version:** 2.0  
-**Last Updated:** Based on actual codebase analysis  
+---
+
+## 13. Redis UI
+
+### 13.1 Overview
+
+**Controller:** `RedisUiController`
+**File:** `app/controllers/redis_ui_controller.rb`
+**View:** `app/views/redis_ui/index.html.erb`
+**Route:** `/redis_ui` (development only)
+
+**Purpose:** Web interface for browsing and managing Redis keys in development environment.
+
+### 13.2 Features
+
+**Key Browsing:**
+- Pattern-based search (e.g., `pnl:*`, `tick:*`, `*`)
+- Database selection (0-15)
+- Pagination support (SCAN cursor-based)
+- Key type detection (string, hash, list, set, zset)
+- TTL display
+
+**Live Tables:**
+- **PnL Keys Table:** Auto-refreshes every 2 seconds
+  - Displays: Key, PnL (₹), PnL %, LTP, HWM, Updated, Actions
+  - Color-coded: Green for positive, red for negative
+
+- **Tick Keys Table:** Auto-refreshes every 2 seconds
+  - Displays: Key, LTP, Volume, Timestamp, Updated, Actions
+
+- **All Keys Table:** Configurable refresh interval (2s, 5s, 10s, 30s, 60s)
+  - Displays: Key, Type, Size/Count, TTL, Actions
+
+**Key Operations:**
+- View key details (modal popup with full value)
+- Delete keys (with confirmation)
+- Redis server info display
+
+### 13.3 Security
+
+**Access Control:**
+- Only available in `Rails.env.development?`
+- Returns 403 Forbidden in production
+
+**Implementation:**
+```ruby
+before_action :ensure_development
+
+def ensure_development
+  return if Rails.env.development?
+  render json: { error: 'Redis UI is only available in development' }, status: :forbidden
+end
+```
+
+### 13.4 Configuration
+
+**Routes (development only):**
+```ruby
+if Rails.env.development?
+  get 'redis_ui', to: 'redis_ui#index'
+  get 'redis_ui/info', to: 'redis_ui#info'
+  get 'redis_ui/:id', to: 'redis_ui#show', as: :redis_ui_key
+  delete 'redis_ui/:id', to: 'redis_ui#destroy'
+end
+```
+
+**ActionView Requirement:**
+- Conditionally enabled in `config/application.rb`:
+  ```ruby
+  require "action_view/railtie" if Rails.env.development?
+  ```
+
+---
+
+**Document Version:** 2.1
+**Last Updated:** 2025-01-16 - Added TrendScorer toggle, market close checks, Redis UI
 **Repository:** https://github.com/shubhamtaywade82/algo_scalper_api/tree/new_trailing

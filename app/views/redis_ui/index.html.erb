@@ -184,13 +184,14 @@
             <th>PnL (₹)</th>
             <th>PnL %</th>
             <th>LTP</th>
-            <th>HWM</th>
+            <th>HWM (₹)</th>
+            <th>HWM %</th>
             <th>Updated</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody id="pnl-table-body">
-          <tr><td colspan="7" style="text-align: center; padding: 20px;">Loading...</td></tr>
+          <tr><td colspan="8" style="text-align: center; padding: 20px;">Loading...</td></tr>
         </tbody>
       </table>
     </div>
@@ -322,7 +323,7 @@
         .then(data => {
           if (data.error) {
             document.getElementById('pnl-table-body').innerHTML =
-              '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #f48771;">Error: ' + escapeHtml(data.error) + '</td></tr>';
+              '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #f48771;">Error: ' + escapeHtml(data.error) + '</td></tr>';
             return;
           }
           renderPnLKeys(data.keys);
@@ -330,14 +331,14 @@
         })
         .catch(e => {
           document.getElementById('pnl-table-body').innerHTML =
-            '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #f48771;">Error loading PnL keys</td></tr>';
+            '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #f48771;">Error loading PnL keys</td></tr>';
         });
     }
 
     function renderPnLKeys(keys) {
       const tbody = document.getElementById('pnl-table-body');
       if (keys.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">No PnL keys found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No PnL keys found</td></tr>';
         return;
       }
 
@@ -351,13 +352,14 @@
       )).then(results => {
         tbody.innerHTML = results.map(({ key, data }) => {
           if (!data || data.error) {
-            return `<tr><td>${escapeHtml(key)}</td><td colspan="6" style="color: #f48771;">Error loading data</td></tr>`;
+            return `<tr><td>${escapeHtml(key)}</td><td colspan="8" style="color: #f48771;">Error loading data</td></tr>`;
           }
           const value = data.value || {};
           const pnl = parseFloat(value.pnl || value['pnl'] || 0);
           const pnlPct = parseFloat(value.pnl_pct || value['pnl_pct'] || 0);
           const ltp = parseFloat(value.ltp || value['ltp'] || 0);
           const hwm = parseFloat(value.hwm_pnl || value['hwm_pnl'] || 0);
+          const hwmPct = parseFloat(value.hwm_pnl_pct || value['hwm_pnl_pct'] || 0);
           const updatedAt = value.updated_at || value['updated_at'] || value.timestamp || value['timestamp'];
           const updatedTime = updatedAt ? new Date(updatedAt * 1000).toLocaleTimeString() : 'N/A';
 
@@ -368,6 +370,7 @@
               <td style="color: ${pnlPct >= 0 ? '#4ec9b0' : '#f48771'}">${pnlPct.toFixed(2)}%</td>
               <td>₹${ltp.toFixed(2)}</td>
               <td style="color: #dcdcaa">₹${hwm.toFixed(2)}</td>
+              <td style="color: #dcdcaa">${hwmPct.toFixed(2)}%</td>
               <td style="color: #858585; font-size: 12px;">${updatedTime}</td>
               <td>
                 <button onclick="showKey('${key.replace(/'/g, "\\'")}')">View</button>

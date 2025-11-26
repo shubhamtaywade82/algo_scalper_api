@@ -507,6 +507,7 @@ module Entries
           pnl_pct: 0.0,
           ltp: ltp,
           hwm: initial_pnl,
+          hwm_pnl_pct: 0.0,
           timestamp: Time.current,
           tracker: tracker
         )
