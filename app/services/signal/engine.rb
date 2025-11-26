@@ -50,6 +50,11 @@ module Signal
         # Check if modular indicator system is enabled
         use_multi_indicator = signals_cfg.fetch(:use_multi_indicator_strategy, false)
 
+        # Load common config variables (needed for confirmation timeframe)
+        supertrend_cfg = signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }
+        adx_cfg = signals_cfg[:adx] || {}
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
+
         # Use strategy-based analysis if recommendation is available and enabled
         if use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
           primary_analysis = analyze_with_recommended_strategy(
@@ -68,14 +73,10 @@ module Signal
           )
         elsif enable_supertrend_signal
           # Traditional Supertrend + ADX analysis (1m signal)
-          supertrend_cfg = signals_cfg[:supertrend]
           unless supertrend_cfg
             Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
             return
           end
-
-          adx_cfg = signals_cfg[:adx] || {}
-          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
 
           # Get per-index ADX thresholds (if specified) or fall back to global
           index_adx_thresholds = index_cfg[:adx_thresholds] || {}
@@ -105,9 +106,9 @@ module Signal
         final_direction = primary_analysis[:direction]
         confirmation_analysis = nil
 
-        # Skip confirmation timeframe when using strategy recommendations
-        # (strategies were backtested as standalone systems)
-        if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended])
+        # Skip confirmation timeframe when using strategy recommendations or multi-indicator system
+        # (strategies were backtested as standalone systems, multi-indicator can combine indicators internally)
+        if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]) && !use_multi_indicator
           mode_config = get_validation_mode_config
 
           # Get per-index ADX thresholds (if specified) or fall back to global
@@ -142,6 +143,8 @@ module Signal
           # Rails.logger.info("[Signal] Multi-timeframe decision for #{index_cfg[:key]}: primary=#{primary_analysis[:direction]} confirmation=#{confirmation_analysis[:direction]} final=#{final_direction}")
         elsif confirmation_tf.present? && use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
           Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using strategy recommendation: #{strategy_recommendation[:strategy_name]})")
+        elsif confirmation_tf.present? && use_multi_indicator
+          Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using multi-indicator system - indicators can be combined via confirmation_mode)")
         end
 
         if final_direction == :avoid
