@@ -132,16 +132,18 @@ module Signal
       end
 
       # Step 1: Check direction-first if enabled (before chain analysis)
-      if direction_before_chain_enabled?
+      if trend_scorer_enabled?
         trend_result = Signal::TrendScorer.compute_direction(index_cfg: index_cfg)
         trend_score = trend_result[:trend_score]
         direction = trend_result[:direction]
+        breakdown = trend_result[:breakdown]
 
         min_trend_score = signal_config.dig(:trend_scorer, :min_trend_score) || 14.0
         if trend_score.nil? || trend_score < min_trend_score || direction.nil?
-          Rails.logger.debug(
+          Rails.logger.warn(
             "[SignalScheduler] Skipping #{index_cfg[:key]} - trend_score=#{trend_score} " \
-            "direction=#{direction} (min=#{min_trend_score})"
+            "direction=#{direction} (min=#{min_trend_score}) " \
+            "breakdown=#{breakdown.inspect}"
           )
           return nil
         end
@@ -225,8 +227,12 @@ module Signal
       AlgoConfig.fetch[:signals] || {}
     end
 
-    def direction_before_chain_enabled?
-      feature_flags[:enable_direction_before_chain] == true
+    def trend_scorer_enabled?
+      # If enable_trend_scorer is explicitly set to false, disable TrendScorer regardless of legacy flag
+      return false if feature_flags[:enable_trend_scorer] == false
+
+      # Otherwise, check enable_trend_scorer (new explicit toggle) OR enable_direction_before_chain (legacy)
+      feature_flags[:enable_trend_scorer] == true || feature_flags[:enable_direction_before_chain] == true
     end
 
     def feature_flags

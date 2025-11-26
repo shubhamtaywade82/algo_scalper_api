@@ -4,6 +4,7 @@ paper_trading:
 
 feature_flags:
   enable_direction_before_chain: true
+  enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
   enable_auto_subscribe_unsubscribe: true
   enable_demand_driven_services: true
   enable_underlying_aware_exits: false

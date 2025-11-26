@@ -14,11 +14,12 @@ module Signal
     def self.compute_direction(index_cfg:, primary_tf: '1m', confirmation_tf: '5m',
                                bullish_threshold: 14.0, bearish_threshold: 7.0)
       instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-      return { direction: nil, trend_score: nil } unless instrument
+      return { direction: nil, trend_score: nil, breakdown: nil } unless instrument
 
       scorer = new(instrument: instrument, primary_tf: primary_tf, confirmation_tf: confirmation_tf)
       result = scorer.compute_trend_score
       score = result[:trend_score].to_f
+      breakdown = result[:breakdown]
 
       direction =
         if score >= bullish_threshold
@@ -29,10 +30,16 @@ module Signal
           nil
         end
 
-      { direction: direction, trend_score: score }
+      Rails.logger.debug do
+        "[TrendScorer] #{index_cfg[:key]}: score=#{score.round(1)}, direction=#{direction}, " \
+          "breakdown=pa:#{breakdown[:pa]}, ind:#{breakdown[:ind]}, mtf:#{breakdown[:mtf]}"
+      end
+
+      { direction: direction, trend_score: score, breakdown: breakdown }
     rescue StandardError => e
       Rails.logger.error("[TrendScorer] compute_direction error: #{e.class} - #{e.message}")
-      { direction: nil, trend_score: nil }
+      Rails.logger.error("[TrendScorer] Backtrace: #{e.backtrace.first(5).join(', ')}")
+      { direction: nil, trend_score: nil, breakdown: nil }
     end
 
     def initialize(instrument:, primary_tf: '1m', confirmation_tf: '5m')
@@ -88,7 +95,11 @@ module Signal
     def get_series(interval)
       return nil unless @instrument.respond_to?(:candle_series)
 
-      @instrument.candle_series(interval: interval)
+      series = @instrument.candle_series(interval: interval)
+      if series.nil? || series.candles.blank?
+        Rails.logger.warn("[TrendScorer] No candle data for #{@instrument.symbol_name} @ #{interval}")
+      end
+      series
     end
 
     # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
