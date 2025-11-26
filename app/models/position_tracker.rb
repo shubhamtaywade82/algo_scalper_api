@@ -88,7 +88,8 @@ class PositionTracker < ApplicationRecord
 
       active_count = active.count
       realized_pnl_rupees = exited.sum { |t| t.last_pnl_rupees.to_f }
-      unrealized_pnl_rupees = active.sum { |t| t.last_pnl_rupees.to_f }
+      # Use current_pnl_rupees for active positions (reads from Redis cache for live values)
+      unrealized_pnl_rupees = active.sum { |t| t.current_pnl_rupees.to_f }
 
       total_pnl_rupees = realized_pnl_rupees + unrealized_pnl_rupees
 

@@ -4,9 +4,13 @@
 # RUN ONLY INSIDE PUMA/RAILS WEB SERVER (bin/dev or rails s)
 # --------------------------------------------------------------------
 
+# Detect if running in rake task
+is_rake_task = defined?(Rake) && Rake.application.top_level_tasks.any?
+
 if Rails.env.test? ||
   defined?(Rails::Console) ||
   (defined?(Rails::Generators) && Rails::Generators.const_defined?(:Base)) ||
+  is_rake_task ||
   ENV['BACKTEST_MODE'] == '1' ||
   ENV['SCRIPT_MODE'] == '1' ||
   ENV['DISABLE_TRADING_SERVICES'] == '1'
@@ -16,7 +20,7 @@ end
 # bin/dev uses Puma, not Rails::Server
 # Skip if running as script (rails runner) or in backtest/script mode
 is_runner = $PROGRAM_NAME.include?('runner') || File.basename($PROGRAM_NAME) == 'runner'
-skip_services = is_runner || ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1' || ENV['DISABLE_TRADING_SERVICES'] == '1'
+skip_services = is_rake_task || is_runner || ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1' || ENV['DISABLE_TRADING_SERVICES'] == '1'
 
 is_web_process =
   $PROGRAM_NAME.include?('puma') ||
