@@ -120,8 +120,8 @@ namespace :trading do
         puts format('%-30s | %15.2f | %15.2f', 'Realized PnL', stats[:realized_pnl_rupees], stats[:realized_pnl_pct])
         puts format('%-30s | %15.2f | %15.2f', 'Unrealized PnL', stats[:unrealized_pnl_rupees], stats[:unrealized_pnl_pct])
         puts format('%-30s | %15s | %15.2f', 'Win Rate', '-', stats[:win_rate])
-        puts format('%-30s | %15.2f | %15.2f', 'Avg Realized PnL %', '-', stats[:avg_realized_pnl_pct])
-        puts format('%-30s | %15.2f | %15.2f', 'Avg Unrealized PnL %', '-', stats[:avg_unrealized_pnl_pct])
+        puts format('%-30s | %15s | %15.2f', 'Avg Realized PnL %', '-', stats[:avg_realized_pnl_pct])
+        puts format('%-30s | %15s | %15.2f', 'Avg Unrealized PnL %', '-', stats[:avg_unrealized_pnl_pct])
         puts format('%-30s | %15s | %15s', 'Winners', stats[:winners].to_s, '-')
         puts format('%-30s | %15s | %15s', 'Losers', stats[:losers].to_s, '-')
         puts '=' * 80
