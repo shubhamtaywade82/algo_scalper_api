@@ -1,8 +1,24 @@
-# Complete System Flow: From Initializer to Exit
+# Complete System Flow: From Initializer to Exit/EOD
 
-## Overview
+**Last Updated:** Based on actual codebase analysis  
+**Repository:** https://github.com/shubhamtaywade82/algo_scalper_api/tree/new_trailing
 
-This document provides a complete, detailed flow of the NEMESIS V3 trading system from Rails initialization through position exit, including all service interactions, data flows, and decision points.
+---
+
+## Table of Contents
+
+1. [System Initialization](#1-system-initialization)
+2. [Service Responsibilities](#2-service-responsibilities)
+3. [Signal Generation Flow](#3-signal-generation-flow)
+4. [Entry Flow](#4-entry-flow)
+5. [Market Data Flow](#5-market-data-flow)
+6. [PnL Update Flow](#6-pnl-update-flow)
+7. [Risk Management Flow](#7-risk-management-flow)
+8. [Exit Flow](#8-exit-flow)
+9. [EOD Handling](#9-eod-handling)
+10. [Service Intervals & Frequencies](#10-service-intervals--frequencies)
+11. [Redis Cache Architecture](#11-redis-cache-architecture)
+12. [Session Checks](#12-session-checks)
 
 ---
 
@@ -25,7 +41,7 @@ This document provides a complete, detailed flow of the NEMESIS V3 trading syste
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 2. Initializers Load (config/initializers/*.rb)           │
-│    - algo_config.rb: Loads config/algo.yml                │
+│    - algo_config.rb: Loads config/algo.yml                 │
 │    - dhanhq_config.rb: Configures DhanHQ client             │
 │    - cors.rb: CORS configuration                            │
 │    - filter_parameter_logging.rb: Log filtering            │
@@ -34,14 +50,14 @@ This document provides a complete, detailed flow of the NEMESIS V3 trading syste
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 3. Trading Supervisor Initializer                          │
-│    File: config/initializers/trading_supervisor.rb         │
+│    File: config/initializers/trading_supervisor.rb          │
 │                                                             │
-│    Checks:                                                  │
-│    - Skip if Rails.env.test?                               │
-│    - Skip if Rails::Console defined                         │
-│    - Skip if BACKTEST_MODE=1 or SCRIPT_MODE=1              │
-│    - Skip if DISABLE_TRADING_SERVICES=1                    │
-│    - Only run in web process (puma/rails server)           │
+│    Skip Conditions:                                         │
+│    - Rails.env.test?                                        │
+│    - Rails::Console defined                                 │
+│    - BACKTEST_MODE=1 or SCRIPT_MODE=1                      │
+│    - DISABLE_TRADING_SERVICES=1                            │
+│    - Not a web process (puma/rails server)                 │
 └───────────────────────┬─────────────────────────────────────┘
                         │
                         ▼
@@ -52,13 +68,12 @@ This document provides a complete, detailed flow of the NEMESIS V3 trading syste
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 1.2 Service Registration
+### 1.2 Service Registration Order
 
-**File:** `config/initializers/trading_supervisor.rb`
-
-**Services Registered (in order):**
+**File:** `config/initializers/trading_supervisor.rb:147-159`
 
 ```ruby
+# Service Registration (in order):
 supervisor.register(:market_feed, MarketFeedHubService.new)
 supervisor.register(:signal_scheduler, Signal::Scheduler.new)
 supervisor.register(:risk_manager, Live::RiskManagerService.new(exit_engine: exit_engine))
@@ -78,9 +93,9 @@ ExitEngine ← OrderRouter
      └── RiskManagerService (receives exit_engine)
 ```
 
-### 1.3 Service Startup Sequence
+### 1.3 Conditional Startup
 
-**Conditional Startup:**
+**Market Status Check:** `TradingSession::Service.market_closed?`
 
 ```ruby
 if TradingSession::Service.market_closed?
@@ -92,42 +107,51 @@ else
 end
 ```
 
-**Startup Order (when market is open):**
+**Startup Sequence (when market is open):**
 
 ```
 1. MarketFeedHub (WebSocket connection)
    └── Subscribes to watchlist (indices: NIFTY, BANKNIFTY, SENSEX)
+   └── Thread: 'market-feed-hub'
    
 2. ActiveCache
    └── Starts → subscribes to MarketFeedHub callbacks
    └── Reloads peak values from Redis
+   └── Thread: N/A (event-driven callbacks)
    
 3. Signal::Scheduler
    └── Starts periodic loop (default: 30s interval)
+   └── Thread: 'signal-scheduler'
    
 4. RiskManagerService
    └── Starts monitoring loop (default: 5s interval, demand-driven)
+   └── Thread: 'risk-manager'
+   └── Watchdog thread: 'risk-manager-watchdog' (restarts if dead)
    
 5. PositionHeartbeat
    └── Starts heartbeat monitoring
+   └── Thread: 'position-heartbeat'
    
 6. OrderRouter
    └── Initializes (no background thread)
    
 7. PaperPnlRefresher
    └── Starts PnL refresh loop (if paper trading enabled)
+   └── Thread: 'paper-pnl-refresher'
    
 8. ExitEngine
    └── Starts idle thread (waits for exit requests)
+   └── Thread: 'exit-engine'
    
 9. ReconciliationService
-   └── Starts reconciliation loop
+   └── Starts reconciliation loop (every 5 seconds)
+   └── Thread: 'reconciliation-service'
 ```
 
 **Active Position Resubscription:**
 
 ```ruby
-# After all services started
+# After all services started (if market is open)
 active_pairs = Live::PositionIndex.instance.all_keys.map do |k|
   seg, sid = k.split(':', 2)
   { segment: seg, security_id: sid }
@@ -138,20 +162,80 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 
 ---
 
-## 2. Signal Generation Flow
+## 2. Service Responsibilities
 
-### 2.1 Scheduler Loop
+### 2.1 Independent Services (Run Continuously)
 
-**Service:** `Signal::Scheduler`
+| Service | Thread Name | Responsibility | Frequency |
+|---------|-------------|---------------|-----------|
+| **MarketFeedHub** | `market-feed-hub` | WebSocket connection, tick reception, subscription management | Continuous |
+| **Signal::Scheduler** | `signal-scheduler` | Generate trading signals for indices | 30s (configurable) |
+| **RiskManagerService** | `risk-manager` | Monitor positions, enforce exits, update PnL | 500ms active / 5000ms idle |
+| **PaperPnlRefresher** | `paper-pnl-refresher` | Refresh paper position PnL | 1s (configurable) |
+| **PnlUpdaterService** | `pnl-updater-service` | Batch write PnL to Redis | 250ms flush interval |
+| **ReconciliationService** | `reconciliation-service` | Data consistency checks | Every 5 seconds |
+| **ExitEngine** | `exit-engine` | Execute exit orders (idle thread) | On-demand |
 
-**Loop Frequency:** 30 seconds (configurable via `DEFAULT_PERIOD`)
+### 2.2 Integrated Services (Event-Driven)
+
+| Service | Trigger | Responsibility |
+|---------|---------|---------------|
+| **ActiveCache** | MarketFeedHub ticks | Update position PnL in-memory, emit events |
+| **PositionSyncService** | Periodic (30s) | Sync positions from DhanHQ to DB |
+| **PositionHeartbeat** | Periodic | Monitor position health |
+
+### 2.3 Service Dependencies
+
+```
+MarketFeedHub
+  ├──→ ActiveCache (via callbacks)
+  ├──→ TickCache (in-memory storage)
+  └──→ RedisTickCache (persistent storage)
+
+Signal::Scheduler
+  ├──→ TrendScorer (direction calculation)
+  ├──→ ChainAnalyzer (option selection)
+  ├──→ EntryGuard (validation)
+  └──→ EntryManager (order placement)
+
+RiskManagerService
+  ├──→ ActiveCache (position data)
+  ├──→ RedisPnlCache (PnL data)
+  ├──→ UnderlyingMonitor (underlying health)
+  ├──→ TrailingEngine (trailing stops)
+  └──→ ExitEngine (exit execution)
+
+EntryManager
+  ├──→ Capital::Allocator (quantity calculation)
+  ├──→ Capital::DynamicRiskAllocator (risk %)
+  ├──→ EntryGuard (validation)
+  ├──→ ActiveCache (add position)
+  └──→ MarketFeedHub (subscribe instrument)
+
+PaperPnlRefresher
+  ├──→ TickCache (LTP lookup)
+  └──→ RedisPnlCache (store PnL)
+
+PnlUpdaterService
+  └──→ RedisPnlCache (batch write)
+```
+
+---
+
+## 3. Signal Generation Flow
+
+### 3.1 Scheduler Loop
+
+**Service:** `Signal::Scheduler`  
+**File:** `app/services/signal/scheduler.rb`  
+**Thread:** `signal-scheduler`  
+**Frequency:** 30 seconds (`DEFAULT_PERIOD`)
 
 **Process:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Signal::Scheduler.start()                                  │
-│   Thread: 'signal-scheduler'                              │
 │                                                             │
 │   Loop:                                                    │
 │     For each index (NIFTY, BANKNIFTY, SENSEX):            │
@@ -165,17 +249,17 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 ┌─────────────────────────────────────────────────────────────┐
 │ process_index(index_cfg)                                    │
 │                                                             │
-│   1. evaluate_supertrend_signal(index_cfg)                 │
+│   1. TradingSession::Service.market_closed? → return      │
+│   2. evaluate_supertrend_signal(index_cfg)                 │
 │      Returns: signal hash or nil                           │
-│                                                             │
-│   2. If signal present:                                    │
+│   3. If signal present:                                    │
 │      process_signal(index_cfg, signal)                     │
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 2.2 Signal Evaluation (Direction-First Path)
+### 3.2 Signal Evaluation (Direction-First Path)
 
-**When:** `enable_direction_before_chain: true`
+**When:** `enable_direction_before_chain: true` (feature flag)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -185,37 +269,34 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │   instrument = IndexInstrumentCache.instance.get_or_fetch()│
 │                                                             │
 │ Step 2: Direction-First Check (if enabled)                 │
-│   trend_result = Signal::TrendScorer.compute_direction()   │
-│     ├── Computes trend_score (0-21)                        │
-│     ├── Determines direction (:bullish, :bearish, nil)     │
-│     └── Returns: { trend_score: X, direction: :bullish }   │
+│   if direction_before_chain_enabled?                        │
+│     trend_result = Signal::TrendScorer.compute_direction()   │
+│       ├── Computes trend_score (0-21)                      │
+│       ├── Determines direction (:bullish, :bearish, nil)   │
+│       └── Returns: { trend_score: X, direction: :bullish } │
 │                                                             │
-│   If trend_score < min_trend_score (14) OR direction nil:  │
-│     → Return nil (skip chain analysis)                      │
+│     min_trend_score = 14.0 (default)                       │
+│     If trend_score < min_trend_score OR direction nil:      │
+│       → Return nil (skip chain analysis)                    │
 │                                                             │
-│ Step 3: Chain Analysis (only if direction confirmed)       │
+│     # Direction confirmed - proceed to chain analysis       │
+│     candidate = select_candidate_from_chain()              │
+│       ├── Options::ChainAnalyzer.new()                     │
+│       ├── analyzer.select_candidates(limit: 2, direction)    │
+│       └── Returns: candidate hash                          │
+│                                                             │
+│     Return signal hash with candidate                       │
+│                                                             │
+│ Step 3: Legacy Path (if direction-first disabled)         │
+│   indicator_result = Signal::Engine.analyze_multi_timeframe()│
+│   direction = indicator_result[:final_direction]            │
+│   If direction nil or :avoid → return nil                   │
 │   candidate = select_candidate_from_chain()                │
-│     ├── Options::ChainAnalyzer.new()                       │
-│     ├── analyzer.select_candidates(limit: 2, direction)     │
-│     └── Returns: candidate hash                            │
-│                                                             │
-│ Step 4: Build Signal Hash                                  │
-│   {                                                         │
-│     segment: candidate[:segment],                          │
-│     security_id: candidate[:security_id],                  │
-│     reason: 'trend_scorer_direction',                       │
-│     meta: {                                                 │
-│       candidate_symbol: candidate[:symbol],                │
-│       lot_size: candidate[:lot_size],                      │
-│       direction: direction,                                 │
-│       trend_score: trend_score,                             │
-│       source: 'trend_scorer'                                │
-│     }                                                       │
-│   }                                                         │
+│   Return signal hash                                       │
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 2.3 Signal Processing
+### 3.3 Signal Processing
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -224,46 +305,84 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │   1. Extract pick/candidate from signal                     │
 │   2. Determine direction (from signal or config)           │
 │   3. Call EntryGuard.try_enter()                           │
-│      ├── Validates entry (cooldown, limits, etc.)         │
-│      ├── Calls Orders::EntryManager.process_entry()        │
-│      └── Returns: true if entry successful                 │
+│      ├── Validates entry (cooldown, limits, exposure)     │
+│      ├── Places order (paper/live)                         │
+│      ├── Creates PositionTracker                           │
+│      └── Calls EntryManager.process_entry()                 │
+│                                                             │
+│   4. If EntryGuard returns false:                          │
+│      → Log warning, skip entry                             │
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Entry Flow
+## 4. Entry Flow
 
-### 3.1 EntryGuard Validation
+### 4.1 EntryGuard Validation
 
-**Service:** `Entries::EntryGuard`
+**Service:** `Entries::EntryGuard`  
+**File:** `app/services/entries/entry_guard.rb`  
+**Method:** `try_enter()`
 
-**Validation Checks:**
+**Validation Checks (in order):**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Entries::EntryGuard.try_enter()                            │
 │                                                             │
-│   1. Check cooldown period                                 │
-│      → Skip if index in cooldown                           │
+│   1. Find Instrument                                        │
+│      → Skip if instrument not found                        │
 │                                                             │
-│   2. Check daily trade limits                              │
-│      → Skip if max_trades_per_day reached                  │
+│   2. Trading Session Check                                 │
+│      TradingSession::Service.entry_allowed?                │
+│      → Skip if before 9:20 AM or after 3:15 PM IST        │
 │                                                             │
-│   3. Check exposure limits                                 │
+│   3. Daily Limits Check                                     │
+│      Live::DailyLimits.can_trade?(index_key:)              │
+│      → Skip if daily_loss limit reached                    │
+│      → Skip if daily_trades limit reached                  │
+│                                                             │
+│   4. Exposure Check                                         │
+│      exposure_ok?(instrument:, side:, max_same_side:)     │
 │      → Skip if max_same_side positions reached             │
+│      → Check pyramiding rules if second position           │
 │                                                             │
-│   4. Check capital allocation                              │
-│      → Calculate risk_pct via DynamicRiskAllocator         │
+│   5. Cooldown Check                                         │
+│      cooldown_active?(symbol, cooldown_sec)                │
+│      → Skip if symbol in cooldown period                   │
 │                                                             │
-│   5. If all checks pass:                                   │
-│      → Call Orders::EntryManager.process_entry()           │
+│   6. LTP Resolution                                         │
+│      → Try WebSocket TickCache first                        │
+│      → Fallback to REST API if WS unavailable              │
+│      → Skip if LTP invalid                                 │
+│                                                             │
+│   7. Quantity Calculation                                   │
+│      Capital::Allocator.qty_for()                          │
+│      → Calculate based on risk_pct and lot_size            │
+│      → Auto-paper fallback if insufficient live balance   │
+│                                                             │
+│   8. Segment Validation                                     │
+│      → Skip if segment not tradable (indices)              │
+│                                                             │
+│   9. Order Placement                                        │
+│      If paper_mode:                                         │
+│        → create_paper_tracker!()                           │
+│      Else:                                                  │
+│        → Orders.config.place_market()                      │
+│        → create_tracker!()                                  │
+│                                                             │
+│   10. Post-Entry Wiring                                     │
+│       post_entry_wiring(tracker:, side:, index_cfg:)       │
+│       → Calls EntryManager.process_entry()                 │
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 3.2 EntryManager Processing
+### 4.2 EntryManager Processing
 
-**Service:** `Orders::EntryManager`
+**Service:** `Orders::EntryManager`  
+**File:** `app/services/orders/entry_manager.rb`  
+**Method:** `process_entry()`
 
 **Complete Flow:**
 
@@ -277,34 +396,39 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │ Step 2: Dynamic Risk Allocation                            │
 │   risk_pct = Capital::DynamicRiskAllocator.risk_pct_for()  │
 │     ├── Uses trend_score from signal                       │
-│     └── Returns: risk_pct (0.01 - 0.02)                    │
+│     ├── Scales base_risk by trend_score (0-21)            │
+│     └── Returns: risk_pct (0.01 - 0.10)                    │
 │                                                             │
 │ Step 3: Entry Validation                                   │
 │   Entries::EntryGuard.try_enter()                          │
 │     ├── Validates cooldown, limits, exposure               │
-│     └── Places order via Orders::Placer                   │
+│     ├── Places order via Orders::Placer                    │
+│     └── Creates PositionTracker                            │
 │                                                             │
-│ Step 4: Find PositionTracker                              │
+│ Step 4: Find PositionTracker                                │
 │   tracker = find_tracker_for_pick(pick, index_cfg)         │
 │     └── Finds most recent active tracker                   │
 │                                                             │
-│ Step 5: Calculate SL/TP                                    │
+│ Step 5: Validate Quantity                                   │
+│   → Reject if quantity < 1 lot-equivalent                  │
+│                                                             │
+│ Step 6: Calculate SL/TP                                     │
 │   sl_price, tp_price = calculate_sl_tp(entry_price, dir)  │
 │     ├── Bullish: SL = entry * 0.70, TP = entry * 1.60    │
 │     └── Bearish: SL = entry * 1.30, TP = entry * 0.50    │
 │                                                             │
-│ Step 6: Add to ActiveCache                                  │
-│   position_data = ActiveCache.add_position(                 │
+│ Step 7: Add to ActiveCache                                  │
+│   position_data = @active_cache.add_position(              │
 │     tracker: tracker,                                       │
 │     sl_price: sl_price,                                     │
 │     tp_price: tp_price                                      │
 │   )                                                         │
 │     ├── Creates PositionData struct                        │
 │     ├── Attaches underlying metadata                       │
-│     ├── Subscribes to MarketFeedHub (if auto enabled)     │
+│     ├── Auto-subscribes to MarketFeedHub (if enabled)     │
 │     └── Emits 'positions.added' event                      │
 │                                                             │
-│ Step 7: Place Bracket Orders                               │
+│ Step 8: Place Bracket Orders                                │
 │   BracketPlacer.place_bracket(                              │
 │     tracker: tracker,                                       │
 │     sl_price: sl_price,                                     │
@@ -312,32 +436,96 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │   )                                                         │
 │     └── Places/modifies SL/TP orders via broker            │
 │                                                             │
-│ Step 8: Record Trade                                        │
+│ Step 9: Record Trade                                        │
 │   DailyLimits.record_trade(index_key: index_cfg[:key])     │
 │                                                             │
-│ Step 9: Emit Event                                          │
-│   EventBus.publish('entry_filled', event_data)             │
+│ Step 10: Emit Event                                         │
+│    EventBus.publish('entry_filled', event_data)            │
 │                                                             │
 │ Returns: { success: true, tracker: tracker, ... }          │
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 3.3 ActiveCache Position Addition
+### 4.3 Capital Allocation
 
-**Service:** `Positions::ActiveCache`
+**Service:** `Capital::Allocator`  
+**File:** `app/services/capital/allocator.rb`  
+**Method:** `qty_for()`
+
+**Process:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Capital::Allocator.qty_for()                               │
+│                                                             │
+│   1. Get Available Cash                                    │
+│      available_cash = Capital::Allocator.available_cash    │
+│                                                             │
+│   2. Get Deployment Policy                                 │
+│      policy = Capital::Allocator.deployment_policy(balance)│
+│        ├── Determines risk_per_trade_pct based on balance  │
+│        └── Returns policy hash                             │
+│                                                             │
+│   3. Calculate Risk Amount                                  │
+│      risk_amount = available_cash * risk_per_trade_pct     │
+│                                                             │
+│   4. Calculate Quantity                                    │
+│      quantity = (risk_amount / entry_price) / lot_size     │
+│      quantity = quantity * scale_multiplier                 │
+│                                                             │
+│   5. Round to Lot Size                                      │
+│      quantity = (quantity / lot_size).floor * lot_size     │
+│                                                             │
+│   Returns: Integer quantity (lot-aligned)                  │
+└───────────────────────┬─────────────────────────────────────┘
+```
+
+**Dynamic Risk Allocator:**
+
+**Service:** `Capital::DynamicRiskAllocator`  
+**File:** `app/services/capital/dynamic_risk_allocator.rb`  
+**Method:** `risk_pct_for()`
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Capital::DynamicRiskAllocator.risk_pct_for()               │
+│                                                             │
+│   1. Get Base Risk for Index                               │
+│      base_risk = base_risk_for_index(index_key)            │
+│                                                             │
+│   2. Scale by Trend Score (if provided)                   │
+│      scaled_risk = scale_by_trend(trend_score, base_risk)  │
+│        ├── Low trend (0-7): 0.5x base risk                │
+│        ├── Medium trend (7-14): 1.0x base risk            │
+│        └── High trend (14-21): 1.5x base risk              │
+│                                                             │
+│   3. Cap Risk                                               │
+│      capped_risk = cap_risk(scaled_risk, base_risk)        │
+│        ├── Max 2x base risk                               │
+│        └── Max 10% absolute                                │
+│                                                             │
+│   Returns: Float risk_pct (0.0 to 0.10)                    │
+└───────────────────────┬─────────────────────────────────────┘
+```
+
+### 4.4 ActiveCache Position Addition
+
+**Service:** `Positions::ActiveCache`  
+**File:** `app/services/positions/active_cache.rb`  
+**Method:** `add_position()`
 
 **Detailed Process:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ActiveCache.add_position(tracker:, sl_price:, tp_price:)     │
+│ ActiveCache.add_position(tracker:, sl_price:, tp_price:)   │
 │                                                             │
 │   1. Create PositionData Struct                             │
 │      PositionData.new(                                      │
 │        tracker_id: tracker.id,                              │
 │        security_id: tracker.security_id,                    │
 │        segment: tracker.segment,                            │
-│        entry_price: tracker.entry_price,                     │
+│        entry_price: tracker.entry_price,                    │
 │        quantity: tracker.quantity,                          │
 │        sl_price: sl_price,                                  │
 │        tp_price: tp_price,                                  │
@@ -347,13 +535,13 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │      )                                                       │
 │                                                             │
 │   2. Attach Underlying Metadata                             │
-│      attach_underlying_metadata(position_data, tracker)     │
+│      attach_underlying_metadata(position_data, tracker)   │
 │        ├── Resolves underlying segment/security_id          │
 │        ├── Gets underlying LTP from TickCache              │
-│        └── Sets: underlying_segment, underlying_security_id │
+│        └── Sets: underlying_segment, underlying_security_id│
 │                                                             │
 │   3. Check for Pending Peak Values                         │
-│      → Apply peak from Redis if available                   │
+│      → Load peak from Redis if available                   │
 │                                                             │
 │   4. Get Current LTP                                        │
 │      ltp = TickCache.ltp(segment, security_id)            │
@@ -369,12 +557,16 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │      @cache[composite_key] = position_data                 │
 │      @tracker_index[tracker.id] = composite_key            │
 │                                                             │
-│   7. Emit Notification                                       │
+│   7. Persist Peak to Redis                                  │
+│      → Store peak_profit_pct with 7-day TTL                │
+│                                                             │
+│   8. Emit Notification                                      │
 │      ActiveSupport::Notifications.instrument(               │
 │        'positions.added',                                   │
 │        tracker_id: tracker.id                                │
 │      )                                                       │
 │      → Wakes up RiskManagerService (if demand-driven)       │
+│      → Wakes up PaperPnlRefresher (if demand-driven)       │
 │                                                             │
 │ Returns: PositionData instance                              │
 └───────────────────────┬─────────────────────────────────────┘
@@ -382,11 +574,13 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 
 ---
 
-## 4. Market Data Flow
+## 5. Market Data Flow
 
-### 4.1 WebSocket Tick Reception
+### 5.1 WebSocket Tick Reception
 
-**Service:** `Live::MarketFeedHub`
+**Service:** `Live::MarketFeedHub`  
+**File:** `app/services/live/market_feed_hub.rb`  
+**Thread:** `market-feed-hub`
 
 **Flow:**
 
@@ -407,28 +601,32 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │   1. Update connection state (:connected)                  │
 │   2. Store in TickCache (in-memory)                        │
 │      Live::TickCache.put(tick)                             │
-│   3. Update FeedHealthService                              │
-│   4. Emit ActiveSupport::Notifications                     │
+│   3. Store in RedisTickCache (persistent)                  │
+│      Live::RedisTickCache.instance.store_tick(tick)        │
+│   4. Update FeedHealthService                              │
+│   5. Emit ActiveSupport::Notifications                     │
 │      ActiveSupport::Notifications.instrument(              │
 │        'dhanhq.tick', tick                                  │
 │      )                                                       │
-│   5. Invoke ActiveCache callbacks                          │
+│   6. Invoke ActiveCache callbacks                          │
 │      @callbacks.each { |cb| cb.call(tick) }                │
-│   6. Update PositionIndex PnL (if position exists)         │
+│   7. Update PositionIndex PnL (if position exists)         │
 │      Live::PositionIndex.instance.trackers_for(sid)        │
 │      → Live::PnlUpdaterService.cache_intermediate_pnl()    │
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 4.2 ActiveCache Tick Handling
+### 5.2 ActiveCache Tick Handling
 
-**Service:** `Positions::ActiveCache`
+**Service:** `Positions::ActiveCache`  
+**File:** `app/services/positions/active_cache.rb`  
+**Method:** `handle_tick()`
 
 **Callback Flow:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ActiveCache.handle_tick(tick)                               │
+│ ActiveCache.handle_tick(tick)                              │
 │                                                             │
 │   1. Validate Tick                                          │
 │      → Skip if ltp <= 0 or segment/security_id missing     │
@@ -440,7 +638,7 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │                                                             │
 │   3. Update LTP                                              │
 │      position.update_ltp(tick[:ltp].to_f)                   │
-│        ├── Sets current_ltp = ltp                           │
+│        ├── Sets current_ltp = ltp                          │
 │        ├── Calls recalculate_pnl()                          │
 │        │   ├── pnl = (ltp - entry_price) * quantity        │
 │        │   ├── pnl_pct = ((ltp - entry_price) / entry_price) * 100│
@@ -448,29 +646,146 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │        │   └── Updates peak_profit_pct if pnl_pct > peak   │
 │        └── Sets last_updated_at = Time.current              │
 │                                                             │
-│   4. Check Exit Triggers                                     │
+│   4. Persist Peak to Redis                                   │
+│      → Store peak_profit_pct if updated (7-day TTL)        │
+│                                                             │
+│   5. Check Exit Triggers                                     │
 │      check_exit_triggers(position)                          │
 │        ├── If position.sl_hit?                             │
 │        │   → EventBus.publish('sl_hit', ...)               │
 │        └── If position.tp_hit?                             │
 │            → EventBus.publish('tp_hit', ...)                │
 │                                                             │
-│   5. Update Stats                                            │
+│   6. Update Stats                                            │
 │      @stats[:updates_processed] += 1                        │
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Risk Management Flow
+## 6. PnL Update Flow
 
-### 5.1 RiskManagerService Monitoring Loop
+### 6.1 PaperPnlRefresher
 
-**Service:** `Live::RiskManagerService`
+**Service:** `Live::PaperPnlRefresher`  
+**File:** `app/services/live/paper_pnl_refresher.rb`  
+**Thread:** `paper-pnl-refresher`  
+**Frequency:** 1 second (configurable via `realtime_interval_seconds`)
 
-**Loop Frequency:**
-- Active positions: 500ms (configurable)
-- No positions (demand-driven): 5000ms (configurable)
+**Flow:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ PaperPnlRefresher.run_loop()                               │
+│                                                             │
+│   1. Check Market Status                                    │
+│      If market closed AND no active positions:              │
+│        → Sleep 60s, continue                                │
+│                                                             │
+│   2. Demand-Driven Check (if enabled)                      │
+│      If ActiveCache.empty? AND enable_demand_driven:        │
+│        → Sleep idle_interval (default: 5000ms), continue    │
+│                                                             │
+│   3. Refresh All Paper Positions                           │
+│      refresh_all()                                          │
+│        For each PositionTracker.paper.active:               │
+│          refresh_tracker(tracker)                           │
+│            ├── Get LTP from TickCache                      │
+│            ├── Calculate PnL                               │
+│            ├── Update tracker.last_pnl_rupees              │
+│            ├── Update tracker.last_pnl_pct                 │
+│            ├── Update tracker.high_water_mark_pnl          │
+│            └── Store in RedisPnlCache                       │
+│                                                             │
+│   4. Sleep active_interval (default: 1000ms)                │
+└───────────────────────┬─────────────────────────────────────┘
+```
+
+### 6.2 PnlUpdaterService
+
+**Service:** `Live::PnlUpdaterService`  
+**File:** `app/services/live/pnl_updater_service.rb`  
+**Thread:** `pnl-updater-service`  
+**Frequency:** 250ms flush interval
+
+**Flow:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ PnlUpdaterService.run_loop()                                │
+│                                                             │
+│   1. Check Market Status                                    │
+│      If market closed AND no active positions:              │
+│        → Sleep 60s, continue                                │
+│                                                             │
+│   2. Flush Queue to Redis                                   │
+│      flush!()                                               │
+│        ├── Take up to MAX_BATCH (200) items                │
+│        ├── Batch load trackers from DB                      │
+│        ├── For each tracker:                                │
+│        │   ├── Update tracker.last_pnl_rupees              │
+│        │   ├── Update tracker.last_pnl_pct                 │
+│        │   ├── Update tracker.high_water_mark_pnl          │
+│        │   └── Store in RedisPnlCache (batch write)       │
+│        └── Remove processed items from queue                │
+│                                                             │
+│   3. Sleep Based on Queue State                             │
+│      If queue empty: sleep longer (60s)                    │
+│      Else: sleep FLUSH_INTERVAL (250ms)                    │
+└───────────────────────┬─────────────────────────────────────┘
+```
+
+**Queue Population:**
+
+```
+MarketFeedHub.handle_tick()
+  └──→ PositionIndex.trackers_for()
+       └──→ PnlUpdaterService.cache_intermediate_pnl()
+            └──→ Adds to queue (last-wins per tracker_id)
+```
+
+### 6.3 RiskManagerService PnL Updates
+
+**Service:** `Live::RiskManagerService`  
+**File:** `app/services/live/risk_manager_service.rb`  
+**Method:** `update_paper_positions_pnl_if_due()`
+
+**Frequency:** Every 1 minute
+
+**Flow:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ RiskManagerService.update_paper_positions_pnl_if_due()     │
+│                                                             │
+│   1. Check if Due                                           │
+│      If last_update_time < 1 minute ago: return             │
+│                                                             │
+│   2. Update All Paper Positions                             │
+│      update_paper_positions_pnl()                           │
+│        For each PositionTracker.paper.active:               │
+│          ├── Stagger API calls (1s between)                │
+│          ├── Get LTP (TickCache → RedisTickCache → API)    │
+│          ├── Calculate PnL                                 │
+│          ├── Update tracker.last_pnl_rupees                │
+│          ├── Update tracker.last_pnl_pct                   │
+│          ├── Update tracker.high_water_mark_pnl            │
+│          └── Store in RedisPnlCache                        │
+└───────────────────────┬─────────────────────────────────────┘
+```
+
+---
+
+## 7. Risk Management Flow
+
+### 7.1 RiskManagerService Monitoring Loop
+
+**Service:** `Live::RiskManagerService`  
+**File:** `app/services/live/risk_manager_service.rb`  
+**Thread:** `risk-manager`  
+**Frequency:** 
+- Active positions: 500ms (`loop_interval_active`)
+- No positions (demand-driven): 5000ms (`loop_interval_idle`)
 
 **Main Loop:**
 
@@ -482,25 +797,25 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │      If market closed AND no active positions:              │
 │        → Sleep 60s, continue                                │
 │                                                             │
-│   2. Demand-Driven Check (if enabled)                      │
+│   2. Demand-Driven Check (if enabled)                       │
 │      If ActiveCache.empty? AND enable_demand_driven:        │
 │        → Sleep 5000ms, continue                             │
 │                                                             │
-│   3. Update Paper Positions PnL (if due)                   │
+│   3. Update Paper Positions PnL (if due)                    │
 │      update_paper_positions_pnl_if_due()                   │
 │        → Runs every 1 minute                               │
 │                                                             │
-│   4. Ensure All Positions in Redis                         │
+│   4. Ensure All Positions in Redis                          │
 │      ensure_all_positions_in_redis()                       │
-│        → Syncs PnL to Redis cache                          │
+│        → Syncs PnL to Redis cache (every 5s)               │
 │                                                             │
 │   5. Ensure All Positions in ActiveCache                    │
 │      ensure_all_positions_in_active_cache()                 │
-│        → Adds missing positions to cache                    │
+│        → Adds missing positions to cache (every 5s)        │
 │                                                             │
 │   6. Ensure All Positions Subscribed                        │
 │      ensure_all_positions_subscribed()                      │
-│        → Subscribes to MarketFeedHub if not subscribed     │
+│        → Subscribes to MarketFeedHub if not subscribed (every 5s)│
 │                                                             │
 │   7. Process Trailing for All Positions                    │
 │      process_trailing_for_all_positions()                   │
@@ -517,9 +832,10 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 5.2 Trailing Processing (Per Position)
+### 7.2 Trailing Processing (Per Position)
 
-**Service:** `Live::RiskManagerService`
+**Service:** `Live::RiskManagerService`  
+**Method:** `process_trailing_for_all_positions()`
 
 **Detailed Flow:**
 
@@ -530,7 +846,7 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │   For each position in ActiveCache:                         │
 │                                                             │
 │   Step 1: Recalculate Position Metrics                     │
-│     recalculate_position_metrics(position, tracker)         │
+│     recalculate_position_metrics(position, tracker)       │
 │       ├── Syncs PnL from Redis cache                       │
 │       ├── Ensures LTP is current                           │
 │       ├── Recalculates PnL if needed                        │
@@ -545,8 +861,8 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │       │   └── Returns: OpenStruct with all metrics         │
 │       │                                                   │
 │       ├── If structure_break_against_position?            │
-│       │   → guarded_exit('underlying_structure_break')    │
-│       │   → Return true (skip remaining checks)            │
+│       │   → guarded_exit('underlying_structure_break')     │
+│       │   → Return true (skip remaining checks)              │
 │       │                                                   │
 │       ├── If trend_score < threshold (10)                  │
 │       │   → guarded_exit('underlying_trend_weak')         │
@@ -557,7 +873,7 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │           → Return true                                    │
 │                                                             │
 │   Step 3: Enforce Hard SL/TP Limits (always active)         │
-│     enforce_bracket_limits(position, tracker, exit_engine)│
+│     enforce_bracket_limits(position, tracker, exit_engine)  │
 │       ├── If position.sl_hit?                             │
 │       │   → guarded_exit('SL HIT X.XX%')                  │
 │       │   → Return true                                    │
@@ -588,99 +904,15 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 5.3 TrailingEngine Processing
-
-**Service:** `Live::TrailingEngine`
-
-**Detailed Flow:**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ TrailingEngine.process_tick(position_data, exit_engine)   │
-│                                                             │
-│   Step 1: Check Peak-Drawdown FIRST                         │
-│     check_peak_drawdown(position_data, exit_engine)        │
-│       ├── peak = position_data.peak_profit_pct             │
-│       ├── current = position_data.pnl_pct                  │
-│       ├── drawdown = peak - current                        │
-│       │                                                   │
-│       ├── If drawdown >= 5% (peak_drawdown_exit_pct):     │
-│       │   ├── If peak_drawdown_activation enabled:        │
-│       │   │   ├── Check activation conditions:             │
-│       │   │   │   ├── peak >= 25% (activation_profit_pct) │
-│       │   │   │   └── sl_offset_pct >= 10%                 │
-│       │   │   │                                           │
-│       │   │   ├── If activation conditions met:           │
-│       │   │   │   → tracker.with_lock do                  │
-│       │   │   │       → exit_engine.execute_exit(         │
-│       │   │   │           tracker,                         │
-│       │   │   │           'peak_drawdown_exit (...)'       │
-│       │   │   │         )                                   │
-│       │   │   │       → Return true                        │
-│       │   │   │                                           │
-│       │   │   └── Else: Return false (gating active)      │
-│       │   │                                               │
-│       │   └── Else (activation disabled):                 │
-│       │       → Exit immediately                           │
-│       │                                                   │
-│       └── Else: Return false (no drawdown)                │
-│                                                             │
-│   Step 2: Update Peak Profit Percentage                    │
-│     update_peak(position_data)                             │
-│       ├── If current_pnl_pct > peak_profit_pct:           │
-│       │   ├── ActiveCache.update_position(                 │
-│       │   │     tracker_id,                                │
-│       │   │     peak_profit_pct: current_pnl_pct           │
-│       │   │   )                                             │
-│       │   └── Persists peak to Redis (7-day TTL)          │
-│       │                                                   │
-│       └── Returns: true if updated                         │
-│                                                             │
-│   Step 3: Apply Tiered SL Offsets                          │
-│     apply_tiered_sl(position_data)                        │
-│       ├── sl_offset_pct =                                  │
-│       │   TrailingConfig.sl_offset_for(current_profit_pct) │
-│       │                                                   │
-│       ├── new_sl_price =                                   │
-│       │   TrailingConfig.sl_price_from_entry(              │
-│       │     entry_price,                                   │
-│       │     sl_offset_pct                                  │
-│       │   )                                                 │
-│       │                                                   │
-│       ├── If new_sl_price > current_sl_price:             │
-│       │   ├── BracketPlacer.update_bracket(                │
-│       │   │     tracker: tracker,                          │
-│       │   │     sl_price: new_sl_price                      │
-│       │   │   )                                             │
-│       │   ├── ActiveCache.update_position(                 │
-│       │   │     tracker_id,                                │
-│       │   │     sl_price: new_sl_price,                     │
-│       │   │     sl_offset_pct: sl_offset_pct                │
-│       │   │   )                                             │
-│       │   └── Returns: { updated: true, ... }              │
-│       │                                                   │
-│       └── Else: Returns: { updated: false, ... }         │
-│                                                             │
-│   Returns: {                                                │
-│     peak_updated: true/false,                              │
-│     sl_updated: true/false,                                │
-│     exit_triggered: true/false,                            │
-│     reason: '...'                                          │
-│   }                                                         │
-└───────────────────────┬─────────────────────────────────────┘
-```
-
 ---
 
-## 6. Exit Flow
+## 8. Exit Flow
 
-### 6.1 Exit Triggering
-
-**Multiple Exit Paths:**
+### 8.1 Exit Trigger Priority Order
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Exit Triggers (Priority Order)                              │
+│ Exit Triggers (Priority Order)                             │
 │                                                             │
 │   1. Underlying Structure Break                            │
 │      → handle_underlying_exit()                            │
@@ -716,9 +948,10 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 6.2 Guarded Exit Execution
+### 8.2 Guarded Exit Execution
 
-**Service:** `Live::RiskManagerService`
+**Service:** `Live::RiskManagerService`  
+**Method:** `guarded_exit()`
 
 **Flow:**
 
@@ -728,7 +961,7 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 │                                                             │
 │   If exit_engine is external (not self):                    │
 │     ├── Check if tracker.exited? → return if true          │
-│     └── exit_engine.execute_exit(tracker, reason)          │
+│     └── exit_engine.execute_exit(tracker, reason)            │
 │                                                             │
 │   Else (self-managed):                                      │
 │     tracker.with_lock do                                    │
@@ -738,15 +971,17 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 6.3 ExitEngine Execution
+### 8.3 ExitEngine Execution
 
-**Service:** `Live::ExitEngine`
+**Service:** `Live::ExitEngine`  
+**File:** `app/services/live/exit_engine.rb`  
+**Method:** `execute_exit()`
 
 **Flow:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ExitEngine.execute_exit(tracker, reason)                    │
+│ ExitEngine.execute_exit(tracker, reason)                   │
 │                                                             │
 │   tracker.with_lock do                                       │
 │     1. Check if already exited                              │
@@ -781,7 +1016,7 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 └───────────────────────┬─────────────────────────────────────┘
 ```
 
-### 6.4 Post-Exit Cleanup
+### 8.4 Post-Exit Cleanup
 
 **Automatic Cleanup:**
 
@@ -809,7 +1044,224 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
 
 ---
 
-## 7. Complete Flow Diagram
+## 9. EOD Handling
+
+### 9.1 Session End Exit
+
+**Service:** `Live::RiskManagerService`  
+**Method:** `enforce_session_end_exit()`
+
+**Flow:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ enforce_session_end_exit(exit_engine:)                     │
+│                                                             │
+│   1. Check Session Deadline                                 │
+│      session_check = TradingSession::Service.should_force_exit?│
+│      → Return if should_exit == false                       │
+│                                                             │
+│   2. Get All Active Positions                               │
+│      positions = active_cache_positions                    │
+│      → Return if empty                                      │
+│                                                             │
+│   3. Exit All Positions                                     │
+│      For each position:                                     │
+│        ├── Sync PnL from Redis                             │
+│        ├── Call guarded_exit()                             │
+│        └── Reason: 'session end (deadline: 3:15 PM IST)'   │
+│                                                             │
+│   4. Log Exit Count                                         │
+│      Rails.logger.info("Session end exit: #{exited_count} positions exited")│
+└───────────────────────┬─────────────────────────────────────┘
+```
+
+### 9.2 Market Closed Behavior
+
+**All Services Check:** `TradingSession::Service.market_closed?`
+
+**Behavior:**
+
+- **Signal::Scheduler:** Skips signal generation
+- **RiskManagerService:** Sleeps 60s if no positions, continues monitoring if positions exist
+- **PaperPnlRefresher:** Sleeps 60s if no positions, continues refresh if positions exist
+- **PnlUpdaterService:** Sleeps 60s if no positions, continues processing if positions exist
+- **ReconciliationService:** Sleeps 60s if no positions, continues reconciliation if positions exist
+
+---
+
+## 10. Service Intervals & Frequencies
+
+### 10.1 Service Loop Intervals
+
+| Service | Active Interval | Idle Interval | Config Key |
+|---------|----------------|---------------|------------|
+| **Signal::Scheduler** | 30s | N/A | `DEFAULT_PERIOD` |
+| **RiskManagerService** | 500ms | 5000ms | `risk.loop_interval_active` / `risk.loop_interval_idle` |
+| **PaperPnlRefresher** | 1000ms | 5000ms | `paper_trading.realtime_interval_seconds` / `risk.loop_interval_idle` |
+| **PnlUpdaterService** | 250ms | 60s | `FLUSH_INTERVAL_SECONDS` |
+| **ReconciliationService** | 5s | 60s | `RECONCILIATION_INTERVAL` |
+| **PositionSyncService** | 30s | N/A | `@sync_interval` |
+
+### 10.2 Demand-Driven Behavior
+
+**Feature Flag:** `enable_demand_driven_services`
+
+**When Enabled:**
+- **RiskManagerService:** Sleeps 5000ms when `ActiveCache.empty?`
+- **PaperPnlRefresher:** Sleeps idle_interval when `ActiveCache.empty?`
+- Both services wake up on `positions.added` / `positions.removed` events
+
+**Event Subscription:**
+
+```ruby
+ActiveSupport::Notifications.subscribe('positions.added') { wake_up! }
+ActiveSupport::Notifications.subscribe('positions.removed') { wake_up! }
+```
+
+---
+
+## 11. Redis Cache Architecture
+
+### 11.1 RedisPnlCache
+
+**Service:** `Live::RedisPnlCache`  
+**Key Format:** `pnl:tracker:#{tracker_id}`
+
+**Data Structure:**
+
+```json
+{
+  "pnl": 150.50,
+  "pnl_pct": 5.25,
+  "ltp": 157.50,
+  "hwm_pnl": 200.00,
+  "peak_profit_pct": 8.50,
+  "timestamp": 1234567890
+}
+```
+
+**TTL:** None (persistent)
+
+**Writers:**
+- `PnlUpdaterService` (batch writes every 250ms)
+- `PaperPnlRefresher` (direct writes every 1s)
+- `RiskManagerService.update_paper_positions_pnl()` (every 1 minute)
+
+**Readers:**
+- `RiskManagerService.sync_position_pnl_from_redis()`
+- `RiskManagerService.ensure_all_positions_in_redis()`
+
+### 11.2 RedisTickCache
+
+**Service:** `Live::RedisTickCache`  
+**Key Format:** `tick:#{segment}:#{security_id}`
+
+**Data Structure:**
+
+```json
+{
+  "ltp": 150.50,
+  "prev_close": 148.00,
+  "timestamp": 1234567890
+}
+```
+
+**TTL:** 24 hours
+
+**Writers:**
+- `MarketFeedHub.handle_tick()` (every tick)
+
+**Readers:**
+- `RiskManagerService.get_paper_ltp()` (fallback)
+- `ActiveCache.ensure_position_snapshot()` (fallback)
+
+### 11.3 Peak Profit Cache
+
+**Service:** `Positions::ActiveCache`  
+**Key Format:** `peak_profit:tracker:#{tracker_id}`
+
+**Data Structure:**
+
+```json
+{
+  "peak_profit_pct": 35.50,
+  "updated_at": 1234567890
+}
+```
+
+**TTL:** 7 days
+
+**Writers:**
+- `ActiveCache.handle_tick()` (when peak updated)
+- `ActiveCache.add_position()` (on entry)
+
+**Readers:**
+- `ActiveCache.add_position()` (on entry, reload peaks)
+- `ActiveCache.reload_peaks()` (on startup)
+
+---
+
+## 12. Session Checks
+
+### 12.1 TradingSession::Service
+
+**File:** `app/services/trading_session.rb`
+
+**Methods:**
+
+| Method | Purpose | Time Range |
+|--------|---------|------------|
+| `entry_allowed?` | Check if entry is allowed | 9:20 AM - 3:15 PM IST |
+| `should_force_exit?` | Check if exit should be forced | After 3:15 PM IST |
+| `market_closed?` | Check if market is closed | After 3:30 PM IST |
+| `in_session?` | Check if in trading session | 9:20 AM - 3:15 PM IST |
+
+**Time Constants:**
+
+```ruby
+ENTRY_START_HOUR = 9
+ENTRY_START_MINUTE = 20
+EXIT_DEADLINE_HOUR = 15
+EXIT_DEADLINE_MINUTE = 15
+MARKET_CLOSE_HOUR = 15
+MARKET_CLOSE_MINUTE = 30
+```
+
+### 12.2 Session Check Usage
+
+**EntryGuard:**
+```ruby
+session_check = TradingSession::Service.entry_allowed?
+return false unless session_check[:allowed]
+```
+
+**Signal::Scheduler:**
+```ruby
+return if TradingSession::Service.market_closed?
+```
+
+**RiskManagerService:**
+```ruby
+if TradingSession::Service.market_closed?
+  active_count = PositionTracker.active.count
+  if active_count.zero?
+    sleep 60
+    next
+  end
+end
+```
+
+**Session End Exit:**
+```ruby
+session_check = TradingSession::Service.should_force_exit?
+return unless session_check[:should_exit]
+# Exit all positions
+```
+
+---
+
+## Complete Flow Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -838,13 +1290,15 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
          │
          ├──→ RiskManagerService.start()
          │         │
-         │         └──→ Start Monitoring Loop (500ms)
+         │         └──→ Start Monitoring Loop (500ms/5000ms)
          │
          └──→ Other Services...
 
 [SIGNAL GENERATION LOOP]
          │
          ├──→ For each index:
+         │         │
+         │         ├──→ TradingSession.market_closed? → Skip
          │         │
          │         ├──→ TrendScorer.compute_direction()
          │         │         │
@@ -854,9 +1308,15 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
          │         │
          │         └──→ EntryGuard.try_enter()
          │                 │
+         │                 ├──→ Session Check (9:20 AM - 3:15 PM)
+         │                 ├──→ Daily Limits Check
+         │                 ├──→ Exposure Check
+         │                 ├──→ Cooldown Check
+         │                 ├──→ Capital::Allocator.qty_for()
+         │                 ├──→ Place Order (paper/live)
          │                 └──→ EntryManager.process_entry()
          │                         │
-         │                         ├──→ Create PositionTracker
+         │                         ├──→ DynamicRiskAllocator.risk_pct_for()
          │                         ├──→ ActiveCache.add_position()
          │                         ├──→ MarketFeedHub.subscribe_instrument()
          │                         └──→ BracketPlacer.place_bracket()
@@ -866,19 +1326,37 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
          ├──→ WebSocket Tick Received
          │         │
          │         ├──→ TickCache.put(tick)
+         │         ├──→ RedisTickCache.store_tick(tick)
          │         ├──→ ActiveCache.handle_tick(tick)
          │         │         │
          │         │         ├──→ position.update_ltp(ltp)
          │         │         ├──→ position.recalculate_pnl()
-         │         │         └──→ Check SL/TP hits
+         │         │         └──→ Persist peak to Redis
          │         │
          │         └──→ PnlUpdaterService.cache_intermediate_pnl()
+
+[PnL UPDATE FLOW]
+         │
+         ├──→ PaperPnlRefresher (1s interval)
+         │         │
+         │         └──→ Refresh paper positions → RedisPnlCache
+         │
+         ├──→ PnlUpdaterService (250ms flush)
+         │         │
+         │         └──→ Batch write queue → RedisPnlCache
+         │
+         └──→ RiskManagerService (1 minute)
+                 │
+                 └──→ Update paper positions → RedisPnlCache
 
 [RISK MANAGEMENT LOOP]
          │
          ├──→ For each position:
          │         │
          │         ├──→ recalculate_position_metrics()
+         │         │         │
+         │         │         ├──→ Sync PnL from Redis
+         │         │         └──→ Update peak if current > peak
          │         │
          │         ├──→ handle_underlying_exit()
          │         │         │
@@ -912,196 +1390,18 @@ supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
          │                 ├──→ ActiveCache.remove_position()
          │                 ├──→ MarketFeedHub.unsubscribe_instrument()
          │                 └──→ DailyLimits.record_loss() (if loss)
-```
 
----
-
-## 8. Key Decision Points
-
-### 8.1 Entry Decision Tree
-
-```
-Signal Generated?
-    │
-    ├── NO → Continue monitoring
-    │
-    └── YES
+[EOD HANDLING]
          │
-         ├── Direction Confirmed? (trend_score >= 14)
-         │   │
-         │   ├── NO → Skip chain analysis
-         │   │
-         │   └── YES
+         ├──→ TradingSession.should_force_exit? (3:15 PM IST)
          │         │
-         │         ├── Chain Analysis → Candidates Found?
-         │         │   │
-         │         │   ├── NO → Skip entry
-         │         │   │
-         │         │   └── YES
-         │         │         │
-         │         │         ├── EntryGuard Validation
-         │         │         │   │
-         │         │         │   ├── Cooldown Active? → Skip
-         │         │         │   ├── Daily Limit Reached? → Skip
-         │         │         │   ├── Exposure Limit Reached? → Skip
-         │         │         │   └── All Checks Pass → ENTER
-         │         │         │
-         │         │         └── EntryManager.process_entry()
-```
-
-### 8.2 Exit Decision Tree
-
-```
-For Each Position:
-    │
-    ├── Underlying Structure Break? (if enabled)
-    │   │
-    │   ├── YES → EXIT ('underlying_structure_break')
-    │   │
-    │   └── NO
-    │         │
-    │         ├── Underlying Trend Weak? (trend_score < 10)
-    │         │   │
-    │         │   ├── YES → EXIT ('underlying_trend_weak')
-    │         │   │
-    │         │   └── NO
-    │         │         │
-    │         │         ├── ATR Collapse? (ratio < 0.65)
-    │         │         │   │
-    │         │         │   ├── YES → EXIT ('underlying_atr_collapse')
-    │         │         │   │
-    │         │         │   └── NO
-    │         │         │         │
-    │         │         │         ├── SL Hit? (current_ltp <= sl_price)
-    │         │         │         │   │
-    │         │         │         │   ├── YES → EXIT ('SL HIT')
-    │         │         │         │   │
-    │         │         │         │   └── NO
-    │         │         │         │         │
-    │         │         │         │         ├── TP Hit? (current_ltp >= tp_price)
-    │         │         │         │         │   │
-    │         │         │         │         │   ├── YES → EXIT ('TP HIT')
-    │         │         │         │         │   │
-    │         │         │         │         │   └── NO
-    │         │         │         │         │         │
-    │         │         │         │         │         ├── Peak-Drawdown? (drawdown >= 5%)
-    │         │         │         │         │         │   │
-    │         │         │         │         │         │   ├── YES
-    │         │         │         │         │         │   │   │
-    │         │         │         │         │         │   │   ├── Gating Active?
-    │         │         │         │         │         │   │   │   │
-    │         │         │         │         │         │   │   │   ├── YES → Check Activation
-    │         │         │         │         │         │   │   │   │   │
-    │         │         │         │         │         │   │   │   │   ├── Peak >= 25% AND SL >= 10%?
-    │         │         │         │         │         │   │   │   │   │   │
-    │         │         │         │         │         │   │   │   │   │   ├── YES → EXIT ('peak_drawdown')
-    │         │         │         │         │         │   │   │   │   │   │
-    │         │         │         │         │         │   │   │   │   │   └── NO → Continue (gated)
-    │         │         │         │         │         │   │   │   │   │
-    │         │         │         │         │         │   │   │   └── NO → EXIT immediately
-    │         │         │         │         │         │   │   │
-    │         │         │         │         │         │   └── NO → Continue monitoring
-    │         │         │         │         │         │
-    │         │         │         │         │         └── Apply Trailing SL Updates
+         │         └──→ enforce_session_end_exit()
+         │                 │
+         │                 └──→ Exit all positions
 ```
 
 ---
 
-## 9. Data Structures
-
-### 9.1 PositionData (ActiveCache)
-
-```ruby
-PositionData = Struct.new(
-  :tracker_id,              # Integer - PositionTracker ID
-  :security_id,             # String - Option security ID
-  :segment,                 # String - Exchange segment
-  :entry_price,             # Float - Entry price
-  :quantity,                # Integer - Position quantity
-  :sl_price,                # Float - Stop loss price
-  :tp_price,                # Float - Take profit price
-  :high_water_mark,         # Float - Highest PnL achieved
-  :current_ltp,             # Float - Current last traded price
-  :pnl,                     # Float - Current PnL (rupees)
-  :pnl_pct,                 # Float - Current PnL percentage
-  :peak_profit_pct,         # Float - Peak profit percentage
-  :sl_offset_pct,           # Float - Current SL offset percentage
-  :position_direction,       # Symbol - :bullish or :bearish
-  :index_key,               # String - Index key (NIFTY, BANKNIFTY, etc.)
-  :underlying_segment,      # String - Underlying index segment
-  :underlying_security_id,  # String - Underlying index security ID
-  :underlying_symbol,       # String - Underlying index symbol
-  :underlying_trend_score,  # Float - Underlying trend score (0-21)
-  :underlying_ltp,          # Float - Underlying index LTP
-  :last_updated_at          # Time - Last update timestamp
-)
-```
-
-### 9.2 UnderlyingMonitor State
-
-```ruby
-OpenStruct.new(
-  trend_score: Float,      # 0-21 composite trend score
-  bos_state: Symbol,       # :broken, :intact, :unknown
-  bos_direction: Symbol,   # :bullish, :bearish, :neutral
-  atr_trend: Symbol,       # :falling, :rising, :flat
-  atr_ratio: Float,        # Current ATR / Previous ATR
-  mtf_confirm: Boolean,    # Multi-timeframe confirmation
-  ltp: Float              # Underlying index LTP
-)
-```
-
----
-
-## 10. Configuration Reference
-
-### 10.1 Feature Flags
-
-```yaml
-feature_flags:
-  enable_direction_before_chain: true      # Direction-first signal generation
-  enable_demand_driven_services: true       # Sleep when no positions
-  enable_underlying_aware_exits: false     # Underlying-aware exit logic
-  enable_peak_drawdown_activation: false   # Peak-drawdown gating
-  enable_auto_subscribe_unsubscribe: true  # Auto market data subscription
-```
-
-### 10.2 Risk Configuration
-
-```yaml
-risk:
-  sl_pct: 0.30                              # 30% fixed SL
-  tp_pct: 0.60                              # 60% fixed TP
-  peak_drawdown_exit_pct: 5                 # 5% drawdown threshold
-  peak_drawdown_activation_profit_pct: 25.0  # Activation: profit >= 25%
-  peak_drawdown_activation_sl_offset_pct: 10.0 # Activation: SL offset >= 10%
-  underlying_trend_score_threshold: 10.0    # Exit if trend < 10
-  underlying_atr_collapse_multiplier: 0.65  # Exit if ATR ratio < 0.65
-```
-
----
-
-## 11. Monitoring & Observability
-
-### 11.1 Key Log Patterns
-
-```
-[UNDERLYING_EXIT] reason=underlying_structure_break tracker_id=123 ...
-[PEAK_DRAWDOWN] tracker_id=123 peak_pct=35.0 current_pct=28.0 drawdown=7.0%
-[RiskManager] Exit executed ORD123: SL HIT -30.00%
-[ExitEngine] Exit executed ORD123: peak_drawdown_exit (drawdown: 7.00%, peak: 35.00%)
-```
-
-### 11.2 Metrics to Track
-
-- `underlying_exit_count` - Count of underlying-triggered exits
-- `peak_drawdown_exit_count` - Count of peak-drawdown exits
-- `signals_processed` - Signal generation rate
-- `entries_created` - Entry success rate
-- `exits_triggered{reason=...}` - Exit reasons breakdown
-
----
-
-**Document Version:** 1.0  
-**Last Updated:** 2025-01-XX  
-**Author:** AI Assistant (Composer)
+**Document Version:** 2.0  
+**Last Updated:** Based on actual codebase analysis  
+**Repository:** https://github.com/shubhamtaywade82/algo_scalper_api/tree/new_trailing
