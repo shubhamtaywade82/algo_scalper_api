@@ -64,6 +64,25 @@ module Entries
           return false
         end
 
+        # Check expiry date (must be within 7 days)
+        # Only block if we can determine expiry and it's > 7 days
+        # If expiry can't be determined, allow entry (will try to get from watchable after creation)
+        expiry_date = extract_expiry_date(pick)
+        if expiry_date
+          days_to_expiry = (expiry_date - Time.zone.today).to_i
+          if days_to_expiry > 7
+            Rails.logger.warn(
+              "[EntryGuard] Expiry too far for #{index_cfg[:key]}: #{pick[:symbol]} " \
+              "(expiry: #{expiry_date}, days_to_expiry: #{days_to_expiry}, max: 7)"
+            )
+            return false
+          end
+        else
+          # Try to get expiry from watchable after position creation
+          # For now, log warning but allow entry (expiry will be checked via watchable)
+          Rails.logger.debug { "[EntryGuard] Could not determine expiry date from pick for #{index_cfg[:key]}: #{pick[:symbol]}, will check via watchable" }
+        end
+
         paper_mode = paper_trading_enabled?
         force_paper = false
 
@@ -149,6 +168,24 @@ module Entries
         unless tracker
           Rails.logger.warn("[EntryGuard] Failed to persist tracker for #{index_cfg[:key]}: #{pick[:symbol]}")
           return false
+        end
+
+        # Post-creation expiry check (if expiry wasn't available in pick)
+        # This ensures we validate expiry even if it wasn't in the pick hash
+        unless expiry_date
+          watchable = tracker.watchable
+          if watchable.is_a?(Derivative) && watchable.expiry_date.present?
+            expiry_date = watchable.expiry_date
+            days_to_expiry = (expiry_date - Time.zone.today).to_i
+            if days_to_expiry > 7
+              Rails.logger.warn(
+                "[EntryGuard] Expiry too far (post-creation check) for #{index_cfg[:key]}: #{pick[:symbol]} " \
+                "(expiry: #{expiry_date}, days_to_expiry: #{days_to_expiry}, max: 7). " \
+                'Position created but should be exited.'
+              )
+              # Don't block here - position already created, but log warning
+            end
+          end
         end
 
         tag_fallback_tracker(tracker, reason: 'insufficient_live_balance') if force_paper && tracker
@@ -425,6 +462,57 @@ module Entries
       # Removed ensure_ws_connection! - no longer needed
       # WebSocket status is checked inline in try_enter for logging only
       # REST API fallback is always used when WS unavailable
+
+      # Extract expiry date from pick hash
+      # Checks multiple sources: pick[:expiry], pick[:derivative], pick[:derivative_id]
+      # @param pick [Hash] Pick/candidate hash
+      # @return [Date, nil] Expiry date or nil if not found
+      def extract_expiry_date(pick)
+        return nil unless pick.is_a?(Hash)
+
+        # Try direct expiry field (from DerivativeChainAnalyzer)
+        if pick[:expiry].present?
+          expiry = pick[:expiry]
+          if expiry.is_a?(Date)
+            return expiry
+          elsif expiry.is_a?(String)
+            begin
+              return Date.parse(expiry)
+            rescue ArgumentError
+              # Invalid date string, continue to next method
+            end
+          elsif expiry.respond_to?(:to_date)
+            return expiry.to_date
+          end
+        end
+
+        # Try derivative object
+        if pick[:derivative].present?
+          derivative = pick[:derivative]
+          if derivative.respond_to?(:expiry_date) && derivative.expiry_date.present?
+            return derivative.expiry_date if derivative.expiry_date.is_a?(Date)
+            return Date.parse(derivative.expiry_date.to_s) if derivative.expiry_date.respond_to?(:to_s)
+          end
+        end
+
+        # Try derivative_id -> load Derivative
+        if pick[:derivative_id].present?
+          begin
+            derivative = Derivative.find_by(id: pick[:derivative_id])
+            if derivative&.expiry_date.present?
+              return derivative.expiry_date if derivative.expiry_date.is_a?(Date)
+              return Date.parse(derivative.expiry_date.to_s) if derivative.expiry_date.respond_to?(:to_s)
+            end
+          rescue StandardError => e
+            Rails.logger.debug { "[EntryGuard] Failed to load derivative #{pick[:derivative_id]}: #{e.message}" }
+          end
+        end
+
+        nil
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Failed to extract expiry date: #{e.class} - #{e.message}")
+        nil
+      end
 
       def find_instrument(index_cfg)
         segment_code = index_cfg[:segment]

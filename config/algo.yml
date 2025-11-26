@@ -154,20 +154,94 @@ risk:
   sl_pct: 0.30 # 30% fixed SL (entry * 0.70)
   tp_pct: 0.60 # 60% fixed TP (entry * 1.60)
 
-  # Micro-Trailing model (tiered)
-  trailing_tiers:
-    - { trigger_pct: 5, sl_offset_pct: -15 }
-    - { trigger_pct: 10, sl_offset_pct: -5 }
-    - { trigger_pct: 15, sl_offset_pct: 0 }
-    - { trigger_pct: 25, sl_offset_pct: 10 }
-    - { trigger_pct: 40, sl_offset_pct: 20 }
-    - { trigger_pct: 60, sl_offset_pct: 30 }
-    - { trigger_pct: 80, sl_offset_pct: 40 }
-    - { trigger_pct: 120, sl_offset_pct: 60 }
+  # Trailing stop mode: 'tiered' (fixed tiers) or 'direct' (follows price directly)
+  trailing_mode: direct # Options: 'tiered' or 'direct'
 
-  peak_drawdown_exit_pct: 5 # Instant exit on -5% drop from peak
-  peak_drawdown_activation_profit_pct: 25.0 # Minimum profit % to activate peak-drawdown gating
-  peak_drawdown_activation_sl_offset_pct: 10.0 # Minimum SL offset % to activate peak-drawdown gating
+  # Direct trailing stop configuration (when trailing_mode: 'direct')
+  # SL moves directly with price, maintaining fixed distance below current price
+  # Only moves upward - never moves down
+  direct_trailing:
+    enabled: true # Enable direct trailing stop
+    distance_pct: 5.0 # Distance below current price (e.g., 5% = SL at 95% of current price)
+    activation_profit_pct: 0.0 # Minimum profit % before activating (0 = immediate activation)
+    min_sl_offset_pct: -30.0 # Minimum SL offset from entry (prevents SL from going below initial SL)
+
+  # Micro-Trailing model (tiered) - 3% INTERVALS with CONSERVATIVE SL offsets
+  # More granular tiers with tighter protection to minimize losses
+  # Used when trailing_mode: 'tiered'
+  trailing_tiers:
+    - { trigger_pct: 3, sl_offset_pct: -15 } # 3%: -15% SL (wide stop, early stage)
+    - { trigger_pct: 6, sl_offset_pct: -10 } # 6%: -10% SL (gradual tightening)
+    - { trigger_pct: 9, sl_offset_pct: -5 } # 9%: -5% SL (approaching breakeven)
+    - { trigger_pct: 12, sl_offset_pct: -2 } # 12%: -2% SL (close to breakeven)
+    - { trigger_pct: 15, sl_offset_pct: 0 } # 15%: 0% SL (breakeven locked)
+    - { trigger_pct: 18, sl_offset_pct: 2 } # 18%: +2% SL (small profit protection)
+    - { trigger_pct: 21, sl_offset_pct: 3 } # 21%: +3% SL (tighter than old +5%)
+    - { trigger_pct: 24, sl_offset_pct: 4 } # 24%: +4% SL (gradual increase)
+    - { trigger_pct: 27, sl_offset_pct: 5 } # 27%: +5% SL (conservative)
+    - { trigger_pct: 30, sl_offset_pct: 6 } # 30%: +6% SL
+    - { trigger_pct: 33, sl_offset_pct: 8 } # 33%: +8% SL
+    - { trigger_pct: 36, sl_offset_pct: 10 } # 36%: +10% SL
+    - { trigger_pct: 39, sl_offset_pct: 12 } # 39%: +12% SL
+    - { trigger_pct: 42, sl_offset_pct: 15 } # 42%: +15% SL
+    - { trigger_pct: 45, sl_offset_pct: 18 } # 45%: +18% SL
+    - { trigger_pct: 48, sl_offset_pct: 20 } # 48%: +20% SL
+    - { trigger_pct: 51, sl_offset_pct: 22 } # 51%: +22% SL
+    - { trigger_pct: 54, sl_offset_pct: 25 } # 54%: +25% SL
+    - { trigger_pct: 57, sl_offset_pct: 28 } # 57%: +28% SL
+    - { trigger_pct: 60, sl_offset_pct: 30 } # 60%: +30% SL
+    - { trigger_pct: 63, sl_offset_pct: 32 } # 63%: +32% SL
+    - { trigger_pct: 66, sl_offset_pct: 35 } # 66%: +35% SL
+    - { trigger_pct: 69, sl_offset_pct: 38 } # 69%: +38% SL
+    - { trigger_pct: 72, sl_offset_pct: 40 } # 72%: +40% SL
+    - { trigger_pct: 75, sl_offset_pct: 42 } # 75%: +42% SL
+    - { trigger_pct: 78, sl_offset_pct: 45 } # 78%: +45% SL
+    - { trigger_pct: 81, sl_offset_pct: 48 } # 81%: +48% SL
+    - { trigger_pct: 84, sl_offset_pct: 50 } # 84%: +50% SL
+    - { trigger_pct: 87, sl_offset_pct: 52 } # 87%: +52% SL
+    - { trigger_pct: 90, sl_offset_pct: 55 } # 90%: +55% SL
+    - { trigger_pct: 93, sl_offset_pct: 58 } # 93%: +58% SL
+    - { trigger_pct: 96, sl_offset_pct: 60 } # 96%: +60% SL
+    - { trigger_pct: 99, sl_offset_pct: 62 } # 99%: +62% SL
+    - { trigger_pct: 102, sl_offset_pct: 65 } # 102%: +65% SL
+    - { trigger_pct: 105, sl_offset_pct: 68 } # 105%: +68% SL
+    - { trigger_pct: 108, sl_offset_pct: 70 } # 108%: +70% SL
+    - { trigger_pct: 111, sl_offset_pct: 72 } # 111%: +72% SL
+    - { trigger_pct: 114, sl_offset_pct: 75 } # 114%: +75% SL
+    - { trigger_pct: 117, sl_offset_pct: 78 } # 117%: +78% SL
+    - { trigger_pct: 120, sl_offset_pct: 80 } # 120%: +80% SL
+
+  # Peak drawdown protection - OPTIMIZED for tighter protection
+  peak_drawdown_exit_pct: 3 # Base threshold (reduced from 5% to 3%)
+
+  # Dynamic drawdown thresholds based on profit level (tighter for lower profits)
+  dynamic_drawdown_thresholds:
+    low_profit: 2.0 # <10% profit: 2% drawdown (very tight)
+    medium_profit: 3.0 # 10-25% profit: 3% drawdown (tight)
+    high_profit: 5.0 # >25% profit: 5% drawdown (standard)
+
+  # Capital-based drawdown thresholds (tighter for larger positions to ensure profit)
+  # Ensures larger positions close profitably - 1% drop on ₹50k = ₹500 vs ₹20k = ₹200
+  capital_based_thresholds:
+    small_capital: # < ₹30,000
+      max_capital: 30000
+      low_profit: 2.0 # <10% profit: 2% drawdown
+      medium_profit: 3.0 # 10-25% profit: 3% drawdown
+      high_profit: 5.0 # >25% profit: 5% drawdown
+    medium_capital: # ₹30,000 - ₹50,000
+      min_capital: 30000
+      max_capital: 50000
+      low_profit: 1.5 # <10% profit: 1.5% drawdown (tighter)
+      medium_profit: 2.0 # 10-25% profit: 2% drawdown (tighter)
+      high_profit: 3.0 # >25% profit: 3% drawdown (tighter)
+    large_capital: # > ₹50,000
+      min_capital: 50000
+      low_profit: 1.0 # <10% profit: 1% drawdown (very tight)
+      medium_profit: 1.5 # 10-25% profit: 1.5% drawdown (very tight)
+      high_profit: 2.0 # >25% profit: 2% drawdown (very tight)
+
+  peak_drawdown_activation_profit_pct: 10.0 # Reduced from 25.0 (activate earlier)
+  peak_drawdown_activation_sl_offset_pct: 5.0 # Reduced from 10.0 (activate with lower SL offset)
 
   # Underlying-aware exit thresholds
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
