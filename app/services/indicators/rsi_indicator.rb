@@ -22,8 +22,10 @@ module Indicators
       return nil unless ready?(index)
       return nil unless trading_hours?(series.candles[index])
 
+      # Use existing CandleSeries#rsi method (uses RubyTechnicalAnalysis gem)
+      # Create partial series up to current index for accurate calculation at that point
       partial_series = create_partial_series(index)
-      rsi_value = partial_series&.rsi(@period)
+      rsi_value = partial_series.rsi(@period)
       return nil if rsi_value.nil?
 
       direction = determine_direction(rsi_value)
@@ -39,6 +41,8 @@ module Indicators
     private
 
     def create_partial_series(index)
+      # Create partial series for calculation at specific index
+      # Uses existing CandleSeries#rsi which leverages RubyTechnicalAnalysis gem
       partial_series = CandleSeries.new(symbol: series.symbol, interval: series.interval)
       series.candles[0..index].each { |candle| partial_series.add_candle(candle) }
       partial_series

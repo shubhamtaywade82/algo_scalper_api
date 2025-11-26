@@ -21,13 +21,14 @@ module Indicators
       return nil unless ready?(index)
       return nil unless trading_hours?(series.candles[index])
 
-      # Create partial series up to current index for ADX calculation
+      # Use existing CandleSeries#adx method (uses TechnicalAnalysis gem)
+      # Create partial series up to current index for accurate calculation at that point
       partial_series = create_partial_series(index)
-      adx_value = partial_series&.adx(@period)
+      adx_value = partial_series.adx(@period)
       return nil if adx_value.nil? || adx_value < @min_strength
 
       # ADX doesn't provide direction directly, but we can infer from trend
-      direction = infer_direction(partial_series, index)
+      direction = infer_direction_from_price(index)
       confidence = calculate_confidence(adx_value)
 
       {
@@ -40,16 +41,18 @@ module Indicators
     private
 
     def create_partial_series(index)
+      # Create partial series for calculation at specific index
+      # Uses existing CandleSeries#adx which leverages TechnicalAnalysis gem
       partial_series = CandleSeries.new(symbol: series.symbol, interval: series.interval)
       series.candles[0..index].each { |candle| partial_series.add_candle(candle) }
       partial_series
     end
 
-    def infer_direction(partial_series, index)
+    def infer_direction_from_price(index)
       # Infer direction from recent price movement
       return :neutral if index < 2
 
-      candles = partial_series.candles
+      candles = series.candles[0..index]
       recent_closes = candles.last(3).map(&:close).compact
 
       return :neutral if recent_closes.size < 2
