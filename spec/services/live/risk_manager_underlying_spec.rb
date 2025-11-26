@@ -115,7 +115,7 @@ RSpec.describe Live::RiskManagerService, '#process_trailing_for_all_positions' d
       service.send(:process_trailing_for_all_positions)
     end
 
-    it 'does not exit when gating conditions are not met' do
+    it 'does not exit when gating conditions are not met (profit < activation threshold)' do
       position_data.peak_profit_pct = 20.0
       position_data.pnl_pct = 14.0
       position_data.sl_offset_pct = 5.0
@@ -124,6 +124,30 @@ RSpec.describe Live::RiskManagerService, '#process_trailing_for_all_positions' d
 
       expect(exit_engine).not_to have_received(:execute_exit)
       expect(trailing_engine).to have_received(:process_tick).once
+    end
+
+    it 'does not exit when gating conditions are not met (sl_offset < activation threshold)' do
+      position_data.peak_profit_pct = 35.0
+      position_data.pnl_pct = 30.0
+      position_data.sl_offset_pct = 8.0 # Below 10.0 threshold
+
+      service.send(:process_trailing_for_all_positions)
+
+      expect(exit_engine).not_to have_received(:execute_exit)
+      expect(trailing_engine).to have_received(:process_tick).once
+    end
+
+    it 'exits when both activation thresholds are met and drawdown exceeds limit' do
+      position_data.peak_profit_pct = 35.0
+      position_data.pnl_pct = 28.0 # 7% drawdown from 35% peak
+      position_data.sl_offset_pct = 12.0 # Above 10.0 threshold
+
+      expect(exit_engine).to receive(:execute_exit).with(
+        tracker,
+        match(/peak_drawdown_exit.*drawdown.*7/)
+      ).once
+
+      service.send(:process_trailing_for_all_positions)
     end
   end
 

@@ -131,6 +131,42 @@ module Signal
         return nil
       end
 
+      # Step 1: Check direction-first if enabled (before chain analysis)
+      if direction_before_chain_enabled?
+        trend_result = Signal::TrendScorer.compute_direction(index_cfg: index_cfg)
+        trend_score = trend_result[:trend_score]
+        direction = trend_result[:direction]
+
+        min_trend_score = signal_config.dig(:trend_scorer, :min_trend_score) || 14.0
+        if trend_score.nil? || trend_score < min_trend_score || direction.nil?
+          Rails.logger.debug(
+            "[SignalScheduler] Skipping #{index_cfg[:key]} - trend_score=#{trend_score} " \
+            "direction=#{direction} (min=#{min_trend_score})"
+          )
+          return nil
+        end
+
+        # Direction confirmed - proceed to chain analysis
+        chain_cfg = AlgoConfig.fetch[:chain_analyzer] || {}
+        candidate = select_candidate_from_chain(index_cfg, direction, chain_cfg, trend_score)
+        return nil unless candidate
+
+        return {
+          segment: candidate[:segment],
+          security_id: candidate[:security_id],
+          reason: 'trend_scorer_direction',
+          meta: {
+            candidate_symbol: candidate[:symbol],
+            lot_size: candidate[:lot_size] || candidate[:lot] || 1,
+            direction: direction,
+            trend_score: trend_score,
+            source: 'trend_scorer',
+            multiplier: 1
+          }
+        }
+      end
+
+      # Step 2: Legacy path (if direction-first disabled)
       indicator_result = Signal::Engine.analyze_multi_timeframe(index_cfg: index_cfg, instrument: instrument)
       unless indicator_result[:status] == :ok
         Rails.logger.warn("[SignalScheduler] Indicator analysis failed for #{index_cfg[:key]}: #{indicator_result[:message]}")
@@ -187,6 +223,16 @@ module Signal
 
     def signal_config
       AlgoConfig.fetch[:signals] || {}
+    end
+
+    def direction_before_chain_enabled?
+      feature_flags[:enable_direction_before_chain] == true
+    end
+
+    def feature_flags
+      AlgoConfig.fetch[:feature_flags] || {}
+    rescue StandardError
+      {}
     end
   end
   # rubocop:enable Metrics/ClassLength
