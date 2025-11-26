@@ -1,5 +1,7 @@
 # Implementation Summary - RiskManager Underlying-Aware Exits & Peak-Drawdown Gating
 
+**📖 For complete system flow from initialization to exit, see:** [`COMPLETE_SYSTEM_FLOW.md`](./COMPLETE_SYSTEM_FLOW.md)
+
 ## Overview
 
 This document summarizes the implementation of underlying-aware hybrid exit logic and peak-drawdown activation gating in the RiskManagerService, as specified in the user requirements.

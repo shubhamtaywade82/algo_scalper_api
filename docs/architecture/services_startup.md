@@ -2,6 +2,8 @@
 
 This document describes all services that start automatically when running `bin/dev`.
 
+**📖 For complete system flow from initialization to exit, see:** [`../COMPLETE_SYSTEM_FLOW.md`](../COMPLETE_SYSTEM_FLOW.md)
+
 ## Overview
 
 When you run `bin/dev`, it executes `bin/rails server`, which triggers Rails initialization. During initialization, several automated trading services are started via initializers.

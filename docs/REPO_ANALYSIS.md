@@ -31,6 +31,10 @@ This is a **production-grade algorithmic trading system** for Indian index optio
 
 ### 1.2 Trading Flow
 
+**📖 For complete detailed flow, see:** [`COMPLETE_SYSTEM_FLOW.md`](./COMPLETE_SYSTEM_FLOW.md)
+
+**High-Level Flow:**
+
 ```
 ┌─────────────────┐
 │   Scheduler     │ → Loops indices, generates signals
@@ -71,6 +75,17 @@ This is a **production-grade algorithmic trading system** for Indian index optio
 │  ExitEngine     │ → Executes exit orders
 └─────────────────┘
 ```
+
+**Complete Flow Includes:**
+- ✅ Rails initialization sequence
+- ✅ Service startup order and dependencies
+- ✅ Signal generation with direction-first logic
+- ✅ Entry flow with ActiveCache integration
+- ✅ Market data flow (WebSocket → TickCache → ActiveCache)
+- ✅ Risk management loop with all exit conditions
+- ✅ Exit execution and cleanup
+- ✅ Decision trees and data structures
+- ✅ Configuration reference
 
 ---
 

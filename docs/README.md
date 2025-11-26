@@ -4,6 +4,11 @@ This directory contains all documentation for the Algo Scalper API trading syste
 
 ## 📚 Documentation Structure
 
+### Core System Documentation
+- **[Complete System Flow](./COMPLETE_SYSTEM_FLOW.md)** - **START HERE** - Complete flow from Rails initialization through position exit, including all service interactions, data flows, and decision points
+- [Repository Analysis](./REPO_ANALYSIS.md) - Comprehensive repository analysis and architecture overview
+- [Implementation Summary](./IMPLEMENTATION_SUMMARY.md) - Recent implementation changes and enhancements
+
 ### [Architecture](./architecture/)
 Core system architecture and component documentation:
 - [Services Startup](./architecture/services_startup.md) - How services start and interact
