@@ -195,6 +195,48 @@ signals:
   enable_adx_filter: true # Enable ADX strength filter (default: false)
   enable_confirmation_timeframe: true # Enable 5m HTF confirmation (default: false)
 
+  # Modular Indicator System Configuration
+  # Use multi_indicator_strategy: true to enable modular indicator system
+  # When enabled, the 'indicators' list defines which indicators to use
+  use_multi_indicator_strategy: false # Set to true to use modular system
+  confirmation_mode: all # Options: all, majority, weighted, any
+  min_confidence: 60 # Minimum combined confidence score (0-100)
+
+  # Indicator configurations for modular system
+  # Each indicator can be enabled/disabled and configured independently
+  indicators:
+    - type: supertrend
+      enabled: true
+      config:
+        period: 7
+        multiplier: 3.0
+        trading_hours_filter: true
+
+    - type: adx
+      enabled: true
+      config:
+        period: 14
+        min_strength: 18
+        trading_hours_filter: true
+
+    # Example: Add RSI indicator (disabled by default)
+    # - type: rsi
+    #   enabled: false
+    #   config:
+    #     period: 14
+    #     oversold: 30
+    #     overbought: 70
+    #     trading_hours_filter: true
+
+    # Example: Add MACD indicator (disabled by default)
+    # - type: macd
+    #   enabled: false
+    #   config:
+    #     fast_period: 12
+    #     slow_period: 26
+    #     signal_period: 9
+    #     trading_hours_filter: true
+
   trend_scorer:
     min_trend_score: 14
     mtf_enabled: true

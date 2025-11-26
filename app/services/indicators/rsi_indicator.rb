@@ -1,0 +1,74 @@
+# frozen_string_literal: true
+
+module Indicators
+  # RSI (Relative Strength Index) indicator wrapper
+  class RsiIndicator < BaseIndicator
+    def initialize(series:, config: {})
+      super
+      @period = config[:period] || 14
+      @oversold = config[:oversold] || 30
+      @overbought = config[:overbought] || 70
+    end
+
+    def min_required_candles
+      @period + 1
+    end
+
+    def ready?(index)
+      index >= min_required_candles
+    end
+
+    def calculate_at(index)
+      return nil unless ready?(index)
+      return nil unless trading_hours?(series.candles[index])
+
+      partial_series = create_partial_series(index)
+      rsi_value = partial_series&.rsi(@period)
+      return nil if rsi_value.nil?
+
+      direction = determine_direction(rsi_value)
+      confidence = calculate_confidence(rsi_value, direction)
+
+      {
+        value: rsi_value,
+        direction: direction,
+        confidence: confidence
+      }
+    end
+
+    private
+
+    def create_partial_series(index)
+      partial_series = CandleSeries.new(symbol: series.symbol, interval: series.interval)
+      series.candles[0..index].each { |candle| partial_series.add_candle(candle) }
+      partial_series
+    end
+
+    def determine_direction(rsi_value)
+      if rsi_value < @oversold
+        :bullish # Oversold - potential upward move
+      elsif rsi_value > @overbought
+        :bearish # Overbought - potential downward move
+      else
+        :neutral
+      end
+    end
+
+    def calculate_confidence(rsi_value, direction)
+      base = 40
+
+      case direction
+      when :bullish
+        # More oversold = higher confidence
+        base += 30 if rsi_value < 25
+        base += 20 if rsi_value < @oversold
+      when :bearish
+        # More overbought = higher confidence
+        base += 30 if rsi_value > 75
+        base += 20 if rsi_value > @overbought
+      end
+
+      [base, 100].min
+    end
+  end
+end
