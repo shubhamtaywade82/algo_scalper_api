@@ -187,24 +187,20 @@ module Options
         # Rails.logger.debug { "[Options] SPOT: #{atm}, Strike interval: #{strike_interval}, ATM strike: #{atm_strike}" }
         # Rails.logger.debug { "[Options] IV Rank: #{iv_rank}, ATM range: #{atm_range_percent * 100}% (#{atm_range_points.round(2)} points)" }
 
-        # For buying options, focus on ATM and nearby strikes only (+-1,2,3 steps)
+        # For buying options, focus on ATM and nearby strikes only (ATM, 1OTM, 2OTM max)
         # This prevents selecting expensive ITM options or far OTM options
         target_strikes = if [:ce, 'ce'].include?(side)
-                           # CE: ATM, ATM+1, ATM+2, ATM+3 (OTM calls)
-                           [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval),
-                            atm_strike + (3 * strike_interval)]
+                           # CE: ATM, ATM+1, ATM+2 (OTM calls, max 2OTM)
+                           [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval)]
                              .select do |s|
                              oc_strikes.include?(s)
                            end
-                             .first(3) # Limit to top 3 strikes
                          else
-                           # PE: ATM, ATM-1, ATM-2, ATM-3 (OTM puts)
-                           [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval),
-                            atm_strike - (3 * strike_interval)]
+                           # PE: ATM, ATM-1, ATM-2 (OTM puts, max 2OTM)
+                           [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval)]
                              .select do |s|
                              oc_strikes.include?(s)
                            end
-                             .first(3) # Limit to top 3 strikes
                          end
 
         # Rails.logger.debug { "[Options] Target strikes for #{side}: #{target_strikes}" }
