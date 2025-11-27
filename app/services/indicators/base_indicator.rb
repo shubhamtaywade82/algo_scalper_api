@@ -36,7 +36,16 @@ module Indicators
 
     # Get indicator name for logging/debugging
     def name
-      self.class.name.split('::').last.underscore
+      class_name = self.class.name.split('::').last
+      # Convert CamelCase to snake_case
+      # Handle both ActiveSupport's underscore and manual conversion
+      if class_name.respond_to?(:underscore)
+        class_name.underscore
+      else
+        class_name.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
+                  .gsub(/([a-z\d])([A-Z])/, '\1_\2')
+                  .downcase
+      end
     end
 
     # Check if trading hours filter should be applied
