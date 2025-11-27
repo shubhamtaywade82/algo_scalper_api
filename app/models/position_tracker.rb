@@ -36,6 +36,7 @@ require 'bigdecimal'
 
 class PositionTracker < ApplicationRecord
   include PositionTrackerFactory
+  include PositionStateManagement
 
   # Attribute accessors
   store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction

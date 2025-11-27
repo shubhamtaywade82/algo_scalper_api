@@ -10,22 +10,16 @@ module Entries
           return false
         end
 
-        # Check trading session timing (9:20 AM to 3:15 PM IST)
-        session_check = TradingSession::Service.entry_allowed?
-        unless session_check[:allowed]
-          Rails.logger.warn("[EntryGuard] Entry blocked: #{session_check[:reason]}")
-          return false
-        end
+        # Use Specification Pattern for entry validation
+        entry_spec = Specifications::EntryEligibilitySpecification.new(
+          index_cfg: index_cfg,
+          pick: pick,
+          direction: direction
+        )
 
-        # NEW: Check daily limits before allowing entry
-        daily_limits = Live::DailyLimits.new
-        limit_check = daily_limits.can_trade?(index_key: index_cfg[:key])
-        unless limit_check[:allowed]
-          Rails.logger.warn(
-            "[EntryGuard] Trading blocked for #{index_cfg[:key]}: #{limit_check[:reason]} " \
-            "(daily_loss: #{limit_check[:daily_loss]&.round(2)}, " \
-            "daily_trades: #{limit_check[:daily_trades]})"
-          )
+        unless entry_spec.satisfied?(nil)
+          failure_reason = entry_spec.failure_reason(nil)
+          Rails.logger.warn("[EntryGuard] Entry validation failed for #{index_cfg[:key]}: #{failure_reason}")
           return false
         end
 
@@ -33,15 +27,6 @@ module Entries
         Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
 
         side = direction == :bullish ? 'long_ce' : 'long_pe'
-        unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
-          Rails.logger.debug { "[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})" }
-          return false
-        end
-
-        if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
-          Rails.logger.warn("[EntryGuard] Cooldown active for #{index_cfg[:key]}: #{pick[:symbol]}")
-          return false
-        end
 
         # Never block due to WebSocket - always allow REST API fallback
         # Log WebSocket status for monitoring but don't block
@@ -556,78 +541,30 @@ module Entries
       end
 
       def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:)
-        # Generate synthetic order number for paper trading
-        order_no = "PAPER-#{index_cfg[:key]}-#{pick[:security_id]}-#{Time.current.to_i}"
-
-        # Determine watchable: derivative for options, instrument for indices
-        watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
-
-        tracker = PositionTracker.create!(
-          watchable: watchable,
-          instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
-          order_no: order_no,
-          security_id: pick[:security_id].to_s,
-          symbol: pick[:symbol],
-          segment: pick[:segment] || index_cfg[:segment],
+        # Use Factory Pattern for centralized creation
+        Factories::PositionTrackerFactory.create_paper_tracker(
+          instrument: instrument,
+          pick: pick,
           side: side,
           quantity: quantity,
-          entry_price: ltp,
-          avg_price: ltp,
-          status: 'active',
-          paper: true,
-          meta: {
-            index_key: index_cfg[:key],
-            direction: side,
-            placed_at: Time.current,
-            paper_trading: true
-          }
+          index_cfg: index_cfg,
+          ltp: ltp
         )
-
-        # Subscription is handled automatically by after_create_commit :subscribe_to_feed callback
-        # No need to call tracker.subscribe explicitly
-
-        # Initialize PnL in Redis (will be 0 initially since entry_price = ltp)
-        # This ensures the position is tracked in Redis from the start
-        initial_pnl = BigDecimal(0)
-        Live::RedisPnlCache.instance.store_pnl(
-          tracker_id: tracker.id,
-          pnl: initial_pnl,
-          pnl_pct: 0.0,
-          ltp: ltp,
-          hwm: initial_pnl,
-          hwm_pnl_pct: 0.0,
-          timestamp: Time.current,
-          tracker: tracker
-        )
-
-        # Add to ActiveCache immediately (ensures exit conditions work)
-        # Calculate default SL/TP if needed
-        sl_price = calculate_default_sl(tracker, ltp)
-        tp_price = calculate_default_tp(tracker, ltp)
-        add_to_active_cache(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
-
-        Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")
-        tracker
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist paper tracker: #{e.record.errors.full_messages.to_sentence}")
         nil
       end
 
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:)
-        # Determine watchable: derivative for options, instrument for indices
-        watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
-
-        PositionTracker.build_or_average!(
-          watchable: watchable,
-          instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
+        # Use Factory Pattern for centralized creation
+        Factories::PositionTrackerFactory.create_live_tracker(
+          instrument: instrument,
           order_no: order_no,
-          security_id: pick[:security_id].to_s,
-          symbol: pick[:symbol],
-          segment: pick[:segment] || index_cfg[:segment],
+          pick: pick,
           side: side,
           quantity: quantity,
-          entry_price: ltp,
-          meta: { index_key: index_cfg[:key], direction: side, placed_at: Time.current }
+          index_cfg: index_cfg,
+          ltp: ltp
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")
@@ -663,15 +600,16 @@ module Entries
       end
 
       def post_entry_wiring(tracker:, side:, index_cfg:)
-        entry_price = tracker.entry_price.to_f
-        sl_price, tp_price = initial_bracket_prices(entry_price: entry_price, side: side, index_cfg: index_cfg)
+        # Use Builder Pattern for bracket order construction
+        bracket_result = Builders::BracketOrderBuilder.new(tracker)
+          .with_stop_loss_percentage(0.30) # 30% SL
+          .with_take_profit_percentage(0.60) # 60% TP
+          .with_reason('initial_bracket')
+          .build
 
-        if auto_subscribe_enabled?
+        if bracket_result[:success] && auto_subscribe_enabled?
           subscribe_to_option_feed(tracker)
-          add_to_active_cache(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
         end
-
-        place_initial_bracket(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
       end
 
       # rubocop:disable Lint/UnusedMethodArgument
