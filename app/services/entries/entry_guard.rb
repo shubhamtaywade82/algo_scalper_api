@@ -12,6 +12,7 @@ module Entries
 
         # Use Specification Pattern for entry validation
         entry_spec = Specifications::EntryEligibilitySpecification.new(
+          instrument: instrument,
           index_cfg: index_cfg,
           pick: pick,
           direction: direction
@@ -44,28 +45,14 @@ module Entries
           ltp = resolved_ltp if resolved_ltp.present?
         end
 
-        unless ltp.present? && ltp.to_f.positive?
-          Rails.logger.warn("[EntryGuard] Invalid LTP for #{index_cfg[:key]}: #{pick[:symbol]} (ltp: #{ltp.inspect})")
-          return false
-        end
+        # Update pick with resolved LTP for specification validation
+        pick[:ltp] = ltp if ltp.present?
 
-        # Check expiry date (must be within 7 days)
-        # Only block if we can determine expiry and it's > 7 days
-        # If expiry can't be determined, allow entry (will try to get from watchable after creation)
-        expiry_date = extract_expiry_date(pick)
-        if expiry_date
-          days_to_expiry = (expiry_date - Time.zone.today).to_i
-          if days_to_expiry > 7
-            Rails.logger.warn(
-              "[EntryGuard] Expiry too far for #{index_cfg[:key]}: #{pick[:symbol]} " \
-              "(expiry: #{expiry_date}, days_to_expiry: #{days_to_expiry}, max: 7)"
-            )
-            return false
-          end
-        else
-          # Try to get expiry from watchable after position creation
-          # For now, log warning but allow entry (expiry will be checked via watchable)
-          Rails.logger.debug { "[EntryGuard] Could not determine expiry date from pick for #{index_cfg[:key]}: #{pick[:symbol]}, will check via watchable" }
+        # Re-validate with updated LTP (specification handles expiry check)
+        unless entry_spec.satisfied?(nil)
+          failure_reason = entry_spec.failure_reason(nil)
+          Rails.logger.warn("[EntryGuard] Entry validation failed after LTP resolution for #{index_cfg[:key]}: #{failure_reason}")
+          return false
         end
 
         paper_mode = paper_trading_enabled?
@@ -119,21 +106,34 @@ module Entries
               ltp: ltp
             )
           else
-            # Live trading: Place real order
-            response = Orders.config.place_market(
+            # Live trading: Place real order using Command Pattern
+            order_command = Commands::PlaceMarketOrderCommand.new(
               side: 'buy',
               segment: segment,
               security_id: pick[:security_id],
               qty: quantity,
-              meta: {
-                client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
-                ltp: ltp # Pass resolved LTP (from WS or API)
+              client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
+              metadata: {
+                index_key: index_cfg[:key],
+                symbol: pick[:symbol],
+                ltp: ltp
               }
             )
 
-            order_no = extract_order_no(response)
+            command_result = order_command.execute
+            unless command_result[:success]
+              Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} - #{command_result[:error]}")
+              # Try retry once
+              command_result = order_command.retry
+              unless command_result[:success]
+                Rails.logger.error("[EntryGuard] Order placement retry failed for #{index_cfg[:key]}: #{pick[:symbol]}")
+                return false
+              end
+            end
+
+            order_no = extract_order_no(command_result[:data])
             unless order_no
-              Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+              Rails.logger.warn("[EntryGuard] Could not extract order number for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{command_result.inspect})")
               return false
             end
 
@@ -183,26 +183,20 @@ module Entries
       end
 
       def exposure_ok?(instrument:, side:, max_same_side:)
-        max_allowed = max_same_side.to_i
+        # Use Repository Pattern for query
+        active_positions = Repositories::PositionTrackerRepository.find_active_by_instrument(instrument)
+          .where(side: side)
+          .limit(max_same_side.to_i + 1)
+        current_count = active_positions.count
 
-        # Safety check: if max_same_side is not configured (nil or 0), default to 1
+        max_allowed = max_same_side.to_i
         if max_allowed <= 0
           Rails.logger.warn("[EntryGuard] Invalid max_same_side value: #{max_same_side.inspect}, defaulting to 1")
           max_allowed = 1
         end
 
-        # Check positions by underlying instrument (for derivatives, check their underlying instrument)
-        # This ensures all positions on the same index count together, regardless of strike
-        # Query by instrument_id (for direct positions) OR by watchable_type='Derivative' with instrument_id
-        active_positions = PositionTracker.active.where(side: side).where(
-          "(instrument_id = ? OR (watchable_type = 'Derivative' AND watchable_id IN (SELECT id FROM derivatives WHERE instrument_id = ?)))",
-          instrument.id, instrument.id
-        ).limit(max_allowed + 1)
-        current_count = active_positions.count
-
         Rails.logger.debug { "[EntryGuard] Exposure check for #{instrument.symbol_name}: side=#{side}, current=#{current_count}, max=#{max_allowed}" }
 
-        # Check if we've reached the maximum allowed positions
         if current_count >= max_allowed
           Rails.logger.warn("[EntryGuard] Exposure limit reached for #{instrument.symbol_name}: #{current_count} >= #{max_allowed} (side: #{side})")
           return false
@@ -211,17 +205,11 @@ module Entries
         # If this would be the second position, check pyramiding rules
         if current_count == 1
           first_position = active_positions.first
-
-          # Reload to get latest data
           first_position.reload
-
-          # Try to hydrate PnL from Redis cache first (has live PnL data)
           first_position.hydrate_pnl_from_cache!
 
-          # If PnL is still nil or zero, calculate it (especially for paper positions or if Redis cache is empty)
           if (first_position.last_pnl_rupees.nil? || first_position.last_pnl_rupees.zero?) && first_position.entry_price.present? && first_position.quantity.present?
             calculate_current_pnl(first_position)
-            # Reload after calculation to get updated PnL
             first_position.reload
           end
 

@@ -126,7 +126,8 @@ module Specifications
 
   # Composite specification for entry eligibility
   class EntryEligibilitySpecification < BaseSpecification
-    def initialize(index_cfg:, pick:, direction:)
+    def initialize(instrument:, index_cfg:, pick:, direction:)
+      @instrument = instrument
       @index_cfg = index_cfg
       @pick = pick
       @direction = direction
@@ -154,7 +155,7 @@ module Specifications
         TradingSessionSpecification.new,
         DailyLimitSpecification.new(index_key: @index_cfg[:key]),
         ExposureSpecification.new(
-          instrument: resolve_instrument,
+          instrument: @instrument,
           side: @direction == :bullish ? 'long_ce' : 'long_pe',
           max_same_side: @index_cfg[:max_same_side] || 1
         ),
@@ -167,12 +168,5 @@ module Specifications
       ]
     end
 
-    def resolve_instrument
-      # Try to get instrument from pick if available
-      return @pick[:instrument] if @pick[:instrument].is_a?(Instrument)
-
-      # Fallback: find by index key
-      Instrument.find_by(symbol_name: @index_cfg[:key]) || Instrument.find_by(security_id: @index_cfg[:sid])
-    end
   end
 end
