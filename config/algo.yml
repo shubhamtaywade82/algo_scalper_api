@@ -301,3 +301,12 @@ data_freshness:
   disable_option_chain_caching: false
   ohlc_cache_duration_minutes: 5
   option_chain_cache_duration_minutes: 2
+
+# ============================================
+# WEBSOCKET WATCHLIST
+# ============================================
+# WebSocket watchlist for market feed subscription
+# Format: Array of strings "SEGMENT:SECURITY_ID" or empty array []
+# Example: ["NSE_EQ:11536", "NSE_EQ:11536"]
+# Can also be set via ENV['DHANHQ_WS_WATCHLIST'] as fallback
+watchlist: []

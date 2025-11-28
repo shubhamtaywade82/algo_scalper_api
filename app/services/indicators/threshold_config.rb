@@ -115,12 +115,12 @@ module Indicators
         PRESETS[preset_name.to_sym] || PRESETS[:moderate]
       end
 
-      # Get current preset from environment or config
-      # Checks ENV['INDICATOR_PRESET'] or config
+      # Get current preset from config (algo.yml preferred, ENV as fallback)
       # @return [Symbol] Current preset name
       def current_preset
-        preset_name = ENV['INDICATOR_PRESET']&.to_sym || 
-                      AlgoConfig.fetch.dig(:signals, :indicator_preset)&.to_sym ||
+        # Prefer algo.yml over ENV
+        preset_name = AlgoConfig.fetch.dig(:signals, :indicator_preset)&.to_sym ||
+                      ENV['INDICATOR_PRESET']&.to_sym ||
                       :moderate
         PRESETS.key?(preset_name) ? preset_name : :moderate
       end

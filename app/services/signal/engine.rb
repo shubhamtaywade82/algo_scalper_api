@@ -729,8 +729,8 @@ module Signal
           return { status: :error, message: 'No enabled indicators' }
         end
 
-        # Get preset from config or environment
-        preset_name = signals_cfg[:indicator_preset] || ENV['INDICATOR_PRESET']&.to_sym || :moderate
+        # Get preset from config (algo.yml preferred, ENV as fallback)
+        preset_name = signals_cfg[:indicator_preset]&.to_sym || ENV['INDICATOR_PRESET']&.to_sym || :moderate
         threshold_preset = Indicators::ThresholdConfig.get_preset(preset_name)
 
         # Merge global config with indicator configs
