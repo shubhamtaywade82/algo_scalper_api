@@ -35,6 +35,8 @@ module Indicators
           Indicators::RsiIndicator.new(series: series, config: merged_config)
         when 'macd'
           Indicators::MacdIndicator.new(series: series, config: merged_config)
+        when 'trend_duration', 'trend_duration_forecast', 'tdf'
+          Indicators::TrendDurationIndicator.new(series: series, config: merged_config)
         else
           Rails.logger.warn("[IndicatorFactory] Unknown indicator type: #{indicator_type}")
           nil

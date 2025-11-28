@@ -66,6 +66,8 @@ class MultiIndicatorStrategy
       Indicators::RsiIndicator.new(series: series, config: config)
     when 'macd'
       Indicators::MacdIndicator.new(series: series, config: config)
+    when 'trend_duration', 'trend_duration_forecast', 'tdf'
+      Indicators::TrendDurationIndicator.new(series: series, config: config)
     else
       Rails.logger.warn("[MultiIndicatorStrategy] Unknown indicator type: #{indicator_type}")
       nil

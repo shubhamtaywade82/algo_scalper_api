@@ -237,6 +237,16 @@ signals:
     #     signal_period: 9
     #     trading_hours_filter: true
 
+    # Trend Duration Indicator (disabled by default)
+    # Uses HMA to detect trend direction and forecast probable trend duration
+    # - type: trend_duration
+    #   enabled: false
+    #   config:
+    #     hma_length: 20        # HMA period
+    #     trend_length: 5       # Bars to confirm trend (rising/falling)
+    #     samples: 10           # Number of historical durations to track
+    #     trading_hours_filter: true
+
   trend_scorer:
     min_trend_score: 14
     mtf_enabled: true

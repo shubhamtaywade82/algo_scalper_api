@@ -17,6 +17,7 @@ The modular indicator system allows you to easily add, remove, and combine multi
    - `AdxIndicator` - Average Directional Index for trend strength
    - `RsiIndicator` - Relative Strength Index for overbought/oversold
    - `MacdIndicator` - Moving Average Convergence Divergence
+   - `TrendDurationIndicator` - HMA-based trend duration forecasting
 
 3. **MultiIndicatorStrategy** (`app/strategies/multi_indicator_strategy.rb`)
    - Combines multiple indicators using different confirmation modes
@@ -72,6 +73,54 @@ signals:
         slow_period: 26
         signal_period: 9
         trading_hours_filter: true
+
+    - type: trend_duration
+      enabled: false  # Disabled by default
+      config:
+        hma_length: 20        # HMA period
+        trend_length: 5       # Bars to confirm trend (rising/falling)
+        samples: 10           # Number of historical durations to track
+        trading_hours_filter: true
+```
+
+## Indicator Details
+
+### Trend Duration Indicator
+
+The Trend Duration Indicator uses HMA (Hull Moving Average) to detect trend direction and forecast probable trend duration. It tracks historical trend durations to predict how long current trends might last.
+
+**Key Features:**
+- Uses HMA for smooth trend detection
+- Tracks trend duration (how long trends persist)
+- Calculates probable duration based on historical averages
+- Provides confidence scores based on trend maturity and historical patterns
+
+**Configuration:**
+- `hma_length`: HMA period (default: 20)
+- `trend_length`: Number of bars to confirm trend direction (default: 5)
+- `samples`: Number of historical durations to track (default: 10)
+
+**Output:**
+- `hma`: Current HMA value
+- `trend_direction`: `:bullish` or `:bearish`
+- `real_length`: Current trend duration in bars
+- `probable_length`: Average historical duration for this trend type
+- `slope`: `'up'` or `'down'`
+
+**Use Cases:**
+- Filter fake breakouts (trends that end too quickly)
+- Identify trend continuation opportunities
+- Combine with other indicators for entry timing
+- Options trading: Use probable duration for position sizing and expiry selection
+
+**Example:**
+```yaml
+- type: trend_duration
+  enabled: true
+  config:
+    hma_length: 20
+    trend_length: 5
+    samples: 10
 ```
 
 ## Confirmation Modes
@@ -170,6 +219,32 @@ signals:
     - type: macd
       enabled: true
 ```
+
+### Example 5: Trend Duration + Supertrend (Trend Continuation)
+
+```yaml
+signals:
+  use_multi_indicator_strategy: true
+  confirmation_mode: all
+  min_confidence: 65
+  indicators:
+    - type: supertrend
+      enabled: true
+      config:
+        period: 7
+        multiplier: 3.0
+    - type: trend_duration
+      enabled: true
+      config:
+        hma_length: 20
+        trend_length: 5
+        samples: 10
+```
+
+This combination ensures:
+- Supertrend confirms trend direction
+- Trend Duration validates trend maturity and continuation probability
+- Higher confidence signals for established trends
 
 ## Adding New Indicators
 
