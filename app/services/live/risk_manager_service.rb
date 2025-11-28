@@ -247,6 +247,9 @@ module Live
         # Sync PnL from Redis cache if ActiveCache is stale
         sync_position_pnl_from_redis(position, tracker)
 
+        # Check profit protection: Exit if HWM >= threshold and drops by specified %
+        next if enforce_profit_protection(position, tracker, exit_engine, risk)
+
         pnl_pct = position.pnl_pct
         next if pnl_pct.nil?
 
@@ -272,6 +275,9 @@ module Live
 
         redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
         next unless redis_pnl && redis_pnl[:pnl_pct]
+
+        # Check profit protection for positions not in ActiveCache
+        next if enforce_profit_protection_from_redis(tracker, redis_pnl, exit_engine, risk)
 
         pnl_pct = redis_pnl[:pnl_pct].to_f
         normalized_pct = pnl_pct / 100.0
@@ -389,7 +395,11 @@ module Live
         # 2. Check underlying-aware exits FIRST (if enabled)
         next if handle_underlying_exit(position, tracker, exit_engine)
 
-        # 3. Enforce hard SL/TP limits (always active)
+        # 3. Check profit protection (HWM >= ₹1040, drop >= 1%) - BEFORE other exits
+        risk = risk_config
+        next if enforce_profit_protection(position, tracker, exit_engine, risk)
+
+        # 4. Enforce hard SL/TP limits (always active)
         next if enforce_bracket_limits(position, tracker, exit_engine)
 
         # 4. Apply tiered trailing SL offsets
@@ -1236,6 +1246,92 @@ module Live
       end
     rescue StandardError => e
       Rails.logger.error("[RiskManager] recalculate_position_metrics failed for tracker #{tracker&.id}: #{e.class} - #{e.message}")
+    end
+
+    # Enforce profit protection: Exit if HWM >= threshold and drops by specified %
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    # @param risk [Hash] Risk configuration
+    # @return [Boolean] True if exit was triggered
+    def enforce_profit_protection(position, tracker, exit_engine, risk)
+      protection_cfg = risk[:profit_protection] || {}
+      return false unless protection_cfg[:enabled] == true
+
+      hwm_threshold = protection_cfg[:hwm_threshold_rupees]&.to_f || 1040.0
+      drop_pct = protection_cfg[:drop_pct_from_hwm]&.to_f || 1.0
+
+      hwm = position.high_water_mark || tracker.high_water_mark_pnl&.to_f || 0.0
+      current_pnl = position.pnl || 0.0
+
+      # Only check if HWM has reached the threshold
+      return false if hwm < hwm_threshold
+
+      # Calculate drop from HWM
+      drop_rupees = hwm - current_pnl
+      drop_pct_from_hwm = hwm.positive? ? (drop_rupees / hwm * 100.0) : 0.0
+
+      # Exit if drop exceeds threshold
+      if drop_pct_from_hwm >= drop_pct
+        reason = format(
+          'PROFIT PROTECTION: HWM=₹%.2f, Current=₹%.2f, Drop=%.2f%%',
+          hwm, current_pnl, drop_pct_from_hwm
+        )
+        Rails.logger.warn(
+          "[RiskManager] Profit protection triggered for #{tracker.symbol}: " \
+          "HWM=₹#{hwm.round(2)}, Current=₹#{current_pnl.round(2)}, Drop=#{drop_pct_from_hwm.round(2)}%"
+        )
+        dispatch_exit(exit_engine, tracker, reason)
+        return true
+      end
+
+      false
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] enforce_profit_protection failed: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Enforce profit protection for positions not in ActiveCache (using Redis PnL)
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param redis_pnl [Hash] Redis PnL data
+    # @param exit_engine [Object] Exit engine to use
+    # @param risk [Hash] Risk configuration
+    # @return [Boolean] True if exit was triggered
+    def enforce_profit_protection_from_redis(tracker, redis_pnl, exit_engine, risk)
+      protection_cfg = risk[:profit_protection] || {}
+      return false unless protection_cfg[:enabled] == true
+
+      hwm_threshold = protection_cfg[:hwm_threshold_rupees]&.to_f || 1040.0
+      drop_pct = protection_cfg[:drop_pct_from_hwm]&.to_f || 1.0
+
+      hwm = (redis_pnl[:hwm] || tracker.high_water_mark_pnl)&.to_f || 0.0
+      current_pnl = redis_pnl[:pnl]&.to_f || 0.0
+
+      # Only check if HWM has reached the threshold
+      return false if hwm < hwm_threshold
+
+      # Calculate drop from HWM
+      drop_rupees = hwm - current_pnl
+      drop_pct_from_hwm = hwm.positive? ? (drop_rupees / hwm * 100.0) : 0.0
+
+      # Exit if drop exceeds threshold
+      if drop_pct_from_hwm >= drop_pct
+        reason = format(
+          'PROFIT PROTECTION: HWM=₹%.2f, Current=₹%.2f, Drop=%.2f%%',
+          hwm, current_pnl, drop_pct_from_hwm
+        )
+        Rails.logger.warn(
+          "[RiskManager] Profit protection triggered for #{tracker.symbol} (from Redis): " \
+          "HWM=₹#{hwm.round(2)}, Current=₹#{current_pnl.round(2)}, Drop=#{drop_pct_from_hwm.round(2)}%"
+        )
+        dispatch_exit(exit_engine, tracker, reason)
+        return true
+      end
+
+      false
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] enforce_profit_protection_from_redis failed: #{e.class} - #{e.message}")
+      false
     end
   end
 end
