@@ -198,15 +198,18 @@ module Capital
       end
 
       def allocation_percentage_with_override(band)
-        ENV['ALLOC_PCT']&.to_f || band[:alloc_pct]
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:alloc_pct] || ENV['ALLOC_PCT']&.to_f
       end
 
       def risk_per_trade_with_override(band)
-        ENV['RISK_PER_TRADE_PCT']&.to_f || band[:risk_per_trade_pct]
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:risk_per_trade_pct] || ENV['RISK_PER_TRADE_PCT']&.to_f
       end
 
       def daily_max_loss_with_override(band)
-        ENV['DAILY_MAX_LOSS_PCT']&.to_f || band[:daily_max_loss_pct]
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:daily_max_loss_pct] || ENV['DAILY_MAX_LOSS_PCT']&.to_f
       end
 
       def fetch_live_trading_balance

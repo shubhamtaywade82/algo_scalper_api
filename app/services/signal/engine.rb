@@ -47,6 +47,14 @@ module Signal
           end
         end
 
+        # Check if modular indicator system is enabled
+        use_multi_indicator = signals_cfg.fetch(:use_multi_indicator_strategy, false)
+
+        # Load common config variables (needed for confirmation timeframe)
+        supertrend_cfg = signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }
+        adx_cfg = signals_cfg[:adx] || {}
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
+
         # Use strategy-based analysis if recommendation is available and enabled
         if use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
           primary_analysis = analyze_with_recommended_strategy(
@@ -55,16 +63,20 @@ module Signal
             timeframe: effective_timeframe,
             strategy_recommendation: strategy_recommendation
           )
+        elsif use_multi_indicator
+          # Use modular multi-indicator system
+          primary_analysis = analyze_with_multi_indicators(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            timeframe: primary_tf,
+            signals_cfg: signals_cfg
+          )
         elsif enable_supertrend_signal
           # Traditional Supertrend + ADX analysis (1m signal)
-          supertrend_cfg = signals_cfg[:supertrend]
           unless supertrend_cfg
             Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
             return
           end
-
-          adx_cfg = signals_cfg[:adx] || {}
-          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
 
           # Get per-index ADX thresholds (if specified) or fall back to global
           index_adx_thresholds = index_cfg[:adx_thresholds] || {}
@@ -94,9 +106,9 @@ module Signal
         final_direction = primary_analysis[:direction]
         confirmation_analysis = nil
 
-        # Skip confirmation timeframe when using strategy recommendations
-        # (strategies were backtested as standalone systems)
-        if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended])
+        # Skip confirmation timeframe when using strategy recommendations or multi-indicator system
+        # (strategies were backtested as standalone systems, multi-indicator can combine indicators internally)
+        if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]) && !use_multi_indicator
           mode_config = get_validation_mode_config
 
           # Get per-index ADX thresholds (if specified) or fall back to global
@@ -131,6 +143,8 @@ module Signal
           # Rails.logger.info("[Signal] Multi-timeframe decision for #{index_cfg[:key]}: primary=#{primary_analysis[:direction]} confirmation=#{confirmation_analysis[:direction]} final=#{final_direction}")
         elsif confirmation_tf.present? && use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
           Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using strategy recommendation: #{strategy_recommendation[:strategy_name]})")
+        elsif confirmation_tf.present? && use_multi_indicator
+          Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using multi-indicator system - indicators can be combined via confirmation_mode)")
         end
 
         if final_direction == :avoid
@@ -688,6 +702,142 @@ module Signal
         end
       rescue StandardError => e
         Rails.logger.error("[Signal] Strategy-based analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
+        { status: :error, message: e.message }
+      end
+
+      def analyze_with_multi_indicators(index_cfg:, instrument:, timeframe:, signals_cfg:)
+        interval = normalize_interval(timeframe)
+        if interval.blank?
+          message = "Invalid timeframe '#{timeframe}'"
+          Rails.logger.error("[Signal] #{message} for #{index_cfg[:key]}")
+          return { status: :error, message: message }
+        end
+
+        series = instrument.candle_series(interval: interval)
+        unless series&.candles&.any?
+          message = "No candle data (#{timeframe})"
+          Rails.logger.warn("[Signal] #{message} for #{index_cfg[:key]}")
+          return { status: :no_data, message: message }
+        end
+
+        # Get enabled indicators from configuration
+        indicator_configs = signals_cfg[:indicators] || []
+        enabled_indicators = indicator_configs.select { |ic| ic[:enabled] != false }
+
+        if enabled_indicators.empty?
+          Rails.logger.warn("[Signal] No enabled indicators configured for #{index_cfg[:key]}")
+          return { status: :error, message: 'No enabled indicators' }
+        end
+
+        # Get preset from config (algo.yml preferred, ENV as fallback)
+        preset_name = signals_cfg[:indicator_preset]&.to_sym || ENV['INDICATOR_PRESET']&.to_sym || :moderate
+        threshold_preset = Indicators::ThresholdConfig.get_preset(preset_name)
+
+        # Merge global config with indicator configs
+        global_config = {
+          supertrend_cfg: signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 },
+          trading_hours_filter: true,
+          indicator_preset: preset_name # Pass preset name to indicators
+        }
+
+        # Apply threshold config to individual indicators
+        enabled_indicators.each do |ic|
+          indicator_type = ic[:type].to_s.downcase.to_sym
+          ic[:config] ||= {}
+          
+          # Merge threshold config for this indicator type
+          if threshold_preset[indicator_type]
+            ic[:config] = ic[:config].merge(threshold_preset[indicator_type])
+          end
+        end
+
+        # Get per-index ADX thresholds if specified (overrides preset)
+        index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+        if index_adx_thresholds[:primary_min_strength]
+          # Update ADX indicator config with per-index threshold
+          enabled_indicators.each do |ic|
+            if ic[:type].to_s.downcase == 'adx'
+              ic[:config] ||= {}
+              ic[:config][:min_strength] = index_adx_thresholds[:primary_min_strength]
+            end
+          end
+        end
+
+        # Build multi-indicator strategy
+        confirmation_mode = signals_cfg[:confirmation_mode] || :all
+        min_confidence = signals_cfg[:min_confidence] || 60
+
+        # Merge threshold config into global_config for MultiIndicatorStrategy
+        global_config = global_config.merge(threshold_preset[:multi_indicator] || {})
+
+        strategy = MultiIndicatorStrategy.new(
+          series: series,
+          indicators: enabled_indicators,
+          confirmation_mode: confirmation_mode,
+          min_confidence: min_confidence,
+          **global_config
+        )
+
+        # Use the last candle index for signal generation
+        current_index = series.candles.size - 1
+        signal = strategy.generate_signal(current_index)
+
+        if signal.nil?
+          Rails.logger.debug("[Signal] Multi-indicator strategy did not generate signal for #{index_cfg[:key]} at index #{current_index}")
+          return {
+            status: :ok,
+            series: series,
+            supertrend: { trend: nil, last_value: nil },
+            adx_value: 0,
+            direction: :avoid,
+            last_candle_timestamp: series.candles.last&.timestamp
+          }
+        end
+
+        # Convert signal to direction
+        direction = signal[:type] == :ce ? :bullish : :bearish
+
+        # Log confluence information
+        if signal[:confluence]
+          confluence = signal[:confluence]
+          Rails.logger.info("[Signal] Confluence for #{index_cfg[:key]}: score=#{confluence[:score]}% strength=#{confluence[:strength]} (#{confluence[:agreeing_count]}/#{confluence[:total_indicators]} indicators agree on #{confluence[:dominant_direction]})")
+          confluence[:breakdown].each do |ind|
+            status = ind[:agrees] ? '✓' : '✗'
+            Rails.logger.debug("[Signal]   #{status} #{ind[:name]}: #{ind[:direction]} (confidence: #{ind[:confidence]})")
+          end
+        end
+
+        # Extract indicator values for compatibility
+        # Try to get supertrend and ADX values if available
+        supertrend_value = nil
+        adx_value = 0
+
+        enabled_indicators.each do |ic|
+          indicator_name = ic[:type].to_s.downcase
+          if indicator_name == 'supertrend' || indicator_name == 'st'
+            # Calculate supertrend for compatibility
+            st_cfg = global_config[:supertrend_cfg]
+            st_service = Indicators::Supertrend.new(series: series, **st_cfg)
+            st_result = st_service.call
+            supertrend_value = st_result[:last_value] if st_result
+          elsif indicator_name == 'adx'
+            adx_value = series.adx(ic.dig(:config, :period) || 14) || 0
+          end
+        end
+
+        {
+          status: :ok,
+          series: series,
+          supertrend: { trend: direction, last_value: supertrend_value },
+          adx_value: adx_value,
+          direction: direction,
+          last_candle_timestamp: series.candles.last&.timestamp,
+          confidence: signal[:confidence],
+          confluence: signal[:confluence]
+        }
+      rescue StandardError => e
+        Rails.logger.error("[Signal] Multi-indicator analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
+        Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
         { status: :error, message: e.message }
       end
 
