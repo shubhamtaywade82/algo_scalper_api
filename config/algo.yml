@@ -199,8 +199,18 @@ signals:
   # Use multi_indicator_strategy: true to enable modular indicator system
   # When enabled, the 'indicators' list defines which indicators to use
   use_multi_indicator_strategy: false # Set to true to use modular system
+  
+  # Indicator threshold preset: loose, moderate, tight, production
+  # - loose: Very permissive - generates more signals for initial testing
+  # - moderate: Balanced - good starting point
+  # - tight: Strict - fewer but higher quality signals
+  # - production: Optimized based on backtesting results
+  # Can also be set via ENV['INDICATOR_PRESET']
+  indicator_preset: moderate # Options: loose, moderate, tight, production
+  
   confirmation_mode: all # Options: all, majority, weighted, any
   min_confidence: 60 # Minimum combined confidence score (0-100)
+  # Note: If indicator_preset is set, these may be overridden by preset values
 
   # Indicator configurations for modular system
   # Each indicator can be enabled/disabled and configured independently

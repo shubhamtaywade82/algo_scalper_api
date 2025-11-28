@@ -12,11 +12,17 @@ class MultiIndicatorStrategy
 
   attr_reader :series, :indicators, :confirmation_mode, :min_confidence
 
-  def initialize(series:, indicators: [], confirmation_mode: :all, min_confidence: 60, **config)
+  def initialize(series:, indicators: [], confirmation_mode: :all, min_confidence: nil, **config)
     @series = series
     @indicators = build_indicators(indicators, config)
-    @confirmation_mode = CONFIRMATION_MODES[confirmation_mode] || :all_must_agree
-    @min_confidence = min_confidence
+    
+    # Allow threshold config to override confirmation_mode and min_confidence
+    threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:multi_indicator, config)
+    effective_confirmation_mode = threshold_config[:confirmation_mode] || confirmation_mode
+    effective_min_confidence = min_confidence || threshold_config[:min_confidence] || 60
+    
+    @confirmation_mode = CONFIRMATION_MODES[effective_confirmation_mode] || :all_must_agree
+    @min_confidence = effective_min_confidence
     @config = config
   end
 

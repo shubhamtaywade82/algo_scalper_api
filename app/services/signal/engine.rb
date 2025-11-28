@@ -729,13 +729,29 @@ module Signal
           return { status: :error, message: 'No enabled indicators' }
         end
 
+        # Get preset from config or environment
+        preset_name = signals_cfg[:indicator_preset] || ENV['INDICATOR_PRESET']&.to_sym || :moderate
+        threshold_preset = Indicators::ThresholdConfig.get_preset(preset_name)
+
         # Merge global config with indicator configs
         global_config = {
           supertrend_cfg: signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 },
-          trading_hours_filter: true
+          trading_hours_filter: true,
+          indicator_preset: preset_name # Pass preset name to indicators
         }
 
-        # Get per-index ADX thresholds if specified
+        # Apply threshold config to individual indicators
+        enabled_indicators.each do |ic|
+          indicator_type = ic[:type].to_s.downcase.to_sym
+          ic[:config] ||= {}
+          
+          # Merge threshold config for this indicator type
+          if threshold_preset[indicator_type]
+            ic[:config] = ic[:config].merge(threshold_preset[indicator_type])
+          end
+        end
+
+        # Get per-index ADX thresholds if specified (overrides preset)
         index_adx_thresholds = index_cfg[:adx_thresholds] || {}
         if index_adx_thresholds[:primary_min_strength]
           # Update ADX indicator config with per-index threshold
@@ -750,6 +766,9 @@ module Signal
         # Build multi-indicator strategy
         confirmation_mode = signals_cfg[:confirmation_mode] || :all
         min_confidence = signals_cfg[:min_confidence] || 60
+
+        # Merge threshold config into global_config for MultiIndicatorStrategy
+        global_config = global_config.merge(threshold_preset[:multi_indicator] || {})
 
         strategy = MultiIndicatorStrategy.new(
           series: series,

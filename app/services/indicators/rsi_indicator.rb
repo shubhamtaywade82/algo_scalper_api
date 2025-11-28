@@ -6,8 +6,10 @@ module Indicators
     def initialize(series:, config: {})
       super
       @period = config[:period] || 14
-      @oversold = config[:oversold] || 30
-      @overbought = config[:overbought] || 70
+      # Allow threshold config to override oversold/overbought levels
+      threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:rsi, @config)
+      @oversold = threshold_config[:oversold] || config[:oversold] || 30
+      @overbought = threshold_config[:overbought] || config[:overbought] || 70
     end
 
     def min_required_candles
@@ -59,7 +61,9 @@ module Indicators
     end
 
     def calculate_confidence(rsi_value, direction)
-      base = 40
+      # Allow threshold config to override confidence base
+      threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:rsi, config)
+      base = threshold_config[:confidence_base] || 40
 
       case direction
       when :bullish

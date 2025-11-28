@@ -6,7 +6,9 @@ module Indicators
     def initialize(series:, config: {})
       super
       @period = config[:period] || 14
-      @min_strength = config[:min_strength] || 20
+      # Allow threshold config to override min_strength
+      threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:adx, @config)
+      @min_strength = threshold_config[:min_strength] || config[:min_strength] || 20
     end
 
     def min_required_candles
@@ -67,7 +69,9 @@ module Indicators
     end
 
     def calculate_confidence(adx_value)
-      base = 50
+      # Allow threshold config to override confidence base
+      threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:adx, config)
+      base = threshold_config[:confidence_base] || 50
       base += 20 if adx_value >= @min_strength
       base += 15 if adx_value >= 30
       base += 10 if adx_value >= 40
