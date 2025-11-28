@@ -21,7 +21,7 @@ class MultiIndicatorStrategy
   end
 
   # Generates entry signal at given candle index
-  # Returns: { type: :ce/:pe, confidence: 0-100 } or nil
+  # Returns: { type: :ce/:pe, confidence: 0-100, confluence: {...} } or nil
   def generate_signal(index)
     return nil if indicators.empty?
     return nil unless enough_candles?(index)
@@ -34,6 +34,9 @@ class MultiIndicatorStrategy
     valid_results = indicator_results.compact
     return nil if valid_results.empty?
 
+    # Calculate confluence information
+    confluence_info = calculate_confluence(valid_results)
+
     # Determine direction based on confirmation mode
     direction = determine_direction(valid_results)
     return nil unless direction
@@ -42,7 +45,11 @@ class MultiIndicatorStrategy
     confidence = calculate_combined_confidence(valid_results, direction)
     return nil if confidence < min_confidence
 
-    { type: direction, confidence: confidence }
+    {
+      type: direction,
+      confidence: confidence,
+      confluence: confluence_info
+    }
   end
 
   private
@@ -214,5 +221,63 @@ class MultiIndicatorStrategy
     return 0 if matching_results.empty?
 
     matching_results.map { |r| r[:confidence] || 0 }.max
+  end
+
+  # Calculate confluence information showing which indicators agree/disagree
+  def calculate_confluence(results)
+    total_indicators = results.size
+    bullish_count = results.count { |r| r[:direction] == :bullish }
+    bearish_count = results.count { |r| r[:direction] == :bearish }
+    neutral_count = results.count { |r| r[:direction] == :neutral }
+
+    # Determine dominant direction
+    dominant_direction = if bullish_count > bearish_count && bullish_count > neutral_count
+                           :bullish
+                         elsif bearish_count > bullish_count && bearish_count > neutral_count
+                           :bearish
+                         else
+                           :neutral
+                         end
+
+    # Calculate confluence score (0-100): percentage of indicators agreeing with dominant direction
+    confluence_score = if dominant_direction == :neutral
+                         0
+                       else
+                         agreeing_count = dominant_direction == :bullish ? bullish_count : bearish_count
+                         (agreeing_count.to_f / total_indicators * 100).round
+                       end
+
+    # Determine confluence strength
+    confluence_strength = if confluence_score >= 80
+                             :strong
+                           elsif confluence_score >= 60
+                             :moderate
+                           elsif confluence_score >= 40
+                             :weak
+                           else
+                             :none
+                           end
+
+    # Build indicator breakdown
+    indicator_breakdown = results.map do |result|
+      {
+        name: result[:indicator],
+        direction: result[:direction],
+        confidence: result[:confidence] || 0,
+        agrees: result[:direction] == dominant_direction
+      }
+    end
+
+    {
+      score: confluence_score,
+      strength: confluence_strength,
+      total_indicators: total_indicators,
+      bullish_count: bullish_count,
+      bearish_count: bearish_count,
+      neutral_count: neutral_count,
+      dominant_direction: dominant_direction,
+      agreeing_count: dominant_direction == :bullish ? bullish_count : bearish_count,
+      breakdown: indicator_breakdown
+    }
   end
 end

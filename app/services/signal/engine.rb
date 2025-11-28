@@ -778,6 +778,16 @@ module Signal
         # Convert signal to direction
         direction = signal[:type] == :ce ? :bullish : :bearish
 
+        # Log confluence information
+        if signal[:confluence]
+          confluence = signal[:confluence]
+          Rails.logger.info("[Signal] Confluence for #{index_cfg[:key]}: score=#{confluence[:score]}% strength=#{confluence[:strength]} (#{confluence[:agreeing_count]}/#{confluence[:total_indicators]} indicators agree on #{confluence[:dominant_direction]})")
+          confluence[:breakdown].each do |ind|
+            status = ind[:agrees] ? '✓' : '✗'
+            Rails.logger.debug("[Signal]   #{status} #{ind[:name]}: #{ind[:direction]} (confidence: #{ind[:confidence]})")
+          end
+        end
+
         # Extract indicator values for compatibility
         # Try to get supertrend and ADX values if available
         supertrend_value = nil
@@ -803,7 +813,8 @@ module Signal
           adx_value: adx_value,
           direction: direction,
           last_candle_timestamp: series.candles.last&.timestamp,
-          confidence: signal[:confidence]
+          confidence: signal[:confidence],
+          confluence: signal[:confluence]
         }
       rescue StandardError => e
         Rails.logger.error("[Signal] Multi-indicator analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
