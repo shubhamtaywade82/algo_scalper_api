@@ -131,6 +131,7 @@ module Live
 
     # Central monitoring loop: keep PnL and caches fresh.
     # DO NOT perform exit dispatching here when an external ExitEngine exists — ExitEngine will call enforcement methods.
+    # Phase 2: Consolidated iteration - processes all positions in single loop
     def monitor_loop(last_paper_pnl_update)
       # Clear per-cycle caches at start of each cycle
       @redis_pnl_cache.clear
@@ -147,29 +148,29 @@ module Live
         return
       end
 
-      # Keep Redis/DB PnL fresh
+      # Keep Redis/DB PnL fresh (throttled maintenance)
       update_paper_positions_pnl_if_due(last_paper_pnl_update)
       ensure_all_positions_in_redis
 
-      # Ensure all active positions are in ActiveCache (for exit checking)
+      # Ensure all active positions are in ActiveCache (for exit checking) - throttled
       ensure_all_positions_in_active_cache
 
-      # Ensure all active positions are subscribed to market data
+      # Ensure all active positions are subscribed to market data - throttled
       ensure_all_positions_subscribed
 
-      # NEW: Process trailing for all active positions (per-tick)
-      # Peak-drawdown check happens FIRST inside TrailingEngine.process_tick()
-      process_trailing_for_all_positions
+      # Phase 2: Consolidated position processing - single iteration
+      tracker_map = trackers_for_positions(positions)
+      exit_engine = @exit_engine || self
 
-      # Enforce session end exit (before 3:15 PM IST) - takes priority
-      enforce_session_end_exit(exit_engine: @exit_engine || self)
+      # Process all positions in single consolidated loop
+      process_all_positions_in_single_loop(positions, tracker_map, exit_engine)
 
       # Backwards-compatible enforcement: if there is no external ExitEngine, run enforcement here
+      # Note: Most enforcement is now handled in process_all_positions_in_single_loop
+      # This is kept for fallback positions not in ActiveCache
       return unless @exit_engine.nil?
 
       enforce_hard_limits(exit_engine: self)
-      enforce_trailing_stops(exit_engine: self)
-      enforce_time_based_exit(exit_engine: self)
     end
 
     # Called by external ExitEngine or internally (when used standalone).
@@ -524,10 +525,18 @@ module Live
     end
 
     # Update PnL for all paper trackers and cache in Redis (same semantics as before)
+    # Phase 2: Uses batch LTP fetching for better performance
     def update_paper_positions_pnl
       paper_trackers = PositionTracker.paper.active.includes(:instrument).to_a
       return if paper_trackers.empty?
 
+      # Phase 2: Use batch fetching for better performance
+      if paper_trackers.length > 1
+        batch_update_paper_positions_pnl(paper_trackers)
+        return
+      end
+
+      # Fallback to individual calls for single tracker (backward compatibility)
       paper_trackers.each do |tracker|
         next unless tracker.entry_price.present? && tracker.quantity.present?
 
@@ -1242,6 +1251,319 @@ module Live
         ActiveSupport::Notifications.unsubscribe(token)
       end
       @position_subscriptions.clear
+    end
+
+    # Phase 2: Process all positions in single consolidated loop
+    # This eliminates 7-10 separate iterations over the same positions
+    # @param positions [Array<Positions::ActiveCache::PositionData>] All active positions
+    # @param tracker_map [Hash<Integer, PositionTracker>] Map of tracker_id => tracker
+    # @param exit_engine [Object] Exit engine to use for exits
+    def process_all_positions_in_single_loop(positions, tracker_map, exit_engine)
+      positions.each do |position|
+        tracker = tracker_map[position.tracker_id]
+        next unless tracker&.active?
+
+        begin
+          # Sync PnL from Redis once per position (uses cycle cache)
+          sync_position_pnl_from_redis(position, tracker)
+
+          # Check all exit conditions in single pass (consolidated)
+          next if check_all_exit_conditions(position, tracker, exit_engine)
+
+          # Process trailing stops (if not exited)
+          process_trailing_for_position(position, tracker, exit_engine)
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] Error processing position #{position.tracker_id}: #{e.class} - #{e.message}")
+        end
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Error in process_all_positions_in_single_loop: #{e.class} - #{e.message}")
+    end
+
+    # Phase 2: Check all exit conditions in single consolidated pass
+    # Consolidates: session end, SL/TP, time-based, trailing stops
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    # @return [Boolean] true if exit was triggered, false otherwise
+    def check_all_exit_conditions(position, tracker, exit_engine)
+      # 1. Session end exit (highest priority)
+      session_check = TradingSession::Service.should_force_exit?
+      if session_check[:should_exit]
+        dispatch_exit(exit_engine, tracker, 'session end (deadline: 3:15 PM IST)')
+        return true
+      end
+
+      # 2. Hard limits (SL/TP) - consolidated check
+      if check_sl_tp_limits(position, tracker, exit_engine)
+        return true
+      end
+
+      # 3. Time-based exit
+      if check_time_based_exit(position, tracker, exit_engine)
+        return true
+      end
+
+      false
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] check_all_exit_conditions error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Phase 2: Consolidated SL/TP limit check
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    # @return [Boolean] true if exit was triggered, false otherwise
+    def check_sl_tp_limits(position, tracker, exit_engine)
+      risk = risk_config
+      sl_pct = begin
+        BigDecimal(risk[:sl_pct].to_s)
+      rescue StandardError
+        BigDecimal(0)
+      end
+      tp_pct = begin
+        BigDecimal(risk[:tp_pct].to_s)
+      rescue StandardError
+        BigDecimal(0)
+      end
+
+      pnl_pct = position.pnl_pct
+      return false if pnl_pct.nil?
+
+      normalized_pct = pnl_pct.to_f / 100.0
+
+      if normalized_pct <= -sl_pct.to_f
+        reason = "SL HIT #{pnl_pct.round(2)}%"
+        dispatch_exit(exit_engine, tracker, reason)
+        return true
+      end
+
+      if normalized_pct >= tp_pct.to_f
+        reason = "TP HIT #{pnl_pct.round(2)}%"
+        dispatch_exit(exit_engine, tracker, reason)
+        return true
+      end
+
+      false
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] check_sl_tp_limits error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Phase 2: Time-based exit check
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    # @return [Boolean] true if exit was triggered, false otherwise
+    def check_time_based_exit(position, tracker, exit_engine)
+      risk = risk_config
+      exit_time = parse_time_hhmm(risk[:time_exit_hhmm] || '15:20')
+      return false unless exit_time
+
+      now = Time.current
+      return false unless now >= exit_time
+
+      market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+      return false if market_close_time && now >= market_close_time
+
+      pnl_rupees = position.pnl
+      if pnl_rupees.to_f.positive?
+        min_profit = begin
+          BigDecimal((risk[:min_profit_rupees] || 0).to_s)
+        rescue StandardError
+          BigDecimal(0)
+        end
+        if min_profit.positive? && BigDecimal(pnl_rupees.to_s) < min_profit
+          Rails.logger.info("[RiskManager] Time-based exit skipped for #{tracker.order_no} - PnL < min_profit")
+          return false
+        end
+      end
+
+      reason = "time-based exit (#{exit_time.strftime('%H:%M')})"
+      dispatch_exit(exit_engine, tracker, reason)
+      true
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] check_time_based_exit error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Phase 2: Process trailing for single position
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    def process_trailing_for_position(position, tracker, exit_engine)
+      @bracket_placer ||= Orders::BracketPlacer.new
+      @trailing_engine ||= Live::TrailingEngine.new(bracket_placer: @bracket_placer)
+
+      ensure_position_snapshot(position)
+
+      # Recalculate position metrics (PnL, peak) from current LTP
+      recalculate_position_metrics(position, tracker)
+
+      # Check underlying-aware exits FIRST (if enabled)
+      return if handle_underlying_exit(position, tracker, exit_engine)
+
+      # Enforce hard SL/TP limits (always active) - already checked in check_all_exit_conditions
+      # but check again here for bracket limits
+      return if enforce_bracket_limits(position, tracker, exit_engine)
+
+      # Apply tiered trailing SL offsets
+      desired_sl_offset_pct = Positions::TrailingConfig.sl_offset_for(position.pnl_pct)
+      if desired_sl_offset_pct
+        position.sl_offset_pct = desired_sl_offset_pct
+        active_cache = Positions::ActiveCache.instance
+        active_cache.update_position(position.tracker_id, sl_offset_pct: desired_sl_offset_pct)
+      end
+
+      # Process trailing with peak-drawdown gating (via TrailingEngine)
+      trailing_exit_engine = exit_engine
+      @trailing_engine.process_tick(position, exit_engine: trailing_exit_engine)
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] process_trailing_for_position error for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
+    end
+
+    # Phase 2: Batch fetch LTP for multiple positions
+    # Groups positions by segment and makes single API call per segment
+    # @param security_ids_by_segment [Array<Hash>] Array of {segment:, security_id:} hashes
+    # @return [Hash<String, BigDecimal>] Map of security_id => LTP
+    def batch_fetch_ltp(security_ids_by_segment)
+      return {} if security_ids_by_segment.empty?
+
+      # Group by segment
+      grouped = security_ids_by_segment.group_by { |item| item[:segment] }
+      result = {}
+
+      grouped.each do |segment, items|
+        security_ids = items.map { |item| item[:security_id].to_i }
+
+        begin
+          # Single API call for all security_ids in this segment
+          response = DhanHQ::Models::MarketFeed.ltp({ segment => security_ids })
+
+          if response['status'] == 'success'
+            segment_data = response.dig('data', segment) || {}
+            items.each do |item|
+              security_id_str = item[:security_id].to_s
+              option_data = segment_data[security_id_str]
+              if option_data && option_data['last_price']
+                ltp = BigDecimal(option_data['last_price'].to_s)
+                result[security_id_str] = ltp
+
+                # Store in Redis tick cache
+                begin
+                  Live::RedisPnlCache.instance.store_tick(
+                    segment: segment,
+                    security_id: item[:security_id],
+                    ltp: ltp,
+                    timestamp: Time.current
+                  )
+                rescue StandardError
+                  nil
+                end
+              end
+            end
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] batch_fetch_ltp failed for segment #{segment}: #{e.class} - #{e.message}")
+          # Fallback: try individual calls for this segment
+          items.each do |item|
+            begin
+              ltp = get_paper_ltp_for_security(item[:segment], item[:security_id])
+              result[item[:security_id].to_s] = ltp if ltp
+            rescue StandardError
+              nil
+            end
+          end
+        end
+      end
+
+      result
+    end
+
+    # Helper for individual LTP fetch (fallback)
+    def get_paper_ltp_for_security(segment, security_id)
+      # Try WebSocket TickCache first
+      cached = Live::TickCache.ltp(segment, security_id)
+      return BigDecimal(cached.to_s) if cached
+
+      # Try RedisTickCache
+      tick_data = begin
+        Live::RedisTickCache.instance.fetch_tick(segment, security_id)
+      rescue StandardError
+        nil
+      end
+      return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
+
+      # Direct API call
+      begin
+        response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
+        if response['status'] == 'success'
+          option_data = response.dig('data', segment, security_id.to_s)
+          if option_data && option_data['last_price']
+            return BigDecimal(option_data['last_price'].to_s)
+          end
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] get_paper_ltp_for_security failed: #{e.class} - #{e.message}")
+      end
+
+      nil
+    end
+
+    # Phase 2: Batch update paper positions PnL using batch LTP fetching
+    # @param trackers [Array<PositionTracker>] Paper trackers to update
+    def batch_update_paper_positions_pnl(trackers)
+      return if trackers.empty?
+
+      # Prepare security IDs for batch fetch
+      security_ids_by_segment = trackers.map do |tracker|
+        segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+        next unless segment.present? && tracker.security_id.present?
+
+        { segment: segment, security_id: tracker.security_id }
+      end.compact
+
+      # Batch fetch LTPs
+      ltps = batch_fetch_ltp(security_ids_by_segment)
+
+      # Update each tracker with batched LTP
+      pnl_updater = Live::PnlUpdaterService.instance
+      trackers.each do |tracker|
+        next unless tracker.entry_price.present? && tracker.quantity.present?
+
+        ltp = ltps[tracker.security_id.to_s]
+        next unless ltp
+
+        entry = BigDecimal(tracker.entry_price.to_s)
+        exit_price = BigDecimal(ltp.to_s)
+        qty = tracker.quantity.to_i
+        pnl = (exit_price - entry) * qty
+        pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
+
+        hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+        hwm = [hwm, pnl].max
+        hwm_pnl_pct = entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
+
+        tracker.update!(
+          last_pnl_rupees: pnl,
+          last_pnl_pct: pnl_pct ? (pnl_pct * 100).round(2) : nil,
+          high_water_mark_pnl: hwm
+        )
+
+        pnl_updater.cache_intermediate_pnl(
+          tracker_id: tracker.id,
+          pnl: pnl,
+          pnl_pct: pnl_pct,
+          ltp: ltp,
+          hwm: hwm,
+          hwm_pnl_pct: hwm_pnl_pct
+        )
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] batch_update_paper_positions_pnl failed for #{tracker.order_no}: #{e.class} - #{e.message}")
+      end
+
+      Rails.logger.info('[RiskManager] Batch paper PnL update completed')
     end
 
     # Recalculate position metrics (PnL, peak) from current LTP
