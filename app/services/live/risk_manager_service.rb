@@ -30,6 +30,8 @@ module Live
       @sleep_cv = ConditionVariable.new
       @position_subscriptions = []
       @metrics = Hash.new(0)
+      @redis_pnl_cache = {} # Per-cycle cache for Redis PnL lookups (cleared each cycle)
+      @cycle_tracker_map = nil # Cached tracker map for current cycle
 
       # Watchdog ensures service thread is restarted if it dies (lightweight)
       @watchdog_thread = Thread.new do
@@ -130,6 +132,21 @@ module Live
     # Central monitoring loop: keep PnL and caches fresh.
     # DO NOT perform exit dispatching here when an external ExitEngine exists — ExitEngine will call enforcement methods.
     def monitor_loop(last_paper_pnl_update)
+      # Clear per-cycle caches at start of each cycle
+      @redis_pnl_cache.clear
+      @cycle_tracker_map = nil
+
+      # Early exit if no positions (optimization)
+      positions = active_cache_positions
+      if positions.empty?
+        # Still run maintenance tasks (throttled)
+        update_paper_positions_pnl_if_due(last_paper_pnl_update)
+        ensure_all_positions_in_redis
+        ensure_all_positions_in_active_cache
+        ensure_all_positions_subscribed
+        return
+      end
+
       # Keep Redis/DB PnL fresh
       update_paper_positions_pnl_if_due(last_paper_pnl_update)
       ensure_all_positions_in_redis
@@ -237,6 +254,8 @@ module Live
       tracker_map = trackers_for_positions(positions)
 
       # Also check positions not in ActiveCache (fallback)
+      # Load all trackers to find ones not in ActiveCache
+      # Note: This is a fallback check, so we load fresh data
       all_trackers = PositionTracker.active.includes(:instrument).to_a
       trackers_not_in_cache = all_trackers.reject { |t| tracker_map[t.id] }
 
@@ -270,7 +289,8 @@ module Live
       trackers_not_in_cache.each do |tracker|
         next unless tracker.active?
 
-        redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+        # Use cached Redis PnL if available (from earlier in this cycle)
+        redis_pnl = @redis_pnl_cache[tracker.id] ||= Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
         next unless redis_pnl && redis_pnl[:pnl_pct]
 
         pnl_pct = redis_pnl[:pnl_pct].to_f
@@ -902,7 +922,16 @@ module Live
       ids = position_list.map(&:tracker_id).compact
       return {} if ids.empty?
 
-      PositionTracker.where(id: ids).index_by(&:id)
+      # Use cached tracker map if available and IDs match
+      if @cycle_tracker_map
+        cached_ids = @cycle_tracker_map.keys.map(&:to_i).to_set
+        requested_ids = ids.map(&:to_i).to_set
+        return @cycle_tracker_map if cached_ids == requested_ids
+      end
+
+      # Load trackers and cache for this cycle
+      @cycle_tracker_map = PositionTracker.where(id: ids).includes(:instrument).index_by(&:id)
+      @cycle_tracker_map
     end
 
     def risk_config
@@ -1025,10 +1054,12 @@ module Live
 
     # Sync position PnL from Redis cache to ActiveCache
     # This ensures exit conditions use the latest PnL data
+    # Uses per-cycle cache to avoid redundant Redis fetches
     def sync_position_pnl_from_redis(position, tracker)
       return unless position && tracker
 
-      redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+      # Use cached Redis PnL if available (fetched earlier in this cycle)
+      redis_pnl = @redis_pnl_cache[tracker.id] ||= Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
       return unless redis_pnl && redis_pnl[:pnl]
 
       # Update ActiveCache position with Redis PnL data
@@ -1220,6 +1251,7 @@ module Live
       return unless position && tracker
 
       # Sync from Redis cache first (most up-to-date)
+      # Uses per-cycle cache to avoid redundant fetches
       sync_position_pnl_from_redis(position, tracker)
 
       # Ensure LTP is current
