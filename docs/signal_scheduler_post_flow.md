@@ -39,10 +39,18 @@ Entries::EntryGuard.try_enter()
     │  - Enforces exit conditions                            │
     └─────────────────────────────────────────────────────────┘
             │
+            ├─→ Live::RedisPnlCache (Redis Storage)
+            │   - Stores PnL data in Redis (key: pnl:tracker:{id})
+            │   - TTL: 6 hours
+            │   - Syncs to DB every 30 seconds (throttled)
+            │   - Provides fast PnL lookups for RiskManager
+            │   - Stores: pnl, pnl_pct, ltp, hwm, drawdown, metadata
+            │
             ├─→ Live::PnlUpdaterService (Background)
             │   - Updates PnL in Redis cache (every 0.25s flush)
             │   - Batches updates (max 200 per batch)
-            │   - Updates PositionTracker.last_pnl_rupees
+            │   - Writes to RedisPnlCache.store_pnl()
+            │   - Updates PositionTracker.last_pnl_rupees (throttled)
             │
             ├─→ Live::TrailingEngine (Per-Tick Processing)
             │   - Updates peak_profit_pct
@@ -181,7 +189,53 @@ Entries::EntryGuard.try_enter()
 
 ---
 
-### 4. **Live::PnlUpdaterService** (Background PnL Updates)
+### 4. **Live::RedisPnlCache** (Redis PnL Storage)
+
+**Purpose**: Fast PnL storage and retrieval in Redis
+
+**Key Features**:
+- Singleton service (one instance)
+- Redis hash storage: `pnl:tracker:{tracker_id}`
+- TTL: 6 hours
+- Throttled DB sync (every 30 seconds per tracker)
+
+**Key Methods**:
+- `store_pnl()` - Store PnL data in Redis
+- `fetch_pnl(tracker_id)` - Retrieve PnL data
+- `sync_pnl_to_database_throttled()` - Sync to DB (throttled)
+- `clear_tracker()` - Remove tracker data
+
+**Stored Data**:
+```ruby
+{
+  pnl: Float,              # Current PnL in rupees
+  pnl_pct: Float,          # Current PnL percentage
+  ltp: Float,              # Last traded price
+  hwm_pnl: Float,          # High water mark PnL
+  hwm_pnl_pct: Float,      # High water mark percentage
+  timestamp: Integer,       # Unix timestamp
+  # Metadata (if tracker provided):
+  entry_price, quantity, segment, security_id,
+  symbol, side, order_no, paper,
+  price_change_pct, capital_deployed,
+  time_in_position_sec, drawdown_rupees, drawdown_pct,
+  index_key, direction
+}
+```
+
+**Usage in RiskManagerService**:
+- `fetch_pnl()` - Fast PnL lookups for exit conditions
+- `sync_position_pnl_from_redis()` - Syncs Redis → ActiveCache
+- Used as fallback when ActiveCache is stale
+
+**DB Sync Strategy**:
+- Throttled: Only syncs to DB every 30 seconds per tracker
+- Reduces database load while maintaining Redis freshness
+- Force sync available for immediate updates (e.g., on exit)
+
+---
+
+### 5. **Live::PnlUpdaterService** (Background PnL Updates)
 
 **Purpose**: Keeps PnL data fresh in Redis and database
 
@@ -198,9 +252,14 @@ Entries::EntryGuard.try_enter()
    - API fallback calls
 
 2. ✅ Batches updates (max 200 per flush)
-3. ✅ Updates `PositionTracker.last_pnl_rupees`
-4. ✅ Updates `PositionTracker.high_water_mark_pnl`
-5. ✅ Stores in Redis PnL cache
+3. ✅ Writes to `RedisPnlCache.store_pnl()` (high frequency)
+4. ✅ Updates `PositionTracker.last_pnl_rupees` (throttled via RedisPnlCache)
+5. ✅ Updates `PositionTracker.high_water_mark_pnl` (throttled via RedisPnlCache)
+
+**Integration with RedisPnlCache**:
+- `PnlUpdaterService` calls `RedisPnlCache.store_pnl()` on every flush
+- `RedisPnlCache` handles throttled DB sync (every 30s per tracker)
+- This separation allows high-frequency Redis updates with low DB load
 
 **Data Flow**:
 ```
@@ -209,13 +268,18 @@ MarketFeedHub (WebSocket)
     → PnlUpdaterService.cache_intermediate_pnl()
     → Queue (in-memory)
     → flush!() (every 0.25s)
-    → PositionTracker.update!()
-    → Redis PnL Cache
+    → RedisPnlCache.store_pnl() (Redis)
+    → PositionTracker.update!() (DB, throttled every 30s)
 ```
+
+**RedisPnlCache Integration**:
+- `RiskManagerService` reads from RedisPnlCache for fast PnL lookups
+- `PnlUpdaterService` writes to RedisPnlCache (high frequency)
+- RedisPnlCache syncs to DB every 30 seconds (throttled to reduce DB load)
 
 ---
 
-### 5. **Positions::ActiveCache** (In-Memory Position Cache)
+### 6. **Positions::ActiveCache** (In-Memory Position Cache)
 
 **Purpose**: Ultra-fast position lookups for exit conditions
 
@@ -248,7 +312,7 @@ PositionData {
 
 ---
 
-### 6. **Live::MarketFeedHub** (WebSocket Feed)
+### 7. **Live::MarketFeedHub** (WebSocket Feed)
 
 **Purpose**: Receives real-time market data from broker
 
@@ -271,7 +335,7 @@ Broker WebSocket
 
 ---
 
-### 7. **Live::ExitEngine** (Exit Execution)
+### 8. **Live::ExitEngine** (Exit Execution)
 
 **Purpose**: Executes exit orders when triggered
 
@@ -362,9 +426,24 @@ trailing:
 However, the complete picture includes:
 
 1. **Immediate**: `Entries::EntryGuard` (entry execution)
-2. **Background**: `Live::PnlUpdaterService` (PnL updates)
-3. **Main Loop**: `Live::RiskManagerService` (monitoring & exits)
-4. **Per-Tick**: `Live::TrailingEngine` (trailing stops)
-5. **Exit**: `Live::ExitEngine` (exit execution)
+2. **Redis Storage**: `Live::RedisPnlCache` (PnL cache in Redis)
+3. **Background**: `Live::PnlUpdaterService` (PnL updates → writes to RedisPnlCache)
+4. **Main Loop**: `Live::RiskManagerService` (monitoring & exits, reads from RedisPnlCache)
+5. **Per-Tick**: `Live::TrailingEngine` (trailing stops)
+6. **Exit**: `Live::ExitEngine` (exit execution)
 
 All services run **in parallel** and work together to manage positions from entry to exit.
+
+### RedisPnlCache Role
+
+**`Live::RedisPnlCache`** is a critical service that:
+- **Stores** PnL data in Redis (high-frequency writes from `PnlUpdaterService`)
+- **Provides** fast PnL lookups for `RiskManagerService` (avoids DB queries)
+- **Syncs** to database every 30 seconds (throttled to reduce DB load)
+- **Enables** `RiskManagerService` to check exit conditions without hitting DB
+
+**Key Integration Points**:
+- `RiskManagerService.enforce_hard_limits()` - Reads from RedisPnlCache for positions not in ActiveCache
+- `RiskManagerService.sync_position_pnl_from_redis()` - Syncs Redis → ActiveCache
+- `PnlUpdaterService.flush!()` - Writes to RedisPnlCache.store_pnl()
+- `RiskManagerService.ensure_all_positions_in_redis()` - Ensures all positions have Redis cache entries
