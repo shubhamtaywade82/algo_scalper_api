@@ -222,12 +222,13 @@ module Live
 
     def enforce_hard_limits(exit_engine:)
       risk = risk_config
-      sl_pct = begin
+      # Default SL/TP from config (fallback if regime-based params not available)
+      default_sl_pct = begin
         BigDecimal(risk[:sl_pct].to_s)
       rescue StandardError
         BigDecimal(0)
       end
-      tp_pct = begin
+      default_tp_pct = begin
         BigDecimal(risk[:tp_pct].to_s)
       rescue StandardError
         BigDecimal(0)
@@ -247,20 +248,23 @@ module Live
         # Sync PnL from Redis cache if ActiveCache is stale
         sync_position_pnl_from_redis(position, tracker)
 
+        # Get regime-based parameters for this tracker
+        sl_pct, tp_pct = resolve_parameters_for_tracker(tracker, default_sl_pct, default_tp_pct)
+
         pnl_pct = position.pnl_pct
         next if pnl_pct.nil?
 
         normalized_pct = pnl_pct.to_f / 100.0
 
         if normalized_pct <= -sl_pct.to_f
-          reason = "SL HIT #{pnl_pct.round(2)}%"
+          reason = "SL HIT #{pnl_pct.round(2)}% (regime-based)"
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
 
         next unless normalized_pct >= tp_pct.to_f
 
-        reason = "TP HIT #{pnl_pct.round(2)}%"
+        reason = "TP HIT #{pnl_pct.round(2)}% (regime-based)"
         dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
@@ -270,6 +274,9 @@ module Live
       trackers_not_in_cache.each do |tracker|
         next unless tracker.active?
 
+        # Get regime-based parameters for this tracker
+        sl_pct, tp_pct = resolve_parameters_for_tracker(tracker, default_sl_pct, default_tp_pct)
+
         redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
         next unless redis_pnl && redis_pnl[:pnl_pct]
 
@@ -277,14 +284,14 @@ module Live
         normalized_pct = pnl_pct / 100.0
 
         if normalized_pct <= -sl_pct.to_f
-          reason = "SL HIT #{pnl_pct.round(2)}% (from Redis)"
+          reason = "SL HIT #{pnl_pct.round(2)}% (from Redis, regime-based)"
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
 
         next unless normalized_pct >= tp_pct.to_f
 
-        reason = "TP HIT #{pnl_pct.round(2)}% (from Redis)"
+        reason = "TP HIT #{pnl_pct.round(2)}% (from Redis, regime-based)"
         dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_hard_limits (fallback) error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
@@ -945,6 +952,63 @@ module Live
       BigDecimal(value.to_s)
     rescue StandardError
       BigDecimal(0)
+    end
+
+    # Resolve regime-based SL/TP parameters for a tracker
+    # @param tracker [PositionTracker] The position tracker
+    # @param default_sl_pct [BigDecimal] Default SL % to use if regime params unavailable
+    # @param default_tp_pct [BigDecimal] Default TP % to use if regime params unavailable
+    # @return [Array<BigDecimal>] [sl_pct, tp_pct]
+    def resolve_parameters_for_tracker(tracker, default_sl_pct, default_tp_pct)
+      # Check if regime-based parameters are enabled
+      risk = risk_config
+      regimes_config = risk[:volatility_regimes] || {}
+      return [default_sl_pct, default_tp_pct] unless regimes_config[:enabled]
+
+      # Get index key from tracker
+      index_key = tracker.index_key || extract_index_from_instrument(tracker)
+      return [default_sl_pct, default_tp_pct] unless index_key
+
+      # Resolve parameters using RegimeParameterResolver
+      resolver_result = Risk::RegimeParameterResolver.call(index_key: index_key)
+      return [default_sl_pct, default_tp_pct] unless resolver_result[:parameters]
+
+      params = resolver_result[:parameters]
+      sl_pct_value = params[:sl_pct_range]&.is_a?(Array) ? (params[:sl_pct_range][0] + params[:sl_pct_range][1]) / 2.0 : nil
+      tp_pct_value = params[:tp_pct_range]&.is_a?(Array) ? (params[:tp_pct_range][0] + params[:tp_pct_range][1]) / 2.0 : nil
+
+      # Convert to BigDecimal and use defaults if nil
+      sl_pct = sl_pct_value ? BigDecimal(sl_pct_value.to_s) / 100.0 : default_sl_pct
+      tp_pct = tp_pct_value ? BigDecimal(tp_pct_value.to_s) / 100.0 : default_tp_pct
+
+      [sl_pct, tp_pct]
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] resolve_parameters_for_tracker error: #{e.class} - #{e.message}")
+      [default_sl_pct, default_tp_pct]
+    end
+
+    # Extract index key from instrument symbol name
+    # @param tracker [PositionTracker] The position tracker
+    # @return [String, nil] Index key (NIFTY, BANKNIFTY, SENSEX) or nil
+    def extract_index_from_instrument(tracker)
+      return nil unless tracker.respond_to?(:instrument) && tracker.instrument
+
+      symbol = tracker.instrument.symbol_name&.upcase
+      return nil unless symbol
+
+      # Try to match common index patterns
+      if symbol.include?('NIFTY') && !symbol.include?('BANK')
+        'NIFTY'
+      elsif symbol.include?('BANKNIFTY') || symbol.include?('BANK NIFTY')
+        'BANKNIFTY'
+      elsif symbol.include?('SENSEX')
+        'SENSEX'
+      else
+        nil
+      end
+    rescue StandardError => e
+      Rails.logger.debug { "[RiskManager] extract_index_from_instrument error: #{e.message}" }
+      nil
     end
 
     def demand_driven_enabled?
