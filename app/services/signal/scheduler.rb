@@ -4,6 +4,7 @@ module Signal
   # rubocop:disable Metrics/ClassLength
   class Scheduler
     DEFAULT_PERIOD = 30 # seconds
+    INTER_INDEX_DELAY = 5 # seconds between processing indices
 
     def initialize(period: DEFAULT_PERIOD, data_provider: nil)
       @period = period
@@ -23,6 +24,10 @@ module Signal
       end
 
       indices = Array(AlgoConfig.fetch[:indices])
+      if indices.empty?
+        Rails.logger.warn('[SignalScheduler] No indices configured - scheduler will not process any signals')
+        return
+      end
 
       @thread = Thread.new do
         Thread.current.name = 'signal-scheduler'
@@ -31,14 +36,28 @@ module Signal
           break unless @running
 
           begin
+            # Early exit if market is closed - avoid unnecessary processing
+            if TradingSession::Service.market_closed?
+              Rails.logger.debug('[SignalScheduler] Market closed - skipping cycle')
+              sleep @period
+              next
+            end
+
             indices.each_with_index do |idx_cfg, idx|
               break unless @running
 
-              sleep(idx.zero? ? 0 : 5)
+              # Re-check market status before each index (market might close during processing)
+              if TradingSession::Service.market_closed?
+                Rails.logger.debug('[SignalScheduler] Market closed during processing - stopping cycle')
+                break
+              end
+
+              sleep(idx.zero? ? 0 : INTER_INDEX_DELAY)
               process_index(idx_cfg)
             end
           rescue StandardError => e
-            Rails.logger.error("[SignalScheduler] #{e.class} - #{e.message}")
+            Rails.logger.error("[SignalScheduler] Cycle error: #{e.class} - #{e.message}")
+            Rails.logger.debug { e.backtrace.first(5).join("\n") }
           end
 
           sleep @period
@@ -48,16 +67,18 @@ module Signal
 
     def stop
       @mutex.synchronize { @running = false }
-      @thread&.kill
+      @thread&.join(2) # Give thread 2 seconds to finish gracefully
+      @thread&.kill if @thread&.alive?
       @thread = nil
+    end
+
+    def running?
+      @mutex.synchronize { @running }
     end
 
     private
 
     def process_index(index_cfg)
-      # Skip signal generation if market is closed (after 3:30 PM IST)
-      return if TradingSession::Service.market_closed?
-
       signal = evaluate_supertrend_signal(index_cfg)
       return unless signal
 
@@ -93,18 +114,26 @@ module Signal
       direction = direction_override || determine_direction(index_cfg)
       multiplier = signal[:meta][:multiplier] || 1
 
-      result = Entries::EntryGuard.try_enter(
+      entry_successful = Entries::EntryGuard.try_enter(
         index_cfg: index_cfg,
         pick: pick,
         direction: direction,
         scale_multiplier: multiplier
       )
 
-      return if result
+      if entry_successful
+        Rails.logger.info(
+          "[SignalScheduler] Entry successful for #{index_cfg[:key]}: #{signal[:meta][:candidate_symbol]} " \
+          "(direction: #{direction}, multiplier: #{multiplier})"
+        )
+      else
+        Rails.logger.warn(
+          "[SignalScheduler] EntryGuard rejected signal for #{index_cfg[:key]}: #{signal[:meta][:candidate_symbol]} " \
+          "(direction: #{direction})"
+        )
+      end
 
-      Rails.logger.warn(
-        "[Scheduler] EntryGuard rejected signal for #{index_cfg[:key]}: #{signal[:meta][:candidate_symbol]}"
-      )
+      entry_successful
     end
 
     def build_pick_from_signal(signal)
@@ -131,44 +160,59 @@ module Signal
         return nil
       end
 
-      # Step 1: Check direction-first if enabled (before chain analysis)
+      # Path 1: Trend Scorer (Direction-First) - if enabled
       if trend_scorer_enabled?
-        trend_result = Signal::TrendScorer.compute_direction(index_cfg: index_cfg)
-        trend_score = trend_result[:trend_score]
-        direction = trend_result[:direction]
-        breakdown = trend_result[:breakdown]
-
-        min_trend_score = signal_config.dig(:trend_scorer, :min_trend_score) || 14.0
-        if trend_score.nil? || trend_score < min_trend_score || direction.nil?
-          Rails.logger.warn(
-            "[SignalScheduler] Skipping #{index_cfg[:key]} - trend_score=#{trend_score} " \
-            "direction=#{direction} (min=#{min_trend_score}) " \
-            "breakdown=#{breakdown.inspect}"
-          )
-          return nil
-        end
-
-        # Direction confirmed - proceed to chain analysis
-        chain_cfg = AlgoConfig.fetch[:chain_analyzer] || {}
-        candidate = select_candidate_from_chain(index_cfg, direction, chain_cfg, trend_score)
-        return nil unless candidate
-
-        return {
-          segment: candidate[:segment],
-          security_id: candidate[:security_id],
-          reason: 'trend_scorer_direction',
-          meta: {
-            candidate_symbol: candidate[:symbol],
-            lot_size: candidate[:lot_size] || candidate[:lot] || 1,
-            direction: direction,
-            trend_score: trend_score,
-            source: 'trend_scorer',
-            multiplier: 1
-          }
-        }
+        return evaluate_with_trend_scorer(index_cfg, instrument)
       end
 
-      # Step 2: Legacy path (if direction-first disabled)
+      # Path 2: Legacy Supertrend + ADX (default)
+      evaluate_with_legacy_indicators(index_cfg, instrument)
+    rescue StandardError => e
+      Rails.logger.error("[SignalScheduler] Signal evaluation failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(5).join("\n") }
+      nil
+    end
+
+    def evaluate_with_trend_scorer(index_cfg, instrument)
+      trend_result = Signal::TrendScorer.compute_direction(index_cfg: index_cfg)
+      trend_score = trend_result[:trend_score]
+      direction = trend_result[:direction]
+      breakdown = trend_result[:breakdown]
+
+      min_trend_score = signal_config.dig(:trend_scorer, :min_trend_score) || 14.0
+      if trend_score.nil? || trend_score < min_trend_score || direction.nil?
+        Rails.logger.debug do
+          "[SignalScheduler] Skipping #{index_cfg[:key]} - trend_score=#{trend_score} " \
+          "direction=#{direction} (min=#{min_trend_score}) " \
+          "breakdown=#{breakdown.inspect}"
+        end
+        return nil
+      end
+
+      # Direction confirmed - proceed to chain analysis
+      chain_cfg = AlgoConfig.fetch[:chain_analyzer] || {}
+      candidate = select_candidate_from_chain(index_cfg, direction, chain_cfg, trend_score)
+      return nil unless candidate
+
+      {
+        segment: candidate[:segment],
+        security_id: candidate[:security_id],
+        reason: 'trend_scorer_direction',
+        meta: {
+          candidate_symbol: candidate[:symbol],
+          lot_size: candidate[:lot_size] || candidate[:lot] || 1,
+          direction: direction,
+          trend_score: trend_score,
+          source: 'trend_scorer',
+          multiplier: 1
+        }
+      }
+    rescue StandardError => e
+      Rails.logger.error("[SignalScheduler] TrendScorer evaluation failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+      nil
+    end
+
+    def evaluate_with_legacy_indicators(index_cfg, instrument)
       indicator_result = Signal::Engine.analyze_multi_timeframe(index_cfg: index_cfg, instrument: instrument)
       unless indicator_result[:status] == :ok
         Rails.logger.warn("[SignalScheduler] Indicator analysis failed for #{index_cfg[:key]}: #{indicator_result[:message]}")
@@ -200,7 +244,7 @@ module Signal
         }
       }
     rescue StandardError => e
-      Rails.logger.error("[SignalScheduler] Supertrend signal failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+      Rails.logger.error("[SignalScheduler] Legacy indicator evaluation failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
       nil
     end
 
@@ -228,11 +272,14 @@ module Signal
     end
 
     def trend_scorer_enabled?
+      flags = feature_flags
+
       # If enable_trend_scorer is explicitly set to false, disable TrendScorer regardless of legacy flag
-      return false if feature_flags[:enable_trend_scorer] == false
+      return false if flags[:enable_trend_scorer] == false
 
       # Otherwise, check enable_trend_scorer (new explicit toggle) OR enable_direction_before_chain (legacy)
-      feature_flags[:enable_trend_scorer] == true || feature_flags[:enable_direction_before_chain] == true
+      # Note: enable_direction_before_chain is deprecated but kept for backward compatibility
+      flags[:enable_trend_scorer] == true || flags[:enable_direction_before_chain] == true
     end
 
     def feature_flags
