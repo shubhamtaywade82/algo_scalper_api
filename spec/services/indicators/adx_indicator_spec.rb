@@ -87,7 +87,13 @@ RSpec.describe Indicators::AdxIndicator do
     end
 
     it 'filters weak ADX values below min_strength' do
-      allow_any_instance_of(CandleSeries).to receive(:adx).and_return(15.0) # Below min_strength
+      # Stub ThresholdConfig to return the test config (min_strength: 20) instead of preset
+      allow(Indicators::ThresholdConfig).to receive(:merge_with_thresholds).and_return(config)
+
+      # Stub the create_partial_series method to return a series with stubbed adx
+      partial_series = double('CandleSeries')
+      allow(indicator).to receive(:create_partial_series).and_return(partial_series)
+      allow(partial_series).to receive(:adx).with(14).and_return(15.0) # Below min_strength of 20
       result = indicator.calculate_at(index)
       expect(result).to be_nil
     end

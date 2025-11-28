@@ -138,10 +138,10 @@ module Indicators
       # @param indicator_name [Symbol] Indicator name
       # @param base_config [Hash] Base configuration from algo.yml
       # @param preset_name [Symbol] Optional preset override
-      # @return [Hash] Merged configuration
+      # @return [Hash] Merged configuration (base_config takes precedence over thresholds)
       def merge_with_thresholds(indicator_name, base_config = {}, preset_name = nil)
         thresholds = for_indicator(indicator_name, preset_name)
-        base_config.merge(thresholds)
+        thresholds.merge(base_config) # Base config overrides thresholds
       end
 
       # Get all available presets

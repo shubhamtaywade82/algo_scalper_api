@@ -31,6 +31,9 @@ module Indicators
       return nil if rsi_value.nil?
 
       direction = determine_direction(rsi_value)
+      # Return nil for neutral RSI (no clear signal)
+      return nil if direction == :neutral
+
       confidence = calculate_confidence(rsi_value, direction)
 
       {

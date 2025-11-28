@@ -24,11 +24,14 @@ RSpec.describe Indicators::ThresholdConfig do
 
   describe '.current_preset' do
     it 'returns preset from ENV' do
+      allow(ENV).to receive(:[]).and_call_original
       allow(ENV).to receive(:[]).with('INDICATOR_PRESET').and_return('tight')
+      allow(AlgoConfig).to receive(:fetch).and_return({ signals: {} })
       expect(described_class.current_preset).to eq(:tight)
     end
 
     it 'returns preset from config' do
+      allow(ENV).to receive(:[]).and_call_original
       allow(ENV).to receive(:[]).with('INDICATOR_PRESET').and_return(nil)
       allow(AlgoConfig).to receive(:fetch).and_return({
         signals: { indicator_preset: :loose }
@@ -37,6 +40,7 @@ RSpec.describe Indicators::ThresholdConfig do
     end
 
     it 'defaults to moderate' do
+      allow(ENV).to receive(:[]).and_call_original
       allow(ENV).to receive(:[]).with('INDICATOR_PRESET').and_return(nil)
       allow(AlgoConfig).to receive(:fetch).and_return({ signals: {} })
       expect(described_class.current_preset).to eq(:moderate)
