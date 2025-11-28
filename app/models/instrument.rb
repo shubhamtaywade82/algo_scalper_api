@@ -109,6 +109,14 @@ class Instrument < ApplicationRecord
 
       find_by(symbol_name: symbol_name.to_s, segment: segment_key)
     end
+
+    # Find index instrument by security_id and symbol_name
+    # @param security_id [String, Integer] Security ID
+    # @param symbol_name [String] Symbol name (e.g., "NIFTY", "BANKNIFTY")
+    # @return [Instrument, nil]
+    def find_index_by_sid_and_symbol(security_id:, symbol_name:)
+      segment_index.find_by(security_id: security_id.to_s, symbol_name: symbol_name.to_s)
+    end
   end
 
   def subscribe!

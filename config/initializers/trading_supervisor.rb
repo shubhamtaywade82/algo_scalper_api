@@ -129,6 +129,21 @@ class ActiveCacheService
   end
 end
 
+# SMC Live Service adapter
+class LiveSmcServiceAdapter
+  def initialize
+    @service = Smc::LiveSmcService.instance
+  end
+
+  def start
+    @service.start
+  end
+
+  def stop
+    @service.stop
+  end
+end
+
 # --------------------------------------------------------------------
 # INITIALIZER (runs on each reload in dev)
 # --------------------------------------------------------------------
@@ -161,6 +176,7 @@ Rails.application.config.to_prepare do
   supervisor.register(:exit_manager, exit_engine)
   supervisor.register(:active_cache, ActiveCacheService.new)
   supervisor.register(:reconciliation, Live::ReconciliationService.instance)
+  supervisor.register(:live_smc, LiveSmcServiceAdapter.new)
 
  # Future:
  # supervisor.register(:pnl_updater, PnlUpdaterServiceAdapter.new)

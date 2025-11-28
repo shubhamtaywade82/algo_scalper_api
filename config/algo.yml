@@ -313,3 +313,85 @@ data_freshness:
   disable_option_chain_caching: false
   ohlc_cache_duration_minutes: 5
   option_chain_cache_duration_minutes: 2
+
+# ============================================
+# SMC (SMART MONEY CONCEPTS) CONFIGURATION
+# ============================================
+smc:
+  # Enable/disable SMC trading system
+  enabled: true # Set to true to enable SMC live trading
+
+  # Candle interval for SMC analysis (options: "1", "5", "15", "60")
+  interval: "5" # 5-minute candles (recommended for options trading)
+
+  # ADX (Average Directional Index) filter settings
+  adx_min_strength: 18 # Minimum ADX value to consider trend strong enough (default: 18)
+  # ADX thresholds:
+  # - < 20: Weak trend (no trade)
+  # - 20-25: Moderate trend (cautious)
+  # - 25-40: Strong trend (preferred)
+  # - > 40: Very strong trend (aggressive)
+
+  # Implied Volatility (IV) filters
+  max_iv: 60.0 # Maximum IV% to accept (reject if IV > 60%)
+  min_iv: 5.0 # Minimum IV% to accept (reject if IV < 5%)
+
+  # Volume confirmation
+  volume_expansion_ratio: 1.25 # Current volume must be 1.25x average of last 4 candles
+
+  # Capital allocation
+  capital_alloc_pct: 0.30 # Allocate 30% of available capital per SMC signal
+
+  # Risk/Reward settings
+  r_mult: 1.5 # Risk multiplier for target calculation (1.5 = 1.5R target)
+  # Target calculation: spot * (1 + 0.0075 * r_mult) for bullish, (1 - 0.0075 * r_mult) for bearish
+
+  # Structure detection settings
+  structure:
+    swing_lookback: 5 # Number of candles to look back for swing detection (default: 5)
+    fvg_lookback: 3 # Number of candles to look back for FVG detection (default: 3)
+    atr_period: 14 # ATR period for tick buffer calculation (default: 14)
+    tick_buffer_multiplier: 0.25 # ATR multiplier for tick buffer (default: 0.25 = 25% of ATR)
+
+  # Order block settings
+  order_block:
+    require_mitigation: true # Require price to tap OB/FVG before entry (recommended: true)
+    allow_immediate_breakout: true # Allow immediate breakout if liquidity sweep + volume (recommended: true)
+
+  # Liquidity sweep detection
+  liquidity_sweep:
+    lookback: 20 # Number of candles to look back for liquidity sweep detection (default: 20)
+    require_volume_confirmation: true # Require volume expansion for sweep confirmation
+
+  # Strike selection
+  strike_selection:
+    default_steps: 0 # Default OTM steps (0 = ATM, 1 = 1OTM, 2 = 2OTM)
+    high_iv_steps: 1 # OTM steps when IV > 35% (default: 1 = 1OTM)
+    high_iv_threshold: 35.0 # IV threshold to use high_iv_steps (default: 35%)
+
+  # Signal filters
+  filters:
+    require_bos: true # Require Break of Structure (BOS) for signal (mandatory)
+    require_supertrend_alignment: false # Require Supertrend alignment (if false, ADX strength can override)
+    require_volume_expansion: true # Require volume expansion confirmation
+    require_mitigation_or_sweep: true # Require either mitigation (tap OB/FVG) or liquidity sweep
+
+  # Minimum data requirements
+  min_candles: 20 # Minimum number of candles required for analysis (default: 20)
+
+  # Live service settings
+  live_service:
+    loop_interval_seconds: 300 # Service loop interval in seconds (default: 300 = 5 minutes)
+    cooldown_seconds: 300 # Cooldown between signals per index (default: 300 = 5 minutes)
+
+
+  # Per-index SMC overrides (optional - can be added to indices[] section)
+  # Example:
+  # indices:
+  #   - key: NIFTY
+  #     smc:
+  #       enabled: true
+  #       interval: "5"
+  #       adx_min_strength: 20
+  #       max_iv: 55.0
+  #       capital_alloc_pct: 0.25
