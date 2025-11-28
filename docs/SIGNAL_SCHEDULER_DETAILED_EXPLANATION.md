@@ -112,6 +112,8 @@ end
 
 **Enabled when:** `feature_flags[:enable_trend_scorer] == true` OR `feature_flags[:enable_direction_before_chain] == true`
 
+**⚠️ NOTE:** Currently uses hardcoded indicators. A modular indicators system with confluence (composite indicators) is **planned but not implemented** (see `docs/SIGNAL_GENERATION_MODULARIZATION.md`).
+
 **Flow:**
 ```ruby
 # Step 1: Compute trend score (0-21)
@@ -466,7 +468,36 @@ end
 
 ---
 
-### 5. 🟢 **LOW PRIORITY: Add Signal Validation**
+### 5. 🔴 **HIGH PRIORITY: Implement Modular Indicators System with Confluence**
+
+**Problem:** Indicators are hardcoded in `TrendScorer`. A modular system with confluence (composite indicators) is documented but not implemented.
+
+**Planned Architecture** (from `docs/SIGNAL_GENERATION_MODULARIZATION.md`):
+- `Indicators::Registry` - Singleton registry for managing indicators
+- `Indicators::Composite` - Combines multiple indicators with confluence modes:
+  - `weighted_sum`: Weighted average of indicator scores
+  - `majority_vote`: Majority direction wins
+  - `all_must_agree`: All indicators must agree
+  - `any_one`: Any indicator can trigger signal
+- Individual indicator classes: `Indicators::Rsi`, `Indicators::Macd`, `Indicators::Adx`, `Indicators::SupertrendIndicator`, `Indicators::PriceAction`
+
+**Benefits:**
+- ✅ Enable/disable indicators via config (no code changes)
+- ✅ Configurable indicator weights/parameters per index
+- ✅ Multiple confluence modes for combining indicators
+- ✅ Easy to add new indicators without modifying core code
+
+**Implementation Status:** ❌ **NOT IMPLEMENTED** (documented only)
+
+**Recommendation:** Implement Phase 1-2 from `docs/SIGNAL_MODULARIZATION_SUMMARY.md`:
+1. Create `Indicators::Base` interface
+2. Create `Indicators::Registry` singleton
+3. Create `Indicators::Composite` class with confluence modes
+4. Extract individual indicators from `TrendScorer`
+
+---
+
+### 6. 🟢 **LOW PRIORITY: Add Signal Validation**
 
 **Problem:** No validation of signal quality before processing.
 
