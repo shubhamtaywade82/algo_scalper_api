@@ -247,6 +247,123 @@ risk:
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
   underlying_atr_collapse_multiplier: 0.65 # Exit if ATR ratio < this value (falling volatility)
 
+  # Volatility Regime-Based Parameters
+  # Parameters adapt based on VIX levels and market conditions (bullish/bearish)
+  # VIX thresholds: High > 20, Medium 15-20, Low < 15
+  volatility_regimes:
+    enabled: true # Enable regime-based parameter adaptation
+    vix_thresholds:
+      high: 20.0   # VIX > 20 = High Volatility
+      medium: 15.0 # VIX 15-20 = Medium Volatility
+      # Low: VIX < 15
+
+    # Regime parameters: [index] -> [regime] -> [market_condition] -> [parameters]
+    parameters:
+      NIFTY:
+        high_volatility: # VIX > 20
+          bullish:
+            sl_pct_range: [8, 12]      # Stop Loss % range
+            tp_pct_range: [18, 30]      # Take Profit % range
+            trail_pct_range: [7, 12]    # Trailing stop % range
+            timeout_minutes: [10, 18]   # Time-out range in minutes
+          bearish:
+            sl_pct_range: [8, 12]
+            tp_pct_range: [15, 28]
+            trail_pct_range: [7, 12]
+            timeout_minutes: [10, 18]
+        medium_volatility: # VIX 15-20
+          bullish:
+            sl_pct_range: [6, 8]
+            tp_pct_range: [10, 18]
+            trail_pct_range: [5, 7]
+            timeout_minutes: [8, 12]
+          bearish:
+            sl_pct_range: [6, 8]
+            tp_pct_range: [9, 16]
+            trail_pct_range: [5, 7]
+            timeout_minutes: [8, 12]
+        low_volatility: # VIX < 15
+          bullish:
+            sl_pct_range: [3, 5]
+            tp_pct_range: [4, 7]
+            trail_pct_range: [2, 3]
+            timeout_minutes: [3, 8]
+          bearish:
+            sl_pct_range: [3, 5]
+            tp_pct_range: [4, 7]
+            trail_pct_range: [2, 3]
+            timeout_minutes: [3, 8]
+
+      BANKNIFTY:
+        high_volatility:
+          bullish:
+            sl_pct_range: [10, 15]
+            tp_pct_range: [25, 40]
+            trail_pct_range: [10, 15]
+            timeout_minutes: [10, 20]
+          bearish:
+            sl_pct_range: [10, 15]
+            tp_pct_range: [20, 35]
+            trail_pct_range: [10, 15]
+            timeout_minutes: [10, 20]
+        medium_volatility:
+          bullish:
+            sl_pct_range: [8, 10]
+            tp_pct_range: [15, 25]
+            trail_pct_range: [7, 10]
+            timeout_minutes: [8, 14]
+          bearish:
+            sl_pct_range: [8, 10]
+            tp_pct_range: [14, 22]
+            trail_pct_range: [7, 10]
+            timeout_minutes: [8, 14]
+        low_volatility:
+          bullish:
+            sl_pct_range: [4, 6]
+            tp_pct_range: [6, 10]
+            trail_pct_range: [2.5, 4]
+            timeout_minutes: [4, 9]
+          bearish:
+            sl_pct_range: [4, 6]
+            tp_pct_range: [6, 10]
+            trail_pct_range: [2.5, 4]
+            timeout_minutes: [4, 9]
+
+      SENSEX:
+        high_volatility:
+          bullish:
+            sl_pct_range: [8, 13]
+            tp_pct_range: [18, 28]
+            trail_pct_range: [7, 12]
+            timeout_minutes: [10, 18]
+          bearish:
+            sl_pct_range: [8, 13]
+            tp_pct_range: [15, 25]
+            trail_pct_range: [7, 12]
+            timeout_minutes: [10, 18]
+        medium_volatility:
+          bullish:
+            sl_pct_range: [7, 9]
+            tp_pct_range: [10, 18]
+            trail_pct_range: [5, 8]
+            timeout_minutes: [8, 12]
+          bearish:
+            sl_pct_range: [7, 9]
+            tp_pct_range: [9, 15]
+            trail_pct_range: [5, 8]
+            timeout_minutes: [8, 12]
+        low_volatility:
+          bullish:
+            sl_pct_range: [3, 5]
+            tp_pct_range: [4, 8]
+            trail_pct_range: [2, 4]
+            timeout_minutes: [3, 8]
+          bearish:
+            sl_pct_range: [3, 5]
+            tp_pct_range: [4, 8]
+            trail_pct_range: [2, 4]
+            timeout_minutes: [3, 8]
+
   daily_limits:
     enable: true
     per_index:
