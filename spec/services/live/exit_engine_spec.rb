@@ -291,6 +291,43 @@ RSpec.describe Live::ExitEngine do
       end
     end
 
+    context 'with gateway-provided exit_price (paper mode)' do
+      it 'uses exit_price from gateway when available' do
+        allow(router).to receive(:exit_market).and_return({ success: true, exit_price: 105.75 })
+
+        result = engine.execute_exit(tracker, 'test reason')
+
+        expect(result[:success]).to be true
+        expect(result[:exit_price]).to eq(105.75)
+        tracker.reload
+        expect(tracker.exit_price).to eq(105.75)
+      end
+
+      it 'falls back to LTP when gateway does not provide exit_price' do
+        allow(Live::TickCache).to receive(:ltp).and_return(102.5)
+        allow(router).to receive(:exit_market).and_return({ success: true })
+
+        result = engine.execute_exit(tracker, 'test reason')
+
+        expect(result[:success]).to be true
+        expect(result[:exit_price]).to eq(102.5)
+        tracker.reload
+        expect(tracker.exit_price).to eq(102.5)
+      end
+
+      it 'uses gateway exit_price even when LTP is nil' do
+        allow(Live::TickCache).to receive(:ltp).and_return(nil)
+        allow(router).to receive(:exit_market).and_return({ success: true, exit_price: 100.0 })
+
+        result = engine.execute_exit(tracker, 'test reason')
+
+        expect(result[:success]).to be true
+        expect(result[:exit_price]).to eq(100.0)
+        tracker.reload
+        expect(tracker.exit_price).to eq(100.0)
+      end
+    end
+
     context 'with exceptions' do
       it 'raises exception when router raises error' do
         allow(router).to receive(:exit_market).and_raise(StandardError.new('Router error'))

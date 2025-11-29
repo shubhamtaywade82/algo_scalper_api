@@ -7,11 +7,8 @@ class Orders::GatewayPaper < Orders::Gateway
 
     exit_price = BigDecimal(ltp.to_s)
 
-    tracker.mark_exited!(
-      exit_price: exit_price,
-      exit_reason: 'paper exit'
-    )
-
+    # Return success with exit_price - let ExitEngine update tracker (consistent with live mode)
+    # This ensures single source of truth and prevents double updates
     { success: true, exit_price: exit_price }
   end
 

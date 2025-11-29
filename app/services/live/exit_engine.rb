@@ -57,12 +57,17 @@ module Live
 
         if success
           begin
+            # Use exit_price from gateway if available (paper mode provides this), fallback to LTP
+            # This ensures paper mode uses correct exit_price (LTP or entry_price fallback)
+            # Live mode gateways don't provide exit_price, so we use LTP
+            exit_price = result[:exit_price] || ltp
+
             tracker.mark_exited!(
-              exit_price: ltp,
+              exit_price: exit_price,
               exit_reason: reason
             )
             Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
-            return { success: true, exit_price: ltp, reason: reason }
+            return { success: true, exit_price: exit_price, reason: reason }
           rescue StandardError => e
             # Order is placed, but tracker update failed
             # Check if tracker is already exited (might have been updated by OrderUpdateHandler)
