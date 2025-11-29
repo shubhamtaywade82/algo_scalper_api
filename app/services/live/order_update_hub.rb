@@ -25,10 +25,10 @@ module Live
         @running = true
       end
 
-      # Rails.logger.info('DhanHQ order update feed started.')
+      Rails.logger.info('[OrderUpdateHub] DhanHQ order update feed started (live mode only)')
       true
     rescue StandardError => e
-      # Rails.logger.error("Failed to start DhanHQ order update feed: #{e.class} - #{e.message}")
+      Rails.logger.error("[OrderUpdateHub] Failed to start DhanHQ order update feed: #{e.class} - #{e.message}")
       stop!
       false
     end
@@ -41,7 +41,7 @@ module Live
         begin
           @ws_client.stop
         rescue StandardError => e
-          # Rails.logger.warn("Error while stopping DhanHQ order update feed: #{e.message}")
+          Rails.logger.warn("[OrderUpdateHub] Error while stopping DhanHQ order update feed: #{e.message}")
         ensure
           @ws_client = nil
         end
@@ -61,11 +61,21 @@ module Live
     private
 
     def enabled?
-      # Always enabled - just check for credentials
+      # Don't start in paper trading mode - paper mode handles positions locally via GatewayPaper
+      # OrderUpdateHub is only needed for live trading to receive WebSocket updates from broker
+      return false if paper_trading_enabled?
+
+      # Check for credentials
       # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
       client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
       access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
+    end
+
+    def paper_trading_enabled?
+      AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+    rescue StandardError
+      false
     end
 
     def config
@@ -87,7 +97,7 @@ module Live
     def safe_invoke(callback, payload)
       callback.call(payload)
     rescue StandardError => e
-      # Rails.logger.error("DhanHQ order update callback failed: #{e.class} - #{e.message}")
+      Rails.logger.error("[OrderUpdateHub] Order update callback failed: #{e.class} - #{e.message}")
     end
   end
 end
