@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'timeout'
+require 'net/http'
+
 class Orders::GatewayLive < Orders::Gateway
   RETRY_COUNT   = 3
   RETRY_BACKOFF = 0.25
@@ -7,7 +10,9 @@ class Orders::GatewayLive < Orders::Gateway
 
   # ------------ EXIT -----------------
   def exit_market(tracker)
-    coid = "AS-EXIT-#{tracker.security_id}-#{Time.now.to_i}"
+    # Generate unique client order ID with random component to prevent collisions
+    # Format: AS-EXIT-{security_id}-{timestamp}-{random}
+    coid = "AS-EXIT-#{tracker.security_id}-#{Time.now.to_i}-#{SecureRandom.hex(2)}"
 
     order = Orders::Placer.exit_position!(
       seg: tracker.segment,
@@ -89,12 +94,17 @@ class Orders::GatewayLive < Orders::Gateway
     begin
       attempts += 1
       Timeout.timeout(API_TIMEOUT) { return yield }
-    rescue StandardError => e
-      Rails.logger.warn("[GatewayLive] attempt #{attempts} failed #{e.class}: #{e.message}")
+    rescue Timeout::Error, Net::TimeoutError, SocketError, Errno::ECONNREFUSED, Errno::ETIMEDOUT => e
+      # Retryable errors: network/timeout issues
+      Rails.logger.warn("[GatewayLive] attempt #{attempts} failed (retryable) #{e.class}: #{e.message}")
       raise if attempts >= RETRY_COUNT
 
       sleep RETRY_BACKOFF * attempts
       retry
+    rescue StandardError => e
+      # Non-retryable errors: validation, business logic, etc.
+      Rails.logger.error("[GatewayLive] attempt #{attempts} failed (non-retryable) #{e.class}: #{e.message}")
+      raise
     end
   end
 
@@ -106,6 +116,8 @@ class Orders::GatewayLive < Orders::Gateway
   end
 
   def generate_client_order_id(prefix, sid)
-    "AS-#{prefix}-#{sid}-#{Time.now.to_i}"
+    # Generate unique client order ID with random component to prevent collisions
+    # Format: AS-{prefix}-{security_id}-{timestamp}-{random}
+    "AS-#{prefix}-#{sid}-#{Time.now.to_i}-#{SecureRandom.hex(2)}"
   end
 end
