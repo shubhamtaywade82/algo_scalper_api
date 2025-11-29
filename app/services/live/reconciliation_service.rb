@@ -195,18 +195,19 @@ module Live
       redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
       return unless redis_pnl && redis_pnl[:pnl]
 
-      # Update ActiveCache with Redis PnL data
-      position.pnl = redis_pnl[:pnl].to_f
-      position.pnl_pct = redis_pnl[:pnl_pct].to_f if redis_pnl[:pnl_pct]
-      position.high_water_mark = redis_pnl[:hwm_pnl].to_f if redis_pnl[:hwm_pnl]
+      # Update ActiveCache with Redis PnL data using update_position method
+      updates = {}
+      updates[:pnl] = redis_pnl[:pnl].to_f if redis_pnl[:pnl]
+      updates[:pnl_pct] = redis_pnl[:pnl_pct].to_f if redis_pnl[:pnl_pct]
+      updates[:high_water_mark] = redis_pnl[:hwm_pnl].to_f if redis_pnl[:hwm_pnl]
+      updates[:current_ltp] = redis_pnl[:ltp].to_f if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
 
-      # Update LTP if available
-      position.current_ltp = redis_pnl[:ltp].to_f if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
+      # Update peak profit if available and higher than current
+      if redis_pnl[:peak_profit_pct] && redis_pnl[:peak_profit_pct].to_f > (position.peak_profit_pct || 0)
+        updates[:peak_profit_pct] = redis_pnl[:peak_profit_pct].to_f
+      end
 
-      # Update peak profit if available
-      return unless redis_pnl[:peak_profit_pct] && redis_pnl[:peak_profit_pct].to_f > (position.peak_profit_pct || 0)
-
-      position.peak_profit_pct = redis_pnl[:peak_profit_pct].to_f
+      active_cache.update_position(tracker.id, **updates) if updates.any?
     end
   end
 end
