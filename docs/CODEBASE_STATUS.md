@@ -225,7 +225,7 @@ Every stable service has been:
 
 ## 📊 **Spec Coverage Status**
 
-### **Services With Specs** ✅ (13 services):
+### **Services With Specs** ✅ (14 services):
 
 1. Signal::Scheduler ✅
 2. Live::RiskManagerService ✅
@@ -302,16 +302,6 @@ Every stable service has been:
 
 ## 📚 **Document History**
 
-This document consolidates and supersedes:
-- `docs/stable_vs_work_in_progress_components.md`
-- `docs/stable_services_comprehensive_review.md`
-- `docs/stable_services_improvements_complete.md`
-- `docs/order_update_hub_handler_comprehensive_review.md`
-- `docs/order_update_hub_handler_improvements_complete.md`
-- `docs/gateway_live_paper_comprehensive_review.md`
-- `docs/gateway_improvements_complete.md`
-- `docs/exit_engine_comprehensive_review.md`
-- `docs/risk_manager_service_comprehensive_review.md`
-- `docs/complete_codebase_status.md`
+**This document is the single source of truth for codebase status.**
 
-**This is now the single source of truth for codebase status.**
+All previous review documents have been consolidated into this document and removed to avoid confusion.
