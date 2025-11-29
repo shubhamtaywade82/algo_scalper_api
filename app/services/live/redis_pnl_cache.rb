@@ -252,13 +252,25 @@ module Live
     end
 
     def purge_exited!
-      active_ids = PositionTracker.active.pluck(:id).map(&:to_s)
+      return false unless @redis
 
-      keys = @redis.keys('pnl:tracker:*')
-      keys.each do |key|
+      active_ids = PositionTracker.active.pluck(:id).map(&:to_s).to_set
+
+      deleted_count = 0
+      pattern = 'pnl:tracker:*'
+      @redis.scan_each(match: pattern) do |key|
         tracker_id = key.split(':').last
-        @redis.del(key) unless active_ids.include?(tracker_id)
+        unless active_ids.include?(tracker_id)
+          @redis.del(key)
+          deleted_count += 1
+        end
       end
+
+      Rails.logger.info("[RedisPnlCache] Purged #{deleted_count} exited position PnL entries") if deleted_count.positive?
+      true
+    rescue StandardError => e
+      Rails.logger.error("[RedisPnlCache] purge_exited! error: #{e.message}")
+      false
     end
 
     # Remove all pnl/tick entries except those for the given tracker IDs
