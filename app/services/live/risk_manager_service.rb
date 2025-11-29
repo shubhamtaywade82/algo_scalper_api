@@ -926,7 +926,7 @@ module Live
           return { success: false, exit_price: nil }
         end
 
-        if defined?(Orders) && Orders.respond_to?(:config) && Orders.config.respond_to?(:flat_position)
+        if Orders.respond_to?(:config) && Orders.config.respond_to?(:flat_position)
           order = Orders.config.flat_position(segment: segment, security_id: tracker.security_id)
           if order
             exit_price = current_ltp(tracker)
