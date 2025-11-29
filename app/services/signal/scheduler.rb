@@ -75,10 +75,28 @@ module Signal
     end
 
     def stop
-      @mutex.synchronize { @running = false }
-      @thread&.join(2) # Give thread 2 seconds to finish gracefully
+      @mutex.synchronize do
+        return unless @running
+        @running = false
+      end
+
+      return unless @thread
+
+      # Give thread 2 seconds to finish gracefully
+      unless @thread.join(2)
+        # Thread didn't finish in time, force kill
+        Rails.logger.warn('[SignalScheduler] Thread did not finish gracefully, forcing termination')
+        @thread.kill if @thread.alive?
+      end
+
+      @thread = nil
+      Rails.logger.info('[SignalScheduler] Stopped successfully')
+    rescue StandardError => e
+      Rails.logger.error("[SignalScheduler] Error during stop: #{e.class} - #{e.message}")
+      # Ensure cleanup even if there's an error
       @thread&.kill if @thread&.alive?
       @thread = nil
+      raise
     end
 
     def running?
