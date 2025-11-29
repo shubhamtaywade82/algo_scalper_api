@@ -23,9 +23,18 @@ module Signal
         @running = true
       end
 
-      indices = Array(AlgoConfig.fetch[:indices])
+      begin
+        indices = Array(AlgoConfig.fetch[:indices])
+      rescue StandardError => e
+        Rails.logger.error("[SignalScheduler] Failed to load indices config: #{e.class} - #{e.message}")
+        Rails.logger.debug { e.backtrace.first(5).join("\n") }
+        @mutex.synchronize { @running = false }
+        return
+      end
+
       if indices.empty?
         Rails.logger.warn('[SignalScheduler] No indices configured - scheduler will not process any signals')
+        @mutex.synchronize { @running = false }
         return
       end
 
@@ -106,6 +115,9 @@ module Signal
     def determine_direction(index_cfg)
       direction = index_cfg[:direction] || AlgoConfig.fetch.dig(:strategy, :direction) || :bullish
       direction.to_s.downcase.to_sym
+    rescue StandardError => e
+      Rails.logger.error("[SignalScheduler] Failed to determine direction: #{e.class} - #{e.message}")
+      :bullish # Default fallback
     end
 
     def process_signal(index_cfg, signal)
@@ -269,6 +281,9 @@ module Signal
 
     def signal_config
       AlgoConfig.fetch[:signals] || {}
+    rescue StandardError => e
+      Rails.logger.error("[SignalScheduler] Failed to load signal config: #{e.class} - #{e.message}")
+      {}
     end
 
     def trend_scorer_enabled?
