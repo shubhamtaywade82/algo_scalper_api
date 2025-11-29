@@ -163,6 +163,17 @@ module Live
           ensure_all_positions_in_redis
           ensure_all_positions_in_active_cache
           ensure_all_positions_subscribed
+          # Record metrics for empty cycle before returning
+          cycle_time = Time.current - cycle_start_time
+          record_cycle_metrics(
+            cycle_time: cycle_time,
+            positions_count: 0,
+            redis_fetches: 0,
+            db_queries: 0,
+            api_calls: 0,
+            exit_counts: {},
+            error_counts: {}
+          )
           return
         end
 
@@ -1231,7 +1242,9 @@ module Live
     end
 
     def increment_metric(key)
-      @metrics[key] += 1
+      @mutex.synchronize do
+        @metrics[key] += 1
+      end
     end
 
     # Phase 3: Metrics & Monitoring
@@ -1246,24 +1259,26 @@ module Live
     # @param exit_counts [Hash] Optional hash of exit type => count
     # @param error_counts [Hash] Optional hash of error type => count
     def record_cycle_metrics(cycle_time:, positions_count:, redis_fetches:, db_queries:, api_calls:, exit_counts: {}, error_counts: {})
-      @metrics[:cycle_count] += 1
-      @metrics[:total_cycle_time] += cycle_time
-      @metrics[:min_cycle_time] = [@metrics[:min_cycle_time] || cycle_time, cycle_time].min
-      @metrics[:max_cycle_time] = [@metrics[:max_cycle_time] || 0, cycle_time].max
-      @metrics[:total_positions] += positions_count
-      @metrics[:total_redis_fetches] += redis_fetches
-      @metrics[:total_db_queries] += db_queries
-      @metrics[:total_api_calls] += api_calls
-      @metrics[:last_cycle_time] = cycle_time
+      @mutex.synchronize do
+        @metrics[:cycle_count] += 1
+        @metrics[:total_cycle_time] += cycle_time
+        @metrics[:min_cycle_time] = [@metrics[:min_cycle_time] || cycle_time, cycle_time].min
+        @metrics[:max_cycle_time] = [@metrics[:max_cycle_time] || 0, cycle_time].max
+        @metrics[:total_positions] += positions_count
+        @metrics[:total_redis_fetches] += redis_fetches
+        @metrics[:total_db_queries] += db_queries
+        @metrics[:total_api_calls] += api_calls
+        @metrics[:last_cycle_time] = cycle_time
 
-      # Record exit counts
-      exit_counts.each do |exit_type, count|
-        @metrics[:"exit_#{exit_type}"] = (@metrics[:"exit_#{exit_type}"] || 0) + count
-      end
+        # Record exit counts
+        exit_counts.each do |exit_type, count|
+          @metrics[:"exit_#{exit_type}"] = (@metrics[:"exit_#{exit_type}"] || 0) + count
+        end
 
-      # Record error counts
-      error_counts.each do |error_type, count|
-        @metrics[:"error_#{error_type}"] = (@metrics[:"error_#{error_type}"] || 0) + count
+        # Record error counts
+        error_counts.each do |error_type, count|
+          @metrics[:"error_#{error_type}"] = (@metrics[:"error_#{error_type}"] || 0) + count
+        end
       end
     end
 
@@ -1271,35 +1286,39 @@ module Live
     #
     # @return [Hash] Hash containing all metrics
     def get_metrics
-      cycle_count = @metrics[:cycle_count] || 0
+      @mutex.synchronize do
+        cycle_count = @metrics[:cycle_count] || 0
 
-      base_metrics = {
-        cycle_count: cycle_count,
-        avg_cycle_time: cycle_count.positive? ? (@metrics[:total_cycle_time] || 0) / cycle_count : 0,
-        min_cycle_time: @metrics[:min_cycle_time],
-        max_cycle_time: @metrics[:max_cycle_time],
-        total_cycle_time: @metrics[:total_cycle_time] || 0,
-        avg_positions_per_cycle: cycle_count.positive? ? (@metrics[:total_positions] || 0) / cycle_count : 0,
-        total_positions: @metrics[:total_positions] || 0,
-        avg_redis_fetches_per_cycle: cycle_count.positive? ? (@metrics[:total_redis_fetches] || 0) / cycle_count : 0,
-        total_redis_fetches: @metrics[:total_redis_fetches] || 0,
-        avg_db_queries_per_cycle: cycle_count.positive? ? (@metrics[:total_db_queries] || 0) / cycle_count : 0,
-        total_db_queries: @metrics[:total_db_queries] || 0,
-        avg_api_calls_per_cycle: cycle_count.positive? ? (@metrics[:total_api_calls] || 0) / cycle_count : 0,
-        total_api_calls: @metrics[:total_api_calls] || 0,
-        exit_counts: @metrics.select { |k, _| k.to_s.start_with?('exit_') },
-        error_counts: @metrics.select { |k, _| k.to_s.start_with?('error_') }
-      }
+        base_metrics = {
+          cycle_count: cycle_count,
+          avg_cycle_time: cycle_count.positive? ? (@metrics[:total_cycle_time] || 0) / cycle_count : 0,
+          min_cycle_time: @metrics[:min_cycle_time],
+          max_cycle_time: @metrics[:max_cycle_time],
+          total_cycle_time: @metrics[:total_cycle_time] || 0,
+          avg_positions_per_cycle: cycle_count.positive? ? (@metrics[:total_positions] || 0) / cycle_count : 0,
+          total_positions: @metrics[:total_positions] || 0,
+          avg_redis_fetches_per_cycle: cycle_count.positive? ? (@metrics[:total_redis_fetches] || 0) / cycle_count : 0,
+          total_redis_fetches: @metrics[:total_redis_fetches] || 0,
+          avg_db_queries_per_cycle: cycle_count.positive? ? (@metrics[:total_db_queries] || 0) / cycle_count : 0,
+          total_db_queries: @metrics[:total_db_queries] || 0,
+          avg_api_calls_per_cycle: cycle_count.positive? ? (@metrics[:total_api_calls] || 0) / cycle_count : 0,
+          total_api_calls: @metrics[:total_api_calls] || 0,
+          exit_counts: @metrics.select { |k, _| k.to_s.start_with?('exit_') },
+          error_counts: @metrics.select { |k, _| k.to_s.start_with?('error_') }
+        }
 
-      # Include individual exit and error metrics for easier access (already included in exit_counts/error_counts)
-      # But also add them as top-level keys for convenience
-      exit_error_metrics = @metrics.select { |k, _| k.to_s.start_with?('exit_') || k.to_s.start_with?('error_') }
-      base_metrics.merge(exit_error_metrics)
+        # Include individual exit and error metrics for easier access (already included in exit_counts/error_counts)
+        # But also add them as top-level keys for convenience
+        exit_error_metrics = @metrics.select { |k, _| k.to_s.start_with?('exit_') || k.to_s.start_with?('error_') }
+        base_metrics.merge(exit_error_metrics)
+      end
     end
 
     # Reset all metrics to zero
     def reset_metrics
-      @metrics.clear
+      @mutex.synchronize do
+        @metrics.clear
+      end
     end
 
     # Phase 3: Circuit Breaker
@@ -1309,33 +1328,37 @@ module Live
     # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
     # @return [Boolean] true if circuit breaker is open, false otherwise
     def circuit_breaker_open?(cache_key = nil)
-      return false if @circuit_breaker_state == :closed
+      @mutex.synchronize do
+        return false if @circuit_breaker_state == :closed
 
-      if @circuit_breaker_state == :open
-        # Check if timeout has passed
-        if @circuit_breaker_last_failure &&
-           (Time.current - @circuit_breaker_last_failure) > @circuit_breaker_timeout
-          @circuit_breaker_state = :half_open
-          @circuit_breaker_failures = 0
-          return false
+        if @circuit_breaker_state == :open
+          # Check if timeout has passed
+          if @circuit_breaker_last_failure &&
+             (Time.current - @circuit_breaker_last_failure) > @circuit_breaker_timeout
+            @circuit_breaker_state = :half_open
+            @circuit_breaker_failures = 0
+            return false
+          end
+          return true
         end
-        return true
-      end
 
-      # half_open state - allow one request to test
-      false
+        # half_open state - allow one request to test
+        false
+      end
     end
 
     # Record an API failure (increment failure count, open circuit if threshold reached)
     #
     # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
     def record_api_failure(cache_key = nil)
-      @circuit_breaker_failures += 1
-      @circuit_breaker_last_failure = Time.current
+      @mutex.synchronize do
+        @circuit_breaker_failures += 1
+        @circuit_breaker_last_failure = Time.current
 
-      if @circuit_breaker_failures >= @circuit_breaker_threshold
-        @circuit_breaker_state = :open
-        Rails.logger.warn("[RiskManager] Circuit breaker OPEN - API failures: #{@circuit_breaker_failures}")
+        if @circuit_breaker_failures >= @circuit_breaker_threshold
+          @circuit_breaker_state = :open
+          Rails.logger.warn("[RiskManager] Circuit breaker OPEN - API failures: #{@circuit_breaker_failures}")
+        end
       end
     end
 
@@ -1343,21 +1366,25 @@ module Live
     #
     # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
     def record_api_success(cache_key = nil)
-      if @circuit_breaker_state == :half_open
-        @circuit_breaker_state = :closed
-        @circuit_breaker_failures = 0
-        Rails.logger.info("[RiskManager] Circuit breaker CLOSED - API recovered")
-      elsif @circuit_breaker_state == :open
-        # Reset failures on success (but keep state as open until timeout)
-        @circuit_breaker_failures = 0
+      @mutex.synchronize do
+        if @circuit_breaker_state == :half_open
+          @circuit_breaker_state = :closed
+          @circuit_breaker_failures = 0
+          Rails.logger.info("[RiskManager] Circuit breaker CLOSED - API recovered")
+        elsif @circuit_breaker_state == :open
+          # Reset failures on success (but keep state as open until timeout)
+          @circuit_breaker_failures = 0
+        end
       end
     end
 
     # Reset circuit breaker to closed state (for testing or manual recovery)
     def reset_circuit_breaker
-      @circuit_breaker_state = :closed
-      @circuit_breaker_failures = 0
-      @circuit_breaker_last_failure = nil
+      @mutex.synchronize do
+        @circuit_breaker_state = :closed
+        @circuit_breaker_failures = 0
+        @circuit_breaker_last_failure = nil
+      end
     end
 
     # Phase 3: Health Status
@@ -1366,15 +1393,17 @@ module Live
     #
     # @return [Hash] Hash containing health status information
     def health_status
-      {
-        running: running?,
-        thread_alive: @thread&.alive? || false,
-        last_cycle_time: @metrics[:last_cycle_time],
-        active_positions: PositionTracker.active.count,
-        circuit_breaker_state: @circuit_breaker_state,
-        recent_errors: @metrics[:recent_api_errors] || 0,
-        uptime_seconds: running? && @started_at ? (Time.current - @started_at).to_i : 0
-      }
+      @mutex.synchronize do
+        {
+          running: running?,
+          thread_alive: @thread&.alive? || false,
+          last_cycle_time: @metrics[:last_cycle_time],
+          active_positions: PositionTracker.active.count,
+          circuit_breaker_state: @circuit_breaker_state,
+          recent_errors: @metrics[:recent_api_errors] || 0,
+          uptime_seconds: running? && @started_at ? (Time.current - @started_at).to_i : 0
+        }
+      end
     end
 
     def guarded_exit(tracker, reason, exit_engine)
