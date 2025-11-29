@@ -30,51 +30,8 @@ end
 ServiceTestHelper.print_section('1. Supervisor Availability')
 config_supervisor = Rails.application.config.x.trading_supervisor
 
-# Define Supervisor class if not already defined (from initializer)
-unless defined?(TradingSystem::Supervisor)
-  module TradingSystem
-    class Supervisor
-      def initialize
-        @services = {} # { name => service_instance }
-        @running  = false
-      end
-
-      def register(name, instance)
-        @services[name] = instance
-      end
-
-      delegate :[], to: :@services
-
-      def start_all
-        return if @running
-
-        @services.each do |name, service|
-          service.start
-          Rails.logger.info("[Supervisor] started #{name}")
-        rescue StandardError => e
-          Rails.logger.error("[Supervisor] failed starting #{name}: #{e.class} - #{e.message}")
-        end
-
-        @running = true
-      end
-
-      def stop_all
-        return unless @running
-
-        @services.reverse_each do |name, service|
-          service.stop
-          Rails.logger.info("[Supervisor] stopped #{name}")
-        rescue StandardError => e
-          Rails.logger.error("[Supervisor] error stopping #{name}: #{e.class} - #{e.message}")
-        end
-
-        @running = false
-      end
-    end
-  end
-end
-
 # Check if it's actually a Supervisor instance (not just OrderedOptions)
+# TradingSystem::Supervisor is defined in config/initializers/trading_supervisor.rb
 if config_supervisor.is_a?(TradingSystem::Supervisor)
   supervisor = config_supervisor
   ServiceTestHelper.print_success('TradingSupervisor found (from initializer)')
@@ -96,40 +53,8 @@ if services.empty?
   ServiceTestHelper.print_section('2a. Registering Services for Testing')
   ServiceTestHelper.print_info('No services registered - registering for testing...')
 
-  # Define service adapters (same as initializer) if not already defined
-  unless defined?(MarketFeedHubService)
-    class MarketFeedHubService
-      def initialize
-        @hub = Live::MarketFeedHub.instance
-      end
-
-      def start
-        @hub.start!
-      end
-
-      def stop
-        @hub.stop!
-      end
-
-      delegate :subscribe_many, to: :@hub
-    end
-  end
-
-  unless defined?(ActiveCacheService)
-    class ActiveCacheService
-      def initialize
-        @cache = Positions::ActiveCache.instance
-      end
-
-      def start
-        @cache.start!
-      end
-
-      def stop
-        @cache.stop!
-      end
-    end
-  end
+  # Service adapters are defined in config/initializers/trading_supervisor.rb
+  # MarketFeedHubService and ActiveCacheService are already available
 
   # Register services (same as initializer)
   begin
