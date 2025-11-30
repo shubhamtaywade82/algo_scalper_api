@@ -23,7 +23,11 @@ RSpec.describe Risk::Rules::PeakDrawdownRule do
       sl_offset_pct: 10.0
     )
   end
-  let(:risk_config) { {} }
+  let(:risk_config) do
+    {
+      trailing: { activation_pct: 10.0 }
+    }
+  end
   let(:context) do
     Risk::Rules::RuleContext.new(
       position: position_data,
@@ -41,10 +45,29 @@ RSpec.describe Risk::Rules::PeakDrawdownRule do
       activation_profit_pct: 25.0,
       activation_sl_offset_pct: 10.0
     )
+    allow(AlgoConfig).to receive(:fetch).and_return(feature_flags: {})
   end
 
   describe '#evaluate' do
-    context 'when peak drawdown is triggered' do
+    context 'when trailing activation threshold is not met' do
+      before do
+        position_data.pnl_pct = 5.0 # Below 10% activation threshold
+        position_data.peak_profit_pct = 5.0
+      end
+
+      it 'returns skip_result when pnl_pct < activation_pct' do
+        result = rule.evaluate(context)
+        expect(result.skip?).to be true
+      end
+    end
+
+    context 'when trailing activation threshold is met' do
+      before do
+        position_data.pnl_pct = 20.0 # Above 10% activation threshold
+        position_data.peak_profit_pct = 25.0
+      end
+
+      context 'when peak drawdown is triggered' do
       before do
         allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
       end
@@ -117,6 +140,26 @@ RSpec.describe Risk::Rules::PeakDrawdownRule do
 
       it 'returns skip_result when current_profit_pct is nil' do
         position_data.pnl_pct = nil
+        result = rule.evaluate(context)
+        expect(result.skip?).to be true
+      end
+    end
+
+    context 'with different activation thresholds' do
+      it 'works with 6% activation threshold' do
+        risk_config[:trailing][:activation_pct] = 6.0
+        position_data.pnl_pct = 6.0
+        position_data.peak_profit_pct = 10.0
+        allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
+
+        result = rule.evaluate(context)
+        expect(result.skip?).to be false
+      end
+
+      it 'skips with 6% threshold when pnl_pct is 5.99%' do
+        risk_config[:trailing][:activation_pct] = 6.0
+        position_data.pnl_pct = 5.99
+
         result = rule.evaluate(context)
         expect(result.skip?).to be true
       end

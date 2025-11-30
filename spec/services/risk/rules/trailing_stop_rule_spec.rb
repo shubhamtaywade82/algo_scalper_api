@@ -22,7 +22,12 @@ RSpec.describe Risk::Rules::TrailingStopRule do
       high_water_mark: 1200.0
     )
   end
-  let(:risk_config) { { exit_drop_pct: 10.0 } }
+  let(:risk_config) do
+    {
+      exit_drop_pct: 10.0,
+      trailing: { activation_pct: 10.0 }
+    }
+  end
   let(:context) do
     Risk::Rules::RuleContext.new(
       position: position_data,
@@ -33,7 +38,23 @@ RSpec.describe Risk::Rules::TrailingStopRule do
   let(:rule) { described_class.new(config: risk_config) }
 
   describe '#evaluate' do
-    context 'when trailing stop is triggered' do
+    context 'when trailing activation threshold is not met' do
+      before do
+        position_data.pnl_pct = 5.0 # Below 10% activation threshold
+      end
+
+      it 'returns skip_result when pnl_pct < activation_pct' do
+        result = rule.evaluate(context)
+        expect(result.skip?).to be true
+      end
+    end
+
+    context 'when trailing activation threshold is met' do
+      before do
+        position_data.pnl_pct = 10.0 # Exactly at 10% activation threshold
+      end
+
+      context 'when trailing stop is triggered' do
       it 'returns exit result when HWM drop exceeds threshold' do
         # HWM: 1200, PnL: 1000, Drop: (1200-1000)/1200 = 16.67% >= 10%
         result = rule.evaluate(context)
@@ -92,6 +113,37 @@ RSpec.describe Risk::Rules::TrailingStopRule do
         risk_config[:exit_drop_pct] = 0
         result = rule.evaluate(context)
         expect(result.skip?).to be true
+      end
+    end
+
+    context 'with different activation thresholds' do
+      it 'works with 6% activation threshold' do
+        risk_config[:trailing][:activation_pct] = 6.0
+        position_data.pnl_pct = 6.0
+        position_data.pnl = 600.0
+        position_data.high_water_mark = 800.0
+
+        result = rule.evaluate(context)
+        # Should evaluate (not skip) since 6% >= 6%
+        expect(result.skip?).to be false
+      end
+
+      it 'skips with 6% threshold when pnl_pct is 5.99%' do
+        risk_config[:trailing][:activation_pct] = 6.0
+        position_data.pnl_pct = 5.99
+
+        result = rule.evaluate(context)
+        expect(result.skip?).to be true
+      end
+
+      it 'works with 13.32% activation threshold' do
+        risk_config[:trailing][:activation_pct] = 13.32
+        position_data.pnl_pct = 13.32
+        position_data.pnl = 1332.0
+        position_data.high_water_mark = 1500.0
+
+        result = rule.evaluate(context)
+        expect(result.skip?).to be false
       end
     end
 
