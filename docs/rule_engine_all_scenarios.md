@@ -809,6 +809,7 @@ Priority 35: SecureProfitRule
 **Outcome:** Position continues to ride - profit can grow further, protected if it drops 3% from peak.
 
 ---
+<<<<<<< HEAD
 ## Summary Table
 
 | Scenario        | Triggering Rule | Priority | Key Condition  |
@@ -824,10 +825,25 @@ Priority 35: SecureProfitRule
 | Underlying Break | UnderlyingExitRule | 60 | Structure break against position |
 =======
 | Peak Drawdown | PeakDrawdownRule | 45 | Drawdown >= threshold |
+=======
+
+## Summary Table
+
+| Scenario | Triggering Rule | Priority | Key Condition |
+|----------|----------------|----------|---------------|
+| Stop Loss Hit | StopLossRule | 20 | PnL <= -SL% |
+| Take Profit Hit | TakeProfitRule | 30 | PnL >= +TP% |
+| Session End | SessionEndRule | 10 | Session ending |
+| Secure Profit | SecureProfitRule | 35 | Profit >= ₹1000 & drawdown >= 3% |
+>>>>>>> feat: Add SecureProfitRule to protect and maximize gains
 | Time-Based Exit | TimeBasedExitRule | 40 | Time >= exit_time & profit >= min |
-| Underlying Break | UnderlyingExitRule | 60 | Structure break against position |
+| Peak Drawdown | PeakDrawdownRule | 45 | Drawdown >= threshold |
 | Trailing Stop | TrailingStopRule | 50 | HWM drop >= threshold |
+<<<<<<< HEAD
 >>>>>>> feat: Add comprehensive rule engine scenarios documentation
+=======
+| Underlying Break | UnderlyingExitRule | 60 | Structure break against position |
+>>>>>>> feat: Add SecureProfitRule to protect and maximize gains
 | Bracket Limit | BracketLimitRule | 25 | position.sl_hit? or position.tp_hit? |
 
 ## Important Notes
