@@ -11,6 +11,7 @@ module Risk
           TakeProfitRule.new(config: risk_config),
           BracketLimitRule.new(config: risk_config),
           TimeBasedExitRule.new(config: risk_config),
+          PeakDrawdownRule.new(config: risk_config),
           TrailingStopRule.new(config: risk_config),
           UnderlyingExitRule.new(config: risk_config)
         ]

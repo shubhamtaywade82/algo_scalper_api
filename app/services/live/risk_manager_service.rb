@@ -1652,7 +1652,7 @@ module Live
       # Recalculate position metrics (PnL, peak) from current LTP
       recalculate_position_metrics(position, tracker)
 
-      # Use rule engine for underlying exits and bracket limits if available
+      # Use rule engine for underlying exits, bracket limits, and peak drawdown if available
       if rule_engine_available?
         context = Risk::Rules::RuleContext.new(
           position: position,
@@ -1678,6 +1678,16 @@ module Live
           bracket_result = bracket_rule.evaluate(context)
           if bracket_result.exit?
             dispatch_exit(exit_engine, tracker, bracket_result.reason)
+            return
+          end
+        end
+
+        # Check peak drawdown rule (replaces TrailingEngine peak-drawdown check)
+        peak_drawdown_rule = rule_engine.find_rule(Risk::Rules::PeakDrawdownRule)
+        if peak_drawdown_rule&.enabled?
+          peak_drawdown_result = peak_drawdown_rule.evaluate(context)
+          if peak_drawdown_result.exit?
+            dispatch_exit(exit_engine, tracker, peak_drawdown_result.reason)
             return
           end
         end

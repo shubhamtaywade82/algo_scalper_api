@@ -51,8 +51,19 @@ Rules are evaluated in priority order:
 3. **BracketLimitRule** (Priority: 25) - Enforces bracket limits (SL/TP) from position data
 4. **TakeProfitRule** (Priority: 30) - Triggers exit when PnL exceeds take profit threshold
 5. **TimeBasedExitRule** (Priority: 40) - Triggers exit at configured time if minimum profit met
-6. **TrailingStopRule** (Priority: 50) - Triggers exit based on high water mark drop
-7. **UnderlyingExitRule** (Priority: 60) - Triggers exit based on underlying instrument state
+6. **PeakDrawdownRule** (Priority: 45) - Triggers exit when profit drops from peak by configured percentage (with activation gating)
+7. **TrailingStopRule** (Priority: 50) - Legacy trailing stop based on high water mark drop
+8. **UnderlyingExitRule** (Priority: 60) - Triggers exit based on underlying instrument state
+
+### Trailing Stop Rules
+
+The rule engine includes comprehensive trailing stop management:
+
+- **PeakDrawdownRule**: Monitors peak profit percentage and triggers exit when current profit drops by a configured percentage from the peak. Includes activation gating that only activates after certain profit thresholds are reached.
+
+- **TrailingStopRule**: Legacy method that triggers exit based on high water mark drop percentage. This is kept for backwards compatibility, but `PeakDrawdownRule` is preferred for new implementations.
+
+The tiered trailing SL offset management (updating SL prices based on profit tiers) is still handled by `TrailingEngine` and integrated with the rule engine during position processing.
 
 ## Usage
 

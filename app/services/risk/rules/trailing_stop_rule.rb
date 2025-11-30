@@ -2,8 +2,9 @@
 
 module Risk
   module Rules
-    # Rule that enforces trailing stop based on high water mark drop
+    # Rule that enforces trailing stop based on high water mark drop (legacy method)
     # Triggers exit when PnL drops by configured percentage from high water mark
+    # NOTE: This is a legacy trailing stop method. PeakDrawdownRule is preferred for new implementations.
     class TrailingStopRule < BaseRule
       PRIORITY = 50
 
