@@ -22,8 +22,8 @@ module Market
         today - 1.day
       end
 
-      # Returns the date that was n trading days ago
-      def trading_days_ago(n)
+      # Returns the date that was count trading days ago
+      def trading_days_ago(count)
         current = Date.current
         trading_days_counted = 0
 
@@ -32,12 +32,12 @@ module Market
           candidate = current - days_back.days
           if trading_day?(candidate)
             trading_days_counted += 1
-            return candidate if trading_days_counted == n
+            return candidate if trading_days_counted == count
           end
         end
 
         # Fallback
-        current - n.days
+        current - count.days
       end
 
       # Returns the next trading day
