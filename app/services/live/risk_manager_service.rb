@@ -18,9 +18,10 @@ module Live
     MAX_RETRIES_ON_RATE_LIMIT = 3
     RATE_LIMIT_BACKOFF_BASE = 2.0 # seconds
 
-    def initialize(exit_engine: nil, trailing_engine: nil)
+    def initialize(exit_engine: nil, trailing_engine: nil, rule_engine: nil)
       @exit_engine = exit_engine
       @trailing_engine = trailing_engine
+      @rule_engine = rule_engine # Rule engine for risk and position management
       @mutex = Mutex.new
       @running = false
       @thread = nil
@@ -1491,13 +1492,55 @@ module Live
       Rails.logger.error("[RiskManager] Error in process_all_positions_in_single_loop: #{e.class} - #{e.message}")
     end
 
-    # Phase 2: Check all exit conditions in single consolidated pass
-    # Consolidates: session end, SL/TP, time-based, trailing stops
+    # Phase 2: Check all exit conditions using rule engine
+    # Uses rule engine to evaluate all risk and position management rules
     # @param position [Positions::ActiveCache::PositionData] Position data
     # @param tracker [PositionTracker] PositionTracker instance
     # @param exit_engine [Object] Exit engine to use
     # @return [Boolean] true if exit was triggered, false otherwise
     def check_all_exit_conditions(position, tracker, exit_engine)
+      # Use rule engine if available, otherwise fallback to legacy methods
+      if rule_engine_available?
+        return check_exit_conditions_with_rule_engine(position, tracker, exit_engine)
+      end
+
+      # Legacy fallback (backwards compatibility)
+      check_all_exit_conditions_legacy(position, tracker, exit_engine)
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] check_all_exit_conditions error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Check exit conditions using rule engine
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    # @return [Boolean] true if exit was triggered, false otherwise
+    def check_exit_conditions_with_rule_engine(position, tracker, exit_engine)
+      context = Risk::Rules::RuleContext.new(
+        position: position,
+        tracker: tracker,
+        risk_config: risk_config,
+        current_time: Time.current,
+        trading_session: TradingSession::Service
+      )
+
+      result = rule_engine.evaluate(context)
+
+      if result.exit?
+        dispatch_exit(exit_engine, tracker, result.reason)
+        return true
+      end
+
+      false
+    end
+
+    # Legacy method for backwards compatibility
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    # @return [Boolean] true if exit was triggered, false otherwise
+    def check_all_exit_conditions_legacy(position, tracker, exit_engine)
       # 1. Session end exit (highest priority)
       session_check = TradingSession::Service.should_force_exit?
       if session_check[:should_exit]
@@ -1515,9 +1558,6 @@ module Live
         return true
       end
 
-      false
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] check_all_exit_conditions error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
       false
     end
 
@@ -1612,12 +1652,40 @@ module Live
       # Recalculate position metrics (PnL, peak) from current LTP
       recalculate_position_metrics(position, tracker)
 
-      # Check underlying-aware exits FIRST (if enabled)
-      return if handle_underlying_exit(position, tracker, exit_engine)
+      # Use rule engine for underlying exits and bracket limits if available
+      if rule_engine_available?
+        context = Risk::Rules::RuleContext.new(
+          position: position,
+          tracker: tracker,
+          risk_config: risk_config,
+          current_time: Time.current,
+          trading_session: TradingSession::Service
+        )
 
-      # Enforce hard SL/TP limits (always active) - already checked in check_all_exit_conditions
-      # but check again here for bracket limits
-      return if enforce_bracket_limits(position, tracker, exit_engine)
+        # Check underlying exit rule
+        underlying_rule = rule_engine.find_rule(Risk::Rules::UnderlyingExitRule)
+        if underlying_rule&.enabled?
+          underlying_result = underlying_rule.evaluate(context)
+          if underlying_result.exit?
+            dispatch_exit(exit_engine, tracker, underlying_result.reason)
+            return
+          end
+        end
+
+        # Check bracket limit rule
+        bracket_rule = rule_engine.find_rule(Risk::Rules::BracketLimitRule)
+        if bracket_rule&.enabled?
+          bracket_result = bracket_rule.evaluate(context)
+          if bracket_result.exit?
+            dispatch_exit(exit_engine, tracker, bracket_result.reason)
+            return
+          end
+        end
+      else
+        # Legacy fallback
+        return if handle_underlying_exit(position, tracker, exit_engine)
+        return if enforce_bracket_limits(position, tracker, exit_engine)
+      end
 
       # Apply tiered trailing SL offsets
       desired_sl_offset_pct = Positions::TrailingConfig.sl_offset_for(position.pnl_pct)
@@ -1838,6 +1906,21 @@ module Live
       end
     rescue StandardError => e
       Rails.logger.error("[RiskManager] recalculate_position_metrics failed for tracker #{tracker&.id}: #{e.class} - #{e.message}")
+    end
+
+    # Get or initialize rule engine
+    # @return [Risk::Rules::RuleEngine, nil] Rule engine instance or nil
+    def rule_engine
+      @rule_engine ||= begin
+        risk_cfg = risk_config
+        Risk::Rules::RuleFactory.create_engine(risk_config: risk_cfg)
+      end
+    end
+
+    # Check if rule engine is available
+    # @return [Boolean] true if rule engine is available, false otherwise
+    def rule_engine_available?
+      !rule_engine.nil?
     end
   end
 end
