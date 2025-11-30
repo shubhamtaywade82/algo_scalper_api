@@ -729,6 +729,87 @@ Priority 40: TimeBasedExitRule
 
 ---
 
+## Secure Profit Scenarios
+
+### Scenario 29: Securing Profit Above ₹1000
+
+**Position State:**
+- Entry Price: ₹100
+- Current LTP: ₹120
+- PnL: ₹1000 (10% gain)
+- Peak Profit: ₹1250 (25% gain)
+- Current Profit: ₹1100 (22% gain)
+- Secure Threshold: ₹1000
+- Drawdown Threshold: 3%
+
+**Rule Evaluation:**
+```
+Priority 10-30: SessionEnd, SL, TP, BracketLimit → no_action
+
+Priority 35: SecureProfitRule
+  → Profit: ₹1100 >= ₹1000? YES ✅
+  → Peak: 25%, Current: 22%
+  → Drawdown: 25% - 22% = 3%
+  → Threshold: 3%
+  → 3% >= 3%? YES ✅
+  → Result: EXIT with reason "secure_profit_exit (profit: ₹1100, drawdown: 3% from peak 25%)"
+
+[Evaluation STOPS]
+```
+
+**Outcome:** Position exited at ₹1100, securing profit above ₹1000 threshold while protecting against reversal.
+
+---
+
+### Scenario 30: Riding Profits Below Threshold
+
+**Position State:**
+- Entry Price: ₹100
+- Current LTP: ₹105
+- PnL: ₹500 (5% gain)
+- Secure Threshold: ₹1000
+
+**Rule Evaluation:**
+```
+Priority 35: SecureProfitRule
+  → Profit: ₹500 >= ₹1000? NO ❌
+  → Result: no_action (rule not activated)
+
+[Evaluation CONTINUES]
+```
+
+**Outcome:** Position continues to ride - rule doesn't interfere with profits below threshold.
+
+---
+
+### Scenario 31: Allowing Further Upside After Securing
+
+**Position State:**
+- Entry Price: ₹100
+- Current LTP: ₹130
+- PnL: ₹1500 (30% gain)
+- Peak Profit: ₹1500 (30% gain)
+- Current Profit: ₹1500 (30% gain)
+- Secure Threshold: ₹1000
+- Drawdown Threshold: 3%
+
+**Rule Evaluation:**
+```
+Priority 35: SecureProfitRule
+  → Profit: ₹1500 >= ₹1000? YES ✅
+  → Peak: 30%, Current: 30%
+  → Drawdown: 30% - 30% = 0%
+  → Threshold: 3%
+  → 0% >= 3%? NO ❌
+  → Result: no_action (allows riding)
+
+[Evaluation CONTINUES]
+```
+
+**Outcome:** Position continues to ride - profit can grow further, protected if it drops 3% from peak.
+
+---
+
 ## Summary Table
 
 | Scenario | Triggering Rule | Priority | Key Condition |
@@ -736,10 +817,11 @@ Priority 40: TimeBasedExitRule
 | Stop Loss Hit | StopLossRule | 20 | PnL <= -SL% |
 | Take Profit Hit | TakeProfitRule | 30 | PnL >= +TP% |
 | Session End | SessionEndRule | 10 | Session ending |
-| Peak Drawdown | PeakDrawdownRule | 45 | Drawdown >= threshold |
+| Secure Profit | SecureProfitRule | 35 | Profit >= ₹1000 & drawdown >= 3% |
 | Time-Based Exit | TimeBasedExitRule | 40 | Time >= exit_time & profit >= min |
-| Underlying Break | UnderlyingExitRule | 60 | Structure break against position |
+| Peak Drawdown | PeakDrawdownRule | 45 | Drawdown >= threshold |
 | Trailing Stop | TrailingStopRule | 50 | HWM drop >= threshold |
+| Underlying Break | UnderlyingExitRule | 60 | Structure break against position |
 | Bracket Limit | BracketLimitRule | 25 | position.sl_hit? or position.tp_hit? |
 
 ## Important Notes

@@ -10,6 +10,7 @@ module Risk
           StopLossRule.new(config: risk_config),
           TakeProfitRule.new(config: risk_config),
           BracketLimitRule.new(config: risk_config),
+          SecureProfitRule.new(config: risk_config), # Secure profits above threshold
           TimeBasedExitRule.new(config: risk_config),
           PeakDrawdownRule.new(config: risk_config),
           TrailingStopRule.new(config: risk_config),
