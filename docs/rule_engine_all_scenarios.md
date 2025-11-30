@@ -809,19 +809,25 @@ Priority 35: SecureProfitRule
 **Outcome:** Position continues to ride - profit can grow further, protected if it drops 3% from peak.
 
 ---
-
 ## Summary Table
 
-| Scenario | Triggering Rule | Priority | Key Condition |
-|----------|----------------|----------|---------------|
-| Stop Loss Hit | StopLossRule | 20 | PnL <= -SL% |
-| Take Profit Hit | TakeProfitRule | 30 | PnL >= +TP% |
-| Session End | SessionEndRule | 10 | Session ending |
+| Scenario        | Triggering Rule | Priority | Key Condition  |
+| --------------- | --------------- | -------- | -------------- |
+| Stop Loss Hit   | StopLossRule    | 20       | PnL <= -SL%    |
+| Take Profit Hit | TakeProfitRule  | 30       | PnL >= +TP%    |
+| Session End     | SessionEndRule  | 10       | Session ending |
+<<<<<<< HEAD
 | Secure Profit | SecureProfitRule | 35 | Profit >= ₹1000 & drawdown >= 3% |
 | Time-Based Exit | TimeBasedExitRule | 40 | Time >= exit_time & profit >= min |
 | Peak Drawdown | PeakDrawdownRule | 45 | Drawdown >= threshold |
 | Trailing Stop | TrailingStopRule | 50 | HWM drop >= threshold |
 | Underlying Break | UnderlyingExitRule | 60 | Structure break against position |
+=======
+| Peak Drawdown | PeakDrawdownRule | 45 | Drawdown >= threshold |
+| Time-Based Exit | TimeBasedExitRule | 40 | Time >= exit_time & profit >= min |
+| Underlying Break | UnderlyingExitRule | 60 | Structure break against position |
+| Trailing Stop | TrailingStopRule | 50 | HWM drop >= threshold |
+>>>>>>> feat: Add comprehensive rule engine scenarios documentation
 | Bracket Limit | BracketLimitRule | 25 | position.sl_hit? or position.tp_hit? |
 
 ## Important Notes
