@@ -11,6 +11,16 @@ module Risk
       def evaluate(context)
         return skip_result unless context.active?
 
+        # Check trailing activation threshold (pnl_pct >= trailing_activation_pct)
+        # Peak drawdown rule only activates after trailing activation threshold is met
+        unless context.trailing_activated?
+          Rails.logger.debug(
+            "[PeakDrawdownRule] Trailing not activated: pnl_pct=#{context.pnl_pct&.round(2)}% " \
+            "< activation_pct=#{context.trailing_activation_pct.to_f.round(2)}%"
+          )
+          return skip_result
+        end
+
         peak_profit_pct = context.peak_profit_pct
         current_profit_pct = context.pnl_pct
         return skip_result unless peak_profit_pct && current_profit_pct
@@ -41,7 +51,8 @@ module Risk
             peak_profit_pct: peak_profit_pct,
             current_profit_pct: current_profit_pct,
             drawdown: drawdown,
-            threshold: peak_drawdown_pct
+            threshold: peak_drawdown_pct,
+            trailing_activation_pct: context.trailing_activation_pct.to_f
           }
         )
       end

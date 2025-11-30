@@ -42,7 +42,12 @@
    - Configuration snippets
    - Common adjustments
 
-7. **[Data Sources](./rule_engine_data_sources.md)**
+7. **[Trailing Activation Rule](./trailing_activation_rule.md)**
+   - Configurable trailing activation percentage
+   - Gates when trailing rules become active
+   - Works across any capital/allocation/lot size
+
+8. **[Data Sources](./rule_engine_data_sources.md)**
    - How rules use live market data
    - WebSocket → Redis → ActiveCache flow
    - Data freshness guarantees
@@ -108,6 +113,17 @@ risk:
 # Triggers when: Profit >= ₹1000 AND drawdown >= 3% from peak
 ```
 
+### Trailing Activation
+```ruby
+# Config
+risk:
+  trailing:
+    activation_pct: 10.0  # Activate trailing at 10% profit (configurable: 6%, 6.66%, 13.32%, etc.)
+
+# Gates TrailingStopRule and PeakDrawdownRule
+# Only activates when: pnl_pct >= activation_pct
+```
+
 ## Configuration
 
 All rules are configured in `config/algo.yml`:
@@ -121,6 +137,9 @@ risk:
   peak_drawdown_exit_pct: 5.0
   time_exit_hhmm: "15:20"
   min_profit_rupees: 200
+  trailing:
+    activation_pct: 10.0  # Configurable: 6%, 6.66%, 13.32%, etc.
+    drawdown_pct: 3.0
   # ... more config options
 ```
 

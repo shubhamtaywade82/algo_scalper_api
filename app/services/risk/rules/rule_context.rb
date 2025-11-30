@@ -94,6 +94,34 @@ module Risk
       rescue StandardError
         default
       end
+
+      # Get trailing activation percentage from config
+      # Checks nested config: risk[:trailing][:activation_pct] or risk[:trailing_activation_pct]
+      # @param default [BigDecimal] Default value if not found
+      # @return [BigDecimal] Trailing activation percentage
+      def trailing_activation_pct(default = BigDecimal('10.0'))
+        # Try nested config first: risk[:trailing][:activation_pct]
+        trailing_config = config_value(:trailing)
+        if trailing_config.is_a?(Hash) && trailing_config[:activation_pct]
+          return BigDecimal(trailing_config[:activation_pct].to_s)
+        end
+
+        # Fallback to flat config: risk[:trailing_activation_pct]
+        config_bigdecimal(:trailing_activation_pct, default)
+      end
+
+      # Check if trailing activation threshold is met
+      # Trailing rules should only activate when pnl_pct >= trailing_activation_pct
+      # @return [Boolean] true if trailing should be active, false otherwise
+      def trailing_activated?
+        pnl_pct = self.pnl_pct
+        return false unless pnl_pct
+
+        activation_pct = trailing_activation_pct
+        return false if activation_pct.zero?
+
+        pnl_pct.to_f >= activation_pct.to_f
+      end
     end
   end
 end
