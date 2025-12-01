@@ -18,9 +18,10 @@ module Live
     MAX_RETRIES_ON_RATE_LIMIT = 3
     RATE_LIMIT_BACKOFF_BASE = 2.0 # seconds
 
-    def initialize(exit_engine: nil, trailing_engine: nil)
+    def initialize(exit_engine: nil, trailing_engine: nil, rule_engine: nil)
       @exit_engine = exit_engine
       @trailing_engine = trailing_engine
+      @rule_engine = rule_engine # Rule engine for risk and position management
       @mutex = Mutex.new
       @running = false
       @thread = nil
@@ -29,7 +30,7 @@ module Live
       @sleep_mutex = Mutex.new
       @sleep_cv = ConditionVariable.new
       @position_subscriptions = []
-      @metrics = Hash.new(0)
+      @metrics = {}
       @redis_pnl_cache = {} # Per-cycle cache for Redis PnL lookups (cleared each cycle)
       @cycle_tracker_map = nil # Cached tracker map for current cycle
 
@@ -259,6 +260,179 @@ module Live
     # If exit_engine is provided, they will delegate the actual exit to it. Otherwise they call internal execute_exit.
     public
 
+    # Phase 3: Metrics & Circuit Breaker - Public API
+
+    # Record cycle metrics (for monitoring and debugging)
+    #
+    # @param cycle_time [Float] Time taken for the cycle in seconds
+    # @param positions_count [Integer] Number of positions processed
+    # @param redis_fetches [Integer] Number of Redis fetches
+    # @param db_queries [Integer] Number of database queries
+    # @param api_calls [Integer] Number of API calls made
+    # @param exit_counts [Hash] Optional hash of exit type => count
+    # @param error_counts [Hash] Optional hash of error type => count
+    def record_cycle_metrics(cycle_time:, positions_count:, redis_fetches:, db_queries:, api_calls:, exit_counts: {}, error_counts: {})
+      @mutex.synchronize do
+        @metrics[:cycle_count] = (@metrics[:cycle_count] || 0) + 1
+        @metrics[:total_cycle_time] = (@metrics[:total_cycle_time] || 0) + cycle_time
+        @metrics[:min_cycle_time] = @metrics[:min_cycle_time] ? [@metrics[:min_cycle_time], cycle_time].min : cycle_time
+        @metrics[:max_cycle_time] = @metrics[:max_cycle_time] ? [@metrics[:max_cycle_time], cycle_time].max : cycle_time
+        @metrics[:total_positions] = (@metrics[:total_positions] || 0) + positions_count
+        @metrics[:total_redis_fetches] = (@metrics[:total_redis_fetches] || 0) + redis_fetches
+        @metrics[:total_db_queries] = (@metrics[:total_db_queries] || 0) + db_queries
+        @metrics[:total_api_calls] = (@metrics[:total_api_calls] || 0) + api_calls
+        @metrics[:last_cycle_time] = cycle_time
+
+        # Record exit counts
+        exit_counts.each do |exit_type, count|
+          @metrics[:"exit_#{exit_type}"] = (@metrics[:"exit_#{exit_type}"] || 0) + count
+        end
+
+        # Record error counts
+        error_counts.each do |error_type, count|
+          @metrics[:"error_#{error_type}"] = (@metrics[:"error_#{error_type}"] || 0) + count
+        end
+      end
+    end
+
+    # Get current metrics summary
+    #
+    # @return [Hash] Hash containing all metrics
+    def get_metrics
+      @mutex.synchronize do
+        cycle_count = @metrics[:cycle_count] || 0
+
+        base_metrics = {
+          cycle_count: cycle_count,
+          avg_cycle_time: cycle_count.positive? ? (@metrics[:total_cycle_time] || 0).to_f / cycle_count : 0,
+          min_cycle_time: @metrics[:min_cycle_time],
+          max_cycle_time: @metrics[:max_cycle_time],
+          total_cycle_time: @metrics[:total_cycle_time] || 0,
+          avg_positions_per_cycle: cycle_count.positive? ? (@metrics[:total_positions] || 0).to_f / cycle_count : 0,
+          total_positions: @metrics[:total_positions] || 0,
+          avg_redis_fetches_per_cycle: cycle_count.positive? ? (@metrics[:total_redis_fetches] || 0).to_f / cycle_count : 0,
+          total_redis_fetches: @metrics[:total_redis_fetches] || 0,
+          avg_db_queries_per_cycle: cycle_count.positive? ? (@metrics[:total_db_queries] || 0).to_f / cycle_count : 0,
+          total_db_queries: @metrics[:total_db_queries] || 0,
+          avg_api_calls_per_cycle: cycle_count.positive? ? (@metrics[:total_api_calls] || 0).to_f / cycle_count : 0,
+          total_api_calls: @metrics[:total_api_calls] || 0,
+          exit_counts: @metrics.select { |k, _| k.to_s.start_with?('exit_') },
+          error_counts: @metrics.select { |k, _| k.to_s.start_with?('error_') }
+        }
+
+        # Include individual exit and error metrics for easier access (already in exit_counts/error_counts)
+        # But also add them as top-level keys for convenience
+        exit_error_metrics = @metrics.select { |k, _| k.to_s.start_with?('exit_') || k.to_s.start_with?('error_') }
+        merged = base_metrics.merge(exit_error_metrics)
+        # Ensure all exit/error metrics default to 0 if nil (after reset)
+        merged.each do |k, v|
+          merged[k] = 0 if v.nil? && (k.to_s.start_with?('exit_') || k.to_s.start_with?('error_'))
+        end
+        merged
+      end
+    end
+
+    # Reset all metrics to zero
+    def reset_metrics
+      @mutex.synchronize do
+        @metrics.clear
+      end
+    end
+
+    # Increment a metric counter
+    #
+    # @param key [Symbol] Metric key to increment
+    def increment_metric(key)
+      @mutex.synchronize do
+        @metrics[key] = (@metrics[key] || 0) + 1
+      end
+    end
+
+    # Phase 3: Circuit Breaker
+
+    # Check if circuit breaker is open (blocking API calls)
+    #
+    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
+    # @return [Boolean] true if circuit breaker is open, false otherwise
+    def circuit_breaker_open?(cache_key = nil)
+      @mutex.synchronize do
+        return false if @circuit_breaker_state == :closed
+
+        if @circuit_breaker_state == :open
+          # Check if timeout has passed
+          if @circuit_breaker_last_failure &&
+             (Time.current - @circuit_breaker_last_failure) > @circuit_breaker_timeout
+            @circuit_breaker_state = :half_open
+            @circuit_breaker_failures = 0
+            return false
+          end
+          return true
+        end
+
+        # half_open state - allow one request to test
+        false
+      end
+    end
+
+    # Record an API failure (increment failure count, open circuit if threshold reached)
+    #
+    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
+    def record_api_failure(cache_key = nil)
+      @mutex.synchronize do
+        @circuit_breaker_failures += 1
+        @circuit_breaker_last_failure = Time.current
+
+        if @circuit_breaker_failures >= @circuit_breaker_threshold
+          @circuit_breaker_state = :open
+          Rails.logger.warn("[RiskManager] Circuit breaker OPEN - API failures: #{@circuit_breaker_failures}")
+        end
+      end
+    end
+
+    # Record an API success (close circuit if in half_open state)
+    #
+    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
+    def record_api_success(cache_key = nil)
+      @mutex.synchronize do
+        if @circuit_breaker_state == :half_open
+          @circuit_breaker_state = :closed
+          @circuit_breaker_failures = 0
+          Rails.logger.info("[RiskManager] Circuit breaker CLOSED - API recovered")
+        elsif @circuit_breaker_state == :open
+          # Reset failures on success (but keep state as open until timeout)
+          @circuit_breaker_failures = 0
+        end
+      end
+    end
+
+    # Reset circuit breaker to closed state (for testing or manual recovery)
+    def reset_circuit_breaker
+      @mutex.synchronize do
+        @circuit_breaker_state = :closed
+        @circuit_breaker_failures = 0
+        @circuit_breaker_last_failure = nil
+      end
+    end
+
+    # Phase 3: Health Status
+
+    # Get health status of the service
+    #
+    # @return [Hash] Hash containing health status information
+    def health_status
+      @mutex.synchronize do
+        {
+          running: running?,
+          thread_alive: @thread&.alive? || false,
+          last_cycle_time: @metrics[:last_cycle_time],
+          active_positions: PositionTracker.active.count,
+          circuit_breaker_state: @circuit_breaker_state,
+          recent_errors: @metrics[:recent_api_errors] || 0,
+          uptime_seconds: running? && @started_at ? (Time.current - @started_at).to_i : 0
+        }
+      end
+    end
+
     def enforce_trailing_stops(exit_engine:)
       risk = risk_config
       drop_threshold = begin
@@ -371,7 +545,12 @@ module Live
       positions = active_cache_positions
       return if positions.empty?
 
-      tracker_map = trackers_for_positions(positions)
+      tracker_map = begin
+        trackers_for_positions(positions)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_session_end_exit error: #{e.class} - #{e.message}")
+        return
+      end
       exited_count = 0
 
       positions.each do |position|
@@ -1241,171 +1420,6 @@ module Live
       )
     end
 
-    def increment_metric(key)
-      @mutex.synchronize do
-        @metrics[key] += 1
-      end
-    end
-
-    # Phase 3: Metrics & Monitoring
-
-    # Record metrics for a single monitoring cycle
-    #
-    # @param cycle_time [Float] Time taken for the cycle in seconds
-    # @param positions_count [Integer] Number of positions processed
-    # @param redis_fetches [Integer] Number of Redis fetches
-    # @param db_queries [Integer] Number of database queries
-    # @param api_calls [Integer] Number of API calls made
-    # @param exit_counts [Hash] Optional hash of exit type => count
-    # @param error_counts [Hash] Optional hash of error type => count
-    def record_cycle_metrics(cycle_time:, positions_count:, redis_fetches:, db_queries:, api_calls:, exit_counts: {}, error_counts: {})
-      @mutex.synchronize do
-        @metrics[:cycle_count] += 1
-        @metrics[:total_cycle_time] += cycle_time
-        @metrics[:min_cycle_time] = [@metrics[:min_cycle_time] || cycle_time, cycle_time].min
-        @metrics[:max_cycle_time] = [@metrics[:max_cycle_time] || 0, cycle_time].max
-        @metrics[:total_positions] += positions_count
-        @metrics[:total_redis_fetches] += redis_fetches
-        @metrics[:total_db_queries] += db_queries
-        @metrics[:total_api_calls] += api_calls
-        @metrics[:last_cycle_time] = cycle_time
-
-        # Record exit counts
-        exit_counts.each do |exit_type, count|
-          @metrics[:"exit_#{exit_type}"] = (@metrics[:"exit_#{exit_type}"] || 0) + count
-        end
-
-        # Record error counts
-        error_counts.each do |error_type, count|
-          @metrics[:"error_#{error_type}"] = (@metrics[:"error_#{error_type}"] || 0) + count
-        end
-      end
-    end
-
-    # Get current metrics summary
-    #
-    # @return [Hash] Hash containing all metrics
-    def get_metrics
-      @mutex.synchronize do
-        cycle_count = @metrics[:cycle_count] || 0
-
-        base_metrics = {
-          cycle_count: cycle_count,
-          avg_cycle_time: cycle_count.positive? ? (@metrics[:total_cycle_time] || 0) / cycle_count : 0,
-          min_cycle_time: @metrics[:min_cycle_time],
-          max_cycle_time: @metrics[:max_cycle_time],
-          total_cycle_time: @metrics[:total_cycle_time] || 0,
-          avg_positions_per_cycle: cycle_count.positive? ? (@metrics[:total_positions] || 0) / cycle_count : 0,
-          total_positions: @metrics[:total_positions] || 0,
-          avg_redis_fetches_per_cycle: cycle_count.positive? ? (@metrics[:total_redis_fetches] || 0) / cycle_count : 0,
-          total_redis_fetches: @metrics[:total_redis_fetches] || 0,
-          avg_db_queries_per_cycle: cycle_count.positive? ? (@metrics[:total_db_queries] || 0) / cycle_count : 0,
-          total_db_queries: @metrics[:total_db_queries] || 0,
-          avg_api_calls_per_cycle: cycle_count.positive? ? (@metrics[:total_api_calls] || 0) / cycle_count : 0,
-          total_api_calls: @metrics[:total_api_calls] || 0,
-          exit_counts: @metrics.select { |k, _| k.to_s.start_with?('exit_') },
-          error_counts: @metrics.select { |k, _| k.to_s.start_with?('error_') }
-        }
-
-        # Include individual exit and error metrics for easier access (already included in exit_counts/error_counts)
-        # But also add them as top-level keys for convenience
-        exit_error_metrics = @metrics.select { |k, _| k.to_s.start_with?('exit_') || k.to_s.start_with?('error_') }
-        base_metrics.merge(exit_error_metrics)
-      end
-    end
-
-    # Reset all metrics to zero
-    def reset_metrics
-      @mutex.synchronize do
-        @metrics.clear
-      end
-    end
-
-    # Phase 3: Circuit Breaker
-
-    # Check if circuit breaker is open (blocking API calls)
-    #
-    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
-    # @return [Boolean] true if circuit breaker is open, false otherwise
-    def circuit_breaker_open?(cache_key = nil)
-      @mutex.synchronize do
-        return false if @circuit_breaker_state == :closed
-
-        if @circuit_breaker_state == :open
-          # Check if timeout has passed
-          if @circuit_breaker_last_failure &&
-             (Time.current - @circuit_breaker_last_failure) > @circuit_breaker_timeout
-            @circuit_breaker_state = :half_open
-            @circuit_breaker_failures = 0
-            return false
-          end
-          return true
-        end
-
-        # half_open state - allow one request to test
-        false
-      end
-    end
-
-    # Record an API failure (increment failure count, open circuit if threshold reached)
-    #
-    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
-    def record_api_failure(cache_key = nil)
-      @mutex.synchronize do
-        @circuit_breaker_failures += 1
-        @circuit_breaker_last_failure = Time.current
-
-        if @circuit_breaker_failures >= @circuit_breaker_threshold
-          @circuit_breaker_state = :open
-          Rails.logger.warn("[RiskManager] Circuit breaker OPEN - API failures: #{@circuit_breaker_failures}")
-        end
-      end
-    end
-
-    # Record an API success (close circuit if in half_open state)
-    #
-    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
-    def record_api_success(cache_key = nil)
-      @mutex.synchronize do
-        if @circuit_breaker_state == :half_open
-          @circuit_breaker_state = :closed
-          @circuit_breaker_failures = 0
-          Rails.logger.info("[RiskManager] Circuit breaker CLOSED - API recovered")
-        elsif @circuit_breaker_state == :open
-          # Reset failures on success (but keep state as open until timeout)
-          @circuit_breaker_failures = 0
-        end
-      end
-    end
-
-    # Reset circuit breaker to closed state (for testing or manual recovery)
-    def reset_circuit_breaker
-      @mutex.synchronize do
-        @circuit_breaker_state = :closed
-        @circuit_breaker_failures = 0
-        @circuit_breaker_last_failure = nil
-      end
-    end
-
-    # Phase 3: Health Status
-
-    # Get health status of the service
-    #
-    # @return [Hash] Hash containing health status information
-    def health_status
-      @mutex.synchronize do
-        {
-          running: running?,
-          thread_alive: @thread&.alive? || false,
-          last_cycle_time: @metrics[:last_cycle_time],
-          active_positions: PositionTracker.active.count,
-          circuit_breaker_state: @circuit_breaker_state,
-          recent_errors: @metrics[:recent_api_errors] || 0,
-          uptime_seconds: running? && @started_at ? (Time.current - @started_at).to_i : 0
-        }
-      end
-    end
-
     def guarded_exit(tracker, reason, exit_engine)
       if exit_engine && exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
         return if tracker.exited?
@@ -1491,13 +1505,55 @@ module Live
       Rails.logger.error("[RiskManager] Error in process_all_positions_in_single_loop: #{e.class} - #{e.message}")
     end
 
-    # Phase 2: Check all exit conditions in single consolidated pass
-    # Consolidates: session end, SL/TP, time-based, trailing stops
+    # Phase 2: Check all exit conditions using rule engine
+    # Uses rule engine to evaluate all risk and position management rules
     # @param position [Positions::ActiveCache::PositionData] Position data
     # @param tracker [PositionTracker] PositionTracker instance
     # @param exit_engine [Object] Exit engine to use
     # @return [Boolean] true if exit was triggered, false otherwise
     def check_all_exit_conditions(position, tracker, exit_engine)
+      # Use rule engine if available, otherwise fallback to legacy methods
+      if rule_engine_available?
+        return check_exit_conditions_with_rule_engine(position, tracker, exit_engine)
+      end
+
+      # Legacy fallback (backwards compatibility)
+      check_all_exit_conditions_legacy(position, tracker, exit_engine)
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] check_all_exit_conditions error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Check exit conditions using rule engine
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    # @return [Boolean] true if exit was triggered, false otherwise
+    def check_exit_conditions_with_rule_engine(position, tracker, exit_engine)
+      context = Risk::Rules::RuleContext.new(
+        position: position,
+        tracker: tracker,
+        risk_config: risk_config,
+        current_time: Time.current,
+        trading_session: TradingSession::Service
+      )
+
+      result = rule_engine.evaluate(context)
+
+      if result.exit?
+        dispatch_exit(exit_engine, tracker, result.reason)
+        return true
+      end
+
+      false
+    end
+
+    # Legacy method for backwards compatibility
+    # @param position [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param exit_engine [Object] Exit engine to use
+    # @return [Boolean] true if exit was triggered, false otherwise
+    def check_all_exit_conditions_legacy(position, tracker, exit_engine)
       # 1. Session end exit (highest priority)
       session_check = TradingSession::Service.should_force_exit?
       if session_check[:should_exit]
@@ -1515,9 +1571,6 @@ module Live
         return true
       end
 
-      false
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] check_all_exit_conditions error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
       false
     end
 
@@ -1612,12 +1665,50 @@ module Live
       # Recalculate position metrics (PnL, peak) from current LTP
       recalculate_position_metrics(position, tracker)
 
-      # Check underlying-aware exits FIRST (if enabled)
-      return if handle_underlying_exit(position, tracker, exit_engine)
+      # Use rule engine for underlying exits, bracket limits, and peak drawdown if available
+      if rule_engine_available?
+        context = Risk::Rules::RuleContext.new(
+          position: position,
+          tracker: tracker,
+          risk_config: risk_config,
+          current_time: Time.current,
+          trading_session: TradingSession::Service
+        )
 
-      # Enforce hard SL/TP limits (always active) - already checked in check_all_exit_conditions
-      # but check again here for bracket limits
-      return if enforce_bracket_limits(position, tracker, exit_engine)
+        # Check underlying exit rule
+        underlying_rule = rule_engine.find_rule(Risk::Rules::UnderlyingExitRule)
+        if underlying_rule&.enabled?
+          underlying_result = underlying_rule.evaluate(context)
+          if underlying_result.exit?
+            dispatch_exit(exit_engine, tracker, underlying_result.reason)
+            return
+          end
+        end
+
+        # Check bracket limit rule
+        bracket_rule = rule_engine.find_rule(Risk::Rules::BracketLimitRule)
+        if bracket_rule&.enabled?
+          bracket_result = bracket_rule.evaluate(context)
+          if bracket_result.exit?
+            dispatch_exit(exit_engine, tracker, bracket_result.reason)
+            return
+          end
+        end
+
+        # Check peak drawdown rule (replaces TrailingEngine peak-drawdown check)
+        peak_drawdown_rule = rule_engine.find_rule(Risk::Rules::PeakDrawdownRule)
+        if peak_drawdown_rule&.enabled?
+          peak_drawdown_result = peak_drawdown_rule.evaluate(context)
+          if peak_drawdown_result.exit?
+            dispatch_exit(exit_engine, tracker, peak_drawdown_result.reason)
+            return
+          end
+        end
+      else
+        # Legacy fallback
+        return if handle_underlying_exit(position, tracker, exit_engine)
+        return if enforce_bracket_limits(position, tracker, exit_engine)
+      end
 
       # Apply tiered trailing SL offsets
       desired_sl_offset_pct = Positions::TrailingConfig.sl_offset_for(position.pnl_pct)
@@ -1838,6 +1929,21 @@ module Live
       end
     rescue StandardError => e
       Rails.logger.error("[RiskManager] recalculate_position_metrics failed for tracker #{tracker&.id}: #{e.class} - #{e.message}")
+    end
+
+    # Get or initialize rule engine
+    # @return [Risk::Rules::RuleEngine, nil] Rule engine instance or nil
+    def rule_engine
+      @rule_engine ||= begin
+        risk_cfg = risk_config
+        Risk::Rules::RuleFactory.create_engine(risk_config: risk_cfg)
+      end
+    end
+
+    # Check if rule engine is available
+    # @return [Boolean] true if rule engine is available, false otherwise
+    def rule_engine_available?
+      !rule_engine.nil?
     end
   end
 end

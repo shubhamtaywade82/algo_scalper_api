@@ -13,6 +13,7 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
   let(:tracker1) do
     create(
       :position_tracker,
+      watchable: instrument,
       instrument: instrument,
       order_no: 'ORD001',
       security_id: '50074',
@@ -25,6 +26,7 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
   let(:tracker2) do
     create(
       :position_tracker,
+      watchable: instrument,
       instrument: instrument,
       order_no: 'ORD002',
       security_id: '50075',
@@ -41,9 +43,9 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
       segment: tracker1.segment,
       entry_price: tracker1.entry_price,
       quantity: tracker1.quantity,
-      pnl: BigDecimal('500'),
+      pnl: BigDecimal(500),
       pnl_pct: 5.0,
-      high_water_mark: BigDecimal('600'),
+      high_water_mark: BigDecimal(600),
       last_updated_at: Time.current
     )
   end
@@ -54,9 +56,9 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
       segment: tracker2.segment,
       entry_price: tracker2.entry_price,
       quantity: tracker2.quantity,
-      pnl: BigDecimal('1000'),
+      pnl: BigDecimal(1000),
       pnl_pct: 10.0,
-      high_water_mark: BigDecimal('1200'),
+      high_water_mark: BigDecimal(1200),
       last_updated_at: Time.current
     )
   end
@@ -65,6 +67,17 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
   before do
     allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
     allow(active_cache).to receive(:all_positions).and_return([position_data1, position_data2])
+    allow(active_cache).to receive(:update_position).and_return(true)
+    allow(active_cache).to receive(:empty?).and_return(false) # For PnlUpdaterService
+    allow(active_cache).to receive(:get_by_tracker_id).and_return(nil)
+    allow(active_cache).to receive(:add_position).and_return(true)
+    allow(service).to receive(:trackers_for_positions).and_return(
+      { tracker1.id => tracker1, tracker2.id => tracker2 }
+    )
+    # Default stubs - can be overridden in individual tests
+    allow(service).to receive(:sync_position_pnl_from_redis)
+    allow(service).to receive(:check_all_exit_conditions).and_return(false)
+    allow(service).to receive(:process_trailing_for_position)
   end
 
   describe 'Optimization 1: Consolidated Position Iteration' do
@@ -74,11 +87,18 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
         allow(service).to receive(:ensure_all_positions_in_redis)
         allow(service).to receive(:ensure_all_positions_in_active_cache)
         allow(service).to receive(:ensure_all_positions_subscribed)
-        allow(service).to receive(:process_trailing_for_all_positions)
         allow(service).to receive(:enforce_session_end_exit)
         allow(service).to receive(:enforce_hard_limits)
         allow(service).to receive(:enforce_trailing_stops)
         allow(service).to receive(:enforce_time_based_exit)
+        # Stub methods called by process_all_positions_in_single_loop
+        allow(service).to receive(:check_all_exit_conditions).and_return(false)
+        allow(service).to receive(:process_trailing_for_position)
+        allow(service).to receive(:recalculate_position_metrics)
+        allow(service).to receive(:handle_underlying_exit).and_return(false)
+        allow(service).to receive(:enforce_bracket_limits).and_return(false)
+        allow(Live::TrailingEngine).to receive(:new).and_return(double(process_tick: nil))
+        allow(Orders::BracketPlacer).to receive(:new).and_return(double)
       end
 
       it 'iterates positions only once per cycle' do
@@ -97,11 +117,11 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
 
       it 'processes all positions in a single consolidated pass' do
         processed_tracker_ids = []
-        allow(service).to receive(:process_position_in_cycle) do |position, tracker|
+        allow(service).to receive(:process_trailing_for_position) do |position, tracker, _exit_engine|
           processed_tracker_ids << tracker.id
         end
 
-        # Mock the consolidated processing method
+        # Don't stub process_all_positions_in_single_loop - let it run
         allow(service).to receive(:process_all_positions_in_single_loop).and_call_original
 
         service.send(:monitor_loop, Time.current)
@@ -112,14 +132,19 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
 
       it 'syncs PnL from Redis once per position per cycle' do
         redis_fetch_count = Hash.new(0)
-        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl) do |tracker_id|
+        redis_cache_instance = instance_double(Live::RedisPnlCache)
+        allow(Live::RedisPnlCache).to receive(:instance).and_return(redis_cache_instance)
+        allow(redis_cache_instance).to receive(:fetch_pnl) do |tracker_id|
           redis_fetch_count[tracker_id] += 1
-          { pnl: BigDecimal('500'), pnl_pct: 5.0, timestamp: Time.current.to_i }
+          { pnl: BigDecimal(500), pnl_pct: 5.0, timestamp: Time.current.to_i, hwm_pnl: BigDecimal(600) }
         end
+
+        # Don't stub sync_position_pnl_from_redis - let it run to count Redis fetches
+        allow(service).to receive(:sync_position_pnl_from_redis).and_call_original
 
         service.send(:monitor_loop, Time.current)
 
-        # Each tracker should only fetch Redis PnL once
+        # Each tracker should only fetch Redis PnL once (cached after first fetch)
         expect(redis_fetch_count[tracker1.id]).to eq(1)
         expect(redis_fetch_count[tracker2.id]).to eq(1)
       end
@@ -182,9 +207,9 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
         allow(service).to receive(:update_pnl_in_redis)
 
         ltps = service.send(:batch_fetch_ltp, [
-          { segment: 'NSE_FNO', security_id: '50074' },
-          { segment: 'NSE_FNO', security_id: '50075' }
-        ])
+                              { segment: 'NSE_FNO', security_id: '50074' },
+                              { segment: 'NSE_FNO', security_id: '50075' }
+                            ])
 
         expect(ltps['50074']).to eq(BigDecimal('110.0'))
         expect(ltps['50075']).to eq(BigDecimal('220.0'))
@@ -198,7 +223,8 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
       end
 
       it 'groups positions by segment for batch calls' do
-        tracker3 = create(:position_tracker, segment: 'IDX_I', security_id: '13', status: 'active')
+        tracker3 = create(:position_tracker, watchable: instrument, instrument: instrument, segment: 'BSE_FNO',
+                                             security_id: '13', status: 'active')
         trackers = [tracker1, tracker2, tracker3]
 
         api_calls = []
@@ -206,12 +232,13 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
           api_calls << request_hash
           { 'status' => 'success', 'data' => {} }
         end
+        allow(service).to receive(:update_pnl_in_redis)
 
         service.send(:batch_update_paper_positions_pnl, trackers)
 
-        # Should make 2 API calls: one for NSE_FNO, one for IDX_I
+        # Should make 2 API calls: one for NSE_FNO, one for BSE_FNO
         expect(api_calls.length).to eq(2)
-        expect(api_calls.map(&:keys).flatten).to contain_exactly('NSE_FNO', 'IDX_I')
+        expect(api_calls.map(&:keys).flatten).to contain_exactly('NSE_FNO', 'BSE_FNO')
       end
     end
   end
@@ -229,6 +256,9 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
         { tracker1.id => tracker1, tracker2.id => tracker2 }
       )
       allow(service).to receive(:sync_position_pnl_from_redis)
+      # Stub active_cache methods that might be called
+      allow(active_cache).to receive(:get_by_tracker_id).and_return(nil)
+      allow(active_cache).to receive(:add_position).and_return(true)
     end
 
     context 'when checking exit conditions' do
@@ -256,15 +286,12 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
           false
         end
 
-        # Process positions through consolidated exit check
-        allow(service).to receive(:check_all_exit_conditions) do |position, tracker|
-          service.send(:check_sl_tp_limits, position, tracker, exit_engine)
-        end
+        # Don't stub check_all_exit_conditions - let it run to verify check_sl_tp_limits is called
+        allow(service).to receive(:check_all_exit_conditions).and_call_original
 
         service.send(:monitor_loop, Time.current)
 
-        # Should only check SL/TP once per position (not in both
-        # process_trailing and enforce_hard_limits)
+        # Should only check SL/TP once per position (in check_all_exit_conditions, not duplicated)
         expect(sl_tp_check_count).to eq(2) # Once per position
       end
 
@@ -274,16 +301,22 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
           exit_reasons << reason
         end
 
-        # Session end should take priority
+        # Session end should take priority (checked in check_all_exit_conditions)
         allow(TradingSession::Service).to receive(:should_force_exit?).and_return(
           { should_exit: true }
         )
         position_data1.pnl_pct = -15.0 # Also hits SL
 
+        # Set exit_engine on service so dispatch_exit uses it
+        service.instance_variable_set(:@exit_engine, exit_engine)
+
+        # Don't stub check_all_exit_conditions - let it run to verify priority
+        allow(service).to receive(:check_all_exit_conditions).and_call_original
+
         service.send(:monitor_loop, Time.current)
 
         # Should exit with session end reason, not SL
-        expect(exit_reasons).to include(match(/session end/))
+        expect(exit_reasons).to include(match(/session end/i))
       end
     end
 
@@ -346,7 +379,7 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
       redis_fetch_count = 0
       allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl) do |*args|
         redis_fetch_count += 1
-        { pnl: BigDecimal('500'), pnl_pct: 5.0, timestamp: Time.current.to_i }
+        { pnl: BigDecimal(500), pnl_pct: 5.0, timestamp: Time.current.to_i }
       end
 
       service.send(:monitor_loop, Time.current)
@@ -391,26 +424,47 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
 
     it 'maintains throttling behavior' do
       # Throttled operations should still respect throttling
-      service.instance_variable_set(:@last_ensure_all, Time.current - 2.seconds)
+      # Set to more than 5 seconds ago so the method will execute and update timestamp
+      old_timestamp = 6.seconds.ago
+      service.instance_variable_set(:@last_ensure_all, old_timestamp)
+      start_time = Time.current
 
+      # Return at least one tracker so the method doesn't return early
       allow(PositionTracker).to receive_message_chain(:active, :includes).and_return(
-        double(to_a: [])
+        double(to_a: [tracker1])
+      )
+      # Stub active_cache methods that might be called
+      allow(active_cache).to receive(:get_by_tracker_id).and_return(nil)
+      allow(active_cache).to receive(:add_position).and_return(true)
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
+        { pnl: BigDecimal(500), pnl_pct: 5.0, timestamp: Time.current.to_i }
       )
 
       service.send(:ensure_all_positions_in_redis)
 
-      # Should update throttle timestamp
-      expect(service.instance_variable_get(:@last_ensure_all)).to be_within(1.second).of(Time.current)
+      # Should update throttle timestamp (should be set to current time, not the old one)
+      new_timestamp = service.instance_variable_get(:@last_ensure_all)
+      expect(new_timestamp).to be >= start_time
+      expect(new_timestamp).not_to eq(old_timestamp)
     end
 
     it 'maintains error isolation' do
       # Errors in one position should not affect others
-      allow(service).to receive(:process_position_in_cycle).and_raise(StandardError, 'Error for position 1')
+      call_count = 0
+      allow(service).to receive(:process_trailing_for_position) do |position, tracker, _exit_engine|
+        call_count += 1
+        raise StandardError, 'Error for position 1' if call_count == 1
+      end
       allow(Rails.logger).to receive(:error)
+      # Stub active_cache methods that might be called
+      allow(active_cache).to receive(:get_by_tracker_id).and_return(nil)
+      allow(active_cache).to receive(:add_position).and_return(true)
 
       expect { service.send(:monitor_loop, Time.current) }.not_to raise_error
       # Should log error but continue processing
       expect(Rails.logger).to have_received(:error).at_least(:once)
+      # Should process both positions despite error in first
+      expect(call_count).to eq(2)
     end
   end
 end

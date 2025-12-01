@@ -76,6 +76,7 @@ group :development, :test do
   gem 'faker'
   gem 'rspec-rails'
   gem 'shoulda-matchers'
+  gem 'simplecov', require: false
   gem 'vcr', require: false
   gem 'webmock', require: false
 

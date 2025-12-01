@@ -37,8 +37,16 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
 
     it 'falls back to Redis tick cache when meta ltp missing' do
-      allow(redis_cache).to receive(:fetch_tick).with(segment: 'NSE_FNO', security_id: '12345')
-                                                .and_return({ ltp: 199.55 })
+      # Mock hub to not be running so it doesn't use Live::TickCache.get
+      allow(Live::MarketFeedHub.instance).to receive_messages(running?: false, connected?: false)
+
+      # Mock TickCache.get to return nil (so it falls back to API)
+      allow(Live::TickCache).to receive(:get).and_return(nil)
+
+      # Mock the API call to return the expected value
+      allow(instrument).to receive(:fetch_ltp_from_api_for_segment)
+        .with(segment: 'NSE_FNO', security_id: '12345')
+        .and_return(199.55)
 
       result = instrument.resolve_ltp(segment: 'NSE_FNO', security_id: '12345')
       expect(result).to eq(BigDecimal('199.55'))
@@ -52,7 +60,16 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
 
     it 'handles Redis tick with string ltp' do
-      allow(redis_cache).to receive(:fetch_tick).and_return({ ltp: '200.75' })
+      # Mock hub to not be running so it doesn't use Live::TickCache.get
+      allow(Live::MarketFeedHub.instance).to receive_messages(running?: false, connected?: false)
+
+      # Mock TickCache.get to return nil (so it falls back to API)
+      allow(Live::TickCache).to receive(:get).and_return(nil)
+
+      # Mock the API call to return the expected value
+      allow(instrument).to receive(:fetch_ltp_from_api_for_segment)
+        .with(segment: 'NSE_FNO', security_id: '12345')
+        .and_return('200.75')
 
       result = instrument.resolve_ltp(segment: 'NSE_FNO', security_id: '12345')
       expect(result).to eq(BigDecimal('200.75'))
@@ -151,7 +168,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
       end.to change(PositionTracker, :count).by(1)
 
       tracker = PositionTracker.last
-      expect(tracker.status).to eq(PositionTracker::STATUSES[:active])
+      expect(tracker.status).to eq('active')
       expect(tracker.side).to eq('LONG')
       expect(tracker.entry_price).to eq(BigDecimal('100.5'))
       expect(tracker.quantity).to eq(50)

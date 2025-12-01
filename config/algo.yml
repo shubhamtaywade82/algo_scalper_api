@@ -169,6 +169,10 @@ risk:
   peak_drawdown_activation_profit_pct: 25.0 # Minimum profit % to activate peak-drawdown gating
   peak_drawdown_activation_sl_offset_pct: 10.0 # Minimum SL offset % to activate peak-drawdown gating
 
+  # Secure profit rule: Lock in profits above threshold while allowing positions to ride
+  secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
+  secure_profit_drawdown_pct: 3.0 # Tighter drawdown threshold (3%) when profit is secured
+
   # Underlying-aware exit thresholds
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
   underlying_atr_collapse_multiplier: 0.65 # Exit if ATR ratio < this value (falling volatility)
