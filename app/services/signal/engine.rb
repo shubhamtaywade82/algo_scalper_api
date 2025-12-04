@@ -19,14 +19,19 @@ module Signal
         end
 
         # Phase 1: Quick No-Trade pre-check (BEFORE expensive signal generation)
-        quick_no_trade = quick_no_trade_precheck(index_cfg: index_cfg, instrument: instrument)
-        unless quick_no_trade[:allowed]
+        # Returns validation result + option chain data for reuse in Phase 2
+        quick_no_trade_result = quick_no_trade_precheck(index_cfg: index_cfg, instrument: instrument)
+        unless quick_no_trade_result[:allowed]
           Rails.logger.warn(
             "[Signal] NO-TRADE pre-check blocked #{index_cfg[:key]}: " \
-            "score=#{quick_no_trade[:score]}/11, reasons=#{quick_no_trade[:reasons].join('; ')}"
+            "score=#{quick_no_trade_result[:score]}/11, reasons=#{quick_no_trade_result[:reasons].join('; ')}"
           )
           return
         end
+
+        # Store option chain data from Phase 1 for reuse in Phase 2
+        cached_option_chain = quick_no_trade_result[:option_chain_data]
+        cached_bars_1m = quick_no_trade_result[:bars_1m]
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
@@ -224,10 +229,13 @@ module Signal
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
         # Phase 2: Detailed No-Trade validation (AFTER signal generation, with full context)
+        # Reuses option chain and bars_1m from Phase 1 to avoid duplicate fetches
         detailed_no_trade = validate_no_trade_conditions(
           index_cfg: index_cfg,
           instrument: instrument,
-          direction: final_direction
+          direction: final_direction,
+          cached_option_chain: cached_option_chain,
+          cached_bars_1m: cached_bars_1m
         )
 
         unless detailed_no_trade[:allowed]
@@ -910,6 +918,8 @@ module Signal
           current_time = Time.current.strftime('%H:%M')
           reasons = []
           score = 0
+          option_chain_data = nil
+          bars_1m = nil
 
           # Time windows (fastest check - no data needed)
           if current_time >= '09:15' && current_time <= '09:18'
@@ -974,36 +984,45 @@ module Signal
           {
             allowed: score < 3,
             score: score,
-            reasons: reasons
+            reasons: reasons,
+            option_chain_data: option_chain_data, # Return for reuse in Phase 2
+            bars_1m: bars_1m # Return for reuse in Phase 2
           }
         rescue StandardError => e
           Rails.logger.error("[Signal] Quick No-Trade pre-check failed: #{e.class} - #{e.message}")
           # On error, allow to proceed (fail open)
-          { allowed: true, score: 0, reasons: ["Pre-check error: #{e.message}"] }
+          { allowed: true, score: 0, reasons: ["Pre-check error: #{e.message}"], option_chain_data: nil, bars_1m: nil }
         end
       end
 
       # Phase 2: Detailed No-Trade validation (after signal generation, with full context)
+      # Reuses option chain and bars_1m from Phase 1 to avoid duplicate fetches
       # @param index_cfg [Hash] Index configuration
       # @param instrument [Instrument] Instrument object
       # @param direction [Symbol] Trade direction (:bullish or :bearish)
+      # @param cached_option_chain [Hash, nil] Option chain data from Phase 1 (optional)
+      # @param cached_bars_1m [CandleSeries, nil] 1m bars from Phase 1 (optional)
       # @return [Hash] Validation result with :allowed, :score, :reasons
-      def validate_no_trade_conditions(index_cfg:, instrument:, direction:)
+      def validate_no_trade_conditions(index_cfg:, instrument:, direction:, cached_option_chain: nil, cached_bars_1m: nil)
         begin
-          # Fetch 1m and 5m candle series
-          bars_1m = instrument.candle_series(interval: '1')
+          # Reuse bars_1m from Phase 1 if available, otherwise fetch
+          bars_1m = cached_bars_1m || instrument.candle_series(interval: '1')
+          
+          # Always fetch bars_5m (needed for ADX/DI calculations)
           bars_5m = instrument.candle_series(interval: '5')
 
           return { allowed: true, score: 0, reasons: [] } unless bars_1m&.candles&.any? && bars_5m&.candles&.any?
 
-          # Fetch option chain data
-          expiry_list = instrument.expiry_list
-          expiry_date = expiry_list&.first
-          option_chain_raw = expiry_date ? instrument.fetch_option_chain(expiry_date) : nil
-          # Extract oc data from response hash
-          option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
+          # Reuse option chain from Phase 1 if available, otherwise fetch
+          option_chain_data = cached_option_chain
+          unless option_chain_data
+            expiry_list = instrument.expiry_list
+            expiry_date = expiry_list&.first
+            option_chain_raw = expiry_date ? instrument.fetch_option_chain(expiry_date) : nil
+            option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
+          end
 
-          # Build context
+          # Build context with full No-Trade Engine validation
           ctx = Entries::NoTradeContextBuilder.build(
             index: index_cfg[:key],
             bars_1m: bars_1m.candles,
