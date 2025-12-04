@@ -12,6 +12,22 @@ module Signal
 
         Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for #{index_cfg[:key]} (IDX_I) --------------------------------------------------------")
 
+        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+        unless instrument
+          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
+          return
+        end
+
+        # Phase 1: Quick No-Trade pre-check (BEFORE expensive signal generation)
+        quick_no_trade = quick_no_trade_precheck(index_cfg: index_cfg, instrument: instrument)
+        unless quick_no_trade[:allowed]
+          Rails.logger.warn(
+            "[Signal] NO-TRADE pre-check blocked #{index_cfg[:key]}: " \
+            "score=#{quick_no_trade[:score]}/11, reasons=#{quick_no_trade[:reasons].join('; ')}"
+          )
+          return
+        end
+
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
@@ -22,12 +38,6 @@ module Signal
         use_strategy_recommendations = signals_cfg.fetch(:use_strategy_recommendations, false)
 
         # Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
-
-        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-        unless instrument
-          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
-          return
-        end
 
         # Get strategy recommendation if enabled - use best strategy for this index
         strategy_recommendation = nil
@@ -213,17 +223,17 @@ module Signal
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
-        # No-Trade Engine validation (volume-independent)
-        no_trade_result = validate_no_trade_conditions(
+        # Phase 2: Detailed No-Trade validation (AFTER signal generation, with full context)
+        detailed_no_trade = validate_no_trade_conditions(
           index_cfg: index_cfg,
           instrument: instrument,
           direction: final_direction
         )
 
-        unless no_trade_result[:allowed]
+        unless detailed_no_trade[:allowed]
           Rails.logger.warn(
-            "[Signal] NO-TRADE CONDITIONS triggered for #{index_cfg[:key]}: " \
-            "score=#{no_trade_result[:score]}/11, reasons=#{no_trade_result[:reasons].join('; ')}"
+            "[Signal] NO-TRADE detailed validation blocked #{index_cfg[:key]}: " \
+            "score=#{detailed_no_trade[:score]}/11, reasons=#{detailed_no_trade[:reasons].join('; ')}"
           )
           return
         end
@@ -890,7 +900,90 @@ module Signal
         end
       end
 
-      # Validate No-Trade conditions before entry
+      # Phase 1: Quick No-Trade pre-check (before expensive signal generation)
+      # Checks only fast/cheap conditions: time windows, basic structure, basic option chain
+      # @param index_cfg [Hash] Index configuration
+      # @param instrument [Instrument] Instrument object
+      # @return [Hash] Validation result with :allowed, :score, :reasons
+      def quick_no_trade_precheck(index_cfg:, instrument:)
+        begin
+          current_time = Time.current.strftime('%H:%M')
+          reasons = []
+          score = 0
+
+          # Time windows (fastest check - no data needed)
+          if current_time >= '09:15' && current_time <= '09:18'
+            reasons << 'Avoid first 3 minutes'
+            score += 1
+          end
+
+          if current_time >= '11:20' && current_time <= '13:30'
+            reasons << 'Lunch-time theta zone'
+            score += 1
+          end
+
+          if current_time > '15:05'
+            reasons << 'Post 3:05 PM - theta crush'
+            score += 1
+          end
+
+          # Basic structure check (needs bars_1m)
+          bars_1m = instrument.candle_series(interval: '1')
+          if bars_1m&.candles&.any?
+            bars_1m_array = bars_1m.candles
+
+            unless Entries::StructureDetector.bos?(bars_1m_array)
+              reasons << 'No BOS in last 10m'
+              score += 1
+            end
+
+            # Basic volatility check
+            range_pct = Entries::RangeUtils.range_pct(bars_1m_array.last(10))
+            if range_pct < 0.1
+              reasons << 'Low volatility: 10m range < 0.1%'
+              score += 1
+            end
+          end
+
+          # Basic option chain check (IV threshold, spread)
+          expiry_list = instrument.expiry_list
+          expiry_date = expiry_list&.first
+          if expiry_date
+            option_chain_raw = instrument.fetch_option_chain(expiry_date)
+            option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
+
+            if option_chain_data
+              chain_wrapper = Entries::OptionChainWrapper.new(
+                chain_data: option_chain_data,
+                index_key: index_cfg[:key]
+              )
+
+              min_iv_threshold = index_cfg[:key].to_s.upcase.include?('BANK') ? 13 : 10
+              if chain_wrapper.atm_iv && chain_wrapper.atm_iv < min_iv_threshold
+                reasons << "IV too low (#{chain_wrapper.atm_iv.round(2)} < #{min_iv_threshold})"
+                score += 1
+              end
+
+              if chain_wrapper.spread_wide?
+                reasons << 'Wide bid-ask spread'
+                score += 1
+              end
+            end
+          end
+
+          {
+            allowed: score < 3,
+            score: score,
+            reasons: reasons
+          }
+        rescue StandardError => e
+          Rails.logger.error("[Signal] Quick No-Trade pre-check failed: #{e.class} - #{e.message}")
+          # On error, allow to proceed (fail open)
+          { allowed: true, score: 0, reasons: ["Pre-check error: #{e.message}"] }
+        end
+      end
+
+      # Phase 2: Detailed No-Trade validation (after signal generation, with full context)
       # @param index_cfg [Hash] Index configuration
       # @param instrument [Instrument] Instrument object
       # @param direction [Symbol] Trade direction (:bullish or :bearish)
