@@ -31,13 +31,13 @@ Most branches were created directly from `main` at commit `30fdba0` ("Update Dha
 
 Some branches were created from other feature branches (not directly from `main`):
 
-| Branch | Base Branch | Base Commit | Base Commit Message |
-|--------|-------------|-------------|---------------------|
-| `add-glue-components-for-rm-and-pm` | `add-trading-decision-execution-spine` | `37e929f` | Add OhlcPrefetcherService for staggered OHLC intraday data fetching |
-| `codex/add-remaining-tasks-to-todo.md-for-algo_scalper_api` | `add-trading-decision-execution-spine` | `37e929f` | Add OhlcPrefetcherService for staggered OHLC intraday data fetching |
-| `develop-intraday-trading-bot-with-dhanhq-api` | `add-trading-decision-execution-spine` | `37e929f` | Add OhlcPrefetcherService for staggered OHLC intraday data fetching |
-| `check-options-buying-execution` | `paper-trading` | `004705e` | feat(docs): record live trading audit |
-| `deployment` | `supervisor` | `4e1dbc7` | Refactor PositionTracker and HealthController |
+| Branch | Base Branch | Base Commit | Base Commit Message | Verified |
+|--------|-------------|-------------|---------------------|----------|
+| `add-glue-components-for-rm-and-pm` | `add-trading-decision-execution-spine` | `37e929f` | Add OhlcPrefetcherService for staggered OHLC intraday data fetching | ✅ Confirmed |
+| `codex/add-remaining-tasks-to-todo.md-for-algo_scalper_api` | `add-trading-decision-execution-spine` | `37e929f` | Add OhlcPrefetcherService for staggered OHLC intraday data fetching | ✅ Confirmed |
+| `develop-intraday-trading-bot-with-dhanhq-api` | `add-trading-decision-execution-spine` | `37e929f` | Add OhlcPrefetcherService for staggered OHLC intraday data fetching | ✅ Confirmed |
+| `check-options-buying-execution` | `paper-trading` | `004705e` | feat(docs): record live trading audit (merge base) | ✅ Confirmed |
+| `deployment` | `supervisor` | `4e1dbc7` | Refactor PositionTracker and HealthController | ✅ Confirmed |
 
 ### Dependabot Branches (Created From Various Points)
 

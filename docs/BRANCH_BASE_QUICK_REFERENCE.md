@@ -41,8 +41,9 @@ supervisor (4e1dbc7)
 ### 🔀 From Feature Branch: `paper-trading`
 
 ```
-paper-trading
-└── check-options-buying-execution
+paper-trading (earlier commit)
+└── check-options-buying-execution (004705e)
+    └── [Later merged back into paper-trading via PR #37]
 ```
 
 ---
