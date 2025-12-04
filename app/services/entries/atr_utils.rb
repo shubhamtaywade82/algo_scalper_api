@@ -9,13 +9,21 @@ module Entries
       # @param period [Integer] ATR period (default: 14)
       # @return [Boolean]
       def atr_downtrend?(bars, period: 14)
-        return false if bars.size < period * 2
+        return false if bars.nil? || bars.empty? || bars.size < period * 2
 
-        # Calculate ATR for recent periods
+        # Build CandleSeries for efficient ATR calculations
+        return false unless bars.first.is_a?(Candle)
+
+        series = CandleSeries.new(symbol: 'temp', interval: '1')
+        bars.each { |c| series.add_candle(c) }
+
+        # Calculate ATR for recent periods using sliding windows
         recent_atrs = []
-        (period..bars.size - 1).each do |i|
-          window = bars[(i - period + 1)..i]
-          atr = calculate_atr(window)
+        (period..series.candles.size - 1).each do |i|
+          # Create a sub-series for this window
+          window_series = CandleSeries.new(symbol: 'temp', interval: '1')
+          series.candles[(i - period + 1)..i].each { |c| window_series.add_candle(c) }
+          atr = window_series.atr(period)
           recent_atrs << atr if atr
         end
 
@@ -25,27 +33,20 @@ module Entries
         recent_atrs.last(3).each_cons(2).all? { |a, b| b < a }
       end
 
-      # Calculate ATR for a window of candles
+      # Calculate ATR for a window of candles using CandleSeries
       # @param bars [Array<Candle>] Array of candle objects
       # @return [Float, nil]
       def calculate_atr(bars)
-        return nil if bars.size < 2
+        return nil if bars.nil? || bars.empty? || bars.size < 2
 
-        true_ranges = []
-        (1..bars.size - 1).each do |i|
-          prev = bars[i - 1]
-          curr = bars[i]
+        # Use CandleSeries.atr() method if we have enough candles
+        return nil unless bars.first.is_a?(Candle)
 
-          tr1 = curr.high - curr.low
-          tr2 = (curr.high - prev.close).abs
-          tr3 = (curr.low - prev.close).abs
+        series = CandleSeries.new(symbol: 'temp', interval: '1')
+        bars.each { |c| series.add_candle(c) }
 
-          true_ranges << [tr1, tr2, tr3].max
-        end
-
-        return nil if true_ranges.empty?
-
-        true_ranges.sum / true_ranges.size
+        # Use existing CandleSeries.atr() method
+        series.atr(14)
       end
 
       # Compare current ATR to historical average

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'technical_analysis'
+
 module Entries
   # Builds context for No-Trade Engine validation
   class NoTradeContextBuilder
@@ -106,66 +108,65 @@ module Entries
       def calculate_adx_data(bars)
         return { adx: 0, plus_di: 0, minus_di: 0 } if bars.size < 15
 
-        # Use CandleSeries if available, otherwise calculate manually
-        if bars.first.is_a?(Candle)
-          series = CandleSeries.new(symbol: 'temp', interval: '5')
-          bars.each { |c| series.add_candle(c) }
-          adx_value = series.adx(14)
-        else
-          adx_value = nil
-        end
+        # Use CandleSeries to get ADX and DI values
+        series = build_candle_series(bars)
+        return { adx: 0, plus_di: 0, minus_di: 0 } unless series
 
-        # Calculate DI+ and DI- manually if needed
-        plus_di = calculate_plus_di(bars)
-        minus_di = calculate_minus_di(bars)
-
+        # Get full ADX result (includes DI+ and DI-)
+        adx_result = extract_adx_with_di(series)
         {
-          adx: adx_value || 0,
-          plus_di: plus_di || 0,
-          minus_di: minus_di || 0
+          adx: adx_result[:adx] || 0,
+          plus_di: adx_result[:plus_di] || 0,
+          minus_di: adx_result[:minus_di] || 0
         }
       end
 
-      def calculate_plus_di(bars)
-        return 0 if bars.size < 14
+      def build_candle_series(bars)
+        return nil if bars.empty? || !bars.first.is_a?(Candle)
 
-        # Simplified DI+ calculation
-        up_moves = []
-        (1..bars.size - 1).each do |i|
-          prev = bars[i - 1]
-          curr = bars[i]
-          move = curr.high - prev.high
-          up_moves << move if move.positive?
-        end
-
-        return 0 if up_moves.empty?
-
-        avg_up = up_moves.sum / up_moves.size
-        atr = ATRUtils.calculate_atr(bars.last(14))
-        return 0 unless atr&.positive?
-
-        (avg_up / atr * 100).round(2)
+        series = CandleSeries.new(symbol: 'temp', interval: '5')
+        bars.each { |c| series.add_candle(c) }
+        series
       end
 
-      def calculate_minus_di(bars)
-        return 0 if bars.size < 14
+      def extract_adx_with_di(series)
+        return { adx: 0, plus_di: 0, minus_di: 0 } if series.candles.size < 15
 
-        # Simplified DI- calculation
-        down_moves = []
-        (1..bars.size - 1).each do |i|
-          prev = bars[i - 1]
-          curr = bars[i]
-          move = prev.low - curr.low
-          down_moves << move if move.positive?
-        end
+        # Use TechnicalAnalysis gem directly to get full ADX result
+        hlc = series.hlc
+        result = TechnicalAnalysis::Adx.calculate(hlc, period: 14)
+        return { adx: 0, plus_di: 0, minus_di: 0 } if result.empty?
 
-        return 0 if down_moves.empty?
+        # Get last result (most recent)
+        last_result = result.last
 
-        avg_down = down_moves.sum / down_moves.size
-        atr = ATRUtils.calculate_atr(bars.last(14))
-        return 0 unless atr&.positive?
+        # Handle different property naming (adx/adx, plus_di/plusDi, minus_di/minusDi)
+        adx_value = last_result.respond_to?(:adx) ? last_result.adx : (last_result.respond_to?(:adx_value) ? last_result.adx_value : 0)
+        plus_di_value = if last_result.respond_to?(:plus_di)
+                          last_result.plus_di
+                        elsif last_result.respond_to?(:plusDi)
+                          last_result.plusDi
+                        else
+                          0
+                        end
+        minus_di_value = if last_result.respond_to?(:minus_di)
+                           last_result.minus_di
+                         elsif last_result.respond_to?(:minusDi)
+                           last_result.minusDi
+                         else
+                           0
+                         end
 
-        (avg_down / atr * 100).round(2)
+        {
+          adx: adx_value || 0,
+          plus_di: plus_di_value || 0,
+          minus_di: minus_di_value || 0
+        }
+      rescue StandardError => e
+        Rails.logger.warn("[NoTradeContextBuilder] ADX calculation failed: #{e.message}")
+        # Fallback to simple ADX value (DI values will be 0)
+        adx_value = series.adx(14) || 0
+        { adx: adx_value, plus_di: 0, minus_di: 0 }
       end
     end
   end
