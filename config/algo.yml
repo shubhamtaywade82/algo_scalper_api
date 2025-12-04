@@ -154,6 +154,12 @@ risk:
   sl_pct: 0.30 # 30% fixed SL (entry * 0.70)
   tp_pct: 0.60 # 60% fixed TP (entry * 1.60)
 
+  # Profit protection: Hard stop if HWM reaches threshold and drops by percentage
+  profit_protection:
+    hwm_threshold_rupees: 1040.0 # Exit if HWM reaches this amount
+    drop_pct_from_hwm: 1.0 # Exit if current PnL drops this % from HWM
+    enabled: true
+
   # Micro-Trailing model (tiered)
   trailing_tiers:
     - { trigger_pct: 5, sl_offset_pct: -15 }
@@ -211,7 +217,7 @@ signals:
   # Use multi_indicator_strategy: true to enable modular indicator system
   # When enabled, the 'indicators' list defines which indicators to use
   use_multi_indicator_strategy: false # Set to true to use modular system
-  
+
   # Indicator threshold preset: loose, moderate, tight, production
   # - loose: Very permissive - generates more signals for initial testing
   # - moderate: Balanced - good starting point
@@ -219,7 +225,7 @@ signals:
   # - production: Optimized based on backtesting results
   # Can also be set via ENV['INDICATOR_PRESET']
   indicator_preset: moderate # Options: loose, moderate, tight, production
-  
+
   confirmation_mode: all # Options: all, majority, weighted, any
   min_confidence: 60 # Minimum combined confidence score (0-100)
   # Note: If indicator_preset is set, these may be overridden by preset values
