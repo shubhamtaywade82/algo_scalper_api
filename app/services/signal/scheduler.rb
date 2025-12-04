@@ -251,7 +251,58 @@ module Signal
 
       direction = indicator_result[:final_direction]
       if direction.nil? || direction == :avoid
-        Rails.logger.debug { "[SignalScheduler] Skipping #{index_cfg[:key]} - indicator direction #{direction || 'nil'}" }
+        # Extract detailed reason for avoid
+        primary_result = indicator_result.dig(:timeframe_results, :primary)
+        confirmation_result = indicator_result.dig(:timeframe_results, :confirmation)
+
+        reasons = []
+
+        if primary_result
+          primary_direction = primary_result[:direction]
+          primary_adx = primary_result[:adx_value]
+          primary_st = primary_result.dig(:supertrend, :trend)
+
+          if primary_direction == :avoid
+            signals_cfg = AlgoConfig.fetch[:signals] || {}
+            adx_cfg = signals_cfg[:adx] || {}
+            index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+            min_adx = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength] || 0
+
+            if primary_adx && min_adx.to_f.positive? && primary_adx.to_f < min_adx.to_f
+              reasons << "ADX too weak on primary timeframe (#{primary_adx.to_f.round(1)} < #{min_adx.to_f.round(1)})"
+            elsif primary_st.nil?
+              reasons << "Supertrend invalid on primary timeframe"
+            else
+              reasons << "Supertrend neutral/unknown on primary timeframe (#{primary_st})"
+            end
+          end
+        end
+
+        if confirmation_result
+          conf_direction = confirmation_result[:direction]
+          conf_adx = confirmation_result[:adx_value]
+          conf_st = confirmation_result.dig(:supertrend, :trend)
+
+          if conf_direction == :avoid
+            signals_cfg = AlgoConfig.fetch[:signals] || {}
+            adx_cfg = signals_cfg[:adx] || {}
+            index_adx_thresholds = index_cfg[:adx_thresholds] || {}
+            min_conf_adx = index_adx_thresholds[:confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength] || 0
+
+            if conf_adx && min_conf_adx.to_f.positive? && conf_adx.to_f < min_conf_adx.to_f
+              reasons << "ADX too weak on confirmation timeframe (#{conf_adx.to_f.round(1)} < #{min_conf_adx.to_f.round(1)})"
+            elsif conf_st.nil?
+              reasons << "Supertrend invalid on confirmation timeframe"
+            else
+              reasons << "Supertrend neutral/unknown on confirmation timeframe (#{conf_st})"
+            end
+          elsif primary_result && primary_result[:direction] != conf_direction && primary_result[:direction] != :avoid
+            reasons << "Multi-timeframe mismatch (primary: #{primary_result[:direction]}, confirmation: #{conf_direction})"
+          end
+        end
+
+        reason_text = reasons.any? ? " - #{reasons.join(', ')}" : " (check Signal::Engine logs for details)"
+        Rails.logger.info("[SignalScheduler] Skipping #{index_cfg[:key]} - indicator direction #{direction || 'nil'}#{reason_text}")
         return nil
       end
 
