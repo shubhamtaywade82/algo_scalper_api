@@ -213,6 +213,21 @@ module Signal
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
+        # No-Trade Engine validation (volume-independent)
+        no_trade_result = validate_no_trade_conditions(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          direction: final_direction
+        )
+
+        unless no_trade_result[:allowed]
+          Rails.logger.warn(
+            "[Signal] NO-TRADE CONDITIONS triggered for #{index_cfg[:key]}: " \
+            "score=#{no_trade_result[:score]}/11, reasons=#{no_trade_result[:reasons].join('; ')}"
+          )
+          return
+        end
+
         picks.each_with_index do |pick, _index|
           # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
           result = Entries::EntryGuard.try_enter(
@@ -874,6 +889,51 @@ module Signal
           :avoid
         end
       end
+
+      # Validate No-Trade conditions before entry
+      # @param index_cfg [Hash] Index configuration
+      # @param instrument [Instrument] Instrument object
+      # @param direction [Symbol] Trade direction (:bullish or :bearish)
+      # @return [Hash] Validation result with :allowed, :score, :reasons
+      def validate_no_trade_conditions(index_cfg:, instrument:, direction:)
+        begin
+          # Fetch 1m and 5m candle series
+          bars_1m = instrument.candle_series(interval: '1')
+          bars_5m = instrument.candle_series(interval: '5')
+
+          return { allowed: true, score: 0, reasons: [] } unless bars_1m&.candles&.any? && bars_5m&.candles&.any?
+
+          # Fetch option chain data
+          expiry_list = instrument.expiry_list
+          expiry_date = expiry_list&.first
+          option_chain_raw = expiry_date ? instrument.fetch_option_chain(expiry_date) : nil
+          # Extract oc data from response hash
+          option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
+
+          # Build context
+          ctx = Entries::NoTradeContextBuilder.build(
+            index: index_cfg[:key],
+            bars_1m: bars_1m.candles,
+            bars_5m: bars_5m.candles,
+            option_chain: option_chain_data,
+            time: Time.current
+          )
+
+          # Validate with No-Trade Engine
+          result = Entries::NoTradeEngine.validate(ctx)
+
+          {
+            allowed: result.allowed,
+            score: result.score,
+            reasons: result.reasons
+          }
+        rescue StandardError => e
+          Rails.logger.error("[Signal] No-Trade Engine validation failed: #{e.class} - #{e.message}")
+          # On error, allow trade (fail open) but log the error
+          { allowed: true, score: 0, reasons: ["Validation error: #{e.message}"] }
+        end
+      end
     end
   end
 end
+
