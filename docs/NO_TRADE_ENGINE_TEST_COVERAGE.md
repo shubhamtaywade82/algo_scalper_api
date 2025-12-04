@@ -277,6 +277,204 @@ COVERAGE=true bundle exec rspec spec/services/entries/
 
 ---
 
+## Missing Test Coverage (TODO)
+
+**Last Updated**: Comprehensive codebase analysis
+
+### Overview
+- **Total Services**: 103
+- **Total Specs**: 89
+- **Missing Tests**: 40 services/modules
+
+---
+
+### Core Services (High Priority)
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `IndexInstrumentCache` | `spec/services/index_instrument_cache_spec.rb` | 🔴 **HIGH** | Singleton cache, critical for signal generation - **MOCKED but NO DEDICATED TEST** |
+| `Core::EventBus` | `spec/services/core/event_bus_spec.rb` | 🔴 **HIGH** | Pub/sub event bus, thread-safe singleton - **MOCKED but NO DEDICATED TEST** |
+| `TickCache` | `spec/services/tick_cache_spec.rb` | 🔴 **HIGH** | In-memory tick cache, critical for real-time data - **USED in integration tests but NO DEDICATED TEST** |
+| `BacktestService` | `spec/services/backtest_service_spec.rb` | 🟡 **MEDIUM** | Backtesting service, used for strategy validation |
+
+---
+
+### Live Services (High Priority)
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `Live::TickCache` | `spec/services/live/tick_cache_spec.rb` | 🔴 **HIGH** | In-memory tick cache (different from TickCache) - **MOCKED but NO DEDICATED TEST** |
+| `Live::RedisTickCache` | `spec/services/live/redis_tick_cache_spec.rb` | 🔴 **HIGH** | Redis tick cache, persistent storage - **MOCKED but NO DEDICATED TEST** |
+| `Live::RedisPnlCache` | `spec/services/live/redis_pnl_cache_spec.rb` | 🔴 **HIGH** | Redis PnL cache, critical for risk management - **MOCKED but NO DEDICATED TEST** |
+| `Live::PositionIndex` | `spec/services/live/position_index_spec.rb` | 🔴 **HIGH** | Position indexing service - **MOCKED but NO DEDICATED TEST** |
+| `Live::ReconciliationService` | `spec/services/live/reconciliation_service_spec.rb` | 🔴 **HIGH** | Data consistency service - **HAS market_close spec, NEEDS main spec** |
+| `Live::PaperPnlRefresher` | `spec/services/live/paper_pnl_refresher_spec.rb` | 🟡 **MEDIUM** | Paper position PnL refresh - **HAS market_close spec, NEEDS main spec** |
+| `Live::FeedHealthService` | `spec/services/live/feed_health_service_spec.rb` | 🟡 **MEDIUM** | WebSocket feed health monitoring |
+| `Live::Gateway` | `spec/services/live/gateway_spec.rb` | 🟡 **MEDIUM** | Order gateway abstraction |
+| `Live::MockDataService` | `spec/services/live/mock_data_service_spec.rb` | 🟢 **LOW** | Mock data for testing |
+| `Live::WsHub` | `spec/services/live/ws_hub_spec.rb` | 🟡 **MEDIUM** | WebSocket hub |
+| `Live::PositionTrackerPruner` | `spec/services/live/position_tracker_pruner_spec.rb` | 🟢 **LOW** | Cleanup service for old positions |
+
+---
+
+### Position Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `Positions::ActiveCache` | `spec/services/positions/active_cache_spec.rb` | 🔴 **HIGH** | In-memory position cache (has add_remove spec but needs main spec) |
+| `Positions::ActiveCacheService` | `spec/services/positions/active_cache_service_spec.rb` | 🟡 **MEDIUM** | Active cache service wrapper |
+| `Positions::HighWaterMark` | `spec/services/positions/high_water_mark_spec.rb` | 🟡 **MEDIUM** | High water mark tracking |
+| `Positions::MetadataResolver` | `spec/services/positions/metadata_resolver_spec.rb` | 🟢 **LOW** | Metadata resolution utility |
+
+---
+
+### Options Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `Options::DerivativeChainAnalyzer` | `spec/services/options/derivative_chain_analyzer_spec.rb` | 🟡 **MEDIUM** | Derivative chain analysis |
+| `Options::ExpiredFetcher` | `spec/services/options/expired_fetcher_spec.rb` | 🟢 **LOW** | Expired option fetcher |
+| `Options::IndexRules::BankNifty` | `spec/services/options/index_rules/banknifty_spec.rb` | 🟡 **MEDIUM** | BANKNIFTY-specific rules (NIFTY has spec) |
+| `Options::IndexRules::Sensex` | `spec/services/options/index_rules/sensex_spec.rb` | 🟡 **MEDIUM** | SENSEX-specific rules |
+
+---
+
+### Orders Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `Orders::Gateway` | `spec/services/orders/gateway_spec.rb` | 🟡 **MEDIUM** | Order gateway base class |
+| `Orders::Manager` | `spec/services/orders/manager_spec.rb` | 🟡 **MEDIUM** | Order management service |
+
+---
+
+### Signal Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `Signal::StateTracker` | `spec/services/signal/state_tracker_spec.rb` | 🔴 **HIGH** | Signal state tracking, scaling logic - **USED but NO DEDICATED TEST** |
+| `Signal::StrategyAdapter` | `spec/services/signal/strategy_adapter_spec.rb` | 🟡 **MEDIUM** | Strategy adapter for Signal::Engine - **NO TEST** |
+| `Signal::Validator` | `spec/services/signal/validator_spec.rb` | 🟡 **MEDIUM** | Signal validation logic - **NO TEST** |
+| `Signal::Engines::BtstMomentumEngine` | `spec/services/signal/engines/btst_momentum_engine_spec.rb` | 🟡 **MEDIUM** | BTST momentum strategy engine |
+| `Signal::Engines::MomentumBuyingEngine` | `spec/services/signal/engines/momentum_buying_engine_spec.rb` | 🟡 **MEDIUM** | Momentum buying strategy engine |
+| `Signal::Engines::SwingOptionBuyingEngine` | `spec/services/signal/engines/swing_option_buying_engine_spec.rb` | 🟡 **MEDIUM** | Swing option buying strategy engine |
+
+---
+
+### Indicators
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `Indicators::HolyGrail` | `spec/services/indicators/holy_grail_spec.rb` | 🟡 **MEDIUM** | Holy Grail indicator |
+| `Indicators::Supertrend` | `spec/services/indicators/supertrend_spec.rb` | 🟡 **MEDIUM** | Supertrend indicator (different from SupertrendIndicator) |
+
+---
+
+### Risk Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `Risk::CircuitBreaker` | `spec/services/risk/circuit_breaker_spec.rb` | 🟡 **MEDIUM** | Circuit breaker pattern for risk management |
+
+---
+
+### Trading System Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `TradingSystem::OrderRouter` | `spec/services/trading_system/order_router_spec.rb` | 🔴 **HIGH** | Order routing service, critical for execution - **MOCKED but NO DEDICATED TEST** |
+| `TradingSystem::PositionHeartbeat` | `spec/services/trading_system/position_heartbeat_spec.rb` | 🔴 **HIGH** | Position heartbeat service - **HAS market_close spec, NEEDS main spec** |
+| `TradingSystem::BaseService` | `spec/services/trading_system/base_service_spec.rb` | 🟡 **MEDIUM** | Base service class for trading system services |
+
+---
+
+### Trading Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `Trading::Indicators` | `spec/services/trading/indicators_spec.rb` | 🟡 **MEDIUM** | Trading indicators module (RSI, etc.) |
+
+---
+
+### Strategy Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `StrategyRecommender` | `spec/services/strategy_recommender_spec.rb` | 🟡 **MEDIUM** | Strategy recommendation service |
+
+---
+
+### Import Services
+
+| Service | File | Priority | Notes |
+|---------|------|----------|-------|
+| `InstrumentsImporter` | `spec/services/instruments_importer_spec.rb` | 🟢 **LOW** | CSV import service for instruments |
+
+---
+
+## Priority Breakdown
+
+### 🔴 **HIGH Priority** (Critical Services - 9 tests needed)
+1. `IndexInstrumentCache` - Used by Signal::Engine
+2. `Core::EventBus` - Pub/sub system
+3. `TickCache` - Real-time data cache
+4. `Live::TickCache` - Live tick cache
+5. `Live::RedisTickCache` - Redis tick cache
+6. `Live::RedisPnlCache` - Redis PnL cache
+7. `Live::PositionIndex` - Position indexing
+8. `Signal::StateTracker` - Signal state tracking
+9. `TradingSystem::OrderRouter` - Order routing
+
+### 🟡 **MEDIUM Priority** (Important Services - 24 tests needed)
+- Live services (FeedHealthService, Gateway, WsHub)
+- Position services (ActiveCacheService, HighWaterMark)
+- Options services (DerivativeChainAnalyzer, IndexRules)
+- Orders services (Gateway, Manager)
+- Signal services (StrategyAdapter, Validator, Engines)
+- Indicators (HolyGrail, Supertrend)
+- Risk services (CircuitBreaker)
+- Trading services (Indicators, StrategyRecommender)
+- Trading system services (BaseService)
+
+### 🟢 **LOW Priority** (Utility Services - 7 tests needed)
+- Mock services
+- Import services
+- Cleanup services
+- Metadata utilities
+
+---
+
+## Integration Tests Missing
+
+### End-to-End Integration Tests
+- [ ] Complete trading flow (Signal → Entry → Monitoring → Exit)
+- [ ] No-Trade Engine integration with all signal engines
+- [ ] Risk management rule engine integration
+- [ ] Position lifecycle (creation → monitoring → exit)
+- [ ] WebSocket feed integration
+- [ ] Redis cache integration
+- [ ] Order placement and execution flow
+
+### Service Integration Tests
+- [ ] Signal::Scheduler → Signal::Engine → EntryGuard flow
+- [ ] RiskManagerService → TrailingEngine → ExitEngine flow
+- [ ] MarketFeedHub → TickCache → PnlUpdaterService flow
+- [ ] PositionTracker → ActiveCache → RedisPnlCache flow
+
+---
+
+## Test Coverage Statistics
+
+- **Total Services**: 103
+- **Total Specs**: 89
+- **Coverage**: 61% (63/103)
+- **Missing Tests**: 40 (39%)
+- **High Priority Missing**: 9 (9%)
+- **Medium Priority Missing**: 24 (23%)
+- **Low Priority Missing**: 7 (7%)
+
+---
+
 ## Summary
 
 ✅ **Complete test coverage** for all No-Trade Engine components  
@@ -285,4 +483,18 @@ COVERAGE=true bundle exec rspec spec/services/entries/
 ✅ **Error handling** tests for fail-open behavior  
 ✅ **Edge cases** covered (empty data, insufficient data, calculation failures)
 
-**Status**: Ready for CI/CD integration and production use.
+⚠️ **Missing Tests**: 40 services/modules need test coverage  
+🔴 **High Priority**: 9 critical services need tests immediately  
+🟡 **Medium Priority**: 24 important services need tests  
+🟢 **Low Priority**: 7 utility services need tests
+
+**Status**: No-Trade Engine is ready for CI/CD integration. Overall codebase needs additional test coverage for critical services.
+
+---
+
+## Next Steps
+
+1. **Immediate**: Create tests for 9 high-priority services
+2. **Short-term**: Create tests for 24 medium-priority services
+3. **Long-term**: Create tests for 7 low-priority services
+4. **Integration**: Add comprehensive integration tests for end-to-end flows
