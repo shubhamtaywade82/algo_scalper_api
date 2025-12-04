@@ -55,20 +55,21 @@ RSpec.describe Risk::Rules::TrailingStopRule do
       end
 
       context 'when trailing stop is triggered' do
-      it 'returns exit result when HWM drop exceeds threshold' do
-        # HWM: 1200, PnL: 1000, Drop: (1200-1000)/1200 = 16.67% >= 10%
-        result = rule.evaluate(context)
-        expect(result.exit?).to be true
-        expect(result.reason).to include('TRAILING STOP')
-        expect(result.metadata[:pnl]).to eq(1000.0)
-        expect(result.metadata[:hwm]).to eq(1200.0)
-        expect(result.metadata[:drop_pct]).to be >= 0.10
-      end
+        it 'returns exit result when HWM drop exceeds threshold' do
+          # HWM: 1200, PnL: 1000, Drop: (1200-1000)/1200 = 16.67% >= 10%
+          result = rule.evaluate(context)
+          expect(result.exit?).to be true
+          expect(result.reason).to include('TRAILING STOP')
+          expect(result.metadata[:pnl]).to eq(1000.0)
+          expect(result.metadata[:hwm]).to eq(1200.0)
+          expect(result.metadata[:drop_pct]).to be >= 0.10
+        end
 
-      it 'triggers exit when drop exactly equals threshold' do
-        position_data.pnl = 1080.0 # Drop: (1200-1080)/1200 = 10%
-        result = rule.evaluate(context)
-        expect(result.exit?).to be true
+        it 'triggers exit when drop exactly equals threshold' do
+          position_data.pnl = 1080.0 # Drop: (1200-1080)/1200 = 10%
+          result = rule.evaluate(context)
+          expect(result.exit?).to be true
+        end
       end
     end
 

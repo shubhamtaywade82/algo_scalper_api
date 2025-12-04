@@ -68,11 +68,11 @@ RSpec.describe Risk::Rules::PeakDrawdownRule do
       end
 
       context 'when peak drawdown is triggered' do
-      before do
-        allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
-      end
+        before do
+          allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
+        end
 
-      context 'when activation gating is disabled' do
+        context 'when activation gating is disabled' do
         before do
           allow(AlgoConfig).to receive(:fetch).and_return(feature_flags: {})
         end
