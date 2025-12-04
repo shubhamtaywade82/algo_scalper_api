@@ -169,6 +169,14 @@ risk:
   peak_drawdown_activation_profit_pct: 25.0 # Minimum profit % to activate peak-drawdown gating
   peak_drawdown_activation_sl_offset_pct: 10.0 # Minimum SL offset % to activate peak-drawdown gating
 
+  # Trailing activation: Configurable percentage-based activation threshold
+  # Trailing rules (TrailingStopRule, PeakDrawdownRule) only activate when pnl_pct >= this value
+  # Based on buy value (premium × lot_size × lots), works across any capital/allocation/lot size
+  # Examples: 6.0, 6.66, 9.99, 10.0, 13.32, 15.0, 20.0
+  trailing:
+    activation_pct: 10.0 # Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
+    drawdown_pct: 3.0 # Exit if price drops this % from peak (used by trailing rules)
+
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
   secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
   secure_profit_drawdown_pct: 3.0 # Tighter drawdown threshold (3%) when profit is secured

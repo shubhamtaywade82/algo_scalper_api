@@ -198,9 +198,7 @@ module Live
         # Backwards-compatible enforcement: if there is no external ExitEngine, run enforcement here
         # Note: Most enforcement is now handled in process_all_positions_in_single_loop
         # This is kept for fallback positions not in ActiveCache
-        if @exit_engine.nil?
-          enforce_hard_limits(exit_engine: self)
-        end
+        enforce_hard_limits(exit_engine: self) if @exit_engine.nil?
       rescue StandardError => e
         Rails.logger.error("[RiskManager] monitor_loop error: #{e.class} - #{e.message}")
         error_counts[:monitor_loop_error] = (error_counts[:monitor_loop_error] || 0) + 1
@@ -271,7 +269,8 @@ module Live
     # @param api_calls [Integer] Number of API calls made
     # @param exit_counts [Hash] Optional hash of exit type => count
     # @param error_counts [Hash] Optional hash of error type => count
-    def record_cycle_metrics(cycle_time:, positions_count:, redis_fetches:, db_queries:, api_calls:, exit_counts: {}, error_counts: {})
+    def record_cycle_metrics(cycle_time:, positions_count:, redis_fetches:, db_queries:, api_calls:, exit_counts: {},
+                             error_counts: {})
       @mutex.synchronize do
         @metrics[:cycle_count] = (@metrics[:cycle_count] || 0) + 1
         @metrics[:total_cycle_time] = (@metrics[:total_cycle_time] || 0) + cycle_time
@@ -322,11 +321,11 @@ module Live
 
         # Include individual exit and error metrics for easier access (already in exit_counts/error_counts)
         # But also add them as top-level keys for convenience
-        exit_error_metrics = @metrics.select { |k, _| k.to_s.start_with?('exit_') || k.to_s.start_with?('error_') }
+        exit_error_metrics = @metrics.select { |k, _| k.to_s.start_with?('exit_', 'error_') }
         merged = base_metrics.merge(exit_error_metrics)
         # Ensure all exit/error metrics default to 0 if nil (after reset)
         merged.each do |k, v|
-          merged[k] = 0 if v.nil? && (k.to_s.start_with?('exit_') || k.to_s.start_with?('error_'))
+          merged[k] = 0 if v.nil? && k.to_s.start_with?('exit_', 'error_')
         end
         merged
       end
@@ -397,7 +396,7 @@ module Live
         if @circuit_breaker_state == :half_open
           @circuit_breaker_state = :closed
           @circuit_breaker_failures = 0
-          Rails.logger.info("[RiskManager] Circuit breaker CLOSED - API recovered")
+          Rails.logger.info('[RiskManager] Circuit breaker CLOSED - API recovered')
         elsif @circuit_breaker_state == :open
           # Reset failures on success (but keep state as open until timeout)
           @circuit_breaker_failures = 0
@@ -1562,14 +1561,10 @@ module Live
       end
 
       # 2. Hard limits (SL/TP) - consolidated check
-      if check_sl_tp_limits(position, tracker, exit_engine)
-        return true
-      end
+      return true if check_sl_tp_limits(position, tracker, exit_engine)
 
       # 3. Time-based exit
-      if check_time_based_exit(position, tracker, exit_engine)
-        return true
-      end
+      return true if check_time_based_exit(position, tracker, exit_engine)
 
       false
     end
@@ -1734,7 +1729,7 @@ module Live
 
       # Phase 3: Check circuit breaker before making API calls
       if circuit_breaker_open?
-        Rails.logger.warn("[RiskManager] Circuit breaker OPEN - skipping batch_fetch_ltp")
+        Rails.logger.warn('[RiskManager] Circuit breaker OPEN - skipping batch_fetch_ltp')
         @metrics[:recent_api_errors] = (@metrics[:recent_api_errors] || 0) + 1
         return {}
       end
@@ -1759,21 +1754,21 @@ module Live
             items.each do |item|
               security_id_str = item[:security_id].to_s
               option_data = segment_data[security_id_str]
-              if option_data && option_data['last_price']
-                ltp = BigDecimal(option_data['last_price'].to_s)
-                result[security_id_str] = ltp
+              next unless option_data && option_data['last_price']
 
-                # Store in Redis tick cache
-                begin
-                  Live::RedisPnlCache.instance.store_tick(
-                    segment: segment,
-                    security_id: item[:security_id],
-                    ltp: ltp,
-                    timestamp: Time.current
-                  )
-                rescue StandardError
-                  nil
-                end
+              ltp = BigDecimal(option_data['last_price'].to_s)
+              result[security_id_str] = ltp
+
+              # Store in Redis tick cache
+              begin
+                Live::RedisPnlCache.instance.store_tick(
+                  segment: segment,
+                  security_id: item[:security_id],
+                  ltp: ltp,
+                  timestamp: Time.current
+                )
+              rescue StandardError
+                nil
               end
             end
           else
@@ -1789,12 +1784,10 @@ module Live
 
           # Fallback: try individual calls for this segment
           items.each do |item|
-            begin
-              ltp = get_paper_ltp_for_security(item[:segment], item[:security_id])
-              result[item[:security_id].to_s] = ltp if ltp
-            rescue StandardError
-              nil
-            end
+            ltp = get_paper_ltp_for_security(item[:segment], item[:security_id])
+            result[item[:security_id].to_s] = ltp if ltp
+          rescue StandardError
+            nil
           end
         end
       end
@@ -1818,7 +1811,7 @@ module Live
 
       # Phase 3: Check circuit breaker before making API call
       if circuit_breaker_open?
-        Rails.logger.warn("[RiskManager] Circuit breaker OPEN - skipping get_paper_ltp_for_security")
+        Rails.logger.warn('[RiskManager] Circuit breaker OPEN - skipping get_paper_ltp_for_security')
         @metrics[:recent_api_errors] = (@metrics[:recent_api_errors] || 0) + 1
         return nil
       end
@@ -1832,9 +1825,7 @@ module Live
           record_api_success
 
           option_data = response.dig('data', segment, security_id.to_s)
-          if option_data && option_data['last_price']
-            return BigDecimal(option_data['last_price'].to_s)
-          end
+          return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
         else
           # Phase 3: Record API failure for non-success response
           record_api_failure

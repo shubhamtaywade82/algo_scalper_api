@@ -202,7 +202,7 @@ module Signal
       nil
     end
 
-    def evaluate_with_trend_scorer(index_cfg, instrument)
+    def evaluate_with_trend_scorer(index_cfg, _instrument)
       trend_result = Signal::TrendScorer.compute_direction(index_cfg: index_cfg)
       trend_score = trend_result[:trend_score]
       direction = trend_result[:direction]
@@ -286,7 +286,9 @@ module Signal
             signals_cfg = AlgoConfig.fetch[:signals] || {}
             adx_cfg = signals_cfg[:adx] || {}
             index_adx_thresholds = index_cfg[:adx_thresholds] || {}
-            min_conf_adx = index_adx_thresholds[:confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength] || 0
+            min_conf_adx = index_adx_thresholds[:confirmation_min_strength] ||
+                           adx_cfg[:confirmation_min_strength] ||
+                           adx_cfg[:min_strength] || 0
 
             reasons << if conf_adx && min_conf_adx.to_f.positive? && conf_adx.to_f < min_conf_adx.to_f
                          "ADX too weak on confirmation timeframe (#{conf_adx.to_f.round(1)} < #{min_conf_adx.to_f.round(1)})"
