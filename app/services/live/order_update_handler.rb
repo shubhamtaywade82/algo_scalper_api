@@ -52,6 +52,10 @@ module Live
       tracker = PositionTracker.find_by(order_no: order_no)
       return unless tracker
 
+      # Skip paper trading trackers - they're handled locally by GatewayPaper
+      # Paper mode doesn't use WebSocket updates, positions are managed directly
+      return if tracker.paper?
+
       status = payload[:order_status] || payload[:status]
       avg_price = safe_decimal(payload[:average_traded_price] || payload[:average_price])
       quantity = payload[:filled_quantity] || payload[:quantity]
@@ -59,17 +63,22 @@ module Live
       transaction_type = (payload[:transaction_type] || payload[:side] || payload[:transaction_side]).to_s.upcase
 
       if FILL_STATUSES.include?(status)
-        if transaction_type == 'SELL'
-          # Use avg_price from order update as exit_price
-          tracker.mark_exited!(exit_price: avg_price)
-        else
-          tracker.mark_active!(avg_price: avg_price, quantity: quantity)
+        # Use tracker lock to prevent race conditions with ExitEngine
+        tracker.with_lock do
+          if transaction_type == 'SELL'
+            # Use avg_price from order update as exit_price
+            tracker.mark_exited!(exit_price: avg_price)
+          else
+            tracker.mark_active!(avg_price: avg_price, quantity: quantity)
+          end
         end
       elsif CANCELLED_STATUSES.include?(status)
-        tracker.mark_cancelled!
+        tracker.with_lock do
+          tracker.mark_cancelled!
+        end
       end
-    rescue StandardError => _e
-      # Rails.logger.error("Failed to process Dhan order update: #{_e.class} - #{_e.message}")
+    rescue StandardError => e
+      Rails.logger.error("[OrderUpdateHandler] Failed to process order update: #{e.class} - #{e.message}")
     end
 
     def safe_decimal(value)

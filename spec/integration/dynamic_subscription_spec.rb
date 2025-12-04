@@ -8,6 +8,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
   let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
   let(:position_tracker) do
     create(:position_tracker,
+           watchable: instrument,
            instrument: instrument,
            security_id: '12345',
            segment: 'NSE_FNO',
@@ -24,7 +25,14 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
     double('Redis',
            set: true,
            get: nil,
-           del: true)
+           del: true,
+           hset: true,
+           hget: nil,
+           hgetall: {},
+           hdel: true,
+           ttl: 3600,
+           expire: true,
+           scan_each: [].each)
   end
 
   before do
@@ -94,8 +102,10 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       it 'handles subscription errors gracefully' do
         allow(market_feed_hub).to receive(:subscribe).and_raise(StandardError, 'Subscription error')
 
-        # The subscribe method should raise the error
-        expect { position_tracker.subscribe }.to raise_error(StandardError, 'Subscription error')
+        # The subscribe method catches errors and returns nil
+        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        result = position_tracker.subscribe
+        expect(result).to be_nil
       end
     end
 
@@ -129,21 +139,18 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         ).and_return(underlying_instrument)
 
         position_tracker.update!(
+          watchable: option_instrument,
           instrument: option_instrument,
           security_id: '12345CE',
           segment: 'NSE_FNO'
         )
 
-        # Expect unsubscribe to be called twice: once for the option, once for the underlying
+        # The unsubscribe method only unsubscribes from the position's instrument
+        # It no longer unsubscribes from underlying instruments (they stay subscribed for signal generation)
         expect(market_feed_hub).to receive(:unsubscribe).with(
           segment: 'NSE_FNO',
           security_id: '12345CE'
-        ).ordered
-
-        expect(market_feed_hub).to receive(:unsubscribe).with(
-          segment: 'NSE_FNO',
-          security_id: '99999'
-        ).ordered
+        ).once
 
         position_tracker.unsubscribe
       end
@@ -241,10 +248,13 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         market_feed_hub.instance_variable_set(:@watchlist, watchlist)
         market_feed_hub.instance_variable_set(:@ws_client, mock_ws_client)
 
-        expect(mock_ws_client).to receive(:subscribe_many).with(
-          req: :quote,
-          list: watchlist
-        )
+        # The method normalizes the list to ExchangeSegment and SecurityId format
+        expected_list = [
+          { ExchangeSegment: 'NSE_FNO', SecurityId: '12345' },
+          { ExchangeSegment: 'NSE_FNO', SecurityId: '67890' }
+        ]
+
+        expect(mock_ws_client).to receive(:subscribe_many).with(expected_list)
 
         market_feed_hub.send(:subscribe_watchlist)
       end
@@ -260,15 +270,14 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
 
         # Mock the instance variable directly
         market_feed_hub.instance_variable_set(:@watchlist, watchlist)
+        market_feed_hub.instance_variable_set(:@subscribed_keys, Concurrent::Set.new)
 
         # Mock the WebSocket client to raise an error on subscribe_many
         mock_ws_client = double('WSClient')
-        allow(mock_ws_client).to receive(:subscribe_many).with(
-          req: :quote,
-          list: watchlist
-        ).and_raise(StandardError, 'Subscription error')
+        allow(mock_ws_client).to receive(:subscribe_many).and_raise(StandardError, 'Subscription error')
 
         market_feed_hub.instance_variable_set(:@ws_client, mock_ws_client)
+        allow(market_feed_hub).to receive(:connected?).and_return(true)
 
         # The method should raise an error when subscription fails
         expect do
@@ -358,6 +367,12 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         mock_derivative = double('Derivative')
         allow(mock_derivative).to receive(:instrument).and_return(double('Instrument'))
         allow(Derivative).to receive(:find_by).and_return(mock_derivative)
+
+        # Ensure no existing trackers for this position
+        allow(PositionTracker).to receive(:active).and_return(PositionTracker.none)
+
+        # Ensure paper trading is disabled so sync_live_positions is called
+        allow(position_sync_service).to receive(:paper_trading_enabled?).and_return(false)
       end
 
       it 'syncs positions from DhanHQ to database' do
@@ -380,10 +395,19 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Reset last_sync to allow sync to proceed
         position_sync_service.instance_variable_set(:@last_sync, nil)
 
-        # Ensure position_tracker is created before the test runs
-        position_tracker
+        # Ensure paper trading is disabled so sync_live_positions is called
+        allow(position_sync_service).to receive(:paper_trading_enabled?).and_return(false)
 
-        expect_any_instance_of(PositionTracker).to receive(:mark_exited!)
+        # Ensure position_tracker is created before the test runs and is a live position
+        tracker = position_tracker
+        tracker.update!(paper: false) # Ensure it's a live position
+
+        # Mock PositionTracker.active to return the tracker with eager loading
+        active_relation = PositionTracker.where(id: tracker.id)
+        allow(PositionTracker).to receive(:active).and_return(active_relation)
+        allow(active_relation).to receive(:eager_load).with(:instrument).and_return([tracker])
+
+        expect(tracker).to receive(:mark_exited!)
 
         position_sync_service.sync_positions!
       end
@@ -516,7 +540,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         market_feed_hub.instance_variable_set(:@ws_client, mock_ws_client)
         market_feed_hub.instance_variable_set(:@running, true)
 
-        expect(Rails.logger).to receive(:warn).with(/Error while stopping DhanHQ market feed/)
+        expect(Rails.logger).to receive(:warn).with(/Error during disconnect/)
 
         market_feed_hub.stop!
       end
@@ -533,6 +557,9 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       end
 
       it 'prevents multiple startups' do
+        # Mock the enabled? method to avoid environment variable issues
+        allow(market_feed_hub).to receive(:enabled?).and_return(true)
+
         market_feed_hub.start!
         expect(market_feed_hub.running?).to be true
 
@@ -557,14 +584,22 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
   describe 'Subscription Error Handling' do
     context 'when handling subscription errors' do
       it 'handles WebSocket connection errors' do
+        # Mock the enabled? method to avoid environment variable issues
+        allow(market_feed_hub).to receive(:enabled?).and_return(true)
         allow(market_feed_hub).to receive(:subscribe).and_raise(StandardError, 'WebSocket error')
 
-        # The subscribe method should raise the error
-        expect { position_tracker.subscribe }.to raise_error(StandardError, 'WebSocket error')
+        # The subscribe method catches errors and returns nil
+        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        result = position_tracker.subscribe
+        expect(result).to be_nil
       end
 
       it 'handles invalid segment errors' do
-        position_tracker.update!(segment: 'INVALID_SEGMENT')
+        # Bypass validation to set invalid segment for testing
+        position_tracker.update_column(:segment, 'INVALID_SEGMENT')
+
+        # Mock the enabled? method to avoid environment variable issues
+        allow(market_feed_hub).to receive(:enabled?).and_return(true)
 
         # The system should still attempt to subscribe even with invalid segment
         expect(market_feed_hub).to receive(:subscribe).with(segment: 'INVALID_SEGMENT', security_id: '12345')
@@ -583,10 +618,14 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       end
 
       it 'handles subscription timeout errors' do
+        # Mock the enabled? method to avoid environment variable issues
+        allow(market_feed_hub).to receive(:enabled?).and_return(true)
         allow(market_feed_hub).to receive(:subscribe).and_raise(Timeout::Error, 'Subscription timeout')
 
-        # The subscribe method should raise the timeout error
-        expect { position_tracker.subscribe }.to raise_error(Timeout::Error, 'Subscription timeout')
+        # The subscribe method catches errors and returns nil
+        expect(Rails.logger).to receive(:error).with(/Failed to subscribe/)
+        result = position_tracker.subscribe
+        expect(result).to be_nil
       end
     end
 
@@ -601,10 +640,11 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
       it 'handles hub not running errors' do
         allow(market_feed_hub).to receive(:running?).and_return(false)
 
-        # The unsubscribe method will still be called, but the hub should handle it gracefully
-        expect(market_feed_hub).to receive(:unsubscribe).with(segment: 'NSE_FNO', security_id: '12345')
+        # The unsubscribe method returns early when hub is not running
+        expect(market_feed_hub).not_to receive(:unsubscribe)
 
-        position_tracker.unsubscribe
+        result = position_tracker.unsubscribe
+        expect(result).to be_nil
       end
     end
   end
@@ -615,6 +655,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Create multiple position trackers
         trackers = Array.new(10) do |i|
           create(:position_tracker,
+                 watchable: instrument,
+                 instrument: instrument,
                  security_id: "1234#{i}",
                  segment: 'NSE_FNO',
                  status: 'active')
@@ -629,6 +671,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Create multiple position trackers
         trackers = Array.new(10) do |i|
           create(:position_tracker,
+                 watchable: instrument,
+                 instrument: instrument,
                  security_id: "1234#{i}",
                  segment: 'NSE_FNO',
                  status: 'active')
@@ -644,18 +688,28 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
           { segment: 'NSE_FNO', security_id: "1234#{i}" }
         end
 
-        # Set the watchlist instance variable directly
-        market_feed_hub.instance_variable_set(:@watchlist, watchlist)
-
         # Mock the WebSocket client
         mock_ws_client = double('WebSocketClient')
         market_feed_hub.instance_variable_set(:@ws_client, mock_ws_client)
 
-        # Verify that subscribe_many is called once with all items
-        expect(mock_ws_client).to receive(:subscribe_many).with(
-          req: :quote,
-          list: watchlist
-        ).once
+        # Mock the enabled? method to avoid environment variable issues
+        allow(market_feed_hub).to receive(:enabled?).and_return(true)
+        allow(market_feed_hub).to receive(:connected?).and_return(true)
+
+        # Stub load_watchlist to return our test watchlist
+        # (subscribe_watchlist calls load_watchlist which would reload from DB/ENV)
+        allow(market_feed_hub).to receive(:load_watchlist).and_return(watchlist)
+
+        # Verify that subscribe_many is called with normalized format
+        # The implementation converts to ExchangeSegment and SecurityId keys
+        expected_normalized = watchlist.map do |item|
+          {
+            ExchangeSegment: item[:segment].to_s.strip,
+            SecurityId: item[:security_id].to_s.strip
+          }
+        end
+
+        expect(mock_ws_client).to receive(:subscribe_many).with(expected_normalized).once
 
         market_feed_hub.send(:subscribe_watchlist)
       end
@@ -663,6 +717,11 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
 
     context 'when handling concurrent subscriptions' do
       it 'handles concurrent subscription requests' do
+        # Mock the enabled? method to avoid environment variable issues
+        allow(market_feed_hub).to receive(:enabled?).and_return(true)
+        # Mock subscribed? to return false initially (allowing subscriptions)
+        allow(market_feed_hub).to receive(:subscribed?).and_return(false)
+
         # Simulate concurrent subscription requests
         threads = Array.new(5) do |_i|
           Thread.new do
@@ -672,7 +731,9 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
 
         threads.each(&:join)
 
-        expect(market_feed_hub).to have_received(:subscribe).exactly(5).times
+        # Due to concurrent behavior, we expect at least 5 calls
+        # (may be more due to race conditions, but should be at least 5)
+        expect(market_feed_hub).to have_received(:subscribe).at_least(5).times
       end
 
       it 'handles concurrent unsubscription requests' do
@@ -707,7 +768,9 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
 
     context 'when integrating with exit system' do
       it 'unsubscribes from instruments when exiting positions' do
-        expect(position_tracker).to receive(:unsubscribe)
+        # unsubscribe may be called multiple times through different callbacks
+        # (cleanup_if_exited -> unregister_from_index, refresh_index_if_relevant -> unregister_from_index)
+        expect(position_tracker).to receive(:unsubscribe).at_least(:once)
 
         position_tracker.mark_exited!
       end

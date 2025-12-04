@@ -3,13 +3,23 @@
 require 'rails_helper'
 
 RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
-  let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
+  # Use real index instruments (NIFTY-13, BANKNIFTY-25, SENSEX-51) if available
+  # Otherwise fall back to factory-created instruments
+  let(:instrument) do
+    Instrument.segment_index.find_by(security_id: '13', symbol_name: 'NIFTY') ||
+      Instrument.segment_index.find_by(symbol_name: 'NIFTY') ||
+      create(:instrument, :nifty_index)
+  end
   let(:derivative) { create(:derivative, security_id: '12345CE', lot_size: 50) }
   let(:position_tracker) do
+    # PositionTracker requires a tradable segment, not IDX_I or 'index'
+    tradable_segment = instrument.exchange == 'nse' ? 'NSE_FNO' : 'BSE_FNO'
     create(:position_tracker,
+           watchable: instrument,
            instrument: instrument,
            order_no: 'ORD123456',
-           security_id: '12345',
+           security_id: instrument.security_id,
+           segment: tradable_segment,
            status: 'active')
   end
   let(:trading_signal) do
@@ -22,12 +32,17 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
   describe 'Position Tracker Persistence' do
     context 'when creating position trackers' do
       it 'persists position tracker with all required fields' do
+        # PositionTracker requires a tradable segment (NSE_FNO, BSE_FNO, etc.), not IDX_I
+        # Use NSE_FNO for NSE instruments, BSE_FNO for BSE instruments
+        tradable_segment = instrument.exchange == 'nse' ? 'NSE_FNO' : 'BSE_FNO'
+
         tracker_data = {
+          watchable: instrument,
           instrument: instrument,
           order_no: 'ORD123456',
-          security_id: '12345',
+          security_id: instrument.security_id,
           symbol: 'NIFTY18500CE',
-          segment: 'NSE_FNO',
+          segment: tradable_segment,
           side: 'long_ce',
           quantity: 50,
           entry_price: 100.0,
@@ -38,9 +53,9 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
 
         expect(tracker).to be_persisted
         expect(tracker.order_no).to eq('ORD123456')
-        expect(tracker.security_id).to eq('12345')
+        expect(tracker.security_id).to eq(instrument.security_id)
         expect(tracker.symbol).to eq('NIFTY18500CE')
-        expect(tracker.segment).to eq('NSE_FNO')
+        expect(tracker.segment).to eq(tradable_segment)
         expect(tracker.side).to eq('long_ce')
         expect(tracker.quantity).to eq(50)
         expect(tracker.entry_price).to eq(BigDecimal('100.0'))
@@ -48,20 +63,24 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
       end
 
       it 'enforces unique order number constraint' do
-        PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
+        PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                instrument: instrument)
 
         expect do
-          PositionTracker.create!(order_no: 'ORD123456', security_id: '67890', instrument: instrument)
+          PositionTracker.create!(order_no: 'ORD123456', security_id: (instrument.security_id.to_i + 1).to_s, watchable: instrument,
+                                  instrument: instrument)
         end.to raise_error(ActiveRecord::RecordInvalid, /Order no has already been taken/)
       end
 
       it 'validates required fields' do
         expect do
-          PositionTracker.create!(order_no: nil, security_id: '12345', instrument: instrument)
+          PositionTracker.create!(order_no: nil, security_id: instrument.security_id, watchable: instrument,
+                                  instrument: instrument)
         end.to raise_error(ActiveRecord::RecordInvalid, /Order no can't be blank/)
 
         expect do
-          PositionTracker.create!(order_no: 'ORD123456', security_id: nil, instrument: instrument)
+          PositionTracker.create!(order_no: 'ORD123456', security_id: nil, watchable: instrument,
+                                  instrument: instrument)
         end.to raise_error(ActiveRecord::RecordInvalid, /Security can't be blank/)
       end
 
@@ -69,11 +88,12 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
         expect do
           PositionTracker.create!(
             order_no: 'ORD123456',
-            security_id: '12345',
+            security_id: instrument.security_id,
+            watchable: instrument,
             instrument: instrument,
             status: 'invalid_status'
           )
-        end.to raise_error(ActiveRecord::RecordInvalid, /Status is not included in the list/)
+        end.to raise_error(ArgumentError, /is not a valid status/)
       end
     end
 
@@ -98,8 +118,11 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
       end
 
       it 'marks position as exited and cleans up resources' do
-        expect(position_tracker).to receive(:unsubscribe)
-        expect(Live::RedisPnlCache.instance).to receive(:clear_tracker).with(position_tracker.id)
+        # unsubscribe and clear_tracker may be called multiple times (by mark_exited! and after_update_commit callbacks)
+        # So we just verify they're called at least once, not exactly once
+        allow(position_tracker).to receive(:unsubscribe)
+        redis_cache = Live::RedisPnlCache.instance
+        allow(redis_cache).to receive(:clear_tracker)
         expect(Rails.cache).to receive(:write).with(
           "reentry:#{position_tracker.symbol}",
           anything,
@@ -109,6 +132,9 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
         position_tracker.mark_exited!
 
         expect(position_tracker.status).to eq('exited')
+        # Verify cleanup methods were called (may be called multiple times due to callbacks)
+        expect(position_tracker).to have_received(:unsubscribe).at_least(:once)
+        expect(redis_cache).to have_received(:clear_tracker).with(position_tracker.id).at_least(:once)
       end
     end
 
@@ -322,9 +348,11 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
   describe 'Instrument Persistence' do
     context 'when persisting instrument data' do
       it 'persists instrument with all required fields' do
+        # Use a unique security_id to avoid conflicts with imported instruments
+        unique_security_id = "TEST#{SecureRandom.hex(4)}"
         instrument_data = {
-          symbol_name: 'NIFTY',
-          security_id: '12345',
+          symbol_name: 'TESTINDEX',
+          security_id: unique_security_id,
           exchange: 'nse',
           segment: 'derivatives',
           instrument_type: 'INDEX',
@@ -333,35 +361,38 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
           instrument_code: 'index'
         }
 
-        instrument = Instrument.create!(instrument_data)
+        new_instrument = Instrument.create!(instrument_data)
 
-        expect(instrument).to be_persisted
-        expect(instrument.symbol_name).to eq('NIFTY')
-        expect(instrument.security_id).to eq('12345')
-        expect(instrument.exchange_segment).to eq('NSE_FNO')
-        expect(instrument.instrument_type).to eq('INDEX')
-        expect(instrument.lot_size).to eq(1)
-        expect(instrument.tick_size).to eq(BigDecimal('0.05'))
+        expect(new_instrument).to be_persisted
+        expect(new_instrument.symbol_name).to eq('TESTINDEX')
+        expect(new_instrument.security_id).to eq(unique_security_id)
+        expect(new_instrument.exchange_segment).to eq('NSE_FNO')
+        expect(new_instrument.instrument_type).to eq('INDEX')
+        expect(new_instrument.lot_size).to eq(1)
+        expect(new_instrument.tick_size).to eq(BigDecimal('0.05'))
       end
 
       it 'enforces unique constraint on security_id and exchange_segment' do
-        Instrument.create!(symbol_name: 'NIFTY', security_id: '12345', exchange: 'nse', segment: 'derivatives',
+        # Use unique security_id to avoid conflicts with imported instruments
+        unique_security_id = "TEST#{SecureRandom.hex(4)}"
+        Instrument.create!(symbol_name: 'TESTINDEX1', security_id: unique_security_id, exchange: 'nse', segment: 'derivatives',
                            instrument_code: 'index')
 
         expect do
-          Instrument.create!(symbol_name: 'NIFTY2', security_id: '12345', exchange: 'nse', segment: 'derivatives',
+          Instrument.create!(symbol_name: 'TESTINDEX2', security_id: unique_security_id, exchange: 'nse', segment: 'derivatives',
                              instrument_code: 'index')
         end.to raise_error(ActiveRecord::RecordInvalid, /Security has already been taken/)
       end
 
       it 'validates required fields' do
+        unique_security_id = "TEST#{SecureRandom.hex(4)}"
         expect do
-          Instrument.create!(symbol_name: nil, security_id: '12345', exchange: 'nse', segment: 'derivatives',
+          Instrument.create!(symbol_name: nil, security_id: unique_security_id, exchange: 'nse', segment: 'derivatives',
                              instrument_code: 'index')
         end.to raise_error(ActiveRecord::RecordInvalid, /Symbol name can't be blank/)
 
         expect do
-          Instrument.create!(symbol_name: 'NIFTY', security_id: nil, exchange: 'nse', segment: 'derivatives',
+          Instrument.create!(symbol_name: 'TESTINDEX', security_id: nil, exchange: 'nse', segment: 'derivatives',
                              instrument_code: 'index')
         end.to raise_error(ActiveRecord::RecordInvalid, /Security can't be blank/)
       end
@@ -369,11 +400,19 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
 
     context 'when managing instrument associations' do
       it 'associates instruments with derivatives' do
+        # Use a unique security_id to avoid conflicts with imported derivatives
+        unique_security_id = "TEST#{SecureRandom.hex(4)}"
         derivative = Derivative.create!(
           instrument: instrument,
-          security_id: '12345CE',
+          security_id: unique_security_id,
+          symbol_name: 'TESTINDEX',
+          underlying_symbol: instrument.symbol_name,
+          underlying_security_id: instrument.security_id,
+          exchange: instrument.exchange,
+          segment: 'derivatives',
           strike_price: 18_500.0,
           expiry_date: Date.current + 7.days,
+          instrument_type: 'OPTION',
           option_type: 'CE',
           lot_size: 50
         )
@@ -384,9 +423,9 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
 
       it 'associates instruments with position trackers' do
         tracker = PositionTracker.create!(
-          instrument: instrument,
+          watchable: instrument, instrument: instrument,
           order_no: 'ORD123456',
-          security_id: '12345'
+          security_id: instrument.security_id
         )
 
         expect(instrument.position_trackers).to include(tracker)
@@ -474,7 +513,7 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
       it 'persists watchlist item with required fields' do
         watchlist_data = {
           segment: 'NSE_FNO',
-          security_id: '12345',
+          security_id: instrument.security_id,
           active: true
         }
 
@@ -482,21 +521,22 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
 
         expect(watchlist_item).to be_persisted
         expect(watchlist_item.segment).to eq('NSE_FNO')
-        expect(watchlist_item.security_id).to eq('12345')
+        expect(watchlist_item.security_id).to eq(instrument.security_id)
         expect(watchlist_item.active).to be true
       end
 
       it 'enforces unique constraint on segment and security_id' do
-        WatchlistItem.create!(segment: 'NSE_FNO', security_id: '12345')
+        WatchlistItem.create!(segment: 'NSE_FNO', security_id: instrument.security_id)
 
         expect do
-          WatchlistItem.create!(segment: 'NSE_FNO', security_id: '12345')
+          WatchlistItem.create!(segment: 'NSE_FNO', security_id: instrument.security_id)
         end.to raise_error(ActiveRecord::RecordInvalid, /Security has already been taken/)
       end
 
       it 'scopes active watchlist items' do
-        active_item = WatchlistItem.create!(segment: 'NSE_FNO', security_id: '12345', active: true)
-        inactive_item = WatchlistItem.create!(segment: 'NSE_FNO', security_id: '67890', active: false)
+        active_item = WatchlistItem.create!(segment: 'NSE_FNO', security_id: instrument.security_id, active: true)
+        inactive_item = WatchlistItem.create!(segment: 'NSE_FNO', security_id: (instrument.security_id.to_i + 1).to_s,
+                                              active: false)
 
         active_items = WatchlistItem.active
         expect(active_items).to include(active_item)
@@ -510,8 +550,9 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
       it 'rolls back transaction on error' do
         expect do
           ActiveRecord::Base.transaction do
-            PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
-            PositionTracker.create!(order_no: 'ORD123456', security_id: '67890', instrument: instrument) # Duplicate order_no
+            PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                    instrument: instrument)
+            PositionTracker.create!(order_no: 'ORD123456', security_id: (instrument.security_id.to_i + 1).to_s, watchable: instrument, instrument: instrument) # Duplicate order_no
           end
         end.to raise_error(ActiveRecord::RecordInvalid)
 
@@ -520,8 +561,10 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
 
       it 'commits transaction on success' do
         ActiveRecord::Base.transaction do
-          PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
-          PositionTracker.create!(order_no: 'ORD123457', security_id: '67890', instrument: instrument)
+          PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                  instrument: instrument)
+          PositionTracker.create!(order_no: 'ORD123457', security_id: (instrument.security_id.to_i + 1).to_s, watchable: instrument,
+                                  instrument: instrument)
         end
 
         expect(PositionTracker.where(order_no: 'ORD123456')).to exist
@@ -553,7 +596,8 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
   describe 'Database Indexes and Performance' do
     context 'when querying with indexes' do
       it 'uses index on order_no for lookups' do
-        PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
+        PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                instrument: instrument)
 
         # This should use the unique index on order_no
         tracker = PositionTracker.find_by(order_no: 'ORD123456')
@@ -561,15 +605,17 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
       end
 
       it 'uses index on security_id and status for lookups' do
-        PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument, status: 'active')
+        PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                instrument: instrument, status: 'active')
 
         # This should use the composite index on security_id and status
-        active_trackers = PositionTracker.where(security_id: '12345', status: 'active')
+        active_trackers = PositionTracker.where(security_id: instrument.security_id, status: 'active')
         expect(active_trackers).to exist
       end
 
       it 'uses index on instrument_id for associations' do
-        tracker = PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
+        tracker = PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                          instrument: instrument)
 
         # This should use the foreign key index on instrument_id
         instrument_trackers = instrument.position_trackers
@@ -584,7 +630,7 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
           PositionTracker.create!(
             order_no: "ORD#{i.to_s.rjust(6, '0')}",
             security_id: "1234#{i}",
-            instrument: instrument
+            watchable: instrument, instrument: instrument
           )
         end
 
@@ -599,7 +645,7 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
           PositionTracker.create!(
             order_no: "ORD#{i.to_s.rjust(6, '0')}",
             security_id: "1234#{i}",
-            instrument: instrument
+            watchable: instrument, instrument: instrument
           )
         end
 
@@ -616,7 +662,8 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
   describe 'Data Integrity and Validation' do
     context 'when enforcing data integrity' do
       it 'prevents orphaned records' do
-        PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
+        PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                instrument: instrument)
 
         # Verify that the method can be called without crashing
         expect { instrument.destroy }.not_to raise_error
@@ -635,8 +682,8 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
       it 'validates decimal precision' do
         tracker = PositionTracker.create!(
           order_no: 'ORD123456',
-          security_id: '12345',
-          instrument: instrument,
+          security_id: instrument.security_id,
+          watchable: instrument, instrument: instrument,
           entry_price: 100.123456789
         )
 
@@ -669,7 +716,8 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
         allow(PositionTracker).to receive(:create!).and_raise(ActiveRecord::ConnectionNotEstablished, 'Connection lost')
 
         expect do
-          PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
+          PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                  instrument: instrument)
         end.to raise_error(ActiveRecord::ConnectionNotEstablished)
       end
 
@@ -678,15 +726,18 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
         allow(PositionTracker).to receive(:create!).and_raise(ActiveRecord::StatementTimeout, 'Query timeout')
 
         expect do
-          PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
+          PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                  instrument: instrument)
         end.to raise_error(ActiveRecord::StatementTimeout)
       end
 
       it 'handles constraint violations gracefully' do
-        PositionTracker.create!(order_no: 'ORD123456', security_id: '12345', instrument: instrument)
+        PositionTracker.create!(order_no: 'ORD123456', security_id: instrument.security_id, watchable: instrument,
+                                instrument: instrument)
 
         expect do
-          PositionTracker.create!(order_no: 'ORD123456', security_id: '67890', instrument: instrument)
+          PositionTracker.create!(order_no: 'ORD123456', security_id: (instrument.security_id.to_i + 1).to_s, watchable: instrument,
+                                  instrument: instrument)
         end.to raise_error(ActiveRecord::RecordInvalid, /Order no has already been taken/)
       end
     end

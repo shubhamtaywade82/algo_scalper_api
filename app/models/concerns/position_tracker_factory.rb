@@ -2,7 +2,7 @@ module PositionTrackerFactory
   extend ActiveSupport::Concern
 
   class_methods do
-    def build_or_average!(instrument:, security_id:, segment:, quantity:, entry_price:, side:, symbol:, order_no:, meta: {})
+    def build_or_average!(instrument:, security_id:, segment:, quantity:, entry_price:, side:, symbol:, order_no:, meta: {}, watchable: nil, status: 'active')
       sid = security_id.to_s
       seg = segment.to_s
 
@@ -34,8 +34,8 @@ module PositionTrackerFactory
       Rails.logger.info("[TrackerFactory] Creating NEW tracker for #{seg}:#{sid}")
 
       PositionTracker.create!(
-        watchable: instrument.is_a?(Derivative) ? instrument : instrument,
-        instrument: instrument.is_a?(Derivative) ? instrument.instrument : instrument,
+        watchable: watchable || (instrument.is_a?(Derivative) ? instrument : instrument),
+        instrument: watchable ? (watchable.is_a?(Derivative) ? watchable.instrument : watchable) : (instrument.is_a?(Derivative) ? instrument.instrument : instrument),
         order_no: order_no,
         security_id: sid,
         symbol: symbol,
@@ -44,7 +44,7 @@ module PositionTrackerFactory
         quantity: quantity,
         entry_price: entry_price,
         avg_price: entry_price,
-        status: 'active',
+        status: status,
         meta: meta
       )
     end

@@ -60,7 +60,17 @@
 require 'rails_helper'
 
 RSpec.describe Derivative, type: :model do
-  let(:instrument) { create(:instrument, :nifty_index, security_id: '13') }
+    let(:instrument) do
+      Instrument.find_or_create_by!(security_id: '13') do |inst|
+        inst.assign_attributes(
+          symbol_name: 'NIFTY',
+          exchange: 'nse',
+          segment: 'index',
+          instrument_type: 'INDEX',
+          instrument_code: 'index'
+        )
+      end
+    end
   let(:derivative) { create(:derivative, :nifty_call_option, instrument: instrument, security_id: '60001', lot_size: 25) }
   let(:order_response) { double('Order', order_id: 'ORD654321') }
   let(:redis_cache) { Live::RedisPnlCache.instance }
@@ -208,6 +218,8 @@ RSpec.describe Derivative, type: :model do
       end
 
       it 'returns nil when provided quantity is zero' do
+        # Mock Capital::Allocator to return 0 so place_market is not called
+        allow(Capital::Allocator).to receive(:qty_for).and_return(0)
         expect(Orders.config).not_to receive(:place_market)
 
         result = derivative.buy_option!(qty: 0)
@@ -251,10 +263,13 @@ RSpec.describe Derivative, type: :model do
     let(:active_tracker) do
       create(
         :position_tracker,
+        :nifty_position,
         instrument: instrument,
+        watchable: derivative,
         security_id: derivative.security_id.to_s,
+        segment: 'NSE_FNO',
         quantity: 50,
-        status: PositionTracker::STATUSES[:active]
+        status: 'active'
       )
     end
 
@@ -281,10 +296,13 @@ RSpec.describe Derivative, type: :model do
       it 'uses sum of active PositionTracker quantities' do
         create(
           :position_tracker,
+          :nifty_position,
           instrument: instrument,
+          watchable: derivative,
           security_id: derivative.security_id.to_s,
+          segment: 'NSE_FNO',
           quantity: 25,
-          status: PositionTracker::STATUSES[:active]
+          status: 'active'
         )
 
         expect(Orders.config).to receive(:place_market).with(

@@ -33,3 +33,10 @@
 
 # Ignore RSpec's example status tracking file.
 /spec/examples.txt
+
+# Ignore SimpleCov coverage reports
+/coverage/
+
+# Ignore filtered CSV (generated from master CSV)
+/tmp/dhan_scrip_master_filtered.csv
+spec/failed_examples.txt

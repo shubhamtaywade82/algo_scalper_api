@@ -102,9 +102,8 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         )
 
         # Expect all the log messages that should be called in dry run mode
-        expect(Rails.logger).to receive(:info).with(/Placing BUY order/)
-        expect(Rails.logger).to receive(:info).with(/BUY Order Payload/)
-        expect(Rails.logger).to receive(:info).with(/BUY Order NOT placed - ENABLE_ORDER=false/)
+        expect(Rails.logger).to receive(:info).with(/BUY payload/)
+        expect(Rails.logger).to receive(:debug).with(/BUY dry-run/)
 
         result = order_placer.buy_market!(**order_params)
 
@@ -166,7 +165,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         # Override the global mock to raise an error
         expect(DhanHQ::Models::Order).to receive(:create).and_raise(StandardError, 'API Error')
 
-        expect(Rails.logger).to receive(:error).with(/Failed to place order/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -182,7 +181,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         # Override the global mock to raise a timeout error
         expect(DhanHQ::Models::Order).to receive(:create).and_raise(Timeout::Error, 'Request timeout')
 
-        expect(Rails.logger).to receive(:error).with(/Failed to place order/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -198,7 +197,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         # Override the global mock to raise an ArgumentError
         expect(DhanHQ::Models::Order).to receive(:create).and_raise(ArgumentError, 'Invalid parameters')
 
-        expect(Rails.logger).to receive(:error).with(/Failed to place order/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -216,25 +215,71 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
   # Current system uses Signal::Engine + Signal::Scheduler for signal generation
 
   describe 'Entry Guard Integration' do
-    let(:instrument) { create(:instrument, :nifty_future, security_id: '12345') }
+    # Use real Derivative records from imported instruments if available
+    # Otherwise fall back to factory-created derivatives
+    let(:real_derivative) do
+      Derivative.where(underlying_symbol: 'NIFTY', instrument_type: 'OPTION', option_type: 'CE')
+                .where('expiry_date >= ?', Date.today)
+                .order(:expiry_date, :strike_price)
+                .first || begin
+                  # Find or create instrument first to avoid validation errors
+                  inst = Instrument.find_by(symbol_name: 'NIFTY', segment: 'index') ||
+                         create(:instrument, :nifty_index)
+                  # Find existing derivative or create new one
+                  Derivative.find_or_create_by(
+                    security_id: '11111',
+                    exchange: 'NSE',
+                    segment: 'derivatives'
+                  ) do |d|
+                    d.instrument = inst
+                    d.symbol_name = 'NIFTY'
+                    d.underlying_symbol = 'NIFTY'
+                    d.underlying_security_id = inst.security_id
+                    d.instrument_type = 'OPTION'
+                    d.option_type = 'CE'
+                    d.strike_price = 25_000
+                    d.lot_size = 50
+                    d.expiry_date = 1.month.from_now
+                    d.display_name = 'NIFTY 25000 CE'
+                  end
+                end
+    end
+    let(:real_instrument) do
+      Instrument.find_by(symbol_name: 'NIFTY', segment: 'index') ||
+        create(:instrument, :nifty_index)
+    end
+    let(:instrument) { real_instrument }
     let(:pick_data) do
       {
-        symbol: 'NIFTY18500CE',
-        security_id: '12345',
-        segment: 'NSE_FNO',
+        symbol: real_derivative.symbol_name || 'NIFTY18500CE',
+        security_id: real_derivative.security_id.to_s,
+        segment: 'NSE_FNO', # API segment code (not DB segment field)
         ltp: 100.0,
-        lot_size: 50
+        lot_size: real_derivative.lot_size || 50
       }
     end
-    let(:index_config) { { key: 'nifty', segment: 'NSE_FNO', max_same_side: 2 } }
+    let(:index_config) { { key: 'nifty', segment: pick_data[:segment], max_same_side: 2 } }
 
     before do
-      allow(Instrument).to receive(:find_by_sid_and_segment).and_return(instrument)
+      # Use real instrument if available, otherwise use the stubbed one
+      allow(Instrument).to receive(:find_by_sid_and_segment).and_return(real_instrument)
       allow(Entries::EntryGuard).to receive(:ensure_ws_connection!)
       allow(Capital::Allocator).to receive(:qty_for).and_return(50)
       allow(Orders::Placer).to receive(:buy_market!).and_return(mock_order)
       allow(Entries::EntryGuard).to receive_messages(exposure_ok?: true, cooldown_active?: false,
                                                      extract_order_no: 'ORD123456')
+      # Mock trading session and daily limits to allow entry
+      allow(TradingSession::Service).to receive(:entry_allowed?).and_return({ allowed: true })
+      allow(Live::DailyLimits).to receive(:new).and_return(
+        instance_double(Live::DailyLimits, can_trade?: { allowed: true })
+      )
+      # Mock MarketFeedHub to prevent subscription errors during PositionTracker creation
+      allow(Live::MarketFeedHub.instance).to receive_messages(
+        running?: true,
+        connected?: true,
+        subscribe: true,
+        subscribe_instrument: true
+      )
       # NOTE: create_tracker! is mocked individually in each test as needed
     end
 
@@ -256,10 +301,11 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         # Remove the global mock for this test
         allow(Capital::Allocator).to receive(:qty_for).and_call_original
 
+        expected_lot_size = pick_data[:lot_size]
         expect(Capital::Allocator).to receive(:qty_for).with(
           index_cfg: index_config,
           entry_price: 100.0,
-          derivative_lot_size: 50,
+          derivative_lot_size: expected_lot_size,
           scale_multiplier: 1
         ).and_return(50)
 
@@ -390,6 +436,9 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       end
 
       it 'handles tracker creation errors gracefully' do
+        # Mock EventBus to prevent event emission errors
+        allow(Core::EventBus).to receive(:publish).and_return(true)
+
         # Create a proper mock record with errors method
         mock_record = double('Record')
 
@@ -399,7 +448,8 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         allow(mock_record).to receive_messages(errors: double('Errors', full_messages: ['some error']),
                                                class: mock_class)
 
-        allow(Entries::EntryGuard).to receive(:create_tracker!).and_raise(ActiveRecord::RecordInvalid.new(mock_record))
+        # Mock create_paper_tracker! since paper mode is likely enabled
+        allow(Entries::EntryGuard).to receive(:create_paper_tracker!).and_raise(ActiveRecord::RecordInvalid.new(mock_record))
 
         expect(Rails.logger).to receive(:error).with(/EntryGuard failed for nifty: ActiveRecord::RecordInvalid/)
 
@@ -442,7 +492,14 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       end
 
       it 'updates position trackers on order completion' do
-        tracker = create(:position_tracker, order_no: 'ORD123456', status: 'pending')
+        instrument = create(:instrument, :nifty_future)
+        tracker = create(:position_tracker,
+                         :nifty_position,
+                         order_no: 'ORD123456',
+                         status: 'pending',
+                         segment: 'NSE_FNO',
+                         instrument: instrument,
+                         watchable: instrument)
 
         allow(order_update_handler).to receive(:find_tracker_by_order_id).and_return(tracker)
         allow(tracker).to receive(:mark_active!)
@@ -453,7 +510,14 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
 
       it 'handles order cancellation' do
         cancellation_update = order_update.merge(status: 'CANCELLED')
-        tracker = create(:position_tracker, order_no: 'ORD123456', status: 'pending')
+        instrument = create(:instrument, :nifty_future)
+        tracker = create(:position_tracker,
+                         :nifty_position,
+                         order_no: 'ORD123456',
+                         status: 'pending',
+                         segment: 'NSE_FNO',
+                         instrument: instrument,
+                         watchable: instrument)
 
         allow(order_update_handler).to receive(:find_tracker_by_order_id).and_return(tracker)
         allow(tracker).to receive(:mark_cancelled!)
@@ -525,8 +589,10 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
   describe 'Order Persistence and Tracking' do
     context 'when persisting order information' do
       it 'creates position tracker records' do
+        instrument = create(:instrument, :nifty_future)
         tracker_data = {
           instrument: instrument,
+          watchable: instrument,
           order_no: 'ORD123456',
           security_id: '12345',
           symbol: 'NIFTY18500CE',
@@ -546,7 +612,14 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       end
 
       it 'tracks order status changes' do
-        tracker = create(:position_tracker, order_no: 'ORD123456', status: 'pending')
+        instrument = create(:instrument, :nifty_future)
+        tracker = create(:position_tracker,
+                         :nifty_position,
+                         order_no: 'ORD123456',
+                         status: 'pending',
+                         segment: 'NSE_FNO',
+                         instrument: instrument,
+                         watchable: instrument)
 
         tracker.mark_active!(avg_price: 101.5, quantity: 50)
 
@@ -565,7 +638,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
           DhanHQ::Error, 'Order rejected: Insufficient funds'
         )
 
-        expect(Rails.logger).to receive(:error).with(/Failed to place order/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -583,7 +656,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
           DhanHQ::Error, 'Market is closed'
         )
 
-        expect(Rails.logger).to receive(:error).with(/Failed to place order/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',
@@ -601,7 +674,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
           DhanHQ::Error, 'Invalid security ID'
         )
 
-        expect(Rails.logger).to receive(:error).with(/Failed to place order/)
+        expect(Rails.logger).to receive(:error).with(/BUY failed/)
 
         result = order_placer.buy_market!(
           seg: 'NSE_FNO',

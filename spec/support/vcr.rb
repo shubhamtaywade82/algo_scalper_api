@@ -80,4 +80,20 @@ VCR.configure do |config|
 
   # Allow localhost connections (Capybara or Rails server)
   config.ignore_localhost = true
+
+  # Default to :once mode (use cassette if exists, record if missing)
+  # Set ENV['VCR_MODE'] to 'all' to record all interactions, 'none' to disable recording
+  config.default_cassette_options = {
+    record: ENV.fetch('VCR_MODE', :once).to_sym,
+    match_requests_on: %i[method uri body],
+    allow_playback_repeats: true
+  }
+
+  # Add delay when recording to prevent rate limits
+  config.before_record do |interaction|
+    # Small delay to prevent rapid API calls when recording
+    if ENV['VCR_RECORDING_DELAY']
+      sleep(ENV['VCR_RECORDING_DELAY'].to_f)
+    end
+  end
 end
