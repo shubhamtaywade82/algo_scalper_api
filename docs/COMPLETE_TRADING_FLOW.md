@@ -467,6 +467,23 @@ RiskManagerService.monitor_loop()
 
 ---
 
+## No-Trade Engine Timeframes
+
+The No-Trade Engine uses **two timeframes**:
+
+1. **1-minute (1m)** - Used for:
+   - Structure detection (BOS, Order Blocks, FVG)
+   - VWAP calculations
+   - Volatility checks (Range, ATR)
+   - Candle quality analysis
+
+2. **5-minute (5m)** - Used for:
+   - ADX/DI trend strength calculations
+
+**See**: `docs/NO_TRADE_ENGINE_TIMEFRAMES.md` for complete details
+
+---
+
 ## Configuration
 
 ### Signal Generation
