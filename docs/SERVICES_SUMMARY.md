@@ -65,6 +65,7 @@ Services that run continuously in their own threads.
 
 **Responsibilities:**
 - Generate trading signals for configured indices (NIFTY, BANKNIFTY, SENSEX)
+- **NEW**: Includes No-Trade Engine validation (two-phase)
 - Evaluate trend direction using TrendScorer (when direction-first enabled)
 - Select option candidates using ChainAnalyzer
 - Validate signals through EntryGuard
@@ -74,22 +75,30 @@ Services that run continuously in their own threads.
 - `start()` - Start periodic signal generation loop
 - `stop()` - Stop signal generation
 - `process_index(index_cfg)` - Process single index
-- `evaluate_supertrend_signal(index_cfg)` - Generate signal for index
-- `process_signal(index_cfg, signal)` - Process validated signal
+  - **NEW**: Calls `Signal::Engine.run_for()` which includes No-Trade Engine
+- `evaluate_supertrend_signal(index_cfg)` - Generate signal for index (legacy path)
+- `process_signal(index_cfg, signal)` - Process validated signal (legacy path)
 
-**Frequency:** 30 seconds (configurable via `DEFAULT_PERIOD`)
+**Frequency:** 1 second (configurable via `period`)
 
 **Dependencies:**
-- TrendScorer (for direction-first logic)
+- Signal::Engine.run_for() - **NEW**: Full flow with No-Trade Engine
+- Entries::NoTradeEngine - **NEW**: Two-phase validation
+- TrendScorer (for direction-first logic, if enabled)
 - ChainAnalyzer (for option selection)
-- EntryGuard (for validation)
+- EntryGuard (for entry execution)
 - TradingSession::Service (for market hours check)
 
-**Flow:**
-1. Loop through indices
+**Flow (Updated with No-Trade Engine):**
+1. Loop through indices (every 1 second)
 2. Check if market closed → skip
-3. Evaluate signal (direction-first or legacy path)
-4. Process signal → EntryGuard → EntryManager
+3. **NEW**: Call `Signal::Engine.run_for()` which includes:
+   - Phase 1: Quick No-Trade pre-check (before signal generation)
+   - Signal generation (Supertrend + ADX)
+   - Strike selection
+   - Phase 2: Detailed No-Trade validation (after signal generation)
+   - EntryGuard.try_enter() (only if both phases pass)
+4. Legacy path: evaluate_supertrend_signal() → process_signal() (if trend_scorer enabled)
 
 ---
 
