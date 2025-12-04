@@ -77,6 +77,7 @@ module Signal
     def stop
       @mutex.synchronize do
         return unless @running
+
         @running = false
       end
 
@@ -191,9 +192,7 @@ module Signal
       end
 
       # Path 1: Trend Scorer (Direction-First) - if enabled
-      if trend_scorer_enabled?
-        return evaluate_with_trend_scorer(index_cfg, instrument)
-      end
+      return evaluate_with_trend_scorer(index_cfg, instrument) if trend_scorer_enabled?
 
       # Path 2: Legacy Supertrend + ADX (default)
       evaluate_with_legacy_indicators(index_cfg, instrument)
@@ -213,8 +212,8 @@ module Signal
       if trend_score.nil? || trend_score < min_trend_score || direction.nil?
         Rails.logger.debug do
           "[SignalScheduler] Skipping #{index_cfg[:key]} - trend_score=#{trend_score} " \
-          "direction=#{direction} (min=#{min_trend_score}) " \
-          "breakdown=#{breakdown.inspect}"
+            "direction=#{direction} (min=#{min_trend_score}) " \
+            "breakdown=#{breakdown.inspect}"
         end
         return nil
       end
@@ -268,13 +267,13 @@ module Signal
             index_adx_thresholds = index_cfg[:adx_thresholds] || {}
             min_adx = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength] || 0
 
-            if primary_adx && min_adx.to_f.positive? && primary_adx.to_f < min_adx.to_f
-              reasons << "ADX too weak on primary timeframe (#{primary_adx.to_f.round(1)} < #{min_adx.to_f.round(1)})"
-            elsif primary_st.nil?
-              reasons << "Supertrend invalid on primary timeframe"
-            else
-              reasons << "Supertrend neutral/unknown on primary timeframe (#{primary_st})"
-            end
+            reasons << if primary_adx && min_adx.to_f.positive? && primary_adx.to_f < min_adx.to_f
+                         "ADX too weak on primary timeframe (#{primary_adx.to_f.round(1)} < #{min_adx.to_f.round(1)})"
+                       elsif primary_st.nil?
+                         'Supertrend invalid on primary timeframe'
+                       else
+                         "Supertrend neutral/unknown on primary timeframe (#{primary_st})"
+                       end
           end
         end
 
@@ -289,19 +288,19 @@ module Signal
             index_adx_thresholds = index_cfg[:adx_thresholds] || {}
             min_conf_adx = index_adx_thresholds[:confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength] || 0
 
-            if conf_adx && min_conf_adx.to_f.positive? && conf_adx.to_f < min_conf_adx.to_f
-              reasons << "ADX too weak on confirmation timeframe (#{conf_adx.to_f.round(1)} < #{min_conf_adx.to_f.round(1)})"
-            elsif conf_st.nil?
-              reasons << "Supertrend invalid on confirmation timeframe"
-            else
-              reasons << "Supertrend neutral/unknown on confirmation timeframe (#{conf_st})"
-            end
+            reasons << if conf_adx && min_conf_adx.to_f.positive? && conf_adx.to_f < min_conf_adx.to_f
+                         "ADX too weak on confirmation timeframe (#{conf_adx.to_f.round(1)} < #{min_conf_adx.to_f.round(1)})"
+                       elsif conf_st.nil?
+                         'Supertrend invalid on confirmation timeframe'
+                       else
+                         "Supertrend neutral/unknown on confirmation timeframe (#{conf_st})"
+                       end
           elsif primary_result && primary_result[:direction] != conf_direction && primary_result[:direction] != :avoid
             reasons << "Multi-timeframe mismatch (primary: #{primary_result[:direction]}, confirmation: #{conf_direction})"
           end
         end
 
-        reason_text = reasons.any? ? " - #{reasons.join(', ')}" : " (check Signal::Engine logs for details)"
+        reason_text = reasons.any? ? " - #{reasons.join(', ')}" : ' (check Signal::Engine logs for details)'
         Rails.logger.info("[SignalScheduler] Skipping #{index_cfg[:key]} - indicator direction #{direction || 'nil'}#{reason_text}")
         return nil
       end
