@@ -1522,9 +1522,7 @@ module Live
     # @return [Boolean] true if exit was triggered, false otherwise
     def check_all_exit_conditions(position, tracker, exit_engine)
       # Use rule engine if available, otherwise fallback to legacy methods
-      if rule_engine_available?
-        return check_exit_conditions_with_rule_engine(position, tracker, exit_engine)
-      end
+      return check_exit_conditions_with_rule_engine(position, tracker, exit_engine) if rule_engine_available?
 
       # Legacy fallback (backwards compatibility)
       check_all_exit_conditions_legacy(position, tracker, exit_engine)
