@@ -942,10 +942,8 @@ module Signal
           if bars_1m&.candles&.any?
             bars_1m_array = bars_1m.candles
 
-            unless Entries::StructureDetector.bos?(bars_1m_array)
-              reasons << 'No BOS in last 10m'
-              score += 1
-            end
+            # NOTE: BOS check removed from Phase 1 to avoid duplicate penalty
+            # BOS is checked in Phase 2 with full context
 
             # Basic volatility check
             range_pct = Entries::RangeUtils.range_pct(bars_1m_array.last(10))

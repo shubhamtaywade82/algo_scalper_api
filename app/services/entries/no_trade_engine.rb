@@ -14,18 +14,24 @@ module Entries
       score = 0
 
       # --- Trend Weakness ---
-      if ctx.adx_5m < 18
-        reasons << 'Weak trend: ADX < 18'
+      # ADX threshold: 15 (was 18) - allows moderate trends through
+      # ADX 15-17 is still valid for trading, 18+ is strong trend
+      if ctx.adx_5m < 15
+        reasons << 'Weak trend: ADX < 15'
         score += 1
       end
 
+      # DI overlap threshold: 2 (was 3) - less strict for ranging markets
+      # DI difference of 2+ still shows directional bias
       di_diff = (ctx.plus_di_5m - ctx.minus_di_5m).abs
-      if di_diff < 3
+      if di_diff < 2
         reasons << 'DI overlap: no directional strength'
         score += 1
       end
 
       # --- Market Structure Failures ---
+      # BOS check: Only penalize if no BOS AND other weak conditions present
+      # BOS alone is not enough to block - need combination with other issues
       unless ctx.bos_present
         reasons << 'No BOS in last 10m'
         score += 1
@@ -96,8 +102,10 @@ module Entries
         score += 1
       end
 
-      if ctx.time_between.call('11:20', '13:30') && ctx.adx_5m < 25
-        reasons << 'Lunch-time theta zone'
+      # Lunch-time check: Only block if ADX is weak (< 20) during lunch hours
+      # Strong trends (ADX >= 20) can still be traded during lunch
+      if ctx.time_between.call('11:20', '13:30') && ctx.adx_5m < 20
+        reasons << 'Lunch-time theta zone (weak trend)'
         score += 1
       end
 
