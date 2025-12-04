@@ -107,10 +107,13 @@ module Signal
     private
 
     def process_index(index_cfg)
-      signal = evaluate_supertrend_signal(index_cfg)
-      return unless signal
-
-      process_signal(index_cfg, signal)
+      # Use run_for() which includes full No-Trade Engine integration
+      # run_for() handles: Phase 1 pre-check, signal generation, strike selection, Phase 2 validation, and entry
+      Signal::Engine.run_for(index_cfg)
+      
+      # Note: run_for() handles entry internally, so we don't need process_signal() here
+      # The old flow (evaluate_supertrend_signal + process_signal) is bypassed
+      # This ensures No-Trade Engine validation is always applied
     rescue StandardError => e
       Rails.logger.error("[SignalScheduler] process_index error #{index_cfg[:key]}: #{e.class} - #{e.message}")
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
@@ -242,89 +245,19 @@ module Signal
     end
 
     def evaluate_with_legacy_indicators(index_cfg, instrument)
-      indicator_result = Signal::Engine.analyze_multi_timeframe(index_cfg: index_cfg, instrument: instrument)
-      unless indicator_result[:status] == :ok
-        Rails.logger.warn("[SignalScheduler] Indicator analysis failed for #{index_cfg[:key]}: #{indicator_result[:message]}")
-        return nil
-      end
-
-      direction = indicator_result[:final_direction]
-      if direction.nil? || direction == :avoid
-        # Extract detailed reason for avoid
-        primary_result = indicator_result.dig(:timeframe_results, :primary)
-        confirmation_result = indicator_result.dig(:timeframe_results, :confirmation)
-
-        reasons = []
-
-        if primary_result
-          primary_direction = primary_result[:direction]
-          primary_adx = primary_result[:adx_value]
-          primary_st = primary_result.dig(:supertrend, :trend)
-
-          if primary_direction == :avoid
-            signals_cfg = AlgoConfig.fetch[:signals] || {}
-            adx_cfg = signals_cfg[:adx] || {}
-            index_adx_thresholds = index_cfg[:adx_thresholds] || {}
-            min_adx = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength] || 0
-
-            reasons << if primary_adx && min_adx.to_f.positive? && primary_adx.to_f < min_adx.to_f
-                         "ADX too weak on primary timeframe (#{primary_adx.to_f.round(1)} < #{min_adx.to_f.round(1)})"
-                       elsif primary_st.nil?
-                         'Supertrend invalid on primary timeframe'
-                       else
-                         "Supertrend neutral/unknown on primary timeframe (#{primary_st})"
-                       end
-          end
-        end
-
-        if confirmation_result
-          conf_direction = confirmation_result[:direction]
-          conf_adx = confirmation_result[:adx_value]
-          conf_st = confirmation_result.dig(:supertrend, :trend)
-
-          if conf_direction == :avoid
-            signals_cfg = AlgoConfig.fetch[:signals] || {}
-            adx_cfg = signals_cfg[:adx] || {}
-            index_adx_thresholds = index_cfg[:adx_thresholds] || {}
-            min_conf_adx = index_adx_thresholds[:confirmation_min_strength] ||
-                           adx_cfg[:confirmation_min_strength] ||
-                           adx_cfg[:min_strength] || 0
-
-            reasons << if conf_adx && min_conf_adx.to_f.positive? && conf_adx.to_f < min_conf_adx.to_f
-                         "ADX too weak on confirmation timeframe (#{conf_adx.to_f.round(1)} < #{min_conf_adx.to_f.round(1)})"
-                       elsif conf_st.nil?
-                         'Supertrend invalid on confirmation timeframe'
-                       else
-                         "Supertrend neutral/unknown on confirmation timeframe (#{conf_st})"
-                       end
-          elsif primary_result && primary_result[:direction] != conf_direction && primary_result[:direction] != :avoid
-            reasons << "Multi-timeframe mismatch (primary: #{primary_result[:direction]}, confirmation: #{conf_direction})"
-          end
-        end
-
-        reason_text = reasons.any? ? " - #{reasons.join(', ')}" : ' (check Signal::Engine logs for details)'
-        Rails.logger.info("[SignalScheduler] Skipping #{index_cfg[:key]} - indicator direction #{direction || 'nil'}#{reason_text}")
-        return nil
-      end
-
-      chain_cfg = AlgoConfig.fetch[:chain_analyzer] || {}
-      trend_metric = indicator_result.dig(:timeframe_results, :primary, :adx_value)
-      candidate = select_candidate_from_chain(index_cfg, direction, chain_cfg, trend_metric)
-      return nil unless candidate
-
-      {
-        segment: candidate[:segment],
-        security_id: candidate[:security_id],
-        reason: 'supertrend_adx',
-        meta: {
-          candidate_symbol: candidate[:symbol],
-          lot_size: candidate[:lot_size] || candidate[:lot] || 1,
-          direction: direction,
-          trend_score: trend_metric,
-          source: 'supertrend_adx',
-          multiplier: 1
-        }
-      }
+      # NOTE: This method is DEPRECATED - process_index() now calls Signal::Engine.run_for() directly
+      # Kept for backward compatibility if evaluate_supertrend_signal() is called elsewhere
+      # 
+      # The new flow uses Signal::Engine.run_for() which includes:
+      # - Phase 1: Quick No-Trade pre-check
+      # - Signal generation (Supertrend + ADX)
+      # - Strike selection
+      # - Phase 2: Detailed No-Trade validation
+      # - EntryGuard.try_enter()
+      
+      # For now, delegate to run_for() which has full No-Trade Engine integration
+      Signal::Engine.run_for(index_cfg)
+      nil # run_for() handles entry internally, return nil to indicate processed
     rescue StandardError => e
       Rails.logger.error("[SignalScheduler] Legacy indicator evaluation failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
       nil
