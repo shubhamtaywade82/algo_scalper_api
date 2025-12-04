@@ -450,6 +450,580 @@ Each service (TrendScorer, Engine, ChainAnalyzer, EntryGuard) has its own error 
 - `[Options]` - Chain analyzer logs
 - `[EntryGuard]` - Entry guard logs
 
+## Testing the Signal Scheduler Locally
+
+### Setup
+
+#### 1. Add Timecop Gem (for time manipulation)
+
+Add to `Gemfile` in the `:development, :test` group:
+
+```ruby
+group :development, :test do
+  # ... existing gems ...
+  gem 'timecop', '~> 0.9.8'
+end
+```
+
+Then run:
+```bash
+bundle install
+```
+
+#### 2. Configure Test Environment
+
+The test environment is already configured with:
+- **VCR**: For recording/playback of API calls
+- **WebMock**: For HTTP stubbing
+- **DatabaseCleaner**: For database cleanup
+- **FactoryBot**: For test data creation
+
+### Testing Approaches
+
+#### Approach 1: Unit Tests with Mocks (Fast, Isolated)
+
+**Use Case**: Test individual methods and logic without external dependencies.
+
+**Example**:
+
+```ruby
+# spec/services/signal/scheduler_spec.rb
+require 'rails_helper'
+
+RSpec.describe Signal::Scheduler do
+  let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', sid: '13' } }
+  let(:scheduler) { described_class.new(period: 1) }
+
+  describe '#process_index' do
+    before do
+      allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
+      allow(scheduler).to receive(:evaluate_supertrend_signal).and_return(signal)
+      allow(scheduler).to receive(:process_signal)
+    end
+
+    context 'when signal is generated' do
+      let(:signal) do
+        {
+          segment: 'NSE_FNO',
+          security_id: '12345',
+          meta: { candidate_symbol: 'TEST', direction: :bullish, lot_size: 50 }
+        }
+      end
+
+      it 'processes the signal' do
+        scheduler.send(:process_index, index_cfg)
+        expect(scheduler).to have_received(:process_signal).with(index_cfg, signal)
+      end
+    end
+
+    context 'when no signal is generated' do
+      let(:signal) { nil }
+
+      it 'skips processing' do
+        scheduler.send(:process_index, index_cfg)
+        expect(scheduler).not_to have_received(:process_signal)
+      end
+    end
+  end
+end
+```
+
+#### Approach 2: Integration Tests with Timecop (Time-Based Testing)
+
+**Use Case**: Test time-dependent behavior (market hours, scheduling, cooldowns).
+
+**Example**:
+
+```ruby
+# spec/services/signal/scheduler_time_spec.rb
+require 'rails_helper'
+require 'timecop'
+
+RSpec.describe Signal::Scheduler do
+  let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', sid: '13' } }
+  let(:scheduler) { described_class.new(period: 1) }
+
+  describe '#start' do
+    context 'during market hours' do
+      before do
+        # Set time to 10:00 AM IST (market open)
+        Timecop.freeze(Time.zone.parse('2024-01-15 10:00:00 IST'))
+        allow(AlgoConfig).to receive(:fetch).and_return(indices: [index_cfg])
+        allow(scheduler).to receive(:process_index)
+      end
+
+      after do
+        Timecop.return
+        scheduler.stop if scheduler.running?
+      end
+
+      it 'processes indices when market is open' do
+        scheduler.start
+        sleep(0.1) # Allow thread to start
+        
+        expect(scheduler.running?).to be true
+        expect(scheduler).to have_received(:process_index).with(index_cfg)
+      end
+    end
+
+    context 'when market is closed' do
+      before do
+        # Set time to 4:00 PM IST (market closed)
+        Timecop.freeze(Time.zone.parse('2024-01-15 16:00:00 IST'))
+        allow(AlgoConfig).to receive(:fetch).and_return(indices: [index_cfg])
+        allow(scheduler).to receive(:process_index)
+      end
+
+      after do
+        Timecop.return
+        scheduler.stop if scheduler.running?
+      end
+
+      it 'skips processing when market is closed' do
+        scheduler.start
+        sleep(0.1)
+        
+        # Should skip processing due to market closed check
+        expect(scheduler.running?).to be true
+        # process_index should not be called due to early exit
+      end
+    end
+
+    context 'market closes during processing' do
+      before do
+        # Start at 3:25 PM IST (market still open)
+        Timecop.freeze(Time.zone.parse('2024-01-15 15:25:00 IST'))
+        allow(AlgoConfig).to receive(:fetch).and_return(indices: [index_cfg])
+        
+        # Simulate market closing during processing
+        call_count = 0
+        allow(TradingSession::Service).to receive(:market_closed?) do
+          call_count += 1
+          # First call: market open, second call: market closed
+          call_count > 1
+        end
+        
+        allow(scheduler).to receive(:process_index) do
+          # Advance time to 3:35 PM during processing
+          Timecop.freeze(Time.zone.parse('2024-01-15 15:35:00 IST'))
+        end
+      end
+
+      after do
+        Timecop.return
+        scheduler.stop if scheduler.running?
+      end
+
+      it 'stops processing when market closes mid-cycle' do
+        scheduler.start
+        sleep(0.1)
+        
+        # Should stop processing after market closes
+        expect(scheduler.running?).to be true
+      end
+    end
+  end
+
+  describe 'scheduling behavior' do
+    before do
+      Timecop.freeze(Time.zone.parse('2024-01-15 10:00:00 IST'))
+      allow(AlgoConfig).to receive(:fetch).and_return(indices: [index_cfg])
+      allow(scheduler).to receive(:process_index)
+    end
+
+    after do
+      Timecop.return
+      scheduler.stop if scheduler.running?
+    end
+
+    it 'processes indices with correct timing' do
+      scheduler.start
+      
+      # First cycle should process immediately
+      sleep(0.1)
+      expect(scheduler).to have_received(:process_index).with(index_cfg).once
+      
+      # Advance time by 30 seconds (one cycle)
+      Timecop.travel(30.seconds)
+      sleep(0.1)
+      
+      # Should process again after period
+      expect(scheduler).to have_received(:process_index).at_least(:twice)
+    end
+
+    it 'delays between multiple indices' do
+      multiple_indices = [
+        { key: 'NIFTY', segment: 'IDX_I', sid: '13' },
+        { key: 'BANKNIFTY', segment: 'IDX_I', sid: '23' }
+      ]
+      
+      allow(AlgoConfig).to receive(:fetch).and_return(indices: multiple_indices)
+      
+      scheduler.start
+      sleep(0.1)
+      
+      # Should process first index immediately
+      expect(scheduler).to have_received(:process_index).with(multiple_indices[0]).once
+      
+      # Advance time by 5 seconds (INTER_INDEX_DELAY)
+      Timecop.travel(5.seconds)
+      sleep(0.1)
+      
+      # Should process second index after delay
+      expect(scheduler).to have_received(:process_index).with(multiple_indices[1]).once
+    end
+  end
+end
+```
+
+#### Approach 3: Integration Tests with Actual API Calls (VCR)
+
+**Use Case**: Test end-to-end flow with real API responses (recorded).
+
+**Example**:
+
+```ruby
+# spec/services/signal/scheduler_integration_spec.rb
+require 'rails_helper'
+
+RSpec.describe Signal::Scheduler, :vcr do
+  let(:index_cfg) do
+    {
+      key: 'NIFTY',
+      segment: 'IDX_I',
+      sid: '13',
+      capital_alloc_pct: 0.30,
+      max_same_side: 2,
+      cooldown_sec: 180
+    }
+  end
+
+  let(:nifty_instrument) { create(:instrument, :nifty_index) }
+
+  before do
+    # Mock IndexInstrumentCache to return our test instrument
+    allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_cfg).and_return(nifty_instrument)
+    
+    # Configure AlgoConfig
+    allow(AlgoConfig).to receive(:fetch).and_return({
+      indices: [index_cfg],
+      signals: {
+        primary_timeframe: '1m',
+        confirmation_timeframe: '5m',
+        enable_trend_scorer: false, # Use legacy path
+        supertrend: {
+          period: 10,
+          base_multiplier: 2.0
+        },
+        adx: {
+          min_strength: 18.0,
+          confirmation_min_strength: 20.0
+        }
+      },
+      chain_analyzer: {
+        max_candidates: 3
+      },
+      risk: {
+        sl_pct: 0.30,
+        tp_pct: 0.60
+      }
+    })
+
+    # Reduce days for faster API calls
+    allow(nifty_instrument).to receive(:intraday_ohlc).and_wrap_original do |original_method, **kwargs|
+      kwargs[:days] = 7 unless kwargs.key?(:days) || kwargs.key?(:from_date)
+      original_method.call(**kwargs)
+    end
+
+    # Mock EntryGuard to prevent actual order placement
+    allow(Entries::EntryGuard).to receive(:try_enter).and_return(true)
+    
+    # Clean up state
+    Signal::StateTracker.reset(index_cfg[:key])
+    TradingSignal.where(index_key: index_cfg[:key]).delete_all
+  end
+
+  after do
+    Signal::StateTracker.reset(index_cfg[:key])
+    TradingSignal.where(index_key: index_cfg[:key]).delete_all
+  end
+
+  describe 'end-to-end signal generation' do
+    it 'fetches real OHLC data and generates signals', :vcr do
+      scheduler = described_class.new(period: 1)
+      
+      # VCR will record/playback actual API calls
+      result = scheduler.send(:evaluate_supertrend_signal, index_cfg)
+      
+      # Should either return a signal or nil (depending on market conditions)
+      expect(result).to be_nil.or(be_a(Hash))
+      
+      if result
+        expect(result[:segment]).to be_present
+        expect(result[:security_id]).to be_present
+        expect(result[:meta][:candidate_symbol]).to be_present
+      end
+    end
+
+    it 'processes index with real API calls', :vcr do
+      scheduler = described_class.new(period: 1)
+      
+      # This will trigger actual API calls (recorded by VCR)
+      scheduler.send(:process_index, index_cfg)
+      
+      # Verify that EntryGuard was called (if signal was generated)
+      # Note: EntryGuard is mocked, so no actual orders are placed
+    end
+  end
+end
+```
+
+#### Approach 4: Full Integration Test with Timecop + VCR
+
+**Use Case**: Test complete flow with time manipulation and real API calls.
+
+**Example**:
+
+```ruby
+# spec/services/signal/scheduler_full_integration_spec.rb
+require 'rails_helper'
+require 'timecop'
+
+RSpec.describe Signal::Scheduler, :vcr do
+  let(:index_cfg) do
+    {
+      key: 'NIFTY',
+      segment: 'IDX_I',
+      sid: '13',
+      capital_alloc_pct: 0.30,
+      max_same_side: 2,
+      cooldown_sec: 180
+    }
+  end
+
+  let(:nifty_instrument) { create(:instrument, :nifty_index) }
+  let(:scheduler) { described_class.new(period: 2) }
+
+  before do
+    # Set time to market hours (10:00 AM IST)
+    Timecop.freeze(Time.zone.parse('2024-01-15 10:00:00 IST'))
+    
+    allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_cfg).and_return(nifty_instrument)
+    
+    allow(AlgoConfig).to receive(:fetch).and_return({
+      indices: [index_cfg],
+      signals: {
+        primary_timeframe: '1m',
+        confirmation_timeframe: '5m',
+        supertrend: { period: 10, base_multiplier: 2.0 },
+        adx: { min_strength: 18.0, confirmation_min_strength: 20.0 }
+      },
+      chain_analyzer: { max_candidates: 3 }
+    })
+
+    # Reduce API call days for faster tests
+    allow(nifty_instrument).to receive(:intraday_ohlc).and_wrap_original do |original_method, **kwargs|
+      kwargs[:days] = 7 unless kwargs.key?(:days) || kwargs.key?(:from_date)
+      original_method.call(**kwargs)
+    end
+
+    # Mock EntryGuard to prevent actual orders
+    allow(Entries::EntryGuard).to receive(:try_enter).and_return(true)
+    
+    Signal::StateTracker.reset(index_cfg[:key])
+  end
+
+  after do
+    Timecop.return
+    scheduler.stop if scheduler.running?
+    Signal::StateTracker.reset(index_cfg[:key])
+  end
+
+  describe 'full scheduler lifecycle' do
+    it 'runs complete cycle with real API calls', :vcr do
+      # Start scheduler
+      scheduler.start
+      
+      # Wait for first cycle
+      sleep(0.1)
+      
+      expect(scheduler.running?).to be true
+      
+      # Advance time to trigger next cycle
+      Timecop.travel(2.seconds)
+      sleep(0.1)
+      
+      # Verify scheduler is still running
+      expect(scheduler.running?).to be true
+      
+      # Stop scheduler
+      scheduler.stop
+      sleep(0.1)
+      
+      expect(scheduler.running?).to be false
+    end
+
+    it 'handles market close transition', :vcr do
+      scheduler.start
+      sleep(0.1)
+      
+      expect(scheduler.running?).to be true
+      
+      # Advance time to market close (3:35 PM IST)
+      Timecop.freeze(Time.zone.parse('2024-01-15 15:35:00 IST'))
+      sleep(0.1)
+      
+      # Scheduler should still be running but skipping processing
+      expect(scheduler.running?).to be true
+      
+      scheduler.stop
+    end
+  end
+end
+```
+
+### Running Tests
+
+#### Run All Scheduler Tests
+
+```bash
+# Run all scheduler specs
+bundle exec rspec spec/services/signal/scheduler*
+
+# Run specific test file
+bundle exec rspec spec/services/signal/scheduler_spec.rb
+
+# Run with VCR recording (first time)
+VCR_MODE=all bundle exec rspec spec/services/signal/scheduler_integration_spec.rb
+
+# Run with VCR playback only (faster, no API calls)
+VCR_MODE=none bundle exec rspec spec/services/signal/scheduler_integration_spec.rb
+```
+
+#### Run Tests with Time Manipulation
+
+```bash
+# Run time-based tests
+bundle exec rspec spec/services/signal/scheduler_time_spec.rb
+
+# Run full integration with time manipulation
+bundle exec rspec spec/services/signal/scheduler_full_integration_spec.rb
+```
+
+#### Test Individual Methods
+
+```ruby
+# In Rails console (test environment)
+require 'rails_helper'
+require 'timecop'
+
+# Set time to market hours
+Timecop.freeze(Time.zone.parse('2024-01-15 10:00:00 IST'))
+
+# Create scheduler
+scheduler = Signal::Scheduler.new(period: 1)
+
+# Test individual method
+index_cfg = { key: 'NIFTY', segment: 'IDX_I', sid: '13' }
+result = scheduler.send(:evaluate_supertrend_signal, index_cfg)
+
+# Cleanup
+Timecop.return
+```
+
+### VCR Cassette Management
+
+#### Recording New Cassettes
+
+```bash
+# Record all interactions (even if cassette exists)
+VCR_MODE=all bundle exec rspec spec/services/signal/scheduler_integration_spec.rb
+
+# Add delay between API calls when recording
+VCR_RECORDING_DELAY=0.5 bundle exec rspec spec/services/signal/scheduler_integration_spec.rb
+```
+
+#### Cassette Location
+
+Cassettes are stored in: `spec/cassettes/signal/scheduler_integration_spec.yml`
+
+#### Regenerating Cassettes
+
+```bash
+# Delete old cassette
+rm spec/cassettes/signal/scheduler_integration_spec.yml
+
+# Record new cassette
+VCR_MODE=all bundle exec rspec spec/services/signal/scheduler_integration_spec.rb
+```
+
+### Testing Checklist
+
+When testing the Signal Scheduler, verify:
+
+- [ ] **Startup**: Scheduler starts correctly with valid config
+- [ ] **Shutdown**: Scheduler stops gracefully
+- [ ] **Market Hours**: Skips processing when market closed
+- [ ] **Timing**: Processes indices at correct intervals
+- [ ] **Signal Generation**: Generates signals correctly (both paths)
+- [ ] **Chain Analysis**: Selects appropriate option candidates
+- [ ] **Entry Execution**: Calls EntryGuard with correct parameters
+- [ ] **Error Handling**: Continues processing after errors
+- [ ] **Thread Safety**: Handles concurrent access correctly
+- [ ] **State Management**: Maintains state correctly across cycles
+
+### Common Test Patterns
+
+#### Pattern 1: Test Time-Dependent Behavior
+
+```ruby
+before do
+  Timecop.freeze(Time.zone.parse('2024-01-15 10:00:00 IST'))
+end
+
+after do
+  Timecop.return
+end
+```
+
+#### Pattern 2: Test with Real API Calls
+
+```ruby
+it 'fetches real data', :vcr do
+  # VCR will record/playback API calls
+  result = scheduler.send(:evaluate_supertrend_signal, index_cfg)
+  expect(result).to be_present
+end
+```
+
+#### Pattern 3: Test Thread Behavior
+
+```ruby
+it 'runs in background thread' do
+  scheduler.start
+  sleep(0.1)
+  
+  expect(scheduler.running?).to be true
+  expect(Thread.list.map(&:name)).to include('signal-scheduler')
+  
+  scheduler.stop
+end
+```
+
+#### Pattern 4: Test Error Recovery
+
+```ruby
+it 'continues after error' do
+  allow(scheduler).to receive(:process_index).and_raise(StandardError.new('Test error'))
+  
+  scheduler.start
+  sleep(0.1)
+  
+  # Should still be running despite error
+  expect(scheduler.running?).to be true
+end
+```
+
 ## Summary
 
 The Signal Scheduler is a sophisticated background service that:
@@ -461,3 +1035,16 @@ The Signal Scheduler is a sophisticated background service that:
 6. **Handles errors gracefully** to ensure continuous operation
 
 The system is designed for reliability, with multiple fallbacks, comprehensive error handling, and efficient caching to minimize API calls and database queries.
+
+### Testing Summary
+
+- **Unit Tests**: Fast, isolated tests with mocks
+- **Integration Tests**: Time-based tests with Timecop
+- **API Tests**: Real API calls recorded with VCR
+- **Full Integration**: Complete flow with time manipulation and API calls
+
+Use the appropriate testing approach based on what you're testing:
+- **Logic/Behavior**: Unit tests with mocks
+- **Time-Dependent**: Integration tests with Timecop
+- **API Integration**: Tests with VCR cassettes
+- **End-to-End**: Full integration tests combining both

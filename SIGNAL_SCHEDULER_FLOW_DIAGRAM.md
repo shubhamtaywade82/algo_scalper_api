@@ -312,3 +312,55 @@ Signal::Scheduler
 │  Stopped    │
 └─────────────┘
 ```
+
+## Quick Testing Reference
+
+### Setup
+
+```bash
+# Add timecop to Gemfile
+gem 'timecop', '~> 0.9.8', group: [:development, :test]
+
+# Install
+bundle install
+```
+
+### Test Commands
+
+```bash
+# Run all scheduler tests
+bundle exec rspec spec/services/signal/scheduler*
+
+# Run with VCR recording
+VCR_MODE=all bundle exec rspec spec/services/signal/scheduler_integration_spec.rb
+
+# Run with time manipulation
+bundle exec rspec spec/services/signal/scheduler_time_spec.rb
+```
+
+### Timecop Usage
+
+```ruby
+# Freeze time
+Timecop.freeze(Time.zone.parse('2024-01-15 10:00:00 IST'))
+
+# Travel forward
+Timecop.travel(30.seconds)
+
+# Return to real time
+Timecop.return
+```
+
+### VCR Usage
+
+```ruby
+# Mark test to use VCR
+it 'fetches real data', :vcr do
+  # VCR will record/playback API calls
+end
+
+# Record new cassette
+VCR_MODE=all bundle exec rspec spec/services/signal/scheduler_integration_spec.rb
+```
+
+See `SIGNAL_SCHEDULER_DETAILED_ANALYSIS.md` for complete testing documentation.
