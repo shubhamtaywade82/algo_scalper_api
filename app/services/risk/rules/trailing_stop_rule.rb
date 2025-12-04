@@ -29,7 +29,7 @@ module Risk
         hwm = context.high_water_mark
         return skip_result if pnl.nil? || hwm.nil? || hwm.zero?
 
-        drop_threshold = context.config_bigdecimal(:exit_drop_pct, BigDecimal(0))
+        drop_threshold = context.config_bigdecimal(:exit_drop_pct, BigDecimal('0'))
         return skip_result if drop_threshold.zero?
 
         drop_pct = (hwm - pnl) / hwm
