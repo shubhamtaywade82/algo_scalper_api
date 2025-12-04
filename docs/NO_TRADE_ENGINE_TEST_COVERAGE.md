@@ -277,6 +277,28 @@ COVERAGE=true bundle exec rspec spec/services/entries/
 
 ---
 
+## Backtesting
+
+### Backtest Service with No-Trade Engine
+
+A complete backtest service has been created to test No-Trade Engine + Supertrend + ADX on historical data:
+
+- **Service**: `BacktestServiceWithNoTradeEngine`
+- **Rake Task**: `backtest:no_trade_engine[symbol,days]`
+- **Comparison**: `backtest:compare[symbol,days]`
+- **Documentation**: `docs/BACKTEST_NO_TRADE_ENGINE.md`
+
+**Usage**:
+```bash
+# Backtest NIFTY (90 days)
+bundle exec rake backtest:no_trade_engine[NIFTY]
+
+# Compare with vs without No-Trade Engine
+bundle exec rake backtest:compare[NIFTY,90]
+```
+
+---
+
 ## Missing Test Coverage (TODO)
 
 **Last Updated**: Comprehensive codebase analysis
