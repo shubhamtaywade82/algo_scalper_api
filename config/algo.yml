@@ -2,6 +2,18 @@ paper_trading:
   enabled: true
   balance: 100000
 
+# Trading time restrictions based on profitability analysis
+# Use analyze_positions_by_time_intervals.rb to identify non-profitable periods
+# Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
+# Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
+trading_time_restrictions:
+  enabled: false # Set to true to enable time-based restrictions
+  avoid_periods: [] # Add time periods to avoid (e.g., ["10:30-11:30", "14:00-15:00"])
+  # Example based on analysis results:
+  # avoid_periods:
+  #   - "10:30-11:30"  # Morning non-profitable period
+  #   - "14:00-15:00"  # Afternoon non-profitable period
+
 feature_flags:
   enable_direction_before_chain: true
   enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
