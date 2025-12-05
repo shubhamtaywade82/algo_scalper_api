@@ -76,7 +76,7 @@ module Positions
     def index_config_for_key(key)
       return nil if key.blank?
 
-      (AlgoConfig.fetch[:indices] || []).find do |cfg|
+      IndexConfigLoader.load_indices.find do |cfg|
         candidate = cfg[:key] || cfg['key']
         candidate.to_s.casecmp?(key.to_s)
       end

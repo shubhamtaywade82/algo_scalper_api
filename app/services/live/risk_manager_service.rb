@@ -76,7 +76,8 @@ module Live
           begin
             # Skip monitoring if market is closed and no active positions
             if TradingSession::Service.market_closed?
-              active_count = PositionTracker.active.count
+              # Use cached active positions to avoid redundant query
+              active_count = Positions::ActivePositionsCache.instance.active_trackers.size
               if active_count.zero?
                 # Market closed and no active positions - sleep longer
                 sleep 60 # Check every minute when market is closed and no positions
@@ -424,7 +425,7 @@ module Live
           running: running?,
           thread_alive: @thread&.alive? || false,
           last_cycle_time: @metrics[:last_cycle_time],
-          active_positions: PositionTracker.active.count,
+          active_positions: Positions::ActivePositionsCache.instance.active_trackers.size,
           circuit_breaker_state: @circuit_breaker_state,
           recent_errors: @metrics[:recent_api_errors] || 0,
           uptime_seconds: running? && @started_at ? (Time.current - @started_at).to_i : 0
@@ -479,8 +480,8 @@ module Live
 
       # Also check positions not in ActiveCache (fallback)
       # Load all trackers to find ones not in ActiveCache
-      # Note: This is a fallback check, so we load fresh data
-      all_trackers = PositionTracker.active.includes(:instrument).to_a
+      # Use cached active positions to avoid redundant query
+      all_trackers = Positions::ActivePositionsCache.instance.active_trackers
       trackers_not_in_cache = all_trackers.reject { |t| tracker_map[t.id] }
 
       positions.each do |position|
@@ -817,7 +818,8 @@ module Live
       @last_ensure_all ||= Time.zone.at(0)
       return if Time.current - @last_ensure_all < 5.seconds
 
-      trackers = PositionTracker.active.includes(:instrument).to_a
+      # Use cached active positions to avoid redundant query
+      trackers = Positions::ActivePositionsCache.instance.active_trackers
       return if trackers.empty?
 
       @last_ensure_all = Time.current
@@ -1258,7 +1260,8 @@ module Live
       @last_ensure_active_cache = Time.current
       active_cache = Positions::ActiveCache.instance
 
-      PositionTracker.active.find_each do |tracker|
+      # Use cached active positions to avoid redundant query
+      Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
         next unless tracker.entry_price&.positive?
 
         # Check if already in cache
@@ -1283,7 +1286,8 @@ module Live
 
       hub.start! unless hub.running?
 
-      PositionTracker.active.find_each do |tracker|
+      # Use cached active positions to avoid redundant query
+      Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
         next unless tracker.security_id.present?
 
         segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment

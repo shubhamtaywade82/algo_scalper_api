@@ -20,20 +20,29 @@ module Signal
 
         # Phase 1: Quick No-Trade pre-check (BEFORE expensive signal generation)
         # Returns validation result + option chain data for reuse in Phase 2
-        quick_no_trade_result = quick_no_trade_precheck(index_cfg: index_cfg, instrument: instrument)
-        unless quick_no_trade_result[:allowed]
-          Rails.logger.warn(
-            "[Signal] NO-TRADE pre-check blocked #{index_cfg[:key]}: " \
-            "score=#{quick_no_trade_result[:score]}/11, reasons=#{quick_no_trade_result[:reasons].join('; ')}"
-          )
-          return
-        end
-
-        # Store option chain data from Phase 1 for reuse in Phase 2
-        cached_option_chain = quick_no_trade_result[:option_chain_data]
-        cached_bars_1m = quick_no_trade_result[:bars_1m]
-
+        # Can be disabled via config: signals.enable_no_trade_engine = false
         signals_cfg = AlgoConfig.fetch[:signals] || {}
+        enable_no_trade_engine = signals_cfg.fetch(:enable_no_trade_engine, true)
+
+        cached_option_chain = nil
+        cached_bars_1m = nil
+
+        if enable_no_trade_engine
+          quick_no_trade_result = quick_no_trade_precheck(index_cfg: index_cfg, instrument: instrument)
+          unless quick_no_trade_result[:allowed]
+            Rails.logger.warn(
+              "[Signal] NO-TRADE pre-check blocked #{index_cfg[:key]}: " \
+              "score=#{quick_no_trade_result[:score]}/11, reasons=#{quick_no_trade_result[:reasons].join('; ')}"
+            )
+            return
+          end
+
+          # Store option chain data from Phase 1 for reuse in Phase 2
+          cached_option_chain = quick_no_trade_result[:option_chain_data]
+          cached_bars_1m = quick_no_trade_result[:bars_1m]
+        else
+          Rails.logger.info("[Signal] NoTradeEngine Phase 1 DISABLED for #{index_cfg[:key]} - skipping pre-check")
+        end
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
         enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, false)
@@ -133,6 +142,15 @@ module Signal
                                        adx_cfg[:confirmation_min_strength] ||
                                        adx_cfg[:min_strength]
 
+                                       pp confirmation_adx_threshold
+                                       pp enable_adx_filter
+                                       pp adx_cfg
+                                       pp index_adx_thresholds
+                                       pp mode_config
+                                       pp adx_cfg[:confirmation_min_strength]
+                                       pp adx_cfg[:min_strength]
+                                       pp index_adx_thresholds[:confirmation_min_strength]
+                                       pp mode_config[:adx_confirmation_min_strength]
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
                                    confirmation_adx_threshold
@@ -230,20 +248,25 @@ module Signal
 
         # Phase 2: Detailed No-Trade validation (AFTER signal generation, with full context)
         # Reuses option chain and bars_1m from Phase 1 to avoid duplicate fetches
-        detailed_no_trade = validate_no_trade_conditions(
-          index_cfg: index_cfg,
-          instrument: instrument,
-          direction: final_direction,
-          cached_option_chain: cached_option_chain,
-          cached_bars_1m: cached_bars_1m
-        )
-
-        unless detailed_no_trade[:allowed]
-          Rails.logger.warn(
-            "[Signal] NO-TRADE detailed validation blocked #{index_cfg[:key]}: " \
-            "score=#{detailed_no_trade[:score]}/11, reasons=#{detailed_no_trade[:reasons].join('; ')}"
+        # Can be disabled via config: signals.enable_no_trade_engine = false
+        if enable_no_trade_engine
+          detailed_no_trade = validate_no_trade_conditions(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            direction: final_direction,
+            cached_option_chain: cached_option_chain,
+            cached_bars_1m: cached_bars_1m
           )
-          return
+
+          unless detailed_no_trade[:allowed]
+            Rails.logger.warn(
+              "[Signal] NO-TRADE detailed validation blocked #{index_cfg[:key]}: " \
+              "score=#{detailed_no_trade[:score]}/11, reasons=#{detailed_no_trade[:reasons].join('; ')}"
+            )
+            return
+          end
+        else
+          Rails.logger.info("[Signal] NoTradeEngine Phase 2 DISABLED for #{index_cfg[:key]} - skipping detailed validation")
         end
 
         picks.each_with_index do |pick, _index|
@@ -483,7 +506,11 @@ module Signal
       def get_validation_mode_config
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         mode = signals_cfg[:validation_mode] || 'balanced'
-        mode_config = signals_cfg.dig(:validation_modes, mode.to_sym) || signals_cfg.dig(:validation_modes, :balanced)
+        mode_config = signals_cfg.dig(:validation_modes,
+                                      mode.to_sym) || signals_cfg.dig(:validation_modes, :balanced) || {}
+
+        # Ensure mode_config is always a Hash (handle edge cases where config might be wrong type)
+        mode_config = {} unless mode_config.is_a?(Hash)
 
         # Merge with mode name for logging
         mode_config.merge(mode: mode)
@@ -777,10 +804,10 @@ module Signal
         enabled_indicators.each do |ic|
           indicator_type = ic[:type].to_s.downcase.to_sym
           ic[:config] ||= {}
-          
+
           # Merge threshold config for this indicator type
-          if threshold_preset[indicator_type]
-            ic[:config] = ic[:config].merge(threshold_preset[indicator_type])
+          if threshold_preset[indicator_type] && ic[:config].is_a?(Hash)
+            ic[:config] = (ic[:config] || {}).merge(threshold_preset[indicator_type])
           end
         end
 
@@ -816,7 +843,7 @@ module Signal
         signal = strategy.generate_signal(current_index)
 
         if signal.nil?
-          Rails.logger.debug("[Signal] Multi-indicator strategy did not generate signal for #{index_cfg[:key]} at index #{current_index}")
+          Rails.logger.debug { "[Signal] Multi-indicator strategy did not generate signal for #{index_cfg[:key]} at index #{current_index}" }
           return {
             status: :ok,
             series: series,
@@ -836,7 +863,7 @@ module Signal
           Rails.logger.info("[Signal] Confluence for #{index_cfg[:key]}: score=#{confluence[:score]}% strength=#{confluence[:strength]} (#{confluence[:agreeing_count]}/#{confluence[:total_indicators]} indicators agree on #{confluence[:dominant_direction]})")
           confluence[:breakdown].each do |ind|
             status = ind[:agrees] ? '✓' : '✗'
-            Rails.logger.debug("[Signal]   #{status} #{ind[:name]}: #{ind[:direction]} (confidence: #{ind[:confidence]})")
+            Rails.logger.debug { "[Signal]   #{status} #{ind[:name]}: #{ind[:direction]} (confidence: #{ind[:confidence]})" }
           end
         end
 
@@ -847,7 +874,7 @@ module Signal
 
         enabled_indicators.each do |ic|
           indicator_name = ic[:type].to_s.downcase
-          if indicator_name == 'supertrend' || indicator_name == 'st'
+          if %w[supertrend st].include?(indicator_name)
             # Calculate supertrend for compatibility
             st_cfg = global_config[:supertrend_cfg]
             st_service = Indicators::Supertrend.new(series: series, **st_cfg)
@@ -914,83 +941,81 @@ module Signal
       # @param instrument [Instrument] Instrument object
       # @return [Hash] Validation result with :allowed, :score, :reasons
       def quick_no_trade_precheck(index_cfg:, instrument:)
-        begin
-          current_time = Time.current.strftime('%H:%M')
-          reasons = []
-          score = 0
-          option_chain_data = nil
-          bars_1m = nil
+        current_time = Time.current.strftime('%H:%M')
+        reasons = []
+        score = 0
+        option_chain_data = nil
+        bars_1m = nil
 
-          # Time windows (fastest check - no data needed)
-          if current_time >= '09:15' && current_time <= '09:18'
-            reasons << 'Avoid first 3 minutes'
+        # Time windows (fastest check - no data needed)
+        if current_time >= '09:15' && current_time <= '09:18'
+          reasons << 'Avoid first 3 minutes'
+          score += 1
+        end
+
+        if current_time >= '11:20' && current_time <= '13:30'
+          reasons << 'Lunch-time theta zone'
+          score += 1
+        end
+
+        if current_time > '15:05'
+          reasons << 'Post 3:05 PM - theta crush'
+          score += 1
+        end
+
+        # Basic structure check (needs bars_1m)
+        bars_1m = instrument.candle_series(interval: '1')
+        if bars_1m&.candles&.any?
+          bars_1m_array = bars_1m.candles
+
+          # NOTE: BOS check removed from Phase 1 to avoid duplicate penalty
+          # BOS is checked in Phase 2 with full context
+
+          # Basic volatility check
+          range_pct = Entries::RangeUtils.range_pct(bars_1m_array.last(10))
+          if range_pct < 0.1
+            reasons << 'Low volatility: 10m range < 0.1%'
             score += 1
           end
+        end
 
-          if current_time >= '11:20' && current_time <= '13:30'
-            reasons << 'Lunch-time theta zone'
-            score += 1
-          end
+        # Basic option chain check (IV threshold, spread)
+        expiry_list = instrument.expiry_list
+        expiry_date = expiry_list&.first
+        if expiry_date
+          option_chain_raw = instrument.fetch_option_chain(expiry_date)
+          option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
 
-          if current_time > '15:05'
-            reasons << 'Post 3:05 PM - theta crush'
-            score += 1
-          end
+          if option_chain_data
+            chain_wrapper = Entries::OptionChainWrapper.new(
+              chain_data: option_chain_data,
+              index_key: index_cfg[:key]
+            )
 
-          # Basic structure check (needs bars_1m)
-          bars_1m = instrument.candle_series(interval: '1')
-          if bars_1m&.candles&.any?
-            bars_1m_array = bars_1m.candles
+            min_iv_threshold = index_cfg[:key].to_s.upcase.include?('BANK') ? 13 : 10
+            if chain_wrapper.atm_iv && chain_wrapper.atm_iv < min_iv_threshold
+              reasons << "IV too low (#{chain_wrapper.atm_iv.round(2)} < #{min_iv_threshold})"
+              score += 1
+            end
 
-            # NOTE: BOS check removed from Phase 1 to avoid duplicate penalty
-            # BOS is checked in Phase 2 with full context
-
-            # Basic volatility check
-            range_pct = Entries::RangeUtils.range_pct(bars_1m_array.last(10))
-            if range_pct < 0.1
-              reasons << 'Low volatility: 10m range < 0.1%'
+            if chain_wrapper.spread_wide?
+              reasons << 'Wide bid-ask spread'
               score += 1
             end
           end
-
-          # Basic option chain check (IV threshold, spread)
-          expiry_list = instrument.expiry_list
-          expiry_date = expiry_list&.first
-          if expiry_date
-            option_chain_raw = instrument.fetch_option_chain(expiry_date)
-            option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
-
-            if option_chain_data
-              chain_wrapper = Entries::OptionChainWrapper.new(
-                chain_data: option_chain_data,
-                index_key: index_cfg[:key]
-              )
-
-              min_iv_threshold = index_cfg[:key].to_s.upcase.include?('BANK') ? 13 : 10
-              if chain_wrapper.atm_iv && chain_wrapper.atm_iv < min_iv_threshold
-                reasons << "IV too low (#{chain_wrapper.atm_iv.round(2)} < #{min_iv_threshold})"
-                score += 1
-              end
-
-              if chain_wrapper.spread_wide?
-                reasons << 'Wide bid-ask spread'
-                score += 1
-              end
-            end
-          end
-
-          {
-            allowed: score < 3,
-            score: score,
-            reasons: reasons,
-            option_chain_data: option_chain_data, # Return for reuse in Phase 2
-            bars_1m: bars_1m # Return for reuse in Phase 2
-          }
-        rescue StandardError => e
-          Rails.logger.error("[Signal] Quick No-Trade pre-check failed: #{e.class} - #{e.message}")
-          # On error, allow to proceed (fail open)
-          { allowed: true, score: 0, reasons: ["Pre-check error: #{e.message}"], option_chain_data: nil, bars_1m: nil }
         end
+
+        {
+          allowed: score < 3,
+          score: score,
+          reasons: reasons,
+          option_chain_data: option_chain_data, # Return for reuse in Phase 2
+          bars_1m: bars_1m # Return for reuse in Phase 2
+        }
+      rescue StandardError => e
+        Rails.logger.error("[Signal] Quick No-Trade pre-check failed: #{e.class} - #{e.message}")
+        # On error, allow to proceed (fail open)
+        { allowed: true, score: 0, reasons: ["Pre-check error: #{e.message}"], option_chain_data: nil, bars_1m: nil }
       end
 
       # Phase 2: Detailed No-Trade validation (after signal generation, with full context)
@@ -1001,49 +1026,47 @@ module Signal
       # @param cached_option_chain [Hash, nil] Option chain data from Phase 1 (optional)
       # @param cached_bars_1m [CandleSeries, nil] 1m bars from Phase 1 (optional)
       # @return [Hash] Validation result with :allowed, :score, :reasons
-      def validate_no_trade_conditions(index_cfg:, instrument:, direction:, cached_option_chain: nil, cached_bars_1m: nil)
-        begin
-          # Reuse bars_1m from Phase 1 if available, otherwise fetch
-          bars_1m = cached_bars_1m || instrument.candle_series(interval: '1')
-          
-          # Always fetch bars_5m (needed for ADX/DI calculations)
-          bars_5m = instrument.candle_series(interval: '5')
+      def validate_no_trade_conditions(index_cfg:, instrument:, direction:, cached_option_chain: nil,
+                                       cached_bars_1m: nil)
+        # Reuse bars_1m from Phase 1 if available, otherwise fetch
+        bars_1m = cached_bars_1m || instrument.candle_series(interval: '1')
 
-          return { allowed: true, score: 0, reasons: [] } unless bars_1m&.candles&.any? && bars_5m&.candles&.any?
+        # Always fetch bars_5m (needed for ADX/DI calculations)
+        bars_5m = instrument.candle_series(interval: '5')
 
-          # Reuse option chain from Phase 1 if available, otherwise fetch
-          option_chain_data = cached_option_chain
-          unless option_chain_data
-            expiry_list = instrument.expiry_list
-            expiry_date = expiry_list&.first
-            option_chain_raw = expiry_date ? instrument.fetch_option_chain(expiry_date) : nil
-            option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
-          end
+        return { allowed: true, score: 0, reasons: [] } unless bars_1m&.candles&.any? && bars_5m&.candles&.any?
 
-          # Build context with full No-Trade Engine validation
-          ctx = Entries::NoTradeContextBuilder.build(
-            index: index_cfg[:key],
-            bars_1m: bars_1m.candles,
-            bars_5m: bars_5m.candles,
-            option_chain: option_chain_data,
-            time: Time.current
-          )
-
-          # Validate with No-Trade Engine
-          result = Entries::NoTradeEngine.validate(ctx)
-
-          {
-            allowed: result.allowed,
-            score: result.score,
-            reasons: result.reasons
-          }
-        rescue StandardError => e
-          Rails.logger.error("[Signal] No-Trade Engine validation failed: #{e.class} - #{e.message}")
-          # On error, allow trade (fail open) but log the error
-          { allowed: true, score: 0, reasons: ["Validation error: #{e.message}"] }
+        # Reuse option chain from Phase 1 if available, otherwise fetch
+        option_chain_data = cached_option_chain
+        unless option_chain_data
+          expiry_list = instrument.expiry_list
+          expiry_date = expiry_list&.first
+          option_chain_raw = expiry_date ? instrument.fetch_option_chain(expiry_date) : nil
+          option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
         end
+
+        # Build context with full No-Trade Engine validation
+        ctx = Entries::NoTradeContextBuilder.build(
+          index: index_cfg[:key],
+          bars_1m: bars_1m.candles,
+          bars_5m: bars_5m.candles,
+          option_chain: option_chain_data,
+          time: Time.current
+        )
+
+        # Validate with No-Trade Engine
+        result = Entries::NoTradeEngine.validate(ctx)
+
+        {
+          allowed: result.allowed,
+          score: result.score,
+          reasons: result.reasons
+        }
+      rescue StandardError => e
+        Rails.logger.error("[Signal] No-Trade Engine validation failed: #{e.class} - #{e.message}")
+        # On error, allow trade (fail open) but log the error
+        { allowed: true, score: 0, reasons: ["Validation error: #{e.message}"] }
       end
     end
   end
 end
-

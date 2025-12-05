@@ -254,7 +254,8 @@ module Live
     def purge_exited!
       return false unless @redis
 
-      active_ids = PositionTracker.active.pluck(:id).map(&:to_s).to_set
+      # Use cached active positions to avoid redundant query
+      active_ids = Positions::ActivePositionsCache.instance.active_tracker_ids.map(&:to_s).to_set
 
       deleted_count = 0
       pattern = 'pnl:tracker:*'

@@ -83,8 +83,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (use global default)
-      confirmation_min_strength: 31 # 5m ADX threshold (70% of typical ~44)
+      primary_min_strength: 10 # 1m ADX threshold (use global default)
+      confirmation_min_strength: 15 # 5m ADX threshold (70% of typical ~44)
 
     strategies:
       open_interest:
@@ -126,7 +126,7 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~25.5)
+      primary_min_strength: 10 # 1m ADX threshold (70% of typical ~25.5)
       confirmation_min_strength: 10 # 5m ADX threshold (70% of typical ~13.5)
 
     strategies:
@@ -206,6 +206,11 @@ signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
 
+  # NoTradeEngine Configuration
+  # Set to false to disable both Phase 1 (pre-check) and Phase 2 (detailed validation)
+  # Useful for testing the trading system without NoTradeEngine restrictions
+  enable_no_trade_engine: false # Enable NoTradeEngine validation (default: true)
+
   # Supertrend+ADX Strategy Configuration
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
@@ -244,7 +249,7 @@ signals:
       enabled: true
       config:
         period: 14
-        min_strength: 18
+        min_strength: 10
         trading_hours_filter: true
 
     # Example: Add RSI indicator (disabled by default)
@@ -287,8 +292,8 @@ signals:
 
   adx:
     # Global ADX thresholds (used as fallback if per-index thresholds not specified)
-    min_strength: 18 # ADX threshold for 1m timeframe (when enabled)
-    confirmation_min_strength: 20 # ADX threshold for 5m confirmation (when enabled)
+    min_strength: 10 # ADX threshold for 1m timeframe (when enabled)
+    confirmation_min_strength: 15 # ADX threshold for 5m confirmation (when enabled)
     # Note: Per-index thresholds in indices[].adx_thresholds override these values
 
 # ============================================

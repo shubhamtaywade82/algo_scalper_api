@@ -62,7 +62,8 @@ module Live
         begin
           # Skip reconciliation if market is closed and no active positions
           if TradingSession::Service.market_closed?
-            active_count = PositionTracker.active.count
+            # Use cached active positions to avoid redundant query
+            active_count = Positions::ActivePositionsCache.instance.active_trackers.size
             if active_count.zero?
               # Market closed and no active positions - no need to reconcile
               # Sleep longer to reduce CPU usage
@@ -98,7 +99,7 @@ module Live
       @last_reconciliation = Time.current
       @stats[:reconciliations] += 1
 
-      active_trackers = PositionTracker.active.includes(:instrument).to_a
+      active_trackers = Positions::ActivePositionsCache.instance.active_trackers
       return if active_trackers.empty?
 
       hub = Live::MarketFeedHub.instance

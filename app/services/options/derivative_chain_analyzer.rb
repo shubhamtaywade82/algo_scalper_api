@@ -9,7 +9,7 @@ module Options
       @index_key = index_key.to_s.upcase
       @config = config || {}
       @expiry = expiry
-      @index_cfg = AlgoConfig.fetch[:indices]&.find { |idx| idx[:key].to_s.upcase == @index_key }
+      @index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == @index_key }
       raise "unknown_index:#{@index_key}" unless @index_cfg
     end
 

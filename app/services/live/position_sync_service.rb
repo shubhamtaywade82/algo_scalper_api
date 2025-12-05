@@ -41,8 +41,8 @@ module Live
       dhan_positions = DhanHQ::Models::Position.active
       Rails.logger.info("[PositionSync] Found #{dhan_positions.size} active positions in DhanHQ")
 
-      # Get all tracked positions from database with proper preloading
-      tracked_positions = PositionTracker.active.eager_load(:instrument).to_a
+      # Use cached active positions to avoid redundant query
+      tracked_positions = Positions::ActivePositionsCache.instance.active_trackers
       tracked_security_ids = tracked_positions.map { |p| p.security_id.to_s }
 
       Rails.logger.info("[PositionSync] Found #{tracked_positions.size} tracked positions in database")
@@ -73,7 +73,8 @@ module Live
 
       # In paper mode, we only work with PositionTracker records
       # No need to fetch from DhanHQ - paper positions don't exist there
-      tracked_positions = PositionTracker.active.eager_load(:instrument).to_a
+      # Use cached active positions to avoid redundant query
+      tracked_positions = Positions::ActivePositionsCache.instance.active_trackers
       paper_positions = tracked_positions.select(&:paper?)
 
       Rails.logger.info("[PositionSync] Found #{paper_positions.size} paper positions in database")

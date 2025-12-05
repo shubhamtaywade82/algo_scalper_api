@@ -12,6 +12,7 @@ module Signal
       @thread  = nil
       @mutex   = Mutex.new
       @data_provider = data_provider || default_provider
+      @expiry_cache = {}
     end
 
     def start
@@ -24,9 +25,9 @@ module Signal
       end
 
       begin
-        indices = Array(AlgoConfig.fetch[:indices])
+        indices = IndexConfigLoader.load_indices
       rescue StandardError => e
-        Rails.logger.error("[SignalScheduler] Failed to load indices config: #{e.class} - #{e.message}")
+        Rails.logger.error("[SignalScheduler] Failed to load indices: #{e.class} - #{e.message}")
         Rails.logger.debug { e.backtrace.first(5).join("\n") }
         @mutex.synchronize { @running = false }
         return
@@ -52,7 +53,10 @@ module Signal
               next
             end
 
-            indices.each_with_index do |idx_cfg, idx|
+            # Reorder indices by expiry proximity (closer expiry = higher priority)
+            ordered_indices = reorder_indices_by_expiry(indices)
+
+            ordered_indices.each_with_index do |idx_cfg, idx|
               break unless @running
 
               # Re-check market status before each index (market might close during processing)
@@ -110,8 +114,8 @@ module Signal
       # Use run_for() which includes full No-Trade Engine integration
       # run_for() handles: Phase 1 pre-check, signal generation, strike selection, Phase 2 validation, and entry
       Signal::Engine.run_for(index_cfg)
-      
-      # Note: run_for() handles entry internally, so we don't need process_signal() here
+
+      # NOTE: run_for() handles entry internally, so we don't need process_signal() here
       # The old flow (evaluate_supertrend_signal + process_signal) is bypassed
       # This ensures No-Trade Engine validation is always applied
     rescue StandardError => e
@@ -247,14 +251,14 @@ module Signal
     def evaluate_with_legacy_indicators(index_cfg, instrument)
       # NOTE: This method is DEPRECATED - process_index() now calls Signal::Engine.run_for() directly
       # Kept for backward compatibility if evaluate_supertrend_signal() is called elsewhere
-      # 
+      #
       # The new flow uses Signal::Engine.run_for() which includes:
       # - Phase 1: Quick No-Trade pre-check
       # - Signal generation (Supertrend + ADX)
       # - Strike selection
       # - Phase 2: Detailed No-Trade validation
       # - EntryGuard.try_enter()
-      
+
       # For now, delegate to run_for() which has full No-Trade Engine integration
       Signal::Engine.run_for(index_cfg)
       nil # run_for() handles entry internally, return nil to indicate processed
@@ -304,6 +308,90 @@ module Signal
       AlgoConfig.fetch[:feature_flags] || {}
     rescue StandardError
       {}
+    end
+
+    # Reorder indices by expiry proximity (closer expiry = processed first)
+    # @param indices [Array<Hash>] Array of index configurations
+    # @return [Array<Hash>] Indices sorted by expiry proximity (closest first)
+    def reorder_indices_by_expiry(indices)
+      return indices if indices.empty?
+
+      # Cache expiry calculations (expiry dates don't change frequently)
+      cache_key = indices.map { |i| i[:key].to_s }.sort.join(',')
+      if @expiry_cache && @expiry_cache[cache_key] &&
+         (Time.current - @expiry_cache[cache_key][:cached_at]) < 1.hour
+        Rails.logger.debug { "[SignalScheduler] Using cached expiry order for: #{cache_key}" }
+        return @expiry_cache[cache_key][:sorted_indices]
+      end
+
+      @expiry_cache ||= {}
+      Rails.logger.debug { "[SignalScheduler] Calculating expiry order (cache miss) for: #{cache_key}" }
+      today = Time.zone.today
+      indexed_with_expiry = indices.filter_map do |idx_cfg|
+        instrument = IndexInstrumentCache.instance.get_or_fetch(idx_cfg)
+        if instrument
+          expiry_list = instrument.expiry_list
+          if expiry_list&.any?
+            # Parse expiry dates and find nearest
+            parsed_expiries = expiry_list.compact.filter_map do |raw|
+              case raw
+              when Date then raw
+              when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
+              when String
+                begin
+                  Date.parse(raw)
+                rescue ArgumentError
+                  nil
+                end
+              else
+                nil
+              end
+            end
+
+            # Find nearest expiry >= today
+            nearest_expiry = parsed_expiries.select { |date| date >= today }.min
+            days_to_expiry = nearest_expiry ? (nearest_expiry - today).to_i : 999
+
+            {
+              index_cfg: idx_cfg,
+              days_to_expiry: days_to_expiry,
+              expiry_date: nearest_expiry
+            }
+          else
+            Rails.logger.warn("[SignalScheduler] No expiry list for #{idx_cfg[:key]} - using default priority")
+            { index_cfg: idx_cfg, days_to_expiry: 999, expiry_date: nil }
+          end
+        else
+          Rails.logger.warn("[SignalScheduler] No instrument found for #{idx_cfg[:key]} - using default priority")
+          { index_cfg: idx_cfg, days_to_expiry: 999, expiry_date: nil }
+        end
+      rescue StandardError => e
+        Rails.logger.warn("[SignalScheduler] Error calculating expiry for #{idx_cfg[:key]}: #{e.class} - #{e.message}")
+        { index_cfg: idx_cfg, days_to_expiry: 999, expiry_date: nil }
+      end
+
+      # Sort by days_to_expiry (ascending - closer expiry first)
+      sorted = indexed_with_expiry.sort_by { |item| item[:days_to_expiry] }
+
+      # Log the ordering for debugging
+      if sorted.size > 1
+        order_str = sorted.map do |item|
+          expiry_info = item[:expiry_date] ? "#{item[:expiry_date].strftime('%Y-%m-%d')} (#{item[:days_to_expiry]}d)" : 'N/A'
+          "#{item[:index_cfg][:key]}: #{expiry_info}"
+        end.join(' → ')
+        Rails.logger.debug { "[SignalScheduler] Processing order (by expiry proximity): #{order_str}" }
+      end
+
+      # Return just the index configs in sorted order
+      sorted_indices = sorted.map { |item| item[:index_cfg] }
+
+      # Cache result
+      @expiry_cache[cache_key] = {
+        sorted_indices: sorted_indices,
+        cached_at: Time.current
+      }
+
+      sorted_indices
     end
   end
   # rubocop:enable Metrics/ClassLength

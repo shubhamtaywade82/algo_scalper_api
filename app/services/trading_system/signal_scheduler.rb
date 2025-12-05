@@ -53,7 +53,7 @@ module TradingSystem
       # Signal::Scheduler processes indices in its start method's loop
       # For this wrapper, we just trigger one cycle of processing
       # by creating a temporary scheduler instance and processing indices
-      indices = Array(AlgoConfig.fetch[:indices])
+      indices = IndexConfigLoader.load_indices
       return if indices.empty?
 
       scheduler = ::Signal::Scheduler.new(period: 1)

@@ -17,7 +17,7 @@ module Signal
     # Select the best index based on trend scores
     # @return [Hash, nil] { index_key: :NIFTY, trend_score: 20.0, reason: "..." } or nil
     def select_best_index
-      indices = AlgoConfig.fetch[:indices]
+      indices = IndexConfigLoader.load_indices
       return nil unless indices.is_a?(Array) && indices.any?
 
       scored_indices = score_all_indices(indices)

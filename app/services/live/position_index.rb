@@ -74,7 +74,8 @@ module Live
     def bulk_load_active!
       @lock.synchronize do
         @index.clear
-        PositionTracker.active.select(:id, :security_id, :entry_price, :quantity, :segment).find_each do |t|
+        # Use cached active positions to avoid redundant query
+        Positions::ActivePositionsCache.instance.active_trackers.each do |t|
           add(
             id: t.id,
             security_id: t.security_id,
