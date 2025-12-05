@@ -164,8 +164,8 @@ module TradingSession
           # Handle period that spans midnight
           if start_minutes > end_minutes
             return period if (current_minutes >= start_minutes) || (current_minutes <= end_minutes)
-          else
-            return period if (current_minutes >= start_minutes) && (current_minutes <= end_minutes)
+          elsif (current_minutes >= start_minutes) && (current_minutes <= end_minutes)
+            return period
           end
         end
 
@@ -187,7 +187,7 @@ module TradingSession
       def load_trading_time_restrictions
         config = AlgoConfig.fetch
         restrictions = config.dig(:trading_time_restrictions, :avoid_periods) || []
-        
+
         # Support both array of strings and single string
         restrictions = [restrictions] unless restrictions.is_a?(Array)
         restrictions.compact
@@ -239,4 +239,3 @@ module TradingSession
     end
   end
 end
-
