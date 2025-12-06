@@ -41,11 +41,11 @@ This implementation adds automated swing trading and long-term trading notificat
 - Sends notifications for new recommendations
 - Updates existing recommendations if confidence improves
 
-**SwingTrading::NotificationService** (`app/services/swing_trading/notification_service.rb`)
-- Sends notifications via multiple channels:
-  - API (default)
-  - WebSocket (ActionCable broadcast)
-  - Email (ActionMailer)
+**SwingTrading::TelegramNotifier** (`app/services/swing_trading/telegram_notifier.rb`)
+- Sends notifications to Telegram bot for high-confidence recommendations (≥70%)
+- Uses Telegram Bot API
+- Formatted with Markdown for better readability
+- Includes all trade details, technical analysis, volume analysis, and reasoning
 
 ### 3. API Endpoints
 
@@ -233,9 +233,14 @@ curl -X POST http://localhost:3000/api/swing_trading/recommendations/analyze/1?t
 4. **Monitor Recommendations**:
    Use API endpoints or rake task to view recommendations
 
-5. **Configure Notifications** (Optional):
-   - Set `SWING_TRADING_NOTIFICATION_EMAIL` environment variable for email
-   - Configure ActionCable for WebSocket notifications
+5. **Configure Telegram Notifications**:
+   - Create a Telegram bot via [@BotFather](https://t.me/botfather)
+   - Get your bot token and chat ID
+   - Set environment variables:
+     ```bash
+     export TELEGRAM_BOT_TOKEN="your_bot_token_here"
+     export TELEGRAM_CHAT_ID="your_chat_id_here"
+     ```
 
 ## Files Created/Modified
 
@@ -247,8 +252,7 @@ curl -X POST http://localhost:3000/api/swing_trading/recommendations/analyze/1?t
 - `app/services/swing_trading/notification_service.rb`
 - `app/controllers/api/watchlist_controller.rb`
 - `app/controllers/api/swing_trading_recommendations_controller.rb`
-- `app/mailers/swing_trading_mailer.rb`
-- `app/views/swing_trading_mailer/recommendation_notification.html.erb`
+- `app/services/swing_trading/telegram_notifier.rb`
 - `lib/tasks/swing_trading.rake`
 - `docs/SWING_TRADING.md`
 - `SWING_TRADING_IMPLEMENTATION.md`

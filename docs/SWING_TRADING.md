@@ -13,7 +13,7 @@ The system analyzes stocks in your watchlist using multiple technical indicators
 - **Comprehensive Recommendations**: Provides entry price, stop loss, take profit, quantity, allocation percentage, and hold duration
 - **Technical Analysis Details**: Includes Supertrend, ADX, RSI, MACD, and volume analysis
 - **Risk Management**: Calculates risk-reward ratios and allocation percentages
-- **Notifications**: Supports API, WebSocket, and email notifications
+- **Telegram Notifications**: Sends notifications to Telegram bot for high-confidence recommendations (≥70%)
 
 ## Database Schema
 
@@ -197,24 +197,31 @@ Or use the rake task:
 rake swing_trading:start_scheduler
 ```
 
-### SwingTrading::NotificationService
+### SwingTrading::TelegramNotifier
 
-Sends notifications for new recommendations via multiple channels.
+Sends notifications to Telegram bot for high-confidence recommendations.
 
-**Channels:**
-- `:api`: API endpoint (default)
-- `:websocket`: ActionCable broadcast
-- `:email`: Email notification via ActionMailer
+**Configuration:**
+Set environment variables:
+- `TELEGRAM_BOT_TOKEN` or `SWING_TRADING_TELEGRAM_BOT_TOKEN`: Your Telegram bot token
+- `TELEGRAM_CHAT_ID` or `SWING_TRADING_TELEGRAM_CHAT_ID`: Chat ID to send notifications to
 
 **Usage:**
 ```ruby
-notification_service = SwingTrading::NotificationService.new(
-  recommendation: recommendation,
-  channels: [:api, :websocket, :email]
-)
+telegram_notifier = SwingTrading::TelegramNotifier.new(recommendation: recommendation)
+result = telegram_notifier.call
 
-notification_service.call
+if result[:success]
+  puts "Notification sent! Message ID: #{result[:data][:message_id]}"
+else
+  puts "Failed: #{result[:error]}"
+end
 ```
+
+**Notification Criteria:**
+- Only sends notifications for recommendations with confidence score ≥ 70%
+- Includes all trade details, technical analysis, volume analysis, and reasoning
+- Formatted with Markdown for better readability
 
 ## Configuration
 
@@ -385,6 +392,57 @@ Confidence score is calculated based on:
 - Check application logs for errors
 - Verify market hours (scheduler runs continuously but may skip during closed hours)
 
+## Telegram Bot Setup
+
+### Step 1: Create a Telegram Bot
+
+1. Open Telegram and search for [@BotFather](https://t.me/botfather)
+2. Send `/newbot` command
+3. Follow the instructions to name your bot
+4. Copy the bot token (format: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+
+### Step 2: Get Your Chat ID
+
+**Option 1: Using @userinfobot**
+1. Search for [@userinfobot](https://t.me/userinfobot) on Telegram
+2. Start a conversation
+3. It will show your chat ID (a number like `123456789`)
+
+**Option 2: Using your bot**
+1. Start a conversation with your bot
+2. Send any message to your bot
+3. Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+4. Look for `"chat":{"id":123456789}` in the response
+
+### Step 3: Configure Environment Variables
+
+Add to your `.env` file or environment:
+```bash
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
+```
+
+### Step 4: Test Notification
+
+You can test the notification by manually triggering an analysis:
+```bash
+curl -X POST http://localhost:3000/api/swing_trading/recommendations/analyze/1?type=swing
+```
+
+If a recommendation is generated with confidence ≥ 70%, you should receive a Telegram message.
+
+## Notification Format
+
+Telegram notifications include:
+- 🟢/🔴 Direction indicator (Buy/Sell)
+- ⚡/📈 Type indicator (Swing/Long-term)
+- Trade details (Entry, SL, TP, Quantity, Investment, Allocation)
+- Technical analysis summary (Supertrend, ADX, RSI, MACD)
+- Volume analysis
+- Confidence score
+- Reasoning
+- Analysis timestamp and expiration
+
 ## Future Enhancements
 
 - Support for more technical indicators
@@ -393,3 +451,5 @@ Confidence score is calculated based on:
 - Customizable risk parameters per stock
 - Integration with order placement system
 - Real-time price alerts
+- Multiple Telegram chat support
+- Custom notification thresholds

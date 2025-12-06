@@ -157,12 +157,19 @@ module SwingTrading
     def send_notification(recommendation)
       return unless recommendation
 
-      notification_service = SwingTrading::NotificationService.new(
-        recommendation: recommendation,
-        channels: [:api] # Add :websocket, :email as needed
-      )
+      # Send Telegram notification for good recommendations (confidence >= 0.7)
+      if recommendation.confidence_score && recommendation.confidence_score >= 0.7
+        telegram_notifier = SwingTrading::TelegramNotifier.new(recommendation: recommendation)
+        result = telegram_notifier.call
 
-      notification_service.call
+        if result[:success]
+          Rails.logger.info("[SwingTrading::Scheduler] Telegram notification sent for #{recommendation.symbol_name}")
+        else
+          Rails.logger.warn("[SwingTrading::Scheduler] Telegram notification failed: #{result[:error]}")
+        end
+      else
+        Rails.logger.debug("[SwingTrading::Scheduler] Skipping Telegram notification - confidence too low (#{(recommendation.confidence_score * 100).round(1)}%)")
+      end
     rescue StandardError => e
       Rails.logger.error("[SwingTrading::Scheduler] Notification failed: #{e.message}")
     end
