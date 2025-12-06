@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content='text/html; charset=UTF-8' http-equiv='Content-Type' />
+  </head>
+  <body>
+    <h2>Swing Trading Recommendation: <%= @recommendation.direction.upcase %> <%= @recommendation.symbol_name %></h2>
+
+    <h3>Trade Details</h3>
+    <ul>
+      <li><strong>Type:</strong> <%= @recommendation.recommendation_type.humanize %></li>
+      <li><strong>Direction:</strong> <%= @recommendation.direction.upcase %></li>
+      <li><strong>Entry Price:</strong> ₹<%= @recommendation.entry_price %></li>
+      <li><strong>Stop Loss:</strong> ₹<%= @recommendation.stop_loss %></li>
+      <li><strong>Take Profit:</strong> ₹<%= @recommendation.take_profit %></li>
+      <li><strong>Quantity:</strong> <%= @recommendation.quantity %></li>
+      <li><strong>Allocation:</strong> <%= @recommendation.allocation_pct %>%</li>
+      <li><strong>Investment Amount:</strong> ₹<%= @recommendation.investment_amount %></li>
+      <li><strong>Hold Duration:</strong> <%= @recommendation.hold_duration_days %> days</li>
+      <li><strong>Risk-Reward Ratio:</strong> <%= @recommendation.risk_reward_ratio %></li>
+      <li><strong>Confidence Score:</strong> <%= (@recommendation.confidence_score * 100).round(1) %>%</li>
+    </ul>
+
+    <h3>Technical Analysis</h3>
+    <% if @recommendation.technical_analysis.present? %>
+      <ul>
+        <% if @recommendation.technical_analysis['supertrend'] %>
+          <li><strong>Supertrend:</strong> <%= @recommendation.technical_analysis['supertrend']['trend'] %></li>
+        <% end %>
+        <% if @recommendation.technical_analysis['adx'] %>
+          <li><strong>ADX:</strong> <%= @recommendation.technical_analysis['adx']['value']&.round(2) %> (<%= @recommendation.technical_analysis['adx']['strength'] %>)</li>
+        <% end %>
+        <% if @recommendation.technical_analysis['rsi'] %>
+          <li><strong>RSI:</strong> <%= @recommendation.technical_analysis['rsi']['value']&.round(2) %></li>
+        <% end %>
+        <% if @recommendation.technical_analysis['macd'] %>
+          <li><strong>MACD:</strong> <%= @recommendation.technical_analysis['macd']['direction'] %></li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <h3>Volume Analysis</h3>
+    <% if @recommendation.volume_analysis.present? %>
+      <ul>
+        <li><strong>Volume Trend:</strong> <%= @recommendation.volume_analysis['trend'] %></li>
+        <li><strong>Volume Ratio:</strong> <%= @recommendation.volume_analysis['volume_ratio'] %></li>
+        <li><strong>Current Volume:</strong> <%= @recommendation.volume_analysis['current_volume'] %></li>
+        <li><strong>Average Volume:</strong> <%= @recommendation.volume_analysis['avg_volume'] %></li>
+      </ul>
+    <% end %>
+
+    <h3>Reasoning</h3>
+    <p><%= simple_format(@recommendation.reasoning) %></p>
+
+    <p><strong>Analysis Timestamp:</strong> <%= @recommendation.analysis_timestamp.strftime('%Y-%m-%d %H:%M:%S %Z') %></p>
+    <p><strong>Expires At:</strong> <%= @recommendation.expires_at&.strftime('%Y-%m-%d %H:%M:%S %Z') %></p>
+  </body>
+</html>
