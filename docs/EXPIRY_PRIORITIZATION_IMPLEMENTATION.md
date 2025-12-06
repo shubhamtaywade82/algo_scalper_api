@@ -172,3 +172,4 @@ To verify the implementation:
 
 The system now prioritizes indices with closer expiry dates, ensuring urgent opportunities (near expiry) are processed before those with more time remaining.
 
+

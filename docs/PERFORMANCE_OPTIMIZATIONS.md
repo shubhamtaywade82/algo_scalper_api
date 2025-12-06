@@ -1,8 +1,7 @@
-# Performance Optimizations - Development Log Analysis
+# Performance Optimizations - Complete Guide
 
 **Date**: Current
-**Analysis**: Based on development.log patterns
-**Status**: Identified optimization opportunities
+**Status**: ✅ Implemented
 
 ---
 
@@ -97,143 +96,156 @@
 
 ---
 
-## ✅ **Recommended Optimizations**
+## ✅ **Optimizations Implemented**
 
-### **Priority 1: Cache Active Positions**
+### **1. Active Positions Cache (CRITICAL)**
 
-**Problem**: Multiple services query `PositionTracker.active` independently
+**Created**: `app/services/positions/active_positions_cache.rb`
 
-**Solution**: Create shared cache service
+**Purpose**: Centralized cache for `PositionTracker.active` queries to eliminate redundant database calls
 
+**Features**:
+- 5-second TTL cache
+- Thread-safe with Mutex
+- Includes instrument preloading
+- Provides both full records and IDs
+
+**Services Updated** (12 services):
+- ✅ `ReconciliationService`
+- ✅ `PositionIndex`
+- ✅ `PositionTrackerPruner`
+- ✅ `RiskManagerService` (4 locations)
+- ✅ `PositionHeartbeat`
+- ✅ `PositionSyncService`
+- ✅ `PnlUpdaterService`
+- ✅ `RedisPnlCache`
+- ✅ `ActiveCache` (2 locations)
+- ✅ `MarketFeedHub`
+
+**Expected Impact**:
+- **Before**: 23+ queries per cycle
+- **After**: 1 query per 5 seconds
+- **Reduction**: ~95% fewer queries
+
+**Usage**:
 ```ruby
-# app/services/positions/active_positions_cache.rb
-class Positions::ActivePositionsCache
-  include Singleton
+# Get all active trackers (cached)
+trackers = Positions::ActivePositionsCache.instance.active_trackers
 
-  CACHE_TTL = 5.seconds
+# Get just IDs (lighter)
+ids = Positions::ActivePositionsCache.instance.active_tracker_ids
 
-  def active_trackers
-    return @cached_trackers if cached?
-    refresh!
-    @cached_trackers
-  end
+# Force refresh
+Positions::ActivePositionsCache.instance.refresh!
 
-  def refresh!
-    @cached_trackers = PositionTracker.active.includes(:instrument).to_a
-    @cached_at = Time.current
-  end
-
-  private
-
-  def cached?
-    @cached_at && (Time.current - @cached_at) < CACHE_TTL
-  end
-end
+# Check cache stats
+stats = Positions::ActivePositionsCache.instance.stats
 ```
-
-**Usage**: Replace all `PositionTracker.active` calls with `ActivePositionsCache.instance.active_trackers`
-
-**Services to Update**:
-- `ReconciliationService`
-- `PositionIndex`
-- `RiskManagerService`
-- `PositionTrackerPruner`
-
-**Expected Impact**: Reduce 23+ queries to 1 query per 5 seconds
 
 ---
 
-### **Priority 2: Cache WatchlistItem Availability**
+### **2. IndexConfigLoader Caching**
 
-**Problem**: `WatchlistItem.exists?` called repeatedly
+**File**: `app/services/index_config_loader.rb`
 
-**Solution**: Cache in IndexConfigLoader
+**Changes**:
+- Added 30-second TTL cache for loaded indices
+- Cached `watchlist_items_available?` check (60-second TTL)
+- Added `clear_cache!` method for invalidation
 
+**Expected Impact**:
+- **Before**: Database query on every call
+- **After**: Cached for 30 seconds
+- **Reduction**: ~90% fewer queries
+
+**Usage**:
 ```ruby
-# In IndexConfigLoader
-@watchlist_available = nil
-@watchlist_checked_at = nil
+# Load indices (cached for 30 seconds)
+indices = IndexConfigLoader.load_indices
 
-def watchlist_items_available?
-  return @watchlist_available if @watchlist_checked_at &&
-                                 (Time.current - @watchlist_checked_at) < 60.seconds
-
-  @watchlist_available = check_watchlist_available
-  @watchlist_checked_at = Time.current
-  @watchlist_available
-end
+# Clear cache when WatchlistItems change
+IndexConfigLoader.instance.clear_cache!
 ```
-
-**Expected Impact**: Reduce 10+ queries to 1 query per minute
 
 ---
 
-### **Priority 3: Cache Expiry Dates**
+### **3. Expiry Date Caching**
 
-**Problem**: Expiry dates recalculated every 30 seconds
+**File**: `app/services/signal/scheduler.rb`
 
-**Solution**: Cache expiry calculation results
+**Changes**:
+- Cache expiry calculations for 1 hour
+- Expiry dates don't change frequently (only on new expiry day)
+- Cache key based on index keys
 
-```ruby
-# In Signal::Scheduler
-@expiry_cache = {}
-@expiry_cache_ttl = 1.hour
-
-def reorder_indices_by_expiry(indices)
-  # Check cache first
-  cache_key = indices.map { |i| i[:key] }.join(',')
-  if @expiry_cache[cache_key] &&
-     (Time.current - @expiry_cache[cache_key][:cached_at]) < @expiry_cache_ttl
-    return @expiry_cache[cache_key][:sorted_indices]
-  end
-
-  # Calculate and cache
-  sorted = calculate_expiry_order(indices)
-  @expiry_cache[cache_key] = {
-    sorted_indices: sorted,
-    cached_at: Time.current
-  }
-  sorted
-end
-```
-
-**Expected Impact**: Reduce API calls from every 30s to once per hour
+**Expected Impact**:
+- **Before**: Recalculated every 30 seconds
+- **After**: Cached for 1 hour
+- **Reduction**: ~120x fewer calculations
 
 ---
 
-### **Priority 4: Cache IndexConfigLoader Results**
+## 📊 **Performance Metrics**
 
-**Problem**: Indices loaded from database every call
+### **Query Reduction Summary**
 
-**Solution**: Cache loaded indices
+| Service                | Before     | After      | Reduction |
+| ---------------------- | ---------- | ---------- | --------- |
+| PositionTracker.active | 23+/cycle  | 1/5s       | **95%**   |
+| WatchlistItem.exists?  | 10+/cycle  | 1/min      | **99%**   |
+| IndexConfigLoader      | Every call | Cached 30s | **90%**   |
+| Expiry calculations    | Every 30s  | Once/hour  | **120x**  |
 
-```ruby
-# In IndexConfigLoader
-@cached_indices = nil
-@cached_at = nil
-CACHE_TTL = 30.seconds
+**Total Database Load Reduction**: ~80-90%
 
-def load_indices
-  return @cached_indices if cached?
+---
 
-  @cached_indices = load_from_source
-  @cached_at = Time.current
-  @cached_indices
-end
-```
+## 🔧 **Cache Invalidation**
 
-**Expected Impact**: Reduce database queries significantly
+### **When to Clear Caches**
+
+**ActivePositionsCache**:
+- Automatically refreshes every 5 seconds
+- Can be manually cleared with `clear!`
+- Should be cleared when positions are created/updated/deleted
+
+**IndexConfigLoader**:
+- Automatically refreshes every 30 seconds
+- Should call `clear_cache!` when WatchlistItems change
+
+**Expiry Cache**:
+- Automatically refreshes every hour
+- Can be manually cleared by reinitializing scheduler
+
+---
+
+## ⚠️ **Important Notes**
+
+1. **Cache TTLs**: All caches have TTLs to ensure data freshness
+2. **Thread Safety**: ActivePositionsCache uses Mutex for thread safety
+3. **Memory**: Caches are in-memory, monitor memory usage
+4. **Invalidation**: Manual cache clearing may be needed on data changes
+
+---
+
+## 🧪 **Testing Recommendations**
+
+1. Monitor database query counts in development.log
+2. Verify cache hit rates
+3. Test cache invalidation on data changes
+4. Monitor memory usage
+5. Verify correctness after cache refreshes
 
 ---
 
 ## 📈 **Expected Performance Improvements**
 
-| Optimization | Current | After | Improvement |
-|--------------|---------|-------|-------------|
-| PositionTracker queries | 23+/cycle | 1/5s | **95% reduction** |
-| WatchlistItem.exists? | 10+/cycle | 1/min | **99% reduction** |
-| Expiry calculations | Every 30s | Once/hour | **120x reduction** |
-| IndexConfigLoader queries | Every call | Cached 30s | **90% reduction** |
+| Optimization              | Current    | After      | Improvement        |
+| ------------------------- | ---------- | ---------- | ------------------ |
+| PositionTracker queries   | 23+/cycle  | 1/5s       | **95% reduction**  |
+| WatchlistItem.exists?     | 10+/cycle  | 1/min      | **99% reduction**  |
+| Expiry calculations       | Every 30s  | Once/hour  | **120x reduction** |
+| IndexConfigLoader queries | Every call | Cached 30s | **90% reduction**  |
 
 **Total Database Load Reduction**: ~80-90%
 
@@ -241,15 +253,15 @@ end
 
 ## 🔧 **Implementation Priority**
 
-1. **High Priority** (Implement First):
+1. **High Priority** (Implemented):
    - ✅ Cache active positions (biggest impact)
    - ✅ Cache WatchlistItem availability
 
-2. **Medium Priority**:
+2. **Medium Priority** (Implemented):
    - ✅ Cache expiry dates
    - ✅ Cache IndexConfigLoader results
 
-3. **Low Priority**:
+3. **Low Priority** (Future):
    - Batch instrument loads
    - Optimize individual queries
 
@@ -261,4 +273,13 @@ end
 - Cache invalidation needed on data changes
 - Monitor cache hit rates
 - Consider Redis for distributed caching if needed
+- All optimizations maintain backward compatibility
 
+---
+
+## 📈 **Next Steps**
+
+1. Monitor performance improvements in production
+2. Consider Redis caching for distributed systems
+3. Add cache metrics/monitoring
+4. Fine-tune TTL values based on usage patterns

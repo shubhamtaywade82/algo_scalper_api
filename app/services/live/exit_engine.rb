@@ -67,6 +67,10 @@ module Live
               exit_reason: reason
             )
             Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
+
+            # Send Telegram notification
+            notify_telegram_exit(tracker, reason, exit_price)
+
             return { success: true, exit_price: exit_price, reason: reason }
           rescue StandardError => e
             # Order is placed, but tracker update failed
@@ -113,6 +117,37 @@ module Live
       return true if success_value.to_s.downcase == 'true'
       return true if success_value.to_s.downcase == 'yes'
 
+      false
+    end
+
+    # Send Telegram exit notification
+    # @param tracker [PositionTracker] Position tracker
+    # @param reason [String] Exit reason
+    # @param exit_price [BigDecimal, Float, nil] Exit price
+    def notify_telegram_exit(tracker, reason, exit_price)
+      return unless telegram_enabled?
+
+      # Reload tracker to get final PnL
+      tracker.reload if tracker.respond_to?(:reload)
+      pnl = tracker.last_pnl_rupees
+
+      Notifications::TelegramNotifier.instance.notify_exit(
+        tracker,
+        exit_reason: reason,
+        exit_price: exit_price,
+        pnl: pnl
+      )
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] Telegram notification failed: #{e.class} - #{e.message}")
+    end
+
+    # Check if Telegram notifications are enabled
+    # @return [Boolean]
+    def telegram_enabled?
+      config = AlgoConfig.fetch[:telegram] || {}
+      enabled = config[:enabled] != false && config[:notify_exit] != false
+      enabled && Notifications::TelegramNotifier.instance.enabled?
+    rescue StandardError
       false
     end
   end

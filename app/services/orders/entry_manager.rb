@@ -111,6 +111,9 @@ module Orders
       # Emit entry_filled event
       emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price, risk_pct)
 
+      # Send Telegram notification
+      notify_telegram_entry(tracker, pick, index_cfg, direction, sl_price, tp_price, risk_pct)
+
       @stats[:entries_successful] += 1
       success_result(
         tracker: tracker,
@@ -274,6 +277,43 @@ module Orders
         tracker_id: nil,
         order_no: nil
       }
+    end
+
+    # Send Telegram entry notification
+    # @param tracker [PositionTracker] Position tracker
+    # @param pick [Hash] Pick/candidate data
+    # @param index_cfg [Hash] Index configuration
+    # @param direction [Symbol] Direction
+    # @param sl_price [Float] Stop loss price
+    # @param tp_price [Float] Take profit price
+    # @param risk_pct [Float, nil] Dynamic risk percentage
+    def notify_telegram_entry(tracker, pick, index_cfg, direction, sl_price, tp_price, risk_pct)
+      return unless telegram_enabled?
+
+      entry_data = {
+        symbol: pick[:symbol] || tracker.symbol,
+        entry_price: tracker.entry_price.to_f,
+        quantity: tracker.quantity.to_i,
+        direction: direction,
+        index_key: index_cfg[:key],
+        risk_pct: risk_pct,
+        sl_price: sl_price,
+        tp_price: tp_price
+      }
+
+      Notifications::TelegramNotifier.instance.notify_entry(tracker, entry_data)
+    rescue StandardError => e
+      Rails.logger.error("[Orders::EntryManager] Telegram notification failed: #{e.class} - #{e.message}")
+    end
+
+    # Check if Telegram notifications are enabled
+    # @return [Boolean]
+    def telegram_enabled?
+      config = AlgoConfig.fetch[:telegram] || {}
+      enabled = config[:enabled] != false && config[:notify_entry] != false
+      enabled && Notifications::TelegramNotifier.instance.enabled?
+    rescue StandardError
+      false
     end
   end
   # rubocop:enable Metrics/ClassLength
