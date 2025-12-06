@@ -416,3 +416,19 @@ data_freshness:
 # Example: ["NSE_EQ:11536", "NSE_EQ:11536"]
 # Can also be set via ENV['DHANHQ_WS_WATCHLIST'] as fallback
 watchlist: []
+
+# ============================================
+# TELEGRAM NOTIFICATIONS
+# ============================================
+telegram:
+  enabled: true # Set to false to disable Telegram notifications
+  # Bot token and chat ID should be set via environment variables:
+  # TELEGRAM_BOT_TOKEN - Your Telegram bot token from @BotFather
+  # TELEGRAM_CHAT_ID - Your Telegram chat ID (can be obtained from @userinfobot)
+  pnl_update_interval_seconds: 300 # Minimum seconds between PnL update notifications per position
+  notify_entry: true # Send notifications on entry
+  notify_exit: true # Send notifications on exit
+  notify_pnl_updates: false # Send periodic PnL updates (throttled)
+  notify_pnl_milestones: true # Send notifications for PnL milestones (10%, 20%, etc.)
+  pnl_milestones: [10, 20, 30, 50, 100] # PnL percentage milestones to notify
+  notify_risk_alerts: true # Send risk alert notifications
