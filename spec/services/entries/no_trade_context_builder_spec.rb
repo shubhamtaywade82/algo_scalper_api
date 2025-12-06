@@ -34,6 +34,7 @@ RSpec.describe Entries::NoTradeContextBuilder do
       # Mock VWAP utilities
       allow(Entries::VWAPUtils).to receive(:near_vwap?).and_return(false)
       allow(Entries::VWAPUtils).to receive(:trapped_between_vwap_avwap?).and_return(false)
+      allow(Entries::VWAPUtils).to receive(:vwap_chop?).and_return(false)
 
       # Mock range utilities
       allow(Entries::RangeUtils).to receive(:range_pct).and_return(0.5)
@@ -69,8 +70,10 @@ RSpec.describe Entries::NoTradeContextBuilder do
       expect(ctx.bos_present).to be true
       expect(ctx.in_opposite_ob).to be false
       expect(ctx.inside_fvg).to be false
+      expect(ctx.index_key).to eq('NIFTY')
       expect(ctx.near_vwap).to be false
       expect(ctx.trapped_between_vwap).to be false
+      expect(ctx.vwap_chop).to be false
       expect(ctx.range_10m_pct).to eq(0.5)
       expect(ctx.atr_downtrend).to be false
       expect(ctx.ce_oi_up).to be false
@@ -78,6 +81,7 @@ RSpec.describe Entries::NoTradeContextBuilder do
       expect(ctx.iv).to eq(15.0)
       expect(ctx.iv_falling).to be false
       expect(ctx.spread_wide).to be false
+      expect(ctx.spread_wide_soft).to be false
       expect(ctx.avg_wick_ratio).to eq(1.0)
       expect(ctx.time).to eq('10:30')
     end
@@ -104,6 +108,99 @@ RSpec.describe Entries::NoTradeContextBuilder do
       )
 
       expect(ctx.min_iv_threshold).to eq(13)
+    end
+
+    it 'sets correct IV threshold for SENSEX' do
+      ctx = described_class.build(
+        index: 'SENSEX',
+        bars_1m: bars_1m,
+        bars_5m: bars_5m,
+        option_chain: option_chain_data,
+        time: '10:30'
+      )
+
+      expect(ctx.min_iv_threshold).to eq(11)
+    end
+
+    it 'calls vwap_chop? with NIFTY-specific parameters' do
+      expect(Entries::VWAPUtils).to receive(:vwap_chop?).with(
+        bars_1m,
+        threshold_pct: 0.08,
+        min_candles: 3
+      ).and_return(false)
+
+      described_class.build(
+        index: 'NIFTY',
+        bars_1m: bars_1m,
+        bars_5m: bars_5m,
+        option_chain: option_chain_data,
+        time: '10:30'
+      )
+    end
+
+    it 'calls vwap_chop? with SENSEX-specific parameters' do
+      expect(Entries::VWAPUtils).to receive(:vwap_chop?).with(
+        bars_1m,
+        threshold_pct: 0.06,
+        min_candles: 2
+      ).and_return(false)
+
+      described_class.build(
+        index: 'SENSEX',
+        bars_1m: bars_1m,
+        bars_5m: bars_5m,
+        option_chain: option_chain_data,
+        time: '10:30'
+      )
+    end
+
+    it 'calls atr_downtrend? with NIFTY-specific min_bars' do
+      expect(Entries::ATRUtils).to receive(:atr_downtrend?).with(
+        bars_1m,
+        min_bars: 5
+      ).and_return(false)
+
+      described_class.build(
+        index: 'NIFTY',
+        bars_1m: bars_1m,
+        bars_5m: bars_5m,
+        option_chain: option_chain_data,
+        time: '10:30'
+      )
+    end
+
+    it 'calls atr_downtrend? with SENSEX-specific min_bars' do
+      expect(Entries::ATRUtils).to receive(:atr_downtrend?).with(
+        bars_1m,
+        min_bars: 3
+      ).and_return(false)
+
+      described_class.build(
+        index: 'SENSEX',
+        bars_1m: bars_1m,
+        bars_5m: bars_5m,
+        option_chain: option_chain_data,
+        time: '10:30'
+      )
+    end
+
+    it 'calls spread_wide? with hard_reject parameter' do
+      chain_wrapper = instance_double(Entries::OptionChainWrapper)
+      allow(chain_wrapper).to receive(:ce_oi_rising?).and_return(false)
+      allow(chain_wrapper).to receive(:pe_oi_rising?).and_return(false)
+      allow(chain_wrapper).to receive(:atm_iv).and_return(15.0)
+      allow(chain_wrapper).to receive(:iv_falling?).and_return(false)
+      allow(chain_wrapper).to receive(:spread_wide?).with(hard_reject: true).and_return(false)
+      allow(chain_wrapper).to receive(:spread_wide?).with(hard_reject: false).and_return(false)
+      allow(Entries::OptionChainWrapper).to receive(:new).and_return(chain_wrapper)
+
+      described_class.build(
+        index: 'NIFTY',
+        bars_1m: bars_1m,
+        bars_5m: bars_5m,
+        option_chain: option_chain_data,
+        time: '10:30'
+      )
     end
 
     it 'handles Time object for time parameter' do
@@ -154,7 +251,8 @@ RSpec.describe Entries::NoTradeContextBuilder do
       allow(chain_wrapper).to receive(:pe_oi_rising?).and_return(false)
       allow(chain_wrapper).to receive(:atm_iv).and_return(15.0)
       allow(chain_wrapper).to receive(:iv_falling?).and_return(false)
-      allow(chain_wrapper).to receive(:spread_wide?).and_return(false)
+      allow(chain_wrapper).to receive(:spread_wide?).with(hard_reject: true).and_return(false)
+      allow(chain_wrapper).to receive(:spread_wide?).with(hard_reject: false).and_return(false)
 
       ctx = described_class.build(
         index: index_key,

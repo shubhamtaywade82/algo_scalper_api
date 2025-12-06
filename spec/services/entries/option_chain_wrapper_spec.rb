@@ -154,10 +154,10 @@ RSpec.describe Entries::OptionChainWrapper do
 
   describe '#spread_wide?' do
     context 'for NIFTY' do
-      it 'returns true when spread > 2' do
+      it 'returns true when spread > 3 (hard reject)' do
         chain_data = {
           ce: {
-            '25000' => { 'bid' => 100.0, 'ask' => 103.0, 'ltp' => 101.0 }
+            '25000' => { 'top_bid_price' => 100.0, 'top_ask_price' => 104.0, 'last_price' => 101.0 }
           },
           pe: {}
         }
@@ -165,15 +165,15 @@ RSpec.describe Entries::OptionChainWrapper do
         wrapper = described_class.new(chain_data: chain_data, index_key: 'NIFTY')
         allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['25000'])
 
-        result = wrapper.spread_wide?
+        result = wrapper.spread_wide?(hard_reject: true)
 
         expect(result).to be true
       end
 
-      it 'returns false when spread <= 2' do
+      it 'returns false when spread <= 3 (hard reject)' do
         chain_data = {
           ce: {
-            '25000' => { 'bid' => 100.0, 'ask' => 101.5, 'ltp' => 100.5 }
+            '25000' => { 'top_bid_price' => 100.0, 'top_ask_price' => 102.5, 'last_price' => 101.0 }
           },
           pe: {}
         }
@@ -181,17 +181,115 @@ RSpec.describe Entries::OptionChainWrapper do
         wrapper = described_class.new(chain_data: chain_data, index_key: 'NIFTY')
         allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['25000'])
 
-        result = wrapper.spread_wide?
+        result = wrapper.spread_wide?(hard_reject: true)
+
+        expect(result).to be false
+      end
+
+      it 'returns true when spread > 2 (soft reject)' do
+        chain_data = {
+          ce: {
+            '25000' => { 'top_bid_price' => 100.0, 'top_ask_price' => 103.0, 'last_price' => 101.0 }
+          },
+          pe: {}
+        }
+
+        wrapper = described_class.new(chain_data: chain_data, index_key: 'NIFTY')
+        allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['25000'])
+
+        result = wrapper.spread_wide?(hard_reject: false)
+
+        expect(result).to be true
+      end
+
+      it 'returns false when spread <= 2 (soft reject)' do
+        chain_data = {
+          ce: {
+            '25000' => { 'top_bid_price' => 100.0, 'top_ask_price' => 101.5, 'last_price' => 100.5 }
+          },
+          pe: {}
+        }
+
+        wrapper = described_class.new(chain_data: chain_data, index_key: 'NIFTY')
+        allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['25000'])
+
+        result = wrapper.spread_wide?(hard_reject: false)
+
+        expect(result).to be false
+      end
+    end
+
+    context 'for SENSEX' do
+      it 'returns true when spread > 5 (hard reject)' do
+        chain_data = {
+          ce: {
+            '75000' => { 'top_bid_price' => 200.0, 'top_ask_price' => 206.0, 'last_price' => 202.0 }
+          },
+          pe: {}
+        }
+
+        wrapper = described_class.new(chain_data: chain_data, index_key: 'SENSEX')
+        allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['75000'])
+
+        result = wrapper.spread_wide?(hard_reject: true)
+
+        expect(result).to be true
+      end
+
+      it 'returns false when spread <= 5 (hard reject)' do
+        chain_data = {
+          ce: {
+            '75000' => { 'top_bid_price' => 200.0, 'top_ask_price' => 204.5, 'last_price' => 202.0 }
+          },
+          pe: {}
+        }
+
+        wrapper = described_class.new(chain_data: chain_data, index_key: 'SENSEX')
+        allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['75000'])
+
+        result = wrapper.spread_wide?(hard_reject: true)
+
+        expect(result).to be false
+      end
+
+      it 'returns true when spread > 3 (soft reject)' do
+        chain_data = {
+          ce: {
+            '75000' => { 'top_bid_price' => 200.0, 'top_ask_price' => 204.0, 'last_price' => 202.0 }
+          },
+          pe: {}
+        }
+
+        wrapper = described_class.new(chain_data: chain_data, index_key: 'SENSEX')
+        allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['75000'])
+
+        result = wrapper.spread_wide?(hard_reject: false)
+
+        expect(result).to be true
+      end
+
+      it 'returns false when spread <= 3 (soft reject)' do
+        chain_data = {
+          ce: {
+            '75000' => { 'top_bid_price' => 200.0, 'top_ask_price' => 202.5, 'last_price' => 201.0 }
+          },
+          pe: {}
+        }
+
+        wrapper = described_class.new(chain_data: chain_data, index_key: 'SENSEX')
+        allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['75000'])
+
+        result = wrapper.spread_wide?(hard_reject: false)
 
         expect(result).to be false
       end
     end
 
     context 'for BANKNIFTY' do
-      it 'returns true when spread > 3' do
+      it 'returns true when spread > 3 (hard reject)' do
         chain_data = {
           ce: {
-            '56000' => { 'bid' => 200.0, 'ask' => 204.0, 'ltp' => 202.0 }
+            '56000' => { 'top_bid_price' => 200.0, 'top_ask_price' => 204.0, 'last_price' => 202.0 }
           },
           pe: {}
         }
@@ -199,15 +297,15 @@ RSpec.describe Entries::OptionChainWrapper do
         wrapper = described_class.new(chain_data: chain_data, index_key: 'BANKNIFTY')
         allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['56000'])
 
-        result = wrapper.spread_wide?
+        result = wrapper.spread_wide?(hard_reject: true)
 
         expect(result).to be true
       end
 
-      it 'returns false when spread <= 3' do
+      it 'returns false when spread <= 3 (hard reject)' do
         chain_data = {
           ce: {
-            '56000' => { 'bid' => 200.0, 'ask' => 202.5, 'ltp' => 201.0 }
+            '56000' => { 'top_bid_price' => 200.0, 'top_ask_price' => 202.5, 'last_price' => 201.0 }
           },
           pe: {}
         }
@@ -215,10 +313,26 @@ RSpec.describe Entries::OptionChainWrapper do
         wrapper = described_class.new(chain_data: chain_data, index_key: 'BANKNIFTY')
         allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['56000'])
 
-        result = wrapper.spread_wide?
+        result = wrapper.spread_wide?(hard_reject: true)
 
         expect(result).to be false
       end
+    end
+
+    it 'defaults to hard_reject: true when parameter not provided' do
+      chain_data = {
+        ce: {
+          '25000' => { 'top_bid_price' => 100.0, 'top_ask_price' => 104.0, 'last_price' => 101.0 }
+        },
+        pe: {}
+      }
+
+      wrapper = described_class.new(chain_data: chain_data, index_key: 'NIFTY')
+      allow(wrapper).to receive(:find_atm_option).with(:ce).and_return(chain_data[:ce]['25000'])
+
+      result = wrapper.spread_wide?
+
+      expect(result).to be true
     end
 
     it 'returns false when ATM option not found' do
