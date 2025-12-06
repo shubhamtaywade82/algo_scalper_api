@@ -363,8 +363,32 @@ class BacktestServiceWithNoTradeEngine
     # Calculate ADX/DI from 5m bars
     adx_data = calculate_adx_data_from_bars(bars_5m)
 
+    # Determine index-specific parameters
+    index_key = instrument.symbol_name.to_s.upcase
+    is_sensex = index_key.include?('SENSEX')
+    is_nifty = index_key == 'NIFTY'
+
+    # VWAP chop parameters: NIFTY: ±0.08% for 3+ candles, SENSEX: ±0.06% for 2+ candles
+    vwap_chop_threshold = is_nifty ? 0.08 : (is_sensex ? 0.06 : 0.08)
+    vwap_chop_min_candles = is_nifty ? 3 : (is_sensex ? 2 : 3)
+
+    # ATR downtrend parameters: NIFTY: 5+ bars, SENSEX: 3+ bars
+    atr_downtrend_min_bars = is_nifty ? 5 : (is_sensex ? 3 : 5)
+
+    # IV thresholds: NIFTY: <9 hard, 9-11 soft; SENSEX: <11 hard, 11-13 soft
+    min_iv_threshold = if index_key.include?('BANK')
+                         13
+                       elsif is_sensex
+                         11
+                       else
+                         10
+                       end
+
     # Build simplified context (without option chain data)
     OpenStruct.new(
+      # Index identification
+      index_key: index_key,
+
       # Trend indicators
       adx_5m: adx_data[:adx] || 0,
       plus_di_5m: adx_data[:plus_di] || 0,
@@ -378,18 +402,20 @@ class BacktestServiceWithNoTradeEngine
       # VWAP indicators
       near_vwap: Entries::VWAPUtils.near_vwap?(bars_1m),
       trapped_between_vwap: Entries::VWAPUtils.trapped_between_vwap_avwap?(bars_1m),
+      vwap_chop: Entries::VWAPUtils.vwap_chop?(bars_1m, threshold_pct: vwap_chop_threshold, min_candles: vwap_chop_min_candles),
 
       # Volatility indicators
       range_10m_pct: Entries::RangeUtils.range_pct(bars_1m.last(10)),
-      atr_downtrend: Entries::ATRUtils.atr_downtrend?(bars_1m),
+      atr_downtrend: Entries::ATRUtils.atr_downtrend?(bars_1m, min_bars: atr_downtrend_min_bars),
 
       # Option chain indicators (simulated for historical data)
       ce_oi_up: false, # Cannot determine from historical data
       pe_oi_up: false, # Cannot determine from historical data
       iv: 15.0, # Default IV (assume reasonable IV for historical)
       iv_falling: false, # Cannot determine from historical data
-      min_iv_threshold: instrument.symbol_name.include?('BANK') ? 13 : 10,
+      min_iv_threshold: min_iv_threshold,
       spread_wide: false, # Cannot determine from historical data
+      spread_wide_soft: false, # Cannot determine from historical data
 
       # Candle behavior
       avg_wick_ratio: Entries::CandleUtils.avg_wick_ratio(bars_1m.last(5)),

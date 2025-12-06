@@ -27,7 +27,21 @@ module Entries
         # Calculate ADX and DI values from 5m bars
         adx_data = calculate_adx_data(bars_5m)
 
+        # Determine index-specific parameters
+        is_sensex = index_key.include?('SENSEX')
+        is_nifty = index_key == 'NIFTY'
+
+        # VWAP chop parameters: NIFTY: ±0.08% for 3+ candles, SENSEX: ±0.06% for 2+ candles
+        vwap_chop_threshold = is_nifty ? 0.08 : (is_sensex ? 0.06 : 0.08)
+        vwap_chop_min_candles = is_nifty ? 3 : (is_sensex ? 2 : 3)
+
+        # ATR downtrend parameters: NIFTY: 5+ bars, SENSEX: 3+ bars
+        atr_downtrend_min_bars = is_nifty ? 5 : (is_sensex ? 3 : 5)
+
         OpenStruct.new(
+          # Index identification
+          index_key: index_key,
+
           # Trend indicators
           adx_5m: adx_data[:adx] || 0,
           plus_di_5m: adx_data[:plus_di] || 0,
@@ -41,18 +55,20 @@ module Entries
           # VWAP indicators
           near_vwap: VWAPUtils.near_vwap?(bars_1m),
           trapped_between_vwap: VWAPUtils.trapped_between_vwap_avwap?(bars_1m),
+          vwap_chop: VWAPUtils.vwap_chop?(bars_1m, threshold_pct: vwap_chop_threshold, min_candles: vwap_chop_min_candles),
 
           # Volatility indicators
           range_10m_pct: RangeUtils.range_pct(bars_1m.last(10)),
-          atr_downtrend: ATRUtils.atr_downtrend?(bars_1m),
+          atr_downtrend: ATRUtils.atr_downtrend?(bars_1m, min_bars: atr_downtrend_min_bars),
 
           # Option chain indicators
           ce_oi_up: chain_wrapper.ce_oi_rising?,
           pe_oi_up: chain_wrapper.pe_oi_rising?,
           iv: chain_wrapper.atm_iv || 0,
           iv_falling: chain_wrapper.iv_falling?,
-          min_iv_threshold: index_key.include?('BANK') ? 13 : 10,
-          spread_wide: chain_wrapper.spread_wide?,
+          min_iv_threshold: index_key.include?('BANK') ? 13 : (is_sensex ? 11 : 10),
+          spread_wide: chain_wrapper.spread_wide?(hard_reject: true),
+          spread_wide_soft: chain_wrapper.spread_wide?(hard_reject: false),
 
           # Candle behavior
           avg_wick_ratio: CandleUtils.avg_wick_ratio(bars_1m.last(5)),
