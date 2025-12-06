@@ -71,12 +71,27 @@ module Entries
     end
 
     # Check if spread is wide
+    # Uses index-specific thresholds:
+    # NIFTY: >3 hard reject, >2 soft reject
+    # SENSEX: >5 hard reject, >3 soft reject
+    # BANKNIFTY: >3 hard reject, >2 soft reject
+    # @param hard_reject [Boolean] If true, use hard reject threshold; if false, use soft reject threshold
     # @return [Boolean]
-    def spread_wide?
+    def spread_wide?(hard_reject: true)
       atm_ce = find_atm_option(:ce)
       atm_pe = find_atm_option(:pe)
 
       return true unless atm_ce || atm_pe
+
+      # Determine thresholds based on index
+      if @index_key.include?('SENSEX')
+        max_spread = hard_reject ? 5.0 : 3.0
+      elsif @index_key.include?('BANK')
+        max_spread = hard_reject ? 3.0 : 2.0
+      else
+        # NIFTY
+        max_spread = hard_reject ? 3.0 : 2.0
+      end
 
       # Check CE spread
       if atm_ce
@@ -88,8 +103,6 @@ module Entries
           spread = ask - bid
           spread_ratio = spread / ltp
 
-          # Threshold: 3 for BANKNIFTY, 2 for NIFTY
-          max_spread = @index_key.include?('BANK') ? 3.0 : 2.0
           return true if spread_ratio > max_spread
         end
       end
@@ -104,7 +117,6 @@ module Entries
           spread = ask - bid
           spread_ratio = spread / ltp
 
-          max_spread = @index_key.include?('BANK') ? 3.0 : 2.0
           return true if spread_ratio > max_spread
         end
       end

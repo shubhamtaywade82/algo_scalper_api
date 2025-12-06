@@ -156,4 +156,105 @@ RSpec.describe Entries::VWAPUtils do
       expect(result).to be false
     end
   end
+
+  describe '.vwap_chop?' do
+    it 'returns true when all candles are within threshold for NIFTY (3+ candles, ±0.08%)' do
+      vwap = 25_000
+      bars = [
+        build(:candle, close: 25_010), # Within ±0.08% (0.04%)
+        build(:candle, close: 25_005), # Within ±0.08% (0.02%)
+        build(:candle, close: 25_015)  # Within ±0.08% (0.06%)
+      ]
+
+      allow(described_class).to receive(:calculate_vwap).and_return(vwap)
+
+      result = described_class.vwap_chop?(bars, threshold_pct: 0.08, min_candles: 3)
+
+      expect(result).to be true
+    end
+
+    it 'returns false when not all candles are within threshold' do
+      vwap = 25_000
+      bars = [
+        build(:candle, close: 25_010), # Within ±0.08%
+        build(:candle, close: 25_005), # Within ±0.08%
+        build(:candle, close: 25_100)  # Outside ±0.08% (0.4%)
+      ]
+
+      allow(described_class).to receive(:calculate_vwap).and_return(vwap)
+
+      result = described_class.vwap_chop?(bars, threshold_pct: 0.08, min_candles: 3)
+
+      expect(result).to be false
+    end
+
+    it 'returns true when all candles are within threshold for SENSEX (2+ candles, ±0.06%)' do
+      vwap = 25_000
+      bars = [
+        build(:candle, close: 25_005), # Within ±0.06% (0.02%)
+        build(:candle, close: 25_010)  # Within ±0.06% (0.04%)
+      ]
+
+      allow(described_class).to receive(:calculate_vwap).and_return(vwap)
+
+      result = described_class.vwap_chop?(bars, threshold_pct: 0.06, min_candles: 2)
+
+      expect(result).to be true
+    end
+
+    it 'returns false when bars has fewer candles than min_candles' do
+      vwap = 25_000
+      bars = [
+        build(:candle, close: 25_010),
+        build(:candle, close: 25_005)
+      ]
+
+      allow(described_class).to receive(:calculate_vwap).and_return(vwap)
+
+      result = described_class.vwap_chop?(bars, threshold_pct: 0.08, min_candles: 3)
+
+      expect(result).to be false
+    end
+
+    it 'returns false when bars is empty' do
+      result = described_class.vwap_chop?([], threshold_pct: 0.08, min_candles: 3)
+
+      expect(result).to be false
+    end
+
+    it 'returns false when bars is nil' do
+      result = described_class.vwap_chop?(nil, threshold_pct: 0.08, min_candles: 3)
+
+      expect(result).to be false
+    end
+
+    it 'returns false when VWAP cannot be calculated' do
+      bars = [
+        build(:candle, close: 25_010),
+        build(:candle, close: 25_005),
+        build(:candle, close: 25_015)
+      ]
+
+      allow(described_class).to receive(:calculate_vwap).and_return(nil)
+
+      result = described_class.vwap_chop?(bars, threshold_pct: 0.08, min_candles: 3)
+
+      expect(result).to be false
+    end
+
+    it 'returns false when candle close price is zero or negative' do
+      vwap = 25_000
+      bars = [
+        build(:candle, close: 25_010),
+        build(:candle, close: 0),
+        build(:candle, close: 25_015)
+      ]
+
+      allow(described_class).to receive(:calculate_vwap).and_return(vwap)
+
+      result = described_class.vwap_chop?(bars, threshold_pct: 0.08, min_candles: 3)
+
+      expect(result).to be false
+    end
+  end
 end

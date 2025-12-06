@@ -61,6 +61,30 @@ module Entries
         # Check if price is between the two
         [vwap, avwap].min <= current_price && current_price <= [vwap, avwap].max
       end
+
+      # Check for VWAP chop: consecutive candles within threshold
+      # NIFTY: ±0.08% for 3+ candles
+      # SENSEX: ±0.06% for 2+ candles
+      # @param bars [Array<Candle>] Array of candle objects
+      # @param threshold_pct [Float] Threshold percentage (default: 0.08 for NIFTY)
+      # @param min_candles [Integer] Minimum consecutive candles (default: 3 for NIFTY)
+      # @return [Boolean]
+      def vwap_chop?(bars, threshold_pct: 0.08, min_candles: 3)
+        return false if bars.nil? || bars.empty? || bars.size < min_candles
+
+        vwap = calculate_vwap(bars)
+        return false unless vwap&.positive?
+
+        # Check last min_candles candles
+        recent_bars = bars.last(min_candles)
+        recent_bars.all? do |candle|
+          price = candle.close
+          next false unless price&.positive?
+
+          deviation_pct = ((price - vwap).abs / vwap * 100).abs
+          deviation_pct <= threshold_pct
+        end
+      end
     end
   end
 end

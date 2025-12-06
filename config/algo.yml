@@ -2,6 +2,12 @@ paper_trading:
   enabled: true
   balance: 100000
 
+# Capital configuration
+capital:
+  # Initial capital amount for live trading (used for PnL percentage calculations)
+  # If not specified, uses current balance as fallback
+  initial_amount: null # Set to initial capital amount (e.g., 100000) for accurate PnL tracking
+
 # Trading time restrictions based on profitability analysis
 # Use analyze_positions_by_time_intervals.rb to identify non-profitable periods
 # Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
@@ -165,6 +171,10 @@ trade_limits:
 risk:
   sl_pct: 0.30 # 30% fixed SL (entry * 0.70)
   tp_pct: 0.60 # 60% fixed TP (entry * 1.60)
+  # Profit Halt Mechanism: Prevents trading after achieving significant realized profits
+  # When realized PnL exceeds profit_halt_threshold_pct, only allows high-probability trades
+  profit_halt_threshold_pct: 20.0 # Halt trading when realized PnL >= 20% of capital
+  profit_halt_min_confidence: 0.6 # Minimum confidence (60%) required when halted (0.0 to 1.0)
 
   # Profit protection: Hard stop if HWM reaches threshold and drops by percentage
   profit_protection:

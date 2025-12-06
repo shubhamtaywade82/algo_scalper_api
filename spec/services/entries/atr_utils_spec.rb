@@ -54,13 +54,35 @@ RSpec.describe Entries::ATRUtils do
       end
     end
 
-    it 'detects ATR downtrend when last 3 windows show decreasing ATR' do
+    it 'detects ATR downtrend when last 3 windows show decreasing ATR (default min_bars)' do
       bars = series.candles
 
       # Mock CandleSeries to return decreasing ATR values
       allow_any_instance_of(CandleSeries).to receive(:atr).and_return(100.0, 90.0, 80.0, 70.0)
 
       result = described_class.atr_downtrend?(bars, period: 14)
+
+      expect(result).to be true
+    end
+
+    it 'detects ATR downtrend with custom min_bars for NIFTY (5 bars)' do
+      bars = series.candles
+
+      # Mock CandleSeries to return decreasing ATR values for 5 bars
+      allow_any_instance_of(CandleSeries).to receive(:atr).and_return(100.0, 95.0, 90.0, 85.0, 80.0, 75.0)
+
+      result = described_class.atr_downtrend?(bars, period: 14, min_bars: 5)
+
+      expect(result).to be true
+    end
+
+    it 'detects ATR downtrend with custom min_bars for SENSEX (3 bars)' do
+      bars = series.candles
+
+      # Mock CandleSeries to return decreasing ATR values for 3 bars
+      allow_any_instance_of(CandleSeries).to receive(:atr).and_return(100.0, 90.0, 80.0, 70.0)
+
+      result = described_class.atr_downtrend?(bars, period: 14, min_bars: 3)
 
       expect(result).to be true
     end
@@ -72,6 +94,17 @@ RSpec.describe Entries::ATRUtils do
       allow_any_instance_of(CandleSeries).to receive(:atr).and_return(70.0, 80.0, 90.0, 100.0)
 
       result = described_class.atr_downtrend?(bars, period: 14)
+
+      expect(result).to be false
+    end
+
+    it 'returns false when insufficient bars for min_bars parameter' do
+      bars = series.candles
+
+      # Mock CandleSeries to return only 2 ATR values when min_bars is 5
+      allow_any_instance_of(CandleSeries).to receive(:atr).and_return(100.0, 90.0)
+
+      result = described_class.atr_downtrend?(bars, period: 14, min_bars: 5)
 
       expect(result).to be false
     end

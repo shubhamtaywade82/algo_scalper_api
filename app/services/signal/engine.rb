@@ -275,7 +275,8 @@ module Signal
             index_cfg: index_cfg,
             pick: pick,
             direction: final_direction,
-            scale_multiplier: state_snapshot[:multiplier]
+            scale_multiplier: state_snapshot[:multiplier],
+            confidence_score: confidence_score
           )
 
           if result
