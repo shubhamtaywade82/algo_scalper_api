@@ -3,7 +3,7 @@
 module Entries
   class EntryGuard
     class << self
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1)
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, confidence_score: nil)
         instrument = find_instrument(index_cfg)
         unless instrument
           Rails.logger.warn("[EntryGuard] Instrument not found for #{index_cfg[:key]} (segment: #{index_cfg[:segment]}, sid: #{index_cfg[:sid]})")
@@ -25,6 +25,16 @@ module Entries
             "[EntryGuard] Trading blocked for #{index_cfg[:key]}: #{limit_check[:reason]} " \
             "(daily_loss: #{limit_check[:daily_loss]&.round(2)}, " \
             "daily_trades: #{limit_check[:daily_trades]})"
+          )
+          return false
+        end
+
+        # NEW: Check profit halt status (only allow high-probability trades after 20% profit)
+        halt_check = Risk::ProfitHaltService.can_trade?(confidence_score: confidence_score)
+        unless halt_check[:allowed]
+          Rails.logger.warn(
+            "[EntryGuard] Profit halt check blocked entry for #{index_cfg[:key]}: #{halt_check[:reason]} " \
+            "(confidence: #{confidence_score ? (confidence_score * 100).round(1) : 'N/A'}%)"
           )
           return false
         end
