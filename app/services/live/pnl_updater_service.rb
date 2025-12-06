@@ -265,6 +265,9 @@ module Live
         rescue StandardError => e
           @logger.warn("[PnlUpdater] tracker.cache_live_pnl failed for #{tracker_id}: #{e.message}")
         end
+
+        # Check for PnL milestones and send Telegram notifications
+        check_and_notify_pnl_milestones(tracker, pnl_pct_bd, pnl_bd)
       rescue StandardError => e
         @logger.error("[PnlUpdater] processing failed for tracker #{tracker_id}: #{e.class} - #{e.message}")
         next
@@ -317,6 +320,70 @@ module Live
       @sleep_mutex.synchronize do
         @sleep_cv.broadcast
       end
+    end
+
+    # Check for PnL milestones and send notifications
+    # @param tracker [PositionTracker] Position tracker
+    # @param pnl_pct [BigDecimal] PnL percentage
+    # @param pnl [BigDecimal] PnL value
+    def check_and_notify_pnl_milestones(tracker, pnl_pct, pnl)
+      return unless telegram_milestones_enabled?
+
+      config = AlgoConfig.fetch[:telegram] || {}
+      milestones = config[:pnl_milestones] || [10, 20, 30, 50, 100]
+      pnl_pct_value = pnl_pct.to_f
+
+      # Get notified milestones from tracker meta
+      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
+      notified_milestones = meta['telegram_notified_milestones'] || []
+
+      milestones.each do |milestone_pct|
+        # Check if milestone reached (positive or negative)
+        milestone_reached = if pnl_pct_value.positive?
+                              pnl_pct_value >= milestone_pct && !notified_milestones.include?(milestone_pct)
+                            elsif pnl_pct_value.negative?
+                              pnl_pct_value <= -milestone_pct && !notified_milestones.include?(-milestone_pct)
+                            else
+                              false
+                            end
+
+        next unless milestone_reached
+
+        # Send notification
+        milestone_text = if pnl_pct_value.positive?
+                          "#{milestone_pct}% profit"
+                        else
+                          "#{milestone_pct}% loss"
+                        end
+
+        begin
+          Notifications::TelegramNotifier.instance.notify_pnl_milestone(
+            tracker,
+            milestone: milestone_text,
+            pnl: pnl,
+            pnl_pct: pnl_pct_value
+          )
+
+          # Mark milestone as notified
+          milestone_key = pnl_pct_value.positive? ? milestone_pct : -milestone_pct
+          notified_milestones << milestone_key
+          tracker.update!(meta: meta.merge('telegram_notified_milestones' => notified_milestones))
+        rescue StandardError => e
+          @logger.error("[PnlUpdater] Failed to notify milestone for #{tracker_id}: #{e.class} - #{e.message}")
+        end
+      end
+    rescue StandardError => e
+      @logger.error("[PnlUpdater] check_and_notify_pnl_milestones failed: #{e.class} - #{e.message}")
+    end
+
+    # Check if Telegram milestone notifications are enabled
+    # @return [Boolean]
+    def telegram_milestones_enabled?
+      config = AlgoConfig.fetch[:telegram] || {}
+      enabled = config[:enabled] != false && config[:notify_pnl_milestones] != false
+      enabled && Notifications::TelegramNotifier.instance.enabled?
+    rescue StandardError
+      false
     end
   end
 end

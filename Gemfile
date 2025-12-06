@@ -46,6 +46,9 @@ gem 'thruster', require: false
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
 gem 'DhanHQ', git: 'https://github.com/shubhamtaywade82/dhanhq-client.git', branch: 'main'
 
+# Telegram bot for notifications
+gem 'telegram-bot-ruby', '~> 0.19'
+
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
 
