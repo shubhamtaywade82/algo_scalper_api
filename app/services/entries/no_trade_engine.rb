@@ -36,11 +36,9 @@ module Entries
       end
 
       # --- Market Structure Failures ---
-      # RELAXED: BOS check is now optional (0.5 instead of 1.0) to allow more trades
-      # BOS is still useful but not a hard requirement
       unless ctx.bos_present
-        reasons << 'No BOS in last 10m (relaxed)'
-        score += 0.5
+        reasons << 'No BOS in last 10m'
+        score += 1
       end
 
       if ctx.in_opposite_ob
@@ -142,11 +140,8 @@ module Entries
         score += 1
       end
 
-      # IMPROVED: Increased blocking threshold from 4 to 5 to be more selective
-      # This allows trades with 4 or fewer unfavorable conditions
-      # Goal: Better avg profit vs avg loss ratio by filtering more bad trades
       Result.new(
-        allowed: score < 5,
+        allowed: score < 3,
         score: score.round(2),
         reasons: reasons
       )

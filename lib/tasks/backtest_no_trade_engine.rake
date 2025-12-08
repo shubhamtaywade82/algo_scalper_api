@@ -34,14 +34,13 @@ namespace :backtest do
             interval_1m = '1'
             interval_5m = '5'  # Always fetch 5m separately from API for ADX calculations
 
-            # Use optimized parameters if available (pass nil to auto-load)
             result = BacktestServiceWithNoTradeEngine.run(
               symbol: index_key,
               interval_1m: interval_1m,
               interval_5m: interval_5m,
               days_back: days_back,
-              supertrend_cfg: nil,  # nil = auto-load from BestIndicatorParam
-              adx_min_strength: nil  # nil = auto-load from BestIndicatorParam (0 = let NoTradeEngine handle)
+              supertrend_cfg: { period: 7, base_multiplier: 3.0 },
+              adx_min_strength: 0 # Let NoTradeEngine handle ADX filtering
             )
 
             summary = result.summary
@@ -135,14 +134,13 @@ namespace :backtest do
       interval_1m = '1'
       interval_5m = '5'  # Always fetch 5m separately from API for ADX calculations
 
-      # Use optimized parameters if available (pass nil to auto-load)
       result = BacktestServiceWithNoTradeEngine.run(
         symbol: index_key,
         interval_1m: interval_1m,
         interval_5m: interval_5m,
         days_back: days_back,
-        supertrend_cfg: nil,  # nil = auto-load from BestIndicatorParam
-        adx_min_strength: nil # nil = auto-load from BestIndicatorParam
+        supertrend_cfg: { period: 7, multiplier: 3.0 },
+        adx_min_strength: 0
       )
 
       result.print_summary

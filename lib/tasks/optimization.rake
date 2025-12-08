@@ -209,9 +209,7 @@ namespace :optimization do
       puts "📊 Instrument: #{instrument.symbol_name} (SID: #{instrument.security_id})\n\n"
 
       # Optimize each indicator separately
-      # IMPORTANT: RSI must be LAST - runs after all other indicators
-      # Optimization order: ADX → Supertrend → MACD → ATR → RSI
-      indicators = %i[adx supertrend macd atr rsi]
+      indicators = %i[adx rsi macd supertrend]
       results = {}
 
       indicators.each do |indicator|
@@ -343,9 +341,7 @@ namespace :optimization do
       puts "📊 Instrument: #{instrument.symbol_name} (SID: #{instrument.security_id})"
 
       intervals = %w[1 5 15]
-      # IMPORTANT: RSI must be LAST - runs after all other indicators
-      # Optimization order: ADX → Supertrend → MACD → ATR → RSI
-      indicators = %i[adx supertrend macd atr rsi]
+      indicators = %i[adx rsi macd supertrend]
       all_results = {}
 
       intervals.each do |interval|

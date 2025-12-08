@@ -270,10 +270,12 @@ module Backtest
     def generate_signal(series_1m, series_5m, index, current_time, last_5m_index = 0)
       # Find corresponding 5m candle
       candle_5m_index = find_5m_candle_index(series_5m, current_time, start_from: last_5m_index)
-      return { signal: nil, direction: nil } if candle_5m_index.nil? || candle_5m_index < 14
+      return { signal: nil, direction: nil } if candle_5m_index.nil?
 
-      # Need enough candles for Supertrend calculation
-      return { signal: nil, direction: nil } if candle_5m_index < @supertrend_cfg[:period] || candle_5m_index < 14
+      # ADX needs at least 2*period candles (typically 2*14 = 28) for accurate calculation
+      # Supertrend needs at least period candles
+      min_required = [@supertrend_cfg[:period] || 7, 28].max
+      return { signal: nil, direction: nil } if candle_5m_index < min_required
 
       # Build series up to current index for Supertrend
       temp_series_5m = CandleSeries.new(symbol: 'temp', interval: '5')
@@ -346,17 +348,26 @@ module Backtest
     end
 
     def calculate_adx_for_series(series, index)
-      return 0 if index < 14
+      # ADX needs at least 2*period candles for accurate calculation (2*14 = 28)
+      # Plus 1 for the TechnicalAnalysis gem requirement
+      min_required = 29
+      return 0 if index < min_required - 1
 
       recent_candles = series.candles[0..index]
-      return 0 if recent_candles.size < 15
+      return 0 if recent_candles.size < min_required
 
       temp_series = CandleSeries.new(symbol: 'temp', interval: '5')
       recent_candles.each { |c| temp_series.add_candle(c) }
 
+      # Only calculate if we have enough candles
+      return 0 if temp_series.candles.size < min_required
+
       temp_series.adx(14) || 0
     rescue StandardError => e
-      Rails.logger.error("[SignalBacktest] ADX calculation error: #{e.class} - #{e.message}")
+      # Suppress "Not enough data" errors - they're expected for early candles
+      unless e.message.to_s.include?('Not enough data')
+        Rails.logger.error("[SignalBacktest] ADX calculation error: #{e.class} - #{e.message}")
+      end
       0
     end
 

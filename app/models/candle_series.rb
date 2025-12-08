@@ -26,7 +26,6 @@ class CandleSeries
     end
   end
 
-  # rubocop:disable Metrics/AbcSize
   def normalise_candles(resp)
     return [] if resp.blank?
 
@@ -34,7 +33,6 @@ class CandleSeries
 
     normalize_hash_format(resp)
   end
-  # rubocop:enable Metrics/AbcSize
 
   def normalize_hash_format(resp)
     raise "Unexpected candle format: #{resp.class}" unless resp.is_a?(Hash) && resp['high'].is_a?(Array)
@@ -118,6 +116,8 @@ class CandleSeries
   end
 
   def adx(period = 14)
+    # ADX needs at least period + 1 candles, but TechnicalAnalysis gem typically needs 2*period for accuracy
+    # We'll check for period + 1 here (minimum), but callers should ensure 2*period for best results
     return nil if candles.size < period + 1
 
     result = TechnicalAnalysis::Adx.calculate(hlc, period: period)
@@ -125,13 +125,19 @@ class CandleSeries
 
     result.last.adx
   rescue ArgumentError, TypeError => e
-    Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    # Suppress "Not enough data" warnings - they're expected when called too early
+    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
+      Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    end
     nil
   rescue StandardError => e
     # Don't catch NoMethodError as it indicates programming errors
     raise if e.is_a?(NoMethodError)
 
-    Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    # Suppress "Not enough data" warnings - they're expected when called too early
+    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
+      Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    end
     nil
   end
 

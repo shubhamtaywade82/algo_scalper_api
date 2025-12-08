@@ -38,13 +38,9 @@ RSpec.describe Risk::Rules::PeakDrawdownRule do
   let(:rule) { described_class.new(config: risk_config) }
 
   before do
-    allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
-    allow(Positions::TrailingConfig).to receive(:peak_drawdown_active?).and_return(true)
-    allow(Positions::TrailingConfig).to receive(:config).and_return(
-      peak_drawdown_pct: 5.0,
-      activation_profit_pct: 25.0,
-      activation_sl_offset_pct: 10.0
-    )
+    allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: false, peak_drawdown_active?: true, config: { peak_drawdown_pct: 5.0,
+                                                                                                                                 activation_profit_pct: 25.0,
+                                                                                                                                 activation_sl_offset_pct: 10.0 })
     allow(AlgoConfig).to receive(:fetch).and_return(feature_flags: {})
   end
 
@@ -73,45 +69,46 @@ RSpec.describe Risk::Rules::PeakDrawdownRule do
         end
 
         context 'when activation gating is disabled' do
-        before do
-          allow(AlgoConfig).to receive(:fetch).and_return(feature_flags: {})
+          before do
+            allow(AlgoConfig).to receive(:fetch).and_return(feature_flags: {})
+          end
+
+          it 'returns exit result' do
+            result = rule.evaluate(context)
+            expect(result.exit?).to be true
+            expect(result.reason).to include('peak_drawdown_exit')
+            expect(result.metadata[:peak_profit_pct]).to eq(25.0)
+            expect(result.metadata[:current_profit_pct]).to eq(20.0)
+            expect(result.metadata[:drawdown]).to eq(5.0)
+          end
         end
 
-        it 'returns exit result' do
-          result = rule.evaluate(context)
-          expect(result.exit?).to be true
-          expect(result.reason).to include('peak_drawdown_exit')
-          expect(result.metadata[:peak_profit_pct]).to eq(25.0)
-          expect(result.metadata[:current_profit_pct]).to eq(20.0)
-          expect(result.metadata[:drawdown]).to eq(5.0)
-        end
-      end
+        context 'when activation gating is enabled and conditions met' do
+          before do
+            allow(AlgoConfig).to receive(:fetch).and_return(
+              feature_flags: { enable_peak_drawdown_activation: true }
+            )
+            allow(Positions::TrailingConfig).to receive(:peak_drawdown_active?).and_return(true)
+          end
 
-      context 'when activation gating is enabled and conditions met' do
-        before do
-          allow(AlgoConfig).to receive(:fetch).and_return(
-            feature_flags: { enable_peak_drawdown_activation: true }
-          )
-          allow(Positions::TrailingConfig).to receive(:peak_drawdown_active?).and_return(true)
+          it 'returns exit result' do
+            result = rule.evaluate(context)
+            expect(result.exit?).to be true
+          end
         end
 
-        it 'returns exit result' do
-          result = rule.evaluate(context)
-          expect(result.exit?).to be true
-        end
-      end
+        context 'when activation gating is enabled but conditions not met' do
+          before do
+            allow(AlgoConfig).to receive(:fetch).and_return(
+              feature_flags: { enable_peak_drawdown_activation: true }
+            )
+            allow(Positions::TrailingConfig).to receive(:peak_drawdown_active?).and_return(false)
+          end
 
-      context 'when activation gating is enabled but conditions not met' do
-        before do
-          allow(AlgoConfig).to receive(:fetch).and_return(
-            feature_flags: { enable_peak_drawdown_activation: true }
-          )
-          allow(Positions::TrailingConfig).to receive(:peak_drawdown_active?).and_return(false)
-        end
-
-        it 'returns no_action' do
-          result = rule.evaluate(context)
-          expect(result.no_action?).to be true
+          it 'returns no_action' do
+            result = rule.evaluate(context)
+            expect(result.no_action?).to be true
+          end
         end
       end
     end

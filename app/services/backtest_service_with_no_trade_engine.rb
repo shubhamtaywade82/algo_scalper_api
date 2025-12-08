@@ -27,13 +27,8 @@ class BacktestServiceWithNoTradeEngine
     @interval_1m = interval_1m
     @interval_5m = interval_5m
     @days_back = days_back
-    # supertrend_cfg should always be provided (from OptimizedParamsLoader or defaults)
-    # Normalize multiplier key (handle both :multiplier and :base_multiplier)
-    cfg = supertrend_cfg.presence || { period: 7, multiplier: 3.0 }
-    cfg = cfg.dup
-    cfg[:base_multiplier] = cfg.delete(:multiplier) if cfg.key?(:multiplier) && !cfg.key?(:base_multiplier)
-    @supertrend_cfg = cfg
-    @adx_min_strength = adx_min_strength || 0
+    @supertrend_cfg = supertrend_cfg || { period: 7, multiplier: 3.0 }
+    @adx_min_strength = adx_min_strength
     @results = []
     @no_trade_stats = {
       phase1_blocked: 0,
@@ -45,43 +40,21 @@ class BacktestServiceWithNoTradeEngine
     }
 
     @instrument = Instrument.segment_index.find_by(symbol_name: symbol)
-    raise "Instrument #{symbol} not found" unless @instrument
+    unless @instrument
+      raise "Instrument #{symbol} not found"
+    end
 
     Rails.logger.info("[Backtest] Initialized backtest for #{symbol} with No-Trade Engine")
   end
 
-  def self.run(symbol:, interval_1m: '1', interval_5m: '5', days_back: 90, supertrend_cfg: nil, adx_min_strength: nil)
-    # Load instrument first to check for optimized parameters
-    instrument = Instrument.segment_index.find_by(symbol_name: symbol)
-    raise "Instrument #{symbol} not found" unless instrument
-
-    # Load optimized parameters (or use provided overrides, or defaults)
-    # Use interval_5m for optimization lookup (signals are generated on 5m)
-    optimized = Backtest::OptimizedParamsLoader.load_for_backtest(
-      instrument: instrument,
-      interval: interval_5m,
-      supertrend_cfg: supertrend_cfg,
-      adx_min_strength: adx_min_strength
-    )
-
-    if optimized[:source] == :optimized
-      $stdout.puts "[Backtest] Using optimized parameters (Score: #{optimized[:score]&.round(3)})"
-      $stdout.flush
-    elsif optimized[:source] == :manual
-      $stdout.puts '[Backtest] Using manual override parameters'
-      $stdout.flush
-    else
-      $stdout.puts '[Backtest] Using default parameters (no optimization found)'
-      $stdout.flush
-    end
-
+  def self.run(symbol:, interval_1m: '1', interval_5m: '5', days_back: 90, supertrend_cfg: {}, adx_min_strength: 0)
     service = new(
       symbol: symbol,
       interval_1m: interval_1m,
       interval_5m: interval_5m,
       days_back: days_back,
-      supertrend_cfg: optimized[:supertrend_cfg],
-      adx_min_strength: optimized[:adx_min_strength]
+      supertrend_cfg: supertrend_cfg,
+      adx_min_strength: adx_min_strength
     )
     service.execute
     service
@@ -132,7 +105,7 @@ class BacktestServiceWithNoTradeEngine
     $stdout.flush
 
     # Build candle series
-    $stdout.puts '[Backtest] Building candle series...'
+    $stdout.puts "[Backtest] Building candle series..."
     $stdout.flush
     series_1m = build_candle_series(bars_1m, interval_1m)
     series_5m = build_candle_series(bars_5m, interval_5m)
@@ -168,26 +141,6 @@ class BacktestServiceWithNoTradeEngine
     loss_total_percent = losses.sum { |l| l[:pnl_percent] }
     total_pnl_percent = @results.sum { |r| r[:pnl_percent] }
 
-    # Calculate average underlying movement in signal direction
-    avg_underlying_movement = if @results.any?
-                                (@results.sum do |r|
-                                  r[:underlying_movement_pct] || 0
-                                end / trade_count.to_f).round(2)
-                              else
-                                0
-                              end
-
-    # Calculate average time elapsed from entry to exit
-    avg_time_elapsed = if @results.any?
-                         (@results.sum do |r|
-                           r[:time_elapsed_minutes] || 0
-                         end / trade_count.to_f).round(2)
-                       else
-                         0
-                       end
-    min_time_elapsed = @results.any? ? @results.map { |r| r[:time_elapsed_minutes] || 0 }.min.round(2) : 0
-    max_time_elapsed = @results.any? ? @results.map { |r| r[:time_elapsed_minutes] || 0 }.max.round(2) : 0
-
     {
       total_trades: trade_count,
       winning_trades: wins.size,
@@ -199,10 +152,6 @@ class BacktestServiceWithNoTradeEngine
       expectancy: (total_pnl_percent / trade_count.to_f).round(2),
       max_win: wins.any? ? wins.max_by { |w| w[:pnl_percent] }[:pnl_percent].round(2) : 0,
       max_loss: losses.any? ? losses.min_by { |l| l[:pnl_percent] }[:pnl_percent].round(2) : 0,
-      avg_underlying_movement_pct: avg_underlying_movement,
-      avg_time_elapsed_minutes: avg_time_elapsed,
-      min_time_elapsed_minutes: min_time_elapsed,
-      max_time_elapsed_minutes: max_time_elapsed,
       no_trade_stats: @no_trade_stats,
       trades: @results
     }
@@ -219,8 +168,6 @@ class BacktestServiceWithNoTradeEngine
     puts "BACKTEST RESULTS: #{instrument.symbol_name} (WITH NO-TRADE ENGINE)"
     puts separator
     puts "Period: Last #{days_back} days | Intervals: #{interval_1m}m (signal), #{interval_5m}m (ADX)"
-    puts "Supertrend: period=#{@supertrend_cfg[:period]}, multiplier=#{@supertrend_cfg[:base_multiplier]}"
-    puts "ADX Min Strength: #{@adx_min_strength}"
     puts divider
     puts "Total Trades:      #{s[:total_trades]}"
     puts "Winning Trades:    #{s[:winning_trades]} (#{s[:win_rate]}%)"
@@ -234,12 +181,7 @@ class BacktestServiceWithNoTradeEngine
     puts "Total P&L:         #{'+' if s[:total_pnl_percent] > 0}#{s[:total_pnl_percent]}%"
     puts "Expectancy:        #{'+' if s[:expectancy] > 0}#{s[:expectancy]}% per trade"
     puts divider
-    puts 'UNDERLYING MOVEMENT (After No-Trade Engine Allowed):'
-    puts "  Avg Movement:     #{'+' if s[:avg_underlying_movement_pct] > 0}#{s[:avg_underlying_movement_pct]}%"
-    puts "  Time to Exit:     #{s[:avg_time_elapsed_minutes]} min (avg)"
-    puts "  Time Range:       #{s[:min_time_elapsed_minutes]} - #{s[:max_time_elapsed_minutes]} min"
-    puts divider
-    puts 'NO-TRADE ENGINE STATS:'
+    puts "NO-TRADE ENGINE STATS:"
     puts "  Phase 1 Blocked:  #{s[:no_trade_stats][:phase1_blocked]}"
     puts "  Phase 2 Blocked:  #{s[:no_trade_stats][:phase2_blocked]}"
     puts "  Signals Generated: #{s[:no_trade_stats][:signal_generated]}"
@@ -247,11 +189,11 @@ class BacktestServiceWithNoTradeEngine
     block_rate = calculate_block_rate(s[:no_trade_stats])
     puts "  Block Rate:       #{block_rate}%"
     puts divider
-    puts 'Top Phase 1 Block Reasons:'
+    puts "Top Phase 1 Block Reasons:"
     s[:no_trade_stats][:phase1_reasons].sort_by { |_k, v| -v }.first(5).each do |reason, count|
       puts "  #{reason}: #{count}"
     end
-    puts 'Top Phase 2 Block Reasons:'
+    puts "Top Phase 2 Block Reasons:"
     s[:no_trade_stats][:phase2_reasons].sort_by { |_k, v| -v }.first(5).each do |reason, count|
       puts "  #{reason}: #{count}"
     end
@@ -274,7 +216,7 @@ class BacktestServiceWithNoTradeEngine
     start_time = Time.current
     # Direct API call with interval parameter - fetches native interval data
     data = @instrument.intraday_ohlc(
-      interval: interval, # This parameter ensures we get native 5m data, not aggregated
+      interval: interval,  # This parameter ensures we get native 5m data, not aggregated
       from_date: from_date.to_s,
       to_date: to_date.to_s,
       days: @days_back
@@ -288,7 +230,7 @@ class BacktestServiceWithNoTradeEngine
       $stdout.flush
     else
       Rails.logger.warn("[Backtest] No data returned for #{interval}m OHLC")
-      $stdout.puts '[Backtest]   ⚠️  No data returned'
+      $stdout.puts "[Backtest]   ⚠️  No data returned"
       $stdout.flush
     end
 
@@ -304,9 +246,9 @@ class BacktestServiceWithNoTradeEngine
     # Log data format for debugging
     if ohlc_data.is_a?(Hash)
       size = ohlc_data['high']&.size || ohlc_data.keys.size
-      Rails.logger.debug { "[Backtest] Building #{interval}m series from hash format: #{size} records" }
+      Rails.logger.debug("[Backtest] Building #{interval}m series from hash format: #{size} records")
     elsif ohlc_data.is_a?(Array)
-      Rails.logger.debug { "[Backtest] Building #{interval}m series from array format: #{ohlc_data.size} records" }
+      Rails.logger.debug("[Backtest] Building #{interval}m series from array format: #{ohlc_data.size} records")
     end
 
     series = CandleSeries.new(symbol: @instrument.symbol_name, interval: interval)
@@ -324,7 +266,7 @@ class BacktestServiceWithNoTradeEngine
     i = 0
     total_candles = series_1m.candles.size
     last_progress_log = 0
-    last_5m_index = 0 # Cache last found 5m index for optimization
+    last_5m_index = 0  # Cache last found 5m index for optimization
 
     # Process 1m candles (for signal generation)
     loop_start_time = Time.current
@@ -450,11 +392,11 @@ class BacktestServiceWithNoTradeEngine
     end
 
     # Force exit any open position at end
-    return unless open_position
-
-    last_candle = series_1m.candles.last
-    exit_result = force_exit(open_position, last_candle, series_1m.candles.size - 1, 'end_of_data')
-    @results << exit_result
+    if open_position
+      last_candle = series_1m.candles.last
+      exit_result = force_exit(open_position, last_candle, series_1m.candles.size - 1, 'end_of_data')
+      @results << exit_result
+    end
   end
 
   def quick_no_trade_precheck_historical(candle_1m:, series_1m:, index:, current_time:)
@@ -509,7 +451,9 @@ class BacktestServiceWithNoTradeEngine
     candle_5m_index = find_5m_candle_index(series_5m, current_time, start_from: last_5m_index)
     find_elapsed = Time.current - find_start
 
-    Rails.logger.warn("[Backtest] Slow find_5m_candle_index: #{find_elapsed.round(2)}s") if find_elapsed > 0.5
+    if find_elapsed > 0.5
+      Rails.logger.warn("[Backtest] Slow find_5m_candle_index: #{find_elapsed.round(2)}s")
+    end
 
     return { signal: nil, direction: nil } if candle_5m_index.nil? || candle_5m_index < 14
 
@@ -557,12 +501,11 @@ class BacktestServiceWithNoTradeEngine
       direction: direction,
       supertrend: st_result,
       adx_value: adx_value,
-      last_5m_index: candle_5m_index # Return for caching
+      last_5m_index: candle_5m_index  # Return for caching
     }
   end
 
-  def validate_no_trade_conditions_historical(signal_direction:, candle_1m:, series_1m:, series_5m:, index:,
-                                              current_time:)
+  def validate_no_trade_conditions_historical(signal_direction:, candle_1m:, series_1m:, series_5m:, index:, current_time:)
     # Build context for No-Trade Engine
     # Get recent bars for context building
     bars_1m_recent = index >= 20 ? series_1m.candles[(index - 19)..index] : series_1m.candles[0..index]
@@ -680,25 +623,21 @@ class BacktestServiceWithNoTradeEngine
 
     last_result = result.last
 
-    adx_value = if last_result.respond_to?(:adx)
-                  last_result.adx
-                else
-                  (last_result.respond_to?(:adx_value) ? last_result.adx_value : 0)
-                end
+    adx_value = last_result.respond_to?(:adx) ? last_result.adx : (last_result.respond_to?(:adx_value) ? last_result.adx_value : 0)
     plus_di_value = if last_result.respond_to?(:plus_di)
-                      last_result.plus_di
-                    elsif last_result.respond_to?(:plusDi)
-                      last_result.plusDi
+                     last_result.plus_di
+                   elsif last_result.respond_to?(:plusDi)
+                     last_result.plusDi
+                   else
+                     0
+                   end
+    minus_di_value = if last_result.respond_to?(:minus_di)
+                      last_result.minus_di
+                    elsif last_result.respond_to?(:minusDi)
+                      last_result.minusDi
                     else
                       0
                     end
-    minus_di_value = if last_result.respond_to?(:minus_di)
-                       last_result.minus_di
-                     elsif last_result.respond_to?(:minusDi)
-                       last_result.minusDi
-                     else
-                       0
-                     end
 
     {
       adx: adx_value || 0,
@@ -732,7 +671,9 @@ class BacktestServiceWithNoTradeEngine
 
   def decide_direction_from_supertrend_adx(st_result, adx_value, index)
     # Apply ADX filter if enabled
-    return :avoid if @adx_min_strength.positive? && adx_value < @adx_min_strength
+    if @adx_min_strength.positive? && adx_value < @adx_min_strength
+      return :avoid
+    end
 
     # Check Supertrend trend
     return :avoid if st_result.blank? || st_result[:trend].nil?
@@ -755,7 +696,7 @@ class BacktestServiceWithNoTradeEngine
     confidence += 5 if adx_value >= 20
 
     # Add confidence for clear trend
-    confidence += 10 if %i[bullish bearish].include?(st_result[:trend])
+    confidence += 10 if st_result[:trend] == :bullish || st_result[:trend] == :bearish
 
     [confidence, 100].min
   end
@@ -764,34 +705,41 @@ class BacktestServiceWithNoTradeEngine
     candles = series_5m.candles
     return nil if candles.empty?
 
-    # OPTIMIZE: Start from last found index (candles are sequential, so next 1m candle
+    # Optimize: Start from last found index (candles are sequential, so next 1m candle
     # will likely map to same or next 5m candle)
     start_idx = [[start_from, 0].max, candles.size - 1].min
 
     # First, try forward search from cached position (most common case)
     # Limit search to prevent infinite loops
-    max_search = [candles.size - start_idx, 10].min # Search max 10 candles forward
+    max_search = [candles.size - start_idx, 10].min  # Search max 10 candles forward
     (start_idx...[start_idx + max_search, candles.size].min).each do |idx|
       candle = candles[idx]
       next_candle = candles[idx + 1] if idx + 1 < candles.size
 
       # Check if this candle contains the target time
-      break unless candle.timestamp <= target_time
-      # If this is the last candle, or next candle is after target, we found it
-      return idx if idx == candles.size - 1 || next_candle.nil? || next_candle.timestamp > target_time
-
-      # We've passed the target time, need to search backwards
+      if candle.timestamp <= target_time
+        # If this is the last candle, or next candle is after target, we found it
+        if idx == candles.size - 1 || next_candle.nil? || next_candle.timestamp > target_time
+          return idx
+        end
+      else
+        # We've passed the target time, need to search backwards
+        break
+      end
     end
 
     # Fallback: search backwards from start_idx (in case target is before cached position)
     # Limit search to prevent infinite loops
-    max_backward = [start_idx, 10].min # Search max 10 candles backward
+    max_backward = [start_idx, 10].min  # Search max 10 candles backward
     (start_idx - 1).downto([start_idx - max_backward, 0].max) do |idx|
       candle = candles[idx]
       next_candle = candles[idx + 1] if idx + 1 < candles.size
 
-      next unless candle.timestamp <= target_time
-      return idx if idx == candles.size - 1 || next_candle.nil? || next_candle.timestamp > target_time
+      if candle.timestamp <= target_time
+        if idx == candles.size - 1 || next_candle.nil? || next_candle.timestamp > target_time
+          return idx
+        end
+      end
     end
 
     # Final fallback: full linear search if cached search failed
@@ -836,7 +784,7 @@ class BacktestServiceWithNoTradeEngine
     hour = parts[0].to_i
     minute = parts[1].to_i
 
-    (hour * 60) + minute
+    hour * 60 + minute
   end
 
   def trading_hours?(timestamp)
@@ -865,27 +813,23 @@ class BacktestServiceWithNoTradeEngine
       spot_entry_price: entry_price, # Store spot price for PnL calculation
       stop_loss: calculate_stop_loss(entry_price, signal_result[:signal][:type]),
       target: calculate_target(entry_price, signal_result[:signal][:type]),
-      direction: signal_result[:direction],
-      breakeven_set: false,      # Track if breakeven stop has been set
-      early_profit_taken: false  # Track if early profit has been taken
+      direction: signal_result[:direction]
     }
   end
 
   def calculate_stop_loss(entry_price, signal_type)
-    # IMPROVED: Tighter stop loss (-20% instead of -30%) to cut losses faster
     if signal_type == :ce
-      entry_price * 0.80 # -20% (was -30%)
+      entry_price * 0.70 # -30%
     else
-      entry_price * 1.20 # +20% (for PE, price going up is a loss) (was +30%)
+      entry_price * 1.30 # +30% (for PE, price going up is a loss)
     end
   end
 
   def calculate_target(entry_price, signal_type)
-    # IMPROVED: Lower target (+30% instead of +50%) to take profits earlier
     if signal_type == :ce
-      entry_price * 1.30 # +30% (was +50%)
+      entry_price * 1.50 # +50%
     else
-      entry_price * 0.70 # -30% (for PE, price going down is profit) (was -50%)
+      entry_price * 0.50 # -50% (for PE, price going down is profit)
     end
   end
 
@@ -898,29 +842,10 @@ class BacktestServiceWithNoTradeEngine
 
     # Simplified PnL calculation (assumes 1:1 delta for ATM options)
     pnl_percent = if signal_type == :ce
-                    ((current_spot - entry_spot) / entry_spot * 100)
-                  else # :pe
-                    ((entry_spot - current_spot) / entry_spot * 100)
-                  end
-
-    # IMPROVED: Breakeven stop - move stop loss to breakeven after +0.15% profit
-    # This protects small gains and prevents winners from turning into losers
-    if pnl_percent >= 0.15 && !position[:breakeven_set]
-      position[:breakeven_set] = true
-      # Move stop loss to breakeven (entry price)
-      position[:stop_loss] = entry_spot
-    end
-
-    # IMPROVED: Early profit taking - exit at +0.25% to lock in small profits
-    # This improves avg win by taking profits earlier on small moves
-    if pnl_percent >= 0.25 && !position[:early_profit_taken]
-      # Only take early profit if we've held for at least 30 minutes (avoid premature exits)
-      time_held_minutes = ((candle.timestamp - position[:entry_time]) / 60.0).round(2)
-      if time_held_minutes >= 30
-        position[:early_profit_taken] = true
-        return build_exit_result(position, candle, index, pnl_percent, 'early_profit')
-      end
-    end
+                   ((current_spot - entry_spot) / entry_spot * 100)
+                 else # :pe
+                   ((entry_spot - current_spot) / entry_spot * 100)
+                 end
 
     # Check target hit
     target_hit =
@@ -928,7 +853,7 @@ class BacktestServiceWithNoTradeEngine
       (signal_type == :pe && current_spot <= position[:target])
     return build_exit_result(position, candle, index, pnl_percent, 'target') if target_hit
 
-    # Check stop loss (now includes breakeven stop if activated)
+    # Check stop loss
     stop_loss_hit =
       (signal_type == :ce && current_spot <= position[:stop_loss]) ||
       (signal_type == :pe && current_spot >= position[:stop_loss])
@@ -949,40 +874,22 @@ class BacktestServiceWithNoTradeEngine
     signal_type = position[:signal_type]
 
     pnl_percent = if signal_type == :ce
-                    ((current_spot - entry_spot) / entry_spot * 100)
-                  else
-                    ((entry_spot - current_spot) / entry_spot * 100)
-                  end
+                   ((current_spot - entry_spot) / entry_spot * 100)
+                 else
+                   ((entry_spot - current_spot) / entry_spot * 100)
+                 end
 
     build_exit_result(position, candle, index, pnl_percent, reason)
   end
 
   def build_exit_result(position, candle, index, pnl_percent, exit_reason)
-    entry_time = position[:entry_time]
-    exit_time = candle.timestamp
-    entry_price = position[:entry_price]
-    exit_price = candle.close
-
-    # Calculate time elapsed from entry to exit (in minutes)
-    time_elapsed_seconds = exit_time - entry_time
-    time_elapsed_minutes = (time_elapsed_seconds / 60.0).round(2)
-
-    # Calculate underlying price movement in signal direction
-    # For CE (bullish): movement = (exit - entry) / entry * 100
-    # For PE (bearish): movement = (entry - exit) / entry * 100
-    # This is the same as pnl_percent, but we'll make it explicit
-    underlying_movement_pct = pnl_percent
-
     {
       signal_type: position[:signal_type],
-      direction: position[:direction],
-      entry_time: entry_time,
-      entry_price: entry_price,
-      exit_time: exit_time,
-      exit_price: exit_price,
+      entry_time: position[:entry_time],
+      entry_price: position[:entry_price],
+      exit_time: candle.timestamp,
+      exit_price: candle.close,
       pnl_percent: pnl_percent.round(2),
-      underlying_movement_pct: underlying_movement_pct.round(2),
-      time_elapsed_minutes: time_elapsed_minutes,
       exit_reason: exit_reason,
       bars_held: index - position[:entry_index]
     }
