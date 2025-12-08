@@ -53,19 +53,19 @@ module Live
       tracker.with_lock do
         return if tracker.exited?
 
-        ltp = safe_ltp(tracker)
-        result = @router.exit_market(tracker)
-        success = (result == true) ||
-                  (result.is_a?(Hash) && result[:success] == true)
+        # Use Command Pattern for exit with audit trail
+        exit_command = Commands::ExitPositionCommand.new(
+          tracker: tracker,
+          exit_reason: reason,
+          exit_price: safe_ltp(tracker),
+          metadata: { triggered_by: 'exit_engine' }
+        )
 
-        if success
-          tracker.mark_exited!(
-            exit_price: ltp,
-            exit_reason: reason
-          )
+        result = exit_command.execute
+        if result[:success]
           Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
         else
-          Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{result.inspect}")
+          Rails.logger.error("[ExitEngine] Exit command failed for #{tracker.order_no}: #{result[:error]}")
         end
       end
     rescue StandardError => e

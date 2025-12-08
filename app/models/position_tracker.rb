@@ -36,6 +36,7 @@ require 'bigdecimal'
 
 class PositionTracker < ApplicationRecord
   include PositionTrackerFactory
+  include PositionStateManagement
 
   # Attribute accessors
   store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction
@@ -300,6 +301,9 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
+    # Validate state transition before proceeding
+    State::PositionStateMachine.validate_transition!(status, :exited) if respond_to?(:status)
+
     # Persist final PnL from Redis cache to DB (force sync, no throttling)
     persist_final_pnl_from_cache
 
