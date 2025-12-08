@@ -25,8 +25,17 @@ module Risk
         current_profit_pct = context.pnl_pct
         return skip_result unless peak_profit_pct && current_profit_pct
 
-        # Check if peak drawdown threshold is breached
-        return no_action_result unless peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
+        # Check if peak drawdown threshold is breached (uses tiered protection)
+        unless peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
+          return no_action_result
+        end
+
+        # Log which tier was used for transparency
+        drawdown_threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak_profit_pct)
+        Rails.logger.debug(
+          "[PeakDrawdownRule] Tiered protection: peak=#{peak_profit_pct.round(2)}% " \
+          "threshold=#{drawdown_threshold.round(2)}% drawdown=#{(peak_profit_pct - current_profit_pct).round(2)}%"
+        )
 
         # Apply peak-drawdown activation gating (if enabled)
         if peak_drawdown_activation_enabled?

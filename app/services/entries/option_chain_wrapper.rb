@@ -71,12 +71,16 @@ module Entries
     end
 
     # Check if spread is wide
+    # @param hard_reject_threshold [Float] Hard reject threshold (default: uses index-specific)
     # @return [Boolean]
-    def spread_wide?
+    def spread_wide?(hard_reject_threshold: nil)
       atm_ce = find_atm_option(:ce)
       atm_pe = find_atm_option(:pe)
 
       return true unless atm_ce || atm_pe
+
+      # Get threshold from parameter or use index-specific default
+      max_spread = hard_reject_threshold || get_index_spread_threshold
 
       # Check CE spread
       if atm_ce
@@ -86,11 +90,7 @@ module Entries
 
         if bid.positive? && ask.positive? && ltp.positive?
           spread = ask - bid
-          spread_ratio = spread / ltp
-
-          # Threshold: 3 for BANKNIFTY, 2 for NIFTY
-          max_spread = @index_key.include?('BANK') ? 3.0 : 2.0
-          return true if spread_ratio > max_spread
+          return true if spread > max_spread
         end
       end
 
@@ -102,14 +102,16 @@ module Entries
 
         if bid.positive? && ask.positive? && ltp.positive?
           spread = ask - bid
-          spread_ratio = spread / ltp
-
-          max_spread = @index_key.include?('BANK') ? 3.0 : 2.0
-          return true if spread_ratio > max_spread
+          return true if spread > max_spread
         end
       end
 
       false
+    end
+
+    def get_index_spread_threshold
+      thresholds = NoTradeThresholds.for_index(@index_key)
+      thresholds[:spread_hard_reject] || 3.0
     end
 
     private

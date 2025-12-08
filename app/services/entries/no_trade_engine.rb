@@ -3,6 +3,7 @@
 module Entries
   # No-Trade Engine: Validates market conditions before allowing entry
   # Blocks trades when multiple unfavorable conditions are present
+  # Uses index-specific thresholds optimized for OPTIONS BUYING
   class NoTradeEngine
     Result = Struct.new(:allowed, :score, :reasons, keyword_init: true)
 
@@ -12,29 +13,34 @@ module Entries
     def self.validate(ctx)
       reasons = []
       score = 0
+      thresholds = ctx.thresholds || NoTradeThresholds::DEFAULT_THRESHOLDS
 
-      # --- Trend Weakness ---
-      # ADX threshold: 15 (was 18) - allows moderate trends through
-      # ADX 15-17 is still valid for trading, 18+ is strong trend
-      if ctx.adx_5m < 15
-        reasons << 'Weak trend: ADX < 15'
+      # --- Trend Weakness (Index-Specific) ---
+      # ADX threshold: NIFTY < 14, SENSEX < 12, BANKNIFTY < 16
+      if ctx.adx_5m < thresholds[:adx_hard_reject]
+        reasons << "Weak trend: ADX < #{thresholds[:adx_hard_reject]}"
         score += 1
+      elsif ctx.adx_5m < thresholds[:adx_soft_reject]
+        reasons << "Moderate trend: ADX #{ctx.adx_5m.round(1)} < #{thresholds[:adx_soft_reject]}"
+        score += 0.5
       end
 
-      # DI overlap threshold: 2 (was 3) - less strict for ranging markets
-      # DI difference of 2+ still shows directional bias
+      # DI overlap threshold: NIFTY < 2.0, SENSEX < 1.5, BANKNIFTY < 2.5
       di_diff = (ctx.plus_di_5m - ctx.minus_di_5m).abs
-      if di_diff < 2
-        reasons << 'DI overlap: no directional strength'
+      if di_diff < thresholds[:di_diff_hard_reject]
+        reasons << "DI overlap: no directional strength (diff: #{di_diff.round(2)} < #{thresholds[:di_diff_hard_reject]})"
         score += 1
+      elsif di_diff < thresholds[:di_diff_soft_reject]
+        reasons << "Weak DI separation: #{di_diff.round(2)} < #{thresholds[:di_diff_soft_reject]}"
+        score += 0.5
       end
 
       # --- Market Structure Failures ---
-      # BOS check: Only penalize if no BOS AND other weak conditions present
-      # BOS alone is not enough to block - need combination with other issues
+      # RELAXED: BOS check is now optional (0.5 instead of 1.0) to allow more trades
+      # BOS is still useful but not a hard requirement
       unless ctx.bos_present
-        reasons << 'No BOS in last 10m'
-        score += 1
+        reasons << 'No BOS in last 10m (relaxed)'
+        score += 0.5
       end
 
       if ctx.in_opposite_ob
@@ -47,10 +53,16 @@ module Entries
         score += 1
       end
 
-      # --- VWAP / AVWAP Filters ---
-      if ctx.near_vwap
-        reasons << 'VWAP magnet zone'
+      # --- VWAP / AVWAP Filters (Index-Specific) ---
+      # VWAP chop: NIFTY ±0.08% for 3+ candles, SENSEX ±0.06% for 2+ candles
+      if ctx.vwap_chop
+        reasons << "VWAP chop: price within ±#{thresholds[:vwap_chop_pct]}% for #{thresholds[:vwap_chop_candles]}+ candles"
         score += 1
+      end
+
+      if ctx.near_vwap
+        reasons << "VWAP magnet zone (within ±#{thresholds[:vwap_chop_pct]}%)"
+        score += 0.5
       end
 
       if ctx.trapped_between_vwap
@@ -58,42 +70,57 @@ module Entries
         score += 1
       end
 
-      # --- Volatility Filters ---
-      if ctx.range_10m_pct < 0.1
-        reasons << 'Low volatility: 10m range < 0.1%'
+      # --- Volatility Filters (Index-Specific) ---
+      # Range: NIFTY < 0.06%, SENSEX < 0.04%, BANKNIFTY < 0.08%
+      if ctx.range_10m_pct < thresholds[:range_10m_hard_reject]
+        reasons << "Low volatility: 10m range #{ctx.range_10m_pct.round(4)}% < #{thresholds[:range_10m_hard_reject]}%"
         score += 1
+      elsif ctx.range_10m_pct < thresholds[:range_10m_soft_reject]
+        reasons << "Moderate volatility: 10m range #{ctx.range_10m_pct.round(4)}% < #{thresholds[:range_10m_soft_reject]}%"
+        score += 0.5
       end
 
+      # ATR downtrend: NIFTY 5+ bars, SENSEX 3+ bars, BANKNIFTY 4+ bars
       if ctx.atr_downtrend
-        reasons << 'ATR decreasing (volatility compression)'
+        reasons << "ATR decreasing (volatility compression for #{thresholds[:atr_downtrend_bars]}+ bars)"
         score += 1
       end
 
-      # --- Option Chain Microstructure ---
-      if ctx.ce_oi_up && ctx.pe_oi_up
-        reasons << 'Both CE & PE OI rising (writers controlling)'
+      # --- Option Chain Microstructure (Index-Specific) ---
+      # OI trap: Both CE & PE OI rising with low range
+      if ctx.oi_trap
+        reasons << "OI trap: CE↑ & PE↑ & range < #{thresholds[:oi_trap_range_pct]}%"
         score += 1
       end
 
-      if ctx.iv < ctx.min_iv_threshold
-        reasons << "IV too low (#{ctx.iv.round(2)} < #{ctx.min_iv_threshold})"
+      # IV threshold: NIFTY < 9, SENSEX < 11, BANKNIFTY < 13
+      if ctx.iv < thresholds[:iv_hard_reject]
+        reasons << "IV too low: #{ctx.iv.round(2)} < #{thresholds[:iv_hard_reject]}"
         score += 1
+      elsif ctx.iv < thresholds[:iv_soft_reject]
+        reasons << "Low IV: #{ctx.iv.round(2)} < #{thresholds[:iv_soft_reject]}"
+        score += 0.5
       end
 
       if ctx.iv_falling
         reasons << 'IV decreasing'
-        score += 1
+        score += 0.5
       end
 
+      # Spread threshold: NIFTY > ₹3, SENSEX > ₹5, BANKNIFTY > ₹4
       if ctx.spread_wide
-        reasons << 'Wide bid-ask spread'
+        reasons << "Wide bid-ask spread (> ₹#{thresholds[:spread_hard_reject]})"
         score += 1
       end
 
-      # --- Candle Quality ---
-      if ctx.avg_wick_ratio > 1.8
-        reasons << "High wick ratio (#{ctx.avg_wick_ratio.round(2)})"
+      # --- Candle Quality (Index-Specific) ---
+      # Wick ratio: NIFTY > 2.2, SENSEX > 2.5, BANKNIFTY > 2.3
+      if ctx.avg_wick_ratio > thresholds[:wick_ratio_hard_reject]
+        reasons << "High wick ratio: #{ctx.avg_wick_ratio.round(2)} > #{thresholds[:wick_ratio_hard_reject]}"
         score += 1
+      elsif ctx.avg_wick_ratio > thresholds[:wick_ratio_soft_reject]
+        reasons << "Moderate wick ratio: #{ctx.avg_wick_ratio.round(2)} > #{thresholds[:wick_ratio_soft_reject]}"
+        score += 0.5
       end
 
       # --- Time Windows ---
@@ -102,10 +129,10 @@ module Entries
         score += 1
       end
 
-      # Lunch-time check: Only block if ADX is weak (< 20) during lunch hours
-      # Strong trends (ADX >= 20) can still be traded during lunch
-      if ctx.time_between.call('11:20', '13:30') && ctx.adx_5m < 20
-        reasons << 'Lunch-time theta zone (weak trend)'
+      # Lunch-time check: Only block if ADX is weak during lunch hours
+      # Use index-specific ADX soft reject threshold
+      if ctx.time_between.call('11:20', '13:30') && ctx.adx_5m < thresholds[:adx_soft_reject]
+        reasons << "Lunch-time theta zone (ADX < #{thresholds[:adx_soft_reject]})"
         score += 1
       end
 
@@ -115,9 +142,12 @@ module Entries
         score += 1
       end
 
+      # IMPROVED: Increased blocking threshold from 4 to 5 to be more selective
+      # This allows trades with 4 or fewer unfavorable conditions
+      # Goal: Better avg profit vs avg loss ratio by filtering more bad trades
       Result.new(
-        allowed: score < 3,
-        score: score,
+        allowed: score < 5,
+        score: score.round(2),
         reasons: reasons
       )
     end

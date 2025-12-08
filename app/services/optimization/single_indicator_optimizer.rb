@@ -4,36 +4,42 @@ module Optimization
   # Optimizes a SINGLE indicator's parameters
   # Tests parameter combinations for one indicator and measures price movement after signals
   class SingleIndicatorOptimizer
+    # Indicator parameter spaces for optimization
+    # IMPORTANT: Order matters - RSI must be LAST (runs after all other indicators)
+    # Optimization order: ADX → Supertrend → MACD → ATR → RSI
     INDICATOR_PARAM_SPACES = {
       adx: {
         period: [10, 14, 18],
         threshold: [15, 18, 20, 22, 25]
       },
-      rsi: {
-        period: [10, 14, 21],
-        oversold: [20, 25, 30, 35],
-        overbought: [65, 70, 75, 80]
+      supertrend: {
+        atr_period: [8, 10, 12, 14],
+        multiplier: [1.5, 2.0, 2.5, 3.0]
       },
       macd: {
         fast: [8, 12, 14],
         slow: [20, 26, 30],
         signal: [5, 9, 12]
       },
-      supertrend: {
-        atr_period: [8, 10, 12, 14],
-        multiplier: [1.5, 2.0, 2.5, 3.0]
+      atr: {
+        period: [7, 10, 14, 18, 21]
+      },
+      rsi: {
+        period: [10, 14, 21],
+        oversold: [20, 25, 30, 35],
+        overbought: [65, 70, 75, 80]
       }
     }.freeze
 
-    def initialize(instrument:, interval:, lookback_days: 45, indicator:)
+    def initialize(instrument:, interval:, indicator:, lookback_days: 45)
       @instrument = instrument
       @interval = interval
       @lookback = lookback_days
       @indicator = indicator.to_sym
 
-      unless INDICATOR_PARAM_SPACES.key?(@indicator)
-        raise ArgumentError, "Unknown indicator: #{@indicator}. Must be one of: #{INDICATOR_PARAM_SPACES.keys.join(', ')}"
-      end
+      return if INDICATOR_PARAM_SPACES.key?(@indicator)
+
+      raise ArgumentError, "Unknown indicator: #{@indicator}. Must be one of: #{INDICATOR_PARAM_SPACES.keys.join(', ')}"
     end
 
     def run
@@ -81,12 +87,12 @@ module Optimization
         end
 
         # Progress logging every 10%
-        if processed % [total_combinations / 10, 1].max == 0
-          progress_pct = (processed.to_f / total_combinations * 100).round(1)
-          Rails.logger.info("[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
-          $stdout.puts "[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
-          $stdout.flush
-        end
+        next unless processed % [total_combinations / 10, 1].max == 0
+
+        progress_pct = (processed.to_f / total_combinations * 100).round(1)
+        Rails.logger.info("[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
+        $stdout.puts "[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
+        $stdout.flush
       end
 
       Rails.logger.info("[SingleIndicatorOptimizer] Optimization complete. Best AvgMove: #{best[:score].round(4)}%")
@@ -103,7 +109,7 @@ module Optimization
 
     def load_series!
       Rails.logger.info("[SingleIndicatorOptimizer] Fetching intraday OHLC for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
-      $stdout.puts "[SingleIndicatorOptimizer] Fetching intraday OHLC..."
+      $stdout.puts '[SingleIndicatorOptimizer] Fetching intraday OHLC...'
       $stdout.flush
 
       raw = @instrument.intraday_ohlc(
@@ -120,7 +126,7 @@ module Optimization
       end
 
       Rails.logger.info("[SingleIndicatorOptimizer] Received #{raw.is_a?(Hash) ? raw.keys.size : raw.size} records from API")
-      $stdout.puts "[SingleIndicatorOptimizer] Received data from API"
+      $stdout.puts '[SingleIndicatorOptimizer] Received data from API'
       $stdout.flush
 
       @series = CandleSeries.new(symbol: @instrument.symbol_name, interval: @interval)
@@ -186,7 +192,7 @@ module Optimization
             score: best[:score],
             updated_at: Time.current
           },
-          unique_by: [:instrument_id, :interval, :indicator]
+          unique_by: %i[instrument_id interval indicator]
         )
       else
         # Fallback for old schema
@@ -199,7 +205,7 @@ module Optimization
             score: best[:score],
             updated_at: Time.current
           },
-          unique_by: [:instrument_id, :interval]
+          unique_by: %i[instrument_id interval]
         )
       end
     rescue StandardError => e
@@ -207,4 +213,3 @@ module Optimization
     end
   end
 end
-

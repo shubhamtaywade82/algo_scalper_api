@@ -4,8 +4,9 @@ module Entries
   # VWAP utilities (works without volume - uses typical price)
   class VWAPUtils
     class << self
-      # Check if price is near VWAP (within ±0.1%)
+      # Check if price is near VWAP (within threshold %)
       # @param bars [Array<Candle>] Array of candle objects
+      # @param threshold_pct [Float] Threshold percentage (default: 0.1%)
       # @return [Boolean]
       def near_vwap?(bars, threshold_pct: 0.1)
         return false if bars.nil? || bars.empty?
@@ -18,6 +19,28 @@ module Entries
 
         deviation_pct = ((current_price - vwap).abs / vwap * 100).abs
         deviation_pct <= threshold_pct
+      end
+
+      # Check for VWAP chop: price within ±threshold% for N+ candles
+      # @param bars [Array<Candle>] Array of candle objects
+      # @param threshold_pct [Float] Threshold percentage (e.g., 0.08 for NIFTY, 0.06 for SENSEX)
+      # @param min_candles [Integer] Minimum candles in chop (e.g., 3 for NIFTY, 2 for SENSEX)
+      # @return [Boolean]
+      def vwap_chop?(bars, threshold_pct:, min_candles:)
+        return false if bars.nil? || bars.empty? || bars.size < min_candles
+
+        vwap = calculate_vwap(bars)
+        return false unless vwap&.positive?
+
+        # Check last N candles
+        recent_bars = bars.last(min_candles)
+        recent_bars.all? do |candle|
+          price = candle.close
+          next false unless price&.positive?
+
+          deviation_pct = ((price - vwap).abs / vwap * 100).abs
+          deviation_pct <= threshold_pct
+        end
       end
 
       # Calculate VWAP (using typical price when volume unavailable)

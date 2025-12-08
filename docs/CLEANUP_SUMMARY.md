@@ -2,8 +2,8 @@
 
 ## 📋 **Cleanup Completed**
 
-**Date**: Current session  
-**Files Removed**: 34 outdated/superseded documents  
+**Date**: Current session
+**Files Removed**: 34 outdated/superseded documents
 **Files Remaining**: 41 relevant documents
 
 ---
@@ -73,7 +73,7 @@
 ### **Feature-Specific Documentation**:
 - `signal_trend_scorer.md`
 - `signal_index_selector.md`
-- `signal_scheduler_pr_review.md` - Historical PR review
+- `SIGNAL_SCHEDULER_PR_REVIEW.md` - Signal scheduler PR review
 - `signal_scheduler_post_flow.md` - Flow documentation
 - `options_strike_selector.md`
 - `options_premium_filter.md`
@@ -119,8 +119,8 @@
 
 ## 📊 **Summary**
 
-**Before**: 75 MD files  
-**After**: 41 MD files  
+**Before**: 75 MD files
+**After**: 41 MD files
 **Removed**: 34 files (45% reduction)
 
 **Result**: Cleaner documentation structure with single source of truth (`CODEBASE_STATUS.md`) for codebase status.

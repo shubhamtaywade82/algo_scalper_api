@@ -17,6 +17,9 @@ module Entries
         index_key = index.to_s.upcase
         current_time = normalize_time(time)
 
+        # Get index-specific thresholds
+        thresholds = NoTradeThresholds.for_index(index_key)
+
         # Wrap option chain if needed
         chain_wrapper = if option_chain.is_a?(OptionChainWrapper)
                           option_chain
@@ -27,7 +30,14 @@ module Entries
         # Calculate ADX and DI values from 5m bars
         adx_data = calculate_adx_data(bars_5m)
 
+        # Calculate range for OI trap check
+        range_10m_pct = RangeUtils.range_pct(bars_1m.last(10))
+
         OpenStruct.new(
+          # Index key for threshold lookups
+          index_key: index_key,
+          thresholds: thresholds,
+
           # Trend indicators
           adx_5m: adx_data[:adx] || 0,
           plus_di_5m: adx_data[:plus_di] || 0,
@@ -38,23 +48,32 @@ module Entries
           in_opposite_ob: StructureDetector.inside_opposite_ob?(bars_1m),
           inside_fvg: StructureDetector.inside_fvg?(bars_1m),
 
-          # VWAP indicators
-          near_vwap: VWAPUtils.near_vwap?(bars_1m),
+          # VWAP indicators (with index-specific thresholds)
+          near_vwap: VWAPUtils.near_vwap?(bars_1m, threshold_pct: thresholds[:vwap_chop_pct]),
+          vwap_chop: VWAPUtils.vwap_chop?(
+            bars_1m,
+            threshold_pct: thresholds[:vwap_chop_pct],
+            min_candles: thresholds[:vwap_chop_candles]
+          ),
           trapped_between_vwap: VWAPUtils.trapped_between_vwap_avwap?(bars_1m),
 
-          # Volatility indicators
-          range_10m_pct: RangeUtils.range_pct(bars_1m.last(10)),
-          atr_downtrend: ATRUtils.atr_downtrend?(bars_1m),
+          # Volatility indicators (with index-specific thresholds)
+          range_10m_pct: range_10m_pct,
+          atr_downtrend: ATRUtils.atr_downtrend?(
+            bars_1m,
+            min_downtrend_bars: thresholds[:atr_downtrend_bars]
+          ),
 
-          # Option chain indicators
+          # Option chain indicators (with index-specific thresholds)
           ce_oi_up: chain_wrapper.ce_oi_rising?,
           pe_oi_up: chain_wrapper.pe_oi_rising?,
           iv: chain_wrapper.atm_iv || 0,
           iv_falling: chain_wrapper.iv_falling?,
-          min_iv_threshold: index_key.include?('BANK') ? 13 : 10,
-          spread_wide: chain_wrapper.spread_wide?,
+          min_iv_threshold: thresholds[:iv_hard_reject],
+          oi_trap: chain_wrapper.ce_oi_rising? && chain_wrapper.pe_oi_rising? && range_10m_pct < thresholds[:oi_trap_range_pct],
+          spread_wide: chain_wrapper.spread_wide?(hard_reject_threshold: thresholds[:spread_hard_reject]),
 
-          # Candle behavior
+          # Candle behavior (with index-specific thresholds)
           avg_wick_ratio: CandleUtils.avg_wick_ratio(bars_1m.last(5)),
 
           # Timing

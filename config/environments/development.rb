@@ -34,6 +34,23 @@ Rails.application.configure do
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
 
+  # Configure logger to write to both file and STDOUT with proper timestamps
+  # Rails 8 uses BroadcastLogger by default, but we need to ensure file logging is enabled
+  # Use Rails' default formatter (includes timestamps) instead of SimpleFormatter
+  log_formatter = config.log_formatter || proc do |severity, time, progname, msg|
+    "#{severity[0]}, [#{time.strftime('%Y-%m-%dT%H:%M:%S.%6N')} ##{Process.pid}]  #{severity} -- : #{msg}\n"
+  end
+
+  file_logger = ActiveSupport::Logger.new(Rails.root.join('log', "#{Rails.env}.log"))
+  file_logger.formatter = log_formatter
+  file_logger.level = config.log_level || :debug
+
+  stdout_logger = ActiveSupport::Logger.new(STDOUT)
+  stdout_logger.formatter = log_formatter
+  stdout_logger.level = config.log_level || :debug
+
+  config.logger = ActiveSupport::BroadcastLogger.new(file_logger, stdout_logger)
+
   # Raise an error on page load if there are pending migrations.
   config.active_record.migration_error = :page_load
 

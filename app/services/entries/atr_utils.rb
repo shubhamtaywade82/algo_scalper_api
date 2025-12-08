@@ -7,8 +7,9 @@ module Entries
       # Check if ATR is trending down (volatility compression)
       # @param bars [Array<Candle>] Array of candle objects
       # @param period [Integer] ATR period (default: 14)
+      # @param min_downtrend_bars [Integer] Minimum bars in downtrend (default: 3)
       # @return [Boolean]
-      def atr_downtrend?(bars, period: 14)
+      def atr_downtrend?(bars, period: 14, min_downtrend_bars: 3)
         return false if bars.nil? || bars.empty? || bars.size < period * 2
 
         # Build CandleSeries for efficient ATR calculations
@@ -27,10 +28,10 @@ module Entries
           recent_atrs << atr if atr
         end
 
-        return false if recent_atrs.size < 3
+        return false if recent_atrs.size < min_downtrend_bars
 
-        # Check if last 3 ATR values are decreasing
-        recent_atrs.last(3).each_cons(2).all? { |a, b| b < a }
+        # Check if last N ATR values are decreasing
+        recent_atrs.last(min_downtrend_bars).each_cons(2).all? { |a, b| b < a }
       end
 
       # Calculate ATR for a window of candles using CandleSeries

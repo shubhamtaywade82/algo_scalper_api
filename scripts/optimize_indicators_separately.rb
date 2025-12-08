@@ -11,7 +11,7 @@
 unless BestIndicatorParam.table_exists?
   puts "\n❌ ERROR: best_indicator_params table does not exist!"
   puts "\nPlease run the migration first:"
-  puts "  rails db:migrate"
+  puts '  rails db:migrate'
   exit 1
 end
 
@@ -21,12 +21,12 @@ interval = ARGV[1] || '5'
 lookback_days = (ARGV[2] || '45').to_i
 
 puts "\n" + ('=' * 80)
-puts "Single Indicator Parameter Optimization"
+puts 'Single Indicator Parameter Optimization'
 puts '=' * 80
 puts "Index: #{index_key}"
 puts "Interval: #{interval}m"
 puts "Lookback: #{lookback_days} days"
-puts '=' * 80 + "\n"
+puts ('=' * 80) + "\n"
 
 # Get index configuration
 algo_config = AlgoConfig.fetch
@@ -48,7 +48,9 @@ end
 puts "📊 Instrument: #{instrument.symbol_name} (SID: #{instrument.security_id})\n\n"
 
 # Optimize each indicator separately
-indicators = %i[adx rsi macd supertrend]
+# IMPORTANT: RSI must be LAST - runs after all other indicators
+# Optimization order: ADX → Supertrend → MACD → ATR → RSI
+indicators = %i[adx supertrend macd atr rsi]
 results = {}
 
 indicators.each do |indicator|
@@ -77,7 +79,7 @@ indicators.each do |indicator|
     end
 
     unless result[:score] && result[:params] && result[:metrics]
-      puts "❌ No valid results returned"
+      puts '❌ No valid results returned'
       results[indicator] = nil
       next
     end
@@ -124,11 +126,10 @@ indicators.each do |indicator|
   end
 end
 
-puts "\n" + '=' * 80
+puts "\n" + ('=' * 80)
 puts '✅ Done! Results saved to best_indicator_params table'
 puts '=' * 80
 puts "\nTo retrieve optimized parameters:"
 puts "  best = BestIndicatorParam.best_for(instrument.id, '#{interval}').first"
-puts "  params = best.params"
+puts '  params = best.params'
 puts "\n"
-

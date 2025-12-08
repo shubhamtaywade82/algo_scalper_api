@@ -229,32 +229,19 @@ risk:
     - { trigger_pct: 117, sl_offset_pct: 78 } # 117%: +78% SL
     - { trigger_pct: 120, sl_offset_pct: 80 } # 120%: +80% SL
 
-  # Peak drawdown protection - OPTIMIZED for tighter protection
-  peak_drawdown_exit_pct: 3 # Base threshold (reduced from 5% to 3%)
-  # Dynamic drawdown thresholds based on profit level (tighter for lower profits)
-  dynamic_drawdown_thresholds:
-    low_profit: 2.0 # <10% profit: 2% drawdown (very tight)
-    medium_profit: 3.0 # 10-25% profit: 3% drawdown (tight)
-    high_profit: 5.0 # >25% profit: 5% drawdown (standard)
-  # Capital-based drawdown thresholds (tighter for larger positions to ensure profit)
-  # Ensures larger positions close profitably - 1% drop on ₹50k = ₹500 vs ₹20k = ₹200
-  capital_based_thresholds:
-    small_capital: # < ₹30,000
-      max_capital: 30000
-      low_profit: 2.0 # <10% profit: 2% drawdown
-      medium_profit: 3.0 # 10-25% profit: 3% drawdown
-      high_profit: 5.0 # >25% profit: 5% drawdown
-    medium_capital: # ₹30,000 - ₹50,000
-      min_capital: 30000
-      max_capital: 50000
-      low_profit: 1.5 # <10% profit: 1.5% drawdown (tighter)
-      medium_profit: 2.0 # 10-25% profit: 2% drawdown (tighter)
-      high_profit: 3.0 # >25% profit: 3% drawdown (tighter)
-    large_capital: # > ₹50,000
-      min_capital: 50000
-      low_profit: 1.0 # <10% profit: 1% drawdown (very tight)
-      medium_profit: 1.5 # 10-25% profit: 1.5% drawdown (very tight)
-      high_profit: 2.0 # >25% profit: 2% drawdown (very tight)
+  # Peak drawdown protection - AGGRESSIVE TIERED PROTECTION
+  # Higher peaks get progressively tighter drawdown thresholds to preserve profits
+  peak_drawdown_exit_pct: 3 # Base threshold (fallback for very low peaks)
+  # Tiered drawdown thresholds based on peak profit percentage
+  # Higher peaks = tighter protection to prevent losing large profits
+  tiered_drawdown_thresholds:
+    very_low: 3.0 # Peak 0-5%: 3% drawdown allowed
+    low: 2.5 # Peak 5-10%: 2.5% drawdown allowed
+    medium: 2.0 # Peak 10-15%: 2% drawdown allowed
+    medium_high: 1.5 # Peak 15-20%: 1.5% drawdown allowed
+    high: 1.2 # Peak 20-25%: 1.2% drawdown allowed
+    very_high: 1.0 # Peak 25-30%: 1% drawdown allowed
+    ultra_high: 0.8 # Peak >30%: 0.8% drawdown allowed (maximum protection)
   peak_drawdown_activation_profit_pct: 10.0 # Reduced from 25.0 (activate earlier)
   peak_drawdown_activation_sl_offset_pct: 5.0 # Reduced from 10.0 (activate with lower SL offset)
 
@@ -299,7 +286,13 @@ signals:
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
   enable_adx_filter: true # Enable ADX strength filter (default: false)
-  enable_confirmation_timeframe: true # Enable 5m HTF confirmation (default: false)
+  enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
+
+  # Optimized Parameters Configuration
+  # Set to false to disable loading optimized indicator parameters from BestIndicatorParam
+  # When disabled, uses hardcoded defaults from config/algo.yml (supertrend.period, supertrend.base_multiplier, etc.)
+  # When enabled (default: true), automatically loads best-scoring parameters from optimization runs
+  use_optimized_params: false # Enable optimized parameters from BestIndicatorParam (default: true)
 
   # Modular Indicator System Configuration
   # Use multi_indicator_strategy: true to enable modular indicator system
@@ -312,7 +305,7 @@ signals:
   # - tight: Strict - fewer but higher quality signals
   # - production: Optimized based on backtesting results
   # Can also be set via ENV['INDICATOR_PRESET']
-  indicator_preset: moderate # Options: loose, moderate, tight, production
+  indicator_preset: loose # Options: loose, moderate, tight, production
 
   confirmation_mode: all # Options: all, majority, weighted, any
   min_confidence: 60 # Minimum combined confidence score (0-100)
@@ -370,8 +363,8 @@ signals:
   validation_mode: balanced
 
   supertrend:
-    period: 7
-    base_multiplier: 3.0
+    period: 10
+    base_multiplier: 1.5
 
   adx:
     # Global ADX thresholds (used as fallback if per-index thresholds not specified)

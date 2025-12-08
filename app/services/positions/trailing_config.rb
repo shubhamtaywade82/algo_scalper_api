@@ -36,7 +36,49 @@ module Positions
     def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
       return false unless peak_profit_pct && current_profit_pct
 
-      (peak_profit_pct - current_profit_pct) >= config[:peak_drawdown_pct]
+      # Use tiered drawdown threshold based on peak height
+      # Higher peaks get tighter protection to preserve profits
+      drawdown_threshold = calculate_tiered_drawdown_threshold(peak_profit_pct)
+      drawdown = peak_profit_pct - current_profit_pct
+
+      drawdown >= drawdown_threshold
+    end
+
+    # Calculate tiered drawdown threshold based on peak profit percentage
+    # Higher peaks get progressively tighter protection
+    # @param peak_profit_pct [Float] Peak profit percentage
+    # @return [Float] Drawdown threshold percentage
+    def calculate_tiered_drawdown_threshold(peak_profit_pct)
+      peak = peak_profit_pct.to_f
+
+      # Get tiered thresholds from config if available
+      tiered_config = config[:tiered_drawdown_thresholds] || {}
+
+      # Tiered protection: Higher peaks = tighter drawdown allowed
+      # Use exclusive upper bounds to avoid overlap
+      case peak
+      when 0...5
+        # Very low peaks: Use base threshold
+        tiered_config[:very_low] || config[:peak_drawdown_pct] || DEFAULT_PEAK_DRAWDOWN_PCT
+      when 5...10
+        # Low peaks: Slightly tighter
+        tiered_config[:low] || 2.5
+      when 10...15
+        # Medium peaks: Tighter protection
+        tiered_config[:medium] || 2.0
+      when 15...20
+        # Medium-high peaks: Even tighter
+        tiered_config[:medium_high] || 1.5
+      when 20...25
+        # High peaks: Very tight protection
+        tiered_config[:high] || 1.2
+      when 25...30
+        # Very high peaks: Extremely tight
+        tiered_config[:very_high] || 1.0
+      else
+        # Ultra high peaks (>=30%): Maximum protection (0.8% drawdown)
+        tiered_config[:ultra_high] || 0.8
+      end
     end
 
     def peak_drawdown_active?(profit_pct:, current_sl_offset_pct:)
@@ -66,9 +108,26 @@ module Positions
           activation_profit_pct: numeric_or_default(risk[:peak_drawdown_activation_profit_pct],
                                                     DEFAULT_ACTIVATION_PROFIT_PCT),
           activation_sl_offset_pct: numeric_or_default(risk[:peak_drawdown_activation_sl_offset_pct],
-                                                       DEFAULT_ACTIVATION_SL_OFFSET_PCT)
+                                                       DEFAULT_ACTIVATION_SL_OFFSET_PCT),
+          tiered_drawdown_thresholds: parse_tiered_drawdown_thresholds(risk[:tiered_drawdown_thresholds])
         }
       end
+    end
+
+    def parse_tiered_drawdown_thresholds(thresholds)
+      return {} unless thresholds.is_a?(Hash)
+
+      {
+        very_low: numeric_or_default(thresholds[:very_low], nil),
+        low: numeric_or_default(thresholds[:low], nil),
+        medium: numeric_or_default(thresholds[:medium], nil),
+        medium_high: numeric_or_default(thresholds[:medium_high], nil),
+        high: numeric_or_default(thresholds[:high], nil),
+        very_high: numeric_or_default(thresholds[:very_high], nil),
+        ultra_high: numeric_or_default(thresholds[:ultra_high], nil)
+      }
+    rescue StandardError
+      {}
     end
 
     def fetch_risk_config

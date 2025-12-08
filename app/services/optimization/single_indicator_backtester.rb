@@ -35,12 +35,14 @@ module Optimization
       case @indicator
       when :adx
         signals = generate_adx_signals
-      when :rsi
-        signals = generate_rsi_signals
-      when :macd
-        signals = generate_macd_signals
       when :supertrend
         signals = generate_supertrend_signals
+      when :macd
+        signals = generate_macd_signals
+      when :atr
+        signals = generate_atr_signals
+      when :rsi
+        signals = generate_rsi_signals
       end
 
       signals
@@ -84,6 +86,54 @@ module Optimization
           signals << { type: :buy, index: idx, price: @candles[idx].close, timestamp: @candles[idx].timestamp }
         # Strong trend with downward bias
         elsif adx >= threshold && di_minus > di_plus
+          signals << { type: :sell, index: idx, price: @candles[idx].close, timestamp: @candles[idx].timestamp }
+        end
+      end
+
+      signals
+    end
+
+    def generate_atr_signals
+      signals = []
+      period = @params[:period] || 14
+
+      # Calculate ATR values for the series
+      atr_values = []
+      (period...@candles.size).each do |idx|
+        partial_series = create_partial_series(idx)
+        atr_val = partial_series&.atr(period)
+        atr_values << atr_val
+      end
+
+      atr_values = Array.new(period, nil) + atr_values
+
+      # Calculate ATR moving average for trend detection
+      atr_ma_period = [period / 2, 5].max
+      atr_ma = []
+      (period + atr_ma_period...@candles.size).each do |idx|
+        recent_atrs = atr_values[(idx - atr_ma_period + 1)..idx].compact
+        next if recent_atrs.empty?
+
+        avg_atr = recent_atrs.sum / recent_atrs.size.to_f
+        atr_ma << avg_atr
+      end
+
+      atr_ma = Array.new(period + atr_ma_period, nil) + atr_ma
+
+      # Generate signals based on ATR volatility patterns
+      # Signal when ATR is increasing (volatility expansion) - potential breakout
+      (period + atr_ma_period...@candles.size).each do |idx|
+        current_atr = atr_values[idx]
+        prev_atr = atr_values[idx - 1]
+        avg_atr = atr_ma[idx]
+
+        next unless current_atr && prev_atr && avg_atr
+
+        # Buy signal: ATR increasing above average (volatility expansion, potential upward move)
+        if current_atr > prev_atr && current_atr > avg_atr * 1.1
+          signals << { type: :buy, index: idx, price: @candles[idx].close, timestamp: @candles[idx].timestamp }
+        # Sell signal: ATR decreasing below average (volatility compression, potential downward move)
+        elsif current_atr < prev_atr && current_atr < avg_atr * 0.9
           signals << { type: :sell, index: idx, price: @candles[idx].close, timestamp: @candles[idx].timestamp }
         end
       end
@@ -282,5 +332,3 @@ module Optimization
     end
   end
 end
-
-

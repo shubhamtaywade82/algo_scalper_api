@@ -74,8 +74,40 @@ module Signal
         # Check if modular indicator system is enabled
         use_multi_indicator = signals_cfg.fetch(:use_multi_indicator_strategy, false)
 
-        # Load common config variables (needed for confirmation timeframe)
-        supertrend_cfg = signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }
+        # Load Supertrend config - prefer optimized parameters from BestIndicatorParam
+        config_supertrend_cfg = signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }
+        primary_interval = normalize_interval(primary_tf)
+
+        # Check if optimized parameters are enabled
+        use_optimized_params = signals_cfg.fetch(:use_optimized_params, true)
+
+        # Try to load optimized parameters (if enabled and available)
+        optimized_params = if use_optimized_params && primary_interval && defined?(Backtest::OptimizedParamsLoader)
+                             Backtest::OptimizedParamsLoader.load_for_backtest(
+                               instrument: instrument,
+                               interval: primary_interval,
+                               supertrend_cfg: nil, # Let loader decide
+                               adx_min_strength: nil
+                             )
+                           end
+
+        # Use optimized params if available, otherwise use config
+        if optimized_params && optimized_params[:source] == :optimized
+          supertrend_cfg = optimized_params[:supertrend_cfg]
+          Rails.logger.info(
+            "[Signal] Using optimized Supertrend params for #{index_cfg[:key]}: " \
+            "period=#{supertrend_cfg[:period]}, multiplier=#{supertrend_cfg[:base_multiplier]} " \
+            "(score: #{optimized_params[:score].round(3)})"
+          )
+        else
+          supertrend_cfg = config_supertrend_cfg
+          # Normalize config format (multiplier -> base_multiplier)
+          supertrend_cfg = {
+            period: supertrend_cfg[:period] || supertrend_cfg['period'] || 7,
+            base_multiplier: supertrend_cfg[:base_multiplier] || supertrend_cfg[:multiplier] || supertrend_cfg['multiplier'] || 3.0
+          }
+        end
+
         adx_cfg = signals_cfg[:adx] || {}
         enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
 
@@ -135,6 +167,31 @@ module Signal
         if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]) && !use_multi_indicator
           mode_config = get_validation_mode_config
 
+          # Load optimized Supertrend params for confirmation timeframe (may differ from primary)
+          confirmation_interval = normalize_interval(confirmation_tf)
+          confirmation_supertrend_cfg = supertrend_cfg # Default to primary config
+
+          # Check if optimized parameters are enabled
+          use_optimized_params = signals_cfg.fetch(:use_optimized_params, true)
+
+          if use_optimized_params && confirmation_interval && defined?(Backtest::OptimizedParamsLoader) && confirmation_interval != primary_interval
+            # Only load if confirmation timeframe differs from primary
+            confirmation_optimized = Backtest::OptimizedParamsLoader.load_for_backtest(
+              instrument: instrument,
+              interval: confirmation_interval,
+              supertrend_cfg: nil,
+              adx_min_strength: nil
+            )
+
+            if confirmation_optimized && confirmation_optimized[:source] == :optimized
+              confirmation_supertrend_cfg = confirmation_optimized[:supertrend_cfg]
+              Rails.logger.info(
+                "[Signal] Using optimized Supertrend params for #{index_cfg[:key]} confirmation (#{confirmation_tf}): " \
+                "period=#{confirmation_supertrend_cfg[:period]}, multiplier=#{confirmation_supertrend_cfg[:base_multiplier]}"
+              )
+            end
+          end
+
           # Get per-index ADX thresholds (if specified) or fall back to global
           index_adx_thresholds = index_cfg[:adx_thresholds] || {}
           confirmation_adx_threshold = index_adx_thresholds[:confirmation_min_strength] ||
@@ -142,15 +199,6 @@ module Signal
                                        adx_cfg[:confirmation_min_strength] ||
                                        adx_cfg[:min_strength]
 
-                                       pp confirmation_adx_threshold
-                                       pp enable_adx_filter
-                                       pp adx_cfg
-                                       pp index_adx_thresholds
-                                       pp mode_config
-                                       pp adx_cfg[:confirmation_min_strength]
-                                       pp adx_cfg[:min_strength]
-                                       pp index_adx_thresholds[:confirmation_min_strength]
-                                       pp mode_config[:adx_confirmation_min_strength]
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
                                    confirmation_adx_threshold
@@ -162,7 +210,7 @@ module Signal
             index_cfg: index_cfg,
             instrument: instrument,
             timeframe: confirmation_tf,
-            supertrend_cfg: supertrend_cfg,
+            supertrend_cfg: confirmation_supertrend_cfg,
             adx_min_strength: confirmation_adx_min
           )
 
@@ -793,9 +841,45 @@ module Signal
         preset_name = signals_cfg[:indicator_preset]&.to_sym || ENV['INDICATOR_PRESET']&.to_sym || :moderate
         threshold_preset = Indicators::ThresholdConfig.get_preset(preset_name)
 
+        # Load optimized Supertrend params for multi-indicator system
+        config_supertrend_cfg = signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }
+        multi_indicator_supertrend_cfg = config_supertrend_cfg
+
+        # Check if optimized parameters are enabled
+        use_optimized_params = signals_cfg.fetch(:use_optimized_params, true)
+
+        if use_optimized_params && interval && defined?(Backtest::OptimizedParamsLoader)
+          multi_optimized = Backtest::OptimizedParamsLoader.load_for_backtest(
+            instrument: instrument,
+            interval: interval,
+            supertrend_cfg: nil,
+            adx_min_strength: nil
+          )
+
+          if multi_optimized && multi_optimized[:source] == :optimized
+            multi_indicator_supertrend_cfg = multi_optimized[:supertrend_cfg]
+            Rails.logger.info(
+              "[Signal] Using optimized Supertrend params for #{index_cfg[:key]} multi-indicator (#{timeframe}): " \
+              "period=#{multi_indicator_supertrend_cfg[:period]}, multiplier=#{multi_indicator_supertrend_cfg[:base_multiplier]}"
+            )
+          else
+            # Normalize config format
+            multi_indicator_supertrend_cfg = {
+              period: config_supertrend_cfg[:period] || config_supertrend_cfg['period'] || 7,
+              base_multiplier: config_supertrend_cfg[:base_multiplier] || config_supertrend_cfg[:multiplier] || config_supertrend_cfg['multiplier'] || 3.0
+            }
+          end
+        else
+          # Normalize config format when optimized params are disabled
+          multi_indicator_supertrend_cfg = {
+            period: config_supertrend_cfg[:period] || config_supertrend_cfg['period'] || 7,
+            base_multiplier: config_supertrend_cfg[:base_multiplier] || config_supertrend_cfg[:multiplier] || config_supertrend_cfg['multiplier'] || 3.0
+          }
+        end
+
         # Merge global config with indicator configs
         global_config = {
-          supertrend_cfg: signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 },
+          supertrend_cfg: multi_indicator_supertrend_cfg,
           trading_hours_filter: true,
           indicator_preset: preset_name # Pass preset name to indicators
         }
