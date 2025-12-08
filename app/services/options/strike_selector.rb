@@ -112,6 +112,7 @@ module Options
     # Calculate maximum OTM depth allowed based on trend score
     # @param trend_score [Float, nil] Trend score (0-21)
     # @return [Integer] Maximum OTM depth: 0 (ATM only), 1 (ATM+1OTM), 2 (ATM+2OTM)
+    # NOTE: Capped at 2OTM to prevent selecting strikes too far from ATM
     def calculate_max_otm_depth(trend_score)
       return 0 unless trend_score&.positive? # Default to ATM only if no trend score
 

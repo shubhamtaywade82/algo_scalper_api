@@ -32,8 +32,12 @@ module Live
       # 2. Update peak_profit_pct if current profit exceeds peak
       peak_updated = update_peak(position_data)
 
-      # 3. Apply tiered SL offsets based on current profit %
-      sl_result = apply_tiered_sl(position_data)
+      # 3. Apply trailing SL (direct or tiered based on config)
+      sl_result = if Positions::TrailingConfig.direct_trailing_enabled?
+                    apply_direct_trailing_sl(position_data)
+                  else
+                    apply_tiered_sl(position_data)
+                  end
 
       {
         peak_updated: peak_updated,
@@ -49,7 +53,7 @@ module Live
     end
 
     # Check if peak drawdown threshold is breached
-    # Enhanced with peak-drawdown activation gating
+    # Enhanced with peak-drawdown activation gating and capital-based thresholds
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @param exit_engine [Live::ExitEngine] Exit engine instance
     # @return [Boolean] True if exit was triggered
@@ -59,8 +63,15 @@ module Live
       peak = position_data.peak_profit_pct.to_f
       current = position_data.pnl_pct.to_f
 
-      # Check if drawdown threshold is breached
-      return false unless Positions::TrailingConfig.peak_drawdown_triggered?(peak, current)
+      # Calculate capital deployed (entry_price * quantity)
+      capital_deployed = calculate_capital_deployed(position_data)
+
+      # Check if drawdown threshold is breached (with capital-aware thresholds)
+      return false unless Positions::TrailingConfig.peak_drawdown_triggered?(
+        peak,
+        current,
+        capital_deployed: capital_deployed
+      )
 
       # Apply peak-drawdown activation gating (if enabled)
       if peak_drawdown_activation_enabled?
@@ -70,10 +81,11 @@ module Live
           current_sl_offset_pct: current_sl_offset_pct(position_data)
         )
         unless activation_ready
+          capital_info = capital_deployed ? " capital=₹#{capital_deployed.round(0)}" : ''
           Rails.logger.debug(
             "[TrailingEngine] Peak drawdown gating: peak=#{peak.round(2)}% " \
             "sl_offset=#{current_sl_offset_pct(position_data)&.round(2)}% " \
-            "not activated (drawdown=#{(peak - current).round(2)}%)"
+            "not activated (drawdown=#{(peak - current).round(2)}%#{capital_info})"
           )
           return false
         end
@@ -86,7 +98,12 @@ module Live
       end
 
       drawdown = peak - current
-      reason = "peak_drawdown_exit (drawdown: #{drawdown.round(2)}%, peak: #{peak.round(2)}%)"
+      threshold = Positions::TrailingConfig.dynamic_drawdown_threshold(
+        peak,
+        capital_deployed: capital_deployed
+      )
+      capital_info = capital_deployed ? " (capital: ₹#{capital_deployed.round(0)})" : ''
+      reason = "peak_drawdown_exit (drawdown: #{drawdown.round(2)}%, threshold: #{threshold.round(2)}%, peak: #{peak.round(2)}%#{capital_info})"
 
       # Wrap exit in tracker lock for idempotency
       tracker.with_lock do
@@ -125,6 +142,69 @@ module Live
       Rails.logger.error("[TrailingEngine] Failed to update peak: #{e.class} - #{e.message}")
       false
     end
+
+    # Apply direct trailing SL (follows price directly, only moves upward)
+    # @param position_data [Positions::ActiveCache::PositionData] Position data
+    # @return [Hash] Result hash with :updated, :new_sl_price, :reason
+    # rubocop:disable Metrics/AbcSize
+    def apply_direct_trailing_sl(position_data)
+      return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
+
+      entry_price = position_data.entry_price.to_f
+      current_price = position_data.current_ltp.to_f
+      current_profit_pct = position_data.pnl_pct.to_f
+      current_sl = position_data.sl_price.to_f
+
+      return { updated: false, new_sl_price: current_sl, reason: 'no_current_price' } unless current_price.positive?
+
+      # Calculate new SL based on current price (maintains fixed distance below)
+      new_sl_price = Positions::TrailingConfig.calculate_direct_trailing_sl(
+        current_price: current_price,
+        entry_price: entry_price,
+        current_profit_pct: current_profit_pct
+      )
+
+      return { updated: false, new_sl_price: current_sl, reason: 'direct_trailing_not_applicable' } unless new_sl_price
+
+      # Only update if new SL is higher than current SL (only moves upward)
+      return { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved' } unless new_sl_price > current_sl
+
+      tracker = PositionTracker.find_by(id: position_data.tracker_id)
+      return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
+
+      # Calculate SL offset for logging
+      sl_offset_pct = ((new_sl_price - entry_price) / entry_price * 100.0).round(2)
+
+      bracket_result = @bracket_placer.update_bracket(
+        tracker: tracker,
+        sl_price: new_sl_price,
+        reason: "direct_trailing (price: ₹#{current_price.round(2)}, profit: #{current_profit_pct.round(2)}%)"
+      )
+
+      if bracket_result[:success]
+        @active_cache.update_position(
+          position_data.tracker_id,
+          sl_price: new_sl_price,
+          sl_offset_pct: sl_offset_pct
+        )
+        position_data.sl_price = new_sl_price if position_data.respond_to?(:sl_price=)
+        position_data.sl_offset_pct = sl_offset_pct if position_data.respond_to?(:sl_offset_pct=)
+
+        Rails.logger.info(
+          "[TrailingEngine] Updated SL (direct trailing) for #{tracker.order_no}: " \
+          "₹#{current_sl.round(2)} → ₹#{new_sl_price.round(2)} " \
+          "(price: ₹#{current_price.round(2)}, profit: #{current_profit_pct.round(2)}%)"
+        )
+        { updated: true, new_sl_price: new_sl_price, reason: 'sl_updated' }
+      else
+        Rails.logger.warn("[TrailingEngine] Failed to update SL (direct trailing) for #{tracker.order_no}: #{bracket_result[:error]}")
+        { updated: false, new_sl_price: current_sl, reason: bracket_result[:error] }
+      end
+    rescue StandardError => e
+      Rails.logger.error("[TrailingEngine] Failed to apply direct trailing SL: #{e.class} - #{e.message}")
+      { updated: false, new_sl_price: nil, reason: e.message }
+    end
+    # rubocop:enable Metrics/AbcSize
 
     # Apply tiered SL offsets based on current profit percentage
     # @param position_data [Positions::ActiveCache::PositionData] Position data
@@ -219,6 +299,17 @@ module Live
       # Track peak-drawdown exits for observability
       # This could be integrated with a metrics service if available
       Rails.logger.info('[TrailingEngine] Peak drawdown exit metric incremented')
+    end
+
+    # Calculate capital deployed for a position
+    # @param position_data [Positions::ActiveCache::PositionData] Position data
+    # @return [Float, nil] Capital deployed (entry_price * quantity) or nil if not available
+    def calculate_capital_deployed(position_data)
+      return nil unless position_data.entry_price&.positive? && position_data.quantity&.positive?
+
+      position_data.entry_price.to_f * position_data.quantity.to_i
+    rescue StandardError
+      nil
     end
   end
   # rubocop:enable Metrics/ClassLength

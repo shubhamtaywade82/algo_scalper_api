@@ -19,6 +19,26 @@ module Positions
 
     module_function
 
+    def trailing_mode
+      config[:trailing_mode] || 'tiered'
+    end
+
+    def direct_trailing_enabled?
+      trailing_mode == 'direct' && config[:direct_trailing]&.dig(:enabled) == true
+    end
+
+    def direct_trailing_distance_pct
+      config[:direct_trailing]&.dig(:distance_pct) || 5.0
+    end
+
+    def direct_trailing_activation_profit_pct
+      config[:direct_trailing]&.dig(:activation_profit_pct) || 0.0
+    end
+
+    def direct_trailing_min_sl_offset_pct
+      config[:direct_trailing]&.dig(:min_sl_offset_pct) || -30.0
+    end
+
     def tiers
       config[:tiers]
     end
@@ -33,7 +53,31 @@ module Positions
       nil
     end
 
-    def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
+    # Calculate SL price using direct trailing mode (based on current price)
+    # @param current_price [Float] Current LTP
+    # @param entry_price [Float] Entry price
+    # @param current_profit_pct [Float] Current profit percentage
+    # @return [Float, nil] New SL price or nil if not applicable
+    def calculate_direct_trailing_sl(current_price:, entry_price:, current_profit_pct:)
+      return nil unless direct_trailing_enabled?
+      return nil unless current_price&.positive? && entry_price&.positive?
+
+      # Check activation threshold
+      return nil if current_profit_pct.to_f < direct_trailing_activation_profit_pct
+
+      # Calculate SL as: current_price * (1 - distance_pct / 100)
+      # For CE calls: SL should be below current price
+      distance_pct = direct_trailing_distance_pct
+      new_sl_price = current_price * (1.0 - (distance_pct / 100.0))
+
+      # Ensure SL doesn't go below minimum offset from entry
+      min_sl_price = entry_price * (1.0 + (direct_trailing_min_sl_offset_pct / 100.0))
+      new_sl_price = [new_sl_price, min_sl_price].max
+
+      new_sl_price.round(2)
+    end
+
+    def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, capital_deployed: nil)
       return false unless peak_profit_pct && current_profit_pct
 
       # Use tiered drawdown threshold based on peak height
@@ -89,7 +133,7 @@ module Positions
     def sl_price_from_entry(entry_price, sl_offset_pct)
       raise ArgumentError, 'entry_price required' if entry_price.nil?
 
-      entry_price.to_f * (1.0 + sl_offset_pct.to_f / 100.0)
+      entry_price.to_f * (1.0 + (sl_offset_pct.to_f / 100.0))
     end
 
     def calculate_sl_price(entry_price, profit_pct)
@@ -103,8 +147,12 @@ module Positions
       @config ||= begin
         risk = fetch_risk_config
         {
+          trailing_mode: (risk[:trailing_mode] || 'tiered').to_s,
+          direct_trailing: parse_direct_trailing(risk[:direct_trailing]),
           tiers: parse_tiers(risk[:trailing_tiers]) || DEFAULT_TIERS,
           peak_drawdown_pct: numeric_or_default(risk[:peak_drawdown_exit_pct], DEFAULT_PEAK_DRAWDOWN_PCT),
+          dynamic_drawdown_thresholds: parse_dynamic_drawdown_thresholds(risk[:dynamic_drawdown_thresholds]),
+          capital_based_thresholds: parse_capital_based_thresholds(risk[:capital_based_thresholds]),
           activation_profit_pct: numeric_or_default(risk[:peak_drawdown_activation_profit_pct],
                                                     DEFAULT_ACTIVATION_PROFIT_PCT),
           activation_sl_offset_pct: numeric_or_default(risk[:peak_drawdown_activation_sl_offset_pct],

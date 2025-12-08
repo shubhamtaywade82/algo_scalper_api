@@ -171,9 +171,10 @@ module Options
       end
 
       # Limit derivatives to a small strike window around ATM to avoid scanning entire chain
+      # Only consider ATM, 1OTM, and 2OTM (window = 2, max)
       if atm_strike_approx
-        window = (@config[:strike_window_steps] || 3).to_i
-        window = 3 if window <= 0
+        window = (@config[:strike_window_steps] || 2).to_i
+        window = 2 if window <= 0 || window > 2 # Cap at 2OTM only
         target_strikes = (-window..window).map do |offset|
           atm_strike_approx + (offset * strike_increment)
         end.select { |strike| strike.positive? }.uniq

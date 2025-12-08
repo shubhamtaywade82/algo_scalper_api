@@ -40,9 +40,9 @@ namespace :trading do
         )
 
         if is_tty
-          # Move cursor to beginning of line, clear to end, print output
-          # \r = carriage return (move to start), \033[K = clear to end of line
-          print "\r\033[K#{output}"
+          # Use carriage return + clear entire line
+          # \r = move to start of line, \e[2K = clear entire line (more reliable)
+          print "\r\e[2K#{output}"
         else
           # Fallback: just print with newline if not a TTY
           puts output
@@ -59,6 +59,8 @@ namespace :trading do
 
   desc 'Display live paper trading statistics (full hash format, updates in place)'
   task live_stats_hash: :environment do
+    require 'io/console'
+
     # Ensure stdout is not buffered
     $stdout.sync = true
     $stderr.sync = true
@@ -77,9 +79,13 @@ namespace :trading do
         hash_output = stats.inspect
 
         if is_tty
-          # Move cursor to beginning of line, clear to end, print hash
-          # \r = carriage return (move to start), \033[K = clear to end of line
-          print "\r\033[K#{hash_output}"
+          # Try multiple escape code formats for maximum compatibility
+          # Method 1: \r + \e[2K (clear entire line)
+          print "\r\e[2K"
+          # Method 2: Also try \033[2K (alternative format)
+          print "\033[2K"
+          # Now print the hash
+          print hash_output
         else
           # Fallback: just print with newline if not a TTY
           puts hash_output
