@@ -25,7 +25,9 @@ module Core
       trailing_triggered: :trailing_triggered,
       danger_zone: :danger_zone,
       volatility_spike: :volatility_spike,
-      trend_flip: :trend_flip
+      trend_flip: :trend_flip,
+      bracket_placed: :bracket_placed,
+      bracket_modified: :bracket_modified
     }.freeze
 
     def initialize

@@ -2,6 +2,18 @@ paper_trading:
   enabled: true
   balance: 100000
 
+# Trading time restrictions based on profitability analysis
+# Use analyze_positions_by_time_intervals.rb to identify non-profitable periods
+# Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
+# Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
+trading_time_restrictions:
+  enabled: false # Set to true to enable time-based restrictions
+  avoid_periods: [] # Add time periods to avoid (e.g., ["10:30-11:30", "14:00-15:00"])
+  # Example based on analysis results:
+  # avoid_periods:
+  #   - "10:30-11:30"  # Morning non-profitable period
+  #   - "14:00-15:00"  # Afternoon non-profitable period
+
 feature_flags:
   enable_direction_before_chain: true
   enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
@@ -83,8 +95,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (use global default)
-      confirmation_min_strength: 31 # 5m ADX threshold (70% of typical ~44)
+      primary_min_strength: 10 # 1m ADX threshold (use global default)
+      confirmation_min_strength: 15 # 5m ADX threshold (70% of typical ~44)
 
     strategies:
       open_interest:
@@ -126,7 +138,7 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~25.5)
+      primary_min_strength: 10 # 1m ADX threshold (70% of typical ~25.5)
       confirmation_min_strength: 10 # 5m ADX threshold (70% of typical ~13.5)
 
     strategies:
@@ -153,6 +165,12 @@ trade_limits:
 risk:
   sl_pct: 0.30 # 30% fixed SL (entry * 0.70)
   tp_pct: 0.60 # 60% fixed TP (entry * 1.60)
+
+  # Profit protection: Hard stop if HWM reaches threshold and drops by percentage
+  profit_protection:
+    hwm_threshold_rupees: 1040.0 # Exit if HWM reaches this amount
+    drop_pct_from_hwm: 1.0 # Exit if current PnL drops this % from HWM
+    enabled: true
 
   # Trailing stop mode: 'tiered' (fixed tiers) or 'direct' (follows price directly)
   trailing_mode: direct # Options: 'tiered' or 'direct'
@@ -211,37 +229,33 @@ risk:
     - { trigger_pct: 117, sl_offset_pct: 78 } # 117%: +78% SL
     - { trigger_pct: 120, sl_offset_pct: 80 } # 120%: +80% SL
 
-  # Peak drawdown protection - OPTIMIZED for tighter protection
-  peak_drawdown_exit_pct: 3 # Base threshold (reduced from 5% to 3%)
-
-  # Dynamic drawdown thresholds based on profit level (tighter for lower profits)
-  dynamic_drawdown_thresholds:
-    low_profit: 2.0 # <10% profit: 2% drawdown (very tight)
-    medium_profit: 3.0 # 10-25% profit: 3% drawdown (tight)
-    high_profit: 5.0 # >25% profit: 5% drawdown (standard)
-
-  # Capital-based drawdown thresholds (tighter for larger positions to ensure profit)
-  # Ensures larger positions close profitably - 1% drop on ₹50k = ₹500 vs ₹20k = ₹200
-  capital_based_thresholds:
-    small_capital: # < ₹30,000
-      max_capital: 30000
-      low_profit: 2.0 # <10% profit: 2% drawdown
-      medium_profit: 3.0 # 10-25% profit: 3% drawdown
-      high_profit: 5.0 # >25% profit: 5% drawdown
-    medium_capital: # ₹30,000 - ₹50,000
-      min_capital: 30000
-      max_capital: 50000
-      low_profit: 1.5 # <10% profit: 1.5% drawdown (tighter)
-      medium_profit: 2.0 # 10-25% profit: 2% drawdown (tighter)
-      high_profit: 3.0 # >25% profit: 3% drawdown (tighter)
-    large_capital: # > ₹50,000
-      min_capital: 50000
-      low_profit: 1.0 # <10% profit: 1% drawdown (very tight)
-      medium_profit: 1.5 # 10-25% profit: 1.5% drawdown (very tight)
-      high_profit: 2.0 # >25% profit: 2% drawdown (very tight)
-
+  # Peak drawdown protection - AGGRESSIVE TIERED PROTECTION
+  # Higher peaks get progressively tighter drawdown thresholds to preserve profits
+  peak_drawdown_exit_pct: 3 # Base threshold (fallback for very low peaks)
+  # Tiered drawdown thresholds based on peak profit percentage
+  # Higher peaks = tighter protection to prevent losing large profits
+  tiered_drawdown_thresholds:
+    very_low: 3.0 # Peak 0-5%: 3% drawdown allowed
+    low: 2.5 # Peak 5-10%: 2.5% drawdown allowed
+    medium: 2.0 # Peak 10-15%: 2% drawdown allowed
+    medium_high: 1.5 # Peak 15-20%: 1.5% drawdown allowed
+    high: 1.2 # Peak 20-25%: 1.2% drawdown allowed
+    very_high: 1.0 # Peak 25-30%: 1% drawdown allowed
+    ultra_high: 0.8 # Peak >30%: 0.8% drawdown allowed (maximum protection)
   peak_drawdown_activation_profit_pct: 10.0 # Reduced from 25.0 (activate earlier)
   peak_drawdown_activation_sl_offset_pct: 5.0 # Reduced from 10.0 (activate with lower SL offset)
+
+  # Trailing activation: Configurable percentage-based activation threshold
+  # Trailing rules (TrailingStopRule, PeakDrawdownRule) only activate when pnl_pct >= this value
+  # Based on buy value (premium × lot_size × lots), works across any capital/allocation/lot size
+  # Examples: 6.0, 6.66, 9.99, 10.0, 13.32, 15.0, 20.0
+  trailing:
+    activation_pct: 10.0 # Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
+    drawdown_pct: 3.0 # Exit if price drops this % from peak (used by trailing rules)
+
+  # Secure profit rule: Lock in profits above threshold while allowing positions to ride
+  secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
+  secure_profit_drawdown_pct: 3.0 # Tighter drawdown threshold (3%) when profit is secured
 
   # Underlying-aware exit thresholds
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
@@ -262,12 +276,85 @@ signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
 
+  # NoTradeEngine Configuration
+  # Set to false to disable both Phase 1 (pre-check) and Phase 2 (detailed validation)
+  # Useful for testing the trading system without NoTradeEngine restrictions
+  enable_no_trade_engine: false # Enable NoTradeEngine validation (default: true)
+
   # Supertrend+ADX Strategy Configuration
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
   enable_adx_filter: true # Enable ADX strength filter (default: false)
-  enable_confirmation_timeframe: true # Enable 5m HTF confirmation (default: false)
+  enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
+
+  # Optimized Parameters Configuration
+  # Set to false to disable loading optimized indicator parameters from BestIndicatorParam
+  # When disabled, uses hardcoded defaults from config/algo.yml (supertrend.period, supertrend.base_multiplier, etc.)
+  # When enabled (default: true), automatically loads best-scoring parameters from optimization runs
+  use_optimized_params: false # Enable optimized parameters from BestIndicatorParam (default: true)
+
+  # Modular Indicator System Configuration
+  # Use multi_indicator_strategy: true to enable modular indicator system
+  # When enabled, the 'indicators' list defines which indicators to use
+  use_multi_indicator_strategy: false # Set to true to use modular system
+
+  # Indicator threshold preset: loose, moderate, tight, production
+  # - loose: Very permissive - generates more signals for initial testing
+  # - moderate: Balanced - good starting point
+  # - tight: Strict - fewer but higher quality signals
+  # - production: Optimized based on backtesting results
+  # Can also be set via ENV['INDICATOR_PRESET']
+  indicator_preset: loose # Options: loose, moderate, tight, production
+
+  confirmation_mode: all # Options: all, majority, weighted, any
+  min_confidence: 60 # Minimum combined confidence score (0-100)
+  # Note: If indicator_preset is set, these may be overridden by preset values
+
+  # Indicator configurations for modular system
+  # Each indicator can be enabled/disabled and configured independently
+  indicators:
+    - type: supertrend
+      enabled: true
+      config:
+        period: 7
+        multiplier: 3.0
+        trading_hours_filter: true
+
+    - type: adx
+      enabled: true
+      config:
+        period: 14
+        min_strength: 10
+        trading_hours_filter: true
+
+    # Example: Add RSI indicator (disabled by default)
+    # - type: rsi
+    #   enabled: false
+    #   config:
+    #     period: 14
+    #     oversold: 30
+    #     overbought: 70
+    #     trading_hours_filter: true
+
+    # Example: Add MACD indicator (disabled by default)
+    # - type: macd
+    #   enabled: false
+    #   config:
+    #     fast_period: 12
+    #     slow_period: 26
+    #     signal_period: 9
+    #     trading_hours_filter: true
+
+    # Trend Duration Indicator (disabled by default)
+    # Uses HMA to detect trend direction and forecast probable trend duration
+    # - type: trend_duration
+    #   enabled: false
+    #   config:
+    #     hma_length: 20        # HMA period
+    #     trend_length: 5       # Bars to confirm trend (rising/falling)
+    #     samples: 10           # Number of historical durations to track
+    #     trading_hours_filter: true
 
   trend_scorer:
     min_trend_score: 14
@@ -276,13 +363,13 @@ signals:
   validation_mode: balanced
 
   supertrend:
-    period: 7
-    base_multiplier: 3.0
+    period: 10
+    base_multiplier: 1.5
 
   adx:
     # Global ADX thresholds (used as fallback if per-index thresholds not specified)
-    min_strength: 18 # ADX threshold for 1m timeframe (when enabled)
-    confirmation_min_strength: 20 # ADX threshold for 5m confirmation (when enabled)
+    min_strength: 10 # ADX threshold for 1m timeframe (when enabled)
+    confirmation_min_strength: 15 # ADX threshold for 5m confirmation (when enabled)
     # Note: Per-index thresholds in indices[].adx_thresholds override these values
 
 # ============================================
@@ -313,3 +400,28 @@ data_freshness:
   disable_option_chain_caching: false
   ohlc_cache_duration_minutes: 5
   option_chain_cache_duration_minutes: 2
+
+# ============================================
+# WEBSOCKET WATCHLIST
+# ============================================
+# WebSocket watchlist for market feed subscription
+# Format: Array of strings "SEGMENT:SECURITY_ID" or empty array []
+# Example: ["NSE_EQ:11536", "NSE_EQ:11536"]
+# Can also be set via ENV['DHANHQ_WS_WATCHLIST'] as fallback
+watchlist: []
+
+# ============================================
+# TELEGRAM NOTIFICATIONS
+# ============================================
+telegram:
+  enabled: true # Set to false to disable Telegram notifications
+  # Bot token and chat ID should be set via environment variables:
+  # TELEGRAM_BOT_TOKEN - Your Telegram bot token from @BotFather
+  # TELEGRAM_CHAT_ID - Your Telegram chat ID (can be obtained from @userinfobot)
+  pnl_update_interval_seconds: 300 # Minimum seconds between PnL update notifications per position
+  notify_entry: true # Send notifications on entry
+  notify_exit: true # Send notifications on exit
+  notify_pnl_updates: false # Send periodic PnL updates (throttled)
+  notify_pnl_milestones: true # Send notifications for PnL milestones (10%, 20%, etc.)
+  pnl_milestones: [10, 20, 30, 50, 100] # PnL percentage milestones to notify
+  notify_risk_alerts: true # Send risk alert notifications

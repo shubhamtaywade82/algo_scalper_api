@@ -80,81 +80,49 @@ module Positions
     def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, capital_deployed: nil)
       return false unless peak_profit_pct && current_profit_pct
 
-      # Use dynamic drawdown threshold based on peak profit level and capital
-      threshold = dynamic_drawdown_threshold(peak_profit_pct, capital_deployed: capital_deployed)
-      (peak_profit_pct - current_profit_pct) >= threshold
+      # Use tiered drawdown threshold based on peak height
+      # Higher peaks get tighter protection to preserve profits
+      drawdown_threshold = calculate_tiered_drawdown_threshold(peak_profit_pct)
+      drawdown = peak_profit_pct - current_profit_pct
+
+      drawdown >= drawdown_threshold
     end
 
-    # Dynamic drawdown threshold based on profit level and capital deployed
-    # Lower profit = tighter protection, higher profit = more room
-    # Larger capital = tighter protection to ensure profitable exits
+    # Calculate tiered drawdown threshold based on peak profit percentage
+    # Higher peaks get progressively tighter protection
     # @param peak_profit_pct [Float] Peak profit percentage
-    # @param capital_deployed [Float, nil] Capital deployed (entry_price * quantity)
     # @return [Float] Drawdown threshold percentage
-    def dynamic_drawdown_threshold(peak_profit_pct, capital_deployed: nil)
-      return config[:peak_drawdown_pct] unless peak_profit_pct
-
+    def calculate_tiered_drawdown_threshold(peak_profit_pct)
       peak = peak_profit_pct.to_f
 
-      # Determine profit level category
-      profit_category = if peak < 10.0
-                          :low_profit
-                        elsif peak < 25.0
-                          :medium_profit
-                        else
-                          :high_profit
-                        end
+      # Get tiered thresholds from config if available
+      tiered_config = config[:tiered_drawdown_thresholds] || {}
 
-      # Use capital-based thresholds if capital is provided and thresholds are configured
-      if capital_deployed&.positive? && config[:capital_based_thresholds]
-        capital_thresholds = capital_based_threshold_for_capital(capital_deployed)
-        if capital_thresholds
-          threshold = capital_thresholds[profit_category]
-          return threshold if threshold
-        end
-      end
-
-      # Fallback to profit-level based thresholds
-      case profit_category
-      when :low_profit
-        config[:dynamic_drawdown_thresholds]&.dig(:low_profit) || 2.0
-      when :medium_profit
-        config[:dynamic_drawdown_thresholds]&.dig(:medium_profit) || 3.0
+      # Tiered protection: Higher peaks = tighter drawdown allowed
+      # Use exclusive upper bounds to avoid overlap
+      case peak
+      when 0...5
+        # Very low peaks: Use base threshold
+        tiered_config[:very_low] || config[:peak_drawdown_pct] || DEFAULT_PEAK_DRAWDOWN_PCT
+      when 5...10
+        # Low peaks: Slightly tighter
+        tiered_config[:low] || 2.5
+      when 10...15
+        # Medium peaks: Tighter protection
+        tiered_config[:medium] || 2.0
+      when 15...20
+        # Medium-high peaks: Even tighter
+        tiered_config[:medium_high] || 1.5
+      when 20...25
+        # High peaks: Very tight protection
+        tiered_config[:high] || 1.2
+      when 25...30
+        # Very high peaks: Extremely tight
+        tiered_config[:very_high] || 1.0
       else
-        config[:dynamic_drawdown_thresholds]&.dig(:high_profit) || config[:peak_drawdown_pct]
+        # Ultra high peaks (>=30%): Maximum protection (0.8% drawdown)
+        tiered_config[:ultra_high] || 0.8
       end
-    end
-
-    # Get capital-based thresholds for a given capital amount
-    # @param capital_deployed [Float] Capital deployed (entry_price * quantity)
-    # @return [Hash, nil] Thresholds hash with :low_profit, :medium_profit, :high_profit or nil
-    def capital_based_threshold_for_capital(capital_deployed)
-      return nil unless capital_deployed&.positive?
-
-      capital = capital_deployed.to_f
-      thresholds = config[:capital_based_thresholds]
-      return nil unless thresholds.is_a?(Hash)
-
-      # Check large capital first (> ₹50k)
-      if thresholds[:large_capital] && thresholds[:large_capital][:min_capital]
-        min = thresholds[:large_capital][:min_capital].to_f
-        return thresholds[:large_capital] if capital >= min
-      end
-
-      # Check medium capital (₹30k - ₹50k)
-      if thresholds[:medium_capital]
-        min = thresholds[:medium_capital][:min_capital]&.to_f || 0.0
-        max = thresholds[:medium_capital][:max_capital]&.to_f || Float::INFINITY
-        return thresholds[:medium_capital] if capital >= min && capital < max
-      end
-
-      # Check small capital (< ₹30k)
-      if thresholds[:small_capital] && thresholds[:small_capital][:max_capital]
-        max = thresholds[:small_capital][:max_capital].to_f
-        return thresholds[:small_capital] if capital < max
-      end
-
-      nil
     end
 
     def peak_drawdown_active?(profit_pct:, current_sl_offset_pct:)
@@ -188,55 +156,26 @@ module Positions
           activation_profit_pct: numeric_or_default(risk[:peak_drawdown_activation_profit_pct],
                                                     DEFAULT_ACTIVATION_PROFIT_PCT),
           activation_sl_offset_pct: numeric_or_default(risk[:peak_drawdown_activation_sl_offset_pct],
-                                                       DEFAULT_ACTIVATION_SL_OFFSET_PCT)
+                                                       DEFAULT_ACTIVATION_SL_OFFSET_PCT),
+          tiered_drawdown_thresholds: parse_tiered_drawdown_thresholds(risk[:tiered_drawdown_thresholds])
         }
       end
     end
 
-    def parse_capital_based_thresholds(thresholds)
-      return nil unless thresholds.is_a?(Hash)
-
-      result = {}
-      %i[small_capital medium_capital large_capital].each do |key|
-        next unless thresholds[key].is_a?(Hash)
-
-        tier = thresholds[key]
-        result[key] = {
-          min_capital: numeric_or_default(tier[:min_capital], nil),
-          max_capital: numeric_or_default(tier[:max_capital], nil),
-          low_profit: numeric_or_default(tier[:low_profit], nil),
-          medium_profit: numeric_or_default(tier[:medium_profit], nil),
-          high_profit: numeric_or_default(tier[:high_profit], nil)
-        }
-      end
-      result.empty? ? nil : result
-    rescue StandardError
-      nil
-    end
-
-    def parse_direct_trailing(direct_trailing)
-      return nil unless direct_trailing.is_a?(Hash)
+    def parse_tiered_drawdown_thresholds(thresholds)
+      return {} unless thresholds.is_a?(Hash)
 
       {
-        enabled: direct_trailing[:enabled] == true,
-        distance_pct: numeric_or_default(direct_trailing[:distance_pct], 5.0),
-        activation_profit_pct: numeric_or_default(direct_trailing[:activation_profit_pct], 0.0),
-        min_sl_offset_pct: numeric_or_default(direct_trailing[:min_sl_offset_pct], -30.0)
+        very_low: numeric_or_default(thresholds[:very_low], nil),
+        low: numeric_or_default(thresholds[:low], nil),
+        medium: numeric_or_default(thresholds[:medium], nil),
+        medium_high: numeric_or_default(thresholds[:medium_high], nil),
+        high: numeric_or_default(thresholds[:high], nil),
+        very_high: numeric_or_default(thresholds[:very_high], nil),
+        ultra_high: numeric_or_default(thresholds[:ultra_high], nil)
       }
     rescue StandardError
-      nil
-    end
-
-    def parse_dynamic_drawdown_thresholds(thresholds)
-      return nil unless thresholds.is_a?(Hash)
-
-      {
-        low_profit: numeric_or_default(thresholds[:low_profit], 2.0),
-        medium_profit: numeric_or_default(thresholds[:medium_profit], 3.0),
-        high_profit: numeric_or_default(thresholds[:high_profit], 5.0)
-      }
-    rescue StandardError
-      nil
+      {}
     end
 
     def fetch_risk_config

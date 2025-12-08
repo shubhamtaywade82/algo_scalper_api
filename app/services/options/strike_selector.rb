@@ -181,7 +181,7 @@ module Options
     # @param index_key [String] Index key
     # @return [Float, nil] Spot price
     def get_spot_price(index_key)
-      index_cfg = AlgoConfig.fetch[:indices]&.find { |idx| idx[:key].to_s.upcase == index_key.to_s.upcase }
+      index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == index_key.to_s.upcase }
       return nil unless index_cfg
 
       segment = index_cfg[:segment]

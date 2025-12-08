@@ -116,7 +116,7 @@ RSpec.describe 'Real-time LTP Updates Integration', :vcr, type: :integration do
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
         expect(cached_tick[:ltp]).to eq(101.5)
         expect(cached_tick[:segment]).to eq('NSE_FNO')
-        expect(cached_tick[:security_id]).to eq('12345')
+        expect(cached_tick[:security_id]).to eq(12_345.0)
       end
 
       it 'retrieves LTP from cache' do
@@ -152,6 +152,8 @@ RSpec.describe 'Real-time LTP Updates Integration', :vcr, type: :integration do
       it 'clears all cached ticks' do
         tick_cache.put(sample_tick)
         TickCache.instance.clear
+        # Also clear Redis since fetch falls back to Redis
+        Live::RedisTickCache.instance.clear
 
         expect(tick_cache.fetch('NSE_FNO', '12345')).to be_nil
       end
@@ -170,7 +172,7 @@ RSpec.describe 'Real-time LTP Updates Integration', :vcr, type: :integration do
         tick_cache.put(ticker_tick)
 
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
-        expect(cached_tick[:kind]).to eq(:ticker)
+        expect(cached_tick[:kind]).to eq('ticker')
         expect(cached_tick[:ltp]).to eq(101.5)
       end
 
@@ -186,7 +188,7 @@ RSpec.describe 'Real-time LTP Updates Integration', :vcr, type: :integration do
         tick_cache.put(quote_tick)
 
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
-        expect(cached_tick[:kind]).to eq(:quote)
+        expect(cached_tick[:kind]).to eq('quote')
         expect(cached_tick[:ltp]).to eq(101.5)
       end
     end

@@ -58,7 +58,17 @@
 require 'rails_helper'
 
 RSpec.describe Instrument, type: :model do
-  let(:instrument) { create(:instrument, :nifty_index, security_id: '13') }
+    let(:instrument) do
+      Instrument.find_or_create_by!(security_id: '13') do |inst|
+        inst.assign_attributes(
+          symbol_name: 'NIFTY',
+          exchange: 'nse',
+          segment: 'index',
+          instrument_type: 'INDEX',
+          instrument_code: 'index'
+        )
+      end
+    end
   let(:order_response) { double('Order', order_id: 'ORD123456') }
   let(:redis_cache) { Live::RedisPnlCache.instance }
   let(:ws_hub) { Live::WsHub.instance }
@@ -179,13 +189,16 @@ RSpec.describe Instrument, type: :model do
 
   describe '#sell_market!' do
     let(:active_tracker) do
-      create(
-        :position_tracker,
-        instrument: instrument,
-        security_id: instrument.security_id.to_s,
-        quantity: 5,
-        status: PositionTracker::STATUSES[:active]
-      )
+        create(
+          :position_tracker,
+          :nifty_position,
+          instrument: instrument,
+          watchable: instrument,
+          security_id: instrument.security_id.to_s,
+          segment: 'NSE_FNO',
+          quantity: 5,
+          status: 'active'
+        )
     end
 
     before do
@@ -211,10 +224,13 @@ RSpec.describe Instrument, type: :model do
       it 'uses sum of active PositionTracker quantities' do
         create(
           :position_tracker,
+          :nifty_position,
           instrument: instrument,
+          watchable: instrument,
           security_id: instrument.security_id.to_s,
+          segment: 'NSE_FNO',
           quantity: 2,
-          status: PositionTracker::STATUSES[:active]
+          status: 'active'
         )
 
         expect(Orders.config).to receive(:place_market).with(

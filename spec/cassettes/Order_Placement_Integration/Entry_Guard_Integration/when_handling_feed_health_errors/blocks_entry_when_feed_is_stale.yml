@@ -1,0 +1,43 @@
+---
+http_interactions:
+  - request:
+      method: post
+      uri: https://api.dhan.co/v2/marketfeed/ltp
+      body:
+        encoding: UTF-8
+        string: '{"NSE_FNO":["12345"]}'
+      headers:
+        User-Agent:
+          - Faraday v1.10.4
+        Content-Type:
+          - application/json
+        Accept:
+          - application/json
+        Access-Token:
+          - "<ACCESS_TOKEN>"
+        Client-Id:
+          - "<CLIENT_ID>"
+        Accept-Encoding:
+          - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+    response:
+      status:
+        code: 200
+        message: OK
+      headers:
+        Date:
+          - Sat, 29 Nov 2025 04:45:06 GMT
+        Content-Type:
+          - application/json
+        Content-Length:
+          - "42"
+        Connection:
+          - keep-alive
+        Content-Security-Policy:
+          - frame-ancestors 'none'
+        X-Frame-Options:
+          - SAMEORIGIN
+      body:
+        encoding: UTF-8
+        string: '{"data":{"NSE_FNO":{}},"status":"success"}'
+    recorded_at: Sat, 29 Nov 2025 04:45:05 GMT
+recorded_with: VCR 6.3.1

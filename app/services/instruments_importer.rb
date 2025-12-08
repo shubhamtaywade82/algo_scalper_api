@@ -178,8 +178,19 @@ class InstrumentsImporter
 
       return if with_parent.empty?
 
+      # Validate instrument_ids exist before importing
+      valid_instrument_ids = Instrument.where(id: with_parent.map { |r| r[:instrument_id] }.compact.uniq).pluck(:id).to_set
+      validated_rows = with_parent.select { |r| r[:instrument_id] && valid_instrument_ids.include?(r[:instrument_id]) }
+
+      if validated_rows.size < with_parent.size
+        skipped = with_parent.size - validated_rows.size
+        # Rails.logger.warn "Skipping #{skipped} derivatives with invalid instrument_id references"
+      end
+
+      return if validated_rows.empty?
+
       Derivative.import(
-        with_parent,
+        validated_rows,
         batch_size: BATCH_SIZE,
         on_duplicate_key_update: {
           conflict_target: %i[security_id symbol_name exchange segment],

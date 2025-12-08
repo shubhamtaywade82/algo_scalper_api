@@ -13,8 +13,16 @@ RSpec.describe 'VCR Cassette Generation', :vcr, type: :integration do
         # Skip if no credentials are available
         skip 'No DhanHQ credentials available' unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
 
-        # Create a real instrument
-        instrument = create(:instrument, :nifty_index)
+        # Create a real instrument (use find_or_create to avoid duplicate security_id errors)
+        instrument = Instrument.find_or_create_by!(security_id: '13') do |inst|
+          inst.assign_attributes(
+            symbol_name: 'NIFTY',
+            exchange: 'nse',
+            segment: 'index',
+            instrument_type: 'INDEX',
+            instrument_code: 'index'
+          )
+        end
 
         # This will make a real HTTP request and record it in VCR cassette
         # The sensitive headers will be filtered out by our VCR configuration
@@ -28,8 +36,16 @@ RSpec.describe 'VCR Cassette Generation', :vcr, type: :integration do
         # Skip if no credentials are available
         skip 'No DhanHQ credentials available' unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
 
-        # Create a real instrument
-        instrument = create(:instrument, :nifty_index)
+        # Create a real instrument (use find_or_create to avoid duplicate security_id errors)
+        instrument = Instrument.find_or_create_by!(security_id: '13') do |inst|
+          inst.assign_attributes(
+            symbol_name: 'NIFTY',
+            exchange: 'nse',
+            segment: 'index',
+            instrument_type: 'INDEX',
+            instrument_code: 'index'
+          )
+        end
 
         # This will make a real HTTP request and record it in VCR cassette
         result = instrument.intraday_ohlc(interval: '5')

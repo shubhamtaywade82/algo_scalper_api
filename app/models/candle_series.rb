@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# rubocop:disable Metrics/ClassLength
 class CandleSeries
   include Enumerable
 
@@ -17,7 +18,7 @@ class CandleSeries
   def load_from_raw(response)
     normalise_candles(response).each do |row|
       @candles << Candle.new(
-        ts: Time.zone.parse(row[:timestamp].to_s),
+        timestamp: Time.zone.parse(row[:timestamp].to_s),
         open: row[:open], high: row[:high],
         low: row[:low], close: row[:close],
         volume: row[:volume]
@@ -30,6 +31,10 @@ class CandleSeries
 
     return resp.map { |c| slice_candle(c) } if resp.is_a?(Array)
 
+    normalize_hash_format(resp)
+  end
+
+  def normalize_hash_format(resp)
     raise "Unexpected candle format: #{resp.class}" unless resp.is_a?(Hash) && resp['high'].is_a?(Array)
 
     size = resp['high'].size
@@ -100,10 +105,7 @@ class CandleSeries
     return nil if candles.size < period + 1
 
     TechnicalAnalysis::Atr.calculate(hlc, period: period).first.atr
-  rescue TechnicalAnalysis::Validation::ValidationError => e
-    Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
-    nil
-  rescue ArgumentError, TypeError => e
+  rescue TechnicalAnalysis::Validation::ValidationError, ArgumentError, TypeError => e
     Rails.logger.warn("[CandleSeries] ATR calculation failed: #{e.message}")
     nil
   rescue StandardError => e
@@ -114,17 +116,28 @@ class CandleSeries
   end
 
   def adx(period = 14)
+    # ADX needs at least period + 1 candles, but TechnicalAnalysis gem typically needs 2*period for accuracy
+    # We'll check for period + 1 here (minimum), but callers should ensure 2*period for best results
     return nil if candles.size < period + 1
 
     result = TechnicalAnalysis::Adx.calculate(hlc, period: period)
     return nil if result.empty?
 
     result.last.adx
-  rescue ArgumentError, TypeError, StandardError => e
+  rescue ArgumentError, TypeError => e
+    # Suppress "Not enough data" warnings - they're expected when called too early
+    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
+      Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    end
+    nil
+  rescue StandardError => e
     # Don't catch NoMethodError as it indicates programming errors
     raise if e.is_a?(NoMethodError)
 
-    Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    # Suppress "Not enough data" warnings - they're expected when called too early
+    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
+      Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
+    end
     nil
   end
 
@@ -146,12 +159,12 @@ class CandleSeries
     current < left.min && current < right.min
   end
 
-  def recent_highs(n = 20)
-    candles.last(n).map(&:high)
+  def recent_highs(count = 20)
+    candles.last(count).map(&:high)
   end
 
-  def recent_lows(n = 20)
-    candles.last(n).map(&:low)
+  def recent_lows(count = 20)
+    candles.last(count).map(&:low)
   end
 
   def previous_swing_high
@@ -328,10 +341,14 @@ class CandleSeries
     # OBV.calculate might have different signature - try alternative approach
     Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
     nil
-  rescue TypeError, StandardError => e
+  rescue TypeError => e
+    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
+    nil
+  rescue StandardError => e
     raise if e.is_a?(NoMethodError)
 
     Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
     nil
   end
 end
+# rubocop:enable Metrics/ClassLength

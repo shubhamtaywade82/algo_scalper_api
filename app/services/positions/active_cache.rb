@@ -311,7 +311,8 @@ module Positions
     # @return [Integer] Number of positions loaded
     def bulk_load!
       count = 0
-      PositionTracker.active.find_each do |tracker|
+      # Use cached active positions to avoid redundant query
+      Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
         next unless tracker.entry_price&.positive?
 
         # Try to get SL/TP from meta or calculate defaults
@@ -444,7 +445,8 @@ module Positions
       return 0 unless @redis
 
       count = 0
-      PositionTracker.active.find_each do |tracker|
+      # Use cached active positions to avoid redundant query
+      Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
         redis_key = "position_peaks:#{tracker.id}"
         peak_str = @redis.get(redis_key)
         next unless peak_str

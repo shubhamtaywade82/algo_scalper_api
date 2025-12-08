@@ -23,7 +23,8 @@ module TradingSystem
           begin
             # Skip heartbeat if market is closed and no active positions
             if TradingSession::Service.market_closed?
-              active_count = PositionTracker.active.count
+              # Use cached active positions to avoid redundant query
+              active_count = Positions::ActivePositionsCache.instance.active_trackers.size
               if active_count.zero?
                 # Market closed and no active positions - sleep longer
                 sleep 60 # Check every minute when market is closed and no positions

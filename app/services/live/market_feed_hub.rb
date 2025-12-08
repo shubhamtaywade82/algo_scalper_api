@@ -538,7 +538,10 @@ module Live
         return result
       end
 
-      # Fallback to ENV-based watchlist if DB watchlist is empty
+      # Fallback to algo.yml watchlist, then ENV if DB watchlist is empty
+      watchlist_config = AlgoConfig.fetch[:watchlist] || []
+      return watchlist_config if watchlist_config.present?
+
       raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '').strip
       return [] if raw.blank?
 
@@ -659,7 +662,8 @@ module Live
         end
 
         # Then, resubscribe all active positions (only if market is open)
-        positions = PositionTracker.active.includes(:instrument).to_a
+        # Use cached active positions to avoid redundant query
+        positions = Positions::ActivePositionsCache.instance.active_trackers
         unless positions.empty?
           Rails.logger.info("[MarketFeedHub] Reconnecting: Resubscribing #{positions.size} active positions")
 

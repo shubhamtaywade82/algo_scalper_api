@@ -22,6 +22,9 @@ RSpec.configure do |config|
       if Live::MockDataService.instance.respond_to?(:running?) && Live::MockDataService.instance.running?
         Live::MockDataService.instance.stop!
       end
+      if defined?(Live::PnlUpdaterService) && Live::PnlUpdaterService.instance.respond_to?(:running?) && Live::PnlUpdaterService.instance.running?
+        Live::PnlUpdaterService.instance.stop!
+      end
     rescue StandardError => e
       # Rails.logger.warn("[TestHelper] Error stopping services: #{e.message}")
     end
@@ -46,6 +49,9 @@ RSpec.configure do |config|
       end
       if Live::MockDataService.instance.respond_to?(:running?) && Live::MockDataService.instance.running?
         Live::MockDataService.instance.stop!
+      end
+      if defined?(Live::PnlUpdaterService) && Live::PnlUpdaterService.instance.respond_to?(:running?) && Live::PnlUpdaterService.instance.running?
+        Live::PnlUpdaterService.instance.stop!
       end
     rescue StandardError => e
       # Rails.logger.warn("[TestHelper] Error cleaning up services: #{e.message}")
