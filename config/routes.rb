@@ -8,6 +8,22 @@ Rails.application.routes.draw do
   namespace :api do
     get :health, to: "health#show"
     post :test_broadcast, to: "test#broadcast"
+
+    # Watchlist management
+    resources :watchlist, only: [:index, :show, :create, :destroy]
+
+    # Swing trading recommendations
+    namespace :swing_trading do
+      resources :recommendations, only: [:index, :show] do
+        member do
+          post :execute
+          post :cancel
+        end
+        collection do
+          post 'analyze/:watchlist_item_id', to: 'recommendations#analyze', as: :analyze
+        end
+      end
+    end
   end
 
   # Redis UI (development only)
