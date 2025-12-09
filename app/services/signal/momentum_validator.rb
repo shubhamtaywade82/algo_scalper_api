@@ -13,7 +13,11 @@ module Signal
     # @param min_confirmations [Integer] Minimum confirmations required (default: 1)
     # @return [Result] Validation result with score and factors
     def self.validate(instrument:, series:, direction:, min_confirmations: 1)
-      return invalid_result('Missing required parameters') unless instrument && series
+      # Input validation
+      return invalid_result('Missing instrument') unless instrument
+      return invalid_result('Missing series') unless series
+      return invalid_result('Invalid direction') unless direction.in?([:bullish, :bearish])
+      return invalid_result('Invalid min_confirmations (must be 1-3)') unless min_confirmations.between?(1, 3)
 
       factors = {}
       score = 0
@@ -60,27 +64,25 @@ module Signal
       return { confirms: false, reason: 'Series unavailable' } unless series&.candles&.any?
 
       bars = series.candles.last(20)
-      return { confirms: false, reason: 'Insufficient candles' } if bars.size < 5
+      lookback = 2
+      return { confirms: false, reason: 'Insufficient candles' } if bars.size < (lookback * 2 + 3)
 
       # Get current LTP
       current_price = bars.last.close
       return { confirms: false, reason: 'Current price unavailable' } unless current_price&.positive?
 
-      # Find last swing high/low
+      # Find last swing high/low with wider lookback (2-3 candles on each side)
+      lookback = 2  # Check 2 candles on each side for true swing
       case direction
       when :bullish
         # For bullish, check if LTP > last swing high
         swing_highs = []
-        (bars.size - 5..bars.size - 2).each do |i|
-          next if i < 0 || i >= bars.size
-
+        (lookback..bars.size - 1 - lookback).each do |i|
           bar = bars[i]
-          # Check if this is a swing high (higher than neighbors)
-          if i > 0 && i < bars.size - 1
-            prev_high = bars[i - 1].high
-            next_high = bars[i + 1].high
-            swing_highs << bar.high if bar.high > prev_high && bar.high > next_high
-          end
+          # Check if this is a swing high (higher than neighbors on both sides)
+          left_highs = bars[(i - lookback)..(i - 1)].map(&:high)
+          right_highs = bars[(i + 1)..(i + lookback)].map(&:high)
+          swing_highs << bar.high if bar.high > left_highs.max && bar.high > right_highs.max
         end
 
         last_swing_high = swing_highs.max
@@ -92,16 +94,12 @@ module Signal
       when :bearish
         # For bearish, check if LTP < last swing low
         swing_lows = []
-        (bars.size - 5..bars.size - 2).each do |i|
-          next if i < 0 || i >= bars.size
-
+        (lookback..bars.size - 1 - lookback).each do |i|
           bar = bars[i]
-          # Check if this is a swing low (lower than neighbors)
-          if i > 0 && i < bars.size - 1
-            prev_low = bars[i - 1].low
-            next_low = bars[i + 1].low
-            swing_lows << bar.low if bar.low < prev_low && bar.low < next_low
-          end
+          # Check if this is a swing low (lower than neighbors on both sides)
+          left_lows = bars[(i - lookback)..(i - 1)].map(&:low)
+          right_lows = bars[(i + 1)..(i + lookback)].map(&:low)
+          swing_lows << bar.low if bar.low < left_lows.min && bar.low < right_lows.min
         end
 
         last_swing_low = swing_lows.min
@@ -177,8 +175,14 @@ module Signal
 
       price_change_pct = ((current_close - prev_close) / prev_close * 100).abs
 
-      # Require at least 0.3% move in 1-2 candles (momentum)
-      threshold_pct = 0.3
+      # Index-specific premium speed thresholds (options need faster moves)
+      index_key = instrument.index_key&.upcase || 'NIFTY'
+      thresholds = {
+        'NIFTY' => 0.25,
+        'BANKNIFTY' => 0.35,  # More volatile, needs faster moves
+        'SENSEX' => 0.20
+      }
+      threshold_pct = thresholds[index_key] || 0.3
 
       if price_change_pct >= threshold_pct
         case direction

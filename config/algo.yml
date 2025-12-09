@@ -362,6 +362,30 @@ signals:
 
   validation_mode: balanced
 
+  # Enhanced Signal Validation Configuration
+  enhanced_validation:
+    enabled: true  # Enable multi-factor validation
+
+    direction:
+      min_agreement: 2  # Minimum factors that must agree (1-6)
+      htf_timeframe: '15m'  # Higher timeframe for confirmation
+      adx_thresholds:
+        NIFTY: 15
+        BANKNIFTY: 20
+        SENSEX: 15
+
+    momentum:
+      min_confirmations: 1  # Minimum momentum confirmations (1-3)
+      body_expansion_threshold: 1.2  # Minimum body expansion ratio
+      premium_speed_thresholds:
+        NIFTY: 0.25
+        BANKNIFTY: 0.35
+        SENSEX: 0.20
+
+    volatility:
+      min_atr_ratio: 0.65  # Minimum ATR ratio vs historical
+      compression_bars: 4  # Minimum bars for compression detection
+
   supertrend:
     period: 10
     base_multiplier: 1.5

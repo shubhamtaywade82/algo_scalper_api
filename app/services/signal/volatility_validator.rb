@@ -11,7 +11,9 @@ module Signal
     # @param min_atr_ratio [Float] Minimum ATR ratio (default: 0.65)
     # @return [Result] Validation result with ATR ratio and factors
     def self.validate(series:, min_atr_ratio: 0.65)
+      # Input validation
       return invalid_result('Series unavailable') unless series&.candles&.any?
+      return invalid_result('Invalid min_atr_ratio (must be 0.0-2.0)') unless min_atr_ratio.between?(0.0, 2.0)
 
       factors = {}
       reasons = []
@@ -53,14 +55,14 @@ module Signal
 
     def self.check_atr_ratio(series:, min_ratio:)
       bars = series.candles
-      return { valid: false, ratio: nil, reason: 'Insufficient candles' } if bars.size < 28
+      return { valid: false, ratio: nil, reason: 'Insufficient candles' } if bars.size < 42
 
       # Calculate current ATR (last 14 bars)
       current_window = bars.last(14)
       current_atr = Entries::ATRUtils.calculate_atr(current_window)
 
-      # Calculate historical ATR (previous 14 bars)
-      historical_window = bars.last(28).first(14)
+      # Calculate historical ATR (non-overlapping: bars 15-28, previous period)
+      historical_window = bars.last(42).first(14)  # Bars 15-28 (older period)
       historical_atr = Entries::ATRUtils.calculate_atr(historical_window)
 
       return { valid: false, ratio: nil, reason: 'ATR calculation failed' } unless current_atr && historical_atr&.positive?
@@ -81,8 +83,8 @@ module Signal
       bars = series.candles
       return { in_compression: false, reason: 'Insufficient candles' } if bars.size < 20
 
-      # Check if ATR is declining for 3+ consecutive periods
-      atr_downtrend = Entries::ATRUtils.atr_downtrend?(bars, period: 14, min_downtrend_bars: 3)
+      # Check if ATR is declining for 4+ consecutive periods (more sustained compression)
+      atr_downtrend = Entries::ATRUtils.atr_downtrend?(bars, period: 14, min_downtrend_bars: 4)
 
       if atr_downtrend
         { in_compression: true, reason: 'ATR declining (volatility compression detected)' }

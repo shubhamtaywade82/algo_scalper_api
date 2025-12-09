@@ -16,14 +16,23 @@ module Signal
     # @return [Result] Validation result with direction, score, and factors
     def self.validate(index_cfg:, instrument:, primary_series:, primary_supertrend:,
                      primary_adx:, min_agreement: 2)
-      return invalid_result('Missing required parameters') unless instrument && primary_series
+      # Input validation
+      return invalid_result('Missing instrument') unless instrument
+      return invalid_result('Missing primary_series') unless primary_series
+      return invalid_result('Invalid primary_supertrend') unless primary_supertrend.is_a?(Hash)
+      return invalid_result('Invalid primary_adx') unless primary_adx.is_a?(Numeric)
+      return invalid_result('Invalid min_agreement (must be 1-6)') unless min_agreement.between?(1, 6)
 
       factors = {}
       score = 0
       reasons = []
 
-      # 1. HTF Supertrend (15m or 30m)
-      htf_factor = check_htf_supertrend(instrument: instrument, index_cfg: index_cfg)
+      # 1. HTF Supertrend (15m or 30m) with ADX strength check
+      htf_factor = check_htf_supertrend(
+        instrument: instrument,
+        index_cfg: index_cfg,
+        primary_supertrend: primary_supertrend
+      )
       factors[:htf_supertrend] = htf_factor
       score += 1 if htf_factor[:agrees]
 
@@ -75,8 +84,8 @@ module Signal
 
     private
 
-    def self.check_htf_supertrend(instrument:, index_cfg:)
-      # Check 15m Supertrend as HTF confirmation
+    def self.check_htf_supertrend(instrument:, index_cfg:, primary_supertrend:)
+      # Check 15m Supertrend as HTF confirmation (reuse primary_supertrend to avoid recalculation)
       htf_series = instrument.candle_series(interval: '15')
       return { agrees: false, reason: 'HTF data unavailable' } unless htf_series&.candles&.any?
 
@@ -86,16 +95,27 @@ module Signal
       st_service = Indicators::Supertrend.new(series: htf_series, **supertrend_cfg)
       htf_st = st_service.call
 
-      primary_st = instrument.candle_series(interval: '5')
-      return { agrees: false, reason: 'Primary timeframe unavailable' } unless primary_st
+      # Validate HTF trend strength with ADX
+      htf_adx = instrument.adx(14, interval: '15')
+      index_key = index_cfg[:key].to_s.upcase
+      adx_thresholds = {
+        'NIFTY' => 15,
+        'BANKNIFTY' => 20,
+        'SENSEX' => 15
+      }
+      min_htf_adx = adx_thresholds[index_key] || 15
 
-      primary_st_service = Indicators::Supertrend.new(series: primary_st, **supertrend_cfg)
-      primary_st_result = primary_st_service.call
-
-      if htf_st[:trend] == primary_st_result[:trend] && htf_st[:trend].in?([:bullish, :bearish])
-        { agrees: true, reason: "HTF Supertrend (#{htf_st[:trend]}) aligns" }
-      else
+      # Check alignment AND strength
+      if htf_st[:trend] == primary_supertrend[:trend] &&
+         htf_st[:trend].in?([:bullish, :bearish]) &&
+         htf_adx && htf_adx >= min_htf_adx
+        { agrees: true, reason: "HTF Supertrend (#{htf_st[:trend]}) aligns with ADX #{htf_adx.round(1)}" }
+      elsif htf_st[:trend] != primary_supertrend[:trend]
         { agrees: false, reason: "HTF Supertrend (#{htf_st[:trend]}) does not align with primary" }
+      elsif htf_adx.nil? || htf_adx < min_htf_adx
+        { agrees: false, reason: "HTF ADX #{htf_adx&.round(1)} < #{min_htf_adx} (weak trend)" }
+      else
+        { agrees: false, reason: "HTF Supertrend (#{htf_st[:trend]}) validation failed" }
       end
     rescue StandardError => e
       Rails.logger.debug { "[DirectionValidator] HTF check failed: #{e.message}" }
@@ -198,22 +218,26 @@ module Signal
 
       case direction
       when :bullish
-        # Check for higher highs pattern
+        # Check for higher highs pattern (strict: b > a, not b >= a)
         highs = bars.map(&:high)
-        higher_highs = highs.each_cons(2).all? { |a, b| b >= a }
-        if higher_highs
-          { agrees: true, reason: 'Higher highs pattern detected' }
+        # Require at least 80% of pairs to show strict higher highs
+        higher_highs_count = highs.each_cons(2).count { |a, b| b > a }
+        higher_highs_ratio = higher_highs_count.to_f / [highs.size - 1, 1].max
+        if higher_highs_ratio >= 0.8
+          { agrees: true, reason: "Higher highs pattern detected (#{(higher_highs_ratio * 100).round}%)" }
         else
-          { agrees: false, reason: 'No higher highs pattern' }
+          { agrees: false, reason: "No higher highs pattern (#{(higher_highs_ratio * 100).round}% < 80%)" }
         end
       when :bearish
-        # Check for lower lows pattern
+        # Check for lower lows pattern (strict: b < a, not b <= a)
         lows = bars.map(&:low)
-        lower_lows = lows.each_cons(2).all? { |a, b| b <= a }
-        if lower_lows
-          { agrees: true, reason: 'Lower lows pattern detected' }
+        # Require at least 80% of pairs to show strict lower lows
+        lower_lows_count = lows.each_cons(2).count { |a, b| b < a }
+        lower_lows_ratio = lower_lows_count.to_f / [lows.size - 1, 1].max
+        if lower_lows_ratio >= 0.8
+          { agrees: true, reason: "Lower lows pattern detected (#{(lower_lows_ratio * 100).round}%)" }
         else
-          { agrees: false, reason: 'No lower lows pattern' }
+          { agrees: false, reason: "No lower lows pattern (#{(lower_lows_ratio * 100).round}% < 80%)" }
         end
       else
         { agrees: false, reason: "Invalid direction: #{direction}" }
