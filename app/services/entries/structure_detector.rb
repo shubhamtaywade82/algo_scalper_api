@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Entries
-  # Detects market structure patterns (BOS, Order Blocks, FVG) without volume
+  # Detects market structure patterns (BOS, Order Blocks, FVG, CHOCH) without volume
   class StructureDetector
     class << self
       # Break of Structure (BOS) - price breaks previous swing high/low
@@ -9,22 +9,31 @@ module Entries
       # @param lookback_minutes [Integer] Minutes to look back for BOS
       # @return [Boolean]
       def bos?(bars, lookback_minutes: 10)
-        return false if bars.nil? || bars.empty? || bars.size < 3
+        direction = bos_direction(bars, lookback_minutes: lookback_minutes)
+        direction != :neutral
+      end
+
+      # Break of Structure (BOS) direction - returns :bullish, :bearish, or :neutral
+      # @param bars [Array<Candle>] Array of candle objects
+      # @param lookback_minutes [Integer] Minutes to look back for BOS
+      # @return [Symbol] :bullish, :bearish, or :neutral
+      def bos_direction(bars, lookback_minutes: 10)
+        return :neutral if bars.nil? || bars.empty? || bars.size < 3
 
         lookback_count = [lookback_minutes, bars.size].min
         recent_bars = bars.last(lookback_count)
-        return false if recent_bars.size < 3
+        return :neutral if recent_bars.size < 3
 
         current = recent_bars.last
-        return false unless current
+        return :neutral unless current
 
         previous_bars = recent_bars[0..-2]
-        return false if previous_bars.empty?
+        return :neutral if previous_bars.empty?
 
         previous_swing_high = previous_bars.map(&:high).max
         previous_swing_low = previous_bars.map(&:low).min
 
-        return false unless previous_swing_high && previous_swing_low
+        return :neutral unless previous_swing_high && previous_swing_low
 
         # Bullish BOS: price breaks above previous swing high
         bullish_bos = current.close > previous_swing_high
@@ -32,7 +41,85 @@ module Entries
         # Bearish BOS: price breaks below previous swing low
         bearish_bos = current.close < previous_swing_low
 
-        bullish_bos || bearish_bos
+        return :bullish if bullish_bos
+        return :bearish if bearish_bos
+
+        :neutral
+      end
+
+      # Change of Character (CHOCH) - structure shift with confirmation
+      # CHOCH occurs when price breaks structure AND maintains direction
+      # @param bars [Array<Candle>] Array of candle objects
+      # @param lookback_minutes [Integer] Minutes to look back
+      # @return [Symbol] :bullish, :bearish, or :neutral
+      def choch?(bars, lookback_minutes: 15)
+        return :neutral if bars.nil? || bars.empty? || bars.size < 4
+
+        lookback_count = [lookback_minutes, bars.size].min
+        recent_bars = bars.last(lookback_count)
+        return :neutral if recent_bars.size < 4
+
+        # Need at least 4 candles: 2 for structure break, 1 for confirmation
+        current = recent_bars.last
+        prev = recent_bars[-2]
+        return :neutral unless current && prev
+
+        # Check for bullish CHOCH
+        # 1. Price breaks above previous swing high
+        # 2. Confirmation: current candle maintains bullish structure
+        previous_bars = recent_bars[0..-3]
+        return :neutral if previous_bars.empty?
+
+        previous_swing_high = previous_bars.map(&:high).max
+        previous_swing_low = previous_bars.map(&:low).min
+
+        return :neutral unless previous_swing_high && previous_swing_low
+
+        # Bullish CHOCH: Break above swing high + confirmation
+        if prev.close > previous_swing_high && current.close > prev.close
+          # Additional confirmation: current high > previous swing high
+          return :bullish if current.high > previous_swing_high
+        end
+
+        # Bearish CHOCH: Break below swing low + confirmation
+        if prev.close < previous_swing_low && current.close < prev.close
+          # Additional confirmation: current low < previous swing low
+          return :bearish if current.low < previous_swing_low
+        end
+
+        :neutral
+      end
+
+      # Check if structure aligns with trade direction
+      # @param bars [Array<Candle>] Array of candle objects
+      # @param direction [Symbol] :bullish or :bearish
+      # @param min_alignment [Float] Minimum alignment ratio (default: 0.6)
+      # @return [Boolean]
+      def structure_alignment?(bars, direction:, min_alignment: 0.6)
+        return false unless direction.in?([:bullish, :bearish])
+        return false if bars.nil? || bars.empty?
+
+        bos_dir = bos_direction(bars, lookback_minutes: 10)
+        choch_dir = choch?(bars, lookback_minutes: 15)
+
+        alignment_score = 0.0
+        total_checks = 0
+
+        # BOS alignment (50% weight)
+        if bos_dir != :neutral
+          total_checks += 1
+          alignment_score += 0.5 if bos_dir == direction
+        end
+
+        # CHOCH alignment (50% weight)
+        if choch_dir != :neutral
+          total_checks += 1
+          alignment_score += 0.5 if choch_dir == direction
+        end
+
+        return false if total_checks.zero?
+
+        (alignment_score / total_checks) >= min_alignment
       end
 
       # Check if price is inside opposite Order Block
