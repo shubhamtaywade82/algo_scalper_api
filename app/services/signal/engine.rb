@@ -534,8 +534,8 @@ module Signal
         # Log all validation results
         # Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
         validation_checks.each do |check|
-          check[:valid] ? '✅' : '❌'
-          # Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
+          _status = check[:valid] ? '✅' : '❌'
+          # Rails.logger.info("  #{_status} #{check[:name]}: #{check[:message]}")
         end
 
         # Determine overall validation result
@@ -673,8 +673,10 @@ module Signal
 
       # Validate market timing - avoid problematic trading times
       def validate_market_timing
+        # NOTE: Currently always returns valid - timing validation disabled
         return { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
-        current_time = Time.zone.now
+        # Unreachable code below (timing validation disabled)
+        # current_time = Time.zone.now
 
         # First check if it's a trading day using Market::Calendar
         unless Market::Calendar.trading_day_today?
@@ -1110,7 +1112,7 @@ module Signal
       # @param cached_option_chain [Hash, nil] Option chain data from Phase 1 (optional)
       # @param cached_bars_1m [CandleSeries, nil] 1m bars from Phase 1 (optional)
       # @return [Hash] Validation result with :allowed, :score, :reasons
-      def validate_no_trade_conditions(index_cfg:, instrument:, direction:, cached_option_chain: nil,
+      def validate_no_trade_conditions(index_cfg:, instrument:, _direction:, cached_option_chain: nil,
                                        cached_bars_1m: nil)
         # Reuse bars_1m from Phase 1 if available, otherwise fetch
         bars_1m = cached_bars_1m || instrument.candle_series(interval: '1')

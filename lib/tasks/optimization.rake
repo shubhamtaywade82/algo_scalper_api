@@ -285,7 +285,7 @@ namespace :optimization do
         end
       end
 
-      puts "\n" + '=' * 80
+      puts "\n" + ('=' * 80)
       puts '✅ Done! Results saved to best_indicator_params table'
       puts '=' * 80
       puts "\nTo retrieve optimized parameters:"

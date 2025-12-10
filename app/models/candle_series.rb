@@ -247,8 +247,11 @@ class CandleSeries
     return nil if result.nil? || !result.is_a?(Array) || result.size < 3
 
     result # Returns [macd, signal, histogram] array
+  rescue NoMethodError => e
+    raise e
   rescue ArgumentError, TypeError, StandardError => e
-    raise if e.is_a?(NoMethodError)
+    # Re-raise NoMethodError if it was wrapped
+    raise e if e.is_a?(NoMethodError)
 
     Rails.logger.warn("[CandleSeries] MACD calculation failed: #{e.message}")
     nil
@@ -337,16 +340,10 @@ class CandleSeries
     # OBV.calculate is a class method that takes an array of hashes
     # The gem expects the data in a specific format
     TechnicalAnalysis::Obv.calculate(dcv)
-  rescue ArgumentError => e
+  rescue NoMethodError => e
+    raise e
+  rescue ArgumentError, TypeError, StandardError => e
     # OBV.calculate might have different signature - try alternative approach
-    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
-    nil
-  rescue TypeError => e
-    Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
-    nil
-  rescue StandardError => e
-    raise if e.is_a?(NoMethodError)
-
     Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
     nil
   end

@@ -63,6 +63,16 @@ module Live
       peak = position_data.peak_profit_pct.to_f
       current = position_data.pnl_pct.to_f
 
+      # Skip if peak is 0% or negative (position never profitable)
+      # Peak drawdown rule should only trigger when position had profit and is drawing down
+      if peak <= 0
+        Rails.logger.debug(
+          "[TrailingEngine] Skipping peak drawdown check: peak=#{peak.round(2)}% <= 0% " \
+          "(position never profitable)"
+        )
+        return false
+      end
+
       # Calculate capital deployed (entry_price * quantity)
       capital_deployed = calculate_capital_deployed(position_data)
 
@@ -70,7 +80,7 @@ module Live
       return false unless Positions::TrailingConfig.peak_drawdown_triggered?(
         peak,
         current,
-        capital_deployed: capital_deployed
+        _capital_deployed: capital_deployed
       )
 
       # Apply peak-drawdown activation gating (if enabled)
@@ -98,10 +108,7 @@ module Live
       end
 
       drawdown = peak - current
-      threshold = Positions::TrailingConfig.dynamic_drawdown_threshold(
-        peak,
-        capital_deployed: capital_deployed
-      )
+      threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak)
       capital_info = capital_deployed ? " (capital: ₹#{capital_deployed.round(0)})" : ''
       reason = "peak_drawdown_exit (drawdown: #{drawdown.round(2)}%, threshold: #{threshold.round(2)}%, peak: #{peak.round(2)}%#{capital_info})"
 

@@ -77,7 +77,7 @@ module Positions
       new_sl_price.round(2)
     end
 
-    def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, capital_deployed: nil)
+    def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct, _capital_deployed: nil)
       return false unless peak_profit_pct && current_profit_pct
 
       # Use tiered drawdown threshold based on peak height
@@ -160,6 +160,35 @@ module Positions
           tiered_drawdown_thresholds: parse_tiered_drawdown_thresholds(risk[:tiered_drawdown_thresholds])
         }
       end
+    end
+
+    def parse_direct_trailing(direct_trailing)
+      return nil unless direct_trailing.is_a?(Hash)
+
+      {
+        enabled: direct_trailing[:enabled] == true || direct_trailing['enabled'] == true,
+        distance_pct: numeric_or_default(direct_trailing[:distance_pct] || direct_trailing['distance_pct'], 5.0),
+        activation_profit_pct: numeric_or_default(direct_trailing[:activation_profit_pct] || direct_trailing['activation_profit_pct'], 0.0),
+        min_sl_offset_pct: numeric_or_default(direct_trailing[:min_sl_offset_pct] || direct_trailing['min_sl_offset_pct'], -30.0)
+      }
+    rescue StandardError
+      nil
+    end
+
+    def parse_dynamic_drawdown_thresholds(thresholds)
+      return {} unless thresholds.is_a?(Hash)
+
+      {}
+    rescue StandardError
+      {}
+    end
+
+    def parse_capital_based_thresholds(thresholds)
+      return {} unless thresholds.is_a?(Hash)
+
+      {}
+    rescue StandardError
+      {}
     end
 
     def parse_tiered_drawdown_thresholds(thresholds)

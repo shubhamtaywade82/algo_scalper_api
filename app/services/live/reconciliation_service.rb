@@ -13,7 +13,10 @@ module Live
   class ReconciliationService
     include Singleton
 
-    RECONCILIATION_INTERVAL = 5.seconds
+    # Increased interval to reduce redundancy with RiskManagerService
+    # RiskManagerService already ensures caches every 5 seconds
+    # This service is primarily for on-demand reconciliation
+    RECONCILIATION_INTERVAL = 30.seconds
 
     def initialize
       @last_reconciliation = nil
@@ -81,7 +84,7 @@ module Live
           Rails.logger.debug { e.backtrace.first(5).join("\n") }
         end
 
-        sleep 1 # Check every second, but only reconcile every 5 seconds
+        sleep 1 # Check every second, but only reconcile every 30 seconds (reduced redundancy)
       end
     rescue StandardError => e
       Rails.logger.error("[ReconciliationService] Fatal error: #{e.class} - #{e.message}")

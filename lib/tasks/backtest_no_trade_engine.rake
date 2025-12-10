@@ -10,8 +10,8 @@ namespace :backtest do
       puts 'NoTradeEngine Backtest - NIFTY & SENSEX (Intraday)'
       puts '=' * 100
       puts "Lookback Period: #{days_back} days"
-      puts "Timeframes: 1m and 5m"
-      puts "Indices: NIFTY, SENSEX"
+      puts 'Timeframes: 1m and 5m'
+      puts 'Indices: NIFTY, SENSEX'
       puts ('=' * 100) + "\n"
 
       indices = %w[NIFTY SENSEX]
@@ -32,7 +32,7 @@ namespace :backtest do
             # - Always fetch 5m separately from API for ADX/DI calculations (never build from 1m)
             # - Signal generation uses the specified timeframe (1m or 5m)
             interval_1m = '1'
-            interval_5m = '5'  # Always fetch 5m separately from API for ADX calculations
+            interval_5m = '5' # Always fetch 5m separately from API for ADX calculations
 
             result = BacktestServiceWithNoTradeEngine.run(
               symbol: index_key,
@@ -67,13 +67,12 @@ namespace :backtest do
             if result.no_trade_stats[:phase2_reasons].any?
               puts "\n   Top Phase 2 Block Reasons:"
               result.no_trade_stats[:phase2_reasons]
-                .sort_by { |_k, v| -v }
-                .first(5)
-                .each do |reason, count|
-                  puts "     - #{reason}: #{count}"
-                end
+                    .sort_by { |_k, v| -v }
+                    .first(5)
+                    .each do |reason, count|
+                puts "     - #{reason}: #{count}"
+              end
             end
-
           rescue StandardError => e
             puts "❌ ERROR: #{e.class} - #{e.message}"
             puts "   Backtrace: #{e.backtrace.first(3).join("\n   ")}"
@@ -132,7 +131,7 @@ namespace :backtest do
       puts ('=' * 100) + "\n"
 
       interval_1m = '1'
-      interval_5m = '5'  # Always fetch 5m separately from API for ADX calculations
+      interval_5m = '5' # Always fetch 5m separately from API for ADX calculations
 
       result = BacktestServiceWithNoTradeEngine.run(
         symbol: index_key,
@@ -155,16 +154,16 @@ namespace :backtest do
       if result.no_trade_stats[:phase1_reasons].any?
         puts "\n   Phase 1 Block Reasons:"
         result.no_trade_stats[:phase1_reasons]
-          .sort_by { |_k, v| -v }
-          .each { |reason, count| puts "     - #{reason}: #{count}" }
+              .sort_by { |_k, v| -v }
+              .each { |reason, count| puts "     - #{reason}: #{count}" }
       end
 
       if result.no_trade_stats[:phase2_reasons].any?
         puts "\n   Phase 2 Block Reasons:"
         result.no_trade_stats[:phase2_reasons]
-          .sort_by { |_k, v| -v }
-          .first(10)
-          .each { |reason, count| puts "     - #{reason}: #{count}" }
+              .sort_by { |_k, v| -v }
+              .first(10)
+              .each { |reason, count| puts "     - #{reason}: #{count}" }
       end
 
       puts "\n" + ('=' * 100)
@@ -172,7 +171,6 @@ namespace :backtest do
       puts '=' * 100
       puts "\n"
     end
-
   end
 end
 
@@ -199,8 +197,7 @@ module Backtest
           next unless summary && summary[:total_trades]&.positive?
 
           # Score based on expectancy and win rate
-          score = (summary[:expectancy] || 0) * 0.6 + (summary[:win_rate] || 0) * 0.4
-
+          score = ((summary[:expectancy] || 0) * 0.6) + ((summary[:win_rate] || 0) * 0.4)
           next unless score > best_score
 
           best_score = score

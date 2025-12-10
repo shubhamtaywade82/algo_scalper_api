@@ -25,6 +25,16 @@ module Risk
         current_profit_pct = context.pnl_pct
         return skip_result unless peak_profit_pct && current_profit_pct
 
+        # Skip if peak is 0% or negative (position never profitable)
+        # Peak drawdown rule should only trigger when position had profit and is drawing down
+        if peak_profit_pct.to_f <= 0
+          Rails.logger.debug(
+            "[PeakDrawdownRule] Skipping: peak=#{peak_profit_pct.round(2)}% <= 0% " \
+            "(position never profitable, should use Stop Loss rule instead)"
+          )
+          return skip_result
+        end
+
         # Check if peak drawdown threshold is breached (uses tiered protection)
         unless peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
           return no_action_result

@@ -68,7 +68,6 @@ module Live
 
       @thread = Thread.new do
         Thread.current.name = 'risk-manager'
-        last_paper_pnl_update = Time.current
 
         loop do
           break unless @running
@@ -91,8 +90,8 @@ module Live
               next
             end
 
-            monitor_loop(last_paper_pnl_update)
-            last_paper_pnl_update = Time.current
+            # NOTE: Removed last_paper_pnl_update - PaperPnlRefresher handles paper PnL updates
+            monitor_loop
           rescue StandardError => e
             Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
           end
@@ -144,7 +143,7 @@ module Live
     # DO NOT perform exit dispatching here when an external ExitEngine exists — ExitEngine will call enforcement methods.
     # Phase 2: Consolidated iteration - processes all positions in single loop
     # Phase 3: Metrics tracking integrated
-    def monitor_loop(last_paper_pnl_update)
+    def monitor_loop
       cycle_start_time = Time.current
       redis_fetches_before = @metrics[:total_redis_fetches] || 0
       db_queries_before = @metrics[:total_db_queries] || 0
@@ -161,7 +160,7 @@ module Live
         positions = active_cache_positions
         if positions.empty?
           # Still run maintenance tasks (throttled)
-          update_paper_positions_pnl_if_due(last_paper_pnl_update)
+          # NOTE: PnL updates removed - PaperPnlRefresher handles paper position PnL updates every 1 second
           ensure_all_positions_in_redis
           ensure_all_positions_in_active_cache
           ensure_all_positions_subscribed
@@ -180,7 +179,7 @@ module Live
         end
 
         # Keep Redis/DB PnL fresh (throttled maintenance)
-        update_paper_positions_pnl_if_due(last_paper_pnl_update)
+        # NOTE: PnL updates removed - PaperPnlRefresher handles paper position PnL updates every 1 second
         ensure_all_positions_in_redis
 
         # Ensure all active positions are in ActiveCache (for exit checking) - throttled
@@ -754,63 +753,9 @@ module Live
       nil
     end
 
-    def update_paper_positions_pnl_if_due(last_update_time)
-      # if last_update_time is nil or stale, update now
-      return unless Time.current - (last_update_time || Time.zone.at(0)) >= 1.minute
-
-      update_paper_positions_pnl
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] update_paper_positions_pnl_if_due failed: #{e.class} - #{e.message}")
-    end
-
-    # Update PnL for all paper trackers and cache in Redis (same semantics as before)
-    # Phase 2: Uses batch LTP fetching for better performance
-    def update_paper_positions_pnl
-      paper_trackers = PositionTracker.paper.active.includes(:instrument).to_a
-      return if paper_trackers.empty?
-
-      # Phase 2: Use batch fetching for better performance
-      if paper_trackers.length > 1
-        batch_update_paper_positions_pnl(paper_trackers)
-        return
-      end
-
-      # Fallback to individual calls for single tracker (backward compatibility)
-      paper_trackers.each do |tracker|
-        next unless tracker.entry_price.present? && tracker.quantity.present?
-
-        # Stagger API calls to avoid rate limiting
-        stagger_api_calls
-
-        ltp = get_paper_ltp(tracker)
-        unless ltp
-          Rails.logger.debug { "[RiskManager] No LTP for paper tracker #{tracker.order_no}" }
-          next
-        end
-
-        entry = BigDecimal(tracker.entry_price.to_s)
-        exit_price = BigDecimal(ltp.to_s)
-        qty = tracker.quantity.to_i
-        pnl = (exit_price - entry) * qty
-        pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
-
-        hwm = tracker.high_water_mark_pnl || BigDecimal(0)
-        hwm = [hwm, pnl].max
-        hwm_pnl_pct = entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
-
-        tracker.update!(
-          last_pnl_rupees: pnl,
-          last_pnl_pct: pnl_pct ? (pnl_pct * 100).round(2) : nil,
-          high_water_mark_pnl: hwm
-        )
-
-        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct)
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] update_paper_positions_pnl failed for #{tracker.order_no}: #{e.class} - #{e.message}")
-      end
-
-      Rails.logger.info('[RiskManager] Paper PnL update completed')
-    end
+    # REMOVED: update_paper_positions_pnl_if_due and update_paper_positions_pnl
+    # PaperPnlRefresher handles paper position PnL updates every 1 second
+    # This eliminates redundancy and reduces unnecessary API calls
 
     # Ensure every active PositionTracker has an entry in Redis PnL cache (best-effort)
     # Throttled to avoid excessive queries - only runs every 5 seconds
@@ -858,7 +803,8 @@ module Live
                         entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
                       end
 
-        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct)
+        # Only update Redis for live positions (paper positions handled by PaperPnlRefresher)
+        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct) unless tracker.paper?
       rescue StandardError => e
         Rails.logger.error("[RiskManager] ensure_all_positions_in_redis failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
@@ -1051,6 +997,10 @@ module Live
 
     def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct = nil)
       return unless pnl && ltp && ltp.to_f.positive?
+
+      # Skip paper positions - PaperPnlRefresher handles them every 1 second
+      # This method should only be used for live positions
+      return if tracker.paper?
 
       # Calculate hwm_pnl_pct if not provided
       if hwm_pnl_pct.nil? && tracker.entry_price.present? && tracker.quantity.present?
@@ -1278,7 +1228,9 @@ module Live
     # Ensure all active positions are subscribed to market data
     def ensure_all_positions_subscribed
       @last_ensure_subscribed ||= Time.zone.at(0)
-      return if Time.current - @last_ensure_subscribed < 5.seconds
+      # Reduced frequency from 5 seconds to 30 seconds (subscriptions rarely change)
+      # EntryManager handles subscriptions on entry, this is just a safety net
+      return if Time.current - @last_ensure_subscribed < 30.seconds
 
       @last_ensure_subscribed = Time.current
       hub = Live::MarketFeedHub.instance
@@ -1853,60 +1805,9 @@ module Live
       nil
     end
 
-    # Phase 2: Batch update paper positions PnL using batch LTP fetching
-    # @param trackers [Array<PositionTracker>] Paper trackers to update
-    def batch_update_paper_positions_pnl(trackers)
-      return if trackers.empty?
-
-      # Prepare security IDs for batch fetch
-      security_ids_by_segment = trackers.map do |tracker|
-        segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
-        next unless segment.present? && tracker.security_id.present?
-
-        { segment: segment, security_id: tracker.security_id }
-      end.compact
-
-      # Batch fetch LTPs
-      ltps = batch_fetch_ltp(security_ids_by_segment)
-
-      # Update each tracker with batched LTP
-      pnl_updater = Live::PnlUpdaterService.instance
-      trackers.each do |tracker|
-        next unless tracker.entry_price.present? && tracker.quantity.present?
-
-        ltp = ltps[tracker.security_id.to_s]
-        next unless ltp
-
-        entry = BigDecimal(tracker.entry_price.to_s)
-        exit_price = BigDecimal(ltp.to_s)
-        qty = tracker.quantity.to_i
-        pnl = (exit_price - entry) * qty
-        pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
-
-        hwm = tracker.high_water_mark_pnl || BigDecimal(0)
-        hwm = [hwm, pnl].max
-        hwm_pnl_pct = entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
-
-        tracker.update!(
-          last_pnl_rupees: pnl,
-          last_pnl_pct: pnl_pct ? (pnl_pct * 100).round(2) : nil,
-          high_water_mark_pnl: hwm
-        )
-
-        pnl_updater.cache_intermediate_pnl(
-          tracker_id: tracker.id,
-          pnl: pnl,
-          pnl_pct: pnl_pct,
-          ltp: ltp,
-          hwm: hwm,
-          hwm_pnl_pct: hwm_pnl_pct
-        )
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] batch_update_paper_positions_pnl failed for #{tracker.order_no}: #{e.class} - #{e.message}")
-      end
-
-      Rails.logger.info('[RiskManager] Batch paper PnL update completed')
-    end
+    # REMOVED: batch_update_paper_positions_pnl
+    # PaperPnlRefresher handles paper position PnL updates every 1 second
+    # This eliminates redundancy and reduces unnecessary API calls
 
     # Recalculate position metrics (PnL, peak) from current LTP
     # @param position [Positions::ActiveCache::PositionData] Position data
