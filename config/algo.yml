@@ -285,8 +285,8 @@ signals:
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
-  enable_adx_filter: true # Enable ADX strength filter (default: false)
-  enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
+  enable_adx_filter: false # Enable ADX strength filter (default: false)
+  enable_confirmation_timeframe: true # Enable 5m HTF confirmation (default: false)
 
   # Optimized Parameters Configuration
   # Set to false to disable loading optimized indicator parameters from BestIndicatorParam
