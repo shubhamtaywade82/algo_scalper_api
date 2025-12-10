@@ -98,12 +98,13 @@ module Signal
       # Validate HTF trend strength with ADX
       htf_adx = instrument.adx(14, interval: '15')
       index_key = index_cfg[:key].to_s.upcase
+      # AGGRESSIVE: Very low HTF ADX thresholds (5-8) for aggressive entries
       adx_thresholds = {
-        'NIFTY' => 15,
-        'BANKNIFTY' => 20,
-        'SENSEX' => 15
+        'NIFTY' => 5,
+        'BANKNIFTY' => 6,
+        'SENSEX' => 5
       }
-      min_htf_adx = adx_thresholds[index_key] || 15
+      min_htf_adx = adx_thresholds[index_key] || 5
 
       # Check alignment AND strength
       if htf_st[:trend] == primary_supertrend[:trend] &&
@@ -126,13 +127,13 @@ module Signal
       adx_value = adx.to_f
       index_key = index_cfg[:key].to_s.upcase
 
-      # Index-specific thresholds
+      # AGGRESSIVE: Very low ADX thresholds (5-8) for aggressive entries
       thresholds = {
-        'NIFTY' => 15,
-        'BANKNIFTY' => 20,
-        'SENSEX' => 15
+        'NIFTY' => 5,
+        'BANKNIFTY' => 6,
+        'SENSEX' => 5
       }
-      min_adx = thresholds[index_key] || 15
+      min_adx = thresholds[index_key] || 5
 
       if adx_value >= min_adx
         { agrees: true, reason: "ADX #{adx_value.round(1)} >= #{min_adx}" }

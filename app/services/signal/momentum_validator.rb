@@ -16,7 +16,7 @@ module Signal
       # Input validation
       return invalid_result('Missing instrument') unless instrument
       return invalid_result('Missing series') unless series
-      return invalid_result('Invalid direction') unless direction.in?([:bullish, :bearish])
+      return invalid_result('Invalid direction') unless direction.in?(%i[bullish bearish])
       return invalid_result('Invalid min_confirmations (must be 1-3)') unless min_confirmations.between?(1, 3)
 
       factors = {}
@@ -64,15 +64,15 @@ module Signal
       return { confirms: false, reason: 'Series unavailable' } unless series&.candles&.any?
 
       bars = series.candles.last(20)
-      lookback = 2
-      return { confirms: false, reason: 'Insufficient candles' } if bars.size < (lookback * 2 + 3)
+      # Reduced lookback from 2 to 1 for less strict swing detection (allows more trades)
+      lookback = 1
+      return { confirms: false, reason: 'Insufficient candles' } if bars.size < ((lookback * 2) + 3)
 
       # Get current LTP
       current_price = bars.last.close
       return { confirms: false, reason: 'Current price unavailable' } unless current_price&.positive?
 
-      # Find last swing high/low with wider lookback (2-3 candles on each side)
-      lookback = 2  # Check 2 candles on each side for true swing
+      # Find last swing high/low with reduced lookback (1 candle on each side for more lenient detection)
       case direction
       when :bullish
         # For bullish, check if LTP > last swing high
@@ -134,26 +134,26 @@ module Signal
       current_body_size = (last_candle.close - last_candle.open).abs
       expansion_ratio = current_body_size / avg_body_size
 
-      # Require at least 1.2x expansion (20% larger)
-      if expansion_ratio >= 1.2
+      # AGGRESSIVE: Require at least 0.8x expansion (very relaxed for aggressive entries)
+      if expansion_ratio >= 0.8
         case direction
         when :bullish
           if last_candle.bullish?
             { confirms: true, reason: "Body expansion #{expansion_ratio.round(2)}x (bullish)" }
           else
-            { confirms: false, reason: "Body expansion but candle is bearish" }
+            { confirms: false, reason: 'Body expansion but candle is bearish' }
           end
         when :bearish
           if last_candle.bearish?
             { confirms: true, reason: "Body expansion #{expansion_ratio.round(2)}x (bearish)" }
           else
-            { confirms: false, reason: "Body expansion but candle is bullish" }
+            { confirms: false, reason: 'Body expansion but candle is bullish' }
           end
         else
           { confirms: false, reason: "Invalid direction: #{direction}" }
         end
       else
-        { confirms: false, reason: "Body expansion #{expansion_ratio.round(2)}x < 1.2x threshold" }
+        { confirms: false, reason: "Body expansion #{expansion_ratio.round(2)}x < 0.8x threshold" }
       end
     rescue StandardError => e
       Rails.logger.debug { "[MomentumValidator] Body expansion check failed: #{e.message}" }
@@ -175,14 +175,16 @@ module Signal
 
       price_change_pct = ((current_close - prev_close) / prev_close * 100).abs
 
-      # Index-specific premium speed thresholds (options need faster moves)
-      index_key = instrument.index_key&.upcase || 'NIFTY'
+      # Index-specific premium speed thresholds
+      # Note: These are for index movements (not options), so thresholds are lower
+      # Options would need higher thresholds (0.2-0.35%), but indices move slower
+      index_key = instrument.symbol_name&.upcase || 'NIFTY'
       thresholds = {
-        'NIFTY' => 0.25,
-        'BANKNIFTY' => 0.35,  # More volatile, needs faster moves
-        'SENSEX' => 0.20
+        'NIFTY' => 0.01, # AGGRESSIVE: 0.01% price change (very low threshold)
+        'BANKNIFTY' => 0.015, # AGGRESSIVE: Slightly higher for volatility
+        'SENSEX' => 0.01 # AGGRESSIVE: Very low threshold
       }
-      threshold_pct = thresholds[index_key] || 0.3
+      threshold_pct = thresholds[index_key] || 0.01
 
       if price_change_pct >= threshold_pct
         case direction
@@ -190,13 +192,13 @@ module Signal
           if current_close > prev_close
             { confirms: true, reason: "Premium speed #{price_change_pct.round(2)}% (bullish)" }
           else
-            { confirms: false, reason: "Price moving down despite bullish direction" }
+            { confirms: false, reason: 'Price moving down despite bullish direction' }
           end
         when :bearish
           if current_close < prev_close
             { confirms: true, reason: "Premium speed #{price_change_pct.round(2)}% (bearish)" }
           else
-            { confirms: false, reason: "Price moving up despite bearish direction" }
+            { confirms: false, reason: 'Price moving up despite bearish direction' }
           end
         else
           { confirms: false, reason: "Invalid direction: #{direction}" }

@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Signal::MomentumValidator do
-  let(:instrument) { instance_double(Instrument, index_key: 'NIFTY') }
+  let(:instrument) { instance_double(Instrument, symbol_name: 'NIFTY') }
   let(:series) { build(:candle_series, :with_candles) }
 
   describe '.validate' do
@@ -176,7 +176,7 @@ RSpec.describe Signal::MomentumValidator do
     end
 
     it 'uses index-specific thresholds' do
-      banknifty_instrument = instance_double(Instrument, index_key: 'BANKNIFTY')
+      banknifty_instrument = instance_double(Instrument, symbol_name: 'BANKNIFTY')
       small_move_candles = [
         instance_double(Candle, close: 19400.0),
         instance_double(Candle, close: 19430.0) # 0.15% move (below BANKNIFTY threshold)

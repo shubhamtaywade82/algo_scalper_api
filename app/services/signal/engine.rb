@@ -239,17 +239,18 @@ module Signal
         end
 
         primary_series = primary_analysis[:series]
-        
+
         # Enhanced direction validation with multi-factor confirmation
+        # Relaxed min_agreement from 2 to 1 to allow more trades
         direction_result = Signal::DirectionValidator.validate(
           index_cfg: index_cfg,
           instrument: instrument,
           primary_series: primary_series,
           primary_supertrend: primary_analysis[:supertrend],
           primary_adx: primary_analysis[:adx_value],
-          min_agreement: 2
+          min_agreement: 1
         )
-        
+
         unless direction_result.valid && direction_result.direction == final_direction
           Rails.logger.warn(
             "[Signal] Direction validation failed for #{index_cfg[:key]}: " \
@@ -258,7 +259,7 @@ module Signal
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
-        
+
         # Momentum validation
         momentum_result = Signal::MomentumValidator.validate(
           instrument: instrument,
@@ -266,7 +267,7 @@ module Signal
           direction: final_direction,
           min_confirmations: 1
         )
-        
+
         unless momentum_result.valid
           Rails.logger.warn(
             "[Signal] Momentum validation failed for #{index_cfg[:key]}: " \
@@ -275,13 +276,14 @@ module Signal
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
-        
+
         # Volatility validation
+        # AGGRESSIVE: Relaxed min_atr_ratio to 0.3 for very aggressive entries
         volatility_result = Signal::VolatilityValidator.validate(
           series: primary_series,
-          min_atr_ratio: 0.65
+          min_atr_ratio: 0.3
         )
-        
+
         unless volatility_result.valid
           Rails.logger.warn(
             "[Signal] Volatility validation failed for #{index_cfg[:key]}: " \
@@ -290,7 +292,7 @@ module Signal
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
-        
+
         # Legacy comprehensive validation (kept for backward compatibility)
         validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
                                                      primary_analysis[:supertrend], { value: primary_analysis[:adx_value] })
