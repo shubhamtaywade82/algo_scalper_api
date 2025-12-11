@@ -15,6 +15,13 @@ class CandleSeries
   def each(&) = candles.each(&)
   def add_candle(candle) = candles << candle
 
+  # Ensures candles are sorted by timestamp (chronological order)
+  # CRITICAL: All indicators (Supertrend, ADX, ATR, RSI, MACD) assume chronological order
+  # Call this method if candles are added via add_candle and order might be incorrect
+  def ensure_sorted!
+    @candles.sort_by!(&:timestamp)
+  end
+
   def load_from_raw(response)
     normalise_candles(response).each do |row|
       @candles << Candle.new(
@@ -24,6 +31,10 @@ class CandleSeries
         volume: row[:volume]
       )
     end
+    # CRITICAL: Sort candles by timestamp to ensure chronological order
+    # All indicators (Supertrend, ADX, ATR, RSI, MACD, etc.) assume chronological order
+    # Without sorting, indicator calculations will be incorrect
+    @candles.sort_by!(&:timestamp)
   end
 
   def normalise_candles(resp)
@@ -91,6 +102,10 @@ class CandleSeries
   end
 
   def hlc
+    # Ensure candles are sorted before building HLC array for TechnicalAnalysis gem
+    # ADX, ATR, and other indicators require chronological order
+    ensure_sorted! if candles.any? && candles.first.respond_to?(:timestamp)
+
     candles.each_with_index.map do |c, _i|
       {
         date_time: Time.zone.at(c.timestamp || 0),

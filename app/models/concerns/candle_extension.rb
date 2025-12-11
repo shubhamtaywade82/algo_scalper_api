@@ -23,7 +23,28 @@ module CandleExtension
     end
 
     def fetch_fresh_candles(interval)
-      raw_data = intraday_ohlc(interval: interval)
+      # For live trading, include today's data to get the most recent completed candles
+      # Check if we're in live mode (not backtest/script mode)
+      include_today = !Rails.env.test? &&
+                      ENV['BACKTEST_MODE'] != '1' &&
+                      ENV['SCRIPT_MODE'] != '1' &&
+                      !($PROGRAM_NAME.include?('runner') if defined?($PROGRAM_NAME))
+
+      if include_today
+        # Include today's date to get the most recent candles
+        to_date = if defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+                    MarketCalendar.today_or_last_trading_day.to_s
+                  else
+                    Time.zone.today.to_s
+                  end
+        from_date = (Date.parse(to_date) - 2).to_s # Last 2 days including today
+        Rails.logger.debug { "[CandleExtension] Fetching OHLC for #{symbol_name} @ #{interval}m: from_date=#{from_date}, to_date=#{to_date} (including today)" }
+        raw_data = intraday_ohlc(interval: interval, from_date: from_date, to_date: to_date, days: 2)
+      else
+        # For backtest/script mode, use default (excludes today)
+        raw_data = intraday_ohlc(interval: interval)
+      end
+
       return nil if raw_data.blank?
 
       @ohlc_cache[interval] = CandleSeries.new(symbol: symbol_name, interval: interval).tap do |series|

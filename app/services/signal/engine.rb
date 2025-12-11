@@ -317,6 +317,44 @@ module Signal
           Rails.logger.info("[Signal] NoTradeEngine Phase 2 DISABLED for #{index_cfg[:key]} - skipping detailed validation")
         end
 
+        # Signal Confirmation Filter: Verify price action confirms signal direction
+        # Checks if current LTP confirms the signal before trade execution
+        enable_confirmation_filter = signals_cfg.fetch(:enable_confirmation_filter, true)
+        if enable_confirmation_filter
+          # Extract last closed candle's close price (C_last)
+          # Use max_by to get the candle with the most recent timestamp (not just .last)
+          # This ensures we get the actual most recent candle even if candles aren't sorted by timestamp
+          last_candle = primary_series.candles.max_by(&:timestamp)
+          unless last_candle
+            Rails.logger.warn("[Signal] No last candle available for confirmation filter - skipping #{index_cfg[:key]}")
+            return
+          end
+
+          last_close_price = last_candle.close
+          Rails.logger.debug { "[Signal] Using last candle for confirmation: timestamp=#{last_candle.timestamp}, close=#{last_close_price}" }
+          confirmation_result = Signal::ConfirmationFilter.confirm(
+            initial_signal: final_direction,
+            last_close_price: last_close_price,
+            instrument: instrument,
+            index_key: index_cfg[:key]
+          )
+
+          unless confirmation_result[:confirmed]
+            Rails.logger.warn(
+              "[Signal] Confirmation filter blocked #{index_cfg[:key]}: #{confirmation_result[:reason]} " \
+              "(LTP: #{confirmation_result[:current_ltp]&.round(2)}, C_last: #{confirmation_result[:last_close]&.round(2)})"
+            )
+            return
+          end
+
+          Rails.logger.info(
+            "[Signal] Confirmation filter passed for #{index_cfg[:key]}: #{confirmation_result[:reason]} " \
+            "(LTP: #{confirmation_result[:current_ltp]&.round(2)}, C_last: #{confirmation_result[:last_close]&.round(2)})"
+          )
+        else
+          Rails.logger.info("[Signal] Confirmation filter DISABLED for #{index_cfg[:key]} - skipping LTP confirmation")
+        end
+
         picks.each_with_index do |pick, _index|
           # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
           result = Entries::EntryGuard.try_enter(
