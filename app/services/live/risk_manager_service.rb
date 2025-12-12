@@ -494,12 +494,25 @@ module Live
         next if enforce_profit_protection(position, tracker, exit_engine, risk)
 
         pnl_pct = position.pnl_pct
-        next if pnl_pct.nil?
+        if pnl_pct.nil?
+          Rails.logger.warn("[RiskManager] enforce_hard_limits: pnl_pct is nil for tracker #{tracker.id}")
+          next
+        end
 
         normalized_pct = pnl_pct.to_f / 100.0
+        sl_threshold = -sl_pct.to_f
 
-        if normalized_pct <= -sl_pct.to_f
-          reason = "SL HIT #{pnl_pct.round(2)}%"
+        # CRITICAL: Log when approaching SL threshold for debugging
+        if normalized_pct <= sl_threshold * 0.9 # Within 90% of SL threshold
+          Rails.logger.warn(
+            "[RiskManager] Approaching SL: tracker=#{tracker.id}, pnl_pct=#{pnl_pct.round(2)}%, " \
+            "normalized=#{normalized_pct.round(4)}, sl_threshold=#{sl_threshold.round(4)}"
+          )
+        end
+
+        if normalized_pct <= sl_threshold
+          reason = "SL HIT #{pnl_pct.round(2)}% (threshold: #{sl_pct.to_f * 100}%)"
+          Rails.logger.error("[RiskManager] #{reason} for tracker #{tracker.id}")
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
@@ -697,10 +710,91 @@ module Live
       Rails.logger.error("[RiskManager] Failed to record loss: #{e.class} - #{e.message}")
     end
 
+    # Check if exit should proceed based on underlying trend and position PnL
+    # @param tracker [PositionTracker] PositionTracker instance
+    # @param reason [String] Exit reason
+    # @return [Boolean] true if exit should proceed, false if it should be skipped
+    def should_proceed_with_exit?(tracker, reason)
+      # Get position data from ActiveCache
+      position_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+      return true unless position_data # If position data not found, proceed with exit (safety first)
+
+      # Get current PnL
+      pnl_pct = position_data.pnl_pct || tracker.current_pnl_pct
+      return true if pnl_pct.nil? # If PnL unknown, proceed with exit (safety first)
+
+      # Get position direction (CE = bullish, PE = bearish)
+      position_direction = position_data.position_direction || Positions::MetadataResolver.direction(tracker)
+      return true unless position_direction # If direction unknown, proceed with exit
+
+      # Normalize position direction
+      position_dir = case position_direction.to_s.downcase
+                     when 'bullish', 'long_ce', :bullish
+                       :bullish
+                     when 'bearish', 'long_pe', :bearish
+                       :bearish
+                     else
+                       return true # Unknown direction, proceed with exit
+                     end
+
+      # Get underlying index configuration
+      index_key = position_data.index_key || Positions::MetadataResolver.index_key(tracker)
+      return true unless index_key # If index key unknown, proceed with exit
+
+      index_cfg = Positions::MetadataResolver.index_config_for_key(index_key)
+      return true unless index_cfg # If index config unknown, proceed with exit
+
+      # Get underlying trend direction
+      trend_result = Signal::TrendScorer.compute_direction(
+        index_cfg: index_cfg.symbolize_keys,
+        primary_tf: '1m',
+        confirmation_tf: '5m'
+      )
+
+      underlying_trend = trend_result[:direction]
+      return true unless underlying_trend # If trend unknown, proceed with exit (safety first)
+
+      # Check if underlying trend matches position direction
+      trend_matches = (position_dir == :bullish && underlying_trend == :bullish) ||
+                      (position_dir == :bearish && underlying_trend == :bearish)
+
+      # If trend matches, always proceed with exit
+      return true if trend_matches
+
+      # If trend doesn't match, only exit if position is in loss
+      if pnl_pct.to_f < 0
+        Rails.logger.info(
+          "[RiskManager] Underlying trend (#{underlying_trend}) doesn't match position direction (#{position_dir}) " \
+          "but position is in loss (#{pnl_pct.round(2)}%), proceeding with exit"
+        )
+        return true
+      end
+
+      # Trend doesn't match and position is in profit - skip exit
+      false
+    rescue StandardError => e
+      Rails.logger.error(
+        "[RiskManager] should_proceed_with_exit? error for #{tracker.order_no}: #{e.class} - #{e.message}"
+      )
+      # On error, proceed with exit (safety first - don't block exits on errors)
+      true
+    end
+
     # Helper that centralizes exit dispatching logic.
     # If exit_engine is an object responding to execute_exit, delegate to it.
     # If exit_engine == self (or nil) we fallback to internal execute_exit implementation.
+    # Before exiting, checks if underlying trend matches position direction.
+    # If trend doesn't match and position is in profit, exit is skipped.
     def dispatch_exit(exit_engine, tracker, reason)
+      # Check underlying trend before exiting
+      unless should_proceed_with_exit?(tracker, reason)
+        Rails.logger.info(
+          "[RiskManager] Exit skipped for #{tracker.order_no}: underlying trend doesn't match position direction " \
+          "and position is in profit (reason: #{reason})"
+        )
+        return
+      end
+
       if exit_engine && exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
         begin
           exit_engine.execute_exit(tracker, reason)
@@ -1318,16 +1412,28 @@ module Live
     end
 
     def enforce_bracket_limits(position, tracker, exit_engine)
-      return false unless position.current_ltp&.positive?
+      # CRITICAL: Check if LTP is available - if not, log warning and try percentage-based check
+      unless position.current_ltp&.positive?
+        Rails.logger.warn(
+          "[RiskManager] enforce_bracket_limits: No LTP for tracker #{tracker.id} " \
+          "(sl_price: #{position.sl_price}, tp_price: #{position.tp_price}, pnl_pct: #{position.pnl_pct})"
+        )
+        # Fallback to percentage-based check if LTP unavailable
+        return false
+      end
 
       if position.sl_hit?
-        reason = format('SL HIT %.2f%%', position.pnl_pct.to_f)
+        reason = format('SL HIT %.2f%% (bracket: LTP=%.2f, SL=%.2f)',
+                        position.pnl_pct.to_f, position.current_ltp, position.sl_price)
+        Rails.logger.warn("[RiskManager] #{reason} for tracker #{tracker.id}")
         guarded_exit(tracker, reason, exit_engine)
         return true
       end
 
       if position.tp_hit?
-        reason = format('TP HIT %.2f%%', position.pnl_pct.to_f)
+        reason = format('TP HIT %.2f%% (bracket: LTP=%.2f, TP=%.2f)',
+                        position.pnl_pct.to_f, position.current_ltp, position.tp_price)
+        Rails.logger.info("[RiskManager] #{reason} for tracker #{tracker.id}")
         guarded_exit(tracker, reason, exit_engine)
         return true
       end

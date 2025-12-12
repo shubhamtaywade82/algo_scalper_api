@@ -49,17 +49,37 @@ module Positions
       end
 
       def sl_hit?
-        return false unless sl_price && current_ltp
+        return false unless sl_price && current_ltp&.positive?
 
-        # For long positions (CE), SL is below entry
-        current_ltp <= sl_price
+        # Determine position type from position_direction or tracker side
+        # position_direction can be :bullish/:bearish or 'long_ce'/'long_pe'
+        is_ce = ce_position?
+
+        # For CE (long_ce): SL is below entry, price going down hits SL
+        # For PE (long_pe): SL is above entry, price going up hits SL
+        is_ce ? (current_ltp <= sl_price) : (current_ltp >= sl_price)
       end
 
       def tp_hit?
-        return false unless tp_price && current_ltp
+        return false unless tp_price && current_ltp&.positive?
 
-        # For long positions (CE), TP is above entry
-        current_ltp >= tp_price
+        # Determine position type
+        is_ce = ce_position?
+
+        # For CE (long_ce): TP is above entry, price going up hits TP
+        # For PE (long_pe): TP is below entry, price going down hits TP
+        is_ce ? (current_ltp >= tp_price) : (current_ltp <= tp_price)
+      end
+
+      # Determine if this is a CE (Call) position
+      def ce_position?
+        # Check position_direction (can be :bullish/:bearish or 'long_ce'/'long_pe')
+        dir = position_direction.to_s.downcase
+        return true if %w[long_ce bullish].include?(dir)
+        return false if %w[long_pe bearish].include?(dir)
+
+        # Fallback: default to CE if unknown (safer default for long positions)
+        true
       end
 
       def update_ltp(ltp, timestamp: Time.current)
@@ -79,7 +99,6 @@ module Positions
         self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
 
         # Update peak profit percentage (highest profit % achieved)
-        old_peak = peak_profit_pct
         self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
 
         # NEW (Step 12): Persist peak if it was updated
@@ -204,9 +223,7 @@ module Positions
 
       attach_underlying_metadata(position_data, tracker)
 
-      if auto_subscribe_enabled?
-        safe_option_subscribe(segment: tracker.segment, security_id: tracker.security_id)
-      end
+      safe_option_subscribe(segment: tracker.segment, security_id: tracker.security_id) if auto_subscribe_enabled?
 
       ActiveSupport::Notifications.instrument('positions.added', tracker_id: tracker.id)
       Rails.logger.debug { "[Positions::ActiveCache] Added position #{tracker.id} (#{composite_key})" }
@@ -348,13 +365,9 @@ module Positions
       @stats.merge(positions_tracked: @cache.size)
     end
 
-    def empty?
-      @cache.empty?
-    end
+    delegate :empty?, to: :@cache
 
-    def size
-      @cache.size
-    end
+    delegate :size, to: :@cache
 
     private
 
@@ -519,7 +532,6 @@ module Positions
     rescue StandardError => e
       Rails.logger.error("[Positions::ActiveCache] Failed to attach underlying metadata for tracker #{tracker.id}: #{e.class} - #{e.message}")
     end
-
   end
   # rubocop:enable Metrics/ClassLength
 end
