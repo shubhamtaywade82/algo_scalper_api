@@ -442,6 +442,8 @@ Examples:
 
 ## Testing
 
+> **📖 For detailed testing instructions, see [TESTING_GUIDE.md](TESTING_GUIDE.md)**
+
 ### Test Files Created
 
 **Unit Tests**:
