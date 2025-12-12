@@ -442,6 +442,26 @@ Examples:
 
 ## Testing
 
+### Test Files Created
+
+**Unit Tests**:
+- `spec/lib/positions/drawdown_schedule_spec.rb` - Core drawdown calculations
+- `spec/lib/positions/drawdown_schedule_config_spec.rb` - Config variations (conservative/aggressive)
+- `spec/services/live/early_trend_failure_spec.rb` - ETF detection logic
+- `spec/services/live/early_trend_failure_config_spec.rb` - ETF config variations
+
+**Integration Tests**:
+- `spec/services/live/risk_manager_service_trailing_spec.rb` - Trailing stops integration
+- `spec/integration/adaptive_exit_integration_spec.rb` - Full exit flow (conservative/balanced/aggressive)
+
+**Test Coverage**:
+- ✅ Upward drawdown calculations (all profit thresholds)
+- ✅ Reverse SL calculations (all loss thresholds, time tightening, ATR penalties)
+- ✅ ETF detection (all 4 conditions)
+- ✅ Configuration variations (conservative, balanced, aggressive)
+- ✅ Integration with `RiskManagerService`
+- ✅ Edge cases (nil values, missing config, zero values)
+
 ### Run Tests
 
 ```bash
@@ -458,13 +478,24 @@ bundle exec rspec spec/services/live/risk_manager_service_trailing_spec.rb
 
 # Integration tests
 bundle exec rspec spec/integration/adaptive_exit_integration_spec.rb
+
+# Run all adaptive exit tests
+bundle exec rspec spec/lib/positions/ spec/services/live/early_trend_failure* spec/integration/adaptive_exit*
 ```
 
 ### Simulate Drawdowns
 
+**Rake Task**: `lib/tasks/drawdown_simulator.rake`
+
 ```bash
 rake drawdown:simulate
 ```
+
+**What it does**:
+- Simulates drawdown calculations for different profit levels
+- Shows allowed drawdown % at each profit threshold
+- Tests with different index keys (NIFTY, BANKNIFTY, SENSEX)
+- Useful for understanding how the exponential curve works
 
 ---
 
@@ -563,29 +594,275 @@ risk:
 
 ### Entry Path Tracking Implementation
 
-Path tracking is added in `Signal::Engine`:
-- `build_entry_path_identifier()` - Creates path identifier
+**File**: `app/services/signal/engine.rb`
+
+**Method Added**: `build_entry_path_identifier()` (lines 678-694)
+```ruby
+def build_entry_path_identifier(strategy_recommendation:, use_strategy_recommendations:, primary_tf:, effective_timeframe:, confirmation_tf:, enable_confirmation:)
+  strategy_part = if use_strategy_recommendations && strategy_recommendation&.dig(:recommended)
+                    strategy_recommendation[:strategy_name].downcase.gsub(/\s+/, '_')
+                  else
+                    'supertrend_adx'
+                  end
+  
+  timeframe_part = effective_timeframe
+  
+  confirmation_part = if enable_confirmation && confirmation_tf.present?
+                      confirmation_tf
+                    else
+                      'none'
+                    end
+  
+  "#{strategy_part}_#{timeframe_part}_#{confirmation_part}"
+end
+```
+
+**Integration** (lines 149-180):
+- Called in `run_for()` method before creating `TradingSignal`
 - Stored in `TradingSignal.metadata['entry_path']`
-- Format: `"strategy_timeframe_confirmation"`
+- Also stores: `strategy`, `strategy_mode`, `timeframe`, `confirmation_timeframe`, `validation_mode`
+
+**Format**: `"strategy_timeframe_confirmation"` (e.g., `"supertrend_adx_1m_none"`)
+
+---
 
 ### Exit Path Tracking Implementation
 
-Path tracking is added in `RiskManagerService`:
-- `track_exit_path()` - Stores exit path in tracker meta
-- Stored in `PositionTracker.meta['exit_path']`
-- Format: `"type_direction"` or `"type"`
+**File**: `app/services/live/risk_manager_service.rb`
+
+**Method Added**: `track_exit_path()` (lines 952-971)
+```ruby
+def track_exit_path(tracker, exit_path, reason)
+  meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
+  direction = exit_path.include?('upward') ? 'upward' : (exit_path.include?('downward') ? 'downward' : nil)
+  type = exit_path.include?('adaptive') ? 'adaptive' : (exit_path.include?('fixed') ? 'fixed' : nil)
+  
+  tracker.update!(meta: meta.merge(
+    'exit_path' => exit_path,
+    'exit_reason' => reason,
+    'exit_direction' => direction,
+    'exit_type' => type,
+    'exit_triggered_at' => Time.current
+  ))
+rescue StandardError => e
+  Rails.logger.error("[RiskManager] track_exit_path failed: #{e.class} - #{e.message}")
+end
+```
+
+**Integration**: Called in all exit enforcement methods:
+- `enforce_early_trend_failure()` (line 180)
+- `enforce_trailing_stops()` (lines 241, 259)
+- `enforce_hard_limits()` (lines 312, 321, 328)
+
+**Stored Fields**:
+- `exit_path`: Clear identifier (e.g., `"trailing_stop_adaptive_upward"`)
+- `exit_direction`: `"upward"`, `"downward"`, or `nil`
+- `exit_type`: `"adaptive"`, `"fixed"`, or `nil`
+- `exit_reason`: Human-readable reason
+- `exit_triggered_at`: Timestamp
+
+---
+
+### Early Trend Failure Implementation
+
+**File**: `app/services/live/early_trend_failure.rb` (New Module)
+
+**Main Method**: `early_trend_failure?(position_data)` (lines 18-77)
+- Checks 4 conditions (any one triggers exit):
+  1. **Trend Score Collapse**: Drop from peak ≥ `trend_score_drop_pct` (default 30%)
+  2. **ADX Collapse**: ADX < `adx_collapse_threshold` (default 10)
+  3. **ATR Ratio Collapse**: ATR ratio < `atr_ratio_threshold` (default 0.55)
+  4. **VWAP Rejection**: Price crosses VWAP against position direction
+
+**Helper Method**: `applicable?(pnl_pct, activation_profit_pct:)` (lines 80-85)
+- Returns `true` if profit < activation threshold (default 7%)
+
+**Integration** (in `RiskManagerService.enforce_early_trend_failure()`, lines 148-186):
+```ruby
+def enforce_early_trend_failure(exit_engine:)
+  # ... config loading ...
+  
+  PositionTracker.active.find_each do |tracker|
+    snapshot = pnl_snapshot(tracker)
+    pnl_pct_value = snapshot[:pnl_pct].to_f * 100.0
+    
+    next unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_profit)
+    
+    position_data = build_position_data_for_etf(tracker, snapshot, instrument)
+    
+    if Live::EarlyTrendFailure.early_trend_failure?(position_data)
+      track_exit_path(tracker, "early_trend_failure", reason)
+      dispatch_exit(exit_engine, tracker, reason)
+    end
+  end
+end
+```
+
+**Helper Method**: `build_position_data_for_etf()` (lines 698-735)
+- Builds data hash with: `trend_score`, `peak_trend_score`, `adx`, `atr_ratio`, `underlying_price`, `vwap`, `is_long?`
+
+---
+
+### Drawdown Schedule Implementation
+
+**File**: `app/lib/positions/drawdown_schedule.rb` (New Module)
+
+**Upward Drawdown Method**: `allowed_upward_drawdown_pct(profit_pct, index_key:)` (lines 19-38)
+```ruby
+def allowed_upward_drawdown_pct(profit_pct, index_key: nil)
+  # Exponential curve: dd_start_pct → dd_end_pct as profit increases
+  # Formula: dd_end + (dd_start - dd_end) * exp(-k * normalized_profit)
+  # Applies index-specific floor
+end
+```
+
+**Parameters**:
+- `profit_pct`: Current profit (e.g., 10.0 for +10%)
+- `index_key`: "NIFTY", "BANKNIFTY", "SENSEX" (for floor values)
+- Returns: Allowed drawdown % (e.g., 8.5 means 8.5% drawdown allowed)
+- Returns `nil` if profit < activation threshold
+
+**Reverse SL Method**: `reverse_dynamic_sl_pct(pnl_pct, seconds_below_entry:, atr_ratio:)` (lines 45-82)
+```ruby
+def reverse_dynamic_sl_pct(pnl_pct, seconds_below_entry: 0, atr_ratio: 1.0)
+  # Linear interpolation: max_loss_pct → min_loss_pct as loss deepens
+  # Applies time-based tightening: -time_tighten_per_min per minute
+  # Applies ATR penalties for low volatility
+end
+```
+
+**Parameters**:
+- `pnl_pct`: Negative value (e.g., -12.5 for -12.5% loss)
+- `seconds_below_entry`: Time spent below entry (for time tightening)
+- `atr_ratio`: Current ATR ratio (for volatility penalty)
+- Returns: Allowed loss % (e.g., 12.5 means -12.5% loss allowed)
+
+**Helper Method**: `sl_price_from_entry(entry_price, loss_pct)` (lines 86-88)
+- Converts loss percentage to stop-loss price
+
+---
 
 ### Bidirectional Trailing Implementation
 
-**Upward** (in `enforce_trailing_stops()`):
-- Uses `Positions::DrawdownSchedule.allowed_upward_drawdown_pct()`
-- Checks peak profit vs current profit
-- Tracks as: `"trailing_stop_adaptive_upward"` or `"trailing_stop_fixed_upward"`
+#### Upward Trailing (Profit Protection)
 
-**Downward** (in `enforce_hard_limits()`):
-- Uses `Positions::DrawdownSchedule.reverse_dynamic_sl_pct()`
-- Checks current loss vs allowed loss
-- Tracks as: `"stop_loss_adaptive_downward"`
+**File**: `app/services/live/risk_manager_service.rb`
+
+**Method**: `enforce_trailing_stops()` (lines 188-274)
+
+**Flow**:
+1. Check if profit ≥ activation threshold (default 3%)
+2. Calculate allowed drawdown using `Positions::DrawdownSchedule.allowed_upward_drawdown_pct()`
+3. Compare current profit vs peak profit
+4. If drawdown exceeds allowed → exit with `"trailing_stop_adaptive_upward"`
+5. Fallback to fixed threshold (`exit_drop_pct`) if adaptive unavailable
+6. Breakeven lock at +5% profit (protection, not exit)
+
+**Key Code** (lines 217-247):
+```ruby
+# Adaptive upward trailing
+allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(
+  peak_profit_pct,
+  index_key: tracker.index_key
+)
+
+if allowed_dd
+  current_drawdown = peak_profit_pct - current_profit_pct
+  if current_drawdown > allowed_dd
+    track_exit_path(tracker, "trailing_stop_adaptive_upward", reason)
+    dispatch_exit(exit_engine, tracker, reason)
+  end
+end
+```
+
+#### Downward Trailing (Loss Limitation)
+
+**File**: `app/services/live/risk_manager_service.rb`
+
+**Method**: `enforce_hard_limits()` (lines 282-340)
+
+**Flow**:
+1. Check if position is below entry (negative PnL)
+2. Calculate `seconds_below_entry` (time tracking)
+3. Calculate `atr_ratio` (volatility check)
+4. Get allowed loss using `Positions::DrawdownSchedule.reverse_dynamic_sl_pct()`
+5. Compare current loss vs allowed loss
+6. If loss exceeds allowed → exit with `"stop_loss_adaptive_downward"`
+7. Fallback to static SL (`sl_pct`) if adaptive unavailable
+
+**Key Code** (lines 299-316):
+```ruby
+# Dynamic reverse SL (below entry)
+if pnl_pct_value < 0
+  seconds_below = seconds_below_entry(tracker)
+  atr_ratio = calculate_atr_ratio(tracker)
+  
+  allowed_loss_pct = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
+    pnl_pct_value,
+    seconds_below_entry: seconds_below,
+    atr_ratio: atr_ratio
+  )
+  
+  if allowed_loss_pct && loss_pct > allowed_loss_pct
+    track_exit_path(tracker, "stop_loss_adaptive_downward", reason)
+    dispatch_exit(exit_engine, tracker, reason)
+  end
+end
+```
+
+---
+
+### Helper Methods Added
+
+**File**: `app/services/live/risk_manager_service.rb`
+
+**`seconds_below_entry(tracker)`** (lines 768-791):
+- Tracks time spent below entry price using Redis cache
+- Cache key: `"position:below_entry:#{tracker.id}"`
+- Returns seconds since first going below entry
+
+**`calculate_atr_ratio(tracker)`** (lines 795-845):
+- Calculates current ATR / recent ATR average
+- Returns 1.0 if calculation fails (normal volatility)
+- Used for volatility-based penalties
+
+**`build_position_data_for_etf(tracker, snapshot, instrument)`** (lines 698-735):
+- Builds data hash for ETF checks
+- Includes: trend_score, peak_trend_score, adx, atr_ratio, underlying_price, vwap, is_long?
+
+**`momentum_score(candles)`** (lines 738-750):
+- Calculates momentum from recent candles
+- Used for trend score calculation
+
+**`calculate_atr(candles)`** (lines 677-695):
+- Calculates Average True Range from candles
+- Used for ATR ratio calculation
+
+---
+
+### Exit Enforcement Flow
+
+**File**: `app/services/live/risk_manager_service.rb`
+
+**Main Loop**: `monitor_loop()` (runs every 5 seconds)
+
+**Order of Enforcement**:
+1. **Early Trend Failure** (`enforce_early_trend_failure`) - Only if profit < 7%
+2. **Hard Limits** (`enforce_hard_limits`) - Always checked
+   - Dynamic Reverse SL (below entry)
+   - Static SL (fallback)
+   - Take Profit
+3. **Trailing Stops** (`enforce_trailing_stops`) - Only if profit ≥ 3%
+   - Adaptive Upward (exponential drawdown)
+   - Fixed Upward (fallback)
+   - Breakeven Lock
+4. **Time-Based Exit** (`enforce_time_based_exit`) - If configured
+
+**Each enforcement method**:
+- Iterates through `PositionTracker.active`
+- Checks conditions
+- Calls `track_exit_path()` if exit triggered
+- Calls `dispatch_exit()` to execute exit
 
 ---
 
