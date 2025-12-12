@@ -1,0 +1,117 @@
+# Simplified Configuration - KISS Principle
+# Easy to understand, easy to change, easy to analyze
+
+# Trading Mode
+trading:
+  mode: "paper"  # "paper" or "live"
+  preset: "balanced"  # "conservative", "balanced", or "aggressive"
+
+# Entry Configuration (Simple)
+entry:
+  strategy: "supertrend_adx"  # "supertrend_adx", "simple_momentum", "inside_bar"
+  timeframe: "5m"              # Single timeframe: "1m", "5m", "15m"
+  adx_min: 18                  # Minimum ADX strength
+  validation: "balanced"       # "conservative", "balanced", "aggressive"
+
+# Exit Configuration (Simple)
+exit:
+  # Stop Loss
+  stop_loss:
+    type: "adaptive"  # "static" or "adaptive"
+    value: 3.0         # Static SL % (if type: static)
+  
+  # Take Profit
+  take_profit: 5.0     # TP %
+  
+  # Trailing Stop
+  trailing:
+    enabled: true
+    type: "adaptive"   # "adaptive" or "fixed"
+    activation_profit: 3.0  # Start trailing at this profit %
+    drop_threshold: 3.0     # Fixed drop % (if type: fixed)
+  
+  # Early Exit (Trend Failure)
+  early_exit:
+    enabled: true
+    profit_threshold: 7.0  # Only check when profit < this %
+  
+  # Time-Based Exit
+  time_based:
+    enabled: false
+    exit_time: "15:20"  # Exit all positions at this time
+
+# Presets (Easy to switch)
+presets:
+  conservative:
+    entry:
+      strategy: "supertrend_adx"
+      timeframe: "5m"
+      adx_min: 25
+      validation: "conservative"
+    exit:
+      stop_loss: { type: "static", value: 2.0 }
+      take_profit: 3.0
+      trailing: { enabled: true, type: "adaptive", activation_profit: 3.0, drop_threshold: 2.0 }
+      early_exit: { enabled: true, profit_threshold: 5.0 }
+  
+  balanced:
+    entry:
+      strategy: "supertrend_adx"
+      timeframe: "5m"
+      adx_min: 18
+      validation: "balanced"
+    exit:
+      stop_loss: { type: "adaptive", value: 3.0 }
+      take_profit: 5.0
+      trailing: { enabled: true, type: "adaptive", activation_profit: 3.0, drop_threshold: 3.0 }
+      early_exit: { enabled: true, profit_threshold: 7.0 }
+  
+  aggressive:
+    entry:
+      strategy: "supertrend_adx"
+      timeframe: "1m"
+      adx_min: 15
+      validation: "aggressive"
+    exit:
+      stop_loss: { type: "adaptive", value: 5.0 }
+      take_profit: 10.0
+      trailing: { enabled: false }
+      early_exit: { enabled: false }
+
+# Indices (unchanged)
+indices:
+  - {
+      key: NIFTY,
+      segment: IDX_I,
+      sid: "13",
+      capital_alloc_pct: 0.30,
+      max_same_side: 1,
+      cooldown_sec: 180,
+    }
+  - {
+      key: BANKNIFTY,
+      segment: IDX_I,
+      sid: "25",
+      capital_alloc_pct: 0.30,
+      max_same_side: 1,
+      cooldown_sec: 180,
+    }
+  - {
+      key: SENSEX,
+      segment: IDX_I,
+      sid: "51",
+      capital_alloc_pct: 0.30,
+      max_same_side: 1,
+      cooldown_sec: 180,
+    }
+
+# Paper Trading (unchanged)
+paper_trading:
+  enabled: true
+  balance: 100000
+
+# Advanced Configuration (for power users - keep existing complex configs here)
+# This section is optional and only needed for fine-tuning
+advanced:
+  # All the complex nested configs go here
+  # Most users won't need to touch this
