@@ -106,6 +106,8 @@ module Live
       # Backwards-compatible enforcement: if there is no external ExitEngine, run enforcement here
       return unless @exit_engine.nil?
 
+      # Early Trend Failure checks (before other enforcement)
+      enforce_early_trend_failure(exit_engine: self)
       enforce_hard_limits(exit_engine: self)
       enforce_trailing_stops(exit_engine: self)
       enforce_time_based_exit(exit_engine: self)
@@ -143,12 +145,61 @@ module Live
     # If exit_engine is provided, they will delegate the actual exit to it. Otherwise they call internal execute_exit.
     public
 
+    def enforce_early_trend_failure(exit_engine:)
+      etf_cfg = begin
+        AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:etf] || {}
+      rescue StandardError
+        {}
+      end
+
+      return unless etf_cfg[:enabled]
+
+      activation_profit = etf_cfg[:activation_profit_pct].to_f
+
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        pnl_pct = snapshot[:pnl_pct]
+        next if pnl_pct.nil?
+
+        # ETF only applies before trailing activation (when profit < activation threshold)
+        pnl_pct_value = pnl_pct.to_f * 100.0
+        next unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_profit)
+
+        # Build position_data hash for ETF check
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        next unless instrument
+
+        position_data = build_position_data_for_etf(tracker, snapshot, instrument)
+
+        if Live::EarlyTrendFailure.early_trend_failure?(position_data)
+          reason = "EARLY_TREND_FAILURE (pnl: #{pnl_pct_value.round(2)}%)"
+          exit_path = "early_trend_failure"
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_early_trend_failure error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
     def enforce_trailing_stops(exit_engine:)
       risk = risk_config
       drop_threshold = begin
         BigDecimal(risk[:exit_drop_pct].to_s)
       rescue StandardError
-        BigDecimal(0)
+        BigDecimal(999) # Disabled by default
+      end
+
+      # Skip if trailing is disabled (threshold too high)
+      return if drop_threshold >= 100
+
+      breakeven_gain = begin
+        BigDecimal(risk[:breakeven_after_gain].to_s)
+      rescue StandardError
+        BigDecimal(999) # Disabled by default
       end
 
       PositionTracker.active.find_each do |tracker|
@@ -156,16 +207,75 @@ module Live
         next unless snap
 
         pnl = snap[:pnl]
+        pnl_pct = snap[:pnl_pct]
         hwm = snap[:hwm_pnl]
         next if hwm.nil? || hwm.zero?
 
-        drop_pct = (hwm - pnl) / hwm
-        if drop_pct >= drop_threshold
-          reason = "TRAILING STOP drop=#{drop_pct.round(3)}"
-          dispatch_exit(exit_engine, tracker, reason)
+        pnl_pct_value = pnl_pct.to_f * 100.0
+
+        # BIDIRECTIONAL TRAILING LOGIC
+
+        # 1. UPWARD TRAILING (when profitable): Use adaptive drawdown schedule
+        if pnl_pct_value > 0
+          # Calculate peak profit percentage
+          peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
+
+          # Only apply trailing if we've reached activation threshold
+          drawdown_cfg = begin
+            AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown] || {}
+          rescue StandardError
+            {}
+          end
+
+          activation_profit = drawdown_cfg[:activation_profit_pct].to_f.nonzero? || 3.0
+
+          if peak_profit_pct >= activation_profit
+            # Use adaptive drawdown schedule instead of fixed threshold
+            index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+            allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
+
+            if allowed_dd
+              # Convert to drop percentage from HWM
+              allowed_drop_from_hwm = allowed_dd / peak_profit_pct
+              current_drop = (hwm - pnl) / hwm
+
+              if current_drop >= allowed_drop_from_hwm
+                reason = "ADAPTIVE_TRAILING_STOP (peak: #{peak_profit_pct.round(2)}%, drop: #{(current_drop * 100).round(2)}%, allowed: #{(allowed_drop_from_hwm * 100).round(2)}%)"
+                exit_path = "trailing_stop_adaptive_upward"
+                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+                track_exit_path(tracker, exit_path, reason)
+                dispatch_exit(exit_engine, tracker, reason)
+                next
+              end
+            end
+          end
+
+          # Breakeven locking: Lock in breakeven when profit reaches threshold
+          if breakeven_gain < 100 && pnl_pct_value >= (breakeven_gain * 100) && !tracker.breakeven_locked?
+            tracker.lock_breakeven!
+            Rails.logger.info("[RiskManager] Breakeven locked for #{tracker.order_no} at #{pnl_pct_value.round(2)}% profit")
+          end
+
+          # Fallback to fixed threshold if adaptive schedule not available
+          if drop_threshold < 100
+            drop_pct = (hwm - pnl) / hwm
+            if drop_pct >= drop_threshold
+              reason = "TRAILING_STOP (fixed threshold: #{(drop_threshold * 100).round(2)}%, drop: #{(drop_pct * 100).round(2)}%)"
+              exit_path = "trailing_stop_fixed_upward"
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
         end
+
+        # 2. DOWNWARD TRAILING (when below entry): Use reverse dynamic SL
+        # This is handled in enforce_hard_limits, but we can add additional trailing logic here
+        # For now, reverse SL is handled in enforce_hard_limits via dynamic reverse SL
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
     end
 
@@ -189,19 +299,57 @@ module Live
         pnl_pct = snapshot[:pnl_pct]
         next if pnl_pct.nil?
 
+        # Convert pnl_pct from decimal (0.05) to percent (5.0) for DrawdownSchedule
+        pnl_pct_value = pnl_pct.to_f * 100.0
+
+        # Below-entry dynamic reverse SL (takes precedence over static sl_pct)
+        if pnl_pct_value < 0
+          seconds_below = seconds_below_entry(tracker)
+          atr_ratio = calculate_atr_ratio(tracker)
+          index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+
+          dyn_loss_pct = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
+            pnl_pct_value,
+            seconds_below_entry: seconds_below,
+            atr_ratio: atr_ratio
+          )
+
+          if dyn_loss_pct && pnl_pct_value <= -dyn_loss_pct
+            reason = "DYNAMIC_LOSS_HIT #{(pnl_pct_value).round(2)}% (allowed: #{dyn_loss_pct.round(2)}%)"
+            exit_path = "stop_loss_adaptive_downward"
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path} (below_entry: #{seconds_below}s, atr_ratio: #{atr_ratio.round(3)})")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
+            next
+          end
+        end
+
+        # Fallback to static SL if dynamic reverse_loss is disabled or not applicable
         if pnl_pct <= -sl_pct
           reason = "SL HIT #{(pnl_pct * 100).round(2)}%"
+          exit_path = "stop_loss_static_downward"
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
 
+        # Take Profit check
         if pnl_pct >= tp_pct
           reason = "TP HIT #{(pnl_pct * 100).round(2)}%"
+          exit_path = "take_profit"
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
+
+        # Upward drawdown check is now handled in enforce_trailing_stops() with adaptive schedule
+        # Keeping this as fallback only if trailing is completely disabled
+        # (Peak drawdown logic moved to enforce_trailing_stops for better organization)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
     end
 
@@ -231,6 +379,9 @@ module Live
         end
 
         reason = "time-based exit (#{exit_time.strftime('%H:%M')})"
+        exit_path = "time_based"
+        Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+        track_exit_path(tracker, exit_path, reason)
         dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_time_based_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
@@ -612,6 +763,149 @@ module Live
       nil
     end
 
+    # Calculate seconds spent below entry price
+    # Tracks this in Redis cache keyed by tracker_id
+    def seconds_below_entry(tracker)
+      cache_key = "position:below_entry:#{tracker.id}"
+      cached = Rails.cache.read(cache_key)
+
+      snapshot = pnl_snapshot(tracker)
+      return 0 unless snapshot
+
+      pnl_pct = snapshot[:pnl_pct]
+      return 0 if pnl_pct.nil? || pnl_pct >= 0
+
+      # If position is below entry, increment counter
+      if cached
+        # Update timestamp if still below entry
+        Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
+        (Time.current - cached).to_i
+      else
+        # First time below entry, initialize
+        Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
+        0
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] seconds_below_entry error for #{tracker.id}: #{e.class} - #{e.message}")
+      0
+    end
+
+    # Calculate ATR ratio (current ATR / recent ATR average)
+    # Returns 1.0 if calculation fails (normal volatility)
+    def calculate_atr_ratio(tracker)
+      instrument = tracker.instrument || tracker.watchable&.instrument
+      return 1.0 unless instrument
+
+      # Try to get ATR from instrument's candle series
+      begin
+        series = instrument.candle_series(interval: '5') # 5-minute candles
+        return 1.0 unless series&.candles&.any?
+
+        candles = series.candles.last(20) # Last 20 candles
+        return 1.0 if candles.size < 10
+
+        # Calculate current ATR (last 14 periods)
+        current_atr = calculate_atr(candles.last(14))
+        return 1.0 unless current_atr.positive?
+
+        # Calculate average ATR (last 20 periods)
+        avg_atr = calculate_atr(candles)
+        return 1.0 unless avg_atr.positive?
+
+        ratio = current_atr / avg_atr
+        ratio.round(3)
+      rescue StandardError => e
+        Rails.logger.debug("[RiskManager] ATR ratio calculation failed for #{tracker.order_no}: #{e.message}")
+        1.0
+      end
+    end
+
+    # Helper: Calculate ATR from candles
+    def calculate_atr(candles)
+      return 0.0 if candles.size < 2
+
+      true_ranges = []
+      candles.each_cons(2) do |prev, curr|
+        tr1 = curr.high - curr.low
+        tr2 = (curr.high - prev.close).abs
+        tr3 = (curr.low - prev.close).abs
+        true_ranges << [tr1, tr2, tr3].max
+      end
+
+      return 0.0 if true_ranges.empty?
+
+      true_ranges.sum / true_ranges.size
+    end
+
+    # Build position data hash for Early Trend Failure checks
+    def build_position_data_for_etf(tracker, snapshot, instrument)
+      # Get trend metrics from instrument
+      series = instrument.candle_series(interval: '5') rescue nil
+      candles = series&.candles || []
+
+      # Calculate ADX
+      adx_value = instrument.adx(14, interval: '5') rescue nil
+      adx_hash = adx_value.is_a?(Hash) ? adx_value : { value: adx_value }
+
+      # Calculate ATR ratio
+      atr_ratio = calculate_atr_ratio(tracker)
+
+      # Get underlying price (for VWAP check)
+      underlying_price = current_ltp(tracker) || tracker.entry_price.to_f
+
+      # Build trend score (simplified: use ADX + momentum)
+      trend_score = if adx_hash[:value]
+                      adx_hash[:value].to_f + (candles.any? ? momentum_score(candles) : 0)
+                    else
+                      0
+                    end
+
+      # Peak trend score (tracked in Redis or use current if no peak)
+      peak_trend_score = tracker.meta&.dig('peak_trend_score') || trend_score
+      if trend_score > peak_trend_score
+        peak_trend_score = trend_score
+        tracker.update(meta: (tracker.meta || {}).merge('peak_trend_score' => peak_trend_score))
+      end
+
+      # VWAP (simplified: use recent average price)
+      vwap = candles.any? ? candles.last(20).map(&:close).sum / candles.last(20).size : underlying_price
+
+      OpenStruct.new(
+        trend_score: trend_score,
+        peak_trend_score: peak_trend_score,
+        adx: adx_hash[:value],
+        atr_ratio: atr_ratio,
+        underlying_price: underlying_price,
+        vwap: vwap,
+        is_long?: tracker.side == 'long_ce' || tracker.side == 'long_pe'
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] build_position_data_for_etf error: #{e.class} - #{e.message}")
+      OpenStruct.new(
+        trend_score: 0,
+        peak_trend_score: 0,
+        adx: nil,
+        atr_ratio: 1.0,
+        underlying_price: tracker.entry_price.to_f,
+        vwap: tracker.entry_price.to_f,
+        is_long?: true
+      )
+    end
+
+    # Calculate momentum score from candles (0-50 range)
+    def momentum_score(candles)
+      return 0 if candles.size < 3
+
+      recent = candles.last(3)
+      return 0 if recent.size < 2
+
+      # Simple momentum: price change direction and magnitude
+      price_change = (recent.last.close - recent.first.close) / recent.first.close
+      volume_factor = recent.last.respond_to?(:volume) && recent.last.volume ? [recent.last.volume / 1_000_000.0, 1.0].min : 0.5
+
+      (price_change.abs * 100 * volume_factor).round(2)
+    end
+
     def risk_config
       raw = begin
         AlgoConfig.fetch[:risk]
@@ -652,6 +946,48 @@ module Live
       BigDecimal(value.to_s)
     rescue StandardError
       BigDecimal(0)
+    end
+
+    # Track exit path for analysis
+    def track_exit_path(tracker, exit_path, reason)
+      meta = tracker.meta || {}
+      meta = meta.is_a?(Hash) ? meta : {}
+      
+      direction = exit_path.include?('upward') ? 'upward' : (exit_path.include?('downward') ? 'downward' : nil)
+      type = exit_path.include?('adaptive') ? 'adaptive' : (exit_path.include?('fixed') ? 'fixed' : nil)
+
+      # Ensure entry metadata is preserved (in case it wasn't set during creation)
+      # This is a safety net - entry metadata should already be set in EntryGuard
+      entry_meta = {}
+      unless meta['entry_path'] || meta['entry_strategy']
+        # Try to find matching TradingSignal to get entry metadata
+        signal = TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
+          .where("created_at >= ?", tracker.created_at - 5.minutes)
+          .where("created_at <= ?", tracker.created_at + 1.minute)
+          .order(created_at: :desc)
+          .first
+
+        if signal && signal.metadata.is_a?(Hash)
+          entry_meta['entry_path'] = signal.metadata['entry_path']
+          entry_meta['entry_strategy'] = signal.metadata['strategy']
+          entry_meta['entry_strategy_mode'] = signal.metadata['strategy_mode']
+          entry_meta['entry_timeframe'] = signal.metadata['effective_timeframe'] || signal.metadata['primary_timeframe']
+          entry_meta['entry_confirmation_timeframe'] = signal.metadata['confirmation_timeframe']
+          entry_meta['entry_validation_mode'] = signal.metadata['validation_mode']
+        end
+      end
+      
+      tracker.update(
+        meta: meta.merge(entry_meta).merge(
+          'exit_path' => exit_path,
+          'exit_reason' => reason,
+          'exit_direction' => direction,
+          'exit_type' => type,
+          'exit_triggered_at' => Time.current
+        )
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Failed to track exit path for #{tracker.order_no}: #{e.message}")
     end
   end
 end

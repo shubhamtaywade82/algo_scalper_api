@@ -146,6 +146,16 @@ module Signal
           validation_result: validation_result
         )
 
+        # Build clear entry path identifier for tracking and analysis
+        entry_path = build_entry_path_identifier(
+          strategy_recommendation: strategy_recommendation,
+          use_strategy_recommendations: use_strategy_recommendations,
+          primary_tf: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_tf: confirmation_tf,
+          enable_confirmation: enable_confirmation
+        )
+
         TradingSignal.create_from_analysis(
           index_key: index_cfg[:key],
           direction: final_direction.to_s,
@@ -155,12 +165,19 @@ module Signal
           candle_timestamp: primary_analysis[:last_candle_timestamp],
           confidence_score: confidence_score,
           metadata: {
+            # Clear path tracking for analysis
+            entry_path: entry_path,
+            strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
+            strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
+            primary_timeframe: primary_tf,
+            effective_timeframe: effective_timeframe,
             confirmation_timeframe: confirmation_tf,
+            confirmation_enabled: enable_confirmation,
             confirmation_direction: confirmation_analysis&.dig(:direction),
+            validation_mode: signals_cfg[:validation_mode] || 'balanced',
             validation_passed: validation_result[:valid],
             state_count: state_snapshot[:count],
             state_multiplier: state_snapshot[:multiplier],
-            strategy_used: strategy_recommendation&.dig(:strategy_name),
             original_timeframe: primary_tf
           }
         )
@@ -176,13 +193,26 @@ module Signal
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
+        # Prepare entry metadata to pass to EntryGuard
+        entry_metadata = {
+          entry_path: entry_path,
+          strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
+          strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
+          primary_timeframe: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_timeframe: confirmation_tf,
+          confirmation_enabled: enable_confirmation,
+          validation_mode: signals_cfg[:validation_mode] || 'balanced'
+        }
+
         picks.each_with_index do |pick, _index|
           # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
           result = Entries::EntryGuard.try_enter(
             index_cfg: index_cfg,
             pick: pick,
             direction: final_direction,
-            scale_multiplier: state_snapshot[:multiplier]
+            scale_multiplier: state_snapshot[:multiplier],
+            entry_metadata: entry_metadata
           )
 
           if result
@@ -654,6 +684,26 @@ module Signal
       rescue StandardError => e
         Rails.logger.error("[Signal] Strategy-based analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
         { status: :error, message: e.message }
+      end
+
+      # Build clear entry path identifier for tracking
+      # Format: "strategy_timeframe_confirmation" e.g., "recommended_5m_none" or "supertrend_adx_1m_5m"
+      def build_entry_path_identifier(strategy_recommendation:, use_strategy_recommendations:, primary_tf:, effective_timeframe:, confirmation_tf:, enable_confirmation:)
+        strategy_part = if use_strategy_recommendations && strategy_recommendation&.dig(:recommended)
+                          strategy_recommendation[:strategy_name].downcase.gsub(/\s+/, '_')
+                        else
+                          'supertrend_adx'
+                        end
+
+        timeframe_part = effective_timeframe
+
+        confirmation_part = if enable_confirmation && confirmation_tf.present?
+                              confirmation_tf
+                            else
+                              'none'
+                            end
+
+        "#{strategy_part}_#{timeframe_part}_#{confirmation_part}"
       end
 
       def decide_direction(supertrend_result, adx_value, min_strength:, timeframe_label:)
