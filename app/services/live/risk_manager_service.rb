@@ -953,10 +953,36 @@ module Live
       meta = tracker.meta || {}
       meta = meta.is_a?(Hash) ? meta : {}
       
+      direction = exit_path.include?('upward') ? 'upward' : (exit_path.include?('downward') ? 'downward' : nil)
+      type = exit_path.include?('adaptive') ? 'adaptive' : (exit_path.include?('fixed') ? 'fixed' : nil)
+
+      # Ensure entry metadata is preserved (in case it wasn't set during creation)
+      # This is a safety net - entry metadata should already be set in EntryGuard
+      entry_meta = {}
+      unless meta['entry_path'] || meta['entry_strategy']
+        # Try to find matching TradingSignal to get entry metadata
+        signal = TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
+          .where("created_at >= ?", tracker.created_at - 5.minutes)
+          .where("created_at <= ?", tracker.created_at + 1.minute)
+          .order(created_at: :desc)
+          .first
+
+        if signal && signal.metadata.is_a?(Hash)
+          entry_meta['entry_path'] = signal.metadata['entry_path']
+          entry_meta['entry_strategy'] = signal.metadata['strategy']
+          entry_meta['entry_strategy_mode'] = signal.metadata['strategy_mode']
+          entry_meta['entry_timeframe'] = signal.metadata['effective_timeframe'] || signal.metadata['primary_timeframe']
+          entry_meta['entry_confirmation_timeframe'] = signal.metadata['confirmation_timeframe']
+          entry_meta['entry_validation_mode'] = signal.metadata['validation_mode']
+        end
+      end
+      
       tracker.update(
-        meta: meta.merge(
+        meta: meta.merge(entry_meta).merge(
           'exit_path' => exit_path,
           'exit_reason' => reason,
+          'exit_direction' => direction,
+          'exit_type' => type,
           'exit_triggered_at' => Time.current
         )
       )

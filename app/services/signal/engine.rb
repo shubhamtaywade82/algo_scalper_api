@@ -193,13 +193,26 @@ module Signal
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
+        # Prepare entry metadata to pass to EntryGuard
+        entry_metadata = {
+          entry_path: entry_path,
+          strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
+          strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
+          primary_timeframe: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_timeframe: confirmation_tf,
+          confirmation_enabled: enable_confirmation,
+          validation_mode: signals_cfg[:validation_mode] || 'balanced'
+        }
+
         picks.each_with_index do |pick, _index|
           # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
           result = Entries::EntryGuard.try_enter(
             index_cfg: index_cfg,
             pick: pick,
             direction: final_direction,
-            scale_multiplier: state_snapshot[:multiplier]
+            scale_multiplier: state_snapshot[:multiplier],
+            entry_metadata: entry_metadata
           )
 
           if result

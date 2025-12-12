@@ -134,7 +134,7 @@ tail -f log/development.log | grep -E "RiskManager|Signal|Entry|Exit"
 
 ### 2.2 Monitor Entry Path Tracking
 
-**Verify entries are being tracked**:
+**Verify entries are being tracked in TradingSignal**:
 ```ruby
 # In Rails console
 # Check recent entries
@@ -147,24 +147,55 @@ TradingSignal.group("metadata->>'entry_path'").count
 # Expected: {"supertrend_adx_1m_none" => X, ...}
 ```
 
+**Verify entries are being tracked in PositionTracker**:
+```ruby
+# Check that PositionTracker has entry metadata
+PositionTracker.active.limit(10).each do |tracker|
+  puts "Position: #{tracker.order_no} | Entry Path: #{tracker.meta['entry_path']} | Entry Strategy: #{tracker.meta['entry_strategy']}"
+end
+
+# Count active positions by entry path
+PositionTracker.active.group("meta->>'entry_path'").count
+# Expected: {"supertrend_adx_1m_none" => X, ...}
+```
+
 **What to Verify**:
-- ✅ `entry_path` is populated (format: `"strategy_timeframe_confirmation"`)
-- ✅ `strategy` field matches expected strategy
-- ✅ `timeframe` matches config
+- ✅ `entry_path` is populated in TradingSignal (format: `"strategy_timeframe_confirmation"`)
+- ✅ `entry_path` is populated in PositionTracker.meta
+- ✅ `entry_strategy` is populated in PositionTracker.meta
+- ✅ `entry_timeframe` is populated in PositionTracker.meta
+- ✅ Strategy field matches expected strategy
 
 ### 2.3 Monitor Exit Path Tracking
 
 **Verify exits are being tracked**:
 ```ruby
 # In Rails console
-# Check recent exits
+# Check recent exits with complete entry + exit information
 PositionTracker.exited.order(exited_at: :desc).limit(10).each do |tracker|
-  puts "Exit: #{tracker.order_no} | Path: #{tracker.meta['exit_path']} | PnL: ₹#{tracker.last_pnl_rupees.round(2)} (#{tracker.last_pnl_pct.round(2)}%)"
+  puts "Exit: #{tracker.order_no}"
+  puts "  Entry: #{tracker.meta['entry_strategy']} (#{tracker.meta['entry_path']})"
+  puts "  Exit: #{tracker.meta['exit_path']} (#{tracker.meta['exit_reason']})"
+  puts "  PnL: ₹#{tracker.last_pnl_rupees.round(2)} (#{tracker.last_pnl_pct.round(2)}%)"
+  puts "---"
 end
 
 # Count exits by path
 PositionTracker.exited.group("meta->>'exit_path'").count
 # Expected: {"trailing_stop_adaptive_upward" => X, "stop_loss_adaptive_downward" => Y, ...}
+
+# View complete entry → exit analysis
+PositionTracker.exited.select(
+  :order_no,
+  "meta->>'entry_strategy' as entry_strategy",
+  "meta->>'entry_path' as entry_path",
+  "meta->>'exit_path' as exit_path",
+  "meta->>'exit_reason' as exit_reason",
+  :last_pnl_rupees,
+  :last_pnl_pct
+).limit(10).each do |t|
+  puts "#{t.entry_strategy} (#{t.entry_path}) → #{t.exit_path}: ₹#{t.last_pnl_rupees.round(2)}"
+end
 ```
 
 **What to Verify**:
@@ -172,6 +203,8 @@ PositionTracker.exited.group("meta->>'exit_path'").count
 - ✅ `exit_direction` is set (upward/downward)
 - ✅ `exit_type` is set (adaptive/fixed)
 - ✅ `exit_reason` contains human-readable reason
+- ✅ **Entry metadata is preserved** (`entry_path`, `entry_strategy` still present)
+- ✅ Can analyze entry strategy → exit path performance directly from PositionTracker
 
 ### 2.4 Test Early Trend Failure (ETF)
 
@@ -417,9 +450,26 @@ puts "  Avg Loss: ₹#{downward.average('last_pnl_rupees').round(2)}" if downwar
 
 ### 3.4 Complete Strategy Performance Report
 
-**Full Analysis: Entry Strategy → Exit Path → Performance**:
+**Full Analysis: Entry Strategy → Exit Path → Performance** (Now Simplified - No Join Needed!):
 ```ruby
-# Full analysis query
+# NEW: Direct analysis from PositionTracker (no join needed!)
+results = PositionTracker.exited.group("meta->>'entry_strategy'", "meta->>'exit_path'")
+  .select(
+    "meta->>'entry_strategy' as entry_strategy",
+    "meta->>'exit_path' as exit_path",
+    "COUNT(*) as count",
+    "AVG(last_pnl_rupees) as avg_pnl",
+    "AVG(last_pnl_pct) as avg_pnl_pct",
+    "SUM(CASE WHEN last_pnl_rupees > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100 as win_rate"
+  )
+  .order("entry_strategy", "exit_path")
+
+puts "Entry Strategy → Exit Path Performance:"
+results.each do |r|
+  puts "  #{r.entry_strategy} → #{r.exit_path}: Count=#{r.count}, Avg PnL=₹#{r.avg_pnl.round(2)}, Win Rate=#{r.win_rate.round(2)}%"
+end
+
+# Alternative: Using TradingSignal join (still works, but PositionTracker is simpler now)
 results = TradingSignal.joins("LEFT JOIN position_trackers ON position_trackers.meta->>'index_key' = trading_signals.index_key AND position_trackers.status = 'exited'")
   .where("position_trackers.id IS NOT NULL")
   .group("trading_signals.metadata->>'strategy'", "position_trackers.meta->>'exit_path'")
@@ -432,17 +482,13 @@ results = TradingSignal.joins("LEFT JOIN position_trackers ON position_trackers.
     "SUM(CASE WHEN position_trackers.last_pnl_rupees > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100 as win_rate"
   )
   .order("strategy", "exit_path")
-
-puts "Strategy → Exit Path Performance:"
-results.each do |r|
-  puts "  #{r.strategy} → #{r.exit_path}: Count=#{r.count}, Avg PnL=₹#{r.avg_pnl.round(2)}, Win Rate=#{r.win_rate.round(2)}%"
-end
 ```
 
 **What to Look For**:
 - Which strategy + exit path combinations work best?
 - Are there any combinations that consistently lose?
 - Is path tracking helping identify patterns?
+- **NEW**: Can now analyze directly from PositionTracker without complex joins!
 
 ---
 
@@ -591,11 +637,18 @@ puts "\nTotal PnL: ₹#{total_pnl.round(2)}"
 TradingSignal.last.metadata
 # Should contain 'entry_path' field
 
+# Verify PositionTracker has entry metadata
+PositionTracker.active.last.meta
+# Should contain 'entry_path', 'entry_strategy', etc.
+
 # Check if build_entry_path_identifier is being called
 # Review logs for errors in Signal::Engine
 ```
 
-**Fix**: Ensure `Signal::Engine.build_entry_path_identifier()` is being called in `run_for()` method.
+**Fix**: 
+- Ensure `Signal::Engine.build_entry_path_identifier()` is being called in `run_for()` method
+- Ensure `EntryGuard.try_enter()` is receiving `entry_metadata` parameter
+- Ensure `create_paper_tracker!()` and `create_tracker!()` are storing entry metadata in `meta` hash
 
 ### Issue: Exit paths not being tracked
 
@@ -649,17 +702,32 @@ end
 ## Quick Reference Commands
 
 ```ruby
-# Check recent entries
+# Check recent entries (TradingSignal)
 TradingSignal.order(created_at: :desc).limit(10).pluck(:index_key, "metadata->>'entry_path'")
 
-# Check recent exits
-PositionTracker.exited.order(exited_at: :desc).limit(10).pluck(:order_no, "meta->>'exit_path'", :last_pnl_rupees)
+# Check recent positions with entry info (PositionTracker)
+PositionTracker.active.limit(10).pluck(:order_no, "meta->>'entry_path'", "meta->>'entry_strategy'")
 
-# Count by entry path
+# Check recent exits with complete entry + exit info
+PositionTracker.exited.order(exited_at: :desc).limit(10).pluck(
+  :order_no, 
+  "meta->>'entry_strategy'", 
+  "meta->>'entry_path'",
+  "meta->>'exit_path'", 
+  :last_pnl_rupees
+)
+
+# Count by entry path (TradingSignal)
 TradingSignal.group("metadata->>'entry_path'").count
+
+# Count by entry path (PositionTracker)
+PositionTracker.active.group("meta->>'entry_path'").count
 
 # Count by exit path
 PositionTracker.exited.group("meta->>'exit_path'").count
+
+# Entry strategy → Exit path analysis (NEW - no join needed!)
+PositionTracker.exited.group("meta->>'entry_strategy'", "meta->>'exit_path'").count
 
 # Check active positions
 PositionTracker.active.count

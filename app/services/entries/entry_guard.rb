@@ -3,7 +3,7 @@
 module Entries
   class EntryGuard
     class << self
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1)
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil)
         instrument = find_instrument(index_cfg)
         unless instrument
           Rails.logger.warn("[EntryGuard] Instrument not found for #{index_cfg[:key]} (segment: #{index_cfg[:segment]}, sid: #{index_cfg[:sid]})")
@@ -64,7 +64,8 @@ module Entries
             side: side,
             quantity: quantity,
             index_cfg: index_cfg,
-            ltp: ltp
+            ltp: ltp,
+            entry_metadata: entry_metadata
           )
         end
 
@@ -93,7 +94,8 @@ module Entries
           side: side,
           quantity: quantity,
           index_cfg: index_cfg,
-          ltp: ltp
+          ltp: ltp,
+          entry_metadata: entry_metadata
         )
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
@@ -406,12 +408,30 @@ module Entries
         AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
       end
 
-      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:)
+      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil)
         # Generate synthetic order number for paper trading
         order_no = "PAPER-#{index_cfg[:key]}-#{pick[:security_id]}-#{Time.current.to_i}"
 
         # Determine watchable: derivative for options, instrument for indices
         watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
+
+        # Build meta hash with entry strategy/path information
+        meta_hash = {
+          index_key: index_cfg[:key],
+          direction: side,
+          placed_at: Time.current,
+          paper_trading: true
+        }
+
+        # Add entry strategy/path metadata if provided
+        if entry_metadata.is_a?(Hash)
+          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
+          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
+          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
+          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
+          meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe] if entry_metadata[:confirmation_timeframe]
+          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
+        end
 
         tracker = PositionTracker.create!(
           watchable: watchable,
@@ -426,12 +446,7 @@ module Entries
           avg_price: ltp,
           status: 'active',
           paper: true,
-          meta: {
-            index_key: index_cfg[:key],
-            direction: side,
-            placed_at: Time.current,
-            paper_trading: true
-          }
+          meta: meta_hash
         )
 
         # Subscription is handled automatically by after_create_commit :subscribe_to_feed callback
@@ -456,9 +471,26 @@ module Entries
         false
       end
 
-      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:)
+      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil)
         # Determine watchable: derivative for options, instrument for indices
         watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
+
+        # Build meta hash with entry strategy/path information
+        meta_hash = {
+          index_key: index_cfg[:key],
+          direction: side,
+          placed_at: Time.current
+        }
+
+        # Add entry strategy/path metadata if provided
+        if entry_metadata.is_a?(Hash)
+          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
+          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
+          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
+          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
+          meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe] if entry_metadata[:confirmation_timeframe]
+          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
+        end
 
         PositionTracker.build_or_average!(
           watchable: watchable,
@@ -470,7 +502,7 @@ module Entries
           side: side,
           quantity: quantity,
           entry_price: ltp,
-          meta: { index_key: index_cfg[:key], direction: side, placed_at: Time.current }
+          meta: meta_hash
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")

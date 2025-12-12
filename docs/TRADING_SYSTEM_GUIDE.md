@@ -115,7 +115,35 @@ meta: {
   exit_path: "trailing_stop_adaptive_upward",  # Clear identifier
   exit_direction: "upward",                     # upward/downward
   exit_type: "adaptive",                        # adaptive/fixed
-  exit_reason: "ADAPTIVE_TRAILING_STOP"
+  exit_reason: "ADAPTIVE_TRAILING_STOP",
+  exit_triggered_at: "2024-01-15T10:30:00Z"
+}
+```
+
+### Complete Position Tracking (Entry + Exit)
+
+Every `PositionTracker` now stores both entry and exit information:
+```ruby
+meta: {
+  # Entry Information (set during position creation)
+  entry_path: "supertrend_adx_1m_none",        # Entry path identifier
+  entry_strategy: "supertrend_adx",            # Strategy used
+  entry_strategy_mode: "supertrend_adx",       # Strategy mode
+  entry_timeframe: "1m",                       # Timeframe used
+  entry_confirmation_timeframe: nil,           # Confirmation timeframe (if any)
+  entry_validation_mode: "aggressive",        # Validation mode
+  
+  # Exit Information (set when position exits)
+  exit_path: "trailing_stop_adaptive_upward",  # Exit path identifier
+  exit_direction: "upward",                     # upward/downward
+  exit_type: "adaptive",                        # adaptive/fixed
+  exit_reason: "ADAPTIVE_TRAILING_STOP",       # Human-readable reason
+  exit_triggered_at: "2024-01-15T10:30:00Z"    # Exit timestamp
+  
+  # Other metadata
+  index_key: "NIFTY",
+  direction: "long_ce",
+  placed_at: "2024-01-15T09:00:00Z"
 }
 ```
 
@@ -285,6 +313,53 @@ PositionTracker.exited.group("meta->>'exit_path'")
     "AVG(last_pnl_pct) as avg_pnl_pct",
     "SUM(CASE WHEN last_pnl_rupees > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100 as win_rate"
   )
+```
+
+### Analyze Entry Strategy → Exit Path Performance
+
+**Now you can analyze directly from PositionTracker without joining TradingSignal**:
+```ruby
+# Performance by entry strategy and exit path
+PositionTracker.exited.group("meta->>'entry_strategy'", "meta->>'exit_path'")
+  .select(
+    "meta->>'entry_strategy' as entry_strategy",
+    "meta->>'exit_path' as exit_path",
+    "COUNT(*) as count",
+    "AVG(last_pnl_rupees) as avg_pnl",
+    "AVG(last_pnl_pct) as avg_pnl_pct",
+    "SUM(CASE WHEN last_pnl_rupees > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100 as win_rate"
+  )
+  .order("entry_strategy", "exit_path")
+  .each do |r|
+    puts "#{r.entry_strategy} → #{r.exit_path}: Count=#{r.count}, Avg PnL=₹#{r.avg_pnl.round(2)}, Win Rate=#{r.win_rate.round(2)}%"
+  end
+
+# Which entry strategies work best with which exit paths?
+PositionTracker.exited
+  .where("meta->>'entry_strategy' = ?", "supertrend_adx")
+  .group("meta->>'exit_path'")
+  .average("last_pnl_rupees")
+```
+
+### Quick Position Analysis
+
+**View complete entry + exit information for any position**:
+```ruby
+# Get all position details including entry/exit paths
+PositionTracker.exited.select(
+  :order_no,
+  :symbol,
+  :entry_price,
+  :exit_price,
+  :last_pnl_rupees,
+  :last_pnl_pct,
+  "meta->>'entry_path' as entry_path",
+  "meta->>'entry_strategy' as entry_strategy",
+  "meta->>'exit_path' as exit_path",
+  "meta->>'exit_reason' as exit_reason"
+).limit(10).each do |t|
+  puts "#{t.order_no}: Entry=#{t.entry_strategy} (#{t.entry_path}) → Exit=#{t.exit_path} | PnL: ₹#{t.last_pnl_rupees.round(2)} (#{t.last_pnl_pct.round(2)}%)"
+end
 ```
 
 ### Compare Bidirectional Trailing
