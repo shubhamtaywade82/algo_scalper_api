@@ -36,10 +36,10 @@ risk:
   tp_pct: 0.05        # +5% TAKE PROFIT
   per_trade_risk_pct: 0.15
 
-  # Disable trailing, breakeven, and min-profit logic for pure quick test
-  trail_step_pct: 0.0
-  breakeven_after_gain: 999     # effectively disabled
-  exit_drop_pct: 999            # no trailing exits
+  # Bidirectional trailing stops (enhanced with adaptive drawdown schedule)
+  trail_step_pct: 0.03          # 3% trailing step (for breakeven calculation)
+  breakeven_after_gain: 0.05    # Lock breakeven at +5% profit
+  exit_drop_pct: 0.03           # Fixed trailing threshold (fallback, adaptive schedule takes precedence)
   min_profit_rupees: 0          # allow immediate TP exits
 
   # Upward exponential drawdown (activated when pnl >= activation_profit_pct)

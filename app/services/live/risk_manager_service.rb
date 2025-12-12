@@ -188,7 +188,16 @@ module Live
       drop_threshold = begin
         BigDecimal(risk[:exit_drop_pct].to_s)
       rescue StandardError
-        BigDecimal(0)
+        BigDecimal(999) # Disabled by default
+      end
+
+      # Skip if trailing is disabled (threshold too high)
+      return if drop_threshold >= 100
+
+      breakeven_gain = begin
+        BigDecimal(risk[:breakeven_after_gain].to_s)
+      rescue StandardError
+        BigDecimal(999) # Disabled by default
       end
 
       PositionTracker.active.find_each do |tracker|
@@ -196,16 +205,71 @@ module Live
         next unless snap
 
         pnl = snap[:pnl]
+        pnl_pct = snap[:pnl_pct]
         hwm = snap[:hwm_pnl]
         next if hwm.nil? || hwm.zero?
 
-        drop_pct = (hwm - pnl) / hwm
-        if drop_pct >= drop_threshold
-          reason = "TRAILING STOP drop=#{drop_pct.round(3)}"
-          dispatch_exit(exit_engine, tracker, reason)
+        pnl_pct_value = pnl_pct.to_f * 100.0
+
+        # BIDIRECTIONAL TRAILING LOGIC
+
+        # 1. UPWARD TRAILING (when profitable): Use adaptive drawdown schedule
+        if pnl_pct_value > 0
+          # Calculate peak profit percentage
+          peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
+
+          # Only apply trailing if we've reached activation threshold
+          drawdown_cfg = begin
+            AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown] || {}
+          rescue StandardError
+            {}
+          end
+
+          activation_profit = drawdown_cfg[:activation_profit_pct].to_f.nonzero? || 3.0
+
+          if peak_profit_pct >= activation_profit
+            # Use adaptive drawdown schedule instead of fixed threshold
+            index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+            allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
+
+            if allowed_dd
+              # Convert to drop percentage from HWM
+              allowed_drop_from_hwm = allowed_dd / peak_profit_pct
+              current_drop = (hwm - pnl) / hwm
+
+              if current_drop >= allowed_drop_from_hwm
+                reason = "ADAPTIVE_TRAILING_STOP (peak: #{peak_profit_pct.round(2)}%, drop: #{(current_drop * 100).round(2)}%, allowed: #{(allowed_drop_from_hwm * 100).round(2)}%)"
+                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no}")
+                dispatch_exit(exit_engine, tracker, reason)
+                next
+              end
+            end
+          end
+
+          # Breakeven locking: Lock in breakeven when profit reaches threshold
+          if breakeven_gain < 100 && pnl_pct_value >= (breakeven_gain * 100) && !tracker.breakeven_locked?
+            tracker.lock_breakeven!
+            Rails.logger.info("[RiskManager] Breakeven locked for #{tracker.order_no} at #{pnl_pct_value.round(2)}% profit")
+          end
+
+          # Fallback to fixed threshold if adaptive schedule not available
+          if drop_threshold < 100
+            drop_pct = (hwm - pnl) / hwm
+            if drop_pct >= drop_threshold
+              reason = "TRAILING_STOP (fixed threshold: #{(drop_threshold * 100).round(2)}%, drop: #{(drop_pct * 100).round(2)}%)"
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no}")
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
         end
+
+        # 2. DOWNWARD TRAILING (when below entry): Use reverse dynamic SL
+        # This is handled in enforce_hard_limits, but we can add additional trailing logic here
+        # For now, reverse SL is handled in enforce_hard_limits via dynamic reverse SL
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
     end
 
@@ -266,23 +330,9 @@ module Live
           next
         end
 
-        # Upward drawdown check (peak drawdown from high-water mark)
-        if snapshot[:hwm_pnl] && snapshot[:hwm_pnl].positive? && snapshot[:pnl]
-          peak_profit_pct = (snapshot[:hwm_pnl] / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
-          current_pnl_pct = snapshot[:pnl_pct].to_f * 100.0
-
-          if peak_profit_pct >= 3.0 # Only check if we've reached activation threshold
-            index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
-            allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
-
-            if allowed_dd && (peak_profit_pct - current_pnl_pct) >= allowed_dd
-              reason = "PEAK_DRAWDOWN_EXIT (peak: #{peak_profit_pct.round(2)}%, current: #{current_pnl_pct.round(2)}%, allowed_dd: #{allowed_dd.round(2)}%)"
-              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no}")
-              dispatch_exit(exit_engine, tracker, reason)
-              next
-            end
-          end
-        end
+        # Upward drawdown check is now handled in enforce_trailing_stops() with adaptive schedule
+        # Keeping this as fallback only if trailing is completely disabled
+        # (Peak drawdown logic moved to enforce_trailing_stops for better organization)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
