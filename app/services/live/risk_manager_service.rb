@@ -175,7 +175,9 @@ module Live
 
         if Live::EarlyTrendFailure.early_trend_failure?(position_data)
           reason = "EARLY_TREND_FAILURE (pnl: #{pnl_pct_value.round(2)}%)"
-          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no}")
+          exit_path = "early_trend_failure"
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
         end
       rescue StandardError => e
@@ -239,7 +241,9 @@ module Live
 
               if current_drop >= allowed_drop_from_hwm
                 reason = "ADAPTIVE_TRAILING_STOP (peak: #{peak_profit_pct.round(2)}%, drop: #{(current_drop * 100).round(2)}%, allowed: #{(allowed_drop_from_hwm * 100).round(2)}%)"
-                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no}")
+                exit_path = "trailing_stop_adaptive_upward"
+                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+                track_exit_path(tracker, exit_path, reason)
                 dispatch_exit(exit_engine, tracker, reason)
                 next
               end
@@ -257,7 +261,9 @@ module Live
             drop_pct = (hwm - pnl) / hwm
             if drop_pct >= drop_threshold
               reason = "TRAILING_STOP (fixed threshold: #{(drop_threshold * 100).round(2)}%, drop: #{(drop_pct * 100).round(2)}%)"
-              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no}")
+              exit_path = "trailing_stop_fixed_upward"
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
               dispatch_exit(exit_engine, tracker, reason)
               next
             end
@@ -310,7 +316,9 @@ module Live
 
           if dyn_loss_pct && pnl_pct_value <= -dyn_loss_pct
             reason = "DYNAMIC_LOSS_HIT #{(pnl_pct_value).round(2)}% (allowed: #{dyn_loss_pct.round(2)}%)"
-            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} (below_entry: #{seconds_below}s, atr_ratio: #{atr_ratio.round(3)})")
+            exit_path = "stop_loss_adaptive_downward"
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path} (below_entry: #{seconds_below}s, atr_ratio: #{atr_ratio.round(3)})")
+            track_exit_path(tracker, exit_path, reason)
             dispatch_exit(exit_engine, tracker, reason)
             next
           end
@@ -319,6 +327,9 @@ module Live
         # Fallback to static SL if dynamic reverse_loss is disabled or not applicable
         if pnl_pct <= -sl_pct
           reason = "SL HIT #{(pnl_pct * 100).round(2)}%"
+          exit_path = "stop_loss_static_downward"
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
@@ -326,6 +337,9 @@ module Live
         # Take Profit check
         if pnl_pct >= tp_pct
           reason = "TP HIT #{(pnl_pct * 100).round(2)}%"
+          exit_path = "take_profit"
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
@@ -365,6 +379,9 @@ module Live
         end
 
         reason = "time-based exit (#{exit_time.strftime('%H:%M')})"
+        exit_path = "time_based"
+        Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+        track_exit_path(tracker, exit_path, reason)
         dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_time_based_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
@@ -929,6 +946,22 @@ module Live
       BigDecimal(value.to_s)
     rescue StandardError
       BigDecimal(0)
+    end
+
+    # Track exit path for analysis
+    def track_exit_path(tracker, exit_path, reason)
+      meta = tracker.meta || {}
+      meta = meta.is_a?(Hash) ? meta : {}
+      
+      tracker.update(
+        meta: meta.merge(
+          'exit_path' => exit_path,
+          'exit_reason' => reason,
+          'exit_triggered_at' => Time.current
+        )
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Failed to track exit path for #{tracker.order_no}: #{e.message}")
     end
   end
 end
