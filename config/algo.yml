@@ -167,6 +167,37 @@ risk:
   tp_pct: 0.05 # +5% TAKE PROFIT
   per_trade_risk_pct: 0.15
 
+  # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
+  # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
+  hard_rupee_sl:
+    enabled: false # Set to true to enable hard ₹ stop loss
+    max_loss_rupees: 1000 # Maximum loss per trade in rupees
+
+  hard_rupee_tp:
+    enabled: false # Set to true to enable hard ₹ take profit
+    target_profit_rupees: 2000 # Target profit per trade in rupees
+
+# ============================================
+# POSITION SIZING (RUPEES-BASED)
+# ============================================
+# Rupee-based position sizing: derive quantity from fixed ₹ risk
+# Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
+# This ensures position size is calculated to match exact ₹ risk, not percentages
+position_sizing:
+  enabled: false # Set to true to enable rupee-based position sizing
+  mode: rupee_based # Options: 'rupee_based' or 'percentage_based' (legacy)
+
+  # Rupee-based sizing parameters (used when enabled: true)
+  risk_rupees: 1000 # Fixed risk per trade in rupees
+  target_rupees: 2000 # Target profit per trade in rupees (for R:R calculation)
+  stop_distance_rupees: 8 # Stop distance in rupees (typical: NIFTY ₹6-10, SENSEX ₹12-20)
+
+  # Index-specific stop distances (override global if specified)
+  index_stop_distances:
+    NIFTY: 8 # Typical stop distance for NIFTY options
+    BANKNIFTY: 12 # Typical stop distance for BANKNIFTY options
+    SENSEX: 15 # Typical stop distance for SENSEX options
+
   # Bidirectional trailing stops (enhanced with adaptive drawdown schedule)
   trail_step_pct: 0.03 # 3% trailing step (for breakeven calculation)
   breakeven_after_gain: 0.05 # Lock breakeven at +5% profit

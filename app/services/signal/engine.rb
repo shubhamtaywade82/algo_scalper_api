@@ -431,7 +431,11 @@ module Signal
       def get_validation_mode_config
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         mode = signals_cfg[:validation_mode] || 'balanced'
-        mode_config = signals_cfg.dig(:validation_modes, mode.to_sym) || signals_cfg.dig(:validation_modes, :balanced)
+        mode_config = signals_cfg.dig(:validation_modes, mode.to_sym) ||
+                      signals_cfg.dig(:validation_modes, :balanced) || {}
+
+        # Ensure mode_config is always a Hash (handle edge cases where config might be wrong type)
+        mode_config = {} unless mode_config.is_a?(Hash)
 
         # Merge with mode name for logging
         mode_config.merge(mode: mode)

@@ -147,7 +147,7 @@ module Live
 
     def enforce_early_trend_failure(exit_engine:)
       etf_cfg = begin
-        AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:etf] || {}
+        (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:etf]) || {}
       rescue StandardError
         {}
       end
@@ -175,7 +175,7 @@ module Live
 
         if Live::EarlyTrendFailure.early_trend_failure?(position_data)
           reason = "EARLY_TREND_FAILURE (pnl: #{pnl_pct_value.round(2)}%)"
-          exit_path = "early_trend_failure"
+          exit_path = 'early_trend_failure'
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
           track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
@@ -222,7 +222,7 @@ module Live
 
           # Only apply trailing if we've reached activation threshold
           drawdown_cfg = begin
-            AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown] || {}
+            (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown]) || {}
           rescue StandardError
             {}
           end
@@ -241,7 +241,7 @@ module Live
 
               if current_drop >= allowed_drop_from_hwm
                 reason = "ADAPTIVE_TRAILING_STOP (peak: #{peak_profit_pct.round(2)}%, drop: #{(current_drop * 100).round(2)}%, allowed: #{(allowed_drop_from_hwm * 100).round(2)}%)"
-                exit_path = "trailing_stop_adaptive_upward"
+                exit_path = 'trailing_stop_adaptive_upward'
                 Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
                 track_exit_path(tracker, exit_path, reason)
                 dispatch_exit(exit_engine, tracker, reason)
@@ -261,7 +261,7 @@ module Live
             drop_pct = (hwm - pnl) / hwm
             if drop_pct >= drop_threshold
               reason = "TRAILING_STOP (fixed threshold: #{(drop_threshold * 100).round(2)}%, drop: #{(drop_pct * 100).round(2)}%)"
-              exit_path = "trailing_stop_fixed_upward"
+              exit_path = 'trailing_stop_fixed_upward'
               Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
               track_exit_path(tracker, exit_path, reason)
               dispatch_exit(exit_engine, tracker, reason)
@@ -281,6 +281,45 @@ module Live
 
     def enforce_hard_limits(exit_engine:)
       risk = risk_config
+
+      # HIGHEST PRIORITY: Hard rupee-based stops (check FIRST before %-based)
+      if hard_rupee_sl_enabled? || hard_rupee_tp_enabled?
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
+
+          pnl_rupees = snapshot[:pnl]
+          next if pnl_rupees.nil?
+
+          # Hard rupee stop loss (highest priority exit)
+          if hard_rupee_sl_enabled?
+            max_loss_rupees = BigDecimal((hard_rupee_sl_config[:max_loss_rupees] || 1000).to_s)
+            if pnl_rupees <= -max_loss_rupees
+              reason = "HARD_RUPEE_SL (PnL: ₹#{pnl_rupees.round(2)}, limit: -₹#{max_loss_rupees})"
+              exit_path = 'hard_rupee_stop_loss'
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
+
+          # Hard rupee take profit
+          if hard_rupee_tp_enabled?
+            target_profit_rupees = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
+            if pnl_rupees >= target_profit_rupees
+              reason = "HARD_RUPEE_TP (PnL: ₹#{pnl_rupees.round(2)}, target: ₹#{target_profit_rupees})"
+              exit_path = 'hard_rupee_take_profit'
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
+        end
+      end
+
+      # Percentage-based stops (fallback/secondary)
       sl_pct = begin
         BigDecimal(risk[:sl_pct].to_s)
       rescue StandardError
@@ -306,7 +345,7 @@ module Live
         if pnl_pct_value < 0
           seconds_below = seconds_below_entry(tracker)
           atr_ratio = calculate_atr_ratio(tracker)
-          index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+          tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
 
           dyn_loss_pct = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
             pnl_pct_value,
@@ -315,8 +354,8 @@ module Live
           )
 
           if dyn_loss_pct && pnl_pct_value <= -dyn_loss_pct
-            reason = "DYNAMIC_LOSS_HIT #{(pnl_pct_value).round(2)}% (allowed: #{dyn_loss_pct.round(2)}%)"
-            exit_path = "stop_loss_adaptive_downward"
+            reason = "DYNAMIC_LOSS_HIT #{pnl_pct_value.round(2)}% (allowed: #{dyn_loss_pct.round(2)}%)"
+            exit_path = 'stop_loss_adaptive_downward'
             Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path} (below_entry: #{seconds_below}s, atr_ratio: #{atr_ratio.round(3)})")
             track_exit_path(tracker, exit_path, reason)
             dispatch_exit(exit_engine, tracker, reason)
@@ -327,7 +366,7 @@ module Live
         # Fallback to static SL if dynamic reverse_loss is disabled or not applicable
         if pnl_pct <= -sl_pct
           reason = "SL HIT #{(pnl_pct * 100).round(2)}%"
-          exit_path = "stop_loss_static_downward"
+          exit_path = 'stop_loss_static_downward'
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
           track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
@@ -337,7 +376,7 @@ module Live
         # Take Profit check
         if pnl_pct >= tp_pct
           reason = "TP HIT #{(pnl_pct * 100).round(2)}%"
-          exit_path = "take_profit"
+          exit_path = 'take_profit'
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
           track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
@@ -379,7 +418,7 @@ module Live
         end
 
         reason = "time-based exit (#{exit_time.strftime('%H:%M')})"
-        exit_path = "time_based"
+        exit_path = 'time_based'
         Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
         track_exit_path(tracker, exit_path, reason)
         dispatch_exit(exit_engine, tracker, reason)
@@ -815,7 +854,7 @@ module Live
         ratio = current_atr / avg_atr
         ratio.round(3)
       rescue StandardError => e
-        Rails.logger.debug("[RiskManager] ATR ratio calculation failed for #{tracker.order_no}: #{e.message}")
+        Rails.logger.debug { "[RiskManager] ATR ratio calculation failed for #{tracker.order_no}: #{e.message}" }
         1.0
       end
     end
@@ -838,13 +877,21 @@ module Live
     end
 
     # Build position data hash for Early Trend Failure checks
-    def build_position_data_for_etf(tracker, snapshot, instrument)
+    def build_position_data_for_etf(tracker, _snapshot, instrument)
       # Get trend metrics from instrument
-      series = instrument.candle_series(interval: '5') rescue nil
+      series = begin
+        instrument.candle_series(interval: '5')
+      rescue StandardError
+        nil
+      end
       candles = series&.candles || []
 
       # Calculate ADX
-      adx_value = instrument.adx(14, interval: '5') rescue nil
+      adx_value = begin
+        instrument.adx(14, interval: '5')
+      rescue StandardError
+        nil
+      end
       adx_hash = adx_value.is_a?(Hash) ? adx_value : { value: adx_value }
 
       # Calculate ATR ratio
@@ -877,7 +924,7 @@ module Live
         atr_ratio: atr_ratio,
         underlying_price: underlying_price,
         vwap: vwap,
-        is_long?: tracker.side == 'long_ce' || tracker.side == 'long_pe'
+        is_long?: %w[long_ce long_pe].include?(tracker.side)
       )
     rescue StandardError => e
       Rails.logger.error("[RiskManager] build_position_data_for_etf error: #{e.class} - #{e.message}")
@@ -901,7 +948,12 @@ module Live
 
       # Simple momentum: price change direction and magnitude
       price_change = (recent.last.close - recent.first.close) / recent.first.close
-      volume_factor = recent.last.respond_to?(:volume) && recent.last.volume ? [recent.last.volume / 1_000_000.0, 1.0].min : 0.5
+      volume_factor = if recent.last.respond_to?(:volume) && recent.last.volume
+                        [recent.last.volume / 1_000_000.0,
+                         1.0].min
+                      else
+                        0.5
+                      end
 
       (price_change.abs * 100 * volume_factor).round(2)
     end
@@ -931,6 +983,28 @@ module Live
       {}
     end
 
+    def hard_rupee_sl_enabled?
+      cfg = hard_rupee_sl_config
+      cfg && cfg[:enabled] == true
+    end
+
+    def hard_rupee_tp_enabled?
+      cfg = hard_rupee_tp_config
+      cfg && cfg[:enabled] == true
+    end
+
+    def hard_rupee_sl_config
+      AlgoConfig.fetch.dig(:risk, :hard_rupee_sl)
+    rescue StandardError
+      nil
+    end
+
+    def hard_rupee_tp_config
+      AlgoConfig.fetch.dig(:risk, :hard_rupee_tp)
+    rescue StandardError
+      nil
+    end
+
     def cancel_remote_order(order_id)
       order = DhanHQ::Models::Order.find(order_id)
       order.cancel
@@ -951,10 +1025,18 @@ module Live
     # Track exit path for analysis
     def track_exit_path(tracker, exit_path, reason)
       meta = tracker.meta || {}
-      meta = meta.is_a?(Hash) ? meta : {}
-      
-      direction = exit_path.include?('upward') ? 'upward' : (exit_path.include?('downward') ? 'downward' : nil)
-      type = exit_path.include?('adaptive') ? 'adaptive' : (exit_path.include?('fixed') ? 'fixed' : nil)
+      meta = {} unless meta.is_a?(Hash)
+
+      direction = if exit_path.include?('upward')
+                    'upward'
+                  else
+                    (exit_path.include?('downward') ? 'downward' : nil)
+                  end
+      type = if exit_path.include?('adaptive')
+               'adaptive'
+             else
+               (exit_path.include?('fixed') ? 'fixed' : nil)
+             end
 
       # Ensure entry metadata is preserved (in case it wasn't set during creation)
       # This is a safety net - entry metadata should already be set in EntryGuard
@@ -962,10 +1044,10 @@ module Live
       unless meta['entry_path'] || meta['entry_strategy']
         # Try to find matching TradingSignal to get entry metadata
         signal = TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
-          .where("created_at >= ?", tracker.created_at - 5.minutes)
-          .where("created_at <= ?", tracker.created_at + 1.minute)
-          .order(created_at: :desc)
-          .first
+                              .where('created_at >= ?', tracker.created_at - 5.minutes)
+                              .where('created_at <= ?', tracker.created_at + 1.minute)
+                              .order(created_at: :desc)
+                              .first
 
         if signal && signal.metadata.is_a?(Hash)
           entry_meta['entry_path'] = signal.metadata['entry_path']
@@ -976,7 +1058,7 @@ module Live
           entry_meta['entry_validation_mode'] = signal.metadata['validation_mode']
         end
       end
-      
+
       tracker.update(
         meta: meta.merge(entry_meta).merge(
           'exit_path' => exit_path,
