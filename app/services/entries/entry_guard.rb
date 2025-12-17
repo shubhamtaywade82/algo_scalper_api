@@ -3,29 +3,10 @@
 module Entries
   class EntryGuard
     class << self
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1)
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil)
         instrument = find_instrument(index_cfg)
         unless instrument
           Rails.logger.warn("[EntryGuard] Instrument not found for #{index_cfg[:key]} (segment: #{index_cfg[:segment]}, sid: #{index_cfg[:sid]})")
-          return false
-        end
-
-        # Check trading session timing (9:20 AM to 3:15 PM IST)
-        session_check = TradingSession::Service.entry_allowed?
-        unless session_check[:allowed]
-          Rails.logger.warn("[EntryGuard] Entry blocked: #{session_check[:reason]}")
-          return false
-        end
-
-        # NEW: Check daily limits before allowing entry
-        daily_limits = Live::DailyLimits.new
-        limit_check = daily_limits.can_trade?(index_key: index_cfg[:key])
-        unless limit_check[:allowed]
-          Rails.logger.warn(
-            "[EntryGuard] Trading blocked for #{index_cfg[:key]}: #{limit_check[:reason]} " \
-            "(daily_loss: #{limit_check[:daily_loss]&.round(2)}, " \
-            "daily_trades: #{limit_check[:daily_trades]})"
-          )
           return false
         end
 
@@ -64,28 +45,6 @@ module Entries
           return false
         end
 
-        # Check expiry date (must be within 7 days)
-        # Only block if we can determine expiry and it's > 7 days
-        # If expiry can't be determined, allow entry (will try to get from watchable after creation)
-        expiry_date = extract_expiry_date(pick)
-        if expiry_date
-          days_to_expiry = (expiry_date - Time.zone.today).to_i
-          if days_to_expiry > 7
-            Rails.logger.warn(
-              "[EntryGuard] Expiry too far for #{index_cfg[:key]}: #{pick[:symbol]} " \
-              "(expiry: #{expiry_date}, days_to_expiry: #{days_to_expiry}, max: 7)"
-            )
-            return false
-          end
-        else
-          # Try to get expiry from watchable after position creation
-          # For now, log warning but allow entry (expiry will be checked via watchable)
-          Rails.logger.debug { "[EntryGuard] Could not determine expiry date from pick for #{index_cfg[:key]}: #{pick[:symbol]}, will check via watchable" }
-        end
-
-        paper_mode = paper_trading_enabled?
-        force_paper = false
-
         quantity = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
           entry_price: ltp.to_f,
@@ -93,104 +52,53 @@ module Entries
           scale_multiplier: multiplier
         )
         if quantity <= 0
-          if !paper_mode && auto_paper_fallback_enabled? &&
-             insufficient_live_balance?(entry_price: ltp, lot_size: pick[:lot_size])
-            fallback_qty = fallback_quantity(pick: pick, multiplier: multiplier)
-            if fallback_qty <= 0
-              Rails.logger.warn("[EntryGuard] Paper fallback calculated invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (lot_size: #{pick[:lot_size]}, multiplier: #{multiplier})")
-              return false
-            end
-            quantity = fallback_qty
-            paper_mode = true
-            force_paper = true
-            Rails.logger.warn(
-              "[EntryGuard] Insufficient live balance for #{index_cfg[:key]} (symbol: #{pick[:symbol]}). " \
-              "Falling back to paper mode with quantity #{quantity}."
-            )
-          else
-            Rails.logger.warn("[EntryGuard] Invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, ltp: #{ltp}, lot_size: #{pick[:lot_size]})")
-            return false
-          end
+          Rails.logger.warn("[EntryGuard] Invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, ltp: #{ltp}, lot_size: #{pick[:lot_size]})")
+          return false
         end
 
-        # Validate segment is tradable (indices are not tradable)
-        segment = pick[:segment] || index_cfg[:segment]
-        unless segment_tradable?(segment)
-          Rails.logger.error(
-            "[EntryGuard] Cannot create position for non-tradable segment #{segment} " \
-            "(#{index_cfg[:key]}: #{pick[:symbol]}). Indices are not tradable."
+        # Paper trading mode: Skip real order placement, create PositionTracker directly
+        if paper_trading_enabled?
+          return create_paper_tracker!(
+            instrument: instrument,
+            pick: pick,
+            side: side,
+            quantity: quantity,
+            index_cfg: index_cfg,
+            ltp: ltp,
+            entry_metadata: entry_metadata
           )
+        end
+
+        # Live trading: Place real order
+        response = Orders.config.place_market(
+          side: 'buy',
+          segment: pick[:segment] || index_cfg[:segment],
+          security_id: pick[:security_id],
+          qty: quantity,
+          meta: {
+            client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
+            ltp: ltp # Pass resolved LTP (from WS or API)
+          }
+        )
+
+        order_no = extract_order_no(response)
+        unless order_no
+          Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
           return false
         end
 
-        tracker =
-          if paper_mode
-            create_paper_tracker!(
-              instrument: instrument,
-              pick: pick,
-              side: side,
-              quantity: quantity,
-              index_cfg: index_cfg,
-              ltp: ltp
-            )
-          else
-            # Live trading: Place real order
-            response = Orders.config.place_market(
-              side: 'buy',
-              segment: segment,
-              security_id: pick[:security_id],
-              qty: quantity,
-              meta: {
-                client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
-                ltp: ltp # Pass resolved LTP (from WS or API)
-              }
-            )
+        create_tracker!(
+          instrument: instrument,
+          order_no: order_no,
+          pick: pick,
+          side: side,
+          quantity: quantity,
+          index_cfg: index_cfg,
+          ltp: ltp,
+          entry_metadata: entry_metadata
+        )
 
-            order_no = extract_order_no(response)
-            unless order_no
-              Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
-              return false
-            end
-
-            created = create_tracker!(
-              instrument: instrument,
-              order_no: order_no,
-              pick: pick,
-              side: side,
-              quantity: quantity,
-              index_cfg: index_cfg,
-              ltp: ltp
-            )
-            Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}") if created
-            created
-          end
-
-        unless tracker
-          Rails.logger.warn("[EntryGuard] Failed to persist tracker for #{index_cfg[:key]}: #{pick[:symbol]}")
-          return false
-        end
-
-        # Post-creation expiry check (if expiry wasn't available in pick)
-        # This ensures we validate expiry even if it wasn't in the pick hash
-        unless expiry_date
-          watchable = tracker.watchable
-          if watchable.is_a?(Derivative) && watchable.expiry_date.present?
-            expiry_date = watchable.expiry_date
-            days_to_expiry = (expiry_date - Time.zone.today).to_i
-            if days_to_expiry > 7
-              Rails.logger.warn(
-                "[EntryGuard] Expiry too far (post-creation check) for #{index_cfg[:key]}: #{pick[:symbol]} " \
-                "(expiry: #{expiry_date}, days_to_expiry: #{days_to_expiry}, max: 7). " \
-                'Position created but should be exited.'
-              )
-              # Don't block here - position already created, but log warning
-            end
-          end
-        end
-
-        tag_fallback_tracker(tracker, reason: 'insufficient_live_balance') if force_paper && tracker
-
-        post_entry_wiring(tracker: tracker, side: side, index_cfg: index_cfg)
+        Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
         true
       rescue StandardError => e
         Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
@@ -405,14 +313,10 @@ module Entries
 
         # Strategy 1: WebSocket subscription + TickCache (fastest, no API rate limits)
         if hub.running? && hub.connected?
-          # Subscribe to the strike/derivative immediately (only if not already subscribed)
+          # Subscribe to the strike/derivative immediately
           begin
-            if hub.subscribed?(segment: segment, security_id: security_id)
-              Rails.logger.debug { "[EntryGuard] Already subscribed to #{segment}:#{security_id}, using existing subscription" }
-            else
-              hub.subscribe(segment: segment, security_id: security_id)
-              Rails.logger.debug { "[EntryGuard] Subscribed to #{segment}:#{security_id} for LTP resolution" }
-            end
+            hub.subscribe(segment: segment, security_id: security_id)
+            Rails.logger.debug { "[EntryGuard] Subscribed to #{segment}:#{security_id} for LTP resolution" }
 
             # Wait briefly for tick to arrive (typically < 100ms)
             max_wait_ms = 300
@@ -463,57 +367,6 @@ module Entries
       # WebSocket status is checked inline in try_enter for logging only
       # REST API fallback is always used when WS unavailable
 
-      # Extract expiry date from pick hash
-      # Checks multiple sources: pick[:expiry], pick[:derivative], pick[:derivative_id]
-      # @param pick [Hash] Pick/candidate hash
-      # @return [Date, nil] Expiry date or nil if not found
-      def extract_expiry_date(pick)
-        return nil unless pick.is_a?(Hash)
-
-        # Try direct expiry field (from DerivativeChainAnalyzer)
-        if pick[:expiry].present?
-          expiry = pick[:expiry]
-          if expiry.is_a?(Date)
-            return expiry
-          elsif expiry.is_a?(String)
-            begin
-              return Date.parse(expiry)
-            rescue ArgumentError
-              # Invalid date string, continue to next method
-            end
-          elsif expiry.respond_to?(:to_date)
-            return expiry.to_date
-          end
-        end
-
-        # Try derivative object
-        if pick[:derivative].present?
-          derivative = pick[:derivative]
-          if derivative.respond_to?(:expiry_date) && derivative.expiry_date.present?
-            return derivative.expiry_date if derivative.expiry_date.is_a?(Date)
-            return Date.parse(derivative.expiry_date.to_s) if derivative.expiry_date.respond_to?(:to_s)
-          end
-        end
-
-        # Try derivative_id -> load Derivative
-        if pick[:derivative_id].present?
-          begin
-            derivative = Derivative.find_by(id: pick[:derivative_id])
-            if derivative&.expiry_date.present?
-              return derivative.expiry_date if derivative.expiry_date.is_a?(Date)
-              return Date.parse(derivative.expiry_date.to_s) if derivative.expiry_date.respond_to?(:to_s)
-            end
-          rescue StandardError => e
-            Rails.logger.debug { "[EntryGuard] Failed to load derivative #{pick[:derivative_id]}: #{e.message}" }
-          end
-        end
-
-        nil
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] Failed to extract expiry date: #{e.class} - #{e.message}")
-        nil
-      end
-
       def find_instrument(index_cfg)
         segment_code = index_cfg[:segment]
         instrument = Instrument.find_by_sid_and_segment(
@@ -555,12 +408,30 @@ module Entries
         AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
       end
 
-      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:)
+      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil)
         # Generate synthetic order number for paper trading
         order_no = "PAPER-#{index_cfg[:key]}-#{pick[:security_id]}-#{Time.current.to_i}"
 
         # Determine watchable: derivative for options, instrument for indices
         watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
+
+        # Build meta hash with entry strategy/path information
+        meta_hash = {
+          index_key: index_cfg[:key],
+          direction: side,
+          placed_at: Time.current,
+          paper_trading: true
+        }
+
+        # Add entry strategy/path metadata if provided
+        if entry_metadata.is_a?(Hash)
+          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
+          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
+          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
+          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
+          meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe] if entry_metadata[:confirmation_timeframe]
+          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
+        end
 
         tracker = PositionTracker.create!(
           watchable: watchable,
@@ -575,12 +446,7 @@ module Entries
           avg_price: ltp,
           status: 'active',
           paper: true,
-          meta: {
-            index_key: index_cfg[:key],
-            direction: side,
-            placed_at: Time.current,
-            paper_trading: true
-          }
+          meta: meta_hash
         )
 
         # Subscription is handled automatically by after_create_commit :subscribe_to_feed callback
@@ -595,27 +461,36 @@ module Entries
           pnl_pct: 0.0,
           ltp: ltp,
           hwm: initial_pnl,
-          hwm_pnl_pct: 0.0,
-          timestamp: Time.current,
-          tracker: tracker
+          timestamp: Time.current
         )
 
-        # Add to ActiveCache immediately (ensures exit conditions work)
-        # Calculate default SL/TP if needed
-        sl_price = calculate_default_sl(tracker, ltp)
-        tp_price = calculate_default_tp(tracker, ltp)
-        add_to_active_cache(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
-
         Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")
-        tracker
+        true
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist paper tracker: #{e.record.errors.full_messages.to_sentence}")
-        nil
+        false
       end
 
-      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:)
+      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil)
         # Determine watchable: derivative for options, instrument for indices
         watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
+
+        # Build meta hash with entry strategy/path information
+        meta_hash = {
+          index_key: index_cfg[:key],
+          direction: side,
+          placed_at: Time.current
+        }
+
+        # Add entry strategy/path metadata if provided
+        if entry_metadata.is_a?(Hash)
+          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
+          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
+          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
+          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
+          meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe] if entry_metadata[:confirmation_timeframe]
+          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
+        end
 
         PositionTracker.build_or_average!(
           watchable: watchable,
@@ -627,11 +502,10 @@ module Entries
           side: side,
           quantity: quantity,
           entry_price: ltp,
-          meta: { index_key: index_cfg[:key], direction: side, placed_at: Time.current }
+          meta: meta_hash
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")
-        nil
       end
 
       def find_watchable_for_pick(pick:, instrument:)
@@ -654,157 +528,6 @@ module Entries
 
         # Fallback to instrument (for index positions)
         instrument
-      end
-
-      def segment_tradable?(segment)
-        return false if segment.blank?
-
-        Orders::Placer::VALID_TRADABLE_SEGMENTS.include?(segment.to_s.upcase)
-      end
-
-      def post_entry_wiring(tracker:, side:, index_cfg:)
-        entry_price = tracker.entry_price.to_f
-        sl_price, tp_price = initial_bracket_prices(entry_price: entry_price, side: side, index_cfg: index_cfg)
-
-        if auto_subscribe_enabled?
-          subscribe_to_option_feed(tracker)
-          add_to_active_cache(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
-        end
-
-        place_initial_bracket(tracker: tracker, sl_price: sl_price, tp_price: tp_price)
-      end
-
-      # rubocop:disable Lint/UnusedMethodArgument
-      def initial_bracket_prices(entry_price:, side:, index_cfg:)
-        return [nil, nil] unless entry_price&.positive?
-
-        risk_cfg = AlgoConfig.fetch[:risk] || {}
-        sl_pct = safe_percentage(risk_cfg[:sl_pct]) || 0.30
-        tp_pct = safe_percentage(risk_cfg[:tp_pct]) || 0.60
-
-        [
-          (entry_price * (1 - sl_pct)).round(2),
-          (entry_price * (1 + tp_pct)).round(2)
-        ]
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] Failed to compute initial brackets: #{e.class} - #{e.message}")
-        [nil, nil]
-      end
-      # rubocop:enable Lint/UnusedMethodArgument
-
-      def safe_percentage(value)
-        pct = value.to_f
-        pct.positive? && pct < 1.0 ? pct : nil
-      end
-
-      def subscribe_to_option_feed(tracker)
-        return unless option_segment?(tracker.segment)
-
-        Live::MarketFeedHub.instance.subscribe_instrument(segment: tracker.segment, security_id: tracker.security_id)
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] Feed subscribe failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
-      end
-
-      def add_to_active_cache(tracker:, sl_price:, tp_price:)
-        Positions::ActiveCache.instance.add_position(
-          tracker: tracker,
-          sl_price: sl_price,
-          tp_price: tp_price
-        )
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] ActiveCache add_position failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
-      end
-
-      def place_initial_bracket(tracker:, sl_price:, tp_price:)
-        Orders::BracketPlacer.place_bracket(
-          tracker: tracker,
-          sl_price: sl_price,
-          tp_price: tp_price,
-          reason: 'initial_bracket'
-        )
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] Initial bracket placement failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
-      end
-
-      def auto_subscribe_enabled?
-        feature_flags[:enable_auto_subscribe_unsubscribe] == true
-      end
-
-      def feature_flags
-        AlgoConfig.fetch[:feature_flags] || {}
-      rescue StandardError
-        {}
-      end
-
-      def option_segment?(segment)
-        seg = segment.to_s.upcase
-        seg.include?('FNO') || seg.include?('COMM') || seg.include?('CUR')
-      end
-
-      def auto_paper_fallback_enabled?
-        feature_flags[:auto_paper_on_insufficient_balance] == true
-      rescue StandardError
-        false
-      end
-
-      def insufficient_live_balance?(entry_price:, lot_size:)
-        lot = lot_size.to_i
-        return false unless lot.positive?
-
-        price = entry_price.to_f
-        return false unless price.positive?
-
-        capital_available = Capital::Allocator.available_cash
-        return false unless capital_available
-
-        required = price * lot
-        capital_available.to_f < required
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] Failed to evaluate live balance: #{e.class} - #{e.message}")
-        false
-      end
-
-      def fallback_quantity(pick:, multiplier:)
-        lot = pick[:lot_size].to_i
-        lot = 1 if lot <= 0
-        [lot * multiplier, lot].max
-      end
-
-      def tag_fallback_tracker(tracker, reason:)
-        meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-        tracker.update!(meta: meta.merge('fallback_to_paper' => true, 'fallback_reason' => reason))
-      rescue StandardError => e
-        Rails.logger.warn("[EntryGuard] Failed to tag fallback tracker #{tracker.id}: #{e.class} - #{e.message}")
-      end
-
-      # Calculate default stop loss price
-      def calculate_default_sl(_tracker, entry_price)
-        risk_cfg = AlgoConfig.fetch.dig(:risk) || {}
-        sl_pct = risk_cfg[:sl_pct] || 5.0 # Default 5% stop loss
-
-        entry = BigDecimal(entry_price.to_s)
-        sl_offset = entry * (BigDecimal(sl_pct.to_s) / 100.0)
-
-        # For long positions, SL is below entry
-        entry - sl_offset
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] calculate_default_sl failed: #{e.class} - #{e.message}")
-        nil
-      end
-
-      # Calculate default take profit price
-      def calculate_default_tp(_tracker, entry_price)
-        risk_cfg = AlgoConfig.fetch.dig(:risk) || {}
-        tp_pct = risk_cfg[:tp_pct] || 10.0 # Default 10% take profit
-
-        entry = BigDecimal(entry_price.to_s)
-        tp_offset = entry * (BigDecimal(tp_pct.to_s) / 100.0)
-
-        # For long positions, TP is above entry
-        entry + tp_offset
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] calculate_default_tp failed: #{e.class} - #{e.message}")
-        nil
       end
     end
   end

@@ -163,14 +163,15 @@ trade_limits:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.30 # 30% fixed SL (entry * 0.70)
-  tp_pct: 0.60 # 60% fixed TP (entry * 1.60)
+  sl_pct: 0.03 # -3% STOP LOSS (fallback, dynamic reverse_loss takes precedence)
+  tp_pct: 0.05 # +5% TAKE PROFIT
+  per_trade_risk_pct: 0.15
 
-  # Profit protection: Hard stop if HWM reaches threshold and drops by percentage
-  profit_protection:
-    hwm_threshold_rupees: 1040.0 # Exit if HWM reaches this amount
-    drop_pct_from_hwm: 1.0 # Exit if current PnL drops this % from HWM
-    enabled: true
+  # Bidirectional trailing stops (enhanced with adaptive drawdown schedule)
+  trail_step_pct: 0.03 # 3% trailing step (for breakeven calculation)
+  breakeven_after_gain: 0.05 # Lock breakeven at +5% profit
+  exit_drop_pct: 0.03 # Fixed trailing threshold (fallback, adaptive schedule takes precedence)
+  min_profit_rupees: 0 # allow immediate TP exits
 
   # Trailing stop mode: 'tiered' (fixed tiers) or 'direct' (follows price directly)
   trailing_mode: direct # Options: 'tiered' or 'direct'
@@ -183,6 +184,45 @@ risk:
     distance_pct: 5.0 # Distance below current price (e.g., 5% = SL at 95% of current price)
     activation_profit_pct: 0.0 # Minimum profit % before activating (0 = immediate activation)
     min_sl_offset_pct: -30.0 # Minimum SL offset from entry (prevents SL from going below initial SL)
+
+  # Profit protection: Hard stop if HWM reaches threshold and drops by percentage
+  profit_protection:
+    hwm_threshold_rupees: 1040.0 # Exit if HWM reaches this amount
+    drop_pct_from_hwm: 1.0 # Exit if current PnL drops this % from HWM
+    enabled: true
+
+  # Upward exponential drawdown (activated when pnl >= activation_profit_pct)
+  drawdown:
+    activation_profit_pct: 3.0
+    profit_min: 3.0
+    profit_max: 30.0
+    dd_start_pct: 15.0 # start allowed DD at this % when profit == profit_min
+    dd_end_pct: 1.0 # floor allowed DD at this % when profit >= profit_max
+    exponential_k: 3.0 # curve steepness
+    index_floors:
+      NIFTY: 1.0
+      BANKNIFTY: 1.2
+      SENSEX: 1.5
+
+  # Reverse (below entry) dynamic loss tightening
+  reverse_loss:
+    enabled: true
+    max_loss_pct: 20.0 # starting allowed loss when position just turned red
+    min_loss_pct: 5.0 # tightest allowed loss when pnl hits -30%
+    loss_span_pct: 30.0 # map -0..-loss_span_pct to max_loss_pct..min_loss_pct
+    time_tighten_per_min: 2.0 # % tightening per minute spent below entry
+    atr_penalty_thresholds:
+      - { threshold: 0.75, penalty_pct: 3.0 }
+      - { threshold: 0.60, penalty_pct: 5.0 }
+
+  # Early Trend Failure Exit (ETF)
+  etf:
+    enabled: true
+    activation_profit_pct: 7.0 # ETF checks apply until trailing activates
+    trend_score_drop_pct: 30.0 # drop from peak trend score to trigger ETF
+    adx_collapse_threshold: 10 # ADX under this triggers ETF
+    atr_ratio_threshold: 0.55 # collapse detection
+    confirmation_ticks: 2 # consecutive tick confirmations
 
   # Micro-Trailing model (tiered) - 3% INTERVALS with CONSERVATIVE SL offsets
   # More granular tiers with tighter protection to minimize losses

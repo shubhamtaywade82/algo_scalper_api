@@ -4,54 +4,23 @@ module Signal
   class Engine
     class << self
       def run_for(index_cfg)
-        # Skip signal generation if market is closed (after 3:30 PM IST)
-        if TradingSession::Service.market_closed?
-          Rails.logger.debug { "[Signal] Market closed - skipping analysis for #{index_cfg[:key]}" }
-          return
-        end
-
         Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for #{index_cfg[:key]} (IDX_I) --------------------------------------------------------")
 
-        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-        unless instrument
-          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
-          return
-        end
-
-        # Phase 1: Quick No-Trade pre-check (BEFORE expensive signal generation)
-        # Returns validation result + option chain data for reuse in Phase 2
-        # Can be disabled via config: signals.enable_no_trade_engine = false
         signals_cfg = AlgoConfig.fetch[:signals] || {}
-        enable_no_trade_engine = signals_cfg.fetch(:enable_no_trade_engine, true)
-
-        cached_option_chain = nil
-        cached_bars_1m = nil
-
-        if enable_no_trade_engine
-          quick_no_trade_result = quick_no_trade_precheck(index_cfg: index_cfg, instrument: instrument)
-          unless quick_no_trade_result[:allowed]
-            Rails.logger.warn(
-              "[Signal] NO-TRADE pre-check blocked #{index_cfg[:key]}: " \
-              "score=#{quick_no_trade_result[:score]}/11, reasons=#{quick_no_trade_result[:reasons].join('; ')}"
-            )
-            return
-          end
-
-          # Store option chain data from Phase 1 for reuse in Phase 2
-          cached_option_chain = quick_no_trade_result[:option_chain_data]
-          cached_bars_1m = quick_no_trade_result[:bars_1m]
-        else
-          Rails.logger.info("[Signal] NoTradeEngine Phase 1 DISABLED for #{index_cfg[:key]} - skipping pre-check")
-        end
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
-        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, false)
+        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
 
         # Check if strategy-based recommendations are enabled
         use_strategy_recommendations = signals_cfg.fetch(:use_strategy_recommendations, false)
 
         # Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
+
+        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+        unless instrument
+          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
+          return
+        end
 
         # Get strategy recommendation if enabled - use best strategy for this index
         strategy_recommendation = nil
@@ -71,46 +40,6 @@ module Signal
           end
         end
 
-        # Check if modular indicator system is enabled
-        use_multi_indicator = signals_cfg.fetch(:use_multi_indicator_strategy, false)
-
-        # Load Supertrend config - prefer optimized parameters from BestIndicatorParam
-        config_supertrend_cfg = signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }
-        primary_interval = normalize_interval(primary_tf)
-
-        # Check if optimized parameters are enabled
-        use_optimized_params = signals_cfg.fetch(:use_optimized_params, true)
-
-        # Try to load optimized parameters (if enabled and available)
-        optimized_params = if use_optimized_params && primary_interval && defined?(Backtest::OptimizedParamsLoader)
-                             Backtest::OptimizedParamsLoader.load_for_backtest(
-                               instrument: instrument,
-                               interval: primary_interval,
-                               supertrend_cfg: nil, # Let loader decide
-                               adx_min_strength: nil
-                             )
-                           end
-
-        # Use optimized params if available, otherwise use config
-        if optimized_params && optimized_params[:source] == :optimized
-          supertrend_cfg = optimized_params[:supertrend_cfg]
-          Rails.logger.info(
-            "[Signal] Using optimized Supertrend params for #{index_cfg[:key]}: " \
-            "period=#{supertrend_cfg[:period]}, multiplier=#{supertrend_cfg[:base_multiplier]} " \
-            "(score: #{optimized_params[:score].round(3)})"
-          )
-        else
-          supertrend_cfg = config_supertrend_cfg
-          # Normalize config format (multiplier -> base_multiplier)
-          supertrend_cfg = {
-            period: supertrend_cfg[:period] || supertrend_cfg['period'] || 7,
-            base_multiplier: supertrend_cfg[:base_multiplier] || supertrend_cfg[:multiplier] || supertrend_cfg['multiplier'] || 3.0
-          }
-        end
-
-        adx_cfg = signals_cfg[:adx] || {}
-        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
-
         # Use strategy-based analysis if recommendation is available and enabled
         if use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
           primary_analysis = analyze_with_recommended_strategy(
@@ -119,27 +48,18 @@ module Signal
             timeframe: effective_timeframe,
             strategy_recommendation: strategy_recommendation
           )
-        elsif use_multi_indicator
-          # Use modular multi-indicator system
-          primary_analysis = analyze_with_multi_indicators(
-            index_cfg: index_cfg,
-            instrument: instrument,
-            timeframe: primary_tf,
-            signals_cfg: signals_cfg
-          )
-        elsif enable_supertrend_signal
-          # Traditional Supertrend + ADX analysis (1m signal)
+        else
+          # Fallback to traditional Supertrend + ADX analysis
+          supertrend_cfg = signals_cfg[:supertrend]
           unless supertrend_cfg
             Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
             return
           end
 
-          # Get per-index ADX thresholds (if specified) or fall back to global
-          index_adx_thresholds = index_cfg[:adx_thresholds] || {}
-          primary_adx_threshold = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength]
-
+          adx_cfg = signals_cfg[:adx] || {}
+          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-          adx_min_strength = enable_adx_filter ? primary_adx_threshold : 0
+          adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
 
           primary_analysis = analyze_timeframe(
             index_cfg: index_cfg,
@@ -148,9 +68,6 @@ module Signal
             supertrend_cfg: supertrend_cfg,
             adx_min_strength: adx_min_strength
           )
-        else
-          Rails.logger.warn("[Signal] Supertrend signal disabled for #{index_cfg[:key]} - skipping analysis")
-          return
         end
 
         unless primary_analysis[:status] == :ok
@@ -162,46 +79,13 @@ module Signal
         final_direction = primary_analysis[:direction]
         confirmation_analysis = nil
 
-        # Skip confirmation timeframe when using strategy recommendations or multi-indicator system
-        # (strategies were backtested as standalone systems, multi-indicator can combine indicators internally)
-        if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]) && !use_multi_indicator
+        # Skip confirmation timeframe when using strategy recommendations
+        # (strategies were backtested as standalone systems)
+        if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended])
           mode_config = get_validation_mode_config
-
-          # Load optimized Supertrend params for confirmation timeframe (may differ from primary)
-          confirmation_interval = normalize_interval(confirmation_tf)
-          confirmation_supertrend_cfg = supertrend_cfg # Default to primary config
-
-          # Check if optimized parameters are enabled
-          use_optimized_params = signals_cfg.fetch(:use_optimized_params, true)
-
-          if use_optimized_params && confirmation_interval && defined?(Backtest::OptimizedParamsLoader) && confirmation_interval != primary_interval
-            # Only load if confirmation timeframe differs from primary
-            confirmation_optimized = Backtest::OptimizedParamsLoader.load_for_backtest(
-              instrument: instrument,
-              interval: confirmation_interval,
-              supertrend_cfg: nil,
-              adx_min_strength: nil
-            )
-
-            if confirmation_optimized && confirmation_optimized[:source] == :optimized
-              confirmation_supertrend_cfg = confirmation_optimized[:supertrend_cfg]
-              Rails.logger.info(
-                "[Signal] Using optimized Supertrend params for #{index_cfg[:key]} confirmation (#{confirmation_tf}): " \
-                "period=#{confirmation_supertrend_cfg[:period]}, multiplier=#{confirmation_supertrend_cfg[:base_multiplier]}"
-              )
-            end
-          end
-
-          # Get per-index ADX thresholds (if specified) or fall back to global
-          index_adx_thresholds = index_cfg[:adx_thresholds] || {}
-          confirmation_adx_threshold = index_adx_thresholds[:confirmation_min_strength] ||
-                                       mode_config[:adx_confirmation_min_strength] ||
-                                       adx_cfg[:confirmation_min_strength] ||
-                                       adx_cfg[:min_strength]
-
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
-                                   confirmation_adx_threshold
+                                   mode_config[:adx_confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
                                  else
                                    0
                                  end
@@ -210,7 +94,7 @@ module Signal
             index_cfg: index_cfg,
             instrument: instrument,
             timeframe: confirmation_tf,
-            supertrend_cfg: confirmation_supertrend_cfg,
+            supertrend_cfg: supertrend_cfg,
             adx_min_strength: confirmation_adx_min
           )
 
@@ -224,8 +108,6 @@ module Signal
           # Rails.logger.info("[Signal] Multi-timeframe decision for #{index_cfg[:key]}: primary=#{primary_analysis[:direction]} confirmation=#{confirmation_analysis[:direction]} final=#{final_direction}")
         elsif confirmation_tf.present? && use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
           Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using strategy recommendation: #{strategy_recommendation[:strategy_name]})")
-        elsif confirmation_tf.present? && use_multi_indicator
-          Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using multi-indicator system - indicators can be combined via confirmation_mode)")
         end
 
         if final_direction == :avoid
@@ -264,6 +146,16 @@ module Signal
           validation_result: validation_result
         )
 
+        # Build clear entry path identifier for tracking and analysis
+        entry_path = build_entry_path_identifier(
+          strategy_recommendation: strategy_recommendation,
+          use_strategy_recommendations: use_strategy_recommendations,
+          primary_tf: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_tf: confirmation_tf,
+          enable_confirmation: enable_confirmation
+        )
+
         TradingSignal.create_from_analysis(
           index_key: index_cfg[:key],
           direction: final_direction.to_s,
@@ -273,12 +165,19 @@ module Signal
           candle_timestamp: primary_analysis[:last_candle_timestamp],
           confidence_score: confidence_score,
           metadata: {
+            # Clear path tracking for analysis
+            entry_path: entry_path,
+            strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
+            strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
+            primary_timeframe: primary_tf,
+            effective_timeframe: effective_timeframe,
             confirmation_timeframe: confirmation_tf,
+            confirmation_enabled: enable_confirmation,
             confirmation_direction: confirmation_analysis&.dig(:direction),
+            validation_mode: signals_cfg[:validation_mode] || 'balanced',
             validation_passed: validation_result[:valid],
             state_count: state_snapshot[:count],
             state_multiplier: state_snapshot[:multiplier],
-            strategy_used: strategy_recommendation&.dig(:strategy_name),
             original_timeframe: primary_tf
           }
         )
@@ -294,66 +193,17 @@ module Signal
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
-        # Phase 2: Detailed No-Trade validation (AFTER signal generation, with full context)
-        # Reuses option chain and bars_1m from Phase 1 to avoid duplicate fetches
-        # Can be disabled via config: signals.enable_no_trade_engine = false
-        if enable_no_trade_engine
-          detailed_no_trade = validate_no_trade_conditions(
-            index_cfg: index_cfg,
-            instrument: instrument,
-            direction: final_direction,
-            cached_option_chain: cached_option_chain,
-            cached_bars_1m: cached_bars_1m
-          )
-
-          unless detailed_no_trade[:allowed]
-            Rails.logger.warn(
-              "[Signal] NO-TRADE detailed validation blocked #{index_cfg[:key]}: " \
-              "score=#{detailed_no_trade[:score]}/11, reasons=#{detailed_no_trade[:reasons].join('; ')}"
-            )
-            return
-          end
-        else
-          Rails.logger.info("[Signal] NoTradeEngine Phase 2 DISABLED for #{index_cfg[:key]} - skipping detailed validation")
-        end
-
-        # Signal Confirmation Filter: Verify price action confirms signal direction
-        # Checks if current LTP confirms the signal before trade execution
-        enable_confirmation_filter = signals_cfg.fetch(:enable_confirmation_filter, true)
-        if enable_confirmation_filter
-          # Extract last closed candle's close price (C_last)
-          # Use max_by to get the candle with the most recent timestamp (not just .last)
-          # This ensures we get the actual most recent candle even if candles aren't sorted by timestamp
-          last_candle = primary_series.candles.max_by(&:timestamp)
-          unless last_candle
-            Rails.logger.warn("[Signal] No last candle available for confirmation filter - skipping #{index_cfg[:key]}")
-            return
-          end
-
-          last_close_price = last_candle.close
-          Rails.logger.debug { "[Signal] Using last candle for confirmation: timestamp=#{last_candle.timestamp}, close=#{last_close_price}" }
-          confirmation_result = Signal::ConfirmationFilter.confirm(
-            initial_signal: final_direction,
-            last_close_price: last_close_price,
-            instrument: instrument,
-            index_key: index_cfg[:key]
-          )
-
-          unless confirmation_result[:confirmed]
-            Rails.logger.warn(
-              "[Signal] Confirmation filter blocked #{index_cfg[:key]}: #{confirmation_result[:reason]} " \
-              "(LTP: #{confirmation_result[:current_ltp]&.round(2)}, C_last: #{confirmation_result[:last_close]&.round(2)})"
-            )
-            return
-          end
-
-          Rails.logger.info(
-            "[Signal] Confirmation filter passed for #{index_cfg[:key]}: #{confirmation_result[:reason]} " \
-            "(LTP: #{confirmation_result[:current_ltp]&.round(2)}, C_last: #{confirmation_result[:last_close]&.round(2)})"
-          )
-        else
-          Rails.logger.info("[Signal] Confirmation filter DISABLED for #{index_cfg[:key]} - skipping LTP confirmation")
-        end
+        # Prepare entry metadata to pass to EntryGuard
+        entry_metadata = {
+          entry_path: entry_path,
+          strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
+          strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
+          primary_timeframe: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_timeframe: confirmation_tf,
+          confirmation_enabled: enable_confirmation,
+          validation_mode: signals_cfg[:validation_mode] || 'balanced'
+        }
 
         picks.each_with_index do |pick, _index|
           # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
@@ -361,13 +211,14 @@ module Signal
             index_cfg: index_cfg,
             pick: pick,
             direction: final_direction,
-            scale_multiplier: state_snapshot[:multiplier]
+            scale_multiplier: state_snapshot[:multiplier],
+            entry_metadata: entry_metadata
           )
 
           if result
             # Rails.logger.info("[Signal] Entry successful for #{index_cfg[:key]}: #{pick[:symbol]}")
           else
-            Rails.logger.debug { "[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]} #{result}" }
+            Rails.logger.debug("[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]} #{result}")
           end
         end
 
@@ -428,14 +279,8 @@ module Signal
       def analyze_multi_timeframe(index_cfg:, instrument:)
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
-        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, false)
+        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
-
-        unless enable_supertrend_signal
-          Rails.logger.warn("[Signal] Supertrend signal disabled for #{index_cfg[:key]}")
-          return { status: :error, message: 'Supertrend signal disabled' }
-        end
 
         supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
@@ -444,15 +289,9 @@ module Signal
         end
 
         adx_cfg = signals_cfg[:adx] || {}
-        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, false)
-
-        # Get per-index ADX thresholds (if specified) or fall back to global
-        index_adx_thresholds = index_cfg[:adx_thresholds] || {}
-        primary_adx_threshold = index_adx_thresholds[:primary_min_strength] || adx_cfg[:min_strength]
-        confirmation_adx_threshold = index_adx_thresholds[:confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
-
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
         # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-        adx_min_strength = enable_adx_filter ? primary_adx_threshold : 0
+        adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
 
         # Analyze primary timeframe
         primary_analysis = analyze_timeframe(
@@ -474,7 +313,7 @@ module Signal
         if confirmation_tf.present?
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
           confirmation_adx_min = if enable_adx_filter
-                                   confirmation_adx_threshold
+                                   adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
                                  else
                                    0
                                  end
@@ -572,8 +411,8 @@ module Signal
         # Log all validation results
         # Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
         validation_checks.each do |check|
-          _status = check[:valid] ? '✅' : '❌'
-          # Rails.logger.info("  #{_status} #{check[:name]}: #{check[:message]}")
+          check[:valid] ? '✅' : '❌'
+          # Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
         end
 
         # Determine overall validation result
@@ -592,11 +431,7 @@ module Signal
       def get_validation_mode_config
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         mode = signals_cfg[:validation_mode] || 'balanced'
-        mode_config = signals_cfg.dig(:validation_modes,
-                                      mode.to_sym) || signals_cfg.dig(:validation_modes, :balanced) || {}
-
-        # Ensure mode_config is always a Hash (handle edge cases where config might be wrong type)
-        mode_config = {} unless mode_config.is_a?(Hash)
+        mode_config = signals_cfg.dig(:validation_modes, mode.to_sym) || signals_cfg.dig(:validation_modes, :balanced)
 
         # Merge with mode name for logging
         mode_config.merge(mode: mode)
@@ -711,10 +546,8 @@ module Signal
 
       # Validate market timing - avoid problematic trading times
       def validate_market_timing
-        # NOTE: Currently always returns valid - timing validation disabled
         return { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
-        # Unreachable code below (timing validation disabled)
-        # current_time = Time.zone.now
+        current_time = Time.zone.now
 
         # First check if it's a trading day using Market::Calendar
         unless Market::Calendar.trading_day_today?
@@ -853,176 +686,24 @@ module Signal
         { status: :error, message: e.message }
       end
 
-      def analyze_with_multi_indicators(index_cfg:, instrument:, timeframe:, signals_cfg:)
-        interval = normalize_interval(timeframe)
-        if interval.blank?
-          message = "Invalid timeframe '#{timeframe}'"
-          Rails.logger.error("[Signal] #{message} for #{index_cfg[:key]}")
-          return { status: :error, message: message }
-        end
+      # Build clear entry path identifier for tracking
+      # Format: "strategy_timeframe_confirmation" e.g., "recommended_5m_none" or "supertrend_adx_1m_5m"
+      def build_entry_path_identifier(strategy_recommendation:, use_strategy_recommendations:, primary_tf:, effective_timeframe:, confirmation_tf:, enable_confirmation:)
+        strategy_part = if use_strategy_recommendations && strategy_recommendation&.dig(:recommended)
+                          strategy_recommendation[:strategy_name].downcase.gsub(/\s+/, '_')
+                        else
+                          'supertrend_adx'
+                        end
 
-        series = instrument.candle_series(interval: interval)
-        unless series&.candles&.any?
-          message = "No candle data (#{timeframe})"
-          Rails.logger.warn("[Signal] #{message} for #{index_cfg[:key]}")
-          return { status: :no_data, message: message }
-        end
+        timeframe_part = effective_timeframe
 
-        # Get enabled indicators from configuration
-        indicator_configs = signals_cfg[:indicators] || []
-        enabled_indicators = indicator_configs.select { |ic| ic[:enabled] != false }
+        confirmation_part = if enable_confirmation && confirmation_tf.present?
+                              confirmation_tf
+                            else
+                              'none'
+                            end
 
-        if enabled_indicators.empty?
-          Rails.logger.warn("[Signal] No enabled indicators configured for #{index_cfg[:key]}")
-          return { status: :error, message: 'No enabled indicators' }
-        end
-
-        # Get preset from config (algo.yml preferred, ENV as fallback)
-        preset_name = signals_cfg[:indicator_preset]&.to_sym || ENV['INDICATOR_PRESET']&.to_sym || :moderate
-        threshold_preset = Indicators::ThresholdConfig.get_preset(preset_name)
-
-        # Load optimized Supertrend params for multi-indicator system
-        config_supertrend_cfg = signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }
-        multi_indicator_supertrend_cfg = config_supertrend_cfg
-
-        # Check if optimized parameters are enabled
-        use_optimized_params = signals_cfg.fetch(:use_optimized_params, true)
-
-        if use_optimized_params && interval && defined?(Backtest::OptimizedParamsLoader)
-          multi_optimized = Backtest::OptimizedParamsLoader.load_for_backtest(
-            instrument: instrument,
-            interval: interval,
-            supertrend_cfg: nil,
-            adx_min_strength: nil
-          )
-
-          if multi_optimized && multi_optimized[:source] == :optimized
-            multi_indicator_supertrend_cfg = multi_optimized[:supertrend_cfg]
-            Rails.logger.info(
-              "[Signal] Using optimized Supertrend params for #{index_cfg[:key]} multi-indicator (#{timeframe}): " \
-              "period=#{multi_indicator_supertrend_cfg[:period]}, multiplier=#{multi_indicator_supertrend_cfg[:base_multiplier]}"
-            )
-          else
-            # Normalize config format
-            multi_indicator_supertrend_cfg = {
-              period: config_supertrend_cfg[:period] || config_supertrend_cfg['period'] || 7,
-              base_multiplier: config_supertrend_cfg[:base_multiplier] || config_supertrend_cfg[:multiplier] || config_supertrend_cfg['multiplier'] || 3.0
-            }
-          end
-        else
-          # Normalize config format when optimized params are disabled
-          multi_indicator_supertrend_cfg = {
-            period: config_supertrend_cfg[:period] || config_supertrend_cfg['period'] || 7,
-            base_multiplier: config_supertrend_cfg[:base_multiplier] || config_supertrend_cfg[:multiplier] || config_supertrend_cfg['multiplier'] || 3.0
-          }
-        end
-
-        # Merge global config with indicator configs
-        global_config = {
-          supertrend_cfg: multi_indicator_supertrend_cfg,
-          trading_hours_filter: true,
-          indicator_preset: preset_name # Pass preset name to indicators
-        }
-
-        # Apply threshold config to individual indicators
-        enabled_indicators.each do |ic|
-          indicator_type = ic[:type].to_s.downcase.to_sym
-          ic[:config] ||= {}
-
-          # Merge threshold config for this indicator type
-          if threshold_preset[indicator_type] && ic[:config].is_a?(Hash)
-            ic[:config] = (ic[:config] || {}).merge(threshold_preset[indicator_type])
-          end
-        end
-
-        # Get per-index ADX thresholds if specified (overrides preset)
-        index_adx_thresholds = index_cfg[:adx_thresholds] || {}
-        if index_adx_thresholds[:primary_min_strength]
-          # Update ADX indicator config with per-index threshold
-          enabled_indicators.each do |ic|
-            if ic[:type].to_s.downcase == 'adx'
-              ic[:config] ||= {}
-              ic[:config][:min_strength] = index_adx_thresholds[:primary_min_strength]
-            end
-          end
-        end
-
-        # Build multi-indicator strategy
-        confirmation_mode = signals_cfg[:confirmation_mode] || :all
-        min_confidence = signals_cfg[:min_confidence] || 60
-
-        # Merge threshold config into global_config for MultiIndicatorStrategy
-        global_config = global_config.merge(threshold_preset[:multi_indicator] || {})
-
-        strategy = MultiIndicatorStrategy.new(
-          series: series,
-          indicators: enabled_indicators,
-          confirmation_mode: confirmation_mode,
-          min_confidence: min_confidence,
-          **global_config
-        )
-
-        # Use the last candle index for signal generation
-        current_index = series.candles.size - 1
-        signal = strategy.generate_signal(current_index)
-
-        if signal.nil?
-          Rails.logger.debug { "[Signal] Multi-indicator strategy did not generate signal for #{index_cfg[:key]} at index #{current_index}" }
-          return {
-            status: :ok,
-            series: series,
-            supertrend: { trend: nil, last_value: nil },
-            adx_value: 0,
-            direction: :avoid,
-            last_candle_timestamp: series.candles.last&.timestamp
-          }
-        end
-
-        # Convert signal to direction
-        direction = signal[:type] == :ce ? :bullish : :bearish
-
-        # Log confluence information
-        if signal[:confluence]
-          confluence = signal[:confluence]
-          Rails.logger.info("[Signal] Confluence for #{index_cfg[:key]}: score=#{confluence[:score]}% strength=#{confluence[:strength]} (#{confluence[:agreeing_count]}/#{confluence[:total_indicators]} indicators agree on #{confluence[:dominant_direction]})")
-          confluence[:breakdown].each do |ind|
-            status = ind[:agrees] ? '✓' : '✗'
-            Rails.logger.debug { "[Signal]   #{status} #{ind[:name]}: #{ind[:direction]} (confidence: #{ind[:confidence]})" }
-          end
-        end
-
-        # Extract indicator values for compatibility
-        # Try to get supertrend and ADX values if available
-        supertrend_value = nil
-        adx_value = 0
-
-        enabled_indicators.each do |ic|
-          indicator_name = ic[:type].to_s.downcase
-          if %w[supertrend st].include?(indicator_name)
-            # Calculate supertrend for compatibility
-            st_cfg = global_config[:supertrend_cfg]
-            st_service = Indicators::Supertrend.new(series: series, **st_cfg)
-            st_result = st_service.call
-            supertrend_value = st_result[:last_value] if st_result
-          elsif indicator_name == 'adx'
-            adx_value = series.adx(ic.dig(:config, :period) || 14) || 0
-          end
-        end
-
-        {
-          status: :ok,
-          series: series,
-          supertrend: { trend: direction, last_value: supertrend_value },
-          adx_value: adx_value,
-          direction: direction,
-          last_candle_timestamp: series.candles.last&.timestamp,
-          confidence: signal[:confidence],
-          confluence: signal[:confluence]
-        }
-      rescue StandardError => e
-        Rails.logger.error("[Signal] Multi-indicator analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
-        Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
-        { status: :error, message: e.message }
+        "#{strategy_part}_#{timeframe_part}_#{confirmation_part}"
       end
 
       def decide_direction(supertrend_result, adx_value, min_strength:, timeframe_label:)
@@ -1057,139 +738,6 @@ module Signal
           # Rails.logger.info("[Signal] Neutral/unknown trend on #{timeframe_label}: #{trend}")
           :avoid
         end
-      end
-
-      # Phase 1: Quick No-Trade pre-check (before expensive signal generation)
-      # Checks only fast/cheap conditions: time windows, basic structure, basic option chain
-      # @param index_cfg [Hash] Index configuration
-      # @param instrument [Instrument] Instrument object
-      # @return [Hash] Validation result with :allowed, :score, :reasons
-      def quick_no_trade_precheck(index_cfg:, instrument:)
-        current_time = Time.current.strftime('%H:%M')
-        reasons = []
-        score = 0
-        option_chain_data = nil
-        bars_1m = nil
-
-        # Time windows (fastest check - no data needed)
-        if current_time >= '09:15' && current_time <= '09:18'
-          reasons << 'Avoid first 3 minutes'
-          score += 1
-        end
-
-        if current_time >= '11:20' && current_time <= '13:30'
-          reasons << 'Lunch-time theta zone'
-          score += 1
-        end
-
-        if current_time > '15:05'
-          reasons << 'Post 3:05 PM - theta crush'
-          score += 1
-        end
-
-        # Basic structure check (needs bars_1m)
-        bars_1m = instrument.candle_series(interval: '1')
-        if bars_1m&.candles&.any?
-          bars_1m_array = bars_1m.candles
-
-          # NOTE: BOS check removed from Phase 1 to avoid duplicate penalty
-          # BOS is checked in Phase 2 with full context
-
-          # Basic volatility check
-          range_pct = Entries::RangeUtils.range_pct(bars_1m_array.last(10))
-          if range_pct < 0.1
-            reasons << 'Low volatility: 10m range < 0.1%'
-            score += 1
-          end
-        end
-
-        # Basic option chain check (IV threshold, spread)
-        expiry_list = instrument.expiry_list
-        expiry_date = expiry_list&.first
-        if expiry_date
-          option_chain_raw = instrument.fetch_option_chain(expiry_date)
-          option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
-
-          if option_chain_data
-            chain_wrapper = Entries::OptionChainWrapper.new(
-              chain_data: option_chain_data,
-              index_key: index_cfg[:key]
-            )
-
-            min_iv_threshold = index_cfg[:key].to_s.upcase.include?('BANK') ? 13 : 10
-            if chain_wrapper.atm_iv && chain_wrapper.atm_iv < min_iv_threshold
-              reasons << "IV too low (#{chain_wrapper.atm_iv.round(2)} < #{min_iv_threshold})"
-              score += 1
-            end
-
-            if chain_wrapper.spread_wide?
-              reasons << 'Wide bid-ask spread'
-              score += 1
-            end
-          end
-        end
-
-        {
-          allowed: score < 3,
-          score: score,
-          reasons: reasons,
-          option_chain_data: option_chain_data, # Return for reuse in Phase 2
-          bars_1m: bars_1m # Return for reuse in Phase 2
-        }
-      rescue StandardError => e
-        Rails.logger.error("[Signal] Quick No-Trade pre-check failed: #{e.class} - #{e.message}")
-        # On error, allow to proceed (fail open)
-        { allowed: true, score: 0, reasons: ["Pre-check error: #{e.message}"], option_chain_data: nil, bars_1m: nil }
-      end
-
-      # Phase 2: Detailed No-Trade validation (after signal generation, with full context)
-      # Reuses option chain and bars_1m from Phase 1 to avoid duplicate fetches
-      # @param index_cfg [Hash] Index configuration
-      # @param instrument [Instrument] Instrument object
-      # @param direction [Symbol] Trade direction (:bullish or :bearish)
-      # @param cached_option_chain [Hash, nil] Option chain data from Phase 1 (optional)
-      # @param cached_bars_1m [CandleSeries, nil] 1m bars from Phase 1 (optional)
-      # @return [Hash] Validation result with :allowed, :score, :reasons
-      def validate_no_trade_conditions(index_cfg:, instrument:, _direction:, cached_option_chain: nil,
-                                       cached_bars_1m: nil)
-        # Reuse bars_1m from Phase 1 if available, otherwise fetch
-        bars_1m = cached_bars_1m || instrument.candle_series(interval: '1')
-
-        # Always fetch bars_5m (needed for ADX/DI calculations)
-        bars_5m = instrument.candle_series(interval: '5')
-
-        return { allowed: true, score: 0, reasons: [] } unless bars_1m&.candles&.any? && bars_5m&.candles&.any?
-
-        # Reuse option chain from Phase 1 if available, otherwise fetch
-        option_chain_data = cached_option_chain
-        unless option_chain_data
-          expiry_list = instrument.expiry_list
-          expiry_date = expiry_list&.first
-          option_chain_raw = expiry_date ? instrument.fetch_option_chain(expiry_date) : nil
-          option_chain_data = option_chain_raw.is_a?(Hash) ? option_chain_raw : nil
-        end
-
-        # Build context with full No-Trade Engine validation
-        ctx = Entries::NoTradeContextBuilder.build(
-          index: index_cfg[:key],
-          bars_1m: bars_1m.candles,
-          bars_5m: bars_5m.candles,
-          option_chain: option_chain_data,
-          time: Time.current
-        )
-
-        # Validate with No-Trade Engine
-        result = Entries::NoTradeEngine.validate(ctx)
-
-        {
-          allowed: result.allowed,
-          score: result.score,
-          reasons: result.reasons
-        }
-      rescue StandardError => e
-        Rails.logger.error("[Signal] No-Trade Engine validation failed: #{e.class} - #{e.message}")
-        # On error, allow trade (fail open) but log the error
-        { allowed: true, score: 0, reasons: ["Validation error: #{e.message}"] }
       end
     end
   end
