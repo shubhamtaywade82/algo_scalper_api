@@ -692,7 +692,8 @@ module Signal
 
       # Build clear entry path identifier for tracking
       # Format: "strategy_timeframe_confirmation" e.g., "recommended_5m_none" or "supertrend_adx_1m_5m"
-      def build_entry_path_identifier(strategy_recommendation:, use_strategy_recommendations:, primary_tf:, effective_timeframe:, confirmation_tf:, enable_confirmation:)
+      def build_entry_path_identifier(strategy_recommendation:, use_strategy_recommendations:, primary_tf:, 
+effective_timeframe:, confirmation_tf:, enable_confirmation:)
         strategy_part = if use_strategy_recommendations && strategy_recommendation&.dig(:recommended)
                           strategy_recommendation[:strategy_name].downcase.gsub(/\s+/, '_')
                         else
