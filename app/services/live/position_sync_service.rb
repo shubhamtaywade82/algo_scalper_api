@@ -280,7 +280,11 @@ module Live
       exit_price = BigDecimal(ltp.to_s)
       entry = BigDecimal(tracker.entry_price.to_s)
       qty = tracker.quantity.to_i
-      pnl = (exit_price - entry) * qty
+      gross_pnl = (exit_price - entry) * qty
+
+      # Deduct broker fees (₹20 per order, ₹40 per trade - position is being exited)
+      pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: true)
+
       # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
       pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
 
