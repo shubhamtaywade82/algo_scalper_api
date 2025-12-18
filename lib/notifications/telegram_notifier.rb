@@ -112,6 +112,20 @@ module Notifications
       Rails.logger.error("[TelegramNotifier] Failed to send test message: #{e.class} - #{e.message}")
     end
 
+    # Send trading statistics notification (daily stats only)
+    # @param stats [Hash, nil] Trading stats hash (from PositionTracker.paper_trading_stats_with_pct)
+    #                         If nil, will fetch today's stats
+    def notify_trading_stats(stats: nil)
+      return unless enabled?
+
+      # Default to today's stats only
+      stats ||= PositionTracker.paper_trading_stats_with_pct(date: Time.zone.today)
+      message = format_trading_stats(stats)
+      send_message(message)
+    rescue StandardError => e
+      Rails.logger.error("[TelegramNotifier] Failed to send trading stats: #{e.class} - #{e.message}")
+    end
+
     private
 
     def send_message(text)
@@ -203,6 +217,14 @@ module Notifications
       message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
 
+      # Append trading stats if enabled in config (daily stats only)
+      config = AlgoConfig.fetch[:telegram] || {}
+      if config[:include_stats_on_exit] == true
+        message += "\n\n"
+        # Get today's stats only
+        message += format_trading_stats(PositionTracker.paper_trading_stats_with_pct(date: Time.zone.today))
+      end
+
       message
     end
 
@@ -266,6 +288,31 @@ module Notifications
               end
 
       "#{emoji} <b>Risk Alert</b>\n\n#{message}\n\n⏰ #{Time.current.strftime('%H:%M:%S')}"
+    end
+
+    def format_trading_stats(stats)
+      total_pnl_emoji = stats[:total_pnl_rupees] >= 0 ? '📈' : '📉'
+      realized_pnl_emoji = stats[:realized_pnl_rupees] >= 0 ? '✅' : '❌'
+
+      message = "📊 <b>Daily Trading Statistics</b>\n"
+      message += "📅 <b>Date:</b> #{Time.zone.today.strftime('%Y-%m-%d')}\n\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      message += "<b>📈 Total PnL:</b> ₹#{stats[:total_pnl_rupees].round(2)} (#{stats[:total_pnl_pct].round(2)}%)\n"
+      message += "<b>#{realized_pnl_emoji} Realized PnL:</b> ₹#{stats[:realized_pnl_rupees].round(2)} (#{stats[:realized_pnl_pct].round(2)}%)\n"
+      message += "<b>⏳ Unrealized PnL:</b> ₹#{stats[:unrealized_pnl_rupees].round(2)} (#{stats[:unrealized_pnl_pct].round(2)}%)\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      message += "<b>📊 Total Trades:</b> #{stats[:total_trades]}\n"
+      message += "<b>🟢 Winners:</b> #{stats[:winners]}\n"
+      message += "<b>🔴 Losers:</b> #{stats[:losers]}\n"
+      message += "<b>📈 Win Rate:</b> #{stats[:win_rate].round(2)}%\n"
+      message += "<b>🔄 Active Positions:</b> #{stats[:active_positions]}\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      message += "<b>📊 Avg Realized PnL %:</b> #{stats[:avg_realized_pnl_pct].round(2)}%\n"
+      message += "<b>📊 Avg Unrealized PnL %:</b> #{stats[:avg_unrealized_pnl_pct].round(2)}%\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      message += "⏰ <b>Updated:</b> #{Time.current.strftime('%Y-%m-%d %H:%M:%S')}"
+
+      message
     end
   end
 end

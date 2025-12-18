@@ -83,8 +83,18 @@ class PositionTracker < ApplicationRecord
       where(segment: seg, security_id: sid, status: :exited).order(id: :desc).first
     end
 
-    def paper_trading_stats_with_pct
-      exited = exited_paper
+    def paper_trading_stats_with_pct(date: nil)
+      # Filter by date if provided, otherwise use all exited positions
+      if date
+        date_start = date.beginning_of_day
+        date_end = date.end_of_day
+        exited = exited_paper.where(exited_at: date_start..date_end)
+      else
+        # Default: only today's exited positions
+        today_start = Time.zone.today.beginning_of_day
+        today_end = Time.zone.today.end_of_day
+        exited = exited_paper.where(exited_at: today_start..today_end)
+      end
       active = paper.active
 
       active_count = active.count
@@ -127,7 +137,7 @@ class PositionTracker < ApplicationRecord
         realized_pnl_pct: realized_pnl_pct.round(2),
         unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
         unrealized_pnl_pct: unrealized_pnl_pct.round(2),
-        win_rate: paper_win_rate,
+        win_rate: paper_win_rate(date: date),
         avg_realized_pnl_pct: avg_realized_pnl_pct,
         avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
@@ -190,8 +200,18 @@ class PositionTracker < ApplicationRecord
       paper.active.count
     end
 
-    def paper_win_rate
-      exited = exited_paper
+    def paper_win_rate(date: nil)
+      # Filter by date if provided, otherwise use today's exited positions
+      if date
+        date_start = date.beginning_of_day
+        date_end = date.end_of_day
+        exited = exited_paper.where(exited_at: date_start..date_end)
+      else
+        # Default: only today's exited positions
+        today_start = Time.zone.today.beginning_of_day
+        today_end = Time.zone.today.end_of_day
+        exited = exited_paper.where(exited_at: today_start..today_end)
+      end
       return 0.0 if exited.empty?
 
       winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }

@@ -513,3 +513,5 @@ telegram:
   notify_pnl_milestones: true # Send notifications for PnL milestones (10%, 20%, etc.)
   pnl_milestones: [10, 20, 30, 50, 100] # PnL percentage milestones to notify
   notify_risk_alerts: true # Send risk alert notifications
+  include_stats_on_exit: true # Include trading stats summary in exit notifications
+  notify_stats_at_market_close: true # Send daily trading stats at end of market session (3:30 PM IST)
