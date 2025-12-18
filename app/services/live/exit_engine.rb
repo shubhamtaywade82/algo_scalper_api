@@ -66,6 +66,10 @@ module Live
               exit_price: exit_price,
               exit_reason: reason
             )
+
+            # Record exit in BalanceManager (adds realized P&L back to balance)
+            record_exit_balance(tracker)
+
             Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
 
             # Send Telegram notification
@@ -149,6 +153,14 @@ module Live
       enabled && Notifications::TelegramNotifier.instance.enabled?
     rescue StandardError
       false
+    end
+
+    # Record exit in BalanceManager
+    # @param tracker [PositionTracker] Position tracker
+    def record_exit_balance(tracker)
+      Capital::BalanceManager.instance.record_exit(tracker: tracker)
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] Failed to record exit balance: #{e.class} - #{e.message}")
     end
   end
 end

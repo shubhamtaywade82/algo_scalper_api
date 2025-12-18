@@ -239,6 +239,9 @@ module Live
         if exit_successful
           tracker.mark_exited!(exit_price: exit_price, exit_reason: reason)
 
+          # Record exit in BalanceManager (adds realized P&L back to balance)
+          Capital::BalanceManager.instance.record_exit(tracker: tracker)
+
           # NEW: Record loss in DailyLimits if position exited with loss
           record_loss_if_applicable(tracker, exit_price)
 
