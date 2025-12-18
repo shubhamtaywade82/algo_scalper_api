@@ -18,25 +18,29 @@
 
 ## Recommended Improvements
 
-### 1. **Add Volume Confirmation** (HIGH PRIORITY)
+### 1. **Add Price-Based Volume Proxies** (MEDIUM PRIORITY)
 
-**Why**: Volume confirms trend strength. Scalping without volume is risky.
+**Why**: Indices don't have volume data, but we can use price movement intensity as a proxy.
 
 **Implementation**:
 ```ruby
-# Add Volume Weighted Average Price (VWAP)
-# Add Volume Rate of Change (VROC)
-# Add Volume Profile analysis
+# Add Tick Volume (number of price changes per minute)
+# Add Price Movement Intensity (ATR-based)
+# Add Momentum Acceleration (rate of price change)
 
 # Entry Rules:
-- Supertrend bullish + ADX > 20 + Volume > 1.5x average = Strong signal
-- Supertrend bullish + ADX > 20 + Volume < 0.8x average = Weak signal (skip)
+- Supertrend bullish + ADX > 20 + High tick activity = Strong signal
+- Supertrend bullish + ADX > 20 + Low tick activity = Weak signal (skip)
+- Use ATR expansion as volume proxy (expanding ATR = increasing activity)
 ```
 
 **Benefits**:
+- Works without volume data
 - Filters false breakouts
 - Confirms trend strength
 - Reduces whipsaws
+
+**Alternative**: Use futures/options volume if available (NIFTY futures volume as proxy)
 
 ---
 
@@ -200,9 +204,9 @@
 ## Recommended Implementation Priority
 
 ### Phase 1 (Immediate Impact)
-1. ✅ **Volume Confirmation** - Add VWAP and volume filters
-2. ✅ **Price Action Patterns** - Add structure breaks (BOS/CHoCH)
-3. ✅ **Entry Timing** - Add pullback entry logic
+1. ✅ **Price Action Patterns** - Add structure breaks (BOS/CHoCH) - HIGHEST PRIORITY
+2. ✅ **Entry Timing** - Add pullback entry logic - HIGHEST PRIORITY
+3. ✅ **Momentum Indicators** - Add RSI to avoid overbought/oversold entries
 
 ### Phase 2 (Medium Term)
 4. ✅ **Momentum Indicators** - Add RSI and MACD
@@ -228,14 +232,13 @@
 ```
 1m Supertrend → Bullish
 1m ADX → > 20
-1m Volume → > 1.5x average ✅
-1m Structure → BOS bullish ✅
+1m Structure → BOS bullish ✅ (NEW - price action confirmation)
 5m Supertrend → Bullish ✅
 15m Supertrend → Bullish ✅
-RSI → 45 (not overbought) ✅
-ATR → 0.4% (good volatility) ✅
-Spread → 0.08% (tight) ✅
-→ Wait for pullback to 38.2% Fib
+RSI → 45 (not overbought) ✅ (NEW - momentum filter)
+ATR → 0.4% (good volatility) ✅ (NEW - volatility filter)
+Tick Activity → High (price movement intensity) ✅ (NEW - volume proxy)
+→ Wait for pullback to 38.2% Fib ✅ (NEW - better entry timing)
 → ENTER on bounce
 ```
 
@@ -248,34 +251,51 @@ Spread → 0.08% (tight) ✅
 module Signal
   class ScalpingEnhancer
     def enhance_signal(base_signal:, instrument:, series:)
-      # Add volume confirmation
-      volume_score = check_volume(series)
-      
-      # Add price action
+      # Add price action (structure breaks, candlestick patterns)
       structure_score = check_structure(series)
       
-      # Add momentum
+      # Add momentum (RSI, MACD)
       momentum_score = check_momentum(series)
       
-      # Add volatility
+      # Add volatility (ATR-based filters)
       volatility_score = check_volatility(series)
+      
+      # Add price movement intensity (volume proxy - tick activity)
+      activity_score = check_price_activity(series)
       
       # Calculate final score
       final_score = base_signal[:confidence] + 
-                    volume_score + 
                     structure_score + 
                     momentum_score + 
-                    volatility_score
+                    volatility_score +
+                    activity_score
       
       {
         enhanced: true,
         original_signal: base_signal,
         confidence: final_score,
-        volume_confirmed: volume_score > 0,
         structure_confirmed: structure_score > 0,
         momentum_confirmed: momentum_score > 0,
-        volatility_ok: volatility_score > 0
+        volatility_ok: volatility_score > 0,
+        activity_high: activity_score > 0
       }
+    end
+    
+    private
+    
+    # Check price movement intensity (volume proxy)
+    def check_price_activity(series)
+      # Count number of candles with significant movement
+      # High activity = many candles with > 0.2% range
+      recent_candles = series.candles.last(10)
+      active_candles = recent_candles.count do |c|
+        range_pct = ((c.high - c.low) / c.close) * 100
+        range_pct > 0.2
+      end
+      
+      # High activity = 7+ candles with significant movement
+      activity_score = active_candles >= 7 ? 15 : 0
+      activity_score
     end
   end
 end
@@ -347,9 +367,10 @@ signals:
     enabled: true
     min_confidence: 70  # 0-100 scale
     
-    volume:
+    price_activity:
       enabled: true
-      min_multiplier: 1.5  # Volume must be 1.5x average
+      min_active_candles: 7  # Out of last 10 candles, 7+ must have > 0.2% range
+      min_range_pct: 0.2  # Minimum candle range to count as "active"
     
     price_action:
       enabled: true
