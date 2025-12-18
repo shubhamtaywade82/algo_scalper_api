@@ -12,6 +12,7 @@ Rails 8 API backend for **autonomous algorithmic trading** powered by the DhanHQ
 - **🎯 Smart Strike Selection**: ATM-focused option chain analysis with liquidity scoring
 - **💰 Capital Management**: Dynamic allocation based on account size and risk parameters
 - **🔄 Background Processing**: Solid Queue integration for reliable job processing
+- **🤖 AI Integration**: OpenAI-powered trading analysis and strategy suggestions (optional)
 
 ---
 
