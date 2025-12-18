@@ -15,9 +15,7 @@ module Notifications
       @pnl_notification_interval = 300 # 5 minutes between PnL updates per position
     end
 
-    def enabled?
-      ::TelegramNotifier.enabled?
-    end
+    delegate :enabled?, to: :'::TelegramNotifier'
 
     # Send entry notification
     # @param tracker [PositionTracker] Position tracker
@@ -56,9 +54,7 @@ module Notifications
       # Throttle PnL updates per position
       unless force
         last_notification = @last_pnl_notification[tracker.id]
-        if last_notification && (Time.current - last_notification) < @pnl_notification_interval
-          return
-        end
+        return if last_notification && (Time.current - last_notification) < @pnl_notification_interval
       end
 
       message = format_pnl_message(tracker, pnl, pnl_pct)
@@ -144,9 +140,7 @@ module Notifications
       message += "📦 <b>Quantity:</b> #{quantity}\n"
       message += "🎯 <b>Direction:</b> #{direction_text}\n"
 
-      if risk_pct
-        message += "⚖️ <b>Risk:</b> #{(risk_pct * 100).round(2)}%\n"
-      end
+      message += "⚖️ <b>Risk:</b> #{(risk_pct * 100).round(2)}%\n" if risk_pct
 
       if sl_price && tp_price
         message += "🛑 <b>SL:</b> ₹#{sl_price.round(2)}\n"
@@ -165,7 +159,22 @@ module Notifications
       exit_price_value = exit_price&.to_f || tracker.exit_price&.to_f || 0.0
       quantity = tracker.quantity || 0
       pnl_value = pnl&.to_f || tracker.last_pnl_rupees&.to_f || 0.0
-      pnl_pct = tracker.last_pnl_pct&.to_f || 0.0
+
+      # Calculate PnL percentage from PnL value (includes broker fees) for consistency with exit reason
+      # Exit reason shows PnL percentage (after fees), not price change percentage
+      # Formula: PnL percentage = (PnL / (entry_price * quantity)) * 100
+      pnl_pct = if pnl_value.present? && entry_price.positive? && quantity.positive?
+                  # Calculate PnL percentage (includes fees) - matches exit reason format
+                  (pnl_value / (entry_price * quantity)) * 100.0
+                elsif tracker.last_pnl_pct.present?
+                  # Fallback: use price change percentage from DB (convert decimal to percentage)
+                  (tracker.last_pnl_pct.to_f * 100.0)
+                elsif entry_price.positive? && exit_price_value.positive?
+                  # Last fallback: calculate price change percentage
+                  ((exit_price_value - entry_price) / entry_price) * 100.0
+                else
+                  0.0
+                end
 
       # Determine emoji based on PnL
       emoji = if pnl_value.positive?
@@ -183,11 +192,11 @@ module Notifications
       message += "📦 <b>Quantity:</b> #{quantity}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
 
-      if pnl_pct != 0.0
+      if pnl_pct == 0.0
+        message += "\n"
+      else
         pnl_pct_emoji = pnl_pct.positive? ? '📈' : '📉'
         message += " (#{pnl_pct_emoji} #{pnl_pct.round(2)}%)\n"
-      else
-        message += "\n"
       end
 
       message += "📝 <b>Reason:</b> #{exit_reason}\n"
@@ -205,7 +214,11 @@ module Notifications
       pnl_value = pnl.to_f
       pnl_pct_value = pnl_pct&.to_f || 0.0
 
-      emoji = pnl_value.positive? ? '📈' : pnl_value.negative? ? '📉' : '➡️'
+      emoji = if pnl_value.positive?
+                '📈'
+              else
+                pnl_value.negative? ? '📉' : '➡️'
+              end
 
       message = "#{emoji} <b>PnL Update</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
@@ -213,11 +226,11 @@ module Notifications
       message += "💵 <b>Current:</b> ₹#{current_price.round(2)}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
 
-      if pnl_pct_value != 0.0
-        message += " (#{pnl_pct_value.positive? ? '+' : ''}#{pnl_pct_value.round(2)}%)\n"
-      else
-        message += "\n"
-      end
+      message += if pnl_pct_value == 0.0
+                   "\n"
+                 else
+                   " (#{'+' if pnl_pct_value.positive?}#{pnl_pct_value.round(2)}%)\n"
+                 end
 
       message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
@@ -235,7 +248,7 @@ module Notifications
       message = "#{emoji} <b>Milestone Reached</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
       message += "🏆 <b>Milestone:</b> #{milestone}\n"
-      message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)} (#{pnl_pct_value.positive? ? '+' : ''}#{pnl_pct_value.round(2)}%)\n"
+      message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)} (#{'+' if pnl_pct_value.positive?}#{pnl_pct_value.round(2)}%)\n"
       message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
 

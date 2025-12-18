@@ -93,7 +93,8 @@ module Positions
         return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
 
         self.pnl = (current_ltp - entry_price) * quantity
-        self.pnl_pct = ((current_ltp - entry_price) / entry_price * 100.0).round(4)
+        # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
+        self.pnl_pct = entry_price.positive? ? ((current_ltp - entry_price) / entry_price) : 0.0
 
         # Update HWM
         self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark

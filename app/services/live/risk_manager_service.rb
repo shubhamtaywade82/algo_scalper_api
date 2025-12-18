@@ -131,7 +131,43 @@ module Live
 
         if exit_successful
           tracker.mark_exited!(exit_price: exit_price, exit_reason: reason)
+
+          # Reload tracker to get final PnL values after mark_exited!
+          tracker.reload
+
+          # Update exit reason with final PnL percentage for consistency
+          # Calculate PnL percentage from final PnL value (includes broker fees)
+          # This matches what Telegram notifier will display
+          final_pnl = tracker.last_pnl_rupees
+          entry_price = tracker.entry_price
+          quantity = tracker.quantity
+
+          if final_pnl.present? && entry_price.present? && quantity.present? &&
+             entry_price.to_f.positive? && quantity.to_i.positive? && reason.present? && reason.include?('%')
+            # Calculate PnL percentage (includes fees) - matches Telegram display
+            pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
+            # Extract the base reason (e.g., "SL HIT" or "TP HIT") - everything before the percentage
+            base_reason = reason.split(/\s+-?\d+\.?\d*%/).first&.strip || reason.split('%').first&.strip || reason
+            updated_reason = "#{base_reason} #{pnl_pct_display}%"
+
+            # Always update to ensure consistency (even if values are close)
+            if reason != updated_reason
+              Rails.logger.info("[RiskManager] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
+              # exit_reason is a store_accessor on meta, so update via meta hash
+              meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+              meta['exit_reason'] = updated_reason
+              tracker.update_column(:meta, meta)
+            end
+          else
+            Rails.logger.warn("[RiskManager] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
+          end
+
           Rails.logger.info("[RiskManager] Successfully exited #{tracker.order_no} (#{tracker.id}) via internal executor")
+
+          # Send Telegram notification
+          final_reason = updated_reason || reason
+          notify_telegram_exit(tracker, final_reason, exit_price)
+
           true
         else
           Rails.logger.error("[RiskManager] Failed to exit #{tracker.order_no} via internal executor")
@@ -385,8 +421,10 @@ module Live
         end
 
         # Fallback to static SL if dynamic reverse_loss is disabled or not applicable
+        # pnl_pct from Redis is a decimal (0.0193 = 1.93%), so multiply by 100 for display
         if pnl_pct <= -sl_pct
-          reason = "SL HIT #{(pnl_pct * 100).round(2)}%"
+          pnl_pct_display = (pnl_pct * 100).round(2)
+          reason = "SL HIT #{pnl_pct_display}%"
           exit_path = 'stop_loss_static_downward'
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
           track_exit_path(tracker, exit_path, reason)
@@ -395,8 +433,10 @@ module Live
         end
 
         # Take Profit check
+        # pnl_pct from Redis is a decimal (0.0573 = 5.73%), so multiply by 100 for display
         if pnl_pct >= tp_pct
-          reason = "TP HIT #{(pnl_pct * 100).round(2)}%"
+          pnl_pct_display = (pnl_pct * 100).round(2)
+          reason = "TP HIT #{pnl_pct_display}%"
           exit_path = 'take_profit'
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
           track_exit_path(tracker, exit_path, reason)
@@ -543,7 +583,7 @@ module Live
 
         tracker.update!(
           last_pnl_rupees: pnl,
-          last_pnl_pct: pnl_pct ? (pnl_pct * 100).round(2) : nil,
+          last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
           high_water_mark_pnl: hwm
         )
 
@@ -758,14 +798,15 @@ module Live
 
         # Deduct broker fees (₹20 per order, ₹40 per trade - position is being exited)
         pnl = gross_pnl ? BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: true) : nil
-        pnl_pct = entry ? ((exit_price - entry) / entry) * 100 : nil
+        # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent DB storage (matches Redis format)
+        pnl_pct = entry ? ((exit_price - entry) / entry) : nil
 
         hwm = tracker.high_water_mark_pnl || BigDecimal(0)
         hwm = [hwm, pnl].max if pnl
 
         tracker.update!(
           last_pnl_rupees: pnl,
-          last_pnl_pct: pnl_pct,
+          last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
           high_water_mark_pnl: hwm,
           avg_price: exit_price
         )
@@ -818,6 +859,37 @@ module Live
       tracker.update!(meta: metadata.merge('exit_reason' => reason, 'exit_triggered_at' => Time.current))
     rescue StandardError => e
       Rails.logger.warn("[RiskManager] store_exit_reason failed for #{tracker.order_no}: #{e.class} - #{e.message}")
+    end
+
+    # Send Telegram exit notification
+    # @param tracker [PositionTracker] Position tracker
+    # @param reason [String] Exit reason
+    # @param exit_price [BigDecimal, Float, nil] Exit price
+    def notify_telegram_exit(tracker, reason, exit_price)
+      return unless telegram_enabled?
+
+      # Reload tracker to get final PnL
+      tracker.reload if tracker.respond_to?(:reload)
+      pnl = tracker.last_pnl_rupees
+
+      Notifications::TelegramNotifier.instance.notify_exit(
+        tracker,
+        exit_reason: reason,
+        exit_price: exit_price,
+        pnl: pnl
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Telegram notification failed: #{e.class} - #{e.message}")
+    end
+
+    # Check if Telegram notifications are enabled
+    # @return [Boolean]
+    def telegram_enabled?
+      config = AlgoConfig.fetch[:telegram] || {}
+      enabled = config[:enabled] != false && config[:notify_exit] != false
+      enabled && Notifications::TelegramNotifier.instance.enabled?
+    rescue StandardError
+      false
     end
 
     def parse_time_hhmm(value)
@@ -1097,6 +1169,37 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.error("[RiskManager] Failed to track exit path for #{tracker.order_no}: #{e.message}")
+    end
+
+    # Send Telegram exit notification
+    # @param tracker [PositionTracker] Position tracker
+    # @param reason [String] Exit reason
+    # @param exit_price [BigDecimal, Float, nil] Exit price
+    def notify_telegram_exit(tracker, reason, exit_price)
+      return unless telegram_enabled?
+
+      # Reload tracker to get final PnL
+      tracker.reload if tracker.respond_to?(:reload)
+      pnl = tracker.last_pnl_rupees
+
+      Notifications::TelegramNotifier.instance.notify_exit(
+        tracker,
+        exit_reason: reason,
+        exit_price: exit_price,
+        pnl: pnl
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Telegram notification failed: #{e.class} - #{e.message}")
+    end
+
+    # Check if Telegram notifications are enabled
+    # @return [Boolean]
+    def telegram_enabled?
+      config = AlgoConfig.fetch[:telegram] || {}
+      enabled = config[:enabled] != false && config[:notify_exit] != false
+      enabled && Notifications::TelegramNotifier.instance.enabled?
+    rescue StandardError
+      false
     end
   end
 end

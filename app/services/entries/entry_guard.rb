@@ -234,14 +234,15 @@ module Entries
           entry = BigDecimal(tracker.entry_price.to_s)
           qty = tracker.quantity.to_i
           pnl = (ltp - entry) * qty
-          pnl_pct = entry.positive? ? ((ltp - entry) / entry * 100).round(2) : nil
+          # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
+          pnl_pct = entry.positive? ? ((ltp - entry) / entry) : nil
 
           hwm = tracker.high_water_mark_pnl || BigDecimal(0)
           hwm = [hwm, pnl].max
 
           tracker.update!(
             last_pnl_rupees: pnl,
-            last_pnl_pct: pnl_pct,
+            last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
             high_water_mark_pnl: hwm
           )
           Rails.logger.debug { "[EntryGuard] Calculated PnL from tick data for #{tracker.order_no}: PnL=₹#{pnl.round(2)}" }

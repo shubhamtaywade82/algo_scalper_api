@@ -101,16 +101,18 @@ class PositionTracker < ApplicationRecord
       total_pnl_pct = initial_capital.positive? ? (total_pnl_rupees / initial_capital * 100.0) : 0.0
 
       # Calculate average per-trade percentages (for reference)
+      # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
       avg_realized_pnl_pct = if exited.any?
                                (exited.map do |t|
-                                 t.last_pnl_pct.to_f
+                                 (t.last_pnl_pct.to_f || 0.0) * 100.0
                                end.compact.sum / exited.count.to_f).round(2)
                              else
                                0.0
                              end
+      # current_pnl_pct returns decimal from Redis, convert to percentage for display
       avg_unrealized_pnl_pct = if active.any?
                                  (active.map do |t|
-                                   (t.current_pnl_pct || 0).to_f
+                                   (t.current_pnl_pct || 0).to_f * 100.0
                                  end.compact.sum / active.count.to_f).round(2)
                                else
                                  0.0
@@ -141,8 +143,9 @@ class PositionTracker < ApplicationRecord
         side = t.side
         qty = t.quantity.to_i
         pnl_abs = t.last_pnl_rupees.to_f
+        # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
         pnl_pct = if t.last_pnl_pct.present?
-                    t.last_pnl_pct.to_f
+                    t.last_pnl_pct.to_f * 100.0
                   elsif entry_price.positive? && current_price.positive?
                     if side == 'BUY'
                       ((current_price - entry_price) / entry_price * 100.0)
