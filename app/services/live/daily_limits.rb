@@ -78,6 +78,18 @@ module Live
         }
       end
 
+      # Check daily profit target (stop trading when target reached)
+      global_daily_profit = get_global_daily_profit
+      max_daily_profit = risk_config[:max_daily_profit] || risk_config[:daily_profit_target]
+      if max_daily_profit&.to_f&.positive? && global_daily_profit >= max_daily_profit.to_f
+        return {
+          allowed: false,
+          reason: 'daily_profit_target_reached',
+          global_daily_profit: global_daily_profit,
+          max_daily_profit: max_daily_profit.to_f
+        }
+      end
+
       { allowed: true, reason: nil }
     rescue StandardError => e
       Rails.logger.error("[DailyLimits] can_trade? error: #{e.class} - #{e.message}")
@@ -112,6 +124,48 @@ module Live
       true
     rescue StandardError => e
       Rails.logger.error("[DailyLimits] record_loss error: #{e.class} - #{e.message}")
+      false
+    end
+
+    # Record a profit for the given index
+    # @param index_key [Symbol, String] Index key
+    # @param amount [Float, BigDecimal] Profit amount in rupees (positive value)
+    # @return [Boolean] True if recorded successfully
+    def record_profit(index_key:, amount:)
+      return false unless @redis && amount&.positive?
+
+      index_key = normalize_index_key(index_key)
+      amount = amount.to_f
+
+      # Increment per-index profit counter
+      profit_key = daily_profit_key(index_key)
+      @redis.incrbyfloat(profit_key, amount)
+      @redis.expire(profit_key, TTL_SECONDS)
+
+      # Increment global profit counter
+      global_profit_key = global_daily_profit_key
+      @redis.incrbyfloat(global_profit_key, amount)
+      @redis.expire(global_profit_key, TTL_SECONDS)
+
+      global_profit = get_global_daily_profit
+      Rails.logger.info(
+        "[DailyLimits] Recorded profit for #{index_key}: ₹#{amount.round(2)} " \
+        "(daily: ₹#{get_daily_profit(index_key).round(2)}, global: ₹#{global_profit.round(2)})"
+      )
+
+      # Check if daily profit target reached and log warning
+      risk_config = load_risk_config
+      max_daily_profit = risk_config[:max_daily_profit] || risk_config[:daily_profit_target]
+      if max_daily_profit && global_profit >= max_daily_profit.to_f
+        Rails.logger.warn(
+          '[DailyLimits] ⚠️ DAILY PROFIT TARGET REACHED: ' \
+          "₹#{global_profit.round(2)} >= ₹#{max_daily_profit.to_f} - Trading will be stopped for the day"
+        )
+      end
+
+      true
+    rescue StandardError => e
+      Rails.logger.error("[DailyLimits] record_profit error: #{e.class} - #{e.message}")
       false
     end
 
@@ -218,6 +272,33 @@ module Live
       0
     end
 
+    # Get daily profit for index
+    # @param index_key [Symbol, String] Index key
+    # @return [Float] Daily profit amount
+    def get_daily_profit(index_key)
+      return 0.0 unless @redis
+
+      key = daily_profit_key(normalize_index_key(index_key))
+      value = @redis.get(key)
+      (value || 0).to_f
+    rescue StandardError => e
+      Rails.logger.error("[DailyLimits] get_daily_profit error: #{e.class} - #{e.message}")
+      0.0
+    end
+
+    # Get global daily profit
+    # @return [Float] Global daily profit amount
+    def get_global_daily_profit
+      return 0.0 unless @redis
+
+      key = global_daily_profit_key
+      value = @redis.get(key)
+      (value || 0).to_f
+    rescue StandardError => e
+      Rails.logger.error("[DailyLimits] get_global_daily_profit error: #{e.class} - #{e.message}")
+      0.0
+    end
+
     private
 
     # Normalize index key to string
@@ -251,6 +332,16 @@ module Live
     # Redis key for global daily trades
     def global_daily_trades_key
       "#{REDIS_KEY_PREFIX}:trades:#{Time.zone.today}:global"
+    end
+
+    # Redis key for daily profit (per-index)
+    def daily_profit_key(index_key)
+      "#{REDIS_KEY_PREFIX}:profit:#{Time.zone.today}:#{index_key}"
+    end
+
+    # Redis key for global daily profit
+    def global_daily_profit_key
+      "#{REDIS_KEY_PREFIX}:profit:#{Time.zone.today}:global"
     end
   end
   # rubocop:enable Metrics/ClassLength, Naming/PredicateMethod, Naming/AccessorMethodName

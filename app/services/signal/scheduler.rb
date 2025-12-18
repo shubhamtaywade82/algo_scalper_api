@@ -370,8 +370,20 @@ module Signal
         { index_cfg: idx_cfg, days_to_expiry: 999, expiry_date: nil }
       end
 
+      # Filter out indices with expiry > max_expiry_days (default: 7 days)
+      max_expiry_days = get_max_expiry_days
+      filtered = indexed_with_expiry.reject do |item|
+        next false if item[:days_to_expiry] <= max_expiry_days
+
+        Rails.logger.info(
+          "[SignalScheduler] Skipping #{item[:index_cfg][:key]} - expiry in #{item[:days_to_expiry]} days " \
+          "(> #{max_expiry_days} days limit)"
+        )
+        true
+      end
+
       # Sort by days_to_expiry (ascending - closer expiry first)
-      sorted = indexed_with_expiry.sort_by { |item| item[:days_to_expiry] }
+      sorted = filtered.sort_by { |item| item[:days_to_expiry] }
 
       # Log the ordering for debugging
       if sorted.size > 1
@@ -392,6 +404,16 @@ module Signal
       }
 
       sorted_indices
+    end
+
+    # Get maximum expiry days from config (default: 7 days)
+    # Indices with expiry > this limit will be skipped
+    def get_max_expiry_days
+      config = AlgoConfig.fetch[:signals] || {}
+      max_days = config[:max_expiry_days] || 7
+      max_days.to_i
+    rescue StandardError
+      7 # Default to 7 days if config unavailable
     end
   end
   # rubocop:enable Metrics/ClassLength

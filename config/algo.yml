@@ -160,6 +160,15 @@ trade_limits:
   global_max_trades_per_day: 8
 
 # ============================================
+# BROKER FEES
+# ============================================
+# Broker fee configuration (₹20 per order execution, ₹40 per trade)
+broker_fees:
+  enabled: true # Set to false to disable fee calculations
+  fee_per_order: 20 # Fee per order execution (entry or exit)
+  # Total fee per trade = fee_per_order * 2 (entry + exit) = ₹40
+
+# ============================================
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
@@ -340,12 +349,20 @@ position_sizing:
       SENSEX: 0.01 # 1% max loss for SENSEX
     global_limit_pct: 0.04
 
+  # Daily profit target: Stop trading when daily profit reaches this amount
+  max_daily_profit: 20000 # ₹20,000 daily profit target (trading stops when reached)
+  # Alternative config key: daily_profit_target (also supported)
+
 # ============================================
 # SIGNAL SETTINGS
 # ============================================
 signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
+
+  # Expiry date filtering: Skip indices with expiry > max_expiry_days
+  # This prevents trading in indices where expiry is too far away (e.g., monthly BANKNIFTY when > 7 days)
+  max_expiry_days: 7 # Maximum days to expiry (indices with expiry > this will be skipped)
 
   # NoTradeEngine Configuration
   # Set to false to disable both Phase 1 (pre-check) and Phase 2 (detailed validation)
@@ -356,8 +373,8 @@ signals:
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
-  enable_adx_filter: false # Enable ADX strength filter (default: false)
-  enable_confirmation_timeframe: true # Enable 5m HTF confirmation (default: false)
+  enable_adx_filter: true # Enable ADX strength filter (default: false)
+  enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
 
   # Optimized Parameters Configuration
   # Set to false to disable loading optimized indicator parameters from BestIndicatorParam

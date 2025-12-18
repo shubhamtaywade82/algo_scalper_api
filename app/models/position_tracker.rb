@@ -38,7 +38,8 @@ class PositionTracker < ApplicationRecord
   include PositionTrackerFactory
 
   # Attribute accessors
-  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy, :exit_path, :exit_reason
+  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
+                 :exit_path, :exit_reason
 
   # Enums
   enum :status, {
@@ -307,6 +308,10 @@ class PositionTracker < ApplicationRecord
     metadata = prepare_exit_metadata(exit_reason)
 
     update_exit_attributes(exit_price, exited_at, metadata)
+
+    # Record profit/loss in daily limits (after PnL is persisted)
+    record_daily_pnl
+
     cleanup_exit_caches
     unsubscribe
     register_cooldown!
@@ -659,5 +664,25 @@ class PositionTracker < ApplicationRecord
       "is not tradable. Segment '#{segment}' is an index segment and cannot be traded. " \
       "Valid tradable segments: #{Orders::Placer::VALID_TRADABLE_SEGMENTS.join(', ')}"
     )
+  end
+
+  # Record profit/loss in daily limits when position exits
+  def record_daily_pnl
+    return unless exited? && last_pnl_rupees.present?
+
+    index_key = meta&.dig('index_key') || instrument&.symbol_name || 'UNKNOWN'
+    pnl_amount = last_pnl_rupees.to_f
+
+    daily_limits = Live::DailyLimits.new
+
+    if pnl_amount.positive?
+      # Record profit
+      daily_limits.record_profit(index_key: index_key, amount: pnl_amount)
+    elsif pnl_amount.negative?
+      # Record loss (amount should be positive)
+      daily_limits.record_loss(index_key: index_key, amount: pnl_amount.abs)
+    end
+  rescue StandardError => e
+    Rails.logger.error("[PositionTracker] record_daily_pnl failed for #{order_no}: #{e.class} - #{e.message}")
   end
 end

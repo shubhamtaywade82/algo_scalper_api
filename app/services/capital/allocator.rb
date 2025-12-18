@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'bigdecimal'
+require_relative '../concerns/broker_fee_calculator'
 
 module Capital
   class Allocator
@@ -281,6 +282,11 @@ module Capital
         risk_rupees = BigDecimal((sizing_cfg[:risk_rupees] || 1000).to_s)
         index_key = @index_key || 'UNKNOWN'
 
+        # Deduct broker fees from risk capital (₹40 per trade: entry + exit)
+        # This ensures net risk after fees matches the target risk
+        broker_fees = BrokerFeeCalculator.fee_per_trade
+        net_risk_rupees = risk_rupees - broker_fees
+
         # Get index-specific stop distance or fallback to global
         index_stop_distances = sizing_cfg[:index_stop_distances] || {}
         stop_distance_rupees = if index_stop_distances[index_key.to_sym] || index_stop_distances[index_key.to_s]
@@ -291,12 +297,13 @@ module Capital
         lot_size = derivative_lot_size.to_i
 
         return 0 if stop_distance_rupees.zero? || lot_size.zero?
+        return 0 if net_risk_rupees <= 0 # Not enough risk capital after fees
 
         # Calculate risk per lot
         risk_per_lot = stop_distance_rupees * lot_size
 
-        # Calculate max lots based on risk
-        max_lots_by_risk = (risk_rupees / risk_per_lot).floor
+        # Calculate max lots based on net risk (after fees)
+        max_lots_by_risk = (net_risk_rupees / risk_per_lot).floor
 
         # Apply multiplier
         max_lots = max_lots_by_risk * multiplier
@@ -321,6 +328,7 @@ module Capital
         # Log breakdown
         Rails.logger.info(
           "[Allocator] RUPEES_BASED index:#{index_key} risk:₹#{risk_rupees} " \
+          "fees:₹#{broker_fees} net_risk:₹#{net_risk_rupees} " \
           "stop_dist:₹#{stop_distance_rupees} risk_per_lot:₹#{risk_per_lot} " \
           "max_lots:#{max_lots_by_risk} qty:#{final_quantity} " \
           "buy_value:₹#{(entry_price.to_f * final_quantity).round(2)}"

@@ -9,10 +9,13 @@ This document describes the **rupee-based position sizing and hard rupee stops**
 **Position sizing is derived from ₹ risk, not percentages.**
 
 This ensures:
-- ✅ Consistent risk per trade (₹1,000)
-- ✅ Consistent target per trade (₹2,000)
+- ✅ Consistent risk per trade (₹1,000 net after fees)
+- ✅ Consistent target per trade (₹2,000 net after fees)
 - ✅ Clean 1:2 risk-reward ratio
 - ✅ No random SL hits from percentage-based calculations
+- ✅ Broker fees (₹20 per order, ₹40 per trade) automatically deducted from PnL
+
+**Important**: Broker fees are automatically deducted from all PnL calculations. The ₹1,000 SL and ₹2,000 TP targets are **net after fees**, ensuring your actual risk/reward matches expectations.
 
 ## Configuration
 
@@ -21,14 +24,19 @@ This ensures:
 In `config/algo.yml`:
 
 ```yaml
+# Broker fees (₹20 per order, ₹40 per trade)
+broker_fees:
+  enabled: true # Set to false to disable fee calculations
+  fee_per_order: 20 # Fee per order execution (entry or exit)
+
 # Position sizing: rupee-based (recommended for scalping)
 position_sizing:
   enabled: true # Set to true to enable
   mode: rupee_based
 
-  # Fixed risk per trade
-  risk_rupees: 1000 # ₹1,000 risk per trade
-  target_rupees: 2000 # ₹2,000 target per trade
+  # Fixed risk per trade (NET after broker fees)
+  risk_rupees: 1000 # ₹1,000 net risk per trade (after ₹40 fees)
+  target_rupees: 2000 # ₹2,000 net target per trade (after ₹40 fees)
   stop_distance_rupees: 8 # Stop distance in rupees (global default)
 
   # Index-specific stop distances (override global if specified)
@@ -38,14 +46,15 @@ position_sizing:
     SENSEX: 15    # Typical: ₹12-20 for SENSEX
 
 # Hard rupee stops (HIGHEST PRIORITY)
+# Note: These are NET after broker fees
 risk:
   hard_rupee_sl:
     enabled: true # Set to true to enable
-    max_loss_rupees: 1000 # Maximum loss per trade
+    max_loss_rupees: 1000 # Maximum net loss per trade (after fees)
 
   hard_rupee_tp:
     enabled: true # Set to true to enable
-    target_profit_rupees: 2000 # Target profit per trade
+    target_profit_rupees: 2000 # Target net profit per trade (after fees)
 ```
 
 ## How It Works
@@ -53,10 +62,14 @@ risk:
 ### Position Sizing Formula
 
 ```
+broker_fees = fee_per_order × 2  # ₹40 per trade (entry + exit)
+net_risk_rupees = risk_rupees - broker_fees  # Deduct fees from risk capital
 risk_per_lot = stop_distance_rupees × lot_size
-max_lots = floor(risk_rupees / risk_per_lot)
+max_lots = floor(net_risk_rupees / risk_per_lot)
 quantity = max_lots × lot_size
 ```
+
+**Note**: Broker fees are deducted from risk capital before calculating position size. This ensures your net risk after fees matches the target risk.
 
 **Example (NIFTY):**
 - Entry premium: ₹100

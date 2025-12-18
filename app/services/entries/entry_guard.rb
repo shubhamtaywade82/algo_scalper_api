@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../concerns/broker_fee_calculator'
+
 module Entries
   class EntryGuard
     class << self
@@ -186,7 +188,10 @@ module Entries
           entry = BigDecimal(tracker.entry_price.to_s)
           exit_price = BigDecimal(ltp.to_s)
           qty = tracker.quantity.to_i
-          pnl = (exit_price - entry) * qty
+          gross_pnl = (exit_price - entry) * qty
+
+          # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
+          pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
           pnl_pct = ((exit_price - entry) / entry * 100).round(2)
 
           hwm = tracker.high_water_mark_pnl || BigDecimal(0)
@@ -429,7 +434,10 @@ module Entries
           meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
           meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
           meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
-          meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe] if entry_metadata[:confirmation_timeframe]
+          if entry_metadata[:confirmation_timeframe]
+            meta_hash[:entry_confirmation_timeframe] =
+              entry_metadata[:confirmation_timeframe]
+          end
           meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
         end
 
@@ -488,7 +496,10 @@ module Entries
           meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
           meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
           meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
-          meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe] if entry_metadata[:confirmation_timeframe]
+          if entry_metadata[:confirmation_timeframe]
+            meta_hash[:entry_confirmation_timeframe] =
+              entry_metadata[:confirmation_timeframe]
+          end
           meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
         end
 

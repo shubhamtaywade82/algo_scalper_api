@@ -89,7 +89,11 @@ module Live
 
       entry = BigDecimal(tracker.entry_price.to_s)
       qty   = tracker.quantity.to_i
-      pnl   = (ltp.to_d - entry) * qty.to_d
+      gross_pnl = (ltp.to_d - entry) * qty.to_d
+
+      # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
+      pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
+
       pct   = entry.positive? ? ((ltp.to_d - entry) / entry * 100) : 0
 
       hwm_pnl = [tracker.high_water_mark_pnl.to_d, pnl].max

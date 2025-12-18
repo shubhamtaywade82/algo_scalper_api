@@ -3,6 +3,7 @@
 require 'bigdecimal'
 require 'singleton'
 require 'ostruct'
+require_relative '../concerns/broker_fee_calculator'
 
 module Live
   # Responsible for monitoring active PositionTracker entries, keeping PnL up-to-date in Redis,
@@ -97,20 +98,21 @@ module Live
     private
 
     # Central monitoring loop: keep PnL and caches fresh.
-    # DO NOT perform exit dispatching here when an external ExitEngine exists — ExitEngine will call enforcement methods.
+    # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
     def monitor_loop(last_paper_pnl_update)
       # Keep Redis/DB PnL fresh
       update_paper_positions_pnl_if_due(last_paper_pnl_update)
       ensure_all_positions_in_redis
 
-      # Backwards-compatible enforcement: if there is no external ExitEngine, run enforcement here
-      return unless @exit_engine.nil?
+      # Always run enforcement methods - ExitEngine is only for executing exits, not triggering them
+      # Use external ExitEngine if provided, otherwise use self (backwards compatibility)
+      exit_engine = @exit_engine || self
 
       # Early Trend Failure checks (before other enforcement)
-      enforce_early_trend_failure(exit_engine: self)
-      enforce_hard_limits(exit_engine: self)
-      enforce_trailing_stops(exit_engine: self)
-      enforce_time_based_exit(exit_engine: self)
+      enforce_early_trend_failure(exit_engine: exit_engine)
+      enforce_hard_limits(exit_engine: exit_engine)
+      enforce_trailing_stops(exit_engine: exit_engine)
+      enforce_time_based_exit(exit_engine: exit_engine)
     end
 
     # Called by external ExitEngine or internally (when used standalone).
@@ -288,14 +290,27 @@ module Live
           snapshot = pnl_snapshot(tracker)
           next unless snapshot
 
-          pnl_rupees = snapshot[:pnl]
-          next if pnl_rupees.nil?
+          net_pnl_rupees = snapshot[:pnl]
+          next if net_pnl_rupees.nil?
+
+          # For exit rule checks on active positions:
+          # - Current net PnL = gross_pnl - entry_fee (₹20)
+          # - After exit, final net PnL = gross_pnl - full_trade_fee (₹40)
+          # - So: final_net_pnl = (net_pnl + entry_fee) - (entry_fee + exit_fee) = net_pnl - exit_fee
+          # - We check if final_net_pnl will hit the target/stop after exit
+          exit_fee = BrokerFeeCalculator.fee_per_order # Additional fee on exit (₹20)
 
           # Hard rupee stop loss (highest priority exit)
+          # Check: Will final net PnL (after exit) hit the stop?
+          # Formula: net_pnl - exit_fee <= -max_loss_rupees
+          # Simplified: net_pnl <= -max_loss_rupees + exit_fee
           if hard_rupee_sl_enabled?
             max_loss_rupees = BigDecimal((hard_rupee_sl_config[:max_loss_rupees] || 1000).to_s)
-            if pnl_rupees <= -max_loss_rupees
-              reason = "HARD_RUPEE_SL (PnL: ₹#{pnl_rupees.round(2)}, limit: -₹#{max_loss_rupees})"
+            net_threshold = -max_loss_rupees + exit_fee
+            if net_pnl_rupees <= net_threshold
+              # Calculate what net PnL will be after exit
+              final_net_pnl = net_pnl_rupees - exit_fee
+              reason = "HARD_RUPEE_SL (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, limit: -₹#{max_loss_rupees})"
               exit_path = 'hard_rupee_stop_loss'
               Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
               track_exit_path(tracker, exit_path, reason)
@@ -305,10 +320,16 @@ module Live
           end
 
           # Hard rupee take profit
+          # Check: Will final net PnL (after exit) hit the target?
+          # Formula: net_pnl - exit_fee >= target_profit_rupees
+          # Simplified: net_pnl >= target_profit_rupees + exit_fee
           if hard_rupee_tp_enabled?
             target_profit_rupees = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
-            if pnl_rupees >= target_profit_rupees
-              reason = "HARD_RUPEE_TP (PnL: ₹#{pnl_rupees.round(2)}, target: ₹#{target_profit_rupees})"
+            net_threshold = target_profit_rupees + exit_fee
+            if net_pnl_rupees >= net_threshold
+              # Calculate what net PnL will be after exit
+              final_net_pnl = net_pnl_rupees - exit_fee
+              reason = "HARD_RUPEE_TP (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, target: ₹#{target_profit_rupees})"
               exit_path = 'hard_rupee_take_profit'
               Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
               track_exit_path(tracker, exit_path, reason)
@@ -511,7 +532,10 @@ module Live
         entry = BigDecimal(tracker.entry_price.to_s)
         exit_price = BigDecimal(ltp.to_s)
         qty = tracker.quantity.to_i
-        pnl = (exit_price - entry) * qty
+        gross_pnl = (exit_price - entry) * qty
+
+        # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
+        pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
         pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
 
         hwm = tracker.high_water_mark_pnl || BigDecimal(0)
@@ -730,7 +754,10 @@ module Live
           nil
         end
         qty = tracker.quantity.to_i
-        pnl = entry ? (exit_price - entry) * qty : nil
+        gross_pnl = entry ? (exit_price - entry) * qty : nil
+
+        # Deduct broker fees (₹20 per order, ₹40 per trade - position is being exited)
+        pnl = gross_pnl ? BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: true) : nil
         pnl_pct = entry ? ((exit_price - entry) / entry) * 100 : nil
 
         hwm = tracker.high_water_mark_pnl || BigDecimal(0)

@@ -4,6 +4,7 @@ require 'singleton'
 require 'monitor'
 require 'bigdecimal'
 require 'logger'
+require_relative '../concerns/broker_fee_calculator'
 
 module Live
   class PnlUpdaterService
@@ -230,8 +231,11 @@ module Live
         entry_bd = safe_decimal(tracker.entry_price) || BigDecimal(0)
         qty_bd = BigDecimal(tracker.quantity.to_i.to_s)
 
-        # Compute PnL (fresh) — allow payload override when present (payload values are BigDecimal already)
-        pnl_bd = payload[:pnl] || ((ltp_bd - entry_bd) * qty_bd)
+        # Compute gross PnL (fresh) — allow payload override when present (payload values are BigDecimal already)
+        gross_pnl_bd = payload[:pnl] || ((ltp_bd - entry_bd) * qty_bd)
+
+        # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
+        pnl_bd = BrokerFeeCalculator.net_pnl(gross_pnl_bd, is_exited: tracker.exited?)
         pnl_pct_bd = begin
           payload[:pnl_pct] || ((ltp_bd - entry_bd) / entry_bd)
         rescue StandardError
@@ -351,10 +355,10 @@ module Live
 
         # Send notification
         milestone_text = if pnl_pct_value.positive?
-                          "#{milestone_pct}% profit"
-                        else
-                          "#{milestone_pct}% loss"
-                        end
+                           "#{milestone_pct}% profit"
+                         else
+                           "#{milestone_pct}% loss"
+                         end
 
         begin
           Notifications::TelegramNotifier.instance.notify_pnl_milestone(
