@@ -38,12 +38,14 @@ module Capital
       end
 
       def available_cash
+        # Use BalanceManager for accurate running balance
+        BalanceManager.instance.available_balance
+      rescue StandardError => e
+        log_balance_fetch_error(e)
+        # Fallback to old method if BalanceManager fails
         return paper_trading_balance if paper_trading_enabled?
 
         fetch_live_trading_balance
-      rescue StandardError => e
-        log_balance_fetch_error(e)
-        BigDecimal(0)
       end
 
       def paper_trading_enabled?

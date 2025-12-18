@@ -136,6 +136,9 @@ module Live
       orphaned_trackers.each do |tracker|
         Rails.logger.warn("[PositionSync] Found orphaned tracker: #{tracker.order_no} - marking as exited")
         tracker.mark_exited!
+
+        # Record exit in BalanceManager (adds realized P&L back to balance)
+        Capital::BalanceManager.instance.record_exit(tracker: tracker)
       end
 
       orphaned_trackers.size

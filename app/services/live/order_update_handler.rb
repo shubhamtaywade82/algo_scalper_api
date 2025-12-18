@@ -68,6 +68,9 @@ module Live
           if transaction_type == 'SELL'
             # Use avg_price from order update as exit_price
             tracker.mark_exited!(exit_price: avg_price)
+
+            # Record exit in BalanceManager (adds realized P&L back to balance)
+            Capital::BalanceManager.instance.record_exit(tracker: tracker)
           else
             tracker.mark_active!(avg_price: avg_price, quantity: quantity)
           end

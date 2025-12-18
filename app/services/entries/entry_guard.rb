@@ -190,6 +190,9 @@ module Entries
 
         tag_fallback_tracker(tracker, reason: 'insufficient_live_balance') if force_paper && tracker
 
+        # Record entry in BalanceManager (reduces available balance)
+        record_entry_balance(tracker: tracker, entry_price: ltp, quantity: quantity)
+
         post_entry_wiring(tracker: tracker, side: side, index_cfg: index_cfg)
         true
       rescue StandardError => e
@@ -805,6 +808,20 @@ module Entries
       rescue StandardError => e
         Rails.logger.error("[EntryGuard] calculate_default_tp failed: #{e.class} - #{e.message}")
         nil
+      end
+
+      # Record entry in BalanceManager
+      # @param tracker [PositionTracker] Position tracker
+      # @param entry_price [BigDecimal, Float] Entry price
+      # @param quantity [Integer] Quantity
+      def record_entry_balance(tracker:, entry_price:, quantity:)
+        Capital::BalanceManager.instance.record_entry(
+          tracker: tracker,
+          entry_price: entry_price,
+          quantity: quantity
+        )
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Failed to record entry balance: #{e.class} - #{e.message}")
       end
     end
   end
