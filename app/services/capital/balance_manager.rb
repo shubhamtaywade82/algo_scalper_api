@@ -52,19 +52,23 @@ module Capital
       Rails.logger.error("[BalanceManager] Failed to record entry: #{e.class} - #{e.message}")
     end
 
-    # Record trade exit - adds realized P&L back to balance
+    # Record trade exit - adds realized capital back to balance
+    # For options: Adds back entry cost + P&L (full exit proceeds)
+    # This makes realized capital available for new trades on the same exchange
     # @param tracker [PositionTracker] Position tracker
     def record_exit(tracker)
       return unless paper_trading_enabled?
 
-      realized_pnl = tracker.last_pnl_rupees
-      return unless realized_pnl
+      # Calculate realized capital = entry cost + P&L
+      entry_cost = calculate_entry_cost(tracker)
+      realized_pnl = tracker.last_pnl_rupees || BigDecimal(0)
+      realized_capital = entry_cost + BigDecimal(realized_pnl.to_s)
 
-      pnl_value = BigDecimal(realized_pnl.to_s)
-      add_balance(pnl_value, tracker: tracker, reason: 'exit')
+      add_balance(realized_capital, tracker: tracker, reason: 'exit')
       Rails.logger.info(
         "[BalanceManager] Exit recorded: #{tracker.order_no} " \
-        "pnl=₹#{pnl_value.round(2)} balance=₹#{paper_running_balance.round(2)}"
+        "entry_cost=₹#{entry_cost.round(2)} pnl=₹#{realized_pnl.to_f.round(2)} " \
+        "realized_capital=₹#{realized_capital.round(2)} balance=₹#{paper_running_balance.round(2)}"
       )
     rescue StandardError => e
       Rails.logger.error("[BalanceManager] Failed to record exit: #{e.class} - #{e.message}")
@@ -225,6 +229,15 @@ module Capital
     # @return [Boolean]
     def live_trading?
       !paper_trading_enabled?
+    end
+
+    # Calculate entry cost for a tracker
+    # @param tracker [PositionTracker] Position tracker
+    # @return [BigDecimal] Entry cost (entry_price × quantity)
+    def calculate_entry_cost(tracker)
+      return BigDecimal(0) unless tracker.entry_price && tracker.quantity
+
+      BigDecimal(tracker.entry_price.to_s) * tracker.quantity.to_i
     end
 
     # Fallback balance if all else fails
