@@ -10,10 +10,13 @@ Running Balance = Initial Balance - Deployed Capital + Realized Capital
 ```
 
 Where:
-- **Deployed Capital** = Sum of (entry_price × quantity) for all active positions
-- **Realized Capital** = Sum of (entry_cost + P&L) for all exited positions
+- **Deployed Capital** = Sum of (entry_price × quantity + entry_charges) for all active positions
+- **Realized Capital** = Sum of (entry_cost + P&L - exit_charges) for all exited positions
 - **Entry Cost** = entry_price × quantity (capital deployed when entering)
-- **Realized Capital on Exit** = entry_cost + P&L (capital returned when exiting)
+- **Entry Charges** = ₹20 per buy order
+- **Exit Charges** = ₹20 per sell order
+- **Total Charges Per Trade** = ₹40 (₹20 entry + ₹20 exit)
+- **Realized Capital on Exit** = entry_cost + P&L - exit_charges (net capital returned)
 
 ---
 
@@ -29,30 +32,36 @@ Where:
 - **Entry Price**: ₹100 per lot
 - **Quantity**: 10 lots
 - **Entry Cost**: ₹100 × 10 = ₹1,000
+- **Entry Charges**: ₹20
+- **Total Entry Cost**: ₹1,000 + ₹20 = ₹1,020
 
 **Balance After Entry:**
 ```
-Running Balance = ₹100,000 - ₹1,000 = ₹99,000
-Deployed Capital = ₹1,000 (1 active position)
+Running Balance = ₹100,000 - ₹1,020 = ₹98,980
+Deployed Capital = ₹1,020 (1 active position: ₹1,000 capital + ₹20 charges)
 Realized Capital = ₹0 (no exits yet)
 ```
 
 ### Trade 1: Exit (Profitable)
 - **Exit Price**: ₹120 per lot
 - **P&L**: (₹120 - ₹100) × 10 = ₹200 profit
-- **Realized Capital**: ₹1,000 (entry cost) + ₹200 (P&L) = ₹1,200
+- **Exit Charges**: ₹20
+- **Gross Realized Capital**: ₹1,000 (entry cost) + ₹200 (P&L) = ₹1,200
+- **Net Realized Capital**: ₹1,200 - ₹20 (exit charges) = ₹1,180
 
 **Balance After Exit:**
 ```
-Running Balance = ₹99,000 + ₹1,200 = ₹100,200
+Running Balance = ₹98,980 + ₹1,180 = ₹100,160
 Deployed Capital = ₹0 (no active positions)
-Realized Capital = ₹1,200 (1 exited position)
+Realized Capital = ₹1,180 (1 exited position)
 ```
 
 **Net Result:**
 - Started with: ₹100,000
-- Ended with: ₹100,200
-- **Profit**: ₹200 ✅
+- Ended with: ₹100,160
+- **Gross Profit**: ₹200
+- **Charges Paid**: ₹40 (₹20 entry + ₹20 exit)
+- **Net Profit**: ₹160 ✅
 
 ---
 
@@ -68,30 +77,36 @@ Realized Capital = ₹1,200 (1 exited position)
 - **Entry Price**: ₹150 per lot
 - **Quantity**: 5 lots
 - **Entry Cost**: ₹150 × 5 = ₹750
+- **Entry Charges**: ₹20
+- **Total Entry Cost**: ₹750 + ₹20 = ₹770
 
 **Balance After Entry:**
 ```
-Running Balance = ₹100,000 - ₹750 = ₹99,250
-Deployed Capital = ₹750 (1 active position)
+Running Balance = ₹100,000 - ₹770 = ₹99,230
+Deployed Capital = ₹770 (1 active position: ₹750 capital + ₹20 charges)
 Realized Capital = ₹0
 ```
 
 ### Trade 1: Exit (Loss)
 - **Exit Price**: ₹120 per lot
 - **P&L**: (₹120 - ₹150) × 5 = -₹150 loss
-- **Realized Capital**: ₹750 (entry cost) + (-₹150) (P&L) = ₹600
+- **Exit Charges**: ₹20
+- **Gross Realized Capital**: ₹750 (entry cost) + (-₹150) (P&L) = ₹600
+- **Net Realized Capital**: ₹600 - ₹20 (exit charges) = ₹580
 
 **Balance After Exit:**
 ```
-Running Balance = ₹99,250 + ₹600 = ₹99,850
+Running Balance = ₹99,230 + ₹580 = ₹99,810
 Deployed Capital = ₹0
-Realized Capital = ₹600 (1 exited position)
+Realized Capital = ₹580 (1 exited position)
 ```
 
 **Net Result:**
 - Started with: ₹100,000
-- Ended with: ₹99,850
-- **Loss**: ₹150 ❌
+- Ended with: ₹99,810
+- **Gross Loss**: ₹150
+- **Charges Paid**: ₹40 (₹20 entry + ₹20 exit)
+- **Net Loss**: ₹190 ❌
 
 ---
 
@@ -345,19 +360,28 @@ Initial: ₹100,000
 
 ### Entry
 ```
-New Balance = Current Balance - (Entry Price × Quantity)
+Entry Cost = Entry Price × Quantity
+Total Entry Cost = Entry Cost + ₹20 (entry charges)
+New Balance = Current Balance - Total Entry Cost
 ```
 
 ### Exit (Profit)
 ```
-Realized Capital = Entry Cost + P&L
-New Balance = Current Balance + Realized Capital
+Gross Realized Capital = Entry Cost + P&L
+Net Realized Capital = Gross Realized Capital - ₹20 (exit charges)
+New Balance = Current Balance + Net Realized Capital
 ```
 
 ### Exit (Loss)
 ```
-Realized Capital = Entry Cost + P&L (P&L is negative)
-New Balance = Current Balance + Realized Capital
+Gross Realized Capital = Entry Cost + P&L (P&L is negative)
+Net Realized Capital = Gross Realized Capital - ₹20 (exit charges)
+New Balance = Current Balance + Net Realized Capital
+```
+
+### Net P&L Per Trade
+```
+Net P&L = Gross P&L - ₹40 (total charges: ₹20 entry + ₹20 exit)
 ```
 
 ### Available Balance for Next Trade
@@ -370,13 +394,13 @@ Available = Running Balance - Currently Deployed Capital
 ## Balance Manager Methods
 
 ### `record_entry(tracker, entry_price:, quantity:)`
-- Reduces balance by: `entry_price × quantity`
-- Logs: Entry cost and new balance
+- Reduces balance by: `(entry_price × quantity) + ₹20 (entry charges)`
+- Logs: Entry cost, charges, total cost, and new balance
 
 ### `record_exit(tracker)`
-- Calculates: `entry_cost + P&L`
-- Adds to balance: Full realized capital
-- Logs: Entry cost, P&L, realized capital, new balance
+- Calculates: `(entry_cost + P&L) - ₹20 (exit charges)`
+- Adds to balance: Net realized capital (after exit charges)
+- Logs: Entry cost, P&L, gross realized, charges, net realized, new balance
 
 ### `available_balance`
 - Returns: Current running balance
@@ -415,8 +439,17 @@ puts "Match: #{balance.round(2) == calculated.round(2)}"
 
 ## Important Notes
 
-1. **Entry Cost is Deducted**: When entering a trade, the full entry cost is deducted from balance
-2. **Full Exit Proceeds Added**: When exiting, entry cost + P&L is added back
-3. **Net Effect**: Balance changes by exactly the P&L amount
-4. **Concurrent Positions**: Multiple active positions reduce available balance accordingly
-5. **Redis Persistence**: Balance is stored in Redis with daily keys for persistence
+1. **Entry Cost + Charges Deducted**: When entering a trade, entry cost + ₹20 charges is deducted
+2. **Net Exit Proceeds Added**: When exiting, entry cost + P&L - ₹20 charges is added back
+3. **Net Effect**: Balance changes by P&L - ₹40 (total charges per trade)
+4. **Charges Impact**: Each closed trade costs ₹40 (₹20 entry + ₹20 exit)
+5. **Concurrent Positions**: Multiple active positions reduce available balance accordingly
+6. **Redis Persistence**: Balance is stored in Redis with daily keys for persistence
+
+## Trading Charges Summary
+
+- **Entry Charges**: ₹20 per buy order
+- **Exit Charges**: ₹20 per sell order
+- **Total Per Closed Trade**: ₹40
+- **Impact**: Reduces net P&L by ₹40 per trade
+- **Example**: If you make ₹200 profit, net profit after charges is ₹160

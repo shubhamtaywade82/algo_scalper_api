@@ -14,6 +14,11 @@ module Capital
     BALANCE_KEY_PREFIX = 'capital:balance:paper'
     INITIAL_BALANCE_KEY = 'capital:balance:initial'
 
+    # Trading charges per transaction
+    ENTRY_CHARGES = BigDecimal('20.0')  # ₹20 charges on buy
+    EXIT_CHARGES = BigDecimal('20.0')    # ₹20 charges on sell
+    TOTAL_CHARGES_PER_TRADE = ENTRY_CHARGES + EXIT_CHARGES # ₹40 per closed trade
+
     def initialize
       @lock = Mutex.new
       @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
@@ -35,7 +40,7 @@ module Capital
       fallback_balance
     end
 
-    # Record trade entry - reduces available balance by trade cost
+    # Record trade entry - reduces available balance by trade cost + entry charges
     # @param tracker [PositionTracker] Position tracker
     # @param entry_price [BigDecimal, Float] Entry price
     # @param quantity [Integer] Quantity
@@ -43,32 +48,36 @@ module Capital
       return unless paper_trading_enabled?
 
       trade_cost = BigDecimal(entry_price.to_s) * quantity.to_i
-      reduce_balance(trade_cost, tracker: tracker, reason: 'entry')
+      total_cost = trade_cost + ENTRY_CHARGES
+      reduce_balance(total_cost, tracker: tracker, reason: 'entry')
       Rails.logger.info(
         "[BalanceManager] Entry recorded: #{tracker.order_no} " \
-        "cost=₹#{trade_cost.round(2)} balance=₹#{paper_running_balance.round(2)}"
+        "cost=₹#{trade_cost.round(2)} charges=₹#{ENTRY_CHARGES} " \
+        "total=₹#{total_cost.round(2)} balance=₹#{paper_running_balance.round(2)}"
       )
     rescue StandardError => e
       Rails.logger.error("[BalanceManager] Failed to record entry: #{e.class} - #{e.message}")
     end
 
-    # Record trade exit - adds realized capital back to balance
-    # For options: Adds back entry cost + P&L (full exit proceeds)
+    # Record trade exit - adds realized capital back to balance minus exit charges
+    # For options: Adds back entry cost + P&L - exit charges (net exit proceeds)
     # This makes realized capital available for new trades on the same exchange
     # @param tracker [PositionTracker] Position tracker
     def record_exit(tracker)
       return unless paper_trading_enabled?
 
-      # Calculate realized capital = entry cost + P&L
+      # Calculate realized capital = entry cost + P&L - exit charges
       entry_cost = calculate_entry_cost(tracker)
       realized_pnl = tracker.last_pnl_rupees || BigDecimal(0)
-      realized_capital = entry_cost + BigDecimal(realized_pnl.to_s)
+      gross_realized_capital = entry_cost + BigDecimal(realized_pnl.to_s)
+      net_realized_capital = gross_realized_capital - EXIT_CHARGES
 
-      add_balance(realized_capital, tracker: tracker, reason: 'exit')
+      add_balance(net_realized_capital, tracker: tracker, reason: 'exit')
       Rails.logger.info(
         "[BalanceManager] Exit recorded: #{tracker.order_no} " \
         "entry_cost=₹#{entry_cost.round(2)} pnl=₹#{realized_pnl.to_f.round(2)} " \
-        "realized_capital=₹#{realized_capital.round(2)} balance=₹#{paper_running_balance.round(2)}"
+        "gross=₹#{gross_realized_capital.round(2)} charges=₹#{EXIT_CHARGES} " \
+        "net=₹#{net_realized_capital.round(2)} balance=₹#{paper_running_balance.round(2)}"
       )
     rescue StandardError => e
       Rails.logger.error("[BalanceManager] Failed to record exit: #{e.class} - #{e.message}")
