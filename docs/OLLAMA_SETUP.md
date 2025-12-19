@@ -2,6 +2,14 @@
 
 This guide explains how to connect to Ollama running on another machine (e.g., Omarchy OS laptop) on your local network. Supports both native Ollama installation and Docker-based deployment.
 
+## Quick Decision Guide
+
+**Choose your setup based on your hardware:**
+
+- **GPU with 4GB+ VRAM** → Use GPU mode (faster, can run larger models)
+- **GPU with < 4GB VRAM or crashes** → Use CPU-only mode (stable, slower)
+- **No GPU or limited GPU** → Use CPU-only mode (requires 16GB+ RAM)
+
 ## Quick Start (Working Example)
 
 If you have Ollama accessible at `http://192.168.1.11:11434` with model `phi3:mini`:
@@ -37,23 +45,53 @@ Ollama is an OpenAI-compatible API server that allows you to run LLMs locally. T
 
 #### Running Ollama in Docker
 
-1. **Pull and run Ollama Docker container:**
-   ```bash
-   # Basic run (exposes port 11434)
-   docker run -d \
-     --name ollama \
-     -p 11434:11434 \
-     -v ollama:/root/.ollama \
-     ollama/ollama
+**Choose based on your hardware:**
 
-   # Or with GPU support (if available)
-   docker run -d \
-     --name ollama \
-     --gpus all \
-     -p 11434:11434 \
-     -v ollama:/root/.ollama \
-     ollama/ollama
-   ```
+##### GPU Mode (4GB+ VRAM, Compatible GPU)
+
+```bash
+# With GPU support (requires nvidia-docker2)
+docker run -d \
+  --name ollama \
+  --gpus all \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  -v ollama:/root/.ollama \
+  ollama/ollama:latest
+```
+
+##### CPU-Only Mode (Limited GPU/VRAM, 16GB+ RAM)
+
+**Use this if:**
+- GPU has < 4GB VRAM (e.g., NVIDIA 940MX 2GB)
+- Models crash with "exit status 2" on GPU
+- You have 16GB+ system RAM
+
+```bash
+# Remove existing container if present
+docker rm -f ollama
+
+# Run in CPU-only mode
+docker run -d \
+  --name ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  -e OLLAMA_NUM_GPU=0 \
+  -v ollama:/root/.ollama \
+  ollama/ollama:latest
+```
+
+**Key settings:**
+- `OLLAMA_NUM_GPU=0` → Forces pure CPU execution (no GPU offload)
+- Models run entirely in system RAM
+- Stable but slower (2-5 tokens/s typical on CPU)
+- No GPU crashes or memory errors
+
+**Verify CPU-only mode:**
+```bash
+docker logs ollama | grep -i "gpu"
+# Should NOT show "CUDA" or "GPU layers loaded"
+```
 
 2. **Pull a model:**
    ```bash
@@ -238,14 +276,25 @@ The system **automatically fetches and selects the best model** from your Ollama
 **Model Selection Priority:**
 1. Explicitly set model (`OLLAMA_MODEL` env var) - if available
 2. Auto-selected "best" model based on priority:
-   - `llama3:70b`, `llama3:70b-instruct` (largest, most capable)
-   - `llama3`, `llama3:instruct` (balanced)
-   - `llama3:8b`, `llama3:8b-instruct` (faster)
-   - `mistral`, `mistral:instruct`
-   - `codellama`, `codellama:instruct`
-   - `phi3`, `phi3:mini`, `phi3:medium`
-   - `gemma`, `gemma:2b`, `gemma:7b`
+   - **8B models** (best balance: capable + fast enough)
+     - `llama3.1:8b`, `llama3.1:8b-instruct`, `llama3:8b`, `llama3:8b-instruct`
+   - **7B models** (good for CPU-only with 16GB RAM)
+     - `mistral:7b`, `mistral`, `mistral:instruct`
+   - **3B models** (excellent for CPU-only, good balance)
+     - `llama3.2:3b`, `llama3.2:3b-instruct`, `llama3:3b`
+   - **Small models** (fastest for CPU-only)
+     - `phi3:mini`, `phi3`, `phi3:medium`
+     - `qwen2.5:1.5b-instruct`, `gemma:2b`, `gemma`
+   - **Large models** (require GPU or lots of RAM)
+     - `llama3:70b`, `llama3:70b-instruct`
+     - `llama3`, `llama3:instruct`
+   - **Code models** (not ideal for trading)
+     - `codellama`, `codellama:instruct`
 3. First available model (if no priority match)
+
+**Note for CPU-Only Mode:**
+- System prioritizes 3B models (`llama3.2:3b`) over 8B models for CPU-only setups
+- Smaller models (`phi3:mini`, `qwen2.5:1.5b-instruct`) are preferred for speed
 
 ### List Available Models
 
@@ -270,15 +319,54 @@ Found 3 model(s):
 Best model: llama3
 ```
 
-### Common Models
+### Model Recommendations by Setup
 
-- `llama3` - Meta's Llama 3 (balanced, recommended)
-- `llama3:8b` - Llama 3 8B variant (faster)
-- `llama3:70b` - Llama 3 70B variant (best quality, slower)
-- `mistral` - Mistral AI model
-- `codellama` - Code-focused Llama
-- `phi3:mini` - Microsoft Phi 3 Mini (fast, small)
-- `phi3` - Microsoft Phi 3 (balanced)
+#### For GPU Mode (4GB+ VRAM)
+- **llama3.1:8b** - Best balance of capability and speed (recommended)
+- **mistral:7b** - Good alternative 7B model
+- **llama3.2:3b** - Faster, good for quick queries
+
+#### For CPU-Only Mode (16GB RAM, Limited/No GPU)
+
+**Best Models (in priority order):**
+
+1. **llama3.2:3b** ⭐ (Recommended)
+   - RAM: ~7GB
+   - Speed: Good (3-5 tokens/s on CPU)
+   - Capability: Excellent for trading analysis
+   - Best balance for CPU-only setups
+
+2. **phi3:mini**
+   - RAM: ~5GB
+   - Speed: Very fast (5-8 tokens/s on CPU)
+   - Capability: Good for quick queries and coding
+   - Fastest option for CPU-only
+
+3. **qwen2.5:1.5b-instruct**
+   - RAM: ~4GB
+   - Speed: Very fast (8-12 tokens/s on CPU)
+   - Capability: Good for simple queries
+   - Lightest option, multiple models can run simultaneously
+
+4. **mistral:7b** (If you have 16GB+ RAM)
+   - RAM: ~10GB
+   - Speed: Slower (2-3 tokens/s on CPU)
+   - Capability: Excellent for complex analysis
+   - Use only if you have sufficient RAM
+
+**Models to Avoid on CPU-Only:**
+- ❌ **llama3.1:8b** - May cause OOM on 16GB RAM systems
+- ❌ **llama3:70b** - Requires GPU or 64GB+ RAM
+- ❌ Any model > 7B parameters on CPU-only
+
+**Quick Test:**
+```bash
+# Test a lightweight model
+docker exec -it ollama ollama run phi3:mini <<< "Hello!"
+
+# If successful, try larger models
+docker exec -it ollama ollama run llama3.2:3b <<< "Analyze NIFTY"
+```
 
 ## Usage
 
@@ -635,20 +723,43 @@ response = client.chat(
 
 ## Performance Tips
 
-1. **Model Selection**: Use smaller models for faster responses
-   - `llama3:8b` - Fast, good quality
-   - `llama3` - Balanced
-   - `llama3:70b` - Slower, best quality
+### CPU-Only Mode
 
-2. **Docker Resource Limits**: Set appropriate limits
+1. **Enable swap** - Keep 1-2GB swap enabled for stability
    ```bash
-   docker run -d \
-     --name ollama \
-     --memory="8g" \
-     --cpus="4" \
-     -p 11434:11434 \
-     -v ollama:/root/.ollama \
-     ollama/ollama
+   sudo swapon -s  # Check swap status
+   # Enable swap if needed (varies by distro)
+   ```
+
+2. **Use smaller context windows** - Reduce RAM usage
+   - Default: 2048-4096 tokens
+   - CPU-only: 1024-2048 tokens recommended
+
+3. **Run multiple small models** - Can parallelize lightweight models
+   - `phi3:mini` + `qwen2.5:1.5b-instruct` can run simultaneously
+   - Each uses ~4-5GB RAM
+
+4. **Monitor RAM usage:**
+   ```bash
+   docker stats ollama  # Watch container memory usage
+   free -h  # Check system RAM
+   ```
+
+5. **Recommended models for CPU-only:**
+   - `llama3.2:3b` (~7GB RAM) - Best balance
+   - `phi3:mini` (~5GB RAM) - Fastest
+   - `qwen2.5:1.5b-instruct` (~4GB RAM) - Lightest
+
+### GPU Mode
+
+1. **Model Selection**: Match model to GPU VRAM
+   - 4GB VRAM: `llama3.2:3b`, `phi3:mini`
+   - 8GB+ VRAM: `llama3.1:8b`, `mistral:7b`
+   - 16GB+ VRAM: `llama3:70b`
+
+2. **Monitor VRAM usage:**
+   ```bash
+   nvidia-smi  # Check GPU memory usage
    ```
 
 3. **GPU Acceleration** (Docker):
@@ -662,13 +773,26 @@ response = client.chat(
      ollama/ollama
    ```
 
-4. **Caching**: Consider caching common queries
+### General Tips
 
-5. **Batch Processing**: Process multiple requests together when possible
+1. **Docker Resource Limits**: Set appropriate limits
+   ```bash
+   docker run -d \
+     --name ollama \
+     --memory="8g" \
+     --cpus="4" \
+     -p 11434:11434 \
+     -v ollama:/root/.ollama \
+     ollama/ollama
+   ```
 
-6. **Network Optimization**: Ensure low latency between machines
+2. **Caching**: Models stay loaded in memory after first use
 
-7. **Docker Volume Performance**: Use local SSD for better I/O
+3. **Streaming**: Use `STREAM=true` for better UX (reduces perceived latency)
+
+4. **Network Optimization**: Ensure low latency between machines
+
+5. **Docker Volume Performance**: Use local SSD for better I/O
    ```bash
    # Use specific mount point for better performance
    docker run -d \

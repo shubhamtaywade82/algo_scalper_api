@@ -54,6 +54,22 @@ export OLLAMA_MODEL="llama3"
 export OLLAMA_API_KEY="ollama"
 ```
 
+### 4. Technical Analysis Agent Configuration (Optional)
+
+Configure the Technical Analysis Agent behavior:
+
+```bash
+# Maximum iterations before safety limit (default: 15, range: 3-100)
+export AI_AGENT_MAX_ITERATIONS=20
+
+# Maximum consecutive tool calls before forcing analysis (default: 8, range: 3-15)
+export AI_AGENT_MAX_CONSECUTIVE_TOOLS=5
+```
+
+These settings control how the agent iterates:
+- **AI_AGENT_MAX_ITERATIONS**: Total iterations allowed (higher = more thorough but slower)
+- **AI_AGENT_MAX_CONSECUTIVE_TOOLS**: Prevents tool-calling loops (lower = stricter control)
+
 See [Ollama Setup Guide](OLLAMA_SETUP.md) for detailed instructions.
 
 ### 4. Enable in Config

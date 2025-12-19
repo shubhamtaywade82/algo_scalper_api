@@ -78,23 +78,27 @@ module Services
         # Auto-select best model based on priority
         return nil if @available_models.blank?
 
-        # Priority order: prefer larger/more capable models for trading analysis
+        # Priority order: prefer models that work well for trading analysis
         # Trading analysis requires: complex reasoning, financial understanding, structured output
+        # Note: For CPU-only setups (OLLAMA_NUM_GPU=0), prefer smaller models (3B-7B)
         priority_models = [
-          # Large models (best for complex analysis, but slower)
+          # 8B models (best balance: capable + fast enough for real-time analysis)
+          # Note: May require GPU or 16GB+ RAM for CPU-only
+          'llama3.1:8b', 'llama3.1:8b-instruct', 'llama3:8b', 'llama3:8b-instruct',
+          # 7B models (good for CPU-only with 16GB RAM)
+          'mistral:7b', 'mistral', 'mistral:instruct',
+          # 3B models (excellent for CPU-only, good balance of speed and capability)
+          'llama3.2:3b', 'llama3.2:3b-instruct', 'llama3:3b',
+          # Small models (fastest for CPU-only, good for quick queries)
+          'phi3:mini', 'phi3', 'phi3:medium',
+          'qwen2.5:1.5b-instruct', 'gemma:2b', 'gemma',
+          # Large models (best for complex analysis, but require GPU or lots of RAM)
           'llama3:70b', 'llama3:70b-instruct',
           'llama3', 'llama3:instruct',
-          # 8B models (best balance: capable + fast enough for real-time analysis)
-          'llama3.1:8b', 'llama3.1:8b-instruct', 'llama3:8b', 'llama3:8b-instruct',
-          # 7B models (good alternative)
-          'mistral:7b', 'mistral', 'mistral:instruct',
-          # 3B models (faster but less capable)
-          'llama3.2:3b', 'llama3.2:3b-instruct', 'llama3:3b',
           # Code models (not ideal for trading, but better than tiny models)
           'codellama', 'codellama:instruct',
-          # Small models (fast but limited reasoning)
-          'phi3', 'phi3:mini', 'phi3:medium',
-          'qwen2.5:1.5b-instruct', 'gemma', 'gemma:2b', 'gemma:7b'
+          # Other small models
+          'gemma:7b'
         ]
 
         # Try priority models first
@@ -348,46 +352,85 @@ module Services
 
       # Streaming chat using ruby-openai
       def chat_stream_ruby_openai(messages:, model:, temperature:, &block)
-        @client.chat(
-          parameters: {
-            model: model,
-            messages: format_messages_ruby_openai(messages),
-            temperature: temperature,
-            stream: proc do |chunk, _event|
-              content = chunk.dig('choices', 0, 'delta', 'content')
-              yield(content) if content.present? && block_given?
-            end
-          }
-        )
-      rescue Faraday::TimeoutError, Net::ReadTimeout => e
-        # Timeout errors during streaming - log but don't fail if we got some content
-        Rails.logger.warn { "[OpenAIClient] Stream timeout: #{e.class} - #{e.message}" }
-        # Return nil to indicate partial stream
-        nil
-      rescue StandardError => e
-        # Some streaming implementations may raise errors on stream end
-        # This is expected behavior for some providers
-        if e.message.include?('end of file') || e.message.include?('Connection') || e.message.include?('closed')
-          Rails.logger.debug { "[OpenAIClient] Stream ended normally: #{e.class}" } if Rails.env.development?
+        stream_start = Time.current
+        chunk_count = 0
+
+        begin
+          @client.chat(
+            parameters: {
+              model: model,
+              messages: format_messages_ruby_openai(messages),
+              temperature: temperature,
+              stream: proc do |chunk, _event|
+                content = chunk.dig('choices', 0, 'delta', 'content')
+                if content.present? && block
+                  chunk_count += 1
+                  yield(content)
+                end
+              end
+            }
+          )
+
+          elapsed = Time.current - stream_start
+          Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
+        rescue Faraday::TimeoutError, Net::ReadTimeout => e
+          elapsed = Time.current - stream_start
+          # Timeout errors during streaming - log but don't fail if we got some content
+          Rails.logger.warn("[OpenAIClient] Stream timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
+          # Return nil to indicate partial stream
           nil
-        else
-          Rails.logger.error { "[OpenAIClient] Stream error: #{e.class} - #{e.message}" }
-          raise
+        rescue StandardError => e
+          elapsed = Time.current - stream_start
+          # Some streaming implementations may raise errors on stream end
+          # This is expected behavior for some providers
+          if e.message.include?('end of file') || e.message.include?('Connection') || e.message.include?('closed')
+            Rails.logger.debug { "[OpenAIClient] Stream ended normally after #{elapsed.round(2)}s: #{e.class} (#{chunk_count} chunks)" } if Rails.env.development?
+            nil
+          else
+            Rails.logger.error("[OpenAIClient] Stream error after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks)")
+            Rails.logger.error("[OpenAIClient] Backtrace: #{e.backtrace.first(3).join("\n")}")
+            raise
+          end
         end
       end
 
       # Streaming chat using openai-ruby
       def chat_stream_openai_ruby(messages:, model:, temperature:, &block)
-        stream = @client.chat.completions.create(
-          messages: format_messages_openai_ruby(messages),
-          model: model,
-          temperature: temperature,
-          stream: true
-        )
+        stream_start = Time.current
+        chunk_count = 0
 
-        stream.each do |event|
-          content = event.dig('choices', 0, 'delta', 'content')
-          yield(content) if content.present?
+        begin
+          stream = @client.chat.completions.create(
+            messages: format_messages_openai_ruby(messages),
+            model: model,
+            temperature: temperature,
+            stream: true
+          )
+
+          stream.each do |event|
+            content = event.dig('choices', 0, 'delta', 'content')
+            next unless content.present?
+
+            chunk_count += 1
+            yield(content) if block
+          end
+
+          elapsed = Time.current - stream_start
+          Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
+        rescue Faraday::TimeoutError, Net::ReadTimeout => e
+          elapsed = Time.current - stream_start
+          Rails.logger.warn("[OpenAIClient] Stream timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
+          nil
+        rescue StandardError => e
+          elapsed = Time.current - stream_start
+          if e.message.include?('end of file') || e.message.include?('Connection') || e.message.include?('closed')
+            Rails.logger.debug { "[OpenAIClient] Stream ended normally after #{elapsed.round(2)}s: #{e.class} (#{chunk_count} chunks)" } if Rails.env.development?
+            nil
+          else
+            Rails.logger.error("[OpenAIClient] Stream error after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks)")
+            Rails.logger.error("[OpenAIClient] Backtrace: #{e.backtrace.first(3).join("\n")}")
+            raise
+          end
         end
       end
 

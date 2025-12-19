@@ -52,8 +52,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 14 # 1m ADX threshold (70% of typical ~20)
-      confirmation_min_strength: 11 # 5m ADX threshold (70% of typical ~15.5)
+      primary_min_strength: 15 # 1m ADX threshold (70% of typical ~20)
+      confirmation_min_strength: 15 # 5m ADX threshold (70% of typical ~15.5)
 
     strategies:
       open_interest:
@@ -95,7 +95,7 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 10 # 1m ADX threshold (use global default)
+      primary_min_strength: 15 # 1m ADX threshold (use global default)
       confirmation_min_strength: 15 # 5m ADX threshold (70% of typical ~44)
 
     strategies:
@@ -138,8 +138,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 10 # 1m ADX threshold (70% of typical ~25.5)
-      confirmation_min_strength: 10 # 5m ADX threshold (70% of typical ~13.5)
+      primary_min_strength: 15 # 1m ADX threshold (70% of typical ~25.5)
+      confirmation_min_strength: 15 # 5m ADX threshold (70% of typical ~13.5)
 
     strategies:
       open_interest:
@@ -413,7 +413,7 @@ signals:
       enabled: true
       config:
         period: 14
-        min_strength: 10
+        min_strength: 15
         trading_hours_filter: true
 
     # Example: Add RSI indicator (disabled by default)
@@ -456,7 +456,7 @@ signals:
 
   adx:
     # Global ADX thresholds (used as fallback if per-index thresholds not specified)
-    min_strength: 10 # ADX threshold for 1m timeframe (when enabled)
+    min_strength: 15 # ADX threshold for 1m timeframe (when enabled)
     confirmation_min_strength: 15 # ADX threshold for 5m confirmation (when enabled)
     # Note: Per-index thresholds in indices[].adx_thresholds override these values
 
@@ -534,3 +534,14 @@ ai:
   #   - OLLAMA_API_KEY: Optional API key (default: 'ollama')
   #   - OLLAMA_MODEL: Optional - explicitly set model (e.g., 'phi3:mini', 'llama3')
   #     If not set, system automatically fetches available models and selects the best one
+  #
+  # Technical Analysis Agent Configuration:
+  #   - AI_AGENT_MAX_ITERATIONS: Maximum iterations before safety limit (default: 15, range: 3-100)
+  #     Controls how many iterations the agent can perform before stopping
+  #     Example: export AI_AGENT_MAX_ITERATIONS=20
+  #   - AI_AGENT_MAX_CONSECUTIVE_TOOLS: Maximum consecutive tool calls before forcing analysis (default: 8, range: 3-15)
+  #     Prevents the agent from getting stuck in tool-calling loops
+  #     Example: export AI_AGENT_MAX_CONSECUTIVE_TOOLS=5
+  #   - AI_AGENT_STREAM_TIMEOUT: Timeout for streaming responses per iteration (default: 60 seconds)
+  #     If AI doesn't respond within this time, iteration is aborted and retried
+  #     Example: export AI_AGENT_STREAM_TIMEOUT=30
