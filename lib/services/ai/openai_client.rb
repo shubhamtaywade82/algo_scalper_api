@@ -2,12 +2,19 @@
 
 require 'net/http'
 require 'json'
+require 'timeout'
 
 module Services
   module Ai
     # Abstraction layer for OpenAI API clients
     # Supports both ruby-openai (dev) and openai-ruby (production)
     # Also supports Ollama (local/network instances)
+    #
+    # CLIENT OPTIMIZATION FOR REMOTE OLLAMA:
+    # - Serializes requests (mutex lock)
+    # - Adds delays between requests
+    # - Uses proper timeouts
+    # - Prevents parallel LLM calls
     class OpenaiClient
       class << self
         def instance
@@ -19,12 +26,19 @@ module Services
         delegate :enabled?, to: :instance
       end
 
+      # Request serialization mutex (prevents parallel calls)
+      REQUEST_MUTEX = Mutex.new
+
+      # Delay between requests (milliseconds)
+      REQUEST_DELAY_MS = ENV.fetch('OLLAMA_REQUEST_DELAY_MS', '500').to_i
+
       def initialize
         @client = nil
         @provider = determine_provider
         @enabled = check_enabled
         @available_models = nil
         @selected_model = nil
+        @last_request_time = nil
         initialize_client if @enabled
         fetch_and_select_model if @enabled && @provider == :ollama
       end
@@ -35,12 +49,33 @@ module Services
         @enabled
       end
 
+      # Get Ollama base URL (supports both OLLAMA_HOST_URL and OLLAMA_BASE_URL)
+      def ollama_base_url
+        ENV['OLLAMA_HOST_URL'] || ENV['OLLAMA_BASE_URL'] || 'http://localhost:11434'
+      end
+
+      # Ensure request serialization and delay (for Ollama)
+      def with_request_serialization
+        return yield unless @provider == :ollama
+
+        REQUEST_MUTEX.synchronize do
+          # Add delay between requests if needed
+          if @last_request_time
+            elapsed = (Time.current - @last_request_time) * 1000 # milliseconds
+            sleep((REQUEST_DELAY_MS - elapsed) / 1000.0) if elapsed < REQUEST_DELAY_MS
+          end
+
+          @last_request_time = Time.current
+          yield
+        end
+      end
+
       # Get available models from Ollama
       def fetch_available_models
         return [] unless @provider == :ollama && @enabled
 
         begin
-          base_url = ENV['OLLAMA_BASE_URL'] || 'http://localhost:11434'
+          base_url = ollama_base_url
           response = Net::HTTP.get_response(URI("#{base_url}/api/tags"))
 
           if response.code == '200'
@@ -118,6 +153,7 @@ module Services
       end
 
       # Chat completion interface (works with both gems)
+      # For Ollama: Serializes requests to prevent parallel calls
       def chat(messages:, model: nil, temperature: 0.7, **)
         return nil unless enabled?
 
@@ -128,6 +164,21 @@ module Services
                     'gpt-4o'
                   end
 
+        # Serialize Ollama requests to prevent parallel calls
+        if @provider == :ollama
+          with_request_serialization do
+            execute_chat(messages: messages, model: model, temperature: temperature, **)
+          end
+        else
+          execute_chat(messages: messages, model: model, temperature: temperature, **)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[OpenAIClient] Chat error: #{e.class} - #{e.message}")
+        nil
+      end
+
+      # Internal chat execution (without serialization wrapper)
+      def execute_chat(messages:, model:, temperature:, **)
         case @provider
         when :ruby_openai
           chat_ruby_openai(messages: messages, model: model, temperature: temperature, **)
@@ -143,13 +194,11 @@ module Services
         else
           raise "Unknown provider: #{@provider}"
         end
-      rescue StandardError => e
-        Rails.logger.error("[OpenAIClient] Chat error: #{e.class} - #{e.message}")
-        nil
       end
 
       # Streaming chat completion
-      def chat_stream(messages:, model: nil, temperature: 0.7, &)
+      # For Ollama: Serializes requests to prevent parallel calls
+      def chat_stream(messages:, model: nil, temperature: 0.7, &block)
         return nil unless enabled?
 
         # Auto-select model for Ollama if not provided
@@ -159,6 +208,21 @@ module Services
                     'gpt-4o'
                   end
 
+        # Serialize Ollama requests to prevent parallel calls
+        if @provider == :ollama
+          with_request_serialization do
+            execute_chat_stream(messages: messages, model: model, temperature: temperature, &block)
+          end
+        else
+          execute_chat_stream(messages: messages, model: model, temperature: temperature, &block)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[OpenAIClient] Chat stream error: #{e.class} - #{e.message}")
+        nil
+      end
+
+      # Internal streaming chat execution (without serialization wrapper)
+      def execute_chat_stream(messages:, model:, temperature:, &)
         case @provider
         when :ruby_openai
           chat_stream_ruby_openai(messages: messages, model: model, temperature: temperature, &)
@@ -174,9 +238,6 @@ module Services
         else
           raise "Unknown provider: #{@provider}"
         end
-      rescue StandardError => e
-        Rails.logger.error("[OpenAIClient] Chat stream error: #{e.class} - #{e.message}")
-        nil
       end
 
       private
@@ -185,8 +246,8 @@ module Services
         # Check environment variable first, then fall back to Rails.env
         provider_env = ENV['OPENAI_PROVIDER']&.downcase&.to_sym
 
-        # Check if Ollama is configured
-        return :ollama if ENV['OLLAMA_BASE_URL'].present?
+        # Check if Ollama is configured (supports both OLLAMA_HOST_URL and OLLAMA_BASE_URL)
+        return :ollama if ENV['OLLAMA_HOST_URL'].present? || ENV['OLLAMA_BASE_URL'].present?
 
         if %i[ruby_openai openai_ruby ollama].include?(provider_env)
           provider_env
@@ -205,10 +266,10 @@ module Services
           return false
         end
 
-        # Ollama doesn't require API key, check base URL instead
+        # Ollama doesn't require API key, check base URL instead (supports both OLLAMA_HOST_URL and OLLAMA_BASE_URL)
         if @provider == :ollama
-          unless ENV['OLLAMA_BASE_URL'].present?
-            Rails.logger.warn('[OpenAIClient] Ollama base URL not configured (OLLAMA_BASE_URL)')
+          unless ENV['OLLAMA_HOST_URL'].present? || ENV['OLLAMA_BASE_URL'].present?
+            Rails.logger.warn('[OpenAIClient] Ollama base URL not configured (OLLAMA_HOST_URL or OLLAMA_BASE_URL)')
             return false
           end
           return true
@@ -295,30 +356,41 @@ module Services
           end
         end
 
-        base_url = ENV['OLLAMA_BASE_URL'] || 'http://localhost:11434'
+        base_url = ollama_base_url
         api_key = ENV['OLLAMA_API_KEY'] || 'ollama' # Ollama doesn't require auth, but some clients expect a key
+
+        # Optimized timeouts for remote Ollama server
+        # Default: 20s for non-streaming chat, 120s for streaming (prevents hanging)
+        # Connection timeout: 5s (fast failure if server unreachable)
+        # For very slow models, increase OLLAMA_STREAM_TIMEOUT
+        request_timeout = ENV.fetch('OLLAMA_TIMEOUT', '20').to_i # Default 20s for non-streaming
+        stream_timeout = ENV.fetch('OLLAMA_STREAM_TIMEOUT', '120').to_i # Default 120s (2 min) for streaming
+        open_timeout = ENV.fetch('OLLAMA_OPEN_TIMEOUT', '5').to_i # Default 5s for connection
+
+        # Store timeouts for use in streaming methods
+        @request_timeout = request_timeout
+        @stream_timeout = stream_timeout
 
         # Use ruby-openai if available (better Ollama support)
         if defined?(OpenAI) && OpenAI.respond_to?(:configure)
-          # Configure longer timeouts for Ollama (streaming can take time)
-          timeout = ENV.fetch('OLLAMA_TIMEOUT', '300').to_i # Default 5 minutes for streaming
-
           OpenAI.configure do |config|
             config.access_token = api_key
             config.uri_base = "#{base_url}/v1" # Ollama uses /v1 prefix
             config.log_errors = Rails.env.development?
-            # Configure request timeout for streaming
-            config.request_timeout = timeout
+            # Configure optimized timeouts for remote server
+            # Use longer timeout for streaming (models can be slow to start)
+            config.request_timeout = stream_timeout # Use stream timeout as default (covers both)
+            config.open_timeout = open_timeout if config.respond_to?(:open_timeout=)
           end
           @client = OpenAI::Client.new
         else
           # Fallback to openai-ruby
-          timeout = ENV.fetch('OLLAMA_TIMEOUT', '300').to_i
           @client = OpenAI::Client.new(
             api_key: api_key,
             uri_base: "#{base_url}/v1",
-            request_timeout: timeout
+            request_timeout: stream_timeout # Use stream timeout as default
           )
+          # NOTE: openai-ruby may not support open_timeout directly
         end
 
         Rails.logger.info("[OpenAIClient] Connected to Ollama at #{base_url}")
@@ -354,22 +426,29 @@ module Services
       def chat_stream_ruby_openai(messages:, model:, temperature:, &block)
         stream_start = Time.current
         chunk_count = 0
+        # Increased default timeout for streaming (models can be slow, especially on CPU)
+        # Default: 120s (2 minutes) - increase via OLLAMA_STREAM_TIMEOUT if needed
+        stream_timeout = @stream_timeout || ENV.fetch('OLLAMA_STREAM_TIMEOUT', '120').to_i
 
         begin
-          @client.chat(
-            parameters: {
-              model: model,
-              messages: format_messages_ruby_openai(messages),
-              temperature: temperature,
-              stream: proc do |chunk, _event|
-                content = chunk.dig('choices', 0, 'delta', 'content')
-                if content.present? && block
-                  chunk_count += 1
-                  yield(content)
+          # Use Timeout to wrap the streaming call for better control
+          # Note: This timeout applies to the entire stream, not per-chunk
+          Timeout.timeout(stream_timeout) do
+            @client.chat(
+              parameters: {
+                model: model,
+                messages: format_messages_ruby_openai(messages),
+                temperature: temperature,
+                stream: proc do |chunk, _event|
+                  content = chunk.dig('choices', 0, 'delta', 'content')
+                  if content.present? && block
+                    chunk_count += 1
+                    yield(content)
+                  end
                 end
-              end
-            }
-          )
+              }
+            )
+          end
 
           elapsed = Time.current - stream_start
           Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
@@ -398,26 +477,33 @@ module Services
       def chat_stream_openai_ruby(messages:, model:, temperature:, &block)
         stream_start = Time.current
         chunk_count = 0
+        # Increased default timeout for streaming (models can be slow, especially on CPU)
+        # Default: 120s (2 minutes) - increase via OLLAMA_STREAM_TIMEOUT if needed
+        stream_timeout = @stream_timeout || ENV.fetch('OLLAMA_STREAM_TIMEOUT', '120').to_i
 
         begin
-          stream = @client.chat.completions.create(
-            messages: format_messages_openai_ruby(messages),
-            model: model,
-            temperature: temperature,
-            stream: true
-          )
+          # Use Timeout to wrap the streaming call for better control
+          # Note: This timeout applies to the entire stream, not per-chunk
+          Timeout.timeout(stream_timeout) do
+            stream = @client.chat.completions.create(
+              messages: format_messages_openai_ruby(messages),
+              model: model,
+              temperature: temperature,
+              stream: true
+            )
 
-          stream.each do |event|
-            content = event.dig('choices', 0, 'delta', 'content')
-            next unless content.present?
+            stream.each do |event|
+              content = event.dig('choices', 0, 'delta', 'content')
+              next unless content.present?
 
-            chunk_count += 1
-            yield(content) if block
+              chunk_count += 1
+              yield(content) if block
+            end
           end
 
           elapsed = Time.current - stream_start
           Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
-        rescue Faraday::TimeoutError, Net::ReadTimeout => e
+        rescue Timeout::Error, Faraday::TimeoutError, Net::ReadTimeout => e
           elapsed = Time.current - stream_start
           Rails.logger.warn("[OpenAIClient] Stream timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
           nil

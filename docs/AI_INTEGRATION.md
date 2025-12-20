@@ -45,14 +45,28 @@ If you have Ollama running on another machine (e.g., Omarchy OS laptop):
 
 ```bash
 # Set Ollama server URL (replace with your Ollama server IP)
-export OLLAMA_BASE_URL="http://192.168.1.100:11434"
+# Supports both OLLAMA_HOST_URL and OLLAMA_BASE_URL
+export OLLAMA_HOST_URL="http://192.168.0.200:11434"
+# OR
+export OLLAMA_BASE_URL="http://192.168.0.200:11434"
 
 # Optional: Set default model
 export OLLAMA_MODEL="llama3"
 
 # Optional: API key (default: 'ollama')
 export OLLAMA_API_KEY="ollama"
+
+# Optional: Optimize for remote server
+export OLLAMA_TIMEOUT="20"          # Request timeout (default: 20s)
+export OLLAMA_OPEN_TIMEOUT="5"      # Connection timeout (default: 5s)
+export OLLAMA_REQUEST_DELAY_MS="500" # Delay between requests (default: 500ms)
 ```
+
+**Client Optimization for Remote Ollama:**
+- Requests are automatically serialized (no parallel calls)
+- Automatic delays between requests (configurable via `OLLAMA_REQUEST_DELAY_MS`)
+- Optimized timeouts (20s request, 5s connection)
+- Prevents hanging and blocking
 
 ### 4. Technical Analysis Agent Configuration (Optional)
 

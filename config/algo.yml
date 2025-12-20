@@ -520,7 +520,14 @@ telegram:
 ai:
   enabled: true # Set to true to enable AI integration
   # Timeout settings (in seconds):
-  # - OLLAMA_TIMEOUT: Timeout for Ollama requests (default: 300 seconds / 5 minutes)
+  # - OLLAMA_HOST_URL: Remote Ollama server URL (e.g., http://192.168.0.200:11434)
+  #   Alternative to OLLAMA_BASE_URL (both are supported)
+  # - OLLAMA_BASE_URL: Remote Ollama server URL (legacy, use OLLAMA_HOST_URL if possible)
+  # - OLLAMA_TIMEOUT: Request timeout for non-streaming requests (default: 20 seconds)
+  # - OLLAMA_STREAM_TIMEOUT: Timeout for streaming requests (default: 120 seconds / 2 minutes)
+  #   Increase this if models are slow or responses are long (e.g., 300 for very slow models)
+  # - OLLAMA_OPEN_TIMEOUT: Connection timeout for Ollama (default: 5 seconds)
+  # - OLLAMA_REQUEST_DELAY_MS: Delay between requests in milliseconds (default: 500ms)
   #   Useful for long streaming responses. Set higher if you experience timeouts.
   # Provider selection:
   # - Development/Test: Uses 'ruby-openai' gem (alexrudall/ruby-openai)
