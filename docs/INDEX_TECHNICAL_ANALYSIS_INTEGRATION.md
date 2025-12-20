@@ -41,27 +41,62 @@ signals:
   ta_min_confidence: 0.6 # Minimum confidence (0.0-1.0) required to proceed (default: 0.6)
 ```
 
+### Index-Specific Configuration
+
+The `IndexTechnicalAnalyzer` uses a configurable strategy pattern with index-specific defaults:
+
+**Configurable Behaviors:**
+- **Timeframes**: Different indices can use different timeframe combinations
+- **Indicator Periods**: RSI, ADX, MACD, ATR periods can vary per index
+- **Bias Thresholds**: RSI oversold/overbought levels, confidence calculation
+- **API Settings**: Throttling, retries, days_back per index
+
+**Default Configurations:**
+- **NIFTY**: Standard settings (RSI 14, ADX 14, timeframes [5, 15, 60])
+- **SENSEX**: More sensitive thresholds (RSI oversold 25, overbought 75), includes 30min timeframe
+- **BANKNIFTY**: Standard settings similar to NIFTY
+
+**Runtime Override:**
+```ruby
+# Override configuration at runtime
+analyzer = IndexTechnicalAnalyzer.new(:nifty, custom_config: {
+  configure_indicator_periods: { rsi: 21, adx: 21 },
+  configure_bias_thresholds: { rsi_oversold: 25, rsi_overbought: 75 }
+})
+```
+
 ### Behavior
 
 - **If `enable_index_ta: false`**: TA step is skipped, signal generation proceeds normally
 - **If TA signal is `:neutral`**: Signal generation is skipped
 - **If TA confidence < `ta_min_confidence`**: Signal generation is skipped
 - **If TA analysis fails**: Warning is logged, signal generation continues (graceful degradation)
+- **Index-specific configs**: Automatically applied based on index symbol, can be overridden
 
 ## Usage
 
 ### Single Index Analysis
 
 ```ruby
-# Analyze NIFTY
+# Analyze NIFTY (uses configured defaults)
 analyzer = IndexTechnicalAnalyzer.new(:nifty)
-result = analyzer.call(timeframes: [5, 15, 60], days_back: 30)
+result = analyzer.call
 
 if result[:success] && analyzer.success?
   puts "Signal: #{analyzer.signal}"
   puts "Confidence: #{analyzer.confidence}"
   puts "Rationale: #{analyzer.rationale}"
 end
+
+# Override timeframes at runtime
+result = analyzer.call(timeframes: [5, 15, 30, 60], days_back: 45)
+
+# Use custom configuration
+custom_analyzer = IndexTechnicalAnalyzer.new(:nifty, custom_config: {
+  configure_indicator_periods: { rsi: 21, adx: 21 },
+  configure_bias_thresholds: { rsi_oversold: 25, rsi_overbought: 75 }
+})
+result = custom_analyzer.call
 ```
 
 ### Multi-Index Analysis
