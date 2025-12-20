@@ -43,6 +43,48 @@ module Signal
         else
           Rails.logger.info("[Signal] NoTradeEngine Phase 1 DISABLED for #{index_cfg[:key]} - skipping pre-check")
         end
+
+        # ===== INDEX TECHNICAL ANALYSIS STEP =====
+        # Perform multi-timeframe TA analysis before signal generation
+        # Can be disabled via config: signals.enable_index_ta = false
+        enable_index_ta = signals_cfg.fetch(:enable_index_ta, true)
+        ta_result = nil
+
+        if enable_index_ta
+          ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
+          ta_days_back = signals_cfg[:ta_days_back] || 30
+          ta_min_confidence = signals_cfg[:ta_min_confidence] || 0.6
+
+          index_symbol = index_cfg[:key].to_s.downcase.to_sym
+          ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
+          ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
+
+          if ta_analysis[:success] && ta_analyzer.success?
+            ta_result = ta_analyzer.result
+
+            # If TA suggests neutral or low confidence, consider skipping
+            if ta_result[:signal] == :neutral || ta_result[:confidence] < ta_min_confidence
+              Rails.logger.info(
+                "[Signal] Skipping signal generation for #{index_cfg[:key]}: " \
+                "TA signal=#{ta_result[:signal]}, confidence=#{ta_result[:confidence].round(2)} " \
+                "(min required=#{ta_min_confidence})"
+              )
+              return
+            end
+
+            Rails.logger.info(
+              "[Signal] Index TA for #{index_cfg[:key]}: signal=#{ta_result[:signal]}, " \
+              "confidence=#{ta_result[:confidence].round(2)}, bias=#{ta_result.dig(:bias_summary, :summary, :bias)}"
+            )
+          else
+            Rails.logger.warn(
+              "[Signal] Index TA failed for #{index_cfg[:key]}: #{ta_analyzer.error} - continuing with signal generation"
+            )
+          end
+        else
+          Rails.logger.info("[Signal] Index TA DISABLED for #{index_cfg[:key]} - skipping TA step")
+        end
+
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         enable_supertrend_signal = signals_cfg.fetch(:enable_supertrend_signal, true)
         enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, false)
@@ -279,13 +321,19 @@ module Signal
             state_count: state_snapshot[:count],
             state_multiplier: state_snapshot[:multiplier],
             strategy_used: strategy_recommendation&.dig(:strategy_name),
-            original_timeframe: primary_tf
+            original_timeframe: primary_tf,
+            ta_context: ta_result&.slice(:signal, :confidence, :bias_summary)
           }
         )
 
         # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
 
-        picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: final_direction)
+        # Pass TA context to option chain analyzer if available
+        picks = Options::ChainAnalyzer.pick_strikes(
+          index_cfg: index_cfg,
+          direction: final_direction,
+          ta_context: ta_result
+        )
 
         if picks.blank?
           Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")

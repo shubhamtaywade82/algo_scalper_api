@@ -55,8 +55,16 @@ module Options
     end
 
     class << self
-      def pick_strikes(index_cfg:, direction:)
+      def pick_strikes(index_cfg:, direction:, ta_context: nil)
         # Rails.logger.info("[Options] Starting strike selection for #{index_cfg[:key]} #{direction}")
+
+        # Log TA context if available (for future use in strike selection logic)
+        if ta_context
+          Rails.logger.debug do
+            "[Options] TA context available for #{index_cfg[:key]}: " \
+            "signal=#{ta_context[:signal]}, confidence=#{ta_context[:confidence]&.round(2)}"
+          end
+        end
 
         # Get cached index instrument
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
