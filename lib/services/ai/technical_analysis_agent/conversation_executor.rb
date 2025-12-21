@@ -8,30 +8,14 @@ module Services
         # Maximum message history to keep (reduces token usage)
         MAX_MESSAGE_HISTORY = ENV.fetch('AI_MAX_MESSAGE_HISTORY', '8').to_i # Keep last 8 messages (system + 7)
 
-        # Maximum content length per message (characters, ~250 tokens)
-        MAX_MESSAGE_LENGTH = ENV.fetch('AI_MAX_MESSAGE_LENGTH', '1000').to_i
-
-        # Maximum tool result size (characters, ~500 tokens)
-        MAX_TOOL_RESULT_LENGTH = ENV.fetch('AI_MAX_TOOL_RESULT_LENGTH', '2000').to_i
-
-        # Truncate message content if too long
-        def truncate_message(content, max_length = MAX_MESSAGE_LENGTH)
-          return content if content.length <= max_length
-
-          truncated = content[0..max_length - 50]
-          truncated += "\n\n[Content truncated - #{content.length - max_length + 50} characters removed to optimize performance]"
-          truncated
+        # Truncate message content (no-op - returns content as-is)
+        def truncate_message(content, _max_length = nil)
+          content
         end
 
-        # Truncate tool result JSON if too long
-        def truncate_tool_result(tool_result, max_length = MAX_TOOL_RESULT_LENGTH)
-          result_str = JSON.pretty_generate(tool_result)
-          return result_str if result_str.length <= max_length
-
-          # Try to truncate intelligently - keep structure but reduce data
-          truncated = result_str[0..max_length - 100]
-          truncated += "\n\n[Tool result truncated - #{result_str.length - max_length + 100} characters removed]"
-          truncated
+        # Truncate tool result JSON (no-op - returns full result)
+        def truncate_tool_result(tool_result, _max_length = nil)
+          JSON.pretty_generate(tool_result)
         end
 
         # Limit message history to prevent token bloat
@@ -110,8 +94,7 @@ module Services
               # Safety check: if we've called tools 10 times in a row without analysis, force a break
               if consecutive_tool_calls >= max_consecutive_tools
                 Rails.logger.warn("[TechnicalAnalysisAgent] Too many consecutive tool calls (#{consecutive_tool_calls}), forcing analysis request")
-                truncated_response = truncate_message(response)
-                messages << { role: 'assistant', content: truncated_response }
+                messages << { role: 'assistant', content: response }
                 messages << {
                   role: 'user',
                   content: 'You have called many tools. Please provide your analysis now based on all the data you have gathered. ' \
@@ -138,11 +121,9 @@ module Services
               end
 
               # Add assistant message and tool result to conversation
-              # Truncate response if too long
-              truncated_response = truncate_message(response)
-              messages << { role: 'assistant', content: truncated_response }
+              messages << { role: 'assistant', content: response }
 
-              # Truncate tool result to prevent token bloat
+              # Include full tool result
               tool_result_str = truncate_tool_result(tool_result)
               messages << {
                 role: 'tool',
@@ -175,8 +156,7 @@ module Services
             else
               # Empty or very short response - prompt for analysis
               Rails.logger.warn("[TechnicalAnalysisAgent] Received very short response (#{response.length} chars), prompting for analysis...")
-              truncated_response = truncate_message(response)
-              messages << { role: 'assistant', content: truncated_response }
+              messages << { role: 'assistant', content: response }
               messages << {
                 role: 'user',
                 content: 'Please provide a complete analysis based on the data you have gathered. ' \
@@ -322,8 +302,7 @@ module Services
               if consecutive_tool_calls >= max_consecutive_tools
                 yield("⚠️  [Agent] Too many consecutive tool calls (#{consecutive_tool_calls}), forcing analysis request...\n") if block_given?
                 Rails.logger.warn("[TechnicalAnalysisAgent] Too many consecutive tool calls (#{consecutive_tool_calls}), forcing analysis request")
-                truncated_response = truncate_message(response)
-                messages << { role: 'assistant', content: truncated_response }
+                messages << { role: 'assistant', content: response }
                 messages << {
                   role: 'user',
                   content: 'You have called many tools. Please provide your analysis now based on all the data you have gathered. ' \
@@ -361,9 +340,7 @@ module Services
               Rails.logger.info("[TechnicalAnalysisAgent] Tool completed: #{tool_call['tool']}")
 
               # Add assistant message and tool result to conversation
-              # Truncate response if too long
-              truncated_response = truncate_message(response)
-              messages << { role: 'assistant', content: truncated_response }
+              messages << { role: 'assistant', content: response }
               messages << {
                 role: 'user',
                 content: "Tool result received. Now provide your analysis based on the data you've gathered. " \
@@ -371,7 +348,7 @@ module Services
                          'If you need more data, call another tool.'
               }
 
-              # Truncate tool result to prevent token bloat
+              # Include full tool result
               tool_result_str = truncate_tool_result(tool_result)
               messages << {
                 role: 'tool',
@@ -401,8 +378,7 @@ module Services
               # Empty or very short response - prompt for analysis
               yield("⚠️  [Agent] Short response received (#{response.length} chars), prompting for analysis...\n") if block_given?
               Rails.logger.warn("[TechnicalAnalysisAgent] Received very short response (#{response.length} chars), prompting for analysis...")
-              truncated_response = truncate_message(response)
-              messages << { role: 'assistant', content: truncated_response }
+              messages << { role: 'assistant', content: response }
               messages << {
                 role: 'user',
                 content: 'Please provide a complete analysis based on the data you have gathered. ' \

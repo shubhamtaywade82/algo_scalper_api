@@ -10,21 +10,17 @@ module Services
         def ensure_dhanhq_error_handler_loaded
           return unless defined?(Rails)
 
-          # Check if already loaded
-          return if defined?(DhanhqErrorHandler)
+          # Check if already loaded and methods are available
+          return if defined?(DhanhqErrorHandler) && DhanhqErrorHandler.respond_to?(:handle_dhanhq_error)
 
-          # Try to trigger autoloading by referencing the constant
-          begin
-            _ = DhanhqErrorHandler
-          rescue NameError
-            # If autoloading fails, try to require it explicitly
-            begin
-              require_dependency Rails.root.join('app/services/concerns/dhanhq_error_handler').to_s
-            rescue LoadError, NameError
-              # If that fails, try to load the file directly
-              load Rails.root.join('app/services/concerns/dhanhq_error_handler.rb').to_s
-            end
-          end
+          # Try to load the concern file directly
+          file_path = Rails.root.join('app/services/concerns/dhanhq_error_handler.rb')
+          require file_path.to_s if File.exist?(file_path)
+
+          # Verify the method is available after loading
+          return if defined?(DhanhqErrorHandler) && DhanhqErrorHandler.respond_to?(:handle_dhanhq_error)
+
+          Rails.logger.warn('[TechnicalAnalysisAgent] DhanhqErrorHandler.handle_dhanhq_error not available - instrument methods may fail')
         end
 
         def tool_get_comprehensive_analysis(args)
@@ -802,6 +798,234 @@ module Services
             Rails.logger.error("[TechnicalAnalysisAgent] Optimization error: #{e.class} - #{e.message}")
             { error: "#{e.class}: #{e.message}" }
           end
+        end
+
+        # ==========================================
+        # NEW WRAPPER METHODS (Orchestration Layer)
+        # These wrap existing tools with narrowing logic
+        # ==========================================
+
+        # Wrapper: Resolve instrument deterministically (Rails-controlled)
+        def tool_resolve_instrument(args)
+          symbol = args['symbol'] || args[:symbol]
+          return { error: 'Missing symbol' } unless symbol
+
+          # Use DecisionEngine to resolve deterministically
+          # Create temporary context for resolution
+          temp_context = AgentContext.new(
+            intent: :general,
+            underlying_symbol: symbol,
+            confidence: 0.5,
+            derivatives_needed: false,
+            timeframe_hint: '15m'
+          )
+
+          instrument = resolve_instrument_deterministically(temp_context)
+
+          return { error: "Instrument not found: #{symbol}" } unless instrument
+
+          {
+            instrument_id: instrument.id,
+            symbol: instrument.symbol_name,
+            segment: instrument.segment,
+            exchange: instrument.exchange,
+            underlying_symbol: instrument.underlying_symbol
+          }
+        end
+
+        # Wrapper: Get LTP for resolved instrument
+        def tool_get_ltp(args)
+          instrument_id = args['instrument_id'] || args[:instrument_id]
+          return { error: 'Missing instrument_id' } unless instrument_id
+
+          instrument = Instrument.find_by(id: instrument_id)
+          return { error: "Instrument not found: #{instrument_id}" } unless instrument
+
+          # Ensure DhanhqErrorHandler is loaded
+          ensure_dhanhq_error_handler_loaded
+
+          # Get LTP using existing method
+          ltp = instrument.ltp
+
+          return { error: "Failed to fetch LTP for #{instrument.symbol_name}" } unless ltp
+
+          { ltp: ltp.to_f }
+        end
+
+        # Wrapper: Fetch candles (automatically narrowed to last 50)
+        def tool_fetch_candles(args)
+          instrument_id = args['instrument_id'] || args[:instrument_id]
+          interval = args['interval'] || '15m'
+          return { error: 'Missing instrument_id' } unless instrument_id
+
+          instrument = Instrument.find_by(id: instrument_id)
+          return { error: "Instrument not found: #{instrument_id}" } unless instrument
+
+          # Ensure DhanhqErrorHandler is loaded
+          ensure_dhanhq_error_handler_loaded
+
+          normalized_interval = interval.to_s.gsub(/m$/i, '')
+
+          begin
+            series = instrument.candles(interval: normalized_interval)
+            return { error: "No candle data available for #{instrument.symbol_name}" } unless series&.candles&.any?
+
+            # Narrow to last 50 candles
+            candles = series.candles.last(50)
+            {
+              instrument_id: instrument_id,
+              interval: interval,
+              candle_count: candles.length,
+              latest_candle: candles.last,
+              candles: candles # Keep for now, will be filtered by AdaptiveController
+            }
+          rescue StandardError => e
+            Rails.logger.error("[TechnicalAnalysisAgent] Error fetching candles: #{e.class} - #{e.message}")
+            { error: "Failed to fetch candle data: #{e.message}" }
+          end
+        end
+
+        # NEW: Aggregate indicators (coarse-grained)
+        def tool_compute_indicators(args)
+          instrument_id = args['instrument_id'] || args[:instrument_id]
+          timeframes = args['timeframes'] || ['15m']
+          return { error: 'Missing instrument_id' } unless instrument_id
+
+          instrument = Instrument.find_by(id: instrument_id)
+          return { error: "Instrument not found: #{instrument_id}" } unless instrument
+
+          # Ensure DhanhqErrorHandler is loaded
+          ensure_dhanhq_error_handler_loaded
+
+          indicators = {}
+          timeframes.each do |tf|
+            normalized_tf = tf.to_s.gsub(/m$/i, '')
+            begin
+              series = instrument.candles(interval: normalized_tf)
+
+              # Handle case where candles() returns nil (DhanHQ error)
+              unless series&.candles&.any?
+                Rails.logger.warn("[TechnicalAnalysisAgent] No candle data available for #{instrument.symbol_name} @ #{tf}")
+                indicators[tf] = { error: "No candle data available for #{tf}" }
+                next
+              end
+
+              indicators[tf] = {
+                rsi: series.rsi(14),
+                macd: series.macd(12, 26, 9),
+                adx: series.adx(14),
+                supertrend: series.supertrend_signal,
+                atr: series.atr(14),
+                bollinger: series.bollinger_bands(period: 20)
+              }
+            rescue StandardError => e
+              Rails.logger.error("[TechnicalAnalysisAgent] Error computing indicators for #{tf}: #{e.class} - #{e.message}")
+              indicators[tf] = { error: e.message }
+            end
+          end
+
+          { indicators: indicators }
+        end
+
+        # Wrapper: Fetch option chain (automatically filtered to ATM ±1 ±2)
+        def tool_fetch_option_chain(args)
+          instrument_id = args['instrument_id'] || args[:instrument_id]
+          return { error: 'Missing instrument_id' } unless instrument_id
+
+          instrument = Instrument.find_by(id: instrument_id)
+          return { error: "Instrument not found: #{instrument_id}" } unless instrument
+
+          # Resolve index_key from instrument
+          # For index instruments, use symbol_name; for derivatives, use underlying_symbol
+          segment_upcase = instrument.segment.to_s.upcase
+          index_key = if %w[IDX_I INDEX].include?(segment_upcase)
+                        instrument.symbol_name
+                      else
+                        instrument.underlying_symbol || instrument.symbol_name
+                      end
+
+          return { error: "Could not resolve index_key for instrument #{instrument_id}" } unless index_key.present?
+
+          # Verify index_key exists in config
+          @index_config_cache ||= IndexConfigLoader.load_indices
+          index_cfg = @index_config_cache.find { |idx| idx[:key].to_s.upcase == index_key.to_s.upcase }
+          return { error: "Unknown index: #{index_key}. Available indices: #{@index_config_cache.map { |c| c[:key] }.join(', ')}" } unless index_cfg
+
+          # Use analyzer directly to get full chain data
+          cache_key = "analyzer:#{index_key}"
+          @analyzer_cache ||= {}
+          analyzer = @analyzer_cache[cache_key] ||= Options::DerivativeChainAnalyzer.new(index_key: index_key)
+
+          # Get spot price
+          spot = analyzer.spot_ltp
+          return { error: "Could not get spot price for #{index_key}" } unless spot&.positive?
+
+          # Get nearest expiry
+          expiry_date = analyzer.nearest_expiry
+          return { error: "Could not determine expiry for #{index_key}" } unless expiry_date
+
+          # Load chain for expiry (returns array of option data hashes)
+          chain = analyzer.load_chain_for_expiry(expiry_date, spot)
+          return { error: "No option chain data available for #{index_key}" } unless chain.is_a?(Array) && chain.any?
+
+          # Calculate ATM strike
+          round_to = if %w[NIFTY BANKNIFTY SENSEX].include?(index_key.to_s.upcase)
+                       50
+                     else
+                       5
+                     end
+          atm_strike = (spot.to_f / round_to).round * round_to
+
+          # Filter to ATM ±1 ±2 only (each option data hash has a :strike key)
+          filtered = chain.select do |option_data|
+            strike_value = option_data[:strike] || option_data['strike']
+            next false unless strike_value
+
+            strike_diff = (strike_value.to_f - atm_strike).abs
+            strike_diff <= (round_to * 2) # ATM, ATM±1, ATM±2
+          end
+
+          # Extract unique strikes (since we have both CE and PE for each strike)
+          unique_strikes = filtered.map { |o| o[:strike] || o['strike'] }.compact.uniq.sort.first(5)
+
+          # Build strikes array in format expected by context
+          strikes = unique_strikes.map do |strike_val|
+            # Find CE and PE for this strike
+            ce_option = filtered.find do |o|
+              (o[:strike] || o['strike']) == strike_val && (o[:type] || o['type'])&.upcase == 'CE'
+            end
+            pe_option = filtered.find do |o|
+              (o[:strike] || o['strike']) == strike_val && (o[:type] || o['type'])&.upcase == 'PE'
+            end
+
+            {
+              strike: strike_val,
+              ce: if ce_option
+                    { ltp: ce_option[:ltp] || ce_option['ltp'],
+                      premium: ce_option[:ltp] || ce_option['ltp'] }
+                  else
+                    nil
+                  end,
+              pe: if pe_option
+                    { ltp: pe_option[:ltp] || pe_option['ltp'],
+                      premium: pe_option[:ltp] || pe_option['ltp'] }
+                  else
+                    nil
+                  end
+            }
+          end
+
+          {
+            spot: spot,
+            atm_strike: atm_strike,
+            strikes: strikes
+          }
+        end
+
+        # NEW: Check data availability
+        def tool_check_data_availability(_args)
+          # This is a placeholder - actual check is done in AgentContext#ready_for_analysis?
+          { available: true, message: 'Data availability check' }
         end
       end
     end

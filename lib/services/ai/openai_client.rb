@@ -671,16 +671,11 @@ module Services
 
       # Log prompt and token count
       def log_prompt_and_tokens(messages:, model:, token_count:)
-        # Build a summary of messages for logging
+        # Build a summary of messages for logging (no truncation by default)
         message_summary = messages.map do |msg|
           role = msg[:role] || msg['role'] || 'unknown'
           content = msg[:content] || msg['content'] || ''
-          content_preview = if content.length > 200
-                              "#{content[0..200]}... (#{content.length} chars)"
-                            else
-                              content
-                            end
-          "#{role}: #{content_preview}"
+          "#{role}: #{content}"
         end.join("\n")
 
         Rails.logger.info("[OpenAIClient] Sending prompt to #{model}")

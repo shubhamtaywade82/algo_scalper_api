@@ -51,9 +51,8 @@ module Options
       []
     end
 
-    private
-
     # Get spot LTP from tick cache with API fallback
+    # Public method for external access
     def spot_ltp
       seg = @index_cfg[:segment]
       sid = @index_cfg[:sid]
@@ -81,6 +80,7 @@ module Options
     end
 
     # Find nearest expiry from Instrument's expiry list
+    # Public method for external access
     def find_nearest_expiry
       instrument = IndexInstrumentCache.instance.get_or_fetch(@index_cfg)
       return nil unless instrument
@@ -106,7 +106,11 @@ module Options
       next_expiry&.strftime('%Y-%m-%d')
     end
 
+    # Public alias for find_nearest_expiry
+    alias nearest_expiry find_nearest_expiry
+
     # Load chain using Derivative records and merge with live data
+    # Public method for external access
     def load_chain_for_expiry(expiry_date, spot)
       # Convert expiry_date to Date object if it's a string
       expiry_obj = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
@@ -246,7 +250,7 @@ module Options
 
               # Skip if segment or security_id is missing (shouldn't happen for real derivatives)
               if segment.present? && security_id.present?
-                Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Fetching LTP for ATM candidate: #{derivative.symbol_name} (strike: #{derivative.strike_price}, distance: #{strike_distance.round(0)}, segment: #{segment}, sid: #{security_id})" }
+                Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Fetching LTP for ATM candidate: #{derivative.display_name} (strike: #{derivative.strike_price}, distance: #{strike_distance.round(0)}, segment: #{segment}, sid: #{security_id})" }
 
                 # Use InstrumentHelpers method directly (includes WebSocket subscription + API fallback)
                 api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
@@ -254,7 +258,7 @@ module Options
                 if api_ltp&.positive?
                   tick = tick ? tick.dup : {}
                   tick[:ltp] = api_ltp
-                  Rails.logger.info("[Options::DerivativeChainAnalyzer] ✅ Got LTP from API for #{derivative.symbol_name}: ₹#{api_ltp}")
+                  Rails.logger.info("[Options::DerivativeChainAnalyzer] ✅ Got LTP from API for #{derivative.display_name}: ₹#{api_ltp}")
                 else
                   Rails.logger.debug { "[Options::DerivativeChainAnalyzer] ⚠️  API LTP fetch returned nil for #{derivative.symbol_name}" }
                 end

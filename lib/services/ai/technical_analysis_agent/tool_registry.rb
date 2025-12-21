@@ -6,7 +6,54 @@ module Services
       # Defines and builds the tool registry
       module ToolRegistry
         def build_tools_registry
-          {
+          # NEW: Coarse-grained tools for orchestration layer
+          orchestration_tools = {
+            'resolve_instrument' => {
+              description: 'Resolve instrument from symbol (Rails-controlled, not LLM choice). Returns instrument_id for use in other tools.',
+              parameters: [
+                { name: 'symbol', type: 'string', description: 'Instrument symbol (e.g., "NIFTY", "RELIANCE", "TCS")' }
+              ],
+              handler: method(:tool_resolve_instrument)
+            },
+            'get_ltp' => {
+              description: 'Get Last Traded Price for resolved instrument',
+              parameters: [
+                { name: 'instrument_id', type: 'integer', description: 'Instrument ID from resolve_instrument tool' }
+              ],
+              handler: method(:tool_get_ltp)
+            },
+            'fetch_candles' => {
+              description: 'Fetch historical candles (automatically narrowed to last 50)',
+              parameters: [
+                { name: 'instrument_id', type: 'integer', description: 'Instrument ID from resolve_instrument tool' },
+                { name: 'interval', type: 'string', description: 'Timeframe: 5m, 15m, 1h, daily' }
+              ],
+              handler: method(:tool_fetch_candles)
+            },
+            'compute_indicators' => {
+              description: 'Compute ALL indicators for instrument (RSI, MACD, ADX, Supertrend, ATR, BollingerBands) in one call',
+              parameters: [
+                { name: 'instrument_id', type: 'integer', description: 'Instrument ID from resolve_instrument tool' },
+                { name: 'timeframes', type: 'array', description: 'Array of timeframes: ["5m", "15m"]' }
+              ],
+              handler: method(:tool_compute_indicators)
+            },
+            'fetch_option_chain' => {
+              description: 'Fetch option chain (automatically filtered to ATM ±1 ±2)',
+              parameters: [
+                { name: 'instrument_id', type: 'integer', description: 'Instrument ID from resolve_instrument tool' }
+              ],
+              handler: method(:tool_fetch_option_chain)
+            },
+            'check_data_availability' => {
+              description: 'Check if sufficient data exists for analysis',
+              parameters: [],
+              handler: method(:tool_check_data_availability)
+            }
+          }
+
+          # EXISTING: Legacy tools (kept for backward compatibility, but prefer orchestration tools)
+          legacy_tools = {
             'get_comprehensive_analysis' => {
               description: 'Get comprehensive analysis data for an index or stock in ONE call: finds instrument, fetches LTP, historical data (up to 200 candles), and calculates ALL available indicators (RSI, MACD, ADX, Supertrend, ATR, BollingerBands). Use this instead of multiple separate tool calls for efficiency. IMPORTANT: Use correct segment - indices (NIFTY, BANKNIFTY, SENSEX) use "index", stocks (RELIANCE, TCS, etc.) use "equity".',
               parameters: [
@@ -149,6 +196,9 @@ module Services
               handler: method(:tool_optimize_indicator)
             }
           }
+
+          # Merge: orchestration tools first (preferred), then legacy tools
+          orchestration_tools.merge(legacy_tools)
         end
       end
     end
