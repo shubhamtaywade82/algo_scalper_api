@@ -8,12 +8,265 @@ module Options
   class ChainAnalyzer
     DEFAULT_DIRECTION = :bullish
 
-    def initialize(index:, data_provider:, config: {})
+    # === CONFIGURABLE BEHAVIOR STRATEGIES (Strategy pattern via config) ===
+    BEHAVIOR_STRATEGIES = {
+      strike_selection: {
+        method: :configure_strike_selection,
+        default: { offset: 2, include_atm: true, max_otm: 2 },
+        index_specific: {
+          nifty: { offset: 2, include_atm: true, max_otm: 2 },
+          sensex: { offset: 3, include_atm: true, max_otm: 3 },
+          banknifty: { offset: 2, include_atm: false, max_otm: 2 }
+        }
+      },
+
+      liquidity_filter: {
+        method: :configure_liquidity_filter,
+        default: { min_oi: 50_000, min_volume: 10_000, max_spread_pct: 3.0 },
+        index_specific: {
+          nifty: { min_oi: 100_000, min_volume: 50_000, max_spread_pct: 3.0 },
+          sensex: { min_oi: 50_000, min_volume: 25_000, max_spread_pct: 3.5 },
+          banknifty: { min_oi: 75_000, min_volume: 30_000, max_spread_pct: 3.0 }
+        }
+      },
+
+      volatility_assessment: {
+        method: :configure_volatility_assessment,
+        default: { low_iv: 10.0, high_iv: 30.0, min_iv: 10.0, max_iv: 60.0 },
+        index_specific: {
+          nifty: { low_iv: 10.0, high_iv: 30.0, min_iv: 10.0, max_iv: 60.0 },
+          sensex: { low_iv: 12.0, high_iv: 40.0, min_iv: 12.0, max_iv: 60.0 },
+          banknifty: { low_iv: 15.0, high_iv: 45.0, min_iv: 15.0, max_iv: 60.0 }
+        }
+      },
+
+      position_sizing: {
+        method: :configure_position_sizing,
+        default: { risk_per_trade: 0.01, max_capital_utilization: 0.10 },
+        index_specific: {
+          nifty: { risk_per_trade: 0.01, max_capital_utilization: 0.10 },
+          sensex: { risk_per_trade: 0.01, max_capital_utilization: 0.10 },
+          banknifty: { risk_per_trade: 0.02, max_capital_utilization: 0.10 }
+        }
+      },
+
+      delta_filter: {
+        method: :configure_delta_filter,
+        default: { min_delta: 0.08, time_based: true },
+        index_specific: {
+          nifty: { min_delta: 0.08, time_based: true },
+          sensex: { min_delta: 0.08, time_based: true },
+          banknifty: { min_delta: 0.10, time_based: true }
+        }
+      }
+    }.freeze
+
+    attr_reader :index_cfg, :config, :chain_data, :sorted_strikes, :spot_price, :expiry_date, :instrument, :index_symbol
+
+    def initialize(index:, data_provider: nil, config: {})
       @index_cfg = normalize_index(index)
       @provider = data_provider
-      @config = config || {}
+      @custom_config = config || {}
+      @index_symbol = normalize_index_symbol(@index_cfg[:key])
+      @config = load_configuration
+      @chain_data = nil
+      @sorted_strikes = nil
+      @spot_price = nil
+      @expiry_date = nil
+      @instrument = nil
     end
 
+    # Load chain data from instrument
+    def load_chain_data!
+      @instrument = IndexInstrumentCache.instance.get_or_fetch(@index_cfg)
+      unless @instrument
+        Rails.logger.warn("[Options::ChainAnalyzer] No instrument found for #{@index_cfg[:key]}")
+        return false
+      end
+
+      expiry_list = @instrument.expiry_list
+      unless expiry_list&.any?
+        Rails.logger.warn("[Options::ChainAnalyzer] No expiry list available for #{@index_cfg[:key]}")
+        return false
+      end
+
+      @expiry_date = self.class.find_next_expiry(expiry_list)
+      unless @expiry_date
+        Rails.logger.warn("[Options::ChainAnalyzer] Could not determine next expiry for #{@index_cfg[:key]}")
+        return false
+      end
+
+      chain_data_raw = begin
+        @instrument.fetch_option_chain(@expiry_date)
+      rescue StandardError => e
+        Rails.logger.warn("[Options::ChainAnalyzer] Failed to fetch chain: #{e.class} - #{e.message}")
+        nil
+      end
+
+      unless chain_data_raw
+        Rails.logger.warn("[Options::ChainAnalyzer] No option chain data for #{@index_cfg[:key]} #{@expiry_date}")
+        return false
+      end
+
+      @chain_data = chain_data_raw
+      @spot_price = chain_data_raw[:last_price]&.to_f
+      @sorted_strikes = chain_data_raw[:oc]&.keys&.map(&:to_f)&.sort || []
+
+      true
+    end
+
+    # Recommend strikes for a given signal direction
+    def recommend_strikes_for_signal(signal, options = {})
+      return { strikes: [], option_type: nil, error: 'Chain data not loaded' } unless chain_data_loaded?
+
+      direction = signal.to_sym
+      option_type = direction == :bullish ? 'ce' : 'pe'
+
+      # Merge runtime options with configured strike selection
+      strike_config = @config[:strike_selection].merge(options.slice(:offset, :include_atm, :max_otm))
+
+      # Calculate strike interval
+      strike_interval = calculate_strike_interval
+
+      # Find ATM strike
+      atm_strike = find_atm_strike(@spot_price, strike_interval)
+
+      # Generate candidate strikes
+      candidates = generate_candidate_strikes(atm_strike, strike_interval, option_type, strike_config)
+
+      # Apply filters
+      filtered = filter_strikes(candidates, option_type)
+
+      # Sort by score
+      scored = score_strikes(filtered, atm_strike, option_type)
+
+      {
+        strikes: scored.map { |s| s[:strike] },
+        option_type: option_type,
+        atm_strike: atm_strike,
+        spot_price: @spot_price,
+        expiry_date: @expiry_date
+      }
+    end
+
+    # Get chain summary
+    def chain_summary
+      return nil unless chain_data_loaded?
+
+      {
+        index: @index_cfg[:key],
+        spot_price: @spot_price,
+        expiry_date: @expiry_date,
+        total_strikes: @sorted_strikes.size,
+        strike_range: @sorted_strikes.any? ? { min: @sorted_strikes.first, max: @sorted_strikes.last } : nil,
+        strike_interval: calculate_strike_interval,
+        atm_strike: find_atm_strike(@spot_price, calculate_strike_interval),
+        timestamp: Time.current
+      }
+    end
+
+    # Assess volatility for a strike
+    def assess_volatility(strike, option_type)
+      return nil unless chain_data_loaded?
+
+      option_data = get_option_data(strike, option_type)
+      return nil unless option_data
+
+      iv = option_data['implied_volatility']&.to_f
+      return nil unless iv
+
+      thresholds = @config[:volatility_assessment]
+
+      if iv < thresholds[:low_iv]
+        :cheap
+      elsif iv > thresholds[:high_iv]
+        :expensive
+      else
+        :fair
+      end
+    end
+
+    # Get liquidity status for a strike
+    def liquidity_status(strike, option_type)
+      return nil unless chain_data_loaded?
+
+      option_data = get_option_data(strike, option_type)
+      return nil unless option_data
+
+      oi = option_data['oi']&.to_i || 0
+      volume = option_data['volume']&.to_i || 0
+      bid = option_data['top_bid_price']&.to_f
+      ask = option_data['top_ask_price']&.to_f
+
+      spread_pct = if bid && ask && bid.positive?
+                     ((ask - bid) / bid) * 100
+                   else
+                     nil
+                   end
+
+      thresholds = @config[:liquidity_filter]
+
+      {
+        oi: oi,
+        volume: volume,
+        spread_pct: spread_pct,
+        meets_oi_threshold: oi >= thresholds[:min_oi],
+        meets_volume_threshold: volume >= thresholds[:min_volume],
+        meets_spread_threshold: spread_pct.nil? || spread_pct <= thresholds[:max_spread_pct],
+        overall_liquidity: calculate_liquidity_score(oi, volume, spread_pct)
+      }
+    end
+
+    # Analyze a specific strike
+    def analyze_strike(strike, option_type)
+      return nil unless chain_data_loaded?
+
+      option_data = get_option_data(strike, option_type)
+      return nil unless option_data
+
+      greeks = option_data['greeks'] || {}
+      strike_interval = calculate_strike_interval
+      atm_strike = find_atm_strike(@spot_price, strike_interval)
+
+      {
+        strike: strike,
+        option_type: option_type,
+        last_price: option_data['last_price']&.to_f,
+        iv: option_data['implied_volatility']&.to_f,
+        oi: option_data['oi']&.to_i,
+        volume: option_data['volume']&.to_i,
+        bid: option_data['top_bid_price']&.to_f,
+        ask: option_data['top_ask_price']&.to_f,
+        delta: greeks['delta']&.to_f,
+        gamma: greeks['gamma']&.to_f,
+        theta: greeks['theta']&.to_f,
+        vega: greeks['vega']&.to_f,
+        distance_from_atm: (strike - atm_strike).abs,
+        strike_type: classify_strike(strike, atm_strike, strike_interval, option_type),
+        volatility_assessment: assess_volatility(strike, option_type),
+        liquidity_status: liquidity_status(strike, option_type)
+      }
+    end
+
+    # Calculate position size
+    def calculate_position_size(capital, option_price, risk_params = {})
+      return 0 unless capital&.positive? && option_price&.positive?
+
+      params = @config[:position_sizing].merge(risk_params)
+      risk_amount = capital * params[:risk_per_trade]
+      max_capital_used = capital * params[:max_capital_utilization]
+
+      # Calculate lots based on risk
+      lots_by_risk = (risk_amount / option_price).floor
+
+      # Calculate lots based on max capital utilization
+      lots_by_capital = (max_capital_used / option_price).floor
+
+      # Use the smaller of the two
+      [lots_by_risk, lots_by_capital].min
+    end
+
+    # Backward compatible method
     def select_candidates(limit: 2, direction: DEFAULT_DIRECTION)
       picks = self.class.pick_strikes(
         index_cfg: @index_cfg,
@@ -37,6 +290,245 @@ module Options
       end
     end
 
+    def normalize_index_symbol(symbol)
+      symbol.to_s.downcase.to_sym
+    end
+
+    def load_configuration
+      # Start with algo.yml config
+      algo_config = AlgoConfig.fetch[:option_chain] || {}
+
+      # Load behavior strategies
+      config = {}
+      BEHAVIOR_STRATEGIES.each_value do |strategy_config|
+        strategy_key = strategy_config[:method]
+        index_specific = strategy_config[:index_specific][@index_symbol]
+        default_value = strategy_config[:default]
+
+        # Priority: custom_config > index_specific > default > algo.yml
+        config[strategy_key] = (@custom_config[strategy_key] ||
+                                 index_specific ||
+                                 default_value ||
+                                 algo_config).dup
+      end
+
+      # Add convenience accessors
+      config[:strike_selection] = config[:configure_strike_selection]
+      config[:liquidity_filter] = config[:configure_liquidity_filter]
+      config[:volatility_assessment] = config[:configure_volatility_assessment]
+      config[:position_sizing] = config[:configure_position_sizing]
+      config[:delta_filter] = config[:configure_delta_filter]
+
+      # Add index-specific metadata
+      config[:lot_size] = @index_cfg[:lot]&.to_i || 50
+      config[:point_value] = @index_cfg[:point_value]&.to_f || 25.0
+
+      config
+    end
+
+    def chain_data_loaded?
+      @chain_data.present? && @sorted_strikes&.any?
+    end
+
+    def calculate_strike_interval
+      return 50 unless @sorted_strikes&.size&.>= 2
+
+      @sorted_strikes[1] - @sorted_strikes[0]
+    end
+
+    def find_atm_strike(spot, interval)
+      return spot unless interval&.positive?
+
+      (spot / interval).round * interval
+    end
+
+    def generate_candidate_strikes(atm_strike, interval, option_type, strike_config)
+      offset = strike_config[:offset] || 2
+      include_atm = strike_config[:include_atm] != false
+      max_otm = strike_config[:max_otm] || 2
+
+      candidates = []
+
+      candidates << atm_strike if include_atm && @sorted_strikes.include?(atm_strike)
+
+      if option_type == 'ce'
+        # CE: ATM+1, ATM+2, etc. (OTM calls)
+        1.upto(max_otm) do |i|
+          strike = atm_strike + (i * interval)
+          candidates << strike if @sorted_strikes.include?(strike)
+        end
+      else
+        # PE: ATM-1, ATM-2, etc. (OTM puts)
+        1.upto(max_otm) do |i|
+          strike = atm_strike - (i * interval)
+          candidates << strike if @sorted_strikes.include?(strike)
+        end
+      end
+
+      candidates.uniq.sort
+    end
+
+    def filter_strikes(candidates, option_type)
+      candidates.filter_map do |strike|
+        option_data = get_option_data(strike, option_type)
+        next nil unless option_data
+
+        # Apply filters
+        next nil unless passes_liquidity_filter?(option_data)
+        next nil unless passes_volatility_filter?(option_data, strike)
+        next nil unless passes_delta_filter?(option_data)
+
+        {
+          strike: strike,
+          option_data: option_data
+        }
+      end
+    end
+
+    def passes_liquidity_filter?(option_data)
+      thresholds = @config[:liquidity_filter]
+      oi = option_data['oi']&.to_i || 0
+      volume = option_data['volume']&.to_i || 0
+      bid = option_data['top_bid_price']&.to_f
+      ask = option_data['top_ask_price']&.to_f
+
+      return false unless oi >= thresholds[:min_oi]
+      return false unless volume >= thresholds[:min_volume]
+
+      if bid && ask && bid.positive?
+        spread_pct = ((ask - bid) / bid) * 100
+        return false if spread_pct > thresholds[:max_spread_pct]
+      end
+
+      true
+    end
+
+    def passes_volatility_filter?(option_data, strike)
+      thresholds = @config[:volatility_assessment]
+      iv = option_data['implied_volatility']&.to_f
+      return false unless iv
+
+      # Relaxed thresholds for ATM strikes
+      strike_interval = calculate_strike_interval
+      atm_strike = find_atm_strike(@spot_price, strike_interval)
+
+      min_iv_threshold = if strike == atm_strike
+                           [5.0, thresholds[:min_iv] * 0.6].max
+                         elsif (strike - atm_strike).abs <= strike_interval
+                           [7.0, thresholds[:min_iv] * 0.8].max
+                         else
+                           thresholds[:min_iv]
+                         end
+
+      iv >= min_iv_threshold && iv <= thresholds[:max_iv]
+    end
+
+    def passes_delta_filter?(option_data)
+      thresholds = @config[:delta_filter]
+      greeks = option_data['greeks'] || {}
+      delta = greeks['delta']&.to_f&.abs
+
+      return false unless delta
+
+      min_delta = if thresholds[:time_based]
+                    self.class.min_delta_now
+                  else
+                    thresholds[:min_delta]
+                  end
+
+      delta >= min_delta
+    end
+
+    def score_strikes(filtered, atm_strike, option_type)
+      strike_interval = calculate_strike_interval
+      iv_rank = 0.5 # Default - could be calculated from historical IV
+      atm_range_percent = self.class.atm_range_pct(iv_rank)
+
+      filtered.map do |item|
+        strike = item[:strike]
+        option_data = item[:option_data]
+
+        leg = {
+          strike: strike,
+          ltp: option_data['last_price']&.to_f,
+          iv: option_data['implied_volatility']&.to_f,
+          oi: option_data['oi']&.to_i,
+          spread: calculate_spread_ratio(option_data),
+          delta: option_data.dig('greeks', 'delta')&.to_f&.abs,
+          distance_from_atm: (strike - atm_strike).abs
+        }
+
+        score = self.class.calculate_strike_score(leg, option_type.to_sym, atm_strike, atm_range_percent)
+        leg.merge(score: score)
+      end.sort_by { |leg| [-leg[:score], leg[:distance_from_atm]] }
+    end
+
+    def calculate_spread_ratio(option_data)
+      bid = option_data['top_bid_price']&.to_f
+      ask = option_data['top_ask_price']&.to_f
+
+      return nil unless bid && ask && bid.positive?
+
+      (ask - bid) / bid
+    end
+
+    def get_option_data(strike, option_type)
+      return nil unless @chain_data && @chain_data[:oc]
+
+      strike_data = @chain_data[:oc][strike.to_s]
+      return nil unless strike_data
+
+      strike_data[option_type]
+    end
+
+    def classify_strike(strike, atm_strike, interval, option_type)
+      return 'ATM' if strike == atm_strike
+
+      if option_type == 'ce'
+        diff = (strike - atm_strike) / interval
+        case diff
+        when 1 then 'ATM+1'
+        when 2 then 'ATM+2'
+        when 3 then 'ATM+3'
+        else diff > 0 ? "OTM+#{diff.to_i}" : "ITM#{diff.to_i}"
+        end
+      else
+        diff = (atm_strike - strike) / interval
+        case diff
+        when 1 then 'ATM-1'
+        when 2 then 'ATM-2'
+        when 3 then 'ATM-3'
+        else diff > 0 ? "OTM-#{diff.to_i}" : "ITM+#{diff.to_i}"
+        end
+      end
+    end
+
+    def calculate_liquidity_score(oi, volume, spread_pct)
+      score = 0
+
+      # OI contribution (0-50)
+      score += if oi >= 1_000_000
+                 50
+               elsif oi >= 500_000
+                 40
+               elsif oi >= 100_000
+                 30
+               else
+                 20
+               end
+
+      # Spread penalty
+      if spread_pct
+        if spread_pct > 2.0
+          score *= 0.8
+        elsif spread_pct > 1.0
+          score *= 0.9
+        end
+      end
+
+      score
+    end
+
     def decorate_pick(pick)
       pick.merge(
         index_key: @index_cfg[:key],
@@ -46,7 +538,9 @@ module Options
     end
 
     def fetch_spot
-      return unless @provider.respond_to?(:underlying_spot)
+      return @spot_price if @spot_price
+
+      return unless @provider&.respond_to?(:underlying_spot)
 
       @provider.underlying_spot(@index_cfg[:key])
     rescue StandardError => e
@@ -54,6 +548,7 @@ module Options
       nil
     end
 
+    # Class methods (backward compatible)
     class << self
       def pick_strikes(index_cfg:, direction:)
         # Rails.logger.info("[Options] Starting strike selection for #{index_cfg[:key]} #{direction}")

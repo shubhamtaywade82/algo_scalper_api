@@ -364,6 +364,15 @@ signals:
   # This prevents trading in indices where expiry is too far away (e.g., monthly BANKNIFTY when > 7 days)
   max_expiry_days: 7 # Maximum days to expiry (indices with expiry > this will be skipped)
 
+  # Index Technical Analysis (TA) Configuration
+  # Multi-timeframe technical analysis before signal generation
+  # Uses DhanHQ TA modules if available, falls back to existing indicator infrastructure
+  enable_index_ta: true # Enable index TA step (default: true)
+  ta_timeframes: [5, 15, 60] # Timeframes in minutes for TA analysis (default: [5, 15, 60])
+  ta_days_back: 30 # Days of historical data to fetch (default: 30)
+  ta_min_confidence: 0.6 # Minimum confidence (0.0-1.0) required to proceed (default: 0.6)
+  # If TA signal is neutral or confidence < ta_min_confidence, signal generation is skipped
+
   # NoTradeEngine Configuration
   # Set to false to disable both Phase 1 (pre-check) and Phase 2 (detailed validation)
   # Useful for testing the trading system without NoTradeEngine restrictions

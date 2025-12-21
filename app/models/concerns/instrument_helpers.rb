@@ -264,7 +264,7 @@ module InstrumentHelpers
     error_msg = e.message.to_s
     is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit')
     unless is_rate_limit
-      error_info = ::Concerns::DhanhqErrorHandler.handle_dhanhq_error(
+      error_info = DhanhqErrorHandler.handle_dhanhq_error(
         e,
         context: "fetch_ltp_from_api(#{self.class.name} #{security_id})"
       )
@@ -289,7 +289,7 @@ module InstrumentHelpers
     response = DhanHQ::Models::MarketFeed.ohlc(exch_segment_enum)
     response['status'] == 'success' ? response.dig('data', exchange_segment, security_id.to_s) : nil
   rescue StandardError => e
-    error_info = Concerns::DhanhqErrorHandler.handle_dhanhq_error(
+    error_info = DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "ohlc(#{self.class.name} #{security_id})"
     )
@@ -331,7 +331,7 @@ module InstrumentHelpers
       to_date: to_date || (Time.zone.today - 1).to_s
     )
   rescue StandardError => e
-    error_info = ::Concerns::DhanhqErrorHandler.handle_dhanhq_error(
+    error_info = DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "intraday_ohlc(#{self.class.name} #{security_id})"
     )

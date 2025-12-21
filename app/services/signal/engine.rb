@@ -4,9 +4,63 @@ module Signal
   class Engine
     class << self
       def run_for(index_cfg)
+        # Skip signal generation if market is closed (after 3:30 PM IST)
+        if defined?(TradingSession::Service) && TradingSession::Service.respond_to?(:market_closed?) && TradingSession::Service.market_closed?
+          Rails.logger.debug { "[Signal] Market closed - skipping analysis for #{index_cfg[:key]}" }
+          return
+        end
+
         Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for #{index_cfg[:key]} (IDX_I) --------------------------------------------------------")
 
+        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+        unless instrument
+          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
+          return
+        end
+
         signals_cfg = AlgoConfig.fetch[:signals] || {}
+
+        # ===== INDEX TECHNICAL ANALYSIS STEP =====
+        # Perform multi-timeframe TA analysis before signal generation
+        # Can be disabled via config: signals.enable_index_ta = false
+        enable_index_ta = signals_cfg.fetch(:enable_index_ta, true)
+        ta_result = nil
+
+        if enable_index_ta
+          ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
+          ta_days_back = signals_cfg[:ta_days_back] || 30
+          ta_min_confidence = signals_cfg[:ta_min_confidence] || 0.6
+
+          index_symbol = index_cfg[:key].to_s.downcase.to_sym
+          ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
+          ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
+
+          if ta_analysis[:success] && ta_analyzer.success?
+            ta_result = ta_analyzer.result
+
+            # If TA suggests neutral or low confidence, consider skipping
+            if ta_result[:signal] == :neutral || ta_result[:confidence] < ta_min_confidence
+              Rails.logger.info(
+                "[Signal] Skipping signal generation for #{index_cfg[:key]}: " \
+                "TA signal=#{ta_result[:signal]}, confidence=#{ta_result[:confidence].round(2)} " \
+                "(min required=#{ta_min_confidence})"
+              )
+              return
+            end
+
+            Rails.logger.info(
+              "[Signal] Index TA for #{index_cfg[:key]}: signal=#{ta_result[:signal]}, " \
+              "confidence=#{ta_result[:confidence].round(2)}, bias=#{ta_result.dig(:bias_summary, :summary, :bias)}"
+            )
+          else
+            Rails.logger.warn(
+              "[Signal] Index TA failed for #{index_cfg[:key]}: #{ta_analyzer.error} - continuing with signal generation"
+            )
+          end
+        else
+          Rails.logger.info("[Signal] Index TA DISABLED for #{index_cfg[:key]} - skipping TA step")
+        end
+
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
@@ -15,12 +69,6 @@ module Signal
         use_strategy_recommendations = signals_cfg.fetch(:use_strategy_recommendations, false)
 
         # Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
-
-        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-        unless instrument
-          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
-          return
-        end
 
         # Get strategy recommendation if enabled - use best strategy for this index
         strategy_recommendation = nil
@@ -411,8 +459,8 @@ module Signal
         # Log all validation results
         # Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
         validation_checks.each do |check|
-          check[:valid] ? '✅' : '❌'
-          # Rails.logger.info("  #{status} #{check[:name]}: #{check[:message]}")
+          _status = check[:valid] ? '✅' : '❌'
+          # Rails.logger.info("  #{_status} #{check[:name]}: #{check[:message]}")
         end
 
         # Determine overall validation result
@@ -550,8 +598,9 @@ module Signal
 
       # Validate market timing - avoid problematic trading times
       def validate_market_timing
-        return { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
-        current_time = Time.zone.now
+        # TODO: Implement market timing validation if needed
+        # current_time = Time.zone.now
+        { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
 
         # First check if it's a trading day using Market::Calendar
         unless Market::Calendar.trading_day_today?
@@ -692,7 +741,7 @@ module Signal
 
       # Build clear entry path identifier for tracking
       # Format: "strategy_timeframe_confirmation" e.g., "recommended_5m_none" or "supertrend_adx_1m_5m"
-      def build_entry_path_identifier(strategy_recommendation:, use_strategy_recommendations:, primary_tf:,
+      def build_entry_path_identifier(strategy_recommendation:, use_strategy_recommendations:, primary_tf:, # rubocop:disable Lint/UnusedMethodArgument
                                       effective_timeframe:, confirmation_tf:, enable_confirmation:)
         strategy_part = if use_strategy_recommendations && strategy_recommendation&.dig(:recommended)
                           strategy_recommendation[:strategy_name].downcase.gsub(/\s+/, '_')

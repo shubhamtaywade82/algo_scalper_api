@@ -32,6 +32,20 @@ module Services
       # Delay between requests (milliseconds)
       REQUEST_DELAY_MS = ENV.fetch('OLLAMA_REQUEST_DELAY_MS', '500').to_i
 
+      # Cache for Ollama models list (class-level, shared across instances)
+      # Format: { base_url => { models: [...], fetched_at: Time } }
+      @models_cache = {}
+      @models_cache_mutex = Mutex.new
+      MODELS_CACHE_TTL = ENV.fetch('OLLAMA_MODELS_CACHE_TTL', '300').to_i # Default: 5 minutes
+
+      class << self
+        attr_accessor :models_cache, :models_cache_mutex
+      end
+
+      # Initialize class variables
+      self.models_cache = {}
+      self.models_cache_mutex = Mutex.new
+
       def initialize
         @client = nil
         @provider = determine_provider
@@ -70,18 +84,32 @@ module Services
         end
       end
 
-      # Get available models from Ollama
+      # Get available models from Ollama (with caching)
       def fetch_available_models
         return [] unless @provider == :ollama && @enabled
 
+        base_url = ollama_base_url
+
+        # Check cache first
+        cached = get_cached_models(base_url)
+        if cached
+          Rails.logger.debug { "[OpenAIClient] Using cached models list for #{base_url}" }
+          @available_models = cached
+          return cached
+        end
+
+        # Cache miss or expired - fetch from API
         begin
-          base_url = ollama_base_url
           response = Net::HTTP.get_response(URI("#{base_url}/api/tags"))
 
           if response.code == '200'
             data = JSON.parse(response.body)
             models = data['models'] || []
             @available_models = models.map { |m| m['name'] }.compact
+
+            # Cache the result
+            set_cached_models(base_url, @available_models)
+
             Rails.logger.info("[OpenAIClient] Found #{@available_models.count} Ollama models: #{@available_models.join(', ')}")
             @available_models
           else
@@ -93,6 +121,38 @@ module Services
           []
         end
       end
+
+      # Get cached models for a base URL (class method)
+      def self.get_cached_models(base_url)
+        models_cache_mutex.synchronize do
+          cached = models_cache[base_url]
+          return nil unless cached
+
+          # Check if cache is expired
+          age = Time.current - cached[:fetched_at]
+          if age > MODELS_CACHE_TTL
+            models_cache.delete(base_url)
+            return nil
+          end
+
+          cached[:models]
+        end
+      end
+
+      # Set cached models for a base URL (class method)
+      def self.set_cached_models(base_url, models)
+        models_cache_mutex.synchronize do
+          models_cache[base_url] = {
+            models: models,
+            fetched_at: Time.current
+          }
+        end
+      end
+
+      # Instance method wrappers for class methods
+      delegate :get_cached_models, to: :class
+
+      delegate :set_cached_models, to: :class
 
       # Select best model from available models
       def select_best_model
@@ -398,10 +458,16 @@ module Services
 
       # Chat completion using ruby-openai
       def chat_ruby_openai(messages:, model:, temperature:, **options)
+        formatted_messages = format_messages_ruby_openai(messages)
+        token_count = estimate_token_count(formatted_messages)
+
+        # Log prompt and token count
+        log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
+
         response = @client.chat(
           parameters: {
             model: model,
-            messages: format_messages_ruby_openai(messages),
+            messages: formatted_messages,
             temperature: temperature,
             **options
           }
@@ -412,8 +478,14 @@ module Services
 
       # Chat completion using openai-ruby
       def chat_openai_ruby(messages:, model:, temperature:, **)
+        formatted_messages = format_messages_openai_ruby(messages)
+        token_count = estimate_token_count(formatted_messages)
+
+        # Log prompt and token count
+        log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
+
         response = @client.chat.completions.create(
-          messages: format_messages_openai_ruby(messages),
+          messages: formatted_messages,
           model: model,
           temperature: temperature,
           **
@@ -430,6 +502,12 @@ module Services
         # Default: 120s (2 minutes) - increase via OLLAMA_STREAM_TIMEOUT if needed
         stream_timeout = @stream_timeout || ENV.fetch('OLLAMA_STREAM_TIMEOUT', '120').to_i
 
+        formatted_messages = format_messages_ruby_openai(messages)
+        token_count = estimate_token_count(formatted_messages)
+
+        # Log prompt and token count
+        log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
+
         begin
           # Use Timeout to wrap the streaming call for better control
           # Note: This timeout applies to the entire stream, not per-chunk
@@ -437,7 +515,7 @@ module Services
             @client.chat(
               parameters: {
                 model: model,
-                messages: format_messages_ruby_openai(messages),
+                messages: formatted_messages,
                 temperature: temperature,
                 stream: proc do |chunk, _event|
                   content = chunk.dig('choices', 0, 'delta', 'content')
@@ -452,12 +530,13 @@ module Services
 
           elapsed = Time.current - stream_start
           Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
-        rescue Faraday::TimeoutError, Net::ReadTimeout => e
+        rescue Timeout::Error, Faraday::TimeoutError, Net::ReadTimeout => e
           elapsed = Time.current - stream_start
           # Timeout errors during streaming - log but don't fail if we got some content
           Rails.logger.warn("[OpenAIClient] Stream timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
           # Return nil to indicate partial stream
           nil
+        # Timeout::Error is intentionally caught above; StandardError catches other exceptions
         rescue StandardError => e
           elapsed = Time.current - stream_start
           # Some streaming implementations may raise errors on stream end
@@ -481,12 +560,18 @@ module Services
         # Default: 120s (2 minutes) - increase via OLLAMA_STREAM_TIMEOUT if needed
         stream_timeout = @stream_timeout || ENV.fetch('OLLAMA_STREAM_TIMEOUT', '120').to_i
 
+        formatted_messages = format_messages_openai_ruby(messages)
+        token_count = estimate_token_count(formatted_messages)
+
+        # Log prompt and token count
+        log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
+
         begin
           # Use Timeout to wrap the streaming call for better control
           # Note: This timeout applies to the entire stream, not per-chunk
           Timeout.timeout(stream_timeout) do
             stream = @client.chat.completions.create(
-              messages: format_messages_openai_ruby(messages),
+              messages: formatted_messages,
               model: model,
               temperature: temperature,
               stream: true
@@ -507,6 +592,7 @@ module Services
           elapsed = Time.current - stream_start
           Rails.logger.warn("[OpenAIClient] Stream timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
           nil
+        # Timeout::Error is intentionally caught above; StandardError catches other exceptions
         rescue StandardError => e
           elapsed = Time.current - stream_start
           if e.message.include?('end of file') || e.message.include?('Connection') || e.message.include?('closed')
@@ -563,6 +649,43 @@ module Services
         else
           response.to_s
         end
+      end
+
+      # Estimate token count from messages
+      # Uses approximation: 1 token ≈ 4 characters (common for English text)
+      # This is a rough estimate - actual tokenization varies by model
+      def estimate_token_count(messages)
+        return 0 unless messages.is_a?(Array)
+
+        total_chars = messages.sum do |msg|
+          content = msg[:content] || msg['content'] || ''
+          role = msg[:role] || msg['role'] || ''
+          # Count characters in content and role
+          content.to_s.length + role.to_s.length + 4 # +4 for message structure overhead
+        end
+
+        # Rough approximation: 1 token ≈ 4 characters
+        # Add some overhead for message structure (role tags, etc.)
+        (total_chars / 4.0).ceil + (messages.length * 2)
+      end
+
+      # Log prompt and token count
+      def log_prompt_and_tokens(messages:, model:, token_count:)
+        # Build a summary of messages for logging
+        message_summary = messages.map do |msg|
+          role = msg[:role] || msg['role'] || 'unknown'
+          content = msg[:content] || msg['content'] || ''
+          content_preview = if content.length > 200
+                              "#{content[0..200]}... (#{content.length} chars)"
+                            else
+                              content
+                            end
+          "#{role}: #{content_preview}"
+        end.join("\n")
+
+        Rails.logger.info("[OpenAIClient] Sending prompt to #{model}")
+        Rails.logger.info("[OpenAIClient] Estimated token count: #{token_count}")
+        Rails.logger.debug { "[OpenAIClient] Prompt messages:\n#{message_summary}" }
       end
     end
   end

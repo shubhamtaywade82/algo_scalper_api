@@ -1,0 +1,60 @@
+# Example configuration file for Index Technical Analysis strategies
+# This file demonstrates the structure but is not currently loaded automatically
+# Configuration is defined in IndexTechnicalAnalyzer::ANALYSIS_STRATEGIES constant
+# This file serves as documentation and can be used for future YAML-based configuration
+
+strategies:
+  timeframes:
+    default: [5, 15, 60]
+    nifty: [5, 15, 60]
+    sensex: [5, 15, 30, 60]  # Sensex includes 30min timeframe
+    banknifty: [5, 15, 60]
+
+  indicator_periods:
+    default: &indicator_default
+      rsi: 14
+      adx: 14
+      macd_fast: 12
+      macd_slow: 26
+      macd_signal: 9
+      atr: 14
+    nifty:
+      <<: *indicator_default
+    sensex:
+      <<: *indicator_default
+    banknifty:
+      <<: *indicator_default
+
+  bias_thresholds:
+    default: &bias_default
+      rsi_oversold: 30
+      rsi_overbought: 70
+      rsi_bullish_threshold: 40
+      rsi_bearish_threshold: 60
+      min_timeframes_for_signal: 2
+      confidence_base: 0.4
+    nifty:
+      <<: *bias_default
+    sensex:
+      rsi_oversold: 25  # More sensitive for Sensex
+      rsi_overbought: 75
+      rsi_bullish_threshold: 35
+      rsi_bearish_threshold: 65
+      min_timeframes_for_signal: 2
+      confidence_base: 0.5  # Higher base confidence
+    banknifty:
+      <<: *bias_default
+
+  api_settings:
+    default: &api_default
+      throttle_seconds: 2.5
+      max_retries: 3
+      days_back: 30
+    nifty:
+      <<: *api_default
+    sensex:
+      throttle_seconds: 3.0  # Slightly slower for Sensex
+      max_retries: 3
+      days_back: 30
+    banknifty:
+      <<: *api_default
