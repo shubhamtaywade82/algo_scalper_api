@@ -2,7 +2,6 @@
 
 require 'net/http'
 require 'json'
-require 'timeout'
 
 module Services
   module Ai
@@ -420,16 +419,17 @@ module Services
         api_key = ENV['OLLAMA_API_KEY'] || 'ollama' # Ollama doesn't require auth, but some clients expect a key
 
         # Optimized timeouts for remote Ollama server
-        # Default: 20s for non-streaming chat, 120s for streaming (prevents hanging)
+        # Default: 20s for non-streaming chat
         # Connection timeout: 5s (fast failure if server unreachable)
-        # For very slow models, increase OLLAMA_STREAM_TIMEOUT
+        # Note: Streaming requests have no application-level timeout (streams run until completion)
+        # HTTP client still has request_timeout for connection management (prevents truly hung connections)
         request_timeout = ENV.fetch('OLLAMA_TIMEOUT', '20').to_i # Default 20s for non-streaming
-        stream_timeout = ENV.fetch('OLLAMA_STREAM_TIMEOUT', '120').to_i # Default 120s (2 min) for streaming
+        # Use a high timeout for HTTP client to allow long-running streams (1 hour default)
+        http_client_timeout = ENV.fetch('OLLAMA_HTTP_TIMEOUT', '3600').to_i # Default 3600s (1 hour) for HTTP client
         open_timeout = ENV.fetch('OLLAMA_OPEN_TIMEOUT', '5').to_i # Default 5s for connection
 
-        # Store timeouts for use in streaming methods
+        # Store timeouts (stream_timeout no longer used for application-level timeout)
         @request_timeout = request_timeout
-        @stream_timeout = stream_timeout
 
         # Use ruby-openai if available (better Ollama support)
         if defined?(OpenAI) && OpenAI.respond_to?(:configure)
@@ -438,8 +438,8 @@ module Services
             config.uri_base = "#{base_url}/v1" # Ollama uses /v1 prefix
             config.log_errors = Rails.env.development?
             # Configure optimized timeouts for remote server
-            # Use longer timeout for streaming (models can be slow to start)
-            config.request_timeout = stream_timeout # Use stream timeout as default (covers both)
+            # Use high timeout to allow long-running streams (no application-level timeout)
+            config.request_timeout = http_client_timeout # High timeout for HTTP client (allows long streams)
             config.open_timeout = open_timeout if config.respond_to?(:open_timeout=)
           end
           @client = OpenAI::Client.new
@@ -448,7 +448,7 @@ module Services
           @client = OpenAI::Client.new(
             api_key: api_key,
             uri_base: "#{base_url}/v1",
-            request_timeout: stream_timeout # Use stream timeout as default
+            request_timeout: http_client_timeout # High timeout for HTTP client (allows long streams)
           )
           # NOTE: openai-ruby may not support open_timeout directly
         end
@@ -498,9 +498,6 @@ module Services
       def chat_stream_ruby_openai(messages:, model:, temperature:, &block)
         stream_start = Time.current
         chunk_count = 0
-        # Increased default timeout for streaming (models can be slow, especially on CPU)
-        # Default: 120s (2 minutes) - increase via OLLAMA_STREAM_TIMEOUT if needed
-        stream_timeout = @stream_timeout || ENV.fetch('OLLAMA_STREAM_TIMEOUT', '120').to_i
 
         formatted_messages = format_messages_ruby_openai(messages)
         token_count = estimate_token_count(formatted_messages)
@@ -509,34 +506,30 @@ module Services
         log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
 
         begin
-          # Use Timeout to wrap the streaming call for better control
-          # Note: This timeout applies to the entire stream, not per-chunk
-          Timeout.timeout(stream_timeout) do
-            @client.chat(
-              parameters: {
-                model: model,
-                messages: formatted_messages,
-                temperature: temperature,
-                stream: proc do |chunk, _event|
-                  content = chunk.dig('choices', 0, 'delta', 'content')
-                  if content.present? && block
-                    chunk_count += 1
-                    yield(content)
-                  end
+          # No timeout wrapper - let stream run until completion or natural connection timeout
+          @client.chat(
+            parameters: {
+              model: model,
+              messages: formatted_messages,
+              temperature: temperature,
+              stream: proc do |chunk, _event|
+                content = chunk.dig('choices', 0, 'delta', 'content')
+                if content.present? && block
+                  chunk_count += 1
+                  yield(content)
                 end
-              }
-            )
-          end
+              end
+            }
+          )
 
           elapsed = Time.current - stream_start
           Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
-        rescue Timeout::Error, Faraday::TimeoutError, Net::ReadTimeout => e
+        rescue Faraday::TimeoutError, Net::ReadTimeout => e
           elapsed = Time.current - stream_start
-          # Timeout errors during streaming - log but don't fail if we got some content
-          Rails.logger.warn("[OpenAIClient] Stream timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
+          # Connection-level timeout errors (from HTTP client) - log but don't fail if we got some content
+          Rails.logger.warn("[OpenAIClient] Stream connection timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
           # Return nil to indicate partial stream
           nil
-        # Timeout::Error is intentionally caught above; StandardError catches other exceptions
         rescue StandardError => e
           elapsed = Time.current - stream_start
           # Some streaming implementations may raise errors on stream end
@@ -556,9 +549,6 @@ module Services
       def chat_stream_openai_ruby(messages:, model:, temperature:, &block)
         stream_start = Time.current
         chunk_count = 0
-        # Increased default timeout for streaming (models can be slow, especially on CPU)
-        # Default: 120s (2 minutes) - increase via OLLAMA_STREAM_TIMEOUT if needed
-        stream_timeout = @stream_timeout || ENV.fetch('OLLAMA_STREAM_TIMEOUT', '120').to_i
 
         formatted_messages = format_messages_openai_ruby(messages)
         token_count = estimate_token_count(formatted_messages)
@@ -567,32 +557,29 @@ module Services
         log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
 
         begin
-          # Use Timeout to wrap the streaming call for better control
-          # Note: This timeout applies to the entire stream, not per-chunk
-          Timeout.timeout(stream_timeout) do
-            stream = @client.chat.completions.create(
-              messages: formatted_messages,
-              model: model,
-              temperature: temperature,
-              stream: true
-            )
+          # No timeout wrapper - let stream run until completion or natural connection timeout
+          stream = @client.chat.completions.create(
+            messages: formatted_messages,
+            model: model,
+            temperature: temperature,
+            stream: true
+          )
 
-            stream.each do |event|
-              content = event.dig('choices', 0, 'delta', 'content')
-              next unless content.present?
+          stream.each do |event|
+            content = event.dig('choices', 0, 'delta', 'content')
+            next unless content.present?
 
-              chunk_count += 1
-              yield(content) if block
-            end
+            chunk_count += 1
+            yield(content) if block
           end
 
           elapsed = Time.current - stream_start
           Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
-        rescue Timeout::Error, Faraday::TimeoutError, Net::ReadTimeout => e
+        rescue Faraday::TimeoutError, Net::ReadTimeout => e
           elapsed = Time.current - stream_start
-          Rails.logger.warn("[OpenAIClient] Stream timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
+          # Connection-level timeout errors (from HTTP client) - log but don't fail if we got some content
+          Rails.logger.warn("[OpenAIClient] Stream connection timeout after #{elapsed.round(2)}s: #{e.class} - #{e.message} (#{chunk_count} chunks received)")
           nil
-        # Timeout::Error is intentionally caught above; StandardError catches other exceptions
         rescue StandardError => e
           elapsed = Time.current - stream_start
           if e.message.include?('end of file') || e.message.include?('Connection') || e.message.include?('closed')

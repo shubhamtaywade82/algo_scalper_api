@@ -314,6 +314,18 @@ module Options
       # Use exchange_segment (NSE_FNO) not segment (derivatives) for API calls
       exchange_seg = derivative.exchange_segment || 'NSE_FNO'
 
+      # Calculate OI change: prefer tick data, fallback to API data (current_oi - previous_oi)
+      current_oi = tick&.dig(:oi)&.to_i || api_data&.dig('oi')&.to_i || 0
+      oi_change_from_tick = tick&.dig(:oi_change)&.to_i
+      previous_oi = api_data&.dig('previous_oi')&.to_i || 0
+      oi_change = if oi_change_from_tick && oi_change_from_tick != 0
+                    oi_change_from_tick
+                  elsif current_oi.positive? && previous_oi.positive?
+                    current_oi - previous_oi
+                  else
+                    0
+                  end
+
       {
         derivative: derivative,
         strike: derivative.strike_price.to_f,
@@ -323,8 +335,8 @@ module Options
         security_id: derivative.security_id,
         lot_size: derivative.lot_size.to_i,
         ltp: tick&.dig(:ltp)&.to_f || api_data&.dig('last_price')&.to_f,
-        oi: tick&.dig(:oi)&.to_i || api_data&.dig('oi')&.to_i,
-        oi_change: tick&.dig(:oi_change)&.to_i,
+        oi: current_oi,
+        oi_change: oi_change,
         bid: tick&.dig(:bid)&.to_f || api_data&.dig('top_bid_price')&.to_f,
         ask: tick&.dig(:ask)&.to_f || api_data&.dig('top_ask_price')&.to_f,
         iv: api_data&.dig('implied_volatility')&.to_f,
