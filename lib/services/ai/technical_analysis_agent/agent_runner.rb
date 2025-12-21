@@ -193,8 +193,38 @@ module Services
           strikes_text = if context.filtered_strikes.any?
                            strikes_list = context.filtered_strikes.map do |strike|
                              strike_val = strike[:strike] || strike['strike'] || strike
-                             # Format with Indian rupee symbol and proper spacing
-                             "₹#{strike_val.to_f.round(2)}"
+
+                             # Get CE and PE data
+                             ce_data = strike[:ce] || strike['ce']
+                             pe_data = strike[:pe] || strike['pe']
+
+                             # Build option details
+                             option_parts = []
+
+                             if ce_data
+                               ce_ltp = ce_data[:ltp] || ce_data['ltp'] || ce_data[:premium] || ce_data['premium']
+                               option_parts << if ce_ltp
+                                                 "CE:₹#{ce_ltp.to_f.round(2)}"
+                                               else
+                                                 'CE'
+                                               end
+                             end
+
+                             if pe_data
+                               pe_ltp = pe_data[:ltp] || pe_data['ltp'] || pe_data[:premium] || pe_data['premium']
+                               option_parts << if pe_ltp
+                                                 "PE:₹#{pe_ltp.to_f.round(2)}"
+                                               else
+                                                 'PE'
+                                               end
+                             end
+
+                             # Format: Strike (CE:premium, PE:premium)
+                             if option_parts.any?
+                               "₹#{strike_val.to_f.round(2)} (#{option_parts.join(', ')})"
+                             else
+                               "₹#{strike_val.to_f.round(2)}"
+                             end
                            end
                            strikes_list.join(', ')
                          else

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../telegram_notifier'
+
 namespace :ai do
   desc 'Show example prompts and capabilities of the technical analysis agent'
   task examples: :environment do
@@ -210,18 +212,54 @@ namespace :ai do
     # Check if streaming is requested
     stream = %w[true 1].include?(ENV.fetch('STREAM', nil))
 
+    # Check if Telegram is enabled
+    telegram_enabled = TelegramNotifier.enabled?
+
     if stream
       puts '📊 Analysis (streaming):'
       puts '-' * 100
       puts ''
+
+      # Send typing indicator to Telegram if enabled
+      TelegramNotifier.send_chat_action(action: 'typing') if telegram_enabled
+
+      # Accumulate chunks for Telegram
+      telegram_buffer = String.new # Create mutable string (frozen_string_literal is enabled)
+      # Escape HTML special characters in query
+      escaped_query = query.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+      telegram_buffer << "📊 <b>Technical Analysis: #{escaped_query}</b>\n\n"
+
       result = Services::Ai::TechnicalAnalysisAgent.analyze(query: query, stream: true) do |chunk|
-        print chunk if chunk
-        $stdout.flush
+        if chunk
+          print chunk
+          $stdout.flush
+
+          # Accumulate for Telegram
+          telegram_buffer << chunk if telegram_enabled
+        end
       end
+
       puts ''
       puts ''
       puts '-' * 100
       puts "Generated at: #{result[:generated_at]}" if result
+
+      # Send complete message to Telegram
+      if telegram_enabled && telegram_buffer.present?
+        telegram_buffer << "\n\n"
+        telegram_buffer << "⏰ Generated at: #{result[:generated_at]}" if result&.dig(:generated_at)
+        telegram_buffer << "\n🤖 Provider: #{result[:provider]}" if result&.dig(:provider)
+
+        begin
+          # Escape HTML special characters in the analysis content
+          escaped_buffer = telegram_buffer.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+          TelegramNotifier.send_message(escaped_buffer, parse_mode: 'HTML')
+          puts "\n✅ Analysis sent to Telegram"
+        rescue StandardError => e
+          Rails.logger.error("[AI Technical Analysis] Failed to send to Telegram: #{e.class} - #{e.message}")
+          puts "\n⚠️  Failed to send to Telegram: #{e.message}"
+        end
+      end
     else
       result = Services::Ai::TechnicalAnalysisAgent.analyze(query: query)
 
@@ -232,6 +270,26 @@ namespace :ai do
         puts ''
         puts "Generated at: #{result[:generated_at]}"
         puts "Provider: #{result[:provider]}"
+
+        # Send to Telegram if enabled
+        if telegram_enabled && result[:analysis].present?
+          # Escape HTML special characters in query
+          escaped_query = query.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+          telegram_message = String.new("📊 <b>Technical Analysis: #{escaped_query}</b>\n\n") # Create mutable string
+          # Escape HTML in analysis content
+          escaped_analysis = result[:analysis].to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+          telegram_message << escaped_analysis
+          telegram_message << "\n\n⏰ Generated at: #{result[:generated_at]}" if result[:generated_at]
+          telegram_message << "\n🤖 Provider: #{result[:provider]}" if result[:provider]
+
+          begin
+            TelegramNotifier.send_message(telegram_message, parse_mode: 'HTML')
+            puts "\n✅ Analysis sent to Telegram"
+          rescue StandardError => e
+            Rails.logger.error("[AI Technical Analysis] Failed to send to Telegram: #{e.class} - #{e.message}")
+            puts "\n⚠️  Failed to send to Telegram: #{e.message}"
+          end
+        end
       else
         puts '❌ Failed to generate analysis'
         exit 1
