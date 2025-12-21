@@ -191,10 +191,12 @@ module Services
                             end
 
           strikes_text = if context.filtered_strikes.any?
-                           context.filtered_strikes.map do |strike|
+                           strikes_list = context.filtered_strikes.map do |strike|
                              strike_val = strike[:strike] || strike['strike'] || strike
-                             "#{strike_val}"
-                           end.join(', ')
+                             # Format with Indian rupee symbol and proper spacing
+                             "₹#{strike_val.to_f.round(2)}"
+                           end
+                           strikes_list.join(', ')
                          else
                            'None'
                          end
@@ -213,6 +215,10 @@ module Services
             #{"Option Strikes (ATM ±1 ±2): #{strikes_text}" if context.intent == :options_buying}
 
             Provide trading analysis and recommendation based on these facts.
+
+            IMPORTANT FORMATTING: Always include spaces between words and numbers.
+            Examples: "at ₹84,900" (correct), NOT "at84900" (incorrect).
+            Examples: "strikes at ₹84,900 and ₹85,000" (correct), NOT "at84900and85000" (incorrect).
           PROMPT
         end
 
