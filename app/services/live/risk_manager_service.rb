@@ -111,6 +111,7 @@ module Live
       # Early Trend Failure checks (before other enforcement)
       enforce_early_trend_failure(exit_engine: exit_engine)
       enforce_hard_limits(exit_engine: exit_engine)
+      enforce_post_profit_zone(exit_engine: exit_engine)
       enforce_trailing_stops(exit_engine: exit_engine)
       enforce_time_based_exit(exit_engine: exit_engine)
     end
@@ -321,7 +322,7 @@ module Live
       risk = risk_config
 
       # HIGHEST PRIORITY: Hard rupee-based stops (check FIRST before %-based)
-      if hard_rupee_sl_enabled? || hard_rupee_tp_enabled?
+      if hard_rupee_sl_enabled? || hard_rupee_tp_enabled? || post_profit_zone_enabled?
         PositionTracker.active.find_each do |tracker|
           snapshot = pnl_snapshot(tracker)
           next unless snapshot
@@ -335,6 +336,21 @@ module Live
           # - So: final_net_pnl = (net_pnl + entry_fee) - (entry_fee + exit_fee) = net_pnl - exit_fee
           # - We check if final_net_pnl will hit the target/stop after exit
           exit_fee = BrokerFeeCalculator.fee_per_order # Additional fee on exit (₹20)
+
+          # Check secured profit zone SL (if in secured profit zone)
+          if post_profit_zone_enabled? && tracker.meta&.dig('profit_zone_state') == 'secured_profit_zone'
+            secured_sl_rupees = BigDecimal((tracker.meta&.dig('secured_sl_rupees') || post_profit_zone_config[:secured_sl_rupees] || 800).to_s)
+            net_threshold = secured_sl_rupees + exit_fee
+            if net_pnl_rupees < net_threshold
+              final_net_pnl = net_pnl_rupees - exit_fee
+              reason = "SECURED_PROFIT_SL (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, secured SL: ₹#{secured_sl_rupees})"
+              exit_path = 'secured_profit_sl'
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
 
           # Hard rupee stop loss (highest priority exit)
           # Check: Will final net PnL (after exit) hit the stop?
@@ -355,21 +371,18 @@ module Live
             end
           end
 
-          # Hard rupee take profit
-          # Check: Will final net PnL (after exit) hit the target?
-          # Formula: net_pnl - exit_fee >= target_profit_rupees
-          # Simplified: net_pnl >= target_profit_rupees + exit_fee
+          # Hard rupee take profit - TRANSITION TO SECURED PROFIT ZONE (not immediate exit)
+          # ₹2k TP is a minimum extraction, not a cap
+          # After ₹2k, we transition to secured profit zone with green SL
+          # PostProfitZoneRule will handle exits based on trend/momentum
           if hard_rupee_tp_enabled?
             target_profit_rupees = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
             net_threshold = target_profit_rupees + exit_fee
+
             if net_pnl_rupees >= net_threshold
-              # Calculate what net PnL will be after exit
-              final_net_pnl = net_pnl_rupees - exit_fee
-              reason = "HARD_RUPEE_TP (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, target: ₹#{target_profit_rupees})"
-              exit_path = 'hard_rupee_take_profit'
-              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-              track_exit_path(tracker, exit_path, reason)
-              dispatch_exit(exit_engine, tracker, reason)
+              # Transition to secured profit zone: Move SL to green
+              transition_to_secured_profit_zone(tracker, net_pnl_rupees, target_profit_rupees)
+              # Don't exit here - let PostProfitZoneRule handle exits based on trend/momentum
               next
             end
           end
@@ -450,6 +463,40 @@ module Live
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
+      end
+    end
+
+    def enforce_post_profit_zone(exit_engine:)
+      return unless post_profit_zone_enabled?
+
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        pnl_rupees = snapshot[:pnl]
+        next unless pnl_rupees&.positive?
+
+        # Build rule context
+        position_data = build_position_data_for_rule_engine(tracker, snapshot)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: post_profit_zone_config
+        )
+
+        # Evaluate PostProfitZoneRule
+        rule = Risk::Rules::PostProfitZoneRule.new(config: post_profit_zone_config)
+        result = rule.evaluate(context)
+
+        if result.exit?
+          reason = result.reason || 'POST_PROFIT_ZONE_EXIT'
+          exit_path = 'post_profit_zone'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_post_profit_zone error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
     end
 
@@ -1102,6 +1149,106 @@ module Live
       AlgoConfig.fetch.dig(:risk, :hard_rupee_tp)
     rescue StandardError
       nil
+    end
+
+    def post_profit_zone_enabled?
+      cfg = post_profit_zone_config
+      cfg && cfg[:enabled] != false
+    end
+
+    def post_profit_zone_config
+      raw = begin
+        AlgoConfig.fetch.dig(:risk, :post_profit_zone) || {}
+      rescue StandardError
+        {}
+      end
+
+      # Defaults
+      {
+        enabled: true,
+        secured_profit_threshold_rupees: raw[:secured_profit_threshold_rupees] || 2000,
+        runner_zone_threshold_rupees: raw[:runner_zone_threshold_rupees] || 4000,
+        secured_sl_rupees: raw[:secured_sl_rupees] || 800,
+        underlying_adx_min: raw[:underlying_adx_min] || 18.0,
+        option_pullback_max_pct: raw[:option_pullback_max_pct] || 35.0,
+        underlying_atr_collapse_threshold: raw[:underlying_atr_collapse_threshold] || 0.65,
+        runner_zone_momentum_check: raw[:runner_zone_momentum_check] || false
+      }.merge(raw)
+    end
+
+    def transition_to_secured_profit_zone(tracker, net_pnl_rupees, target_profit_rupees)
+      # Check if already transitioned
+      return if tracker.meta&.dig('profit_zone_state') == 'secured_profit_zone'
+
+      # Move SL to green (+₹500 to +₹1,000)
+      secured_sl_config = post_profit_zone_config
+      secured_sl_rupees = BigDecimal((secured_sl_config[:secured_sl_rupees] || 800).to_s)
+
+      # Calculate entry price and quantity
+      entry_price = tracker.entry_price
+      quantity = tracker.quantity
+      return unless entry_price && quantity && quantity.positive?
+
+      # Calculate SL price that gives us secured_sl_rupees profit
+      # Formula: (sl_price - entry_price) * quantity - exit_fee = secured_sl_rupees
+      # sl_price = entry_price + (secured_sl_rupees + exit_fee) / quantity
+      exit_fee = BrokerFeeCalculator.fee_per_order
+      sl_price = entry_price + BigDecimal((secured_sl_rupees + exit_fee).to_s) / quantity
+
+      # Update tracker metadata
+      meta = tracker.meta || {}
+      meta = {} unless meta.is_a?(Hash)
+      meta['profit_zone_state'] = 'secured_profit_zone'
+      meta['secured_sl_price'] = sl_price.to_f
+      meta['secured_sl_rupees'] = secured_sl_rupees.to_f
+      meta['profit_zone_transitioned_at'] = Time.current.iso8601
+
+      tracker.update_column(:meta, meta)
+
+      Rails.logger.info(
+        "[RiskManager] Transitioned #{tracker.order_no} to SECURED_PROFIT_ZONE " \
+        "(PnL: ₹#{net_pnl_rupees.round(2)}, SL: ₹#{secured_sl_rupees}, SL Price: ₹#{sl_price.round(2)})"
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] transition_to_secured_profit_zone error: #{e.class} - #{e.message}")
+    end
+
+    def build_position_data_for_rule_engine(tracker, snapshot)
+      # Build PositionData compatible with RuleContext
+      instrument = tracker.instrument || tracker.watchable&.instrument
+      index_key = tracker.meta&.dig('index_key') || instrument&.symbol_name
+
+      Positions::ActiveCache::PositionData.new(
+        tracker_id: tracker.id,
+        security_id: tracker.security_id,
+        segment: tracker.segment || instrument&.exchange_segment,
+        entry_price: tracker.entry_price,
+        quantity: tracker.quantity,
+        current_ltp: snapshot[:ltp],
+        pnl: snapshot[:pnl],
+        pnl_pct: snapshot[:pnl_pct],
+        high_water_mark: snapshot[:hwm_pnl],
+        peak_profit_pct: calculate_peak_profit_pct(tracker, snapshot),
+        position_direction: Positions::MetadataResolver.direction(tracker),
+        index_key: index_key,
+        underlying_segment: instrument&.exchange_segment,
+        underlying_security_id: instrument&.security_id,
+        underlying_symbol: index_key
+      )
+    end
+
+    def calculate_peak_profit_pct(tracker, snapshot)
+      hwm = snapshot[:hwm_pnl]
+      return nil unless hwm && hwm.positive?
+
+      entry_price = tracker.entry_price
+      quantity = tracker.quantity
+      return nil unless entry_price && quantity && quantity.positive?
+
+      buy_value = entry_price * quantity
+      return nil unless buy_value.positive?
+
+      (hwm / buy_value).to_f
     end
 
     def cancel_remote_order(order_id)

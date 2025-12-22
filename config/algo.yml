@@ -186,6 +186,44 @@ risk:
     enabled: false # Set to true to enable hard ₹ take profit
     target_profit_rupees: 2000 # Target profit per trade in rupees
 
+  # Post-Profit Zone Management (State Machine)
+  # Implements sophisticated profit zone management after ₹2k TP
+  # Core Principle: ₹2k TP is a minimum extraction, not a cap
+  # After ₹2k, trade continues ONLY if underlying trend + option momentum are favorable
+  #
+  # State Machine:
+  # - ENTRY: ₹0 → ₹2,000 (normal trade management, Hard SL: -₹1,000)
+  # - SECURED_PROFIT_ZONE: ₹2,000 → ₹4,000 (capital protection mode, SL moved to green)
+  # - RUNNER_ZONE: ₹4,000+ (trailing stop with exponential drawdown)
+  #
+  # At ₹2k transition:
+  # - SL moves to +₹500 to +₹1,000 (locked profit)
+  # - Disable loose % drawdown logic
+  # - Switch to underlying-aware exit
+  #
+  # Hold criteria after ₹2k (ALL must be TRUE):
+  # Underlying:
+  #   - 1m Supertrend still in direction
+  #   - ADX ≥ 18 and not falling
+  #   - Candle bodies > wicks (no exhaustion)
+  #   - No HTF resistance within 30-40 pts
+  # Option:
+  #   - Premium is NOT stalling
+  #   - LTP continues to make HH (higher highs)
+  #   - Pullbacks < 30-35% of last impulse
+  #   - Bid-ask spread stable
+  #
+  # Exit immediately if ANY criteria fails
+  post_profit_zone:
+    enabled: true # Set to true to enable post-profit zone management
+    secured_profit_threshold_rupees: 2000 # Transition to secured profit zone at ₹2k
+    runner_zone_threshold_rupees: 4000 # Transition to runner zone at ₹4k
+    secured_sl_rupees: 800 # Move SL to +₹800 when entering secured profit zone (green SL)
+    underlying_adx_min: 18.0 # Minimum ADX for underlying trend to be considered favorable
+    option_pullback_max_pct: 35.0 # Maximum pullback % from peak before considering momentum stalled
+    underlying_atr_collapse_threshold: 0.65 # ATR ratio threshold for collapse detection
+    runner_zone_momentum_check: false # Enable additional momentum checks in runner zone (optional)
+
 # ============================================
 # POSITION SIZING (RUPEES-BASED)
 # ============================================
