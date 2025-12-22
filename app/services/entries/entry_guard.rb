@@ -409,11 +409,12 @@ module Entries
 
         # Special rules for CLOSE_GAMMA regime
         if regime == Live::TimeRegimeService::CLOSE_GAMMA
-          current_time = Time.current.strftime('%H:%M')
+          # Use IST timezone explicitly
+          current_time = Live::TimeRegimeService.instance.current_ist_time.strftime('%H:%M')
           if current_time >= '14:45'
-            # No fresh breakouts after 14:45 - only continuation moves
+            # No fresh breakouts after 14:45 IST - only continuation moves
             # This should be checked in signal generation
-            Rails.logger.info("[EntryGuard] Entry after 14:45 - ensure continuation move only")
+            Rails.logger.info("[EntryGuard] Entry after 14:45 IST - ensure continuation move only")
           end
         end
 
