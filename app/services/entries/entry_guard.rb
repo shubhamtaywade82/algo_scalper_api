@@ -12,9 +12,9 @@ module Entries
           return false
         end
 
-        # Daily trade limits check (per-index and global)
+        # Daily loss/profit limits check (NOT trade frequency - we don't cap trade count)
         unless daily_limits_allow_entry?(index_cfg: index_cfg)
-          Rails.logger.info("[EntryGuard] Entry blocked by daily trade limits for #{index_cfg[:key]}")
+          Rails.logger.info("[EntryGuard] Entry blocked by daily loss/profit limits for #{index_cfg[:key]}")
           return false
         end
 
@@ -438,7 +438,7 @@ module Entries
         end
       end
 
-      # Check if daily trade limits allow entry
+      # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
       def daily_limits_allow_entry?(index_cfg:)
         return true unless daily_limits_enabled?
 
@@ -447,32 +447,29 @@ module Entries
 
         unless result[:allowed]
           reason = result[:reason]
+          # Only block on loss/profit limits, NOT trade frequency limits
           case reason
-          when 'trade_frequency_limit_exceeded'
-            Rails.logger.warn(
-              "[EntryGuard] Daily trade limit exceeded for #{index_cfg[:key]}: " \
-              "#{result[:daily_trades]}/#{result[:max_daily_trades]} trades"
-            )
-          when 'global_trade_frequency_limit_exceeded'
-            Rails.logger.warn(
-              "[EntryGuard] Global daily trade limit exceeded: " \
-              "#{result[:global_daily_trades]}/#{result[:max_global_trades]} trades"
-            )
+          when 'trade_frequency_limit_exceeded', 'global_trade_frequency_limit_exceeded'
+            # Ignore trade frequency limits - we don't cap trade count
+            return true
           when 'daily_loss_limit_exceeded'
             Rails.logger.warn(
               "[EntryGuard] Daily loss limit exceeded for #{index_cfg[:key]}: " \
               "₹#{result[:daily_loss].round(2)}/₹#{result[:max_daily_loss]}"
             )
+            return false
           when 'global_daily_loss_limit_exceeded'
             Rails.logger.warn(
               "[EntryGuard] Global daily loss limit exceeded: " \
               "₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
             )
+            return false
           when 'daily_profit_target_reached'
             Rails.logger.info(
               "[EntryGuard] Daily profit target reached: " \
               "₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
             )
+            return false
           end
           return false
         end
