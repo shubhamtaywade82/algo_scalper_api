@@ -110,6 +110,7 @@ module Live
 
       # Early Trend Failure checks (before other enforcement)
       enforce_early_trend_failure(exit_engine: exit_engine)
+      enforce_global_time_overrides(exit_engine: exit_engine)
       enforce_hard_limits(exit_engine: exit_engine)
       enforce_post_profit_zone(exit_engine: exit_engine)
       enforce_trailing_stops(exit_engine: exit_engine)
@@ -225,6 +226,13 @@ module Live
     end
 
     def enforce_trailing_stops(exit_engine:)
+      # Check if trailing is allowed in current time regime
+      regime = Live::TimeRegimeService.instance.current_regime
+      unless Live::TimeRegimeService.instance.allow_trailing?(regime)
+        Rails.logger.debug("[RiskManager] Trailing disabled for regime: #{regime}")
+        return
+      end
+
       risk = risk_config
       drop_threshold = begin
         BigDecimal(risk[:exit_drop_pct].to_s)
@@ -353,11 +361,12 @@ module Live
           end
 
           # Hard rupee stop loss (highest priority exit)
-          # Check: Will final net PnL (after exit) hit the stop?
-          # Formula: net_pnl - exit_fee <= -max_loss_rupees
-          # Simplified: net_pnl <= -max_loss_rupees + exit_fee
+          # Apply session-aware SL multiplier
           if hard_rupee_sl_enabled?
-            max_loss_rupees = BigDecimal((hard_rupee_sl_config[:max_loss_rupees] || 1000).to_s)
+            base_max_loss_rupees = BigDecimal((hard_rupee_sl_config[:max_loss_rupees] || 1000).to_s)
+            # Apply time regime multiplier
+            sl_multiplier = Live::TimeRegimeService.instance.sl_multiplier
+            max_loss_rupees = base_max_loss_rupees * BigDecimal(sl_multiplier.to_s)
             net_threshold = -max_loss_rupees + exit_fee
             if net_pnl_rupees <= net_threshold
               # Calculate what net PnL will be after exit
@@ -376,13 +385,35 @@ module Live
           # After ₹2k, we transition to secured profit zone with green SL
           # PostProfitZoneRule will handle exits based on trend/momentum
           if hard_rupee_tp_enabled?
-            target_profit_rupees = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
+            base_target_profit_rupees = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
+            # Apply time regime multiplier
+            tp_multiplier = Live::TimeRegimeService.instance.tp_multiplier
+            target_profit_rupees = base_target_profit_rupees * BigDecimal(tp_multiplier.to_s)
+
+            # Check session-specific max TP limit
+            regime = Live::TimeRegimeService.instance.current_regime
+            max_tp = Live::TimeRegimeService.instance.max_tp_rupees(regime)
+            target_profit_rupees = [target_profit_rupees, BigDecimal((max_tp || 999_999).to_s)].min if max_tp
+
             net_threshold = target_profit_rupees + exit_fee
 
             if net_pnl_rupees >= net_threshold
-              # Transition to secured profit zone: Move SL to green
-              transition_to_secured_profit_zone(tracker, net_pnl_rupees, target_profit_rupees)
-              # Don't exit here - let PostProfitZoneRule handle exits based on trend/momentum
+              # Check if runners are allowed in current regime
+              allow_runners = Live::TimeRegimeService.instance.allow_runners?(regime)
+
+              if allow_runners
+                # Transition to secured profit zone: Move SL to green
+                transition_to_secured_profit_zone(tracker, net_pnl_rupees, target_profit_rupees)
+                # Don't exit here - let PostProfitZoneRule handle exits based on trend/momentum
+              else
+                # No runners allowed - exit immediately
+                final_net_pnl = net_pnl_rupees - exit_fee
+                reason = "SESSION_TP_HIT (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, target: ₹#{target_profit_rupees}, regime: #{regime})"
+                exit_path = 'session_take_profit'
+                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+                track_exit_path(tracker, exit_path, reason)
+                dispatch_exit(exit_engine, tracker, reason)
+              end
               next
             end
           end
@@ -464,6 +495,103 @@ module Live
         Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
+    end
+
+    def enforce_global_time_overrides(exit_engine:)
+      # Global override 1: IV collapse detection
+      enforce_iv_collapse_exit(exit_engine: exit_engine)
+
+      # Global override 2: Price stall detection (especially after ₹2k)
+      enforce_stall_detection_exit(exit_engine: exit_engine)
+    end
+
+    def enforce_iv_collapse_exit(exit_engine:)
+      return unless iv_collapse_detection_enabled?
+
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        # Check for sudden IV collapse
+        # This would require IV data from option chain - for now, skip if not available
+        # TODO: Implement IV collapse detection when IV data is available
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_iv_collapse_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
+    def enforce_stall_detection_exit(exit_engine:)
+      return unless stall_detection_enabled?
+
+      stall_candles = stall_detection_config[:stall_candles] || 3
+      min_profit_for_stall_check = BigDecimal((stall_detection_config[:min_profit_rupees] || 2000).to_s)
+
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        pnl_rupees = snapshot[:pnl]
+        next unless pnl_rupees && pnl_rupees >= min_profit_for_stall_check
+
+        # Check if price has stalled (no new HH/LL for N candles)
+        if price_stalled?(tracker, stall_candles)
+          reason = "PRICE_STALL (#{stall_candles} candles no progress, profit: ₹#{pnl_rupees.round(2)})"
+          exit_path = 'stall_detection'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_stall_detection_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
+    def price_stalled?(tracker, stall_candles)
+      # Get recent LTP history
+      ltp_history = get_ltp_history_for_stall_check(tracker, stall_candles + 1)
+      return false if ltp_history.size < stall_candles + 1
+
+      # Check if LTP has made no progress (no new HH for long positions)
+      recent_ltps = ltp_history.last(stall_candles + 1).map { |h| h[:ltp].to_f }
+      current_ltp = recent_ltps.last
+      previous_high = recent_ltps.first(stall_candles).max
+
+      # If current LTP is not making new highs (within 1% tolerance), consider stalled
+      tolerance = 0.01 # 1% tolerance
+      current_ltp <= previous_high * (1 + tolerance)
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] price_stalled? error: #{e.class} - #{e.message}")
+      false
+    end
+
+    def get_ltp_history_for_stall_check(tracker, lookback_candles)
+      # Get LTP history from Redis cache or tracker
+      cache_key = "position:ltp_history:#{tracker.id}"
+      cached = Rails.cache.read(cache_key)
+
+      unless cached
+        # Build from recent Redis PnL cache entries
+        redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+        if redis_pnl && redis_pnl[:ltp]
+          cached = [{ ltp: redis_pnl[:ltp], timestamp: redis_pnl[:timestamp] || Time.current.to_i }]
+        else
+          cached = []
+        end
+      end
+
+      # Update with current LTP
+      snapshot = pnl_snapshot(tracker)
+      current_ltp = snapshot&.dig(:ltp) || tracker.tradable&.ltp
+      if current_ltp
+        cached = (cached || []).last(lookback_candles - 1)
+        cached << { ltp: current_ltp, timestamp: Time.current.to_i }
+        Rails.cache.write(cache_key, cached, expires_in: 1.hour)
+      end
+
+      cached || []
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] get_ltp_history_for_stall_check error: #{e.class} - #{e.message}")
+      []
     end
 
     def enforce_post_profit_zone(exit_engine:)
@@ -1249,6 +1377,28 @@ module Live
       return nil unless buy_value.positive?
 
       (hwm / buy_value).to_f
+    end
+
+    def iv_collapse_detection_enabled?
+      config = begin
+        AlgoConfig.fetch.dig(:risk, :time_overrides, :iv_collapse) || {}
+      rescue StandardError
+        {}
+      end
+      config[:enabled] == true
+    end
+
+    def stall_detection_enabled?
+      config = stall_detection_config
+      config[:enabled] == true
+    end
+
+    def stall_detection_config
+      begin
+        AlgoConfig.fetch.dig(:risk, :time_overrides, :stall_detection) || {}
+      rescue StandardError
+        {}
+      end
     end
 
     def cancel_remote_order(order_id)

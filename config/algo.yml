@@ -224,6 +224,93 @@ risk:
     underlying_atr_collapse_threshold: 0.65 # ATR ratio threshold for collapse detection
     runner_zone_momentum_check: false # Enable additional momentum checks in runner zone (optional)
 
+  # Time-Regime Based Rules (Session-Aware Greeks)
+  # Implements time-conditioned rule system that respects Greek dominance across market sessions
+  # Core Principle: Options buying is NOT symmetric across the day - same signal behaves differently
+  # by time due to changing Greek dominance (Delta/Gamma in open, Theta in mid-day, IV crush in close)
+  #
+  # Market Session Segmentation (Indian Indices):
+  # S1: OPEN EXPANSION     → 09:15 – 09:45 (Delta + Gamma dominant - fast moves, fake breakouts)
+  # S2: TREND CONTINUATION → 09:45 – 11:30 (Best zone - Delta stable, Theta low, IV steady)
+  # S3: CHOP / DECAY       → 11:30 – 13:45 (Theta dominant - danger zone, mostly no trade)
+  # S4: CLOSE / GAMMA      → 13:45 – 15:15 (Theta + IV crush - tight rules, no runners)
+  #
+  # Each regime gets different SL/TP/trailing rules based on Greek behavior
+  time_regimes:
+    enabled: true # Set to true to enable time-regime based rules
+
+    # S1: OPEN EXPANSION (09:15 – 09:45)
+    # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
+    # Premium moves FAST, small index move → big option move, fake breakouts common
+    open_expansion:
+      start: "09:15"
+      end: "09:45"
+      sl_multiplier: 1.3 # WIDE SL (SENSEX: ₹15-20, NIFTY: ₹8-12)
+      tp_multiplier: 1.0 # Fast TP (₹2k often hits in 1-3 candles)
+      allow_trailing: false # No micro trailing (gets wicked out)
+      allow_runners: false # No runners (enter fast, exit fast, no greed)
+      allow_entries: true
+      min_adx: 20.0 # Strict entry (ADX ≥ 20, ATM only, first breakout/pullback only)
+      max_tp_rupees: 2000 # Hard ₹2k TP, no more
+
+    # S2: TREND CONTINUATION (09:45 – 11:30) ✅ BEST ZONE
+    # Delta stable, Gamma moderate, Theta low, IV steady
+    # This is THE MONEY ZONE - extract base profit, then let winners breathe
+    trend_continuation:
+      start: "09:45"
+      end: "11:30"
+      sl_multiplier: 1.0 # Moderate SL (SENSEX: ₹10-15, NIFTY: ₹6-10)
+      tp_multiplier: 1.0 # First extraction: ₹2k, then runner allowed
+      allow_trailing: true # Enable post-TP logic, move SL to green after ₹2k
+      allow_runners: true # Allow runner with trend intact (exponential drawdown logic fits here)
+      allow_entries: true
+      min_adx: 15.0 # Trend continuation only, pullbacks preferred, 1m + 5m alignment
+      max_tp_rupees: null # No limit (runners allowed)
+
+    # S3: CHOP / THETA ZONE (11:30 – 13:45) ❌ DANGER
+    # Delta weak, Gamma flat, Theta dominant, IV bleeds
+    # This is where most retail losses happen - survive, don't trade
+    chop_decay:
+      start: "11:30"
+      end: "13:45"
+      sl_multiplier: 0.8 # TIGHT SL
+      tp_multiplier: 0.8 # SMALL TP
+      allow_trailing: false # Disable trailing
+      allow_runners: false # No runners allowed
+      allow_entries: false # Disable normal entries (allow ONLY if ADX ≥ 22, expansion present, Sensex > 60 pts)
+      min_adx: 22.0 # Very strict if entries allowed
+      max_tp_rupees: 1500 # Small TP, no runners
+
+    # S4: CLOSE / GAMMA ZONE (13:45 – 15:15)
+    # Theta accelerates, Gamma spikes near ATM, IV crush common, reversals violent
+    # Take what market gives, don't argue - scalp only, no greed
+    close_gamma:
+      start: "13:45"
+      end: "15:15"
+      sl_multiplier: 0.7 # TIGHT SL (SENSEX: ₹8-10, NIFTY: ₹5-7)
+      tp_multiplier: 0.75 # FIXED TP (₹1.5k-₹2k)
+      allow_trailing: false # No runners after 14:45
+      allow_runners: false # Book profits aggressively
+      allow_entries: true # ONLY continuation moves, no fresh breakouts after 14:45, ATM only
+      min_adx: 18.0
+      max_tp_rupees: 2000 # Fixed ₹1.5k-₹2k
+
+  # Global Time-Based Overrides (CRITICAL - override everything)
+  time_overrides:
+    # Override 1: No new trades after 14:50 (unless exceptional conditions)
+    no_new_trades_after: "14:50" # No new trades after this time (unless ADX ≥ 25, massive expansion)
+
+    # Override 2: IV collapse detection
+    iv_collapse:
+      enabled: false # Set to true when IV data is available
+      collapse_threshold: 0.15 # Exit if IV drops >15% suddenly (time irrelevant)
+
+    # Override 3: Price stall detection (especially after ₹2k profit)
+    stall_detection:
+      enabled: true # Exit if price stalls for N candles (no new HH/LL)
+      stall_candles: 3 # Number of candles with no progress before exit
+      min_profit_rupees: 2000 # Only check stall if profit >= this amount
+
 # ============================================
 # POSITION SIZING (RUPEES-BASED)
 # ============================================

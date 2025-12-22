@@ -6,6 +6,12 @@ module Entries
   class EntryGuard
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil)
+        # Time regime validation (session-aware entry rules)
+        unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
+          Rails.logger.info("[EntryGuard] Entry blocked by time regime rules for #{index_cfg[:key]}")
+          return false
+        end
+
         instrument = find_instrument(index_cfg)
         unless instrument
           Rails.logger.warn("[EntryGuard] Instrument not found for #{index_cfg[:key]} (segment: #{index_cfg[:segment]}, sid: #{index_cfg[:sid]})")
@@ -365,6 +371,64 @@ module Entries
       rescue StandardError => e
         Rails.logger.error("[EntryGuard] Error resolving entry LTP: #{e.class} - #{e.message}")
         nil
+      end
+
+      # Check if time regime allows entry
+      def time_regime_allows_entry?(index_cfg:, pick:, direction:)
+        return true unless time_regime_rules_enabled?
+
+        regime_service = Live::TimeRegimeService.instance
+        regime = regime_service.current_regime
+
+        # Global override: No new trades after 14:50 (unless exceptional conditions)
+        unless regime_service.allow_new_trades?
+          Rails.logger.info("[EntryGuard] Entry blocked: No new trades allowed after #{Live::TimeRegimeService::NO_NEW_TRADES_AFTER}")
+          return false
+        end
+
+        # Check if entries are allowed in current regime
+        unless regime_service.allow_entries?(regime)
+          Rails.logger.info("[EntryGuard] Entry blocked: Regime #{regime} does not allow entries")
+          return false
+        end
+
+        # Check minimum ADX requirement for regime
+        min_adx = regime_service.min_adx_requirement(regime)
+        if min_adx > 15.0 # Only check if stricter than default
+          # Get ADX from signal metadata or calculate
+          # For now, skip ADX check here (should be done in signal generation)
+          # This is a safety net - signal generation should already filter by ADX
+        end
+
+        # Special rules for CHOP_DECAY regime (very strict)
+        if regime == Live::TimeRegimeService::CHOP_DECAY
+          # Allow ONLY if exceptional conditions (ADX ≥ 22, expansion present, large impulse)
+          # This should be checked in signal generation, but we log here
+          Rails.logger.info("[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met")
+        end
+
+        # Special rules for CLOSE_GAMMA regime
+        if regime == Live::TimeRegimeService::CLOSE_GAMMA
+          current_time = Time.current.strftime('%H:%M')
+          if current_time >= '14:45'
+            # No fresh breakouts after 14:45 - only continuation moves
+            # This should be checked in signal generation
+            Rails.logger.info("[EntryGuard] Entry after 14:45 - ensure continuation move only")
+          end
+        end
+
+        true
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] time_regime_allows_entry? error: #{e.class} - #{e.message}")
+        true # Fail-safe: allow entry if check fails
+      end
+
+      def time_regime_rules_enabled?
+        begin
+          AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
+        rescue StandardError
+          false
+        end
       end
 
       private
