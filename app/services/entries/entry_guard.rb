@@ -12,6 +12,12 @@ module Entries
           return false
         end
 
+        # Daily trade limits check (per-index and global)
+        unless daily_limits_allow_entry?(index_cfg: index_cfg)
+          Rails.logger.info("[EntryGuard] Entry blocked by daily trade limits for #{index_cfg[:key]}")
+          return false
+        end
+
         instrument = find_instrument(index_cfg)
         unless instrument
           Rails.logger.warn("[EntryGuard] Instrument not found for #{index_cfg[:key]} (segment: #{index_cfg[:segment]}, sid: #{index_cfg[:sid]})")
@@ -429,6 +435,61 @@ module Entries
           AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
         rescue StandardError
           false
+        end
+      end
+
+      # Check if daily trade limits allow entry
+      def daily_limits_allow_entry?(index_cfg:)
+        return true unless daily_limits_enabled?
+
+        daily_limits = Live::DailyLimits.new
+        result = daily_limits.can_trade?(index_key: index_cfg[:key])
+
+        unless result[:allowed]
+          reason = result[:reason]
+          case reason
+          when 'trade_frequency_limit_exceeded'
+            Rails.logger.warn(
+              "[EntryGuard] Daily trade limit exceeded for #{index_cfg[:key]}: " \
+              "#{result[:daily_trades]}/#{result[:max_daily_trades]} trades"
+            )
+          when 'global_trade_frequency_limit_exceeded'
+            Rails.logger.warn(
+              "[EntryGuard] Global daily trade limit exceeded: " \
+              "#{result[:global_daily_trades]}/#{result[:max_global_trades]} trades"
+            )
+          when 'daily_loss_limit_exceeded'
+            Rails.logger.warn(
+              "[EntryGuard] Daily loss limit exceeded for #{index_cfg[:key]}: " \
+              "₹#{result[:daily_loss].round(2)}/₹#{result[:max_daily_loss]}"
+            )
+          when 'global_daily_loss_limit_exceeded'
+            Rails.logger.warn(
+              "[EntryGuard] Global daily loss limit exceeded: " \
+              "₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
+            )
+          when 'daily_profit_target_reached'
+            Rails.logger.info(
+              "[EntryGuard] Daily profit target reached: " \
+              "₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
+            )
+          end
+          return false
+        end
+
+        true
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] daily_limits_allow_entry? error: #{e.class} - #{e.message}")
+        true # Fail-safe: allow entry if check fails
+      end
+
+      def daily_limits_enabled?
+        begin
+          config = AlgoConfig.fetch[:risk] || {}
+          daily_limits_cfg = config[:daily_limits] || {}
+          daily_limits_cfg[:enable] != false
+        rescue StandardError
+          true # Default to enabled
         end
       end
 

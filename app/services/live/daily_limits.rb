@@ -55,7 +55,11 @@ module Live
 
       # Check trade frequency limit (per-index)
       daily_trades = get_daily_trades(index_key)
-      max_daily_trades = risk_config[:max_daily_trades] || risk_config[:daily_trade_limit]
+      # Read from indices config: indices[].trade_limits.max_trades_per_day
+      # Fallback to risk config for backward compatibility
+      max_daily_trades = get_index_max_trades(index_key) ||
+                         risk_config[:max_daily_trades] ||
+                         risk_config[:daily_trade_limit]
       if max_daily_trades && daily_trades >= max_daily_trades.to_i
         return {
           allowed: false,
@@ -68,7 +72,11 @@ module Live
 
       # Check global trade frequency limit
       global_daily_trades = get_global_daily_trades
-      max_global_trades = risk_config[:max_global_daily_trades] || risk_config[:global_daily_trade_limit]
+      # Read from trade_limits.global_max_trades_per_day
+      # Fallback to risk config for backward compatibility
+      max_global_trades = get_global_max_trades ||
+                          risk_config[:max_global_daily_trades] ||
+                          risk_config[:global_daily_trade_limit]
       if max_global_trades && global_daily_trades >= max_global_trades.to_i
         return {
           allowed: false,
@@ -312,6 +320,27 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[DailyLimits] Failed to load risk config: #{e.class} - #{e.message}")
       {}
+    end
+
+    # Get max trades per day for specific index from config
+    def get_index_max_trades(index_key)
+      index_key = normalize_index_key(index_key)
+      indices = AlgoConfig.fetch[:indices] || []
+      index_cfg = indices.find { |idx| idx[:key]&.to_s&.upcase == index_key }
+      index_cfg&.dig(:trade_limits, :max_trades_per_day) ||
+        index_cfg&.dig('trade_limits', 'max_trades_per_day')
+    rescue StandardError => e
+      Rails.logger.error("[DailyLimits] Failed to get index max trades: #{e.class} - #{e.message}")
+      nil
+    end
+
+    # Get global max trades per day from config
+    def get_global_max_trades
+      trade_limits = AlgoConfig.fetch[:trade_limits] || {}
+      trade_limits[:global_max_trades_per_day] || trade_limits['global_max_trades_per_day']
+    rescue StandardError => e
+      Rails.logger.error("[DailyLimits] Failed to get global max trades: #{e.class} - #{e.message}")
+      nil
     end
 
     # Redis key for daily loss (per-index)
