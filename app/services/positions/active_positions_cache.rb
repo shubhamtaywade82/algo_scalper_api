@@ -7,6 +7,7 @@ module Positions
     include Singleton
 
     CACHE_TTL = 5.seconds
+    CACHE_TTL_MARKET_CLOSED = 60.seconds # Longer TTL when market is closed and no positions
 
     def initialize
       @cached_trackers = nil
@@ -34,6 +35,17 @@ module Positions
       active_trackers.map(&:id)
     end
 
+    # Get cached count without refreshing (for market-closed checks)
+    # Returns nil if cache doesn't exist, otherwise returns count
+    # @return [Integer, nil] Count of active trackers from cache, or nil if not cached
+    def cached_count
+      @lock.synchronize do
+        return nil unless @cached_trackers
+
+        @cached_trackers.size
+      end
+    end
+
     # Force refresh cache
     def refresh!
       @lock.synchronize do
@@ -53,7 +65,16 @@ module Positions
 
     # Check if cache is still valid
     def cached?
-      @cached_at && @cached_trackers && (Time.current - @cached_at) < CACHE_TTL
+      return false unless @cached_at && @cached_trackers
+
+      # Use longer TTL if market is closed and there are no positions
+      ttl = if TradingSession::Service.market_closed? && @cached_trackers.size.zero?
+              CACHE_TTL_MARKET_CLOSED
+            else
+              CACHE_TTL
+            end
+
+      (Time.current - @cached_at) < ttl
     end
 
     # Get cache stats

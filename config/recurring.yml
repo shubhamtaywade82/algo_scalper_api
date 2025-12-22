@@ -9,7 +9,40 @@
 #     priority: 2
 #     schedule: at 5am every day
 
+development:
+  ai_technical_analysis_nifty:
+    class: AiTechnicalAnalysisJob
+    args: ["NIFTY"]
+    schedule: every 5 minutes
+    queue_name: background
+    priority: 5
+    description: "AI technical analysis for NIFTY options buying intraday - runs every 5 minutes"
+
+  ai_technical_analysis_sensex:
+    class: AiTechnicalAnalysisJob
+    args: ["SENSEX"]
+    schedule: every 5 minutes
+    queue_name: background
+    priority: 5
+    description: "AI technical analysis for SENSEX options buying intraday - runs every 5 minutes"
+
 production:
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
+
+  ai_technical_analysis_nifty:
+    class: AiTechnicalAnalysisJob
+    args: ["NIFTY"]
+    schedule: every 5 minutes
+    queue_name: background
+    priority: 5
+    description: "AI technical analysis for NIFTY options buying intraday - runs every 5 minutes"
+
+  ai_technical_analysis_sensex:
+    class: AiTechnicalAnalysisJob
+    args: ["SENSEX"]
+    schedule: every 5 minutes
+    queue_name: background
+    priority: 5
+    description: "AI technical analysis for SENSEX options buying intraday - runs every 5 minutes"

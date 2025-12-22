@@ -22,6 +22,7 @@ module Live
       @mutex = Mutex.new
       @running = false
       @thread = nil
+      @market_closed_checked = false # Track if we've already checked after market closed
 
       # Watchdog ensures service thread is restarted if it dies (lightweight)
       @watchdog_thread = Thread.new do
@@ -100,6 +101,30 @@ module Live
     # Central monitoring loop: keep PnL and caches fresh.
     # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
     def monitor_loop(last_paper_pnl_update)
+      # Skip processing if market is closed and no active positions
+      if TradingSession::Service.market_closed?
+        # Only fetch once after market closes, then skip all checks until market opens
+        if @market_closed_checked
+          # Already checked after market closed - if we're here, positions exist
+          # Continue monitoring for exits (positions were found in first check)
+        else
+          # First check after market closed - fetch once to verify no positions
+          active_count = Positions::ActivePositionsCache.instance.active_trackers.size
+          @market_closed_checked = true
+
+          if active_count.zero?
+            # Market closed and no active positions - no need to monitor
+            # Mark as checked and return early - won't check again until market opens
+            Rails.logger.debug('[RiskManager] Market closed with no positions - skipping monitoring until market opens')
+            return
+          end
+          # Market closed but positions exist - continue monitoring (needed for exits)
+        end
+      else
+        # Market is open - reset the flag so we check again next time market closes
+        @market_closed_checked = false
+      end
+
       # Keep Redis/DB PnL fresh
       update_paper_positions_pnl_if_due(last_paper_pnl_update)
       ensure_all_positions_in_redis

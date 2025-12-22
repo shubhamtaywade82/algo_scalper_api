@@ -367,7 +367,7 @@ signals:
   # Index Technical Analysis (TA) Configuration
   # Multi-timeframe technical analysis before signal generation
   # Uses DhanHQ TA modules if available, falls back to existing indicator infrastructure
-  enable_index_ta: true # Enable index TA step (default: true)
+  enable_index_ta: false # Enable index TA step (default: true)
   ta_timeframes: [5, 15, 60] # Timeframes in minutes for TA analysis (default: [5, 15, 60])
   ta_days_back: 30 # Days of historical data to fetch (default: 30)
   ta_min_confidence: 0.6 # Minimum confidence (0.0-1.0) required to proceed (default: 0.6)
