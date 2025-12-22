@@ -12,6 +12,18 @@ module Entries
           return false
         end
 
+        # Edge failure detector (rolling PnL window, consecutive SLs, session-based)
+        edge_check = Live::EdgeFailureDetector.instance.entries_paused?(index_key: index_cfg[:key])
+        if edge_check[:paused]
+          resume_at = edge_check[:resume_at]
+          resume_str = resume_at ? resume_at.strftime('%H:%M IST') : 'manual override'
+          Rails.logger.info(
+            "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: " \
+            "#{edge_check[:reason]} (resume at: #{resume_str})"
+          )
+          return false
+        end
+
         # Daily loss/profit limits check (NOT trade frequency - we don't cap trade count)
         unless daily_limits_allow_entry?(index_cfg: index_cfg)
           Rails.logger.info("[EntryGuard] Entry blocked by daily loss/profit limits for #{index_cfg[:key]}")

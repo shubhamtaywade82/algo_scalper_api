@@ -482,6 +482,41 @@ position_sizing:
   max_daily_profit: 20000 # ₹20,000 daily profit target (trading stops when reached)
   # Alternative config key: daily_profit_target (also supported)
 
+  # Edge Failure Detector (Quality/Regime Detector - NOT a loss cap)
+  # Detects when trading edge has degraded and pauses entries to prevent death by a thousand cuts
+  # This preserves profit-hunting mode while preventing edge decay days
+  #
+  # Philosophy:
+  # - Unlimited trades and losses allowed UNTIL ₹20k profit
+  # - BUT edge degradation must be detected and paused
+  # - Prevents chop/theta bleed days from causing infinite drawdown
+  #
+  # Detection Methods:
+  # 1. Rolling PnL Window: Last N trades net PnL <= threshold → pause entries
+  # 2. Consecutive SLs: N consecutive stop losses → pause entries
+  # 3. Session-based: Disable entries in S3 (chop/decay) after consecutive SLs
+  edge_failure_detector:
+    enabled: true # Set to true to enable edge failure detection
+
+    # Rolling PnL Window Breaker
+    # Tracks last N trades and pauses if net PnL falls below threshold
+    # This detects chop days and signal degradation without relying on daily loss caps
+    rolling_window_size: 5 # Number of recent trades to evaluate
+    rolling_window_threshold_rupees: -3000 # Pause if last N trades net PnL <= -₹3k
+    pause_duration_minutes: 60 # Pause entries for N minutes when threshold breached
+
+    # Consecutive SL Breaker
+    # Pauses entries after N consecutive stop losses
+    # Detects when market regime is unfavorable (chop, fake breakouts)
+    max_consecutive_sls: 2 # Pause after N consecutive SLs
+    consecutive_sl_pause_minutes: 60 # Pause entries for N minutes after consecutive SLs
+
+    # Session-Based Pause (especially S3 - chop/decay zone)
+    # In dangerous sessions, disable entries after consecutive SLs
+    session_based_pause: true # Enable session-aware pause logic
+    s3_max_consecutive_sls: 2 # In S3 (11:30-13:45), pause after N consecutive SLs
+    s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
+
 # ============================================
 # SIGNAL SETTINGS
 # ============================================

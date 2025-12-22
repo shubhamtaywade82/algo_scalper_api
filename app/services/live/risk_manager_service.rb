@@ -166,6 +166,9 @@ module Live
 
           Rails.logger.info("[RiskManager] Successfully exited #{tracker.order_no} (#{tracker.id}) via internal executor")
 
+          # Record trade result in EdgeFailureDetector (for edge failure detection)
+          record_trade_result_for_edge_detector(tracker, final_pnl, final_reason || reason)
+
           # Send Telegram notification
           final_reason = updated_reason || reason
           notify_telegram_exit(tracker, final_reason, exit_price)
@@ -1399,6 +1402,23 @@ module Live
       rescue StandardError
         {}
       end
+    end
+
+    # Record trade result in EdgeFailureDetector
+    def record_trade_result_for_edge_detector(tracker, final_pnl, exit_reason)
+      return unless tracker && final_pnl && exit_reason
+
+      index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+      return unless index_key
+
+      Live::EdgeFailureDetector.instance.record_trade_result(
+        index_key: index_key,
+        pnl_rupees: final_pnl.to_f,
+        exit_reason: exit_reason.to_s,
+        exit_time: Time.current
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] record_trade_result_for_edge_detector error: #{e.class} - #{e.message}")
     end
 
     def cancel_remote_order(order_id)
