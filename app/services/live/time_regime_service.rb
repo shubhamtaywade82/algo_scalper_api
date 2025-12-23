@@ -41,7 +41,8 @@ module Live
       return PRE_MARKET if time_str < MARKET_OPEN
       return POST_MARKET if time_str >= MARKET_CLOSE
 
-      config = regime_config
+      # Get config directly to avoid recursion (regime_config calls current_regime)
+      config = time_regime_config
 
       # Check each regime in order
       config.each do |regime_name, regime_cfg|

@@ -26,9 +26,12 @@ module Live
 
       # Watchdog ensures service thread is restarted if it dies (lightweight)
       @watchdog_thread = Thread.new do
+        Thread.current.name = 'risk-manager-watchdog'
         loop do
           unless @thread&.alive?
             Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
+            # Reset running flag if thread is dead or nil
+            @running = false
             start
           end
           sleep 10
@@ -38,7 +41,8 @@ module Live
 
     # Start monitoring loop (non-blocking)
     def start
-      return if @running
+      # Check if thread is actually alive, not just if @running is true
+      return if @running && @thread&.alive?
 
       @running = true
 
@@ -257,7 +261,7 @@ module Live
       # Check if trailing is allowed in current time regime
       regime = Live::TimeRegimeService.instance.current_regime
       unless Live::TimeRegimeService.instance.allow_trailing?(regime)
-        Rails.logger.debug("[RiskManager] Trailing disabled for regime: #{regime}")
+        Rails.logger.debug { "[RiskManager] Trailing disabled for regime: #{regime}" }
         return
       end
 
@@ -600,11 +604,11 @@ module Live
       unless cached
         # Build from recent Redis PnL cache entries
         redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
-        if redis_pnl && redis_pnl[:ltp]
-          cached = [{ ltp: redis_pnl[:ltp], timestamp: redis_pnl[:timestamp] || Time.current.to_i }]
-        else
-          cached = []
-        end
+        cached = if redis_pnl && redis_pnl[:ltp]
+                   [{ ltp: redis_pnl[:ltp], timestamp: redis_pnl[:timestamp] || Time.current.to_i }]
+                 else
+                   []
+                 end
       end
 
       # Update with current LTP
@@ -1349,7 +1353,7 @@ module Live
       # Formula: (sl_price - entry_price) * quantity - exit_fee = secured_sl_rupees
       # sl_price = entry_price + (secured_sl_rupees + exit_fee) / quantity
       exit_fee = BrokerFeeCalculator.fee_per_order
-      sl_price = entry_price + BigDecimal((secured_sl_rupees + exit_fee).to_s) / quantity
+      sl_price = entry_price + (BigDecimal((secured_sl_rupees + exit_fee).to_s) / quantity)
 
       # Update tracker metadata
       meta = tracker.meta || {}
@@ -1422,11 +1426,9 @@ module Live
     end
 
     def stall_detection_config
-      begin
-        AlgoConfig.fetch.dig(:risk, :time_overrides, :stall_detection) || {}
-      rescue StandardError
-        {}
-      end
+      AlgoConfig.fetch.dig(:risk, :time_overrides, :stall_detection) || {}
+    rescue StandardError
+      {}
     end
 
     # Record trade result in EdgeFailureDetector
