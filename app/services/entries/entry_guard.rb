@@ -6,6 +6,30 @@ module Entries
   class EntryGuard
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil)
+        # Time regime validation (session-aware entry rules)
+        unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
+          Rails.logger.info("[EntryGuard] Entry blocked by time regime rules for #{index_cfg[:key]}")
+          return false
+        end
+
+        # Edge failure detector (rolling PnL window, consecutive SLs, session-based)
+        edge_check = Live::EdgeFailureDetector.instance.entries_paused?(index_key: index_cfg[:key])
+        if edge_check[:paused]
+          resume_at = edge_check[:resume_at]
+          resume_str = resume_at ? resume_at.strftime('%H:%M IST') : 'manual override'
+          Rails.logger.info(
+            "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: " \
+            "#{edge_check[:reason]} (resume at: #{resume_str})"
+          )
+          return false
+        end
+
+        # Daily loss/profit limits check (NOT trade frequency - we don't cap trade count)
+        unless daily_limits_allow_entry?(index_cfg: index_cfg)
+          Rails.logger.info("[EntryGuard] Entry blocked by daily loss/profit limits for #{index_cfg[:key]}")
+          return false
+        end
+
         instrument = find_instrument(index_cfg)
         unless instrument
           Rails.logger.warn("[EntryGuard] Instrument not found for #{index_cfg[:key]} (segment: #{index_cfg[:segment]}, sid: #{index_cfg[:sid]})")
@@ -365,6 +389,117 @@ module Entries
       rescue StandardError => e
         Rails.logger.error("[EntryGuard] Error resolving entry LTP: #{e.class} - #{e.message}")
         nil
+      end
+
+      # Check if time regime allows entry
+      def time_regime_allows_entry?(index_cfg:, pick:, direction:)
+        return true unless time_regime_rules_enabled?
+
+        regime_service = Live::TimeRegimeService.instance
+        regime = regime_service.current_regime
+
+        # Global override: No new trades after 14:50 (unless exceptional conditions)
+        unless regime_service.allow_new_trades?
+          Rails.logger.info("[EntryGuard] Entry blocked: No new trades allowed after #{Live::TimeRegimeService::NO_NEW_TRADES_AFTER}")
+          return false
+        end
+
+        # Check if entries are allowed in current regime
+        unless regime_service.allow_entries?(regime)
+          Rails.logger.info("[EntryGuard] Entry blocked: Regime #{regime} does not allow entries")
+          return false
+        end
+
+        # Check minimum ADX requirement for regime
+        min_adx = regime_service.min_adx_requirement(regime)
+        if min_adx > 15.0 # Only check if stricter than default
+          # Get ADX from signal metadata or calculate
+          # For now, skip ADX check here (should be done in signal generation)
+          # This is a safety net - signal generation should already filter by ADX
+        end
+
+        # Special rules for CHOP_DECAY regime (very strict)
+        if regime == Live::TimeRegimeService::CHOP_DECAY
+          # Allow ONLY if exceptional conditions (ADX ≥ 22, expansion present, large impulse)
+          # This should be checked in signal generation, but we log here
+          Rails.logger.info("[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met")
+        end
+
+        # Special rules for CLOSE_GAMMA regime
+        if regime == Live::TimeRegimeService::CLOSE_GAMMA
+          # Use IST timezone explicitly
+          current_time = Live::TimeRegimeService.instance.current_ist_time.strftime('%H:%M')
+          if current_time >= '14:45'
+            # No fresh breakouts after 14:45 IST - only continuation moves
+            # This should be checked in signal generation
+            Rails.logger.info("[EntryGuard] Entry after 14:45 IST - ensure continuation move only")
+          end
+        end
+
+        true
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] time_regime_allows_entry? error: #{e.class} - #{e.message}")
+        true # Fail-safe: allow entry if check fails
+      end
+
+      def time_regime_rules_enabled?
+        begin
+          AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
+        rescue StandardError
+          false
+        end
+      end
+
+      # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
+      def daily_limits_allow_entry?(index_cfg:)
+        return true unless daily_limits_enabled?
+
+        daily_limits = Live::DailyLimits.new
+        result = daily_limits.can_trade?(index_key: index_cfg[:key])
+
+        unless result[:allowed]
+          reason = result[:reason]
+          # Only block on loss/profit limits, NOT trade frequency limits
+          case reason
+          when 'trade_frequency_limit_exceeded', 'global_trade_frequency_limit_exceeded'
+            # Ignore trade frequency limits - we don't cap trade count
+            return true
+          when 'daily_loss_limit_exceeded'
+            Rails.logger.warn(
+              "[EntryGuard] Daily loss limit exceeded for #{index_cfg[:key]}: " \
+              "₹#{result[:daily_loss].round(2)}/₹#{result[:max_daily_loss]}"
+            )
+            return false
+          when 'global_daily_loss_limit_exceeded'
+            Rails.logger.warn(
+              "[EntryGuard] Global daily loss limit exceeded: " \
+              "₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
+            )
+            return false
+          when 'daily_profit_target_reached'
+            Rails.logger.info(
+              "[EntryGuard] Daily profit target reached: " \
+              "₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
+            )
+            return false
+          end
+          return false
+        end
+
+        true
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] daily_limits_allow_entry? error: #{e.class} - #{e.message}")
+        true # Fail-safe: allow entry if check fails
+      end
+
+      def daily_limits_enabled?
+        begin
+          config = AlgoConfig.fetch[:risk] || {}
+          daily_limits_cfg = config[:daily_limits] || {}
+          daily_limits_cfg[:enable] != false
+        rescue StandardError
+          true # Default to enabled
+        end
       end
 
       private

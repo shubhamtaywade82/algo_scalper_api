@@ -186,6 +186,135 @@ risk:
     enabled: false # Set to true to enable hard ₹ take profit
     target_profit_rupees: 2000 # Target profit per trade in rupees
 
+  # Post-Profit Zone Management (State Machine)
+  # Implements sophisticated profit zone management after ₹2k TP
+  # Core Principle: ₹2k TP is a minimum extraction, not a cap
+  # After ₹2k, trade continues ONLY if underlying trend + option momentum are favorable
+  #
+  # State Machine:
+  # - ENTRY: ₹0 → ₹2,000 (normal trade management, Hard SL: -₹1,000)
+  # - SECURED_PROFIT_ZONE: ₹2,000 → ₹4,000 (capital protection mode, SL moved to green)
+  # - RUNNER_ZONE: ₹4,000+ (trailing stop with exponential drawdown)
+  #
+  # At ₹2k transition:
+  # - SL moves to +₹500 to +₹1,000 (locked profit)
+  # - Disable loose % drawdown logic
+  # - Switch to underlying-aware exit
+  #
+  # Hold criteria after ₹2k (ALL must be TRUE):
+  # Underlying:
+  #   - 1m Supertrend still in direction
+  #   - ADX ≥ 18 and not falling
+  #   - Candle bodies > wicks (no exhaustion)
+  #   - No HTF resistance within 30-40 pts
+  # Option:
+  #   - Premium is NOT stalling
+  #   - LTP continues to make HH (higher highs)
+  #   - Pullbacks < 30-35% of last impulse
+  #   - Bid-ask spread stable
+  #
+  # Exit immediately if ANY criteria fails
+  post_profit_zone:
+    enabled: true # Set to true to enable post-profit zone management
+    secured_profit_threshold_rupees: 2000 # Transition to secured profit zone at ₹2k
+    runner_zone_threshold_rupees: 4000 # Transition to runner zone at ₹4k
+    secured_sl_rupees: 800 # Move SL to +₹800 when entering secured profit zone (green SL)
+    underlying_adx_min: 18.0 # Minimum ADX for underlying trend to be considered favorable
+    option_pullback_max_pct: 35.0 # Maximum pullback % from peak before considering momentum stalled
+    underlying_atr_collapse_threshold: 0.65 # ATR ratio threshold for collapse detection
+    runner_zone_momentum_check: false # Enable additional momentum checks in runner zone (optional)
+
+  # Time-Regime Based Rules (Session-Aware Greeks)
+  # Implements time-conditioned rule system that respects Greek dominance across market sessions
+  # Core Principle: Options buying is NOT symmetric across the day - same signal behaves differently
+  # by time due to changing Greek dominance (Delta/Gamma in open, Theta in mid-day, IV crush in close)
+  #
+  # IMPORTANT: All times are in IST (Indian Standard Time, UTC+5:30)
+  # Rails timezone is configured as "Asia/Kolkata" in config/application.rb
+  #
+  # Market Session Segmentation (Indian Indices - IST):
+  # S1: OPEN EXPANSION     → 09:15 – 09:45 IST (Delta + Gamma dominant - fast moves, fake breakouts)
+  # S2: TREND CONTINUATION → 09:45 – 11:30 IST (Best zone - Delta stable, Theta low, IV steady)
+  # S3: CHOP / DECAY       → 11:30 – 13:45 IST (Theta dominant - danger zone, mostly no trade)
+  # S4: CLOSE / GAMMA      → 13:45 – 15:15 IST (Theta + IV crush - tight rules, no runners)
+  #
+  # Each regime gets different SL/TP/trailing rules based on Greek behavior
+  time_regimes:
+    enabled: true # Set to true to enable time-regime based rules
+
+    # S1: OPEN EXPANSION (09:15 – 09:45)
+    # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
+    # Premium moves FAST, small index move → big option move, fake breakouts common
+    open_expansion:
+      start: "09:15"
+      end: "09:45"
+      sl_multiplier: 1.3 # WIDE SL (SENSEX: ₹15-20, NIFTY: ₹8-12)
+      tp_multiplier: 1.0 # Fast TP (₹2k often hits in 1-3 candles)
+      allow_trailing: false # No micro trailing (gets wicked out)
+      allow_runners: false # No runners (enter fast, exit fast, no greed)
+      allow_entries: true
+      min_adx: 20.0 # Strict entry (ADX ≥ 20, ATM only, first breakout/pullback only)
+      max_tp_rupees: 2000 # Hard ₹2k TP, no more
+
+    # S2: TREND CONTINUATION (09:45 – 11:30) ✅ BEST ZONE
+    # Delta stable, Gamma moderate, Theta low, IV steady
+    # This is THE MONEY ZONE - extract base profit, then let winners breathe
+    trend_continuation:
+      start: "09:45"
+      end: "11:30"
+      sl_multiplier: 1.0 # Moderate SL (SENSEX: ₹10-15, NIFTY: ₹6-10)
+      tp_multiplier: 1.0 # First extraction: ₹2k, then runner allowed
+      allow_trailing: true # Enable post-TP logic, move SL to green after ₹2k
+      allow_runners: true # Allow runner with trend intact (exponential drawdown logic fits here)
+      allow_entries: true
+      min_adx: 15.0 # Trend continuation only, pullbacks preferred, 1m + 5m alignment
+      max_tp_rupees: null # No limit (runners allowed)
+
+    # S3: CHOP / THETA ZONE (11:30 – 13:45) ❌ DANGER
+    # Delta weak, Gamma flat, Theta dominant, IV bleeds
+    # This is where most retail losses happen - survive, don't trade
+    chop_decay:
+      start: "11:30"
+      end: "13:45"
+      sl_multiplier: 0.8 # TIGHT SL
+      tp_multiplier: 0.8 # SMALL TP
+      allow_trailing: false # Disable trailing
+      allow_runners: false # No runners allowed
+      allow_entries: false # Disable normal entries (allow ONLY if ADX ≥ 22, expansion present, Sensex > 60 pts)
+      min_adx: 22.0 # Very strict if entries allowed
+      max_tp_rupees: 1500 # Small TP, no runners
+
+    # S4: CLOSE / GAMMA ZONE (13:45 – 15:15)
+    # Theta accelerates, Gamma spikes near ATM, IV crush common, reversals violent
+    # Take what market gives, don't argue - scalp only, no greed
+    close_gamma:
+      start: "13:45"
+      end: "15:15"
+      sl_multiplier: 0.7 # TIGHT SL (SENSEX: ₹8-10, NIFTY: ₹5-7)
+      tp_multiplier: 0.75 # FIXED TP (₹1.5k-₹2k)
+      allow_trailing: false # No runners after 14:45
+      allow_runners: false # Book profits aggressively
+      allow_entries: true # ONLY continuation moves, no fresh breakouts after 14:45, ATM only
+      min_adx: 18.0
+      max_tp_rupees: 2000 # Fixed ₹1.5k-₹2k
+
+  # Global Time-Based Overrides (CRITICAL - override everything)
+  # All times are in IST (Indian Standard Time, UTC+5:30)
+  time_overrides:
+    # Override 1: No new trades after 14:50 IST (unless exceptional conditions)
+    no_new_trades_after: "14:50" # No new trades after this time IST (unless ADX ≥ 25, massive expansion)
+
+    # Override 2: IV collapse detection
+    iv_collapse:
+      enabled: false # Set to true when IV data is available
+      collapse_threshold: 0.15 # Exit if IV drops >15% suddenly (time irrelevant)
+
+    # Override 3: Price stall detection (especially after ₹2k profit)
+    stall_detection:
+      enabled: true # Exit if price stalls for N candles (no new HH/LL)
+      stall_candles: 3 # Number of candles with no progress before exit
+      min_profit_rupees: 2000 # Only check stall if profit >= this amount
+
 # ============================================
 # POSITION SIZING (RUPEES-BASED)
 # ============================================
@@ -352,6 +481,41 @@ position_sizing:
   # Daily profit target: Stop trading when daily profit reaches this amount
   max_daily_profit: 20000 # ₹20,000 daily profit target (trading stops when reached)
   # Alternative config key: daily_profit_target (also supported)
+
+  # Edge Failure Detector (Quality/Regime Detector - NOT a loss cap)
+  # Detects when trading edge has degraded and pauses entries to prevent death by a thousand cuts
+  # This preserves profit-hunting mode while preventing edge decay days
+  #
+  # Philosophy:
+  # - Unlimited trades and losses allowed UNTIL ₹20k profit
+  # - BUT edge degradation must be detected and paused
+  # - Prevents chop/theta bleed days from causing infinite drawdown
+  #
+  # Detection Methods:
+  # 1. Rolling PnL Window: Last N trades net PnL <= threshold → pause entries
+  # 2. Consecutive SLs: N consecutive stop losses → pause entries
+  # 3. Session-based: Disable entries in S3 (chop/decay) after consecutive SLs
+  edge_failure_detector:
+    enabled: true # Set to true to enable edge failure detection
+
+    # Rolling PnL Window Breaker
+    # Tracks last N trades and pauses if net PnL falls below threshold
+    # This detects chop days and signal degradation without relying on daily loss caps
+    rolling_window_size: 5 # Number of recent trades to evaluate
+    rolling_window_threshold_rupees: -3000 # Pause if last N trades net PnL <= -₹3k
+    pause_duration_minutes: 60 # Pause entries for N minutes when threshold breached
+
+    # Consecutive SL Breaker
+    # Pauses entries after N consecutive stop losses
+    # Detects when market regime is unfavorable (chop, fake breakouts)
+    max_consecutive_sls: 2 # Pause after N consecutive SLs
+    consecutive_sl_pause_minutes: 60 # Pause entries for N minutes after consecutive SLs
+
+    # Session-Based Pause (especially S3 - chop/decay zone)
+    # In dangerous sessions, disable entries after consecutive SLs
+    session_based_pause: true # Enable session-aware pause logic
+    s3_max_consecutive_sls: 2 # In S3 (11:30-13:45), pause after N consecutive SLs
+    s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
 
 # ============================================
 # SIGNAL SETTINGS
