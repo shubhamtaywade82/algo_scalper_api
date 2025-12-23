@@ -599,7 +599,7 @@ module Signal
       # Validate market timing - avoid problematic trading times
       def validate_market_timing
         # TODO: Implement market timing validation if needed
-        # current_time = Time.zone.now
+        current_time = Time.zone.now
         { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
 
         # First check if it's a trading day using Market::Calendar

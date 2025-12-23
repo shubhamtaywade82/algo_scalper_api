@@ -949,7 +949,9 @@ module Services
           # Verify index_key exists in config
           @index_config_cache ||= IndexConfigLoader.load_indices
           index_cfg = @index_config_cache.find { |idx| idx[:key].to_s.upcase == index_key.to_s.upcase }
+          # rubocop:disable Rails/Pluck
           return { error: "Unknown index: #{index_key}. Available indices: #{@index_config_cache.map { |c| c[:key] }.join(', ')}" } unless index_cfg
+          # rubocop:enable Rails/Pluck
 
           # Use analyzer directly to get full chain data
           cache_key = "analyzer:#{index_key}"
