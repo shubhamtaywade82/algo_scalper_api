@@ -179,6 +179,7 @@ GEM
     erubi (1.13.1)
     et-orbi (1.4.0)
       tzinfo
+    event_stream_parser (1.0.0)
     eventmachine (1.2.7)
     factory_bot (6.5.5)
       activesupport (>= 6.1.0)
@@ -288,6 +289,9 @@ GEM
       racc (~> 1.4)
     nokogiri (1.18.10-x86_64-linux-musl)
       racc (~> 1.4)
+    openai (0.41.0)
+      base64
+      connection_pool
     ostruct (0.6.3)
     parallel (1.27.0)
     parser (3.3.9.0)
@@ -418,6 +422,10 @@ GEM
       lint_roller (~> 1.1)
       rubocop (~> 1.72, >= 1.72.1)
       rubocop-rspec (~> 3.5)
+    ruby-openai (8.3.0)
+      event_stream_parser (>= 0.3.0, < 2.0.0)
+      faraday (>= 1)
+      faraday-multipart (>= 1)
     ruby-progressbar (1.13.0)
     ruby-technical-analysis (1.0.4)
     ruby2_keywords (0.0.5)
@@ -523,6 +531,7 @@ DEPENDENCIES
   factory_bot_rails
   faker
   kamal
+  openai (~> 0.41)
   pg (~> 1.1)
   puma (>= 5.0)
   rack-cors
@@ -535,6 +544,7 @@ DEPENDENCIES
   rubocop-rails (~> 2.23)
   rubocop-rspec (~> 3.0)
   rubocop-rspec_rails
+  ruby-openai (~> 8.0)
   ruby-technical-analysis
   shoulda-matchers
   sidekiq

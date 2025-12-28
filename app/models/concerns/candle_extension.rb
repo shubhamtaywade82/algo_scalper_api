@@ -32,13 +32,25 @@ module CandleExtension
 
       if include_today
         # Include today's date to get the most recent candles
-        to_date = if defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+        # Use trading days, not calendar days, to avoid weekends/holidays
+        to_date = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
+                    Market::Calendar.today_or_last_trading_day.to_s
+                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
                     MarketCalendar.today_or_last_trading_day.to_s
                   else
                     Time.zone.today.to_s
                   end
-        from_date = (Date.parse(to_date) - 2).to_s # Last 2 days including today
-        Rails.logger.debug { "[CandleExtension] Fetching OHLC for #{symbol_name} @ #{interval}m: from_date=#{from_date}, to_date=#{to_date} (including today)" }
+
+        # Get from_date as 2 trading days ago (not 2 calendar days)
+        from_date = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
+                      Market::Calendar.trading_days_ago(2).to_s
+                    elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
+                      MarketCalendar.trading_days_ago(2).to_s
+                    else
+                      (Date.parse(to_date) - 2).to_s # Fallback to calendar days
+                    end
+
+        Rails.logger.debug { "[CandleExtension] Fetching OHLC for #{symbol_name} @ #{interval}m: from_date=#{from_date}, to_date=#{to_date} (including today, using trading days)" }
         raw_data = intraday_ohlc(interval: interval, from_date: from_date, to_date: to_date, days: 2)
       else
         # For backtest/script mode, use default (excludes today)

@@ -53,9 +53,7 @@ module Live
       # Create PositionTracker records for untracked positions
       untracked_count = 0
       untracked_positions.each do |dhan_pos|
-        if create_tracker_for_position(dhan_pos)
-          untracked_count += 1
-        end
+        untracked_count += 1 if create_tracker_for_position(dhan_pos)
       end
 
       # Check for live positions that exist in database but not in DhanHQ (should be marked as exited)
@@ -282,15 +280,20 @@ module Live
       exit_price = BigDecimal(ltp.to_s)
       entry = BigDecimal(tracker.entry_price.to_s)
       qty = tracker.quantity.to_i
-      pnl = (exit_price - entry) * qty
-      pnl_pct = ((exit_price - entry) / entry * 100).round(2)
+      gross_pnl = (exit_price - entry) * qty
+
+      # Deduct broker fees (₹20 per order, ₹40 per trade - position is being exited)
+      pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: true)
+
+      # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
+      pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
 
       hwm = tracker.high_water_mark_pnl || BigDecimal(0)
       hwm = [hwm, pnl].max
 
       tracker.update!(
         last_pnl_rupees: pnl,
-        last_pnl_pct: pnl_pct,
+        last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
         high_water_mark_pnl: hwm,
         avg_price: exit_price,
         meta: (tracker.meta || {}).merge(

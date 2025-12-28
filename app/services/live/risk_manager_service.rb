@@ -3,6 +3,7 @@
 require 'bigdecimal'
 require 'singleton'
 require 'ostruct'
+require_relative '../concerns/broker_fee_calculator'
 
 module Live
   # Responsible for monitoring active PositionTracker entries, keeping PnL up-to-date in Redis,
@@ -15,87 +16,51 @@ module Live
   class RiskManagerService
     LOOP_INTERVAL = 5
     API_CALL_STAGGER_SECONDS = 1.0
-    MAX_RETRIES_ON_RATE_LIMIT = 3
-    RATE_LIMIT_BACKOFF_BASE = 2.0 # seconds
 
-    def initialize(exit_engine: nil, trailing_engine: nil, rule_engine: nil)
+    def initialize(exit_engine: nil)
       @exit_engine = exit_engine
-      @trailing_engine = trailing_engine
-      @rule_engine = rule_engine # Rule engine for risk and position management
       @mutex = Mutex.new
       @running = false
       @thread = nil
-      @last_api_call_time = Time.zone.at(0)
-      @rate_limit_errors = {} # Track rate limit errors per segment:security_id
-      @sleep_mutex = Mutex.new
-      @sleep_cv = ConditionVariable.new
-      @position_subscriptions = []
-      @metrics = {}
-      @redis_pnl_cache = {} # Per-cycle cache for Redis PnL lookups (cleared each cycle)
-      @cycle_tracker_map = nil # Cached tracker map for current cycle
-
-      # Phase 3: Circuit Breaker initialization
-      @circuit_breaker_state = :closed # :closed, :open, :half_open
-      @circuit_breaker_failures = 0
-      @circuit_breaker_last_failure = nil
-      @circuit_breaker_threshold = 5 # Open after 5 failures
-      @circuit_breaker_timeout = 60 # Stay open for 60 seconds
-      @started_at = nil # Track service start time for uptime
+      @market_closed_checked = false # Track if we've already checked after market closed
 
       # Watchdog ensures service thread is restarted if it dies (lightweight)
       @watchdog_thread = Thread.new do
         Thread.current.name = 'risk-manager-watchdog'
         loop do
+          unless @thread&.alive?
+            Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
+            # Reset running flag if thread is dead or nil
+            @running = false
+            start
+          end
           sleep 10
-          # Only restart if service was running and thread is dead
-          next unless @running && (@thread.nil? || !@thread.alive?)
-
-          Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
-          @running = false # Reset flag before restarting
-          start
         end
       end
-
-      subscribe_to_position_events
     end
 
     # Start monitoring loop (non-blocking)
     def start
-      return if @running
+      # Check if thread is actually alive, not just if @running is true
+      return if @running && @thread&.alive?
 
       @running = true
-      @started_at = Time.current
 
       @thread = Thread.new do
         Thread.current.name = 'risk-manager'
+        last_paper_pnl_update = Time.current
 
         loop do
           break unless @running
 
           begin
-            # Skip monitoring if market is closed and no active positions
-            if TradingSession::Service.market_closed?
-              # Use cached active positions to avoid redundant query
-              active_count = Positions::ActivePositionsCache.instance.active_trackers.size
-              if active_count.zero?
-                # Market closed and no active positions - sleep longer
-                sleep 60 # Check every minute when market is closed and no positions
-                next
-              end
-              # Market closed but positions exist - continue monitoring (needed for exits)
-            end
-
-            if demand_driven_enabled? && Positions::ActiveCache.instance.empty?
-              wait_for_interval(loop_sleep_interval(true))
-              next
-            end
-
-            # NOTE: Removed last_paper_pnl_update - PaperPnlRefresher handles paper PnL updates
-            monitor_loop
+            monitor_loop(last_paper_pnl_update)
+            # update timestamp after paper update occurred inside monitor_loop
+            last_paper_pnl_update = Time.current
           rescue StandardError => e
             Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
           end
-          wait_for_interval(loop_sleep_interval(false))
+          sleep LOOP_INTERVAL
         end
       end
     end
@@ -104,8 +69,6 @@ module Live
       @running = false
       @thread&.kill
       @thread = nil
-      unsubscribe_from_position_events
-      wake_up!
     end
 
     def running?
@@ -140,86 +103,47 @@ module Live
     private
 
     # Central monitoring loop: keep PnL and caches fresh.
-    # DO NOT perform exit dispatching here when an external ExitEngine exists — ExitEngine will call enforcement methods.
-    # Phase 2: Consolidated iteration - processes all positions in single loop
-    # Phase 3: Metrics tracking integrated
-    def monitor_loop
-      cycle_start_time = Time.current
-      redis_fetches_before = @metrics[:total_redis_fetches] || 0
-      db_queries_before = @metrics[:total_db_queries] || 0
-      api_calls_before = @metrics[:total_api_calls] || 0
-      exit_counts = {}
-      error_counts = {}
+    # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
+    def monitor_loop(last_paper_pnl_update)
+      # Skip processing if market is closed and no active positions
+      if TradingSession::Service.market_closed?
+        # Only fetch once after market closes, then skip all checks until market opens
+        if @market_closed_checked
+          # Already checked after market closed - if we're here, positions exist
+          # Continue monitoring for exits (positions were found in first check)
+        else
+          # First check after market closed - fetch once to verify no positions
+          active_count = Positions::ActivePositionsCache.instance.active_trackers.size
+          @market_closed_checked = true
 
-      begin
-        # Clear per-cycle caches at start of each cycle
-        @redis_pnl_cache.clear
-        @cycle_tracker_map = nil
-
-        # Early exit if no positions (optimization)
-        positions = active_cache_positions
-        if positions.empty?
-          # Still run maintenance tasks (throttled)
-          # NOTE: PnL updates removed - PaperPnlRefresher handles paper position PnL updates every 1 second
-          ensure_all_positions_in_redis
-          ensure_all_positions_in_active_cache
-          ensure_all_positions_subscribed
-          # Record metrics for empty cycle before returning
-          cycle_time = Time.current - cycle_start_time
-          record_cycle_metrics(
-            cycle_time: cycle_time,
-            positions_count: 0,
-            redis_fetches: 0,
-            db_queries: 0,
-            api_calls: 0,
-            exit_counts: {},
-            error_counts: {}
-          )
-          return
+          if active_count.zero?
+            # Market closed and no active positions - no need to monitor
+            # Mark as checked and return early - won't check again until market opens
+            Rails.logger.debug('[RiskManager] Market closed with no positions - skipping monitoring until market opens')
+            return
+          end
+          # Market closed but positions exist - continue monitoring (needed for exits)
         end
-
-        # Keep Redis/DB PnL fresh (throttled maintenance)
-        # NOTE: PnL updates removed - PaperPnlRefresher handles paper position PnL updates every 1 second
-        ensure_all_positions_in_redis
-
-        # Ensure all active positions are in ActiveCache (for exit checking) - throttled
-        ensure_all_positions_in_active_cache
-
-        # Ensure all active positions are subscribed to market data - throttled
-        ensure_all_positions_subscribed
-
-        # Phase 2: Consolidated position processing - single iteration
-        tracker_map = trackers_for_positions(positions)
-        exit_engine = @exit_engine || self
-
-        # Process all positions in single consolidated loop
-        process_all_positions_in_single_loop(positions, tracker_map, exit_engine)
-
-        # Backwards-compatible enforcement: if there is no external ExitEngine, run enforcement here
-        # Note: Most enforcement is now handled in process_all_positions_in_single_loop
-        # This is kept for fallback positions not in ActiveCache
-        enforce_hard_limits(exit_engine: self) if @exit_engine.nil?
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] monitor_loop error: #{e.class} - #{e.message}")
-        error_counts[:monitor_loop_error] = (error_counts[:monitor_loop_error] || 0) + 1
-        raise
-      ensure
-        # Phase 3: Record cycle metrics
-        cycle_time = Time.current - cycle_start_time
-        redis_fetches = (@metrics[:total_redis_fetches] || 0) - redis_fetches_before
-        db_queries = (@metrics[:total_db_queries] || 0) - db_queries_before
-        api_calls = (@metrics[:total_api_calls] || 0) - api_calls_before
-
-        record_cycle_metrics(
-          cycle_time: cycle_time,
-          positions_count: positions&.length || 0,
-          redis_fetches: redis_fetches,
-          db_queries: db_queries,
-          api_calls: api_calls,
-          exit_counts: exit_counts,
-          error_counts: error_counts
-        )
+      else
+        # Market is open - reset the flag so we check again next time market closes
+        @market_closed_checked = false
       end
+
+      # Keep Redis/DB PnL fresh
+      update_paper_positions_pnl_if_due(last_paper_pnl_update)
+      ensure_all_positions_in_redis
+
+      # Always run enforcement methods - ExitEngine is only for executing exits, not triggering them
+      # Use external ExitEngine if provided, otherwise use self (backwards compatibility)
+      exit_engine = @exit_engine || self
+
+      # Early Trend Failure checks (before other enforcement)
+      enforce_early_trend_failure(exit_engine: exit_engine)
+      enforce_global_time_overrides(exit_engine: exit_engine)
+      enforce_hard_limits(exit_engine: exit_engine)
+      enforce_post_profit_zone(exit_engine: exit_engine)
+      enforce_trailing_stops(exit_engine: exit_engine)
+      enforce_time_based_exit(exit_engine: exit_engine)
     end
 
     # Called by external ExitEngine or internally (when used standalone).
@@ -239,10 +163,45 @@ module Live
         if exit_successful
           tracker.mark_exited!(exit_price: exit_price, exit_reason: reason)
 
-          # NEW: Record loss in DailyLimits if position exited with loss
-          record_loss_if_applicable(tracker, exit_price)
+          # Reload tracker to get final PnL values after mark_exited!
+          tracker.reload
+
+          # Update exit reason with final PnL percentage for consistency
+          # Calculate PnL percentage from final PnL value (includes broker fees)
+          # This matches what Telegram notifier will display
+          final_pnl = tracker.last_pnl_rupees
+          entry_price = tracker.entry_price
+          quantity = tracker.quantity
+
+          if final_pnl.present? && entry_price.present? && quantity.present? &&
+             entry_price.to_f.positive? && quantity.to_i.positive? && reason.present? && reason.include?('%')
+            # Calculate PnL percentage (includes fees) - matches Telegram display
+            pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
+            # Extract the base reason (e.g., "SL HIT" or "TP HIT") - everything before the percentage
+            base_reason = reason.split(/\s+-?\d+\.?\d*%/).first&.strip || reason.split('%').first&.strip || reason
+            updated_reason = "#{base_reason} #{pnl_pct_display}%"
+
+            # Always update to ensure consistency (even if values are close)
+            if reason != updated_reason
+              Rails.logger.info("[RiskManager] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
+              # exit_reason is a store_accessor on meta, so update via meta hash
+              meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+              meta['exit_reason'] = updated_reason
+              tracker.update_column(:meta, meta)
+            end
+          else
+            Rails.logger.warn("[RiskManager] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
+          end
 
           Rails.logger.info("[RiskManager] Successfully exited #{tracker.order_no} (#{tracker.id}) via internal executor")
+
+          # Record trade result in EdgeFailureDetector (for edge failure detection)
+          record_trade_result_for_edge_detector(tracker, final_pnl, final_reason || reason)
+
+          # Send Telegram notification
+          final_reason = updated_reason || reason
+          notify_telegram_exit(tracker, final_reason, exit_price)
+
           true
         else
           Rails.logger.error("[RiskManager] Failed to exit #{tracker.order_no} via internal executor")
@@ -258,211 +217,242 @@ module Live
     # If exit_engine is provided, they will delegate the actual exit to it. Otherwise they call internal execute_exit.
     public
 
-    # Phase 3: Metrics & Circuit Breaker - Public API
+    def enforce_early_trend_failure(exit_engine:)
+      etf_cfg = begin
+        (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:etf]) || {}
+      rescue StandardError
+        {}
+      end
 
-    # Record cycle metrics (for monitoring and debugging)
-    #
-    # @param cycle_time [Float] Time taken for the cycle in seconds
-    # @param positions_count [Integer] Number of positions processed
-    # @param redis_fetches [Integer] Number of Redis fetches
-    # @param db_queries [Integer] Number of database queries
-    # @param api_calls [Integer] Number of API calls made
-    # @param exit_counts [Hash] Optional hash of exit type => count
-    # @param error_counts [Hash] Optional hash of error type => count
-    def record_cycle_metrics(cycle_time:, positions_count:, redis_fetches:, db_queries:, api_calls:, exit_counts: {},
-                             error_counts: {})
-      @mutex.synchronize do
-        @metrics[:cycle_count] = (@metrics[:cycle_count] || 0) + 1
-        @metrics[:total_cycle_time] = (@metrics[:total_cycle_time] || 0) + cycle_time
-        @metrics[:min_cycle_time] = @metrics[:min_cycle_time] ? [@metrics[:min_cycle_time], cycle_time].min : cycle_time
-        @metrics[:max_cycle_time] = @metrics[:max_cycle_time] ? [@metrics[:max_cycle_time], cycle_time].max : cycle_time
-        @metrics[:total_positions] = (@metrics[:total_positions] || 0) + positions_count
-        @metrics[:total_redis_fetches] = (@metrics[:total_redis_fetches] || 0) + redis_fetches
-        @metrics[:total_db_queries] = (@metrics[:total_db_queries] || 0) + db_queries
-        @metrics[:total_api_calls] = (@metrics[:total_api_calls] || 0) + api_calls
-        @metrics[:last_cycle_time] = cycle_time
+      return unless etf_cfg[:enabled]
 
-        # Record exit counts
-        exit_counts.each do |exit_type, count|
-          @metrics[:"exit_#{exit_type}"] = (@metrics[:"exit_#{exit_type}"] || 0) + count
+      activation_profit = etf_cfg[:activation_profit_pct].to_f
+
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        pnl_pct = snapshot[:pnl_pct]
+        next if pnl_pct.nil?
+
+        # ETF only applies before trailing activation (when profit < activation threshold)
+        pnl_pct_value = pnl_pct.to_f * 100.0
+        next unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_profit)
+
+        # Build position_data hash for ETF check
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        next unless instrument
+
+        position_data = build_position_data_for_etf(tracker, snapshot, instrument)
+
+        if Live::EarlyTrendFailure.early_trend_failure?(position_data)
+          reason = "EARLY_TREND_FAILURE (pnl: #{pnl_pct_value.round(2)}%)"
+          exit_path = 'early_trend_failure'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
         end
-
-        # Record error counts
-        error_counts.each do |error_type, count|
-          @metrics[:"error_#{error_type}"] = (@metrics[:"error_#{error_type}"] || 0) + count
-        end
-      end
-    end
-
-    # Get current metrics summary
-    #
-    # @return [Hash] Hash containing all metrics
-    def get_metrics
-      @mutex.synchronize do
-        cycle_count = @metrics[:cycle_count] || 0
-
-        base_metrics = {
-          cycle_count: cycle_count,
-          avg_cycle_time: cycle_count.positive? ? (@metrics[:total_cycle_time] || 0).to_f / cycle_count : 0,
-          min_cycle_time: @metrics[:min_cycle_time],
-          max_cycle_time: @metrics[:max_cycle_time],
-          total_cycle_time: @metrics[:total_cycle_time] || 0,
-          avg_positions_per_cycle: cycle_count.positive? ? (@metrics[:total_positions] || 0).to_f / cycle_count : 0,
-          total_positions: @metrics[:total_positions] || 0,
-          avg_redis_fetches_per_cycle: cycle_count.positive? ? (@metrics[:total_redis_fetches] || 0).to_f / cycle_count : 0,
-          total_redis_fetches: @metrics[:total_redis_fetches] || 0,
-          avg_db_queries_per_cycle: cycle_count.positive? ? (@metrics[:total_db_queries] || 0).to_f / cycle_count : 0,
-          total_db_queries: @metrics[:total_db_queries] || 0,
-          avg_api_calls_per_cycle: cycle_count.positive? ? (@metrics[:total_api_calls] || 0).to_f / cycle_count : 0,
-          total_api_calls: @metrics[:total_api_calls] || 0,
-          exit_counts: @metrics.select { |k, _| k.to_s.start_with?('exit_') },
-          error_counts: @metrics.select { |k, _| k.to_s.start_with?('error_') }
-        }
-
-        # Include individual exit and error metrics for easier access (already in exit_counts/error_counts)
-        # But also add them as top-level keys for convenience
-        exit_error_metrics = @metrics.select { |k, _| k.to_s.start_with?('exit_', 'error_') }
-        merged = base_metrics.merge(exit_error_metrics)
-        # Ensure all exit/error metrics default to 0 if nil (after reset)
-        merged.each do |k, v|
-          merged[k] = 0 if v.nil? && k.to_s.start_with?('exit_', 'error_')
-        end
-        merged
-      end
-    end
-
-    # Reset all metrics to zero
-    def reset_metrics
-      @mutex.synchronize do
-        @metrics.clear
-      end
-    end
-
-    # Increment a metric counter
-    #
-    # @param key [Symbol] Metric key to increment
-    def increment_metric(key)
-      @mutex.synchronize do
-        @metrics[key] = (@metrics[key] || 0) + 1
-      end
-    end
-
-    # Phase 3: Circuit Breaker
-
-    # Check if circuit breaker is open (blocking API calls)
-    #
-    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
-    # @return [Boolean] true if circuit breaker is open, false otherwise
-    def circuit_breaker_open?(cache_key = nil)
-      @mutex.synchronize do
-        return false if @circuit_breaker_state == :closed
-
-        if @circuit_breaker_state == :open
-          # Check if timeout has passed
-          if @circuit_breaker_last_failure &&
-             (Time.current - @circuit_breaker_last_failure) > @circuit_breaker_timeout
-            @circuit_breaker_state = :half_open
-            @circuit_breaker_failures = 0
-            return false
-          end
-          return true
-        end
-
-        # half_open state - allow one request to test
-        false
-      end
-    end
-
-    # Record an API failure (increment failure count, open circuit if threshold reached)
-    #
-    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
-    def record_api_failure(cache_key = nil)
-      @mutex.synchronize do
-        @circuit_breaker_failures += 1
-        @circuit_breaker_last_failure = Time.current
-
-        if @circuit_breaker_failures >= @circuit_breaker_threshold
-          @circuit_breaker_state = :open
-          Rails.logger.warn("[RiskManager] Circuit breaker OPEN - API failures: #{@circuit_breaker_failures}")
-        end
-      end
-    end
-
-    # Record an API success (close circuit if in half_open state)
-    #
-    # @param cache_key [String, nil] Optional cache key (for future per-key circuit breakers)
-    def record_api_success(cache_key = nil)
-      @mutex.synchronize do
-        if @circuit_breaker_state == :half_open
-          @circuit_breaker_state = :closed
-          @circuit_breaker_failures = 0
-          Rails.logger.info('[RiskManager] Circuit breaker CLOSED - API recovered')
-        elsif @circuit_breaker_state == :open
-          # Reset failures on success (but keep state as open until timeout)
-          @circuit_breaker_failures = 0
-        end
-      end
-    end
-
-    # Reset circuit breaker to closed state (for testing or manual recovery)
-    def reset_circuit_breaker
-      @mutex.synchronize do
-        @circuit_breaker_state = :closed
-        @circuit_breaker_failures = 0
-        @circuit_breaker_last_failure = nil
-      end
-    end
-
-    # Phase 3: Health Status
-
-    # Get health status of the service
-    #
-    # @return [Hash] Hash containing health status information
-    def health_status
-      @mutex.synchronize do
-        {
-          running: running?,
-          thread_alive: @thread&.alive? || false,
-          last_cycle_time: @metrics[:last_cycle_time],
-          active_positions: Positions::ActivePositionsCache.instance.active_trackers.size,
-          circuit_breaker_state: @circuit_breaker_state,
-          recent_errors: @metrics[:recent_api_errors] || 0,
-          uptime_seconds: running? && @started_at ? (Time.current - @started_at).to_i : 0
-        }
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_early_trend_failure error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
     end
 
     def enforce_trailing_stops(exit_engine:)
+      # Check if trailing is allowed in current time regime
+      regime = Live::TimeRegimeService.instance.current_regime
+      unless Live::TimeRegimeService.instance.allow_trailing?(regime)
+        Rails.logger.debug { "[RiskManager] Trailing disabled for regime: #{regime}" }
+        return
+      end
+
       risk = risk_config
       drop_threshold = begin
         BigDecimal(risk[:exit_drop_pct].to_s)
       rescue StandardError
-        BigDecimal(0)
+        BigDecimal(999) # Disabled by default
       end
 
-      positions = active_cache_positions
-      tracker_map = trackers_for_positions(positions)
+      # Skip if trailing is disabled (threshold too high)
+      return if drop_threshold >= 100
 
-      positions.each do |position|
-        tracker = tracker_map[position.tracker_id]
-        next unless tracker&.active?
+      breakeven_gain = begin
+        BigDecimal(risk[:breakeven_after_gain].to_s)
+      rescue StandardError
+        BigDecimal(999) # Disabled by default
+      end
 
-        pnl = position.pnl
-        hwm = position.high_water_mark
-        next if pnl.nil? || hwm.nil? || hwm.zero?
+      PositionTracker.active.find_each do |tracker|
+        snap = pnl_snapshot(tracker)
+        next unless snap
 
-        drop_pct = (hwm - pnl) / hwm
-        next unless drop_pct >= drop_threshold
+        pnl = snap[:pnl]
+        pnl_pct = snap[:pnl_pct]
+        hwm = snap[:hwm_pnl]
+        next if hwm.nil? || hwm.zero?
 
-        reason = "TRAILING STOP drop=#{drop_pct.round(3)}"
-        dispatch_exit(exit_engine, tracker, reason)
+        pnl_pct_value = pnl_pct.to_f * 100.0
+
+        # BIDIRECTIONAL TRAILING LOGIC
+
+        # 1. UPWARD TRAILING (when profitable): Use adaptive drawdown schedule
+        if pnl_pct_value > 0
+          # Calculate peak profit percentage
+          peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
+
+          # Only apply trailing if we've reached activation threshold
+          drawdown_cfg = begin
+            (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown]) || {}
+          rescue StandardError
+            {}
+          end
+
+          activation_profit = drawdown_cfg[:activation_profit_pct].to_f.nonzero? || 3.0
+
+          if peak_profit_pct >= activation_profit
+            # Use adaptive drawdown schedule instead of fixed threshold
+            index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+            allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
+
+            if allowed_dd
+              # Convert to drop percentage from HWM
+              allowed_drop_from_hwm = allowed_dd / peak_profit_pct
+              current_drop = (hwm - pnl) / hwm
+
+              if current_drop >= allowed_drop_from_hwm
+                reason = "ADAPTIVE_TRAILING_STOP (peak: #{peak_profit_pct.round(2)}%, drop: #{(current_drop * 100).round(2)}%, allowed: #{(allowed_drop_from_hwm * 100).round(2)}%)"
+                exit_path = 'trailing_stop_adaptive_upward'
+                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+                track_exit_path(tracker, exit_path, reason)
+                dispatch_exit(exit_engine, tracker, reason)
+                next
+              end
+            end
+          end
+
+          # Breakeven locking: Lock in breakeven when profit reaches threshold
+          if breakeven_gain < 100 && pnl_pct_value >= (breakeven_gain * 100) && !tracker.breakeven_locked?
+            tracker.lock_breakeven!
+            Rails.logger.info("[RiskManager] Breakeven locked for #{tracker.order_no} at #{pnl_pct_value.round(2)}% profit")
+          end
+
+          # Fallback to fixed threshold if adaptive schedule not available
+          if drop_threshold < 100
+            drop_pct = (hwm - pnl) / hwm
+            if drop_pct >= drop_threshold
+              reason = "TRAILING_STOP (fixed threshold: #{(drop_threshold * 100).round(2)}%, drop: #{(drop_pct * 100).round(2)}%)"
+              exit_path = 'trailing_stop_fixed_upward'
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
+        end
+
+        # 2. DOWNWARD TRAILING (when below entry): Use reverse dynamic SL
+        # This is handled in enforce_hard_limits, but we can add additional trailing logic here
+        # For now, reverse SL is handled in enforce_hard_limits via dynamic reverse SL
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
     end
 
     def enforce_hard_limits(exit_engine:)
       risk = risk_config
+
+      # HIGHEST PRIORITY: Hard rupee-based stops (check FIRST before %-based)
+      if hard_rupee_sl_enabled? || hard_rupee_tp_enabled? || post_profit_zone_enabled?
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
+
+          net_pnl_rupees = snapshot[:pnl]
+          next if net_pnl_rupees.nil?
+
+          # For exit rule checks on active positions:
+          # - Current net PnL = gross_pnl - entry_fee (₹20)
+          # - After exit, final net PnL = gross_pnl - full_trade_fee (₹40)
+          # - So: final_net_pnl = (net_pnl + entry_fee) - (entry_fee + exit_fee) = net_pnl - exit_fee
+          # - We check if final_net_pnl will hit the target/stop after exit
+          exit_fee = BrokerFeeCalculator.fee_per_order # Additional fee on exit (₹20)
+
+          # Check secured profit zone SL (if in secured profit zone)
+          if post_profit_zone_enabled? && tracker.meta&.dig('profit_zone_state') == 'secured_profit_zone'
+            secured_sl_rupees = BigDecimal((tracker.meta&.dig('secured_sl_rupees') || post_profit_zone_config[:secured_sl_rupees] || 800).to_s)
+            net_threshold = secured_sl_rupees + exit_fee
+            if net_pnl_rupees < net_threshold
+              final_net_pnl = net_pnl_rupees - exit_fee
+              reason = "SECURED_PROFIT_SL (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, secured SL: ₹#{secured_sl_rupees})"
+              exit_path = 'secured_profit_sl'
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
+
+          # Hard rupee stop loss (highest priority exit)
+          # Apply session-aware SL multiplier
+          if hard_rupee_sl_enabled?
+            base_max_loss_rupees = BigDecimal((hard_rupee_sl_config[:max_loss_rupees] || 1000).to_s)
+            # Apply time regime multiplier
+            sl_multiplier = Live::TimeRegimeService.instance.sl_multiplier
+            max_loss_rupees = base_max_loss_rupees * BigDecimal(sl_multiplier.to_s)
+            net_threshold = -max_loss_rupees + exit_fee
+            if net_pnl_rupees <= net_threshold
+              # Calculate what net PnL will be after exit
+              final_net_pnl = net_pnl_rupees - exit_fee
+              reason = "HARD_RUPEE_SL (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, limit: -₹#{max_loss_rupees})"
+              exit_path = 'hard_rupee_stop_loss'
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
+
+          # Hard rupee take profit - TRANSITION TO SECURED PROFIT ZONE (not immediate exit)
+          # ₹2k TP is a minimum extraction, not a cap
+          # After ₹2k, we transition to secured profit zone with green SL
+          # PostProfitZoneRule will handle exits based on trend/momentum
+          if hard_rupee_tp_enabled?
+            base_target_profit_rupees = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
+            # Apply time regime multiplier
+            tp_multiplier = Live::TimeRegimeService.instance.tp_multiplier
+            target_profit_rupees = base_target_profit_rupees * BigDecimal(tp_multiplier.to_s)
+
+            # Check session-specific max TP limit
+            regime = Live::TimeRegimeService.instance.current_regime
+            max_tp = Live::TimeRegimeService.instance.max_tp_rupees(regime)
+            target_profit_rupees = [target_profit_rupees, BigDecimal((max_tp || 999_999).to_s)].min if max_tp
+
+            net_threshold = target_profit_rupees + exit_fee
+
+            if net_pnl_rupees >= net_threshold
+              # Check if runners are allowed in current regime
+              allow_runners = Live::TimeRegimeService.instance.allow_runners?(regime)
+
+              if allow_runners
+                # Transition to secured profit zone: Move SL to green
+                transition_to_secured_profit_zone(tracker, net_pnl_rupees, target_profit_rupees)
+                # Don't exit here - let PostProfitZoneRule handle exits based on trend/momentum
+              else
+                # No runners allowed - exit immediately
+                final_net_pnl = net_pnl_rupees - exit_fee
+                reason = "SESSION_TP_HIT (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, target: ₹#{target_profit_rupees}, regime: #{regime})"
+                exit_path = 'session_take_profit'
+                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+                track_exit_path(tracker, exit_path, reason)
+                dispatch_exit(exit_engine, tracker, reason)
+              end
+              next
+            end
+          end
+        end
+      end
+
+      # Percentage-based stops (fallback/secondary)
       sl_pct = begin
         BigDecimal(risk[:sl_pct].to_s)
       rescue StandardError
@@ -474,118 +464,200 @@ module Live
         BigDecimal(0)
       end
 
-      positions = active_cache_positions
-      tracker_map = trackers_for_positions(positions)
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
 
-      # Also check positions not in ActiveCache (fallback)
-      # Load all trackers to find ones not in ActiveCache
-      # Use cached active positions to avoid redundant query
-      all_trackers = Positions::ActivePositionsCache.instance.active_trackers
-      trackers_not_in_cache = all_trackers.reject { |t| tracker_map[t.id] }
+        pnl_pct = snapshot[:pnl_pct]
+        next if pnl_pct.nil?
 
-      positions.each do |position|
-        tracker = tracker_map[position.tracker_id]
-        next unless tracker&.active?
+        # Convert pnl_pct from decimal (0.05) to percent (5.0) for DrawdownSchedule
+        pnl_pct_value = pnl_pct.to_f * 100.0
 
-        # Sync PnL from Redis cache if ActiveCache is stale
-        sync_position_pnl_from_redis(position, tracker)
+        # Below-entry dynamic reverse SL (takes precedence over static sl_pct)
+        if pnl_pct_value < 0
+          seconds_below = seconds_below_entry(tracker)
+          atr_ratio = calculate_atr_ratio(tracker)
+          tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
 
-        # Check profit protection: Exit if HWM >= threshold and drops by specified %
-        next if enforce_profit_protection(position, tracker, exit_engine, risk)
-
-        pnl_pct = position.pnl_pct
-        if pnl_pct.nil?
-          Rails.logger.warn("[RiskManager] enforce_hard_limits: pnl_pct is nil for tracker #{tracker.id}")
-          next
-        end
-
-        normalized_pct = pnl_pct.to_f / 100.0
-        sl_threshold = -sl_pct.to_f
-
-        # CRITICAL: Log when approaching SL threshold for debugging
-        if normalized_pct <= sl_threshold * 0.9 # Within 90% of SL threshold
-          Rails.logger.warn(
-            "[RiskManager] Approaching SL: tracker=#{tracker.id}, pnl_pct=#{pnl_pct.round(2)}%, " \
-            "normalized=#{normalized_pct.round(4)}, sl_threshold=#{sl_threshold.round(4)}"
+          dyn_loss_pct = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
+            pnl_pct_value,
+            seconds_below_entry: seconds_below,
+            atr_ratio: atr_ratio
           )
+
+          if dyn_loss_pct && pnl_pct_value <= -dyn_loss_pct
+            reason = "DYNAMIC_LOSS_HIT #{pnl_pct_value.round(2)}% (allowed: #{dyn_loss_pct.round(2)}%)"
+            exit_path = 'stop_loss_adaptive_downward'
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path} (below_entry: #{seconds_below}s, atr_ratio: #{atr_ratio.round(3)})")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
+            next
+          end
         end
 
-        if normalized_pct <= sl_threshold
-          reason = "SL HIT #{pnl_pct.round(2)}% (threshold: #{sl_pct.to_f * 100}%)"
-          Rails.logger.error("[RiskManager] #{reason} for tracker #{tracker.id}")
+        # Fallback to static SL if dynamic reverse_loss is disabled or not applicable
+        # pnl_pct from Redis is a decimal (0.0193 = 1.93%), so multiply by 100 for display
+        if pnl_pct <= -sl_pct
+          pnl_pct_display = (pnl_pct * 100).round(2)
+          reason = "SL HIT #{pnl_pct_display}%"
+          exit_path = 'stop_loss_static_downward'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
 
-        next unless normalized_pct >= tp_pct.to_f
-
-        reason = "TP HIT #{pnl_pct.round(2)}%"
-        dispatch_exit(exit_engine, tracker, reason)
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
-      end
-
-      # Check positions not in ActiveCache using Redis PnL directly
-      trackers_not_in_cache.each do |tracker|
-        next unless tracker.active?
-
-        # Use cached Redis PnL if available (from earlier in this cycle)
-        redis_pnl = @redis_pnl_cache[tracker.id] ||= Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
-        next unless redis_pnl && redis_pnl[:pnl_pct]
-
-        # Check profit protection for positions not in ActiveCache
-        next if enforce_profit_protection_from_redis(tracker, redis_pnl, exit_engine, risk)
-
-        pnl_pct = redis_pnl[:pnl_pct].to_f
-        normalized_pct = pnl_pct / 100.0
-
-        if normalized_pct <= -sl_pct.to_f
-          reason = "SL HIT #{pnl_pct.round(2)}% (from Redis)"
+        # Take Profit check
+        # pnl_pct from Redis is a decimal (0.0573 = 5.73%), so multiply by 100 for display
+        if pnl_pct >= tp_pct
+          pnl_pct_display = (pnl_pct * 100).round(2)
+          reason = "TP HIT #{pnl_pct_display}%"
+          exit_path = 'take_profit'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
           next
         end
 
-        next unless normalized_pct >= tp_pct.to_f
-
-        reason = "TP HIT #{pnl_pct.round(2)}% (from Redis)"
-        dispatch_exit(exit_engine, tracker, reason)
+        # Upward drawdown check is now handled in enforce_trailing_stops() with adaptive schedule
+        # Keeping this as fallback only if trailing is completely disabled
+        # (Peak drawdown logic moved to enforce_trailing_stops for better organization)
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_hard_limits (fallback) error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
     end
 
-    # Enforce session end exit (before 3:15 PM IST)
-    # This is separate from time-based exit and takes priority
-    def enforce_session_end_exit(exit_engine:)
-      session_check = TradingSession::Service.should_force_exit?
-      return unless session_check[:should_exit]
+    def enforce_global_time_overrides(exit_engine:)
+      # Global override 1: IV collapse detection
+      enforce_iv_collapse_exit(exit_engine: exit_engine)
 
-      positions = active_cache_positions
-      return if positions.empty?
+      # Global override 2: Price stall detection (especially after ₹2k)
+      enforce_stall_detection_exit(exit_engine: exit_engine)
+    end
 
-      tracker_map = begin
-        trackers_for_positions(positions)
+    def enforce_iv_collapse_exit(exit_engine:)
+      return unless iv_collapse_detection_enabled?
+
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        # Check for sudden IV collapse
+        # This would require IV data from option chain - for now, skip if not available
+        # TODO: Implement IV collapse detection when IV data is available
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_session_end_exit error: #{e.class} - #{e.message}")
-        return
+        Rails.logger.error("[RiskManager] enforce_iv_collapse_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
-      exited_count = 0
+    end
 
-      positions.each do |position|
-        tracker = tracker_map[position.tracker_id]
-        next unless tracker&.active?
+    def enforce_stall_detection_exit(exit_engine:)
+      return unless stall_detection_enabled?
 
-        # Sync PnL from Redis cache if ActiveCache is stale
-        sync_position_pnl_from_redis(position, tracker)
+      stall_candles = stall_detection_config[:stall_candles] || 3
+      min_profit_for_stall_check = BigDecimal((stall_detection_config[:min_profit_rupees] || 2000).to_s)
 
-        reason = 'session end (deadline: 3:15 PM IST)'
-        dispatch_exit(exit_engine, tracker, reason)
-        exited_count += 1
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        pnl_rupees = snapshot[:pnl]
+        next unless pnl_rupees && pnl_rupees >= min_profit_for_stall_check
+
+        # Check if price has stalled (no new HH/LL for N candles)
+        if price_stalled?(tracker, stall_candles)
+          reason = "PRICE_STALL (#{stall_candles} candles no progress, profit: ₹#{pnl_rupees.round(2)})"
+          exit_path = 'stall_detection'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        end
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_session_end_exit error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] enforce_stall_detection_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
+    def price_stalled?(tracker, stall_candles)
+      # Get recent LTP history
+      ltp_history = get_ltp_history_for_stall_check(tracker, stall_candles + 1)
+      return false if ltp_history.size < stall_candles + 1
+
+      # Check if LTP has made no progress (no new HH for long positions)
+      recent_ltps = ltp_history.last(stall_candles + 1).map { |h| h[:ltp].to_f }
+      current_ltp = recent_ltps.last
+      previous_high = recent_ltps.first(stall_candles).max
+
+      # If current LTP is not making new highs (within 1% tolerance), consider stalled
+      tolerance = 0.01 # 1% tolerance
+      current_ltp <= previous_high * (1 + tolerance)
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] price_stalled? error: #{e.class} - #{e.message}")
+      false
+    end
+
+    def get_ltp_history_for_stall_check(tracker, lookback_candles)
+      # Get LTP history from Redis cache or tracker
+      cache_key = "position:ltp_history:#{tracker.id}"
+      cached = Rails.cache.read(cache_key)
+
+      unless cached
+        # Build from recent Redis PnL cache entries
+        redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+        cached = if redis_pnl && redis_pnl[:ltp]
+                   [{ ltp: redis_pnl[:ltp], timestamp: redis_pnl[:timestamp] || Time.current.to_i }]
+                 else
+                   []
+                 end
       end
 
-      Rails.logger.info("[RiskManager] Session end exit: #{exited_count} positions exited") if exited_count.positive?
+      # Update with current LTP
+      snapshot = pnl_snapshot(tracker)
+      current_ltp = snapshot&.dig(:ltp) || tracker.tradable&.ltp
+      if current_ltp
+        cached = (cached || []).last(lookback_candles - 1)
+        cached << { ltp: current_ltp, timestamp: Time.current.to_i }
+        Rails.cache.write(cache_key, cached, expires_in: 1.hour)
+      end
+
+      cached || []
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] get_ltp_history_for_stall_check error: #{e.class} - #{e.message}")
+      []
+    end
+
+    def enforce_post_profit_zone(exit_engine:)
+      return unless post_profit_zone_enabled?
+
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        pnl_rupees = snapshot[:pnl]
+        next unless pnl_rupees&.positive?
+
+        # Build rule context
+        position_data = build_position_data_for_rule_engine(tracker, snapshot)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: post_profit_zone_config
+        )
+
+        # Evaluate PostProfitZoneRule
+        rule = Risk::Rules::PostProfitZoneRule.new(config: post_profit_zone_config)
+        result = rule.evaluate(context)
+
+        if result.exit?
+          reason = result.reason || 'POST_PROFIT_ZONE_EXIT'
+          exit_path = 'post_profit_zone'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_post_profit_zone error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
     end
 
     def enforce_time_based_exit(exit_engine:)
@@ -599,202 +671,36 @@ module Live
       market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
       return if market_close_time && now >= market_close_time
 
-      positions = active_cache_positions
-      tracker_map = trackers_for_positions(positions)
-
-      positions.each do |position|
-        tracker = tracker_map[position.tracker_id]
-        next unless tracker&.active?
-
-        # Sync PnL from Redis cache if ActiveCache is stale
-        sync_position_pnl_from_redis(position, tracker)
-
-        pnl_rupees = position.pnl
-        if pnl_rupees.to_f.positive?
+      PositionTracker.active.find_each do |tracker|
+        tracker.hydrate_pnl_from_cache!
+        if tracker.last_pnl_rupees.present? && tracker.last_pnl_rupees.positive?
           min_profit = begin
             BigDecimal((risk[:min_profit_rupees] || 0).to_s)
           rescue StandardError
             BigDecimal(0)
           end
-          if min_profit.positive? && BigDecimal(pnl_rupees.to_s) < min_profit
+          if min_profit.positive? && tracker.last_pnl_rupees < min_profit
             Rails.logger.info("[RiskManager] Time-based exit skipped for #{tracker.order_no} - PnL < min_profit")
             next
           end
         end
 
         reason = "time-based exit (#{exit_time.strftime('%H:%M')})"
+        exit_path = 'time_based'
+        Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+        track_exit_path(tracker, exit_path, reason)
         dispatch_exit(exit_engine, tracker, reason)
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_time_based_exit error for tracker=#{tracker&.id}: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] enforce_time_based_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
     end
 
     private
 
-    # Process trailing stops for all active positions using TrailingEngine
-    # Enhanced with underlying-aware exits and peak-drawdown gating
-    def process_trailing_for_all_positions
-      @bracket_placer ||= Orders::BracketPlacer.new
-      @trailing_engine ||= Live::TrailingEngine.new(bracket_placer: @bracket_placer)
-
-      active_cache = Positions::ActiveCache.instance
-      positions = active_cache.all_positions
-      return if positions.empty?
-
-      tracker_map = trackers_for_positions(positions)
-      trailing_exit_engine = @exit_engine || self
-
-      positions.each do |position|
-        tracker = tracker_map[position.tracker_id]
-        next unless tracker&.active?
-
-        ensure_position_snapshot(position)
-        exit_engine = @exit_engine || self
-
-        # 1. Recalculate PnL and peak (ensure fresh data)
-        recalculate_position_metrics(position, tracker)
-
-        # 2. Check underlying-aware exits FIRST (if enabled)
-        next if handle_underlying_exit(position, tracker, exit_engine)
-
-        # 3. Check profit protection (HWM >= ₹1040, drop >= 1%) - BEFORE other exits
-        risk = risk_config
-        next if enforce_profit_protection(position, tracker, exit_engine, risk)
-
-        # 4. Enforce hard SL/TP limits (always active)
-        next if enforce_bracket_limits(position, tracker, exit_engine)
-
-        # 4. Apply tiered trailing SL offsets
-        desired_sl_offset_pct = Positions::TrailingConfig.sl_offset_for(position.pnl_pct)
-        if desired_sl_offset_pct
-          position.sl_offset_pct = desired_sl_offset_pct
-          active_cache.update_position(position.tracker_id, sl_offset_pct: desired_sl_offset_pct)
-        end
-
-        # 5. Process trailing with peak-drawdown gating (via TrailingEngine)
-        @trailing_engine.process_tick(position, exit_engine: trailing_exit_engine)
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] TrailingEngine error for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
-      end
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] Error in process_trailing_for_all_positions: #{e.class} - #{e.message}")
-    end
-
-    # Record loss in DailyLimits if position exited with loss
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param exit_price [BigDecimal, Float, nil] Exit price
-    def record_loss_if_applicable(tracker, exit_price)
-      return unless tracker.entry_price && exit_price
-
-      entry = tracker.entry_price.to_f
-      exit = exit_price.to_f
-      return unless entry.positive? && exit.positive?
-
-      # Calculate PnL
-      pnl = (exit - entry) * tracker.quantity.to_i
-      return unless pnl.negative? # Only record losses
-
-      # Get index key from tracker or instrument
-      index_key = Positions::MetadataResolver.index_key(tracker)
-      return unless index_key
-
-      # Record loss in DailyLimits
-      daily_limits = Live::DailyLimits.new
-      daily_limits.record_loss(index_key: index_key, amount: pnl.abs)
-
-      Rails.logger.info(
-        "[RiskManager] Recorded loss for #{index_key}: ₹#{pnl.abs.round(2)} " \
-        "(entry: ₹#{entry.round(2)}, exit: ₹#{exit.round(2)}, qty: #{tracker.quantity})"
-      )
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] Failed to record loss: #{e.class} - #{e.message}")
-    end
-
-    # Check if exit should proceed based on underlying trend and position PnL
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param reason [String] Exit reason
-    # @return [Boolean] true if exit should proceed, false if it should be skipped
-    def should_proceed_with_exit?(tracker, reason)
-      # Get position data from ActiveCache
-      position_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-      return true unless position_data # If position data not found, proceed with exit (safety first)
-
-      # Get current PnL
-      pnl_pct = position_data.pnl_pct || tracker.current_pnl_pct
-      return true if pnl_pct.nil? # If PnL unknown, proceed with exit (safety first)
-
-      # Get position direction (CE = bullish, PE = bearish)
-      position_direction = position_data.position_direction || Positions::MetadataResolver.direction(tracker)
-      return true unless position_direction # If direction unknown, proceed with exit
-
-      # Normalize position direction
-      position_dir = case position_direction.to_s.downcase
-                     when 'bullish', 'long_ce', :bullish
-                       :bullish
-                     when 'bearish', 'long_pe', :bearish
-                       :bearish
-                     else
-                       return true # Unknown direction, proceed with exit
-                     end
-
-      # Get underlying index configuration
-      index_key = position_data.index_key || Positions::MetadataResolver.index_key(tracker)
-      return true unless index_key # If index key unknown, proceed with exit
-
-      index_cfg = Positions::MetadataResolver.index_config_for_key(index_key)
-      return true unless index_cfg # If index config unknown, proceed with exit
-
-      # Get underlying trend direction
-      trend_result = Signal::TrendScorer.compute_direction(
-        index_cfg: index_cfg.symbolize_keys,
-        primary_tf: '1m',
-        confirmation_tf: '5m'
-      )
-
-      underlying_trend = trend_result[:direction]
-      return true unless underlying_trend # If trend unknown, proceed with exit (safety first)
-
-      # Check if underlying trend matches position direction
-      trend_matches = (position_dir == :bullish && underlying_trend == :bullish) ||
-                      (position_dir == :bearish && underlying_trend == :bearish)
-
-      # If trend matches, always proceed with exit
-      return true if trend_matches
-
-      # If trend doesn't match, only exit if position is in loss
-      if pnl_pct.to_f < 0
-        Rails.logger.info(
-          "[RiskManager] Underlying trend (#{underlying_trend}) doesn't match position direction (#{position_dir}) " \
-          "but position is in loss (#{pnl_pct.round(2)}%), proceeding with exit"
-        )
-        return true
-      end
-
-      # Trend doesn't match and position is in profit - skip exit
-      false
-    rescue StandardError => e
-      Rails.logger.error(
-        "[RiskManager] should_proceed_with_exit? error for #{tracker.order_no}: #{e.class} - #{e.message}"
-      )
-      # On error, proceed with exit (safety first - don't block exits on errors)
-      true
-    end
-
     # Helper that centralizes exit dispatching logic.
     # If exit_engine is an object responding to execute_exit, delegate to it.
     # If exit_engine == self (or nil) we fallback to internal execute_exit implementation.
-    # Before exiting, checks if underlying trend matches position direction.
-    # If trend doesn't match and position is in profit, exit is skipped.
     def dispatch_exit(exit_engine, tracker, reason)
-      # Check underlying trend before exiting
-      unless should_proceed_with_exit?(tracker, reason)
-        Rails.logger.info(
-          "[RiskManager] Exit skipped for #{tracker.order_no}: underlying trend doesn't match position direction " \
-          "and position is in profit (reason: #{reason})"
-        )
-        return
-      end
-
       if exit_engine && exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
         begin
           exit_engine.execute_exit(tracker, reason)
@@ -847,9 +753,54 @@ module Live
       nil
     end
 
-    # REMOVED: update_paper_positions_pnl_if_due and update_paper_positions_pnl
-    # PaperPnlRefresher handles paper position PnL updates every 1 second
-    # This eliminates redundancy and reduces unnecessary API calls
+    def update_paper_positions_pnl_if_due(last_update_time)
+      # if last_update_time is nil or stale, update now
+      return unless Time.current - (last_update_time || Time.zone.at(0)) >= 1.minute
+
+      update_paper_positions_pnl
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] update_paper_positions_pnl_if_due failed: #{e.class} - #{e.message}")
+    end
+
+    # Update PnL for all paper trackers and cache in Redis (same semantics as before)
+    def update_paper_positions_pnl
+      paper_trackers = PositionTracker.paper.active.includes(:instrument).to_a
+      return if paper_trackers.empty?
+
+      paper_trackers.each do |tracker|
+        next unless tracker.entry_price.present? && tracker.quantity.present?
+
+        ltp = get_paper_ltp(tracker)
+        unless ltp
+          Rails.logger.debug { "[RiskManager] No LTP for paper tracker #{tracker.order_no}" }
+          next
+        end
+
+        entry = BigDecimal(tracker.entry_price.to_s)
+        exit_price = BigDecimal(ltp.to_s)
+        qty = tracker.quantity.to_i
+        gross_pnl = (exit_price - entry) * qty
+
+        # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
+        pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
+        pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
+
+        hwm = tracker.high_water_mark_pnl || BigDecimal(0)
+        hwm = [hwm, pnl].max
+
+        tracker.update!(
+          last_pnl_rupees: pnl,
+          last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
+          high_water_mark_pnl: hwm
+        )
+
+        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] update_paper_positions_pnl failed for #{tracker.order_no}: #{e.class} - #{e.message}")
+      end
+
+      Rails.logger.info('[RiskManager] Paper PnL update completed')
+    end
 
     # Ensure every active PositionTracker has an entry in Redis PnL cache (best-effort)
     # Throttled to avoid excessive queries - only runs every 5 seconds
@@ -857,8 +808,7 @@ module Live
       @last_ensure_all ||= Time.zone.at(0)
       return if Time.current - @last_ensure_all < 5.seconds
 
-      # Use cached active positions to avoid redundant query
-      trackers = Positions::ActivePositionsCache.instance.active_trackers
+      trackers = PositionTracker.active.includes(:instrument).to_a
       return if trackers.empty?
 
       @last_ensure_all = Time.current
@@ -872,9 +822,6 @@ module Live
         position = positions[tracker.security_id.to_s]
         tracker.hydrate_pnl_from_cache!
 
-        # Stagger API calls to avoid rate limiting
-        stagger_api_calls
-
         ltp = if tracker.paper?
                 get_paper_ltp(tracker)
               else
@@ -887,18 +834,7 @@ module Live
         next unless pnl
 
         pnl_pct = compute_pnl_pct(tracker, ltp, position)
-
-        # Calculate hwm_pnl_pct for ensure_all_positions_in_redis
-        hwm = tracker.high_water_mark_pnl || BigDecimal(0)
-        hwm = [hwm, pnl].max
-        hwm_pnl_pct = if tracker.entry_price.present? && tracker.quantity.present?
-                        entry = BigDecimal(tracker.entry_price.to_s)
-                        qty = tracker.quantity.to_i
-                        entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
-                      end
-
-        # Only update Redis for live positions (paper positions handled by PaperPnlRefresher)
-        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct) unless tracker.paper?
+        update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] ensure_all_positions_in_redis failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
@@ -944,94 +880,37 @@ module Live
       security_id = tracker.security_id
       return nil unless segment.present? && security_id.present?
 
-      # Try WebSocket TickCache first (fastest, no API call)
       cached = Live::TickCache.ltp(segment, security_id)
       return BigDecimal(cached.to_s) if cached
 
-      # Try RedisTickCache (cached from WebSocket or previous API calls)
       tick_data = begin
-        Live::RedisTickCache.instance.fetch_tick(segment, security_id)
+        Live::TickCache.fetch(segment, security_id)
       rescue StandardError
         nil
       end
       return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
 
-      # Check if we're in rate limit cooldown for this security
-      cache_key = "#{segment}:#{security_id}"
-      if @rate_limit_errors[cache_key]
-        last_error_time = @rate_limit_errors[cache_key][:last_error]
-        backoff_seconds = @rate_limit_errors[cache_key][:backoff_seconds] || RATE_LIMIT_BACKOFF_BASE
-        if Time.current - last_error_time < backoff_seconds
-          Rails.logger.debug { "[RiskManager] Skipping API call for #{cache_key} (rate limit cooldown: #{backoff_seconds.round(1)}s)" }
-          return nil
-        end
-      end
-
-      # Try tradable's fetch method (may use cache)
       tradable = tracker.tradable
       if tradable
         ltp = begin
           tradable.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
-        rescue StandardError => e
-          handle_rate_limit_error(e, cache_key)
+        rescue StandardError
           nil
         end
         return BigDecimal(ltp.to_s) if ltp
       end
 
-      # Last resort: Direct API call (with rate limiting)
       begin
         response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
         if response['status'] == 'success'
           option_data = response.dig('data', segment, security_id.to_s)
-          if option_data && option_data['last_price']
-            # Clear rate limit error on success
-            @rate_limit_errors.delete(cache_key)
-            return BigDecimal(option_data['last_price'].to_s)
-          end
+          return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
         end
       rescue StandardError => e
-        handle_rate_limit_error(e, cache_key, tracker.order_no)
+        Rails.logger.error("[RiskManager] get_paper_ltp API error for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
 
       nil
-    end
-
-    # Stagger API calls to avoid rate limiting
-    def stagger_api_calls
-      @mutex.synchronize do
-        elapsed = Time.current - @last_api_call_time
-        sleep(API_CALL_STAGGER_SECONDS - elapsed) if elapsed < API_CALL_STAGGER_SECONDS
-        @last_api_call_time = Time.current
-      end
-    end
-
-    # Handle rate limit errors with exponential backoff
-    def handle_rate_limit_error(error, cache_key, order_no = nil)
-      error_msg = error.message.to_s
-      is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit') || error.is_a?(DhanHQ::RateLimitError)
-
-      if is_rate_limit
-        # Exponential backoff: 2s, 4s, 8s, etc.
-        current_backoff = @rate_limit_errors[cache_key]&.dig(:backoff_seconds) || RATE_LIMIT_BACKOFF_BASE
-        retry_count = @rate_limit_errors[cache_key]&.dig(:retry_count) || 0
-
-        if retry_count < MAX_RETRIES_ON_RATE_LIMIT
-          new_backoff = current_backoff * 2
-          @rate_limit_errors[cache_key] = {
-            last_error: Time.current,
-            backoff_seconds: new_backoff,
-            retry_count: retry_count + 1
-          }
-          Rails.logger.warn("[RiskManager] Rate limit for #{cache_key} - backing off for #{new_backoff.round(1)}s (retry #{retry_count + 1}/#{MAX_RETRIES_ON_RATE_LIMIT})")
-        else
-          Rails.logger.error("[RiskManager] Rate limit exceeded max retries for #{cache_key} - skipping API calls")
-        end
-      else
-        # Non-rate-limit error - log normally
-        log_msg = order_no ? "get_paper_ltp API error for #{order_no}" : "get_paper_ltp API error for #{cache_key}"
-        Rails.logger.error("[RiskManager] #{log_msg}: #{error.class} - #{error.message}")
-      end
     end
 
     def fetch_ltp(position, tracker)
@@ -1074,7 +953,7 @@ module Live
     end
 
     def compute_pnl_pct(tracker, ltp, position = nil)
-      if position && position.respond_to?(:cost_price)
+      if position&.respond_to?(:cost_price)
         cost_price = position.cost_price.to_f
         return nil if cost_price.zero?
 
@@ -1089,28 +968,15 @@ module Live
       nil
     end
 
-    def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp, hwm_pnl_pct = nil)
+    def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
       return unless pnl && ltp && ltp.to_f.positive?
-
-      # Skip paper positions - PaperPnlRefresher handles them every 1 second
-      # This method should only be used for live positions
-      return if tracker.paper?
-
-      # Calculate hwm_pnl_pct if not provided
-      if hwm_pnl_pct.nil? && tracker.entry_price.present? && tracker.quantity.present?
-        entry = BigDecimal(tracker.entry_price.to_s)
-        qty = tracker.quantity.to_i
-        hwm = tracker.high_water_mark_pnl || BigDecimal(0)
-        hwm_pnl_pct = entry.positive? && qty.positive? ? ((hwm / (entry * qty)) * 100) : nil
-      end
 
       Live::PnlUpdaterService.instance.cache_intermediate_pnl(
         tracker_id: tracker.id,
         pnl: pnl,
         pnl_pct: pnl_pct,
         ltp: ltp,
-        hwm: tracker.high_water_mark_pnl,
-        hwm_pnl_pct: hwm_pnl_pct
+        hwm: tracker.high_water_mark_pnl
       )
     rescue StandardError => e
       Rails.logger.error("[RiskManager] update_pnl_in_redis failed for #{tracker.order_no}: #{e.class} - #{e.message}")
@@ -1135,15 +1001,19 @@ module Live
           nil
         end
         qty = tracker.quantity.to_i
-        pnl = entry ? (exit_price - entry) * qty : nil
-        pnl_pct = entry ? ((exit_price - entry) / entry) * 100 : nil
+        gross_pnl = entry ? (exit_price - entry) * qty : nil
+
+        # Deduct broker fees (₹20 per order, ₹40 per trade - position is being exited)
+        pnl = gross_pnl ? BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: true) : nil
+        # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent DB storage (matches Redis format)
+        pnl_pct = entry ? ((exit_price - entry) / entry) : nil
 
         hwm = tracker.high_water_mark_pnl || BigDecimal(0)
         hwm = [hwm, pnl].max if pnl
 
         tracker.update!(
           last_pnl_rupees: pnl,
-          last_pnl_pct: pnl_pct,
+          last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
           high_water_mark_pnl: hwm,
           avg_price: exit_price
         )
@@ -1160,7 +1030,7 @@ module Live
           return { success: false, exit_price: nil }
         end
 
-        if Orders.respond_to?(:config) && Orders.config.respond_to?(:flat_position)
+        if defined?(Orders) && Orders.respond_to?(:config) && Orders.config.respond_to?(:flat_position)
           order = Orders.config.flat_position(segment: segment, security_id: tracker.security_id)
           if order
             exit_price = current_ltp(tracker)
@@ -1198,6 +1068,37 @@ module Live
       Rails.logger.warn("[RiskManager] store_exit_reason failed for #{tracker.order_no}: #{e.class} - #{e.message}")
     end
 
+    # Send Telegram exit notification
+    # @param tracker [PositionTracker] Position tracker
+    # @param reason [String] Exit reason
+    # @param exit_price [BigDecimal, Float, nil] Exit price
+    def notify_telegram_exit(tracker, reason, exit_price)
+      return unless telegram_enabled?
+
+      # Reload tracker to get final PnL
+      tracker.reload if tracker.respond_to?(:reload)
+      pnl = tracker.last_pnl_rupees
+
+      Notifications::TelegramNotifier.instance.notify_exit(
+        tracker,
+        exit_reason: reason,
+        exit_price: exit_price,
+        pnl: pnl
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Telegram notification failed: #{e.class} - #{e.message}")
+    end
+
+    # Check if Telegram notifications are enabled
+    # @return [Boolean]
+    def telegram_enabled?
+      config = AlgoConfig.fetch[:telegram] || {}
+      enabled = config[:enabled] != false && config[:notify_exit] != false
+      enabled && Notifications::TelegramNotifier.instance.enabled?
+    rescue StandardError
+      false
+    end
+
     def parse_time_hhmm(value)
       return nil if value.blank?
 
@@ -1207,24 +1108,160 @@ module Live
       nil
     end
 
-    def active_cache_positions
-      Positions::ActiveCache.instance.all_positions
+    # Calculate seconds spent below entry price
+    # Tracks this in Redis cache keyed by tracker_id
+    def seconds_below_entry(tracker)
+      cache_key = "position:below_entry:#{tracker.id}"
+      cached = Rails.cache.read(cache_key)
+
+      snapshot = pnl_snapshot(tracker)
+      return 0 unless snapshot
+
+      pnl_pct = snapshot[:pnl_pct]
+      return 0 if pnl_pct.nil? || pnl_pct >= 0
+
+      # If position is below entry, increment counter
+      if cached
+        # Update timestamp if still below entry
+        Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
+        (Time.current - cached).to_i
+      else
+        # First time below entry, initialize
+        Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
+        0
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] seconds_below_entry error for #{tracker.id}: #{e.class} - #{e.message}")
+      0
     end
 
-    def trackers_for_positions(position_list)
-      ids = position_list.map(&:tracker_id).compact
-      return {} if ids.empty?
+    # Calculate ATR ratio (current ATR / recent ATR average)
+    # Returns 1.0 if calculation fails (normal volatility)
+    def calculate_atr_ratio(tracker)
+      instrument = tracker.instrument || tracker.watchable&.instrument
+      return 1.0 unless instrument
 
-      # Use cached tracker map if available and IDs match
-      if @cycle_tracker_map
-        cached_ids = @cycle_tracker_map.keys.map(&:to_i).to_set
-        requested_ids = ids.map(&:to_i).to_set
-        return @cycle_tracker_map if cached_ids == requested_ids
+      # Try to get ATR from instrument's candle series
+      begin
+        series = instrument.candle_series(interval: '5') # 5-minute candles
+        return 1.0 unless series&.candles&.any?
+
+        candles = series.candles.last(20) # Last 20 candles
+        return 1.0 if candles.size < 10
+
+        # Calculate current ATR (last 14 periods)
+        current_atr = calculate_atr(candles.last(14))
+        return 1.0 unless current_atr.positive?
+
+        # Calculate average ATR (last 20 periods)
+        avg_atr = calculate_atr(candles)
+        return 1.0 unless avg_atr.positive?
+
+        ratio = current_atr / avg_atr
+        ratio.round(3)
+      rescue StandardError => e
+        Rails.logger.debug { "[RiskManager] ATR ratio calculation failed for #{tracker.order_no}: #{e.message}" }
+        1.0
+      end
+    end
+
+    # Helper: Calculate ATR from candles
+    def calculate_atr(candles)
+      return 0.0 if candles.size < 2
+
+      true_ranges = []
+      candles.each_cons(2) do |prev, curr|
+        tr1 = curr.high - curr.low
+        tr2 = (curr.high - prev.close).abs
+        tr3 = (curr.low - prev.close).abs
+        true_ranges << [tr1, tr2, tr3].max
       end
 
-      # Load trackers and cache for this cycle
-      @cycle_tracker_map = PositionTracker.where(id: ids).includes(:instrument).index_by(&:id)
-      @cycle_tracker_map
+      return 0.0 if true_ranges.empty?
+
+      true_ranges.sum / true_ranges.size
+    end
+
+    # Build position data hash for Early Trend Failure checks
+    def build_position_data_for_etf(tracker, _snapshot, instrument)
+      # Get trend metrics from instrument
+      series = begin
+        instrument.candle_series(interval: '5')
+      rescue StandardError
+        nil
+      end
+      candles = series&.candles || []
+
+      # Calculate ADX
+      adx_value = begin
+        instrument.adx(14, interval: '5')
+      rescue StandardError
+        nil
+      end
+      adx_hash = adx_value.is_a?(Hash) ? adx_value : { value: adx_value }
+
+      # Calculate ATR ratio
+      atr_ratio = calculate_atr_ratio(tracker)
+
+      # Get underlying price (for VWAP check)
+      underlying_price = current_ltp(tracker) || tracker.entry_price.to_f
+
+      # Build trend score (simplified: use ADX + momentum)
+      trend_score = if adx_hash[:value]
+                      adx_hash[:value].to_f + (candles.any? ? momentum_score(candles) : 0)
+                    else
+                      0
+                    end
+
+      # Peak trend score (tracked in Redis or use current if no peak)
+      peak_trend_score = tracker.meta&.dig('peak_trend_score') || trend_score
+      if trend_score > peak_trend_score
+        peak_trend_score = trend_score
+        tracker.update(meta: (tracker.meta || {}).merge('peak_trend_score' => peak_trend_score))
+      end
+
+      # VWAP (simplified: use recent average price)
+      vwap = candles.any? ? candles.last(20).map(&:close).sum / candles.last(20).size : underlying_price
+
+      OpenStruct.new(
+        trend_score: trend_score,
+        peak_trend_score: peak_trend_score,
+        adx: adx_hash[:value],
+        atr_ratio: atr_ratio,
+        underlying_price: underlying_price,
+        vwap: vwap,
+        is_long?: %w[long_ce long_pe].include?(tracker.side)
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] build_position_data_for_etf error: #{e.class} - #{e.message}")
+      OpenStruct.new(
+        trend_score: 0,
+        peak_trend_score: 0,
+        adx: nil,
+        atr_ratio: 1.0,
+        underlying_price: tracker.entry_price.to_f,
+        vwap: tracker.entry_price.to_f,
+        is_long?: true
+      )
+    end
+
+    # Calculate momentum score from candles (0-50 range)
+    def momentum_score(candles)
+      return 0 if candles.size < 3
+
+      recent = candles.last(3)
+      return 0 if recent.size < 2
+
+      # Simple momentum: price change direction and magnitude
+      price_change = (recent.last.close - recent.first.close) / recent.first.close
+      volume_factor = if recent.last.respond_to?(:volume) && recent.last.volume
+                        [recent.last.volume / 1_000_000.0,
+                         1.0].min
+                      else
+                        0.5
+                      end
+
+      (price_change.abs * 100 * volume_factor).round(2)
     end
 
     def risk_config
@@ -1252,6 +1289,165 @@ module Live
       {}
     end
 
+    def hard_rupee_sl_enabled?
+      cfg = hard_rupee_sl_config
+      cfg && cfg[:enabled] == true
+    end
+
+    def hard_rupee_tp_enabled?
+      cfg = hard_rupee_tp_config
+      cfg && cfg[:enabled] == true
+    end
+
+    def hard_rupee_sl_config
+      AlgoConfig.fetch.dig(:risk, :hard_rupee_sl)
+    rescue StandardError
+      nil
+    end
+
+    def hard_rupee_tp_config
+      AlgoConfig.fetch.dig(:risk, :hard_rupee_tp)
+    rescue StandardError
+      nil
+    end
+
+    def post_profit_zone_enabled?
+      cfg = post_profit_zone_config
+      cfg && cfg[:enabled] != false
+    end
+
+    def post_profit_zone_config
+      raw = begin
+        AlgoConfig.fetch.dig(:risk, :post_profit_zone) || {}
+      rescue StandardError
+        {}
+      end
+
+      # Defaults
+      {
+        enabled: true,
+        secured_profit_threshold_rupees: raw[:secured_profit_threshold_rupees] || 2000,
+        runner_zone_threshold_rupees: raw[:runner_zone_threshold_rupees] || 4000,
+        secured_sl_rupees: raw[:secured_sl_rupees] || 800,
+        underlying_adx_min: raw[:underlying_adx_min] || 18.0,
+        option_pullback_max_pct: raw[:option_pullback_max_pct] || 35.0,
+        underlying_atr_collapse_threshold: raw[:underlying_atr_collapse_threshold] || 0.65,
+        runner_zone_momentum_check: raw[:runner_zone_momentum_check] || false
+      }.merge(raw)
+    end
+
+    def transition_to_secured_profit_zone(tracker, net_pnl_rupees, target_profit_rupees)
+      # Check if already transitioned
+      return if tracker.meta&.dig('profit_zone_state') == 'secured_profit_zone'
+
+      # Move SL to green (+₹500 to +₹1,000)
+      secured_sl_config = post_profit_zone_config
+      secured_sl_rupees = BigDecimal((secured_sl_config[:secured_sl_rupees] || 800).to_s)
+
+      # Calculate entry price and quantity
+      entry_price = tracker.entry_price
+      quantity = tracker.quantity
+      return unless entry_price && quantity && quantity.positive?
+
+      # Calculate SL price that gives us secured_sl_rupees profit
+      # Formula: (sl_price - entry_price) * quantity - exit_fee = secured_sl_rupees
+      # sl_price = entry_price + (secured_sl_rupees + exit_fee) / quantity
+      exit_fee = BrokerFeeCalculator.fee_per_order
+      sl_price = entry_price + (BigDecimal((secured_sl_rupees + exit_fee).to_s) / quantity)
+
+      # Update tracker metadata
+      meta = tracker.meta || {}
+      meta = {} unless meta.is_a?(Hash)
+      meta['profit_zone_state'] = 'secured_profit_zone'
+      meta['secured_sl_price'] = sl_price.to_f
+      meta['secured_sl_rupees'] = secured_sl_rupees.to_f
+      meta['profit_zone_transitioned_at'] = Time.current.iso8601
+
+      tracker.update_column(:meta, meta)
+
+      Rails.logger.info(
+        "[RiskManager] Transitioned #{tracker.order_no} to SECURED_PROFIT_ZONE " \
+        "(PnL: ₹#{net_pnl_rupees.round(2)}, SL: ₹#{secured_sl_rupees}, SL Price: ₹#{sl_price.round(2)})"
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] transition_to_secured_profit_zone error: #{e.class} - #{e.message}")
+    end
+
+    def build_position_data_for_rule_engine(tracker, snapshot)
+      # Build PositionData compatible with RuleContext
+      instrument = tracker.instrument || tracker.watchable&.instrument
+      index_key = tracker.meta&.dig('index_key') || instrument&.symbol_name
+
+      Positions::ActiveCache::PositionData.new(
+        tracker_id: tracker.id,
+        security_id: tracker.security_id,
+        segment: tracker.segment || instrument&.exchange_segment,
+        entry_price: tracker.entry_price,
+        quantity: tracker.quantity,
+        current_ltp: snapshot[:ltp],
+        pnl: snapshot[:pnl],
+        pnl_pct: snapshot[:pnl_pct],
+        high_water_mark: snapshot[:hwm_pnl],
+        peak_profit_pct: calculate_peak_profit_pct(tracker, snapshot),
+        position_direction: Positions::MetadataResolver.direction(tracker),
+        index_key: index_key,
+        underlying_segment: instrument&.exchange_segment,
+        underlying_security_id: instrument&.security_id,
+        underlying_symbol: index_key
+      )
+    end
+
+    def calculate_peak_profit_pct(tracker, snapshot)
+      hwm = snapshot[:hwm_pnl]
+      return nil unless hwm && hwm.positive?
+
+      entry_price = tracker.entry_price
+      quantity = tracker.quantity
+      return nil unless entry_price && quantity && quantity.positive?
+
+      buy_value = entry_price * quantity
+      return nil unless buy_value.positive?
+
+      (hwm / buy_value).to_f
+    end
+
+    def iv_collapse_detection_enabled?
+      config = begin
+        AlgoConfig.fetch.dig(:risk, :time_overrides, :iv_collapse) || {}
+      rescue StandardError
+        {}
+      end
+      config[:enabled] == true
+    end
+
+    def stall_detection_enabled?
+      config = stall_detection_config
+      config[:enabled] == true
+    end
+
+    def stall_detection_config
+      AlgoConfig.fetch.dig(:risk, :time_overrides, :stall_detection) || {}
+    rescue StandardError
+      {}
+    end
+
+    # Record trade result in EdgeFailureDetector
+    def record_trade_result_for_edge_detector(tracker, final_pnl, exit_reason)
+      return unless tracker && final_pnl && exit_reason
+
+      index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+      return unless index_key
+
+      Live::EdgeFailureDetector.instance.record_trade_result(
+        index_key: index_key,
+        pnl_rupees: final_pnl.to_f,
+        exit_reason: exit_reason.to_s,
+        exit_time: Time.current
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] record_trade_result_for_edge_detector error: #{e.class} - #{e.message}")
+    end
+
     def cancel_remote_order(order_id)
       order = DhanHQ::Models::Order.find(order_id)
       order.cancel
@@ -1269,776 +1465,84 @@ module Live
       BigDecimal(0)
     end
 
-    def demand_driven_enabled?
-      feature_flags[:enable_demand_driven_services] == true
+    # Track exit path for analysis
+    def track_exit_path(tracker, exit_path, reason)
+      meta = tracker.meta || {}
+      meta = {} unless meta.is_a?(Hash)
+
+      direction = if exit_path.include?('upward')
+                    'upward'
+                  else
+                    (exit_path.include?('downward') ? 'downward' : nil)
+                  end
+      type = if exit_path.include?('adaptive')
+               'adaptive'
+             else
+               (exit_path.include?('fixed') ? 'fixed' : nil)
+             end
+
+      # Ensure entry metadata is preserved (in case it wasn't set during creation)
+      # This is a safety net - entry metadata should already be set in EntryGuard
+      entry_meta = {}
+      unless meta['entry_path'] || meta['entry_strategy']
+        # Try to find matching TradingSignal to get entry metadata
+        signal = TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
+                              .where('created_at >= ?', tracker.created_at - 5.minutes)
+                              .where('created_at <= ?', tracker.created_at + 1.minute)
+                              .order(created_at: :desc)
+                              .first
+
+        if signal && signal.metadata.is_a?(Hash)
+          entry_meta['entry_path'] = signal.metadata['entry_path']
+          entry_meta['entry_strategy'] = signal.metadata['strategy']
+          entry_meta['entry_strategy_mode'] = signal.metadata['strategy_mode']
+          entry_meta['entry_timeframe'] = signal.metadata['effective_timeframe'] || signal.metadata['primary_timeframe']
+          entry_meta['entry_confirmation_timeframe'] = signal.metadata['confirmation_timeframe']
+          entry_meta['entry_validation_mode'] = signal.metadata['validation_mode']
+        end
+      end
+
+      tracker.update(
+        meta: meta.merge(entry_meta).merge(
+          'exit_path' => exit_path,
+          'exit_reason' => reason,
+          'exit_direction' => direction,
+          'exit_type' => type,
+          'exit_triggered_at' => Time.current
+        )
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Failed to track exit path for #{tracker.order_no}: #{e.message}")
     end
 
-    def feature_flags
-      AlgoConfig.fetch[:feature_flags] || {}
+    # Send Telegram exit notification
+    # @param tracker [PositionTracker] Position tracker
+    # @param reason [String] Exit reason
+    # @param exit_price [BigDecimal, Float, nil] Exit price
+    def notify_telegram_exit(tracker, reason, exit_price)
+      return unless telegram_enabled?
+
+      # Reload tracker to get final PnL
+      tracker.reload if tracker.respond_to?(:reload)
+      pnl = tracker.last_pnl_rupees
+
+      Notifications::TelegramNotifier.instance.notify_exit(
+        tracker,
+        exit_reason: reason,
+        exit_price: exit_price,
+        pnl: pnl
+      )
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Telegram notification failed: #{e.class} - #{e.message}")
+    end
+
+    # Check if Telegram notifications are enabled
+    # @return [Boolean]
+    def telegram_enabled?
+      config = AlgoConfig.fetch[:telegram] || {}
+      enabled = config[:enabled] != false && config[:notify_exit] != false
+      enabled && Notifications::TelegramNotifier.instance.enabled?
     rescue StandardError
-      {}
-    end
-
-    def underlying_exits_enabled?
-      feature_flags[:enable_underlying_aware_exits] == true
-    end
-
-    def ensure_position_snapshot(position)
-      return if position.current_ltp&.positive?
-
-      ltp = Live::TickCache.ltp(position.segment, position.security_id)
-      unless ltp
-        tick = Live::RedisTickCache.instance.fetch_tick(position.segment, position.security_id)
-        ltp = tick[:ltp] if tick&.dig(:ltp)
-      end
-      position.update_ltp(ltp) if ltp
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] ensure_position_snapshot failed for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
-    end
-
-    # Ensure all active positions are in ActiveCache
-    def ensure_all_positions_in_active_cache
-      @last_ensure_active_cache ||= Time.zone.at(0)
-      return if Time.current - @last_ensure_active_cache < 5.seconds
-
-      @last_ensure_active_cache = Time.current
-      active_cache = Positions::ActiveCache.instance
-
-      # Use cached active positions to avoid redundant query
-      Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
-        next unless tracker.entry_price&.positive?
-
-        # Check if already in cache
-        existing = active_cache.get_by_tracker_id(tracker.id)
-        next if existing
-
-        # Add to cache
-        active_cache.add_position(tracker: tracker)
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] ensure_all_positions_in_active_cache failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
-      end
-    end
-
-    # Ensure all active positions are subscribed to market data
-    def ensure_all_positions_subscribed
-      @last_ensure_subscribed ||= Time.zone.at(0)
-      # Reduced frequency from 5 seconds to 30 seconds (subscriptions rarely change)
-      # EntryManager handles subscriptions on entry, this is just a safety net
-      return if Time.current - @last_ensure_subscribed < 30.seconds
-
-      @last_ensure_subscribed = Time.current
-      hub = Live::MarketFeedHub.instance
-      return unless hub.running?
-
-      hub.start! unless hub.running?
-
-      # Use cached active positions to avoid redundant query
-      Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
-        next unless tracker.security_id.present?
-
-        segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
-        next unless segment_key
-
-        # Check if already subscribed
-        next if hub.subscribed?(segment: segment_key, security_id: tracker.security_id)
-
-        # Subscribe
-        tracker.subscribe
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] ensure_all_positions_subscribed failed for tracker #{tracker.id}: #{e.class} - #{e.message}")
-      end
-    end
-
-    # Sync position PnL from Redis cache to ActiveCache
-    # This ensures exit conditions use the latest PnL data
-    # Uses per-cycle cache to avoid redundant Redis fetches
-    def sync_position_pnl_from_redis(position, tracker)
-      return unless position && tracker
-
-      # Use cached Redis PnL if available (fetched earlier in this cycle)
-      redis_pnl = @redis_pnl_cache[tracker.id] ||= Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
-      return unless redis_pnl && redis_pnl[:pnl]
-
-      # Update ActiveCache position with Redis PnL data
-      # Only update if Redis has fresher data (within last 30 seconds)
-      redis_timestamp = redis_pnl[:timestamp] || 0
-      return if (Time.current.to_i - redis_timestamp) > 30
-
-      # Update PnL in ActiveCache
-      position.pnl = redis_pnl[:pnl].to_f
-      position.pnl_pct = redis_pnl[:pnl_pct].to_f if redis_pnl[:pnl_pct]
-      position.high_water_mark = redis_pnl[:hwm_pnl].to_f if redis_pnl[:hwm_pnl]
-
-      # Update LTP if available
-      position.current_ltp = redis_pnl[:ltp].to_f if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
-
-      # Update peak profit if available
-      if redis_pnl[:peak_profit_pct] && redis_pnl[:peak_profit_pct].to_f > (position.peak_profit_pct || 0)
-        position.peak_profit_pct = redis_pnl[:peak_profit_pct].to_f
-      end
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] sync_position_pnl_from_redis failed for tracker #{tracker&.id}: #{e.class} - #{e.message}")
-    end
-
-    def handle_underlying_exit(position, tracker, exit_engine)
-      return false unless underlying_exits_enabled?
-
-      underlying_state = Live::UnderlyingMonitor.evaluate(position)
-      return false unless underlying_state
-
-      if structure_break_against_position?(position, tracker, underlying_state)
-        log_underlying_exit(tracker, position, 'underlying_structure_break', underlying_state)
-        increment_metric(:underlying_exit_count)
-        guarded_exit(tracker, 'underlying_structure_break', exit_engine)
-        return true
-      end
-
-      if underlying_state.trend_score &&
-         underlying_state.trend_score.to_f < underlying_trend_score_threshold
-        log_underlying_exit(tracker, position, 'underlying_trend_weak', underlying_state)
-        increment_metric(:underlying_exit_count)
-        guarded_exit(tracker, 'underlying_trend_weak', exit_engine)
-        return true
-      end
-
-      if atr_collapse?(underlying_state)
-        log_underlying_exit(tracker, position, 'underlying_atr_collapse', underlying_state)
-        increment_metric(:underlying_exit_count)
-        guarded_exit(tracker, 'underlying_atr_collapse', exit_engine)
-        return true
-      end
-
-      false
-    end
-
-    def enforce_bracket_limits(position, tracker, exit_engine)
-      # CRITICAL: Check if LTP is available - if not, log warning and try percentage-based check
-      unless position.current_ltp&.positive?
-        Rails.logger.warn(
-          "[RiskManager] enforce_bracket_limits: No LTP for tracker #{tracker.id} " \
-          "(sl_price: #{position.sl_price}, tp_price: #{position.tp_price}, pnl_pct: #{position.pnl_pct})"
-        )
-        # Fallback to percentage-based check if LTP unavailable
-        return false
-      end
-
-      if position.sl_hit?
-        reason = format('SL HIT %.2f%% (bracket: LTP=%.2f, SL=%.2f)',
-                        position.pnl_pct.to_f, position.current_ltp, position.sl_price)
-        Rails.logger.warn("[RiskManager] #{reason} for tracker #{tracker.id}")
-        guarded_exit(tracker, reason, exit_engine)
-        return true
-      end
-
-      if position.tp_hit?
-        reason = format('TP HIT %.2f%% (bracket: LTP=%.2f, TP=%.2f)',
-                        position.pnl_pct.to_f, position.current_ltp, position.tp_price)
-        Rails.logger.info("[RiskManager] #{reason} for tracker #{tracker.id}")
-        guarded_exit(tracker, reason, exit_engine)
-        return true
-      end
-
-      false
-    end
-
-    def structure_break_against_position?(position, tracker, underlying_state)
-      return false unless underlying_state&.bos_state == :broken
-
-      direction = normalized_position_direction(position, tracker)
-      (direction == :bullish && underlying_state.bos_direction == :bearish) ||
-        (direction == :bearish && underlying_state.bos_direction == :bullish)
-    end
-
-    def normalized_position_direction(position, tracker)
-      direction = position.position_direction
-      return direction.to_s.downcase.to_sym if direction.present?
-
-      Positions::MetadataResolver.direction(tracker)
-    end
-
-    def underlying_trend_score_threshold
-      risk_config[:underlying_trend_score_threshold].to_f.positive? ? risk_config[:underlying_trend_score_threshold].to_f : 10.0
-    end
-
-    def underlying_atr_ratio_threshold
-      value = risk_config[:underlying_atr_collapse_multiplier]
-      value ? value.to_f : 0.65
-    end
-
-    def atr_collapse?(underlying_state)
-      return false unless underlying_state
-
-      underlying_state.atr_trend == :falling &&
-        underlying_state.atr_ratio &&
-        underlying_state.atr_ratio.to_f < underlying_atr_ratio_threshold
-    end
-
-    def log_underlying_exit(tracker, position, reason, underlying_state)
-      Rails.logger.info(
-        "[UNDERLYING_EXIT] reason=#{reason} tracker_id=#{tracker.id} order=#{tracker.order_no} " \
-        "pnl_pct=#{position.pnl_pct&.round(2)} peak_pct=#{position.peak_profit_pct&.round(2)} " \
-        "trend_score=#{underlying_state.trend_score} bos_state=#{underlying_state.bos_state} " \
-        "bos_direction=#{underlying_state.bos_direction} atr_trend=#{underlying_state.atr_trend} " \
-        "atr_ratio=#{underlying_state.atr_ratio} mtf_confirm=#{underlying_state.mtf_confirm}"
-      )
-    end
-
-    def log_peak_drawdown_exit(tracker, position, drawdown)
-      Rails.logger.warn(
-        "[RiskManager] [PEAK_DRAWDOWN] tracker_id=#{tracker.id} order=#{tracker.order_no} " \
-        "peak_pct=#{position.peak_profit_pct&.round(2)} current_pct=#{position.pnl_pct&.round(2)} " \
-        "drawdown=#{drawdown.round(2)}%"
-      )
-    end
-
-    def guarded_exit(tracker, reason, exit_engine)
-      if exit_engine && exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
-        return if tracker.exited?
-
-        exit_engine.execute_exit(tracker, reason)
-      else
-        tracker.with_lock do
-          return if tracker.exited?
-
-          dispatch_exit(self, tracker, reason)
-        end
-      end
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] guarded_exit failed for #{tracker.order_no}: #{e.class} - #{e.message}")
-    end
-
-    def loop_sleep_interval(active_cache_empty)
-      interval_ms =
-        if active_cache_empty
-          risk_config[:loop_interval_idle] || 5000
-        else
-          risk_config[:loop_interval_active] || 500
-        end
-      interval_ms.to_f / 1000.0
-    end
-
-    def wait_for_interval(seconds)
-      return sleep(seconds) unless demand_driven_enabled?
-
-      @sleep_mutex.synchronize do
-        @sleep_cv.wait(@sleep_mutex, seconds) if @running
-      end
-    end
-
-    def wake_up!
-      @sleep_mutex.synchronize do
-        @sleep_cv.broadcast
-      end
-    end
-
-    def subscribe_to_position_events
-      return if @position_subscriptions.any?
-
-      %w[positions.added positions.removed].each do |event|
-        token = ActiveSupport::Notifications.subscribe(event) { wake_up! }
-        @position_subscriptions << token
-      end
-    end
-
-    def unsubscribe_from_position_events
-      return if @position_subscriptions.empty?
-
-      @position_subscriptions.each do |token|
-        ActiveSupport::Notifications.unsubscribe(token)
-      end
-      @position_subscriptions.clear
-    end
-
-    # Phase 2: Process all positions in single consolidated loop
-    # This eliminates 7-10 separate iterations over the same positions
-    # @param positions [Array<Positions::ActiveCache::PositionData>] All active positions
-    # @param tracker_map [Hash<Integer, PositionTracker>] Map of tracker_id => tracker
-    # @param exit_engine [Object] Exit engine to use for exits
-    def process_all_positions_in_single_loop(positions, tracker_map, exit_engine)
-      positions.each do |position|
-        tracker = tracker_map[position.tracker_id]
-        next unless tracker&.active?
-
-        begin
-          # Sync PnL from Redis once per position (uses cycle cache)
-          sync_position_pnl_from_redis(position, tracker)
-
-          # Check all exit conditions in single pass (consolidated)
-          next if check_all_exit_conditions(position, tracker, exit_engine)
-
-          # Process trailing stops (if not exited)
-          process_trailing_for_position(position, tracker, exit_engine)
-        rescue StandardError => e
-          Rails.logger.error("[RiskManager] Error processing position #{position.tracker_id}: #{e.class} - #{e.message}")
-        end
-      end
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] Error in process_all_positions_in_single_loop: #{e.class} - #{e.message}")
-    end
-
-    # Phase 2: Check all exit conditions using rule engine
-    # Uses rule engine to evaluate all risk and position management rules
-    # @param position [Positions::ActiveCache::PositionData] Position data
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param exit_engine [Object] Exit engine to use
-    # @return [Boolean] true if exit was triggered, false otherwise
-    def check_all_exit_conditions(position, tracker, exit_engine)
-      # Use rule engine if available, otherwise fallback to legacy methods
-      return check_exit_conditions_with_rule_engine(position, tracker, exit_engine) if rule_engine_available?
-
-      # Legacy fallback (backwards compatibility)
-      check_all_exit_conditions_legacy(position, tracker, exit_engine)
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] check_all_exit_conditions error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
-      false
-    end
-
-    # Check exit conditions using rule engine
-    # @param position [Positions::ActiveCache::PositionData] Position data
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param exit_engine [Object] Exit engine to use
-    # @return [Boolean] true if exit was triggered, false otherwise
-    def check_exit_conditions_with_rule_engine(position, tracker, exit_engine)
-      context = Risk::Rules::RuleContext.new(
-        position: position,
-        tracker: tracker,
-        risk_config: risk_config,
-        current_time: Time.current,
-        trading_session: TradingSession::Service
-      )
-
-      result = rule_engine.evaluate(context)
-
-      if result.exit?
-        dispatch_exit(exit_engine, tracker, result.reason)
-        return true
-      end
-
-      false
-    end
-
-    # Legacy method for backwards compatibility
-    # @param position [Positions::ActiveCache::PositionData] Position data
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param exit_engine [Object] Exit engine to use
-    # @return [Boolean] true if exit was triggered, false otherwise
-    def check_all_exit_conditions_legacy(position, tracker, exit_engine)
-      # 1. Session end exit (highest priority)
-      session_check = TradingSession::Service.should_force_exit?
-      if session_check[:should_exit]
-        dispatch_exit(exit_engine, tracker, 'session end (deadline: 3:15 PM IST)')
-        return true
-      end
-
-      # 2. Hard limits (SL/TP) - consolidated check
-      return true if check_sl_tp_limits(position, tracker, exit_engine)
-
-      # 3. Time-based exit
-      return true if check_time_based_exit(position, tracker, exit_engine)
-
-      false
-    end
-
-    # Phase 2: Consolidated SL/TP limit check
-    # @param position [Positions::ActiveCache::PositionData] Position data
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param exit_engine [Object] Exit engine to use
-    # @return [Boolean] true if exit was triggered, false otherwise
-    def check_sl_tp_limits(position, tracker, exit_engine)
-      risk = risk_config
-      sl_pct = begin
-        BigDecimal(risk[:sl_pct].to_s)
-      rescue StandardError
-        BigDecimal(0)
-      end
-      tp_pct = begin
-        BigDecimal(risk[:tp_pct].to_s)
-      rescue StandardError
-        BigDecimal(0)
-      end
-
-      pnl_pct = position.pnl_pct
-      return false if pnl_pct.nil?
-
-      normalized_pct = pnl_pct.to_f / 100.0
-
-      if normalized_pct <= -sl_pct.to_f
-        reason = "SL HIT #{pnl_pct.round(2)}%"
-        dispatch_exit(exit_engine, tracker, reason)
-        return true
-      end
-
-      if normalized_pct >= tp_pct.to_f
-        reason = "TP HIT #{pnl_pct.round(2)}%"
-        dispatch_exit(exit_engine, tracker, reason)
-        return true
-      end
-
-      false
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] check_sl_tp_limits error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
-      false
-    end
-
-    # Phase 2: Time-based exit check
-    # @param position [Positions::ActiveCache::PositionData] Position data
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param exit_engine [Object] Exit engine to use
-    # @return [Boolean] true if exit was triggered, false otherwise
-    def check_time_based_exit(position, tracker, exit_engine)
-      risk = risk_config
-      exit_time = parse_time_hhmm(risk[:time_exit_hhmm] || '15:20')
-      return false unless exit_time
-
-      now = Time.current
-      return false unless now >= exit_time
-
-      market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
-      return false if market_close_time && now >= market_close_time
-
-      pnl_rupees = position.pnl
-      if pnl_rupees.to_f.positive?
-        min_profit = begin
-          BigDecimal((risk[:min_profit_rupees] || 0).to_s)
-        rescue StandardError
-          BigDecimal(0)
-        end
-        if min_profit.positive? && BigDecimal(pnl_rupees.to_s) < min_profit
-          Rails.logger.info("[RiskManager] Time-based exit skipped for #{tracker.order_no} - PnL < min_profit")
-          return false
-        end
-      end
-
-      reason = "time-based exit (#{exit_time.strftime('%H:%M')})"
-      dispatch_exit(exit_engine, tracker, reason)
-      true
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] check_time_based_exit error for tracker #{tracker&.id}: #{e.class} - #{e.message}")
-      false
-    end
-
-    # Phase 2: Process trailing for single position
-    # @param position [Positions::ActiveCache::PositionData] Position data
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param exit_engine [Object] Exit engine to use
-    def process_trailing_for_position(position, tracker, exit_engine)
-      @bracket_placer ||= Orders::BracketPlacer.new
-      @trailing_engine ||= Live::TrailingEngine.new(bracket_placer: @bracket_placer)
-
-      ensure_position_snapshot(position)
-
-      # Recalculate position metrics (PnL, peak) from current LTP
-      recalculate_position_metrics(position, tracker)
-
-      # Use rule engine for underlying exits, bracket limits, and peak drawdown if available
-      if rule_engine_available?
-        context = Risk::Rules::RuleContext.new(
-          position: position,
-          tracker: tracker,
-          risk_config: risk_config,
-          current_time: Time.current,
-          trading_session: TradingSession::Service
-        )
-
-        # Check underlying exit rule
-        underlying_rule = rule_engine.find_rule(Risk::Rules::UnderlyingExitRule)
-        if underlying_rule&.enabled?
-          underlying_result = underlying_rule.evaluate(context)
-          if underlying_result.exit?
-            dispatch_exit(exit_engine, tracker, underlying_result.reason)
-            return
-          end
-        end
-
-        # Check bracket limit rule
-        bracket_rule = rule_engine.find_rule(Risk::Rules::BracketLimitRule)
-        if bracket_rule&.enabled?
-          bracket_result = bracket_rule.evaluate(context)
-          if bracket_result.exit?
-            dispatch_exit(exit_engine, tracker, bracket_result.reason)
-            return
-          end
-        end
-
-        # Check peak drawdown rule (replaces TrailingEngine peak-drawdown check)
-        peak_drawdown_rule = rule_engine.find_rule(Risk::Rules::PeakDrawdownRule)
-        if peak_drawdown_rule&.enabled?
-          peak_drawdown_result = peak_drawdown_rule.evaluate(context)
-          if peak_drawdown_result.exit?
-            dispatch_exit(exit_engine, tracker, peak_drawdown_result.reason)
-            return
-          end
-        end
-      else
-        # Legacy fallback
-        return if handle_underlying_exit(position, tracker, exit_engine)
-        return if enforce_bracket_limits(position, tracker, exit_engine)
-      end
-
-      # Apply tiered trailing SL offsets
-      desired_sl_offset_pct = Positions::TrailingConfig.sl_offset_for(position.pnl_pct)
-      if desired_sl_offset_pct
-        position.sl_offset_pct = desired_sl_offset_pct
-        active_cache = Positions::ActiveCache.instance
-        active_cache.update_position(position.tracker_id, sl_offset_pct: desired_sl_offset_pct)
-      end
-
-      # Process trailing with peak-drawdown gating (via TrailingEngine)
-      trailing_exit_engine = exit_engine
-      @trailing_engine.process_tick(position, exit_engine: trailing_exit_engine)
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] process_trailing_for_position error for tracker #{position.tracker_id}: #{e.class} - #{e.message}")
-    end
-
-    # Phase 2: Batch fetch LTP for multiple positions
-    # Groups positions by segment and makes single API call per segment
-    # @param security_ids_by_segment [Array<Hash>] Array of {segment:, security_id:} hashes
-    # @return [Hash<String, BigDecimal>] Map of security_id => LTP
-    def batch_fetch_ltp(security_ids_by_segment)
-      return {} if security_ids_by_segment.empty?
-
-      # Phase 3: Check circuit breaker before making API calls
-      if circuit_breaker_open?
-        Rails.logger.warn('[RiskManager] Circuit breaker OPEN - skipping batch_fetch_ltp')
-        @metrics[:recent_api_errors] = (@metrics[:recent_api_errors] || 0) + 1
-        return {}
-      end
-
-      # Group by segment
-      grouped = security_ids_by_segment.group_by { |item| item[:segment] }
-      result = {}
-
-      grouped.each do |segment, items|
-        security_ids = items.map { |item| item[:security_id].to_i }
-
-        begin
-          # Single API call for all security_ids in this segment
-          @metrics[:total_api_calls] = (@metrics[:total_api_calls] || 0) + 1
-          response = DhanHQ::Models::MarketFeed.ltp({ segment => security_ids })
-
-          if response['status'] == 'success'
-            # Phase 3: Record API success
-            record_api_success
-
-            segment_data = response.dig('data', segment) || {}
-            items.each do |item|
-              security_id_str = item[:security_id].to_s
-              option_data = segment_data[security_id_str]
-              next unless option_data && option_data['last_price']
-
-              ltp = BigDecimal(option_data['last_price'].to_s)
-              result[security_id_str] = ltp
-
-              # Store in Redis tick cache
-              begin
-                Live::RedisPnlCache.instance.store_tick(
-                  segment: segment,
-                  security_id: item[:security_id],
-                  ltp: ltp,
-                  timestamp: Time.current
-                )
-              rescue StandardError
-                nil
-              end
-            end
-          else
-            # Phase 3: Record API failure for non-success response
-            record_api_failure
-            @metrics[:recent_api_errors] = (@metrics[:recent_api_errors] || 0) + 1
-          end
-        rescue StandardError => e
-          Rails.logger.error("[RiskManager] batch_fetch_ltp failed for segment #{segment}: #{e.class} - #{e.message}")
-          # Phase 3: Record API failure
-          record_api_failure
-          @metrics[:recent_api_errors] = (@metrics[:recent_api_errors] || 0) + 1
-
-          # Fallback: try individual calls for this segment
-          items.each do |item|
-            ltp = get_paper_ltp_for_security(item[:segment], item[:security_id])
-            result[item[:security_id].to_s] = ltp if ltp
-          rescue StandardError
-            nil
-          end
-        end
-      end
-
-      result
-    end
-
-    # Helper for individual LTP fetch (fallback)
-    def get_paper_ltp_for_security(segment, security_id)
-      # Try WebSocket TickCache first
-      cached = Live::TickCache.ltp(segment, security_id)
-      return BigDecimal(cached.to_s) if cached
-
-      # Try RedisTickCache
-      tick_data = begin
-        Live::RedisTickCache.instance.fetch_tick(segment, security_id)
-      rescue StandardError
-        nil
-      end
-      return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
-
-      # Phase 3: Check circuit breaker before making API call
-      if circuit_breaker_open?
-        Rails.logger.warn('[RiskManager] Circuit breaker OPEN - skipping get_paper_ltp_for_security')
-        @metrics[:recent_api_errors] = (@metrics[:recent_api_errors] || 0) + 1
-        return nil
-      end
-
-      # Direct API call
-      begin
-        @metrics[:total_api_calls] = (@metrics[:total_api_calls] || 0) + 1
-        response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
-        if response['status'] == 'success'
-          # Phase 3: Record API success
-          record_api_success
-
-          option_data = response.dig('data', segment, security_id.to_s)
-          return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
-        else
-          # Phase 3: Record API failure for non-success response
-          record_api_failure
-          @metrics[:recent_api_errors] = (@metrics[:recent_api_errors] || 0) + 1
-        end
-      rescue StandardError => e
-        Rails.logger.error("[RiskManager] get_paper_ltp_for_security failed: #{e.class} - #{e.message}")
-        # Phase 3: Record API failure
-        record_api_failure
-        @metrics[:recent_api_errors] = (@metrics[:recent_api_errors] || 0) + 1
-      end
-
-      nil
-    end
-
-    # REMOVED: batch_update_paper_positions_pnl
-    # PaperPnlRefresher handles paper position PnL updates every 1 second
-    # This eliminates redundancy and reduces unnecessary API calls
-
-    # Recalculate position metrics (PnL, peak) from current LTP
-    # @param position [Positions::ActiveCache::PositionData] Position data
-    # @param tracker [PositionTracker] PositionTracker instance
-    def recalculate_position_metrics(position, tracker)
-      return unless position && tracker
-
-      # Sync from Redis cache first (most up-to-date)
-      # Uses per-cycle cache to avoid redundant fetches
-      sync_position_pnl_from_redis(position, tracker)
-
-      # Ensure LTP is current
-      ensure_position_snapshot(position)
-
-      # Recalculate if needed
-      if position.current_ltp&.positive? && position.entry_price&.positive?
-        position.recalculate_pnl
-        # Update peak if current exceeds it
-        if position.pnl_pct && position.peak_profit_pct && position.pnl_pct > position.peak_profit_pct
-          active_cache = Positions::ActiveCache.instance
-          active_cache.update_position(position.tracker_id, peak_profit_pct: position.pnl_pct)
-        end
-      end
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] recalculate_position_metrics failed for tracker #{tracker&.id}: #{e.class} - #{e.message}")
-    end
-
-    # Get or initialize rule engine
-    # @return [Risk::Rules::RuleEngine, nil] Rule engine instance or nil
-    def rule_engine
-      @rule_engine ||= begin
-        risk_cfg = risk_config
-        Risk::Rules::RuleFactory.create_engine(risk_config: risk_cfg)
-      end
-    end
-
-    # Check if rule engine is available
-    # @return [Boolean] true if rule engine is available, false otherwise
-    def rule_engine_available?
-      !rule_engine.nil?
-    end
-
-    # Enforce profit protection: Exit if HWM >= threshold and drops by specified %
-    # @param position [Positions::ActiveCache::PositionData] Position data
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param exit_engine [Object] Exit engine to use
-    # @param risk [Hash] Risk configuration
-    # @return [Boolean] True if exit was triggered
-    def enforce_profit_protection(position, tracker, exit_engine, risk)
-      protection_cfg = risk[:profit_protection] || {}
-      return false unless protection_cfg[:enabled] == true
-
-      hwm_threshold = protection_cfg[:hwm_threshold_rupees]&.to_f || 1040.0
-      drop_pct = protection_cfg[:drop_pct_from_hwm]&.to_f || 1.0
-
-      hwm = position.high_water_mark || tracker.high_water_mark_pnl&.to_f || 0.0
-      current_pnl = position.pnl || 0.0
-
-      # Only check if HWM has reached the threshold
-      return false if hwm < hwm_threshold
-
-      # Calculate drop from HWM
-      drop_rupees = hwm - current_pnl
-      drop_pct_from_hwm = hwm.positive? ? (drop_rupees / hwm * 100.0) : 0.0
-
-      # Exit if drop exceeds threshold
-      if drop_pct_from_hwm >= drop_pct
-        reason = format(
-          'PROFIT PROTECTION: HWM=₹%.2f, Current=₹%.2f, Drop=%.2f%%',
-          hwm, current_pnl, drop_pct_from_hwm
-        )
-        Rails.logger.warn(
-          "[RiskManager] Profit protection triggered for #{tracker.symbol}: " \
-          "HWM=₹#{hwm.round(2)}, Current=₹#{current_pnl.round(2)}, Drop=#{drop_pct_from_hwm.round(2)}%"
-        )
-        dispatch_exit(exit_engine, tracker, reason)
-        return true
-      end
-
-      false
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] enforce_profit_protection failed: #{e.class} - #{e.message}")
-      false
-    end
-
-    # Enforce profit protection for positions not in ActiveCache (using Redis PnL)
-    # @param tracker [PositionTracker] PositionTracker instance
-    # @param redis_pnl [Hash] Redis PnL data
-    # @param exit_engine [Object] Exit engine to use
-    # @param risk [Hash] Risk configuration
-    # @return [Boolean] True if exit was triggered
-    def enforce_profit_protection_from_redis(tracker, redis_pnl, exit_engine, risk)
-      protection_cfg = risk[:profit_protection] || {}
-      return false unless protection_cfg[:enabled] == true
-
-      hwm_threshold = protection_cfg[:hwm_threshold_rupees]&.to_f || 1040.0
-      drop_pct = protection_cfg[:drop_pct_from_hwm]&.to_f || 1.0
-
-      hwm = (redis_pnl[:hwm] || tracker.high_water_mark_pnl)&.to_f || 0.0
-      current_pnl = redis_pnl[:pnl]&.to_f || 0.0
-
-      # Only check if HWM has reached the threshold
-      return false if hwm < hwm_threshold
-
-      # Calculate drop from HWM
-      drop_rupees = hwm - current_pnl
-      drop_pct_from_hwm = hwm.positive? ? (drop_rupees / hwm * 100.0) : 0.0
-
-      # Exit if drop exceeds threshold
-      if drop_pct_from_hwm >= drop_pct
-        reason = format(
-          'PROFIT PROTECTION: HWM=₹%.2f, Current=₹%.2f, Drop=%.2f%%',
-          hwm, current_pnl, drop_pct_from_hwm
-        )
-        Rails.logger.warn(
-          "[RiskManager] Profit protection triggered for #{tracker.symbol} (from Redis): " \
-          "HWM=₹#{hwm.round(2)}, Current=₹#{current_pnl.round(2)}, Drop=#{drop_pct_from_hwm.round(2)}%"
-        )
-        dispatch_exit(exit_engine, tracker, reason)
-        return true
-      end
-
-      false
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] enforce_profit_protection_from_redis failed: #{e.class} - #{e.message}")
       false
     end
   end

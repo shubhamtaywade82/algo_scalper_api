@@ -52,8 +52,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 14 # 1m ADX threshold (70% of typical ~20)
-      confirmation_min_strength: 11 # 5m ADX threshold (70% of typical ~15.5)
+      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~20)
+      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~15.5)
 
     strategies:
       open_interest:
@@ -95,8 +95,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 10 # 1m ADX threshold (use global default)
-      confirmation_min_strength: 15 # 5m ADX threshold (70% of typical ~44)
+      primary_min_strength: 18 # 1m ADX threshold (use global default)
+      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~44)
 
     strategies:
       open_interest:
@@ -138,8 +138,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 10 # 1m ADX threshold (70% of typical ~25.5)
-      confirmation_min_strength: 10 # 5m ADX threshold (70% of typical ~13.5)
+      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~25.5)
+      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~13.5)
 
     strategies:
       open_interest:
@@ -160,17 +160,187 @@ trade_limits:
   global_max_trades_per_day: 8
 
 # ============================================
+# BROKER FEES
+# ============================================
+# Broker fee configuration (₹20 per order execution, ₹40 per trade)
+broker_fees:
+  enabled: true # Set to false to disable fee calculations
+  fee_per_order: 20 # Fee per order execution (entry or exit)
+  # Total fee per trade = fee_per_order * 2 (entry + exit) = ₹40
+
+# ============================================
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.30 # 30% fixed SL (entry * 0.70)
-  tp_pct: 0.60 # 60% fixed TP (entry * 1.60)
+  sl_pct: 0.03 # -3% STOP LOSS (fallback, dynamic reverse_loss takes precedence)
+  tp_pct: 0.05 # +5% TAKE PROFIT
+  per_trade_risk_pct: 0.15
 
-  # Profit protection: Hard stop if HWM reaches threshold and drops by percentage
-  profit_protection:
-    hwm_threshold_rupees: 1040.0 # Exit if HWM reaches this amount
-    drop_pct_from_hwm: 1.0 # Exit if current PnL drops this % from HWM
-    enabled: true
+  # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
+  # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
+  hard_rupee_sl:
+    enabled: false # Set to true to enable hard ₹ stop loss
+    max_loss_rupees: 1000 # Maximum loss per trade in rupees
+
+  hard_rupee_tp:
+    enabled: false # Set to true to enable hard ₹ take profit
+    target_profit_rupees: 2000 # Target profit per trade in rupees
+
+  # Post-Profit Zone Management (State Machine)
+  # Implements sophisticated profit zone management after ₹2k TP
+  # Core Principle: ₹2k TP is a minimum extraction, not a cap
+  # After ₹2k, trade continues ONLY if underlying trend + option momentum are favorable
+  #
+  # State Machine:
+  # - ENTRY: ₹0 → ₹2,000 (normal trade management, Hard SL: -₹1,000)
+  # - SECURED_PROFIT_ZONE: ₹2,000 → ₹4,000 (capital protection mode, SL moved to green)
+  # - RUNNER_ZONE: ₹4,000+ (trailing stop with exponential drawdown)
+  #
+  # At ₹2k transition:
+  # - SL moves to +₹500 to +₹1,000 (locked profit)
+  # - Disable loose % drawdown logic
+  # - Switch to underlying-aware exit
+  #
+  # Hold criteria after ₹2k (ALL must be TRUE):
+  # Underlying:
+  #   - 1m Supertrend still in direction
+  #   - ADX ≥ 18 and not falling
+  #   - Candle bodies > wicks (no exhaustion)
+  #   - No HTF resistance within 30-40 pts
+  # Option:
+  #   - Premium is NOT stalling
+  #   - LTP continues to make HH (higher highs)
+  #   - Pullbacks < 30-35% of last impulse
+  #   - Bid-ask spread stable
+  #
+  # Exit immediately if ANY criteria fails
+  post_profit_zone:
+    enabled: true # Set to true to enable post-profit zone management
+    secured_profit_threshold_rupees: 2000 # Transition to secured profit zone at ₹2k
+    runner_zone_threshold_rupees: 4000 # Transition to runner zone at ₹4k
+    secured_sl_rupees: 800 # Move SL to +₹800 when entering secured profit zone (green SL)
+    underlying_adx_min: 18.0 # Minimum ADX for underlying trend to be considered favorable
+    option_pullback_max_pct: 35.0 # Maximum pullback % from peak before considering momentum stalled
+    underlying_atr_collapse_threshold: 0.65 # ATR ratio threshold for collapse detection
+    runner_zone_momentum_check: false # Enable additional momentum checks in runner zone (optional)
+
+  # Time-Regime Based Rules (Session-Aware Greeks)
+  # Implements time-conditioned rule system that respects Greek dominance across market sessions
+  # Core Principle: Options buying is NOT symmetric across the day - same signal behaves differently
+  # by time due to changing Greek dominance (Delta/Gamma in open, Theta in mid-day, IV crush in close)
+  #
+  # IMPORTANT: All times are in IST (Indian Standard Time, UTC+5:30)
+  # Rails timezone is configured as "Asia/Kolkata" in config/application.rb
+  #
+  # Market Session Segmentation (Indian Indices - IST):
+  # S1: OPEN EXPANSION     → 09:15 – 09:45 IST (Delta + Gamma dominant - fast moves, fake breakouts)
+  # S2: TREND CONTINUATION → 09:45 – 11:30 IST (Best zone - Delta stable, Theta low, IV steady)
+  # S3: CHOP / DECAY       → 11:30 – 13:45 IST (Theta dominant - danger zone, mostly no trade)
+  # S4: CLOSE / GAMMA      → 13:45 – 15:15 IST (Theta + IV crush - tight rules, no runners)
+  #
+  # Each regime gets different SL/TP/trailing rules based on Greek behavior
+  time_regimes:
+    enabled: true # Set to true to enable time-regime based rules
+
+    # S1: OPEN EXPANSION (09:15 – 09:45)
+    # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
+    # Premium moves FAST, small index move → big option move, fake breakouts common
+    open_expansion:
+      start: "09:15"
+      end: "09:45"
+      sl_multiplier: 1.3 # WIDE SL (SENSEX: ₹15-20, NIFTY: ₹8-12)
+      tp_multiplier: 1.0 # Fast TP (₹2k often hits in 1-3 candles)
+      allow_trailing: false # No micro trailing (gets wicked out)
+      allow_runners: false # No runners (enter fast, exit fast, no greed)
+      allow_entries: true
+      min_adx: 20.0 # Strict entry (ADX ≥ 20, ATM only, first breakout/pullback only)
+      max_tp_rupees: 2000 # Hard ₹2k TP, no more
+
+    # S2: TREND CONTINUATION (09:45 – 11:30) ✅ BEST ZONE
+    # Delta stable, Gamma moderate, Theta low, IV steady
+    # This is THE MONEY ZONE - extract base profit, then let winners breathe
+    trend_continuation:
+      start: "09:45"
+      end: "11:30"
+      sl_multiplier: 1.0 # Moderate SL (SENSEX: ₹10-15, NIFTY: ₹6-10)
+      tp_multiplier: 1.0 # First extraction: ₹2k, then runner allowed
+      allow_trailing: true # Enable post-TP logic, move SL to green after ₹2k
+      allow_runners: true # Allow runner with trend intact (exponential drawdown logic fits here)
+      allow_entries: true
+      min_adx: 15.0 # Trend continuation only, pullbacks preferred, 1m + 5m alignment
+      max_tp_rupees: null # No limit (runners allowed)
+
+    # S3: CHOP / THETA ZONE (11:30 – 13:45) ❌ DANGER
+    # Delta weak, Gamma flat, Theta dominant, IV bleeds
+    # This is where most retail losses happen - survive, don't trade
+    chop_decay:
+      start: "11:30"
+      end: "13:45"
+      sl_multiplier: 0.8 # TIGHT SL
+      tp_multiplier: 0.8 # SMALL TP
+      allow_trailing: false # Disable trailing
+      allow_runners: false # No runners allowed
+      allow_entries: false # Disable normal entries (allow ONLY if ADX ≥ 22, expansion present, Sensex > 60 pts)
+      min_adx: 22.0 # Very strict if entries allowed
+      max_tp_rupees: 1500 # Small TP, no runners
+
+    # S4: CLOSE / GAMMA ZONE (13:45 – 15:15)
+    # Theta accelerates, Gamma spikes near ATM, IV crush common, reversals violent
+    # Take what market gives, don't argue - scalp only, no greed
+    close_gamma:
+      start: "13:45"
+      end: "15:15"
+      sl_multiplier: 0.7 # TIGHT SL (SENSEX: ₹8-10, NIFTY: ₹5-7)
+      tp_multiplier: 0.75 # FIXED TP (₹1.5k-₹2k)
+      allow_trailing: false # No runners after 14:45
+      allow_runners: false # Book profits aggressively
+      allow_entries: true # ONLY continuation moves, no fresh breakouts after 14:45, ATM only
+      min_adx: 18.0
+      max_tp_rupees: 2000 # Fixed ₹1.5k-₹2k
+
+  # Global Time-Based Overrides (CRITICAL - override everything)
+  # All times are in IST (Indian Standard Time, UTC+5:30)
+  time_overrides:
+    # Override 1: No new trades after 14:50 IST (unless exceptional conditions)
+    no_new_trades_after: "14:50" # No new trades after this time IST (unless ADX ≥ 25, massive expansion)
+
+    # Override 2: IV collapse detection
+    iv_collapse:
+      enabled: false # Set to true when IV data is available
+      collapse_threshold: 0.15 # Exit if IV drops >15% suddenly (time irrelevant)
+
+    # Override 3: Price stall detection (especially after ₹2k profit)
+    stall_detection:
+      enabled: true # Exit if price stalls for N candles (no new HH/LL)
+      stall_candles: 3 # Number of candles with no progress before exit
+      min_profit_rupees: 2000 # Only check stall if profit >= this amount
+
+# ============================================
+# POSITION SIZING (RUPEES-BASED)
+# ============================================
+# Rupee-based position sizing: derive quantity from fixed ₹ risk
+# Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
+# This ensures position size is calculated to match exact ₹ risk, not percentages
+position_sizing:
+  enabled: false # Set to true to enable rupee-based position sizing
+  mode: rupee_based # Options: 'rupee_based' or 'percentage_based' (legacy)
+
+  # Rupee-based sizing parameters (used when enabled: true)
+  risk_rupees: 1000 # Fixed risk per trade in rupees
+  target_rupees: 2000 # Target profit per trade in rupees (for R:R calculation)
+  stop_distance_rupees: 8 # Stop distance in rupees (typical: NIFTY ₹6-10, SENSEX ₹12-20)
+
+  # Index-specific stop distances (override global if specified)
+  index_stop_distances:
+    NIFTY: 8 # Typical stop distance for NIFTY options
+    BANKNIFTY: 12 # Typical stop distance for BANKNIFTY options
+    SENSEX: 15 # Typical stop distance for SENSEX options
+
+  # Bidirectional trailing stops (enhanced with adaptive drawdown schedule)
+  trail_step_pct: 0.03 # 3% trailing step (for breakeven calculation)
+  breakeven_after_gain: 0.05 # Lock breakeven at +5% profit
+  exit_drop_pct: 0.03 # Fixed trailing threshold (fallback, adaptive schedule takes precedence)
+  min_profit_rupees: 0 # allow immediate TP exits
 
   # Trailing stop mode: 'tiered' (fixed tiers) or 'direct' (follows price directly)
   trailing_mode: direct # Options: 'tiered' or 'direct'
@@ -183,6 +353,45 @@ risk:
     distance_pct: 5.0 # Distance below current price (e.g., 5% = SL at 95% of current price)
     activation_profit_pct: 0.0 # Minimum profit % before activating (0 = immediate activation)
     min_sl_offset_pct: -30.0 # Minimum SL offset from entry (prevents SL from going below initial SL)
+
+  # Profit protection: Hard stop if HWM reaches threshold and drops by percentage
+  profit_protection:
+    hwm_threshold_rupees: 1040.0 # Exit if HWM reaches this amount
+    drop_pct_from_hwm: 1.0 # Exit if current PnL drops this % from HWM
+    enabled: true
+
+  # Upward exponential drawdown (activated when pnl >= activation_profit_pct)
+  drawdown:
+    activation_profit_pct: 3.0
+    profit_min: 3.0
+    profit_max: 30.0
+    dd_start_pct: 15.0 # start allowed DD at this % when profit == profit_min
+    dd_end_pct: 1.0 # floor allowed DD at this % when profit >= profit_max
+    exponential_k: 3.0 # curve steepness
+    index_floors:
+      NIFTY: 1.0
+      BANKNIFTY: 1.2
+      SENSEX: 1.5
+
+  # Reverse (below entry) dynamic loss tightening
+  reverse_loss:
+    enabled: true
+    max_loss_pct: 20.0 # starting allowed loss when position just turned red
+    min_loss_pct: 5.0 # tightest allowed loss when pnl hits -30%
+    loss_span_pct: 30.0 # map -0..-loss_span_pct to max_loss_pct..min_loss_pct
+    time_tighten_per_min: 2.0 # % tightening per minute spent below entry
+    atr_penalty_thresholds:
+      - { threshold: 0.75, penalty_pct: 3.0 }
+      - { threshold: 0.60, penalty_pct: 5.0 }
+
+  # Early Trend Failure Exit (ETF)
+  etf:
+    enabled: true
+    activation_profit_pct: 7.0 # ETF checks apply until trailing activates
+    trend_score_drop_pct: 30.0 # drop from peak trend score to trigger ETF
+    adx_collapse_threshold: 10 # ADX under this triggers ETF
+    atr_ratio_threshold: 0.55 # collapse detection
+    confirmation_ticks: 2 # consecutive tick confirmations
 
   # Micro-Trailing model (tiered) - 3% INTERVALS with CONSERVATIVE SL offsets
   # More granular tiers with tighter protection to minimize losses
@@ -269,12 +478,64 @@ risk:
       SENSEX: 0.01 # 1% max loss for SENSEX
     global_limit_pct: 0.04
 
+  # Daily profit target: Stop trading when daily profit reaches this amount
+  max_daily_profit: 20000 # ₹20,000 daily profit target (trading stops when reached)
+  # Alternative config key: daily_profit_target (also supported)
+
+  # Edge Failure Detector (Quality/Regime Detector - NOT a loss cap)
+  # Detects when trading edge has degraded and pauses entries to prevent death by a thousand cuts
+  # This preserves profit-hunting mode while preventing edge decay days
+  #
+  # Philosophy:
+  # - Unlimited trades and losses allowed UNTIL ₹20k profit
+  # - BUT edge degradation must be detected and paused
+  # - Prevents chop/theta bleed days from causing infinite drawdown
+  #
+  # Detection Methods:
+  # 1. Rolling PnL Window: Last N trades net PnL <= threshold → pause entries
+  # 2. Consecutive SLs: N consecutive stop losses → pause entries
+  # 3. Session-based: Disable entries in S3 (chop/decay) after consecutive SLs
+  edge_failure_detector:
+    enabled: true # Set to true to enable edge failure detection
+
+    # Rolling PnL Window Breaker
+    # Tracks last N trades and pauses if net PnL falls below threshold
+    # This detects chop days and signal degradation without relying on daily loss caps
+    rolling_window_size: 5 # Number of recent trades to evaluate
+    rolling_window_threshold_rupees: -3000 # Pause if last N trades net PnL <= -₹3k
+    pause_duration_minutes: 60 # Pause entries for N minutes when threshold breached
+
+    # Consecutive SL Breaker
+    # Pauses entries after N consecutive stop losses
+    # Detects when market regime is unfavorable (chop, fake breakouts)
+    max_consecutive_sls: 2 # Pause after N consecutive SLs
+    consecutive_sl_pause_minutes: 60 # Pause entries for N minutes after consecutive SLs
+
+    # Session-Based Pause (especially S3 - chop/decay zone)
+    # In dangerous sessions, disable entries after consecutive SLs
+    session_based_pause: true # Enable session-aware pause logic
+    s3_max_consecutive_sls: 2 # In S3 (11:30-13:45), pause after N consecutive SLs
+    s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
+
 # ============================================
 # SIGNAL SETTINGS
 # ============================================
 signals:
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
+
+  # Expiry date filtering: Skip indices with expiry > max_expiry_days
+  # This prevents trading in indices where expiry is too far away (e.g., monthly BANKNIFTY when > 7 days)
+  max_expiry_days: 7 # Maximum days to expiry (indices with expiry > this will be skipped)
+
+  # Index Technical Analysis (TA) Configuration
+  # Multi-timeframe technical analysis before signal generation
+  # Uses DhanHQ TA modules if available, falls back to existing indicator infrastructure
+  enable_index_ta: false # Enable index TA step (default: true)
+  ta_timeframes: [5, 15, 60] # Timeframes in minutes for TA analysis (default: [5, 15, 60])
+  ta_days_back: 30 # Days of historical data to fetch (default: 30)
+  ta_min_confidence: 0.6 # Minimum confidence (0.0-1.0) required to proceed (default: 0.6)
+  # If TA signal is neutral or confidence < ta_min_confidence, signal generation is skipped
 
   # NoTradeEngine Configuration
   # Set to false to disable both Phase 1 (pre-check) and Phase 2 (detailed validation)
@@ -285,8 +546,8 @@ signals:
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
-  enable_adx_filter: false # Enable ADX strength filter (default: false)
-  enable_confirmation_timeframe: true # Enable 5m HTF confirmation (default: false)
+  enable_adx_filter: true # Enable ADX strength filter (default: false)
+  enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
 
   # Optimized Parameters Configuration
   # Set to false to disable loading optimized indicator parameters from BestIndicatorParam
@@ -325,7 +586,7 @@ signals:
       enabled: true
       config:
         period: 14
-        min_strength: 10
+        min_strength: 15
         trading_hours_filter: true
 
     # Example: Add RSI indicator (disabled by default)
@@ -368,8 +629,8 @@ signals:
 
   adx:
     # Global ADX thresholds (used as fallback if per-index thresholds not specified)
-    min_strength: 10 # ADX threshold for 1m timeframe (when enabled)
-    confirmation_min_strength: 15 # ADX threshold for 5m confirmation (when enabled)
+    min_strength: 18 # ADX threshold for 1m timeframe (when enabled)
+    confirmation_min_strength: 18 # ADX threshold for 5m confirmation (when enabled)
     # Note: Per-index thresholds in indices[].adx_thresholds override these values
 
 # ============================================
@@ -425,3 +686,42 @@ telegram:
   notify_pnl_milestones: true # Send notifications for PnL milestones (10%, 20%, etc.)
   pnl_milestones: [10, 20, 30, 50, 100] # PnL percentage milestones to notify
   notify_risk_alerts: true # Send risk alert notifications
+  include_stats_on_exit: true # Include trading stats summary in exit notifications
+  notify_stats_at_market_close: true # Send daily trading stats at end of market session (3:30 PM IST)
+
+# AI Integration Configuration
+ai:
+  enabled: true # Set to true to enable AI integration
+  # Timeout settings (in seconds):
+  # - OLLAMA_HOST_URL: Remote Ollama server URL (e.g., http://192.168.0.200:11434)
+  #   Alternative to OLLAMA_BASE_URL (both are supported)
+  # - OLLAMA_BASE_URL: Remote Ollama server URL (legacy, use OLLAMA_HOST_URL if possible)
+  # - OLLAMA_TIMEOUT: Request timeout for non-streaming requests (default: 20 seconds)
+  # - OLLAMA_STREAM_TIMEOUT: Timeout for streaming requests (default: 120 seconds / 2 minutes)
+  #   Increase this if models are slow or responses are long (e.g., 300 for very slow models)
+  # - OLLAMA_OPEN_TIMEOUT: Connection timeout for Ollama (default: 5 seconds)
+  # - OLLAMA_REQUEST_DELAY_MS: Delay between requests in milliseconds (default: 500ms)
+  #   Useful for long streaming responses. Set higher if you experience timeouts.
+  # Provider selection:
+  # - Development/Test: Uses 'ruby-openai' gem (alexrudall/ruby-openai)
+  # - Production: Uses 'openai' gem (official openai-ruby)
+  # - Ollama: Automatically selected if OLLAMA_BASE_URL is set
+  # - Override: Set OPENAI_PROVIDER env var to 'ruby_openai', 'openai_ruby', or 'ollama'
+  #
+  # OpenAI API Key: Set OPENAI_API_KEY or OPENAI_ACCESS_TOKEN environment variable
+  # Ollama Configuration:
+  #   - OLLAMA_BASE_URL: Base URL of Ollama server (e.g., http://192.168.1.11:11434)
+  #   - OLLAMA_API_KEY: Optional API key (default: 'ollama')
+  #   - OLLAMA_MODEL: Optional - explicitly set model (e.g., 'phi3:mini', 'llama3')
+  #     If not set, system automatically fetches available models and selects the best one
+  #
+  # Technical Analysis Agent Configuration:
+  #   - AI_AGENT_MAX_ITERATIONS: Maximum iterations before safety limit (default: 15, range: 3-100)
+  #     Controls how many iterations the agent can perform before stopping
+  #     Example: export AI_AGENT_MAX_ITERATIONS=20
+  #   - AI_AGENT_MAX_CONSECUTIVE_TOOLS: Maximum consecutive tool calls before forcing analysis (default: 8, range: 3-15)
+  #     Prevents the agent from getting stuck in tool-calling loops
+  #     Example: export AI_AGENT_MAX_CONSECUTIVE_TOOLS=5
+  #   - AI_AGENT_STREAM_TIMEOUT: Timeout for streaming responses per iteration (default: 60 seconds)
+  #     If AI doesn't respond within this time, iteration is aborted and retried
+  #     Example: export AI_AGENT_STREAM_TIMEOUT=30

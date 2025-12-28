@@ -61,11 +61,10 @@ class Instrument < ApplicationRecord
   include InstrumentHelpers
 
   has_many :derivatives, dependent: :destroy
-  has_many :position_trackers, as: :watchable, dependent: :destroy
+  has_many :position_trackers, dependent: :restrict_with_error
   accepts_nested_attributes_for :derivatives, allow_destroy: true
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
   has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: 'WatchlistItem'
-  has_many :position_trackers, dependent: :restrict_with_error
 
   scope :enabled, -> { where(enabled: true) }
 
@@ -237,7 +236,7 @@ class Instrument < ApplicationRecord
 
     { last_price: data['last_price'], oc: filtered_data }
   rescue StandardError => e
-    error_info = Concerns::DhanhqErrorHandler.handle_dhanhq_error(
+    error_info = DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "fetch_option_chain(Instrument #{security_id}, expiry: #{expiry})"
     )

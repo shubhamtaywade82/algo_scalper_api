@@ -38,7 +38,8 @@ class PositionTracker < ApplicationRecord
   include PositionTrackerFactory
 
   # Attribute accessors
-  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction
+  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
+                 :exit_path, :exit_reason
 
   # Enums
   enum :status, {
@@ -82,8 +83,18 @@ class PositionTracker < ApplicationRecord
       where(segment: seg, security_id: sid, status: :exited).order(id: :desc).first
     end
 
-    def paper_trading_stats_with_pct
-      exited = exited_paper
+    def paper_trading_stats_with_pct(date: nil)
+      # Filter by date if provided, otherwise use all exited positions
+      if date
+        date_start = date.beginning_of_day
+        date_end = date.end_of_day
+        exited = exited_paper.where(exited_at: date_start..date_end)
+      else
+        # Default: only today's exited positions
+        today_start = Time.zone.today.beginning_of_day
+        today_end = Time.zone.today.end_of_day
+        exited = exited_paper.where(exited_at: today_start..today_end)
+      end
       active = paper.active
 
       active_count = active.count
@@ -100,16 +111,18 @@ class PositionTracker < ApplicationRecord
       total_pnl_pct = initial_capital.positive? ? (total_pnl_rupees / initial_capital * 100.0) : 0.0
 
       # Calculate average per-trade percentages (for reference)
+      # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
       avg_realized_pnl_pct = if exited.any?
                                (exited.map do |t|
-                                 t.last_pnl_pct.to_f
+                                 (t.last_pnl_pct.to_f || 0.0) * 100.0
                                end.compact.sum / exited.count.to_f).round(2)
                              else
                                0.0
                              end
+      # current_pnl_pct returns decimal from Redis, convert to percentage for display
       avg_unrealized_pnl_pct = if active.any?
                                  (active.map do |t|
-                                   (t.current_pnl_pct || 0).to_f
+                                   (t.current_pnl_pct || 0).to_f * 100.0
                                  end.compact.sum / active.count.to_f).round(2)
                                else
                                  0.0
@@ -124,7 +137,7 @@ class PositionTracker < ApplicationRecord
         realized_pnl_pct: realized_pnl_pct.round(2),
         unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
         unrealized_pnl_pct: unrealized_pnl_pct.round(2),
-        win_rate: paper_win_rate,
+        win_rate: paper_win_rate(date: date),
         avg_realized_pnl_pct: avg_realized_pnl_pct,
         avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
@@ -140,8 +153,9 @@ class PositionTracker < ApplicationRecord
         side = t.side
         qty = t.quantity.to_i
         pnl_abs = t.last_pnl_rupees.to_f
+        # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
         pnl_pct = if t.last_pnl_pct.present?
-                    t.last_pnl_pct.to_f
+                    t.last_pnl_pct.to_f * 100.0
                   elsif entry_price.positive? && current_price.positive?
                     if side == 'BUY'
                       ((current_price - entry_price) / entry_price * 100.0)
@@ -186,8 +200,18 @@ class PositionTracker < ApplicationRecord
       paper.active.count
     end
 
-    def paper_win_rate
-      exited = exited_paper
+    def paper_win_rate(date: nil)
+      # Filter by date if provided, otherwise use today's exited positions
+      if date
+        date_start = date.beginning_of_day
+        date_end = date.end_of_day
+        exited = exited_paper.where(exited_at: date_start..date_end)
+      else
+        # Default: only today's exited positions
+        today_start = Time.zone.today.beginning_of_day
+        today_end = Time.zone.today.end_of_day
+        exited = exited_paper.where(exited_at: today_start..today_end)
+      end
       return 0.0 if exited.empty?
 
       winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
@@ -307,6 +331,10 @@ class PositionTracker < ApplicationRecord
     metadata = prepare_exit_metadata(exit_reason)
 
     update_exit_attributes(exit_price, exited_at, metadata)
+
+    # Record profit/loss in daily limits (after PnL is persisted)
+    record_daily_pnl
+
     cleanup_exit_caches
     unsubscribe
     register_cooldown!
@@ -659,5 +687,25 @@ class PositionTracker < ApplicationRecord
       "is not tradable. Segment '#{segment}' is an index segment and cannot be traded. " \
       "Valid tradable segments: #{Orders::Placer::VALID_TRADABLE_SEGMENTS.join(', ')}"
     )
+  end
+
+  # Record profit/loss in daily limits when position exits
+  def record_daily_pnl
+    return unless exited? && last_pnl_rupees.present?
+
+    index_key = meta&.dig('index_key') || instrument&.symbol_name || 'UNKNOWN'
+    pnl_amount = last_pnl_rupees.to_f
+
+    daily_limits = Live::DailyLimits.new
+
+    if pnl_amount.positive?
+      # Record profit
+      daily_limits.record_profit(index_key: index_key, amount: pnl_amount)
+    elsif pnl_amount.negative?
+      # Record loss (amount should be positive)
+      daily_limits.record_loss(index_key: index_key, amount: pnl_amount.abs)
+    end
+  rescue StandardError => e
+    Rails.logger.error("[PositionTracker] record_daily_pnl failed for #{order_no}: #{e.class} - #{e.message}")
   end
 end

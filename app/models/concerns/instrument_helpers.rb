@@ -264,7 +264,7 @@ module InstrumentHelpers
     error_msg = e.message.to_s
     is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit')
     unless is_rate_limit
-      error_info = Concerns::DhanhqErrorHandler.handle_dhanhq_error(
+      error_info = DhanhqErrorHandler.handle_dhanhq_error(
         e,
         context: "fetch_ltp_from_api(#{self.class.name} #{security_id})"
       )
@@ -289,7 +289,7 @@ module InstrumentHelpers
     response = DhanHQ::Models::MarketFeed.ohlc(exch_segment_enum)
     response['status'] == 'success' ? response.dig('data', exchange_segment, security_id.to_s) : nil
   rescue StandardError => e
-    error_info = Concerns::DhanhqErrorHandler.handle_dhanhq_error(
+    error_info = DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "ohlc(#{self.class.name} #{security_id})"
     )
@@ -313,12 +313,22 @@ module InstrumentHelpers
   end
 
   def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2)
-    to_date ||= if defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+    to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
+                  Market::Calendar.today_or_last_trading_day.to_s
+                elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
                   MarketCalendar.today_or_last_trading_day.to_s
                 else
                   (Time.zone.today - 1).to_s
                 end
-    from_date ||= (Date.parse(to_date) - days).to_s
+
+    # Use trading days, not calendar days, to avoid weekends/holidays
+    from_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
+                    Market::Calendar.trading_days_ago(days).to_s
+                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
+                    MarketCalendar.trading_days_ago(days).to_s
+                  else
+                    (Date.parse(to_date) - days).to_s # Fallback to calendar days
+                  end
 
     instrument_code = resolve_instrument_code
     DhanHQ::Models::HistoricalData.intraday(
@@ -331,7 +341,7 @@ module InstrumentHelpers
       to_date: to_date || (Time.zone.today - 1).to_s
     )
   rescue StandardError => e
-    error_info = Concerns::DhanhqErrorHandler.handle_dhanhq_error(
+    error_info = DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "intraday_ohlc(#{self.class.name} #{security_id})"
     )

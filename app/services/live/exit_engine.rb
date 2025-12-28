@@ -13,6 +13,7 @@ module Live
     def start
       @lock.synchronize do
         return if @running
+
         @running = true
         # No background thread needed - execute_exit is called directly by RiskManagerService
       end
@@ -66,6 +67,38 @@ module Live
               exit_price: exit_price,
               exit_reason: reason
             )
+
+            # Reload tracker to get final PnL values after mark_exited!
+            tracker.reload
+
+            # Update exit reason with final PnL percentage for consistency
+            # Calculate PnL percentage from final PnL value (includes broker fees)
+            # This matches what Telegram notifier will display
+            final_pnl = tracker.last_pnl_rupees
+            entry_price = tracker.entry_price
+            quantity = tracker.quantity
+
+            if final_pnl.present? && entry_price.present? && quantity.present? &&
+               entry_price.to_f.positive? && quantity.to_i.positive? && reason.present? && reason.include?('%')
+              # Calculate PnL percentage (includes fees) - matches Telegram display
+              pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
+              # Extract the base reason (e.g., "SL HIT" or "TP HIT") - everything before the percentage
+              base_reason = reason.split(/\s+-?\d+\.?\d*%/).first&.strip || reason.split('%').first&.strip || reason
+              updated_reason = "#{base_reason} #{pnl_pct_display}%"
+
+              # Always update to ensure consistency (even if values are close)
+              if reason != updated_reason
+                Rails.logger.info("[ExitEngine] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
+                # exit_reason is a store_accessor on meta, so update via meta hash
+                meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+                meta['exit_reason'] = updated_reason
+                tracker.update_column(:meta, meta)
+                reason = updated_reason
+              end
+            else
+              Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
+            end
+
             Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
 
             # Send Telegram notification

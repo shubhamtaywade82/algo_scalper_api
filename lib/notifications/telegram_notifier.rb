@@ -15,9 +15,7 @@ module Notifications
       @pnl_notification_interval = 300 # 5 minutes between PnL updates per position
     end
 
-    def enabled?
-      ::TelegramNotifier.enabled?
-    end
+    delegate :enabled?, to: :'::TelegramNotifier'
 
     # Send entry notification
     # @param tracker [PositionTracker] Position tracker
@@ -56,9 +54,7 @@ module Notifications
       # Throttle PnL updates per position
       unless force
         last_notification = @last_pnl_notification[tracker.id]
-        if last_notification && (Time.current - last_notification) < @pnl_notification_interval
-          return
-        end
+        return if last_notification && (Time.current - last_notification) < @pnl_notification_interval
       end
 
       message = format_pnl_message(tracker, pnl, pnl_pct)
@@ -116,6 +112,20 @@ module Notifications
       Rails.logger.error("[TelegramNotifier] Failed to send test message: #{e.class} - #{e.message}")
     end
 
+    # Send trading statistics notification (daily stats only)
+    # @param stats [Hash, nil] Trading stats hash (from PositionTracker.paper_trading_stats_with_pct)
+    #                         If nil, will fetch today's stats
+    def notify_trading_stats(stats: nil)
+      return unless enabled?
+
+      # Default to today's stats only
+      stats ||= PositionTracker.paper_trading_stats_with_pct(date: Time.zone.today)
+      message = format_trading_stats(stats)
+      send_message(message)
+    rescue StandardError => e
+      Rails.logger.error("[TelegramNotifier] Failed to send trading stats: #{e.class} - #{e.message}")
+    end
+
     private
 
     def send_message(text)
@@ -144,9 +154,7 @@ module Notifications
       message += "📦 <b>Quantity:</b> #{quantity}\n"
       message += "🎯 <b>Direction:</b> #{direction_text}\n"
 
-      if risk_pct
-        message += "⚖️ <b>Risk:</b> #{(risk_pct * 100).round(2)}%\n"
-      end
+      message += "⚖️ <b>Risk:</b> #{(risk_pct * 100).round(2)}%\n" if risk_pct
 
       if sl_price && tp_price
         message += "🛑 <b>SL:</b> ₹#{sl_price.round(2)}\n"
@@ -165,7 +173,22 @@ module Notifications
       exit_price_value = exit_price&.to_f || tracker.exit_price&.to_f || 0.0
       quantity = tracker.quantity || 0
       pnl_value = pnl&.to_f || tracker.last_pnl_rupees&.to_f || 0.0
-      pnl_pct = tracker.last_pnl_pct&.to_f || 0.0
+
+      # Calculate PnL percentage from PnL value (includes broker fees) for consistency with exit reason
+      # Exit reason shows PnL percentage (after fees), not price change percentage
+      # Formula: PnL percentage = (PnL / (entry_price * quantity)) * 100
+      pnl_pct = if pnl_value.present? && entry_price.positive? && quantity.positive?
+                  # Calculate PnL percentage (includes fees) - matches exit reason format
+                  (pnl_value / (entry_price * quantity)) * 100.0
+                elsif tracker.last_pnl_pct.present?
+                  # Fallback: use price change percentage from DB (convert decimal to percentage)
+                  (tracker.last_pnl_pct.to_f * 100.0)
+                elsif entry_price.positive? && exit_price_value.positive?
+                  # Last fallback: calculate price change percentage
+                  ((exit_price_value - entry_price) / entry_price) * 100.0
+                else
+                  0.0
+                end
 
       # Determine emoji based on PnL
       emoji = if pnl_value.positive?
@@ -183,16 +206,24 @@ module Notifications
       message += "📦 <b>Quantity:</b> #{quantity}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
 
-      if pnl_pct != 0.0
+      if pnl_pct == 0.0
+        message += "\n"
+      else
         pnl_pct_emoji = pnl_pct.positive? ? '📈' : '📉'
         message += " (#{pnl_pct_emoji} #{pnl_pct.round(2)}%)\n"
-      else
-        message += "\n"
       end
 
       message += "📝 <b>Reason:</b> #{exit_reason}\n"
       message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
+
+      # Append trading stats if enabled in config (daily stats only)
+      config = AlgoConfig.fetch[:telegram] || {}
+      if config[:include_stats_on_exit] == true
+        message += "\n\n"
+        # Get today's stats only
+        message += format_trading_stats(PositionTracker.paper_trading_stats_with_pct(date: Time.zone.today))
+      end
 
       message
     end
@@ -205,7 +236,11 @@ module Notifications
       pnl_value = pnl.to_f
       pnl_pct_value = pnl_pct&.to_f || 0.0
 
-      emoji = pnl_value.positive? ? '📈' : pnl_value.negative? ? '📉' : '➡️'
+      emoji = if pnl_value.positive?
+                '📈'
+              else
+                pnl_value.negative? ? '📉' : '➡️'
+              end
 
       message = "#{emoji} <b>PnL Update</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
@@ -213,11 +248,11 @@ module Notifications
       message += "💵 <b>Current:</b> ₹#{current_price.round(2)}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
 
-      if pnl_pct_value != 0.0
-        message += " (#{pnl_pct_value.positive? ? '+' : ''}#{pnl_pct_value.round(2)}%)\n"
-      else
-        message += "\n"
-      end
+      message += if pnl_pct_value == 0.0
+                   "\n"
+                 else
+                   " (#{'+' if pnl_pct_value.positive?}#{pnl_pct_value.round(2)}%)\n"
+                 end
 
       message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
@@ -235,7 +270,7 @@ module Notifications
       message = "#{emoji} <b>Milestone Reached</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
       message += "🏆 <b>Milestone:</b> #{milestone}\n"
-      message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)} (#{pnl_pct_value.positive? ? '+' : ''}#{pnl_pct_value.round(2)}%)\n"
+      message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)} (#{'+' if pnl_pct_value.positive?}#{pnl_pct_value.round(2)}%)\n"
       message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
 
@@ -253,6 +288,31 @@ module Notifications
               end
 
       "#{emoji} <b>Risk Alert</b>\n\n#{message}\n\n⏰ #{Time.current.strftime('%H:%M:%S')}"
+    end
+
+    def format_trading_stats(stats)
+      total_pnl_emoji = stats[:total_pnl_rupees] >= 0 ? '📈' : '📉'
+      realized_pnl_emoji = stats[:realized_pnl_rupees] >= 0 ? '✅' : '❌'
+
+      message = "📊 <b>Daily Trading Statistics</b>\n"
+      message += "📅 <b>Date:</b> #{Time.zone.today.strftime('%Y-%m-%d')}\n\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      message += "<b>📈 Total PnL:</b> ₹#{stats[:total_pnl_rupees].round(2)} (#{stats[:total_pnl_pct].round(2)}%)\n"
+      message += "<b>#{realized_pnl_emoji} Realized PnL:</b> ₹#{stats[:realized_pnl_rupees].round(2)} (#{stats[:realized_pnl_pct].round(2)}%)\n"
+      message += "<b>⏳ Unrealized PnL:</b> ₹#{stats[:unrealized_pnl_rupees].round(2)} (#{stats[:unrealized_pnl_pct].round(2)}%)\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      message += "<b>📊 Total Trades:</b> #{stats[:total_trades]}\n"
+      message += "<b>🟢 Winners:</b> #{stats[:winners]}\n"
+      message += "<b>🔴 Losers:</b> #{stats[:losers]}\n"
+      message += "<b>📈 Win Rate:</b> #{stats[:win_rate].round(2)}%\n"
+      message += "<b>🔄 Active Positions:</b> #{stats[:active_positions]}\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      message += "<b>📊 Avg Realized PnL %:</b> #{stats[:avg_realized_pnl_pct].round(2)}%\n"
+      message += "<b>📊 Avg Unrealized PnL %:</b> #{stats[:avg_unrealized_pnl_pct].round(2)}%\n"
+      message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      message += "⏰ <b>Updated:</b> #{Time.current.strftime('%Y-%m-%d %H:%M:%S')}"
+
+      message
     end
   end
 end
