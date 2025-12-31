@@ -31,6 +31,17 @@ module Smc
 
         @price < eq
       end
+
+      def to_h
+        {
+          high: @high,
+          low: @low,
+          equilibrium: equilibrium,
+          price: @price,
+          premium: premium?,
+          discount: discount?
+        }
+      end
     end
   end
 end

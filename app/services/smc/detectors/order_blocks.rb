@@ -27,7 +27,29 @@ module Smc
         candle
       end
 
+      def to_h
+        {
+          bullish: candle_to_h(bullish),
+          bearish: candle_to_h(bearish)
+        }
+      end
+
       private
+
+      def candle_to_h(candle)
+        return nil unless candle
+
+        timestamp_value = candle.timestamp
+        timestamp_value = timestamp_value.iso8601 if timestamp_value.respond_to?(:iso8601)
+
+        {
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          timestamp: timestamp_value
+        }
+      end
 
       def candles
         @series&.candles || []

@@ -3,15 +3,100 @@
 require 'rails_helper'
 
 RSpec.describe Smc::Detectors::Liquidity do
-  it 'wraps buy-side and sell-side liquidity grabs' do
-    series = instance_double('CandleSeries')
-    allow(series).to receive(:liquidity_grab_up?).and_return(true)
-    allow(series).to receive(:liquidity_grab_down?).and_return(false)
+  describe '#buy_side_taken?' do
+    it 'returns true when liquidity grab up is detected' do
+      series = instance_double('CandleSeries')
+      allow(series).to receive(:liquidity_grab_up?).and_return(true)
+      allow(series).to receive(:liquidity_grab_down?).and_return(false)
 
-    detector = described_class.new(series)
-    expect(detector.buy_side_taken?).to be(true)
-    expect(detector.sell_side_taken?).to be(false)
-    expect(detector.sweep_direction).to eq(:buy_side)
+      detector = described_class.new(series)
+      expect(detector.buy_side_taken?).to be(true)
+    end
+
+    it 'returns false when no liquidity grab up' do
+      series = instance_double('CandleSeries')
+      allow(series).to receive(:liquidity_grab_up?).and_return(false)
+      allow(series).to receive(:liquidity_grab_down?).and_return(false)
+
+      detector = described_class.new(series)
+      expect(detector.buy_side_taken?).to be(false)
+    end
+
+    it 'handles nil series gracefully' do
+      detector = described_class.new(nil)
+      expect(detector.buy_side_taken?).to be(false)
+    end
+  end
+
+  describe '#sell_side_taken?' do
+    it 'returns true when liquidity grab down is detected' do
+      series = instance_double('CandleSeries')
+      allow(series).to receive(:liquidity_grab_up?).and_return(false)
+      allow(series).to receive(:liquidity_grab_down?).and_return(true)
+
+      detector = described_class.new(series)
+      expect(detector.sell_side_taken?).to be(true)
+    end
+
+    it 'returns false when no liquidity grab down' do
+      series = instance_double('CandleSeries')
+      allow(series).to receive(:liquidity_grab_up?).and_return(false)
+      allow(series).to receive(:liquidity_grab_down?).and_return(false)
+
+      detector = described_class.new(series)
+      expect(detector.sell_side_taken?).to be(false)
+    end
+
+    it 'handles nil series gracefully' do
+      detector = described_class.new(nil)
+      expect(detector.sell_side_taken?).to be(false)
+    end
+  end
+
+  describe '#sweep_direction' do
+    it 'returns :buy_side when buy side is taken' do
+      series = instance_double('CandleSeries')
+      allow(series).to receive(:liquidity_grab_up?).and_return(true)
+      allow(series).to receive(:liquidity_grab_down?).and_return(false)
+
+      detector = described_class.new(series)
+      expect(detector.sweep_direction).to eq(:buy_side)
+    end
+
+    it 'returns :sell_side when sell side is taken' do
+      series = instance_double('CandleSeries')
+      allow(series).to receive(:liquidity_grab_up?).and_return(false)
+      allow(series).to receive(:liquidity_grab_down?).and_return(true)
+
+      detector = described_class.new(series)
+      expect(detector.sweep_direction).to eq(:sell_side)
+    end
+
+    it 'returns nil when no liquidity is taken' do
+      series = instance_double('CandleSeries')
+      allow(series).to receive(:liquidity_grab_up?).and_return(false)
+      allow(series).to receive(:liquidity_grab_down?).and_return(false)
+
+      detector = described_class.new(series)
+      expect(detector.sweep_direction).to be_nil
+    end
+  end
+
+  describe '#to_h' do
+    it 'serializes liquidity state' do
+      series = instance_double('CandleSeries')
+      allow(series).to receive(:liquidity_grab_up?).and_return(true)
+      allow(series).to receive(:liquidity_grab_down?).and_return(false)
+
+      detector = described_class.new(series)
+      result = detector.to_h
+
+      expect(result).to eq(
+        buy_side_taken: true,
+        sell_side_taken: false,
+        sweep_direction: :buy_side
+      )
+    end
   end
 end
 

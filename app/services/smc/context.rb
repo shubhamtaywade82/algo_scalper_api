@@ -11,6 +11,16 @@ module Smc
       @fvg = Detectors::Fvg.new(series)
       @pd = Detectors::PremiumDiscount.new(series)
     end
+
+    def to_h
+      {
+        structure: structure.to_h,
+        liquidity: liquidity.to_h,
+        order_blocks: order_blocks.to_h,
+        fvg: fvg.to_h,
+        premium_discount: pd.to_h
+      }
+    end
   end
 end
 

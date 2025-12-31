@@ -20,13 +20,28 @@ class SmcController < ApplicationController
       return render json: { ok: false, error: 'security_id and segment are required' }, status: :unprocessable_entity
     end
 
-    instrument = Instrument.find_by_sid_and_segment(security_id: security_id, segment_code: segment, symbol_name: symbol_name)
+    instrument = Instrument.find_by_sid_and_segment(security_id: security_id, segment_code: segment,
+                                                    symbol_name: symbol_name)
     return render json: { ok: false, error: 'instrument not found' }, status: :not_found unless instrument
 
-    render json: { ok: true, decision: Smc::BiasEngine.new(instrument).decision }, status: :ok
+    engine = Smc::BiasEngine.new(instrument)
+
+    payload =
+      if params[:details].to_s == '1'
+        { ok: true }.merge(engine.details)
+      else
+        { ok: true, decision: engine.decision }
+      end
+
+    # Add AI analysis if requested
+    if params[:ai].to_s == '1'
+      ai_analysis = engine.analyze_with_ai
+      payload[:ai_analysis] = ai_analysis if ai_analysis
+    end
+
+    render json: payload, status: :ok
   rescue StandardError => e
     Rails.logger.error("[SmcController] #{e.class} - #{e.message}")
     render json: { ok: false, error: 'internal_error' }, status: :internal_server_error
   end
 end
-

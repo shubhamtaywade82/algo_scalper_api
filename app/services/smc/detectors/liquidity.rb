@@ -21,6 +21,14 @@ module Smc
 
         nil
       end
+
+      def to_h
+        {
+          buy_side_taken: buy_side_taken?,
+          sell_side_taken: sell_side_taken?,
+          sweep_direction: sweep_direction
+        }
+      end
     end
   end
 end

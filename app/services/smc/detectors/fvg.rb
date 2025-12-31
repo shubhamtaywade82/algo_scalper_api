@@ -27,6 +27,12 @@ module Smc
         gaps
       end
 
+      def to_h
+        {
+          gaps: gaps
+        }
+      end
+
       private
 
       def candles

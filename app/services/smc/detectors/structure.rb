@@ -10,7 +10,7 @@ module Smc
       def trend
         return :unknown if swings.size < 2
 
-        last, prev = swings.last(2)
+        prev, last = swings.last(2)
 
         if last[:type] == :high && prev[:type] == :low
           :bullish
@@ -46,6 +46,15 @@ module Smc
         else
           false
         end
+      end
+
+      def to_h
+        {
+          trend: trend,
+          bos: bos?,
+          choch: choch?,
+          swings: swings.last(10) # Last 10 swings only
+        }
       end
 
       private

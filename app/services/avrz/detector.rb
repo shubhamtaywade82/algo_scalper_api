@@ -42,6 +42,15 @@ module Avrz
       false
     end
 
+    def to_h
+      {
+        rejection: rejection?,
+        lookback: @lookback,
+        min_wick_ratio: @min_wick_ratio,
+        min_vol_multiplier: @min_vol_multiplier
+      }
+    end
+
     private
 
     def candles
