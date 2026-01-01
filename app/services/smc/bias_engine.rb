@@ -22,7 +22,9 @@ module Smc
       return :no_trade unless htf_bias_valid?(htf)
       return :no_trade unless mtf_aligns?(htf, mtf)
 
-      ltf_entry(htf, mtf, ltf)
+      decision = ltf_entry(htf, mtf, ltf)
+      notify(decision, htf, mtf, ltf) if %i[call put].include?(decision)
+      decision
     end
 
     def details
@@ -198,6 +200,32 @@ module Smc
       else
         :no_trade
       end
+    end
+
+    def notify(decision, htf, mtf, ltf)
+      signal = Smc::SignalEvent.new(
+        instrument: @instrument,
+        decision: decision,
+        timeframe: '5m',
+        price: @instrument.latest_ltp,
+        reasons: build_reasons(htf, mtf, ltf)
+      )
+
+      Notifications::Telegram::SmcAlert.new(signal).notify!
+    rescue StandardError => e
+      Rails.logger.error("[Smc::BiasEngine] #{e.class} - #{e.message}")
+      nil
+    end
+
+    def build_reasons(htf, mtf, ltf)
+      reasons = []
+
+      reasons << "HTF in #{htf.pd.discount? ? 'Discount (Demand)' : 'Premium (Supply)'}"
+      reasons << '15m CHoCH detected' if mtf.structure.choch?
+      reasons << "Liquidity sweep on 5m (#{ltf.liquidity.sweep_direction})"
+      reasons << 'AVRZ rejection confirmed'
+
+      reasons
     end
   end
 end
