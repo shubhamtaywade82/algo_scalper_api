@@ -7,6 +7,8 @@ RSpec.describe Smc::BiasEngine do
     it 'does not instantiate AVRZ when HTF bias is invalid' do
       instrument = instance_double('Instrument')
       allow(instrument).to receive(:candles).and_return(build(:candle_series, :one_hour))
+      allow(instrument).to receive(:ltp).and_return(nil)
+      allow(instrument).to receive(:latest_ltp).and_return(25000.0)
 
       htf_ctx = instance_double('Smc::Context')
       mtf_ctx = instance_double('Smc::Context')
@@ -30,6 +32,9 @@ RSpec.describe Smc::BiasEngine do
       allow(instrument).to receive(:candles).with(interval: '60').and_return(htf_series)
       allow(instrument).to receive(:candles).with(interval: '15').and_return(mtf_series)
       allow(instrument).to receive(:candles).with(interval: '5').and_return(ltf_series)
+      allow(instrument).to receive(:ltp).and_return(nil)
+      allow(instrument).to receive(:latest_ltp).and_return(25000.0)
+      allow(instrument).to receive(:symbol_name).and_return('NIFTY')
 
       htf_pd = instance_double('Smc::Detectors::PremiumDiscount', premium?: false, discount?: true)
       htf_structure = instance_double('Smc::Detectors::Structure', trend: :bullish)
@@ -38,7 +43,7 @@ RSpec.describe Smc::BiasEngine do
       mtf_structure = instance_double('Smc::Detectors::Structure', trend: :bullish, choch?: false)
       mtf_ctx = instance_double('Smc::Context', structure: mtf_structure)
 
-      ltf_liq = instance_double('Smc::Detectors::Liquidity', sell_side_taken?: true, buy_side_taken?: false)
+      ltf_liq = instance_double('Smc::Detectors::Liquidity', sell_side_taken?: true, buy_side_taken?: false, sweep_direction: :sell_side)
       ltf_structure = instance_double('Smc::Detectors::Structure', choch?: true)
       ltf_ctx = instance_double('Smc::Context', liquidity: ltf_liq, structure: ltf_structure)
 
@@ -46,6 +51,9 @@ RSpec.describe Smc::BiasEngine do
 
       avrz = instance_double('Avrz::Detector', rejection?: true)
       expect(Avrz::Detector).to receive(:new).with(ltf_series).and_return(avrz)
+
+      # Disable Telegram notifications in test
+      allow(AlgoConfig).to receive(:fetch).and_return({ telegram: { enabled: false } })
 
       expect(described_class.new(instrument).decision).to eq(:call)
     end

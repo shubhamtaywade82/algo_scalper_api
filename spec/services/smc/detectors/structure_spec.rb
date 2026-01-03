@@ -4,13 +4,13 @@ require 'rails_helper'
 
 RSpec.describe Smc::Detectors::Structure do
   describe '#trend' do
-    it 'returns :unknown with insufficient swings' do
+    it 'returns :range with insufficient swings' do
       series = instance_double('CandleSeries', candles: [], closes: [])
       allow(series).to receive(:swing_high?).and_return(false)
       allow(series).to receive(:swing_low?).and_return(false)
 
       detector = described_class.new(series)
-      expect(detector.trend).to eq(:unknown)
+      expect(detector.trend).to eq(:range)
     end
 
     it 'returns :bullish when last swing is high and previous is low' do

@@ -3,12 +3,17 @@
 module Smc
   module Detectors
     class Structure
-      def initialize(series)
+      # Default lookback for swing detection
+      # Internal structure uses 1-3, swing structure uses 5-10
+      DEFAULT_LOOKBACK = 2
+
+      def initialize(series, lookback: DEFAULT_LOOKBACK)
         @series = series
+        @lookback = lookback
       end
 
       def trend
-        return :unknown if swings.size < 2
+        return :range if swings.size < 2
 
         prev, last = swings.last(2)
 
@@ -48,26 +53,29 @@ module Smc
         end
       end
 
+      def swings
+        @swings ||= detect_swings
+      end
+
       def to_h
         {
           trend: trend,
           bos: bos?,
           choch: choch?,
-          swings: swings.last(10) # Last 10 swings only
+          swings: swings.last(10), # Last 10 swings only
+          lookback: @lookback
         }
       end
 
       private
 
-      def swings
-        @swings ||= begin
-          candles = @series&.candles || []
-          candles.each_with_index.filter_map do |_candle, i|
-            if @series.swing_high?(i)
-              { type: :high, price: candles[i].high }
-            elsif @series.swing_low?(i)
-              { type: :low, price: candles[i].low }
-            end
+      def detect_swings
+        candles = @series&.candles || []
+        candles.each_with_index.filter_map do |_candle, i|
+          if @series.swing_high?(i, @lookback)
+            { type: :high, price: candles[i].high }
+          elsif @series.swing_low?(i, @lookback)
+            { type: :low, price: candles[i].low }
           end
         end
       end

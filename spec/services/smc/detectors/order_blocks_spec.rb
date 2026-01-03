@@ -17,8 +17,10 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       series = build(:candle_series, :five_minute)
       # Bearish candle (order block)
       series.add_candle(build(:candle, open: 105, high: 106, low: 104, close: 104.5))
-      # Bullish impulse (breaks above previous high)
-      series.add_candle(build(:candle, open: 104.5, high: 108, low: 104, close: 107))
+      # Middle candle
+      series.add_candle(build(:candle, open: 104.5, high: 105, low: 104, close: 104.8))
+      # Bullish impulse (breaks above middle candle high)
+      series.add_candle(build(:candle, open: 104.8, high: 108, low: 104, close: 107))
 
       detector = described_class.new(series)
       bullish_ob = detector.bullish
@@ -54,8 +56,10 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       series = build(:candle_series, :five_minute)
       # Bullish candle (order block)
       series.add_candle(build(:candle, open: 100, high: 102, low: 99, close: 101))
-      # Bearish impulse (breaks below previous low)
-      series.add_candle(build(:candle, open: 101, high: 101.5, low: 97, close: 98))
+      # Middle candle
+      series.add_candle(build(:candle, open: 101, high: 101.5, low: 99.5, close: 100.5))
+      # Bearish impulse (breaks below middle candle low)
+      series.add_candle(build(:candle, open: 100.5, high: 101, low: 97, close: 98))
 
       detector = described_class.new(series)
       bearish_ob = detector.bearish
@@ -82,7 +86,8 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       series = build(:candle_series, :five_minute)
       timestamp = Time.zone.now
       series.add_candle(build(:candle, open: 105, high: 106, low: 104, close: 104.5, timestamp: timestamp))
-      series.add_candle(build(:candle, open: 104.5, high: 108, low: 104, close: 107))
+      series.add_candle(build(:candle, open: 104.5, high: 105, low: 104, close: 104.8))
+      series.add_candle(build(:candle, open: 104.8, high: 108, low: 104, close: 107))
 
       detector = described_class.new(series)
       result = detector.to_h
@@ -99,7 +104,8 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       series = build(:candle_series, :five_minute)
       timestamp = Time.zone.now
       series.add_candle(build(:candle, open: 100, high: 102, low: 99, close: 101, timestamp: timestamp))
-      series.add_candle(build(:candle, open: 101, high: 101.5, low: 97, close: 98))
+      series.add_candle(build(:candle, open: 101, high: 101.5, low: 99.5, close: 100.5))
+      series.add_candle(build(:candle, open: 100.5, high: 101, low: 97, close: 98))
 
       detector = described_class.new(series)
       result = detector.to_h

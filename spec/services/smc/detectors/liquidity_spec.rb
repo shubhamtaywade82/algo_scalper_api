@@ -87,14 +87,21 @@ RSpec.describe Smc::Detectors::Liquidity do
       series = instance_double('CandleSeries')
       allow(series).to receive(:liquidity_grab_up?).and_return(true)
       allow(series).to receive(:liquidity_grab_down?).and_return(false)
+      allow(series).to receive(:recent_highs).with(5).and_return([])
+      allow(series).to receive(:recent_lows).with(5).and_return([])
+      allow(series).to receive(:highs).and_return([100.0, 102.0])
+      allow(series).to receive(:lows).and_return([98.0, 99.0])
 
       detector = described_class.new(series)
       result = detector.to_h
 
-      expect(result).to eq(
+      expect(result).to include(
         buy_side_taken: true,
         sell_side_taken: false,
-        sweep_direction: :buy_side
+        sweep_direction: :buy_side,
+        equal_highs: false,
+        equal_lows: false,
+        sweep: true
       )
     end
   end

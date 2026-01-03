@@ -10,11 +10,16 @@ module Smc
     MTF_CANDLES = 100
     LTF_CANDLES = 150
 
-    def initialize(instrument)
+    def initialize(instrument, delay_seconds: 0.0)
       @instrument = instrument
+      @delay_seconds = delay_seconds.to_f
+      @cached_decision = nil
+      @cached_contexts = nil
     end
 
     def decision
+      return @cached_decision if @cached_decision
+
       htf = context_for(interval: HTF_INTERVAL, max_candles: HTF_CANDLES)
       mtf = context_for(interval: MTF_INTERVAL, max_candles: MTF_CANDLES)
       ltf = context_for(interval: LTF_INTERVAL, max_candles: LTF_CANDLES)
@@ -22,12 +27,49 @@ module Smc
       return :no_trade unless htf_bias_valid?(htf)
       return :no_trade unless mtf_aligns?(htf, mtf)
 
-      ltf_entry(htf, mtf, ltf)
+      decision = ltf_entry(htf, mtf, ltf)
+
+      # Cache decision and contexts to avoid re-computation
+      @cached_decision = decision
+      @cached_contexts = { htf: htf, mtf: mtf, ltf: ltf }
+
+      # Notify for trading signals OR for no_trade if AI is enabled (to get AI analysis)
+      notify(decision, htf, mtf, ltf) if %i[call put].include?(decision) || (decision == :no_trade && ai_enabled?)
+
+      decision
     end
 
     def details
+      # Use cached decision if available to avoid recursion
+      # If not cached, compute it without triggering notify
+      cached_decision = @cached_decision
+      unless cached_decision
+        # Compute decision without notification to avoid recursion
+        htf = context_for(interval: HTF_INTERVAL, max_candles: HTF_CANDLES)
+        mtf = context_for(interval: MTF_INTERVAL, max_candles: MTF_CANDLES)
+        ltf = context_for(interval: LTF_INTERVAL, max_candles: LTF_CANDLES)
+
+        cached_decision = if htf_bias_valid?(htf) && mtf_aligns?(htf, mtf)
+                            ltf_entry(htf, mtf, ltf)
+                          else
+                            :no_trade
+                          end
+      end
+
+      details_without_recursion(cached_decision)
+    end
+
+    def details_without_recursion(decision_value = nil)
+      # Use provided decision or cached decision to avoid recursion
+      decision_value ||= @cached_decision || :no_trade
+
+      # Add delays between candle fetches to avoid rate limits
       htf_series = @instrument.candles(interval: HTF_INTERVAL)
+      sleep(@delay_seconds) if @delay_seconds.positive?
+
       mtf_series = @instrument.candles(interval: MTF_INTERVAL)
+      sleep(@delay_seconds) if @delay_seconds.positive?
+
       ltf_series = @instrument.candles(interval: LTF_INTERVAL)
 
       htf = Smc::Context.new(trim_series(htf_series, max_candles: HTF_CANDLES))
@@ -37,7 +79,7 @@ module Smc
       avrz = Avrz::Detector.new(ltf_series)
 
       {
-        decision: decision,
+        decision: decision_value,
         timeframes: {
           htf: { interval: HTF_INTERVAL, context: htf.to_h },
           mtf: { interval: MTF_INTERVAL, context: mtf.to_h },
@@ -91,9 +133,42 @@ module Smc
       nil
     end
 
+    def ai_enabled?
+      AlgoConfig.fetch.dig(:ai, :enabled) == true &&
+        Services::Ai::OpenaiClient.instance.enabled?
+    rescue StandardError
+      false
+    end
+
+    # Analyze with AI for a specific decision (avoids recursion)
+    def analyze_with_ai_for_decision(decision_value)
+      return nil unless ai_enabled?
+
+      # Use details_without_recursion to avoid calling decision again
+      details_data = details_without_recursion(decision_value)
+      prompt = build_smc_analysis_prompt(details_data)
+
+      model = select_ai_model
+
+      ai_client.chat(
+        messages: [
+          { role: 'system', content: smc_ai_system_prompt },
+          { role: 'user', content: prompt }
+        ],
+        model: model,
+        temperature: 0.3
+      )
+    rescue StandardError => e
+      Rails.logger.error("[Smc::BiasEngine] AI analysis error: #{e.class} - #{e.message}")
+      nil
+    end
+
     private
 
     def context_for(interval:, max_candles:)
+      # Add delay before fetching candles to avoid rate limits
+      sleep(@delay_seconds) if @delay_seconds.positive?
+
       series = @instrument.candles(interval: interval)
       trimmed = trim_series(series, max_candles: max_candles)
       Smc::Context.new(trimmed)
@@ -112,13 +187,6 @@ module Smc
     rescue StandardError => e
       Rails.logger.error("[Smc::BiasEngine] #{e.class} - #{e.message}")
       series
-    end
-
-    def ai_enabled?
-      AlgoConfig.fetch.dig(:ai, :enabled) == true &&
-        Services::Ai::OpenaiClient.instance.enabled?
-    rescue StandardError
-      false
     end
 
     def ai_client
@@ -198,6 +266,69 @@ module Smc
       else
         :no_trade
       end
+    end
+
+    def notify(decision, htf, mtf, ltf)
+      # Fetch AI analysis if enabled (reuse contexts to avoid fetching candles again)
+      ai_analysis = nil
+      if ai_enabled?
+        begin
+          # Build details from existing contexts to avoid fetching candles again
+          ltf_series = @instrument.candles(interval: LTF_INTERVAL)
+          avrz = Avrz::Detector.new(ltf_series)
+
+          details_data = {
+            decision: decision,
+            timeframes: {
+              htf: { interval: HTF_INTERVAL, context: htf.to_h },
+              mtf: { interval: MTF_INTERVAL, context: mtf.to_h },
+              ltf: { interval: LTF_INTERVAL, context: ltf.to_h, avrz: avrz.to_h }
+            }
+          }
+
+          prompt = build_smc_analysis_prompt(details_data)
+          model = select_ai_model
+
+          ai_analysis = ai_client.chat(
+            messages: [
+              { role: 'system', content: smc_ai_system_prompt },
+              { role: 'user', content: prompt }
+            ],
+            model: model,
+            temperature: 0.3
+          )
+        rescue StandardError => e
+          Rails.logger.warn("[Smc::BiasEngine] Failed to get AI analysis: #{e.class} - #{e.message}")
+        end
+      end
+
+      signal = Smc::SignalEvent.new(
+        instrument: @instrument,
+        decision: decision,
+        timeframe: '5m',
+        price: current_price,
+        reasons: build_reasons(htf, mtf, ltf),
+        ai_analysis: ai_analysis
+      )
+
+      Notifications::Telegram::SmcAlert.new(signal).notify!
+    rescue StandardError => e
+      Rails.logger.error("[Smc::BiasEngine] Notification error: #{e.class} - #{e.message}")
+    end
+
+    def build_reasons(htf, mtf, ltf)
+      reasons = []
+
+      reasons << "HTF in #{htf.pd.discount? ? 'Discount (Demand)' : 'Premium (Supply)'}"
+      reasons << '15m CHoCH detected' if mtf.structure.choch?
+      reasons << "Liquidity sweep on 5m (#{ltf.liquidity.sweep_direction})"
+      reasons << 'AVRZ rejection confirmed'
+
+      reasons
+    end
+
+    def current_price
+      @instrument.ltp&.to_f || @instrument.latest_ltp&.to_f || 0.0
     end
   end
 end
