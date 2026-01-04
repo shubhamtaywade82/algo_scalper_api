@@ -25,29 +25,26 @@ bundle exec rake solid_queue:load_recurring
    Restart bin/jobs for the dispatcher to pick them up.
 ```
 
-### Step 2: Start Background Processes
+### Step 2: Start SolidQueue
 
-**Terminal 1 - SolidQueue (recurring jobs):**
+**One process handles everything:**
 ```bash
 bin/jobs
 ```
 
-**Terminal 2 - Sidekiq (notification jobs):**
-```bash
-bundle exec sidekiq
-```
-
-**Or use bin/dev to start both:**
+**Or use bin/dev:**
 ```bash
 ./bin/dev
 ```
+
+That's it! SolidQueue handles both scheduling AND background jobs (database-backed).
 
 ### Step 3: Verify It's Working
 
 **Wait 5 minutes**, then check logs:
 
 ```bash
-tail -f log/development.log | grep -E "(SmcScannerJob|SendSmcAlertJob)"
+tail -f log/development.log | grep -E "(SmcScannerJob|SendSmcAlertJob|SolidQueue)"
 ```
 
 **Expected output:**
@@ -193,11 +190,11 @@ bundle exec rake solid_queue:load_recurring
 ### No Telegram Notifications
 
 ```bash
-# 1. Check if Sidekiq is running
-ps aux | grep sidekiq
+# 1. Check if bin/jobs is running
+ps aux | grep "bin/jobs"
 
 # 2. If not running, start it
-bundle exec sidekiq
+bin/jobs
 
 # 3. Check configuration
 bundle exec rails runner "puts AlgoConfig.fetch.dig(:telegram, :enabled)"
@@ -207,17 +204,20 @@ bundle exec rails runner "puts AlgoConfig.fetch.dig(:ai, :enabled)"
 echo $TELEGRAM_BOT_TOKEN
 echo $TELEGRAM_CHAT_ID
 echo $OPENAI_API_KEY
+
+# 5. Check pending jobs
+bundle exec rails runner "puts \"Pending: #{SolidQueue::Job.pending.count}\""
 ```
 
 ### Still Seeing Truncated AI Analysis
 
 ```bash
-# 1. Restart Sidekiq to load new code
-pkill -f sidekiq
-bundle exec sidekiq
+# 1. Restart SolidQueue to load new code
+pkill -f "bin/jobs"
+bin/jobs
 
-# 2. Clear job queue
-redis-cli DEL queue:default
+# 2. Clear pending jobs (if needed)
+bundle exec rails runner "SolidQueue::Job.pending.destroy_all"
 
 # 3. Wait for next scan cycle (5 minutes)
 ```
@@ -275,21 +275,34 @@ The SMC scanner is now:
 ✅ Processing notifications in background
 ✅ Monitoring all configured indices
 ✅ Production-ready with error handling
+✅ **ONE process** - SolidQueue only (database-backed, no Redis!)
 
-Just keep `bin/jobs` and `bundle exec sidekiq` running, and you'll receive Telegram alerts automatically! 🚀
+Just keep `bin/jobs` running, and you'll receive Telegram alerts automatically! 🚀
 
 ---
 
+## 🎯 System Architecture
+
+**SolidQueue Only** (Database-backed with ActiveRecord):
+- ✅ ONE process: `bin/jobs`
+- ✅ Database-backed (PostgreSQL)
+- ✅ No Redis required
+- ✅ No Sidekiq required
+- ✅ 15 concurrent workers (5 threads × 3 processes)
+- ✅ Handles both scheduling AND background jobs
+
 **Questions?** Check the docs or logs:
 ```bash
-# Scanner logs
-tail -f log/development.log | grep SmcScannerJob
+# All logs in one place
+tail -f log/development.log | grep -E "(SmcScannerJob|SendSmcAlertJob|SolidQueue)"
 
-# Notification logs
-tail -f log/sidekiq.log | grep SendSmcAlertJob
+# Check SolidQueue health
+bundle exec rails runner "SolidQueue::Process.all.each { |p| puts \"#{p.name} (#{p.kind})\" }"
 
-# Telegram logs
-tail -f log/development.log | grep SmcAlert
+# Check pending jobs
+bundle exec rails runner "puts \"Pending: #{SolidQueue::Job.pending.count}\""
 ```
 
-**Need Help?** See `docs/smc_scanner_scheduling.md` for detailed troubleshooting.
+**Need Help?** 
+- `SETUP_SOLIDQUEUE_ONLY.md` - Detailed SolidQueue guide
+- `docs/smc_scanner_scheduling.md` - Scheduling configuration

@@ -3,7 +3,7 @@
 module Notifications
   module Telegram
     class SendSmcAlertJob < ApplicationJob
-      queue_as :default
+      queue_as :background
 
       # Retry with exponential backoff for transient failures
       retry_on StandardError, wait: :exponentially_longer, attempts: 3
