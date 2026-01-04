@@ -213,7 +213,8 @@ module Services
 
       # Chat completion interface (works with both gems)
       # For Ollama: Serializes requests to prevent parallel calls
-      def chat(messages:, model: nil, temperature: 0.7, **)
+      # Returns full response object if tools are provided, otherwise returns content string
+      def chat(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, **)
         return nil unless enabled?
 
         # Auto-select model for Ollama if not provided
@@ -224,12 +225,20 @@ module Services
                   end
 
         # Serialize Ollama requests to prevent parallel calls
-        if @provider == :ollama
-          with_request_serialization do
-            execute_chat(messages: messages, model: model, temperature: temperature, **)
-          end
+        result = if @provider == :ollama
+                   with_request_serialization do
+                     execute_chat(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
+                   end
+                 else
+                   execute_chat(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
+                 end
+
+        # If tools are provided, return full response hash; otherwise return content string (backward compatibility)
+        if tools
+          result
         else
-          execute_chat(messages: messages, model: model, temperature: temperature, **)
+          # Extract just the content string for backward compatibility
+          result.is_a?(Hash) ? (result[:content] || result['content'] || result.to_s) : result.to_s
         end
       rescue StandardError => e
         Rails.logger.error("[OpenAIClient] Chat error: #{e.class} - #{e.message}")
@@ -237,18 +246,18 @@ module Services
       end
 
       # Internal chat execution (without serialization wrapper)
-      def execute_chat(messages:, model:, temperature:, **)
+      def execute_chat(messages:, model:, temperature:, tools: nil, tool_choice: nil, **)
         case @provider
         when :ruby_openai
-          chat_ruby_openai(messages: messages, model: model, temperature: temperature, **)
+          chat_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
         when :openai_ruby
-          chat_openai_ruby(messages: messages, model: model, temperature: temperature, **)
+          chat_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
         when :ollama
           # Ollama uses OpenAI-compatible API, use the same client methods
           if defined?(OpenAI) && OpenAI.respond_to?(:configure)
-            chat_ruby_openai(messages: messages, model: model, temperature: temperature, **)
+            chat_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
           else
-            chat_openai_ruby(messages: messages, model: model, temperature: temperature, **)
+            chat_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, **)
           end
         else
           raise "Unknown provider: #{@provider}"
@@ -257,7 +266,8 @@ module Services
 
       # Streaming chat completion
       # For Ollama: Serializes requests to prevent parallel calls
-      def chat_stream(messages:, model: nil, temperature: 0.7, &block)
+      # Supports tools and tool_choice for native tool calling
+      def chat_stream(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, &block)
         return nil unless enabled?
 
         # Auto-select model for Ollama if not provided
@@ -270,10 +280,10 @@ module Services
         # Serialize Ollama requests to prevent parallel calls
         if @provider == :ollama
           with_request_serialization do
-            execute_chat_stream(messages: messages, model: model, temperature: temperature, &block)
+            execute_chat_stream(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &block)
           end
         else
-          execute_chat_stream(messages: messages, model: model, temperature: temperature, &block)
+          execute_chat_stream(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &block)
         end
       rescue StandardError => e
         Rails.logger.error("[OpenAIClient] Chat stream error: #{e.class} - #{e.message}")
@@ -281,18 +291,18 @@ module Services
       end
 
       # Internal streaming chat execution (without serialization wrapper)
-      def execute_chat_stream(messages:, model:, temperature:, &)
+      def execute_chat_stream(messages:, model:, temperature:, tools: nil, tool_choice: nil, &)
         case @provider
         when :ruby_openai
-          chat_stream_ruby_openai(messages: messages, model: model, temperature: temperature, &)
+          chat_stream_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &)
         when :openai_ruby
-          chat_stream_openai_ruby(messages: messages, model: model, temperature: temperature, &)
+          chat_stream_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &)
         when :ollama
           # Ollama uses OpenAI-compatible API, use the same client methods
           if defined?(OpenAI) && OpenAI.respond_to?(:configure)
-            chat_stream_ruby_openai(messages: messages, model: model, temperature: temperature, &)
+            chat_stream_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &)
           else
-            chat_stream_openai_ruby(messages: messages, model: model, temperature: temperature, &)
+            chat_stream_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools, tool_choice: tool_choice, &)
           end
         else
           raise "Unknown provider: #{@provider}"
@@ -457,45 +467,67 @@ module Services
       end
 
       # Chat completion using ruby-openai
-      def chat_ruby_openai(messages:, model:, temperature:, **options)
+      def chat_ruby_openai(messages:, model:, temperature:, tools: nil, tool_choice: nil, **options)
         formatted_messages = format_messages_ruby_openai(messages)
         token_count = estimate_token_count(formatted_messages)
 
         # Log prompt and token count
         log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
 
-        response = @client.chat(
-          parameters: {
-            model: model,
-            messages: formatted_messages,
-            temperature: temperature,
-            **options
-          }
-        )
+        parameters = {
+          model: model,
+          messages: formatted_messages,
+          temperature: temperature
+        }
 
-        extract_content_ruby_openai(response)
+        # Add tools if provided (for native tool calling)
+        parameters[:tools] = tools if tools
+        parameters[:tool_choice] = tool_choice if tool_choice
+
+        response = @client.chat(parameters: parameters.merge(options))
+
+        # Return full response hash if tools were used, otherwise extract content string
+        if tools
+          extract_content_ruby_openai(response)
+        else
+          # Backward compatibility: return just the content string
+          content_data = extract_content_ruby_openai(response)
+          content_data.is_a?(Hash) ? content_data[:content] : content_data.to_s
+        end
       end
 
       # Chat completion using openai-ruby
-      def chat_openai_ruby(messages:, model:, temperature:, **)
+      def chat_openai_ruby(messages:, model:, temperature:, tools: nil, tool_choice: nil, **)
         formatted_messages = format_messages_openai_ruby(messages)
         token_count = estimate_token_count(formatted_messages)
 
         # Log prompt and token count
         log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
 
-        response = @client.chat.completions.create(
+        params = {
           messages: formatted_messages,
           model: model,
-          temperature: temperature,
-          **
-        )
+          temperature: temperature
+        }
 
-        extract_content_openai_ruby(response)
+        # Add tools if provided (for native tool calling)
+        params[:tools] = tools if tools
+        params[:tool_choice] = tool_choice if tool_choice
+
+        response = @client.chat.completions.create(**params.merge(**))
+
+        # Return full response hash if tools were used, otherwise extract content string
+        if tools
+          extract_content_openai_ruby(response)
+        else
+          # Backward compatibility: return just the content string
+          content_data = extract_content_openai_ruby(response)
+          content_data.is_a?(Hash) ? content_data[:content] : content_data.to_s
+        end
       end
 
       # Streaming chat using ruby-openai
-      def chat_stream_ruby_openai(messages:, model:, temperature:, &block)
+      def chat_stream_ruby_openai(messages:, model:, temperature:, tools: nil, tool_choice: nil, &block)
         stream_start = Time.current
         chunk_count = 0
 
@@ -506,12 +538,19 @@ module Services
         log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
 
         begin
+          parameters = {
+            model: model,
+            messages: formatted_messages,
+            temperature: temperature
+          }
+
+          # Add tools if provided (for native tool calling)
+          parameters[:tools] = tools if tools
+          parameters[:tool_choice] = tool_choice if tool_choice
+
           # No timeout wrapper - let stream run until completion or natural connection timeout
           @client.chat(
-            parameters: {
-              model: model,
-              messages: formatted_messages,
-              temperature: temperature,
+            parameters: parameters.merge(
               stream: proc do |chunk, _event|
                 content = chunk.dig('choices', 0, 'delta', 'content')
                 if content.present? && block
@@ -519,7 +558,7 @@ module Services
                   yield(content)
                 end
               end
-            }
+            )
           )
 
           elapsed = Time.current - stream_start
@@ -546,7 +585,7 @@ module Services
       end
 
       # Streaming chat using openai-ruby
-      def chat_stream_openai_ruby(messages:, model:, temperature:, &block)
+      def chat_stream_openai_ruby(messages:, model:, temperature:, tools: nil, tool_choice: nil, &block)
         stream_start = Time.current
         chunk_count = 0
 
@@ -557,13 +596,19 @@ module Services
         log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
 
         begin
-          # No timeout wrapper - let stream run until completion or natural connection timeout
-          stream = @client.chat.completions.create(
+          params = {
             messages: formatted_messages,
             model: model,
             temperature: temperature,
             stream: true
-          )
+          }
+
+          # Add tools if provided (for native tool calling)
+          params[:tools] = tools if tools
+          params[:tool_choice] = tool_choice if tool_choice
+
+          # No timeout wrapper - let stream run until completion or natural connection timeout
+          stream = @client.chat.completions.create(**params)
 
           stream.each do |event|
             content = event.dig('choices', 0, 'delta', 'content')
@@ -594,10 +639,32 @@ module Services
       end
 
       # Format messages for ruby-openai (expects array of hashes)
+      # Handles tool_calls and tool messages for native tool calling
       def format_messages_ruby_openai(messages)
         messages.map do |msg|
           if msg.is_a?(Hash)
-            { role: msg[:role] || msg['role'], content: msg[:content] || msg['content'] }
+            formatted = { role: msg[:role] || msg['role'] }
+
+            # Handle content (can be nil for tool calls)
+            content = msg[:content] || msg['content']
+            formatted[:content] = content if content
+
+            # Handle tool_calls (assistant messages with tool calls)
+            if (tool_calls = msg[:tool_calls] || msg['tool_calls'])
+              formatted[:tool_calls] = tool_calls
+            end
+
+            # Handle tool messages (tool role with tool_call_id)
+            if (tool_call_id = msg[:tool_call_id] || msg['tool_call_id'])
+              formatted[:tool_call_id] = tool_call_id
+            end
+
+            # Handle tool name
+            if (tool_name = msg[:name] || msg['name'])
+              formatted[:name] = tool_name
+            end
+
+            formatted
           else
             msg
           end
@@ -605,10 +672,32 @@ module Services
       end
 
       # Format messages for openai-ruby (expects array of hashes with symbol keys)
+      # Handles tool_calls and tool messages for native tool calling
       def format_messages_openai_ruby(messages)
         messages.map do |msg|
           if msg.is_a?(Hash)
-            { role: (msg[:role] || msg['role']).to_sym, content: msg[:content] || msg['content'] }
+            formatted = { role: (msg[:role] || msg['role']).to_sym }
+
+            # Handle content (can be nil for tool calls)
+            content = msg[:content] || msg['content']
+            formatted[:content] = content if content
+
+            # Handle tool_calls (assistant messages with tool calls)
+            if (tool_calls = msg[:tool_calls] || msg['tool_calls'])
+              formatted[:tool_calls] = tool_calls
+            end
+
+            # Handle tool messages (tool role with tool_call_id)
+            if (tool_call_id = msg[:tool_call_id] || msg['tool_call_id'])
+              formatted[:tool_call_id] = tool_call_id
+            end
+
+            # Handle tool name
+            if (tool_name = msg[:name] || msg['name'])
+              formatted[:name] = tool_name
+            end
+
+            formatted
           else
             msg
           end
@@ -616,25 +705,47 @@ module Services
       end
 
       # Extract content from ruby-openai response
+      # Also extracts tool_calls if present
       def extract_content_ruby_openai(response)
         # ruby-openai returns a hash
         if response.is_a?(Hash)
-          response.dig('choices', 0, 'message', 'content')
+          message = response.dig('choices', 0, 'message') || {}
+          {
+            content: message['content'],
+            tool_calls: message['tool_calls']
+          }
         else
           # Fallback for different response formats
-          response.respond_to?(:dig) ? response.dig('choices', 0, 'message', 'content') : response.to_s
+          if response.respond_to?(:dig)
+            message = response.dig('choices', 0, 'message') || {}
+            {
+              content: message['content'],
+              tool_calls: message['tool_calls']
+            }
+          else
+            { content: response.to_s, tool_calls: nil }
+          end
         end
       end
 
       # Extract content from openai-ruby response
+      # Also extracts tool_calls if present
       def extract_content_openai_ruby(response)
         # openai-ruby returns an object with methods
         if response.respond_to?(:choices)
-          response.choices.first.message.content
+          message = response.choices.first.message
+          {
+            content: message.content,
+            tool_calls: message.tool_calls&.map(&:to_h) || message.respond_to?(:tool_calls) ? message.tool_calls : nil
+          }
         elsif response.is_a?(Hash)
-          response.dig('choices', 0, 'message', 'content')
+          message = response.dig('choices', 0, 'message') || {}
+          {
+            content: message['content'],
+            tool_calls: message['tool_calls']
+          }
         else
-          response.to_s
+          { content: response.to_s, tool_calls: nil }
         end
       end
 
