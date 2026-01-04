@@ -114,14 +114,14 @@ module Notifications
       def format_ai_analysis
         return '' unless @signal.ai_analysis.present?
 
-        # Truncate AI analysis if too long (Telegram has 4096 char limit)
-        analysis = @signal.ai_analysis.to_s.strip
-
         # Escape HTML special characters
-        analysis = escape_html(analysis)
+        analysis = escape_html(@signal.ai_analysis.to_s.strip)
 
-        # Truncate if still too long (leave room for header)
-        analysis = "#{analysis[0..1997]}..." if analysis.length > 2000
+        # Don't truncate - let Telegram client handle message splitting.
+        # Client will automatically split into multiple messages if the total
+        # message exceeds 4096 chars. This ensures complete AI analysis is sent.
+        # Base message (without AI) is typically ~500 chars, so AI analysis
+        # can be up to ~3500 chars in a single message, or split across multiple.
 
         "\n\n🤖 <b>AI Analysis</b>:\n#{analysis}"
       end
