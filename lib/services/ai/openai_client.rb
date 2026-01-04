@@ -549,10 +549,19 @@ module Services
           parameters[:tool_choice] = tool_choice if tool_choice
 
           # No timeout wrapper - let stream run until completion or natural connection timeout
+          # Store tool_calls if present
+          stream_tool_calls = []
           @client.chat(
             parameters: parameters.merge(
               stream: proc do |chunk, _event|
-                content = chunk.dig('choices', 0, 'delta', 'content')
+                delta = chunk.dig('choices', 0, 'delta') || {}
+                content = delta['content']
+
+                # Capture tool_calls if present (for native tool calling)
+                if delta['tool_calls']
+                  stream_tool_calls.concat(delta['tool_calls'])
+                end
+
                 if content.present? && block
                   chunk_count += 1
                   yield(content)
@@ -560,6 +569,14 @@ module Services
               end
             )
           )
+
+          # Return tool_calls if captured (for tool calling support)
+          if stream_tool_calls.any? && tools
+            return {
+              content: nil,
+              tool_calls: stream_tool_calls
+            }
+          end
 
           elapsed = Time.current - stream_start
           Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }

@@ -212,7 +212,7 @@ module Smc
       full_response.presence
     end
 
-    def execute_conversation_stream(&block)
+    def execute_conversation_stream(&_block)
       iteration = 0
       full_response = +''
 
@@ -243,20 +243,31 @@ module Smc
         # Check for tool calls in streamed response
         tool_calls = extract_tool_calls_from_text(stream_response)
         if tool_calls&.any?
-          Rails.logger.debug { "[Smc::AiAnalyzer] Tool calls in stream: #{tool_calls.map { |tc| tc['tool'] }.join(', ')}" }
+          Rails.logger.info { "[Smc::AiAnalyzer] Tool calls detected in stream: #{tool_calls.map { |tc| tc['tool'] || tc[:tool] }.join(', ')}" }
 
-          # Add assistant message
+          # Remove tool call JSON from the response text (clean it up)
+          cleaned_response = stream_response.dup
+          tool_calls.each do |tc|
+            # Remove the tool call JSON from text
+            tool_json = tc.is_a?(Hash) ? tc.to_json : tc.to_s
+            cleaned_response.gsub!(tool_json, '')
+            cleaned_response.gsub!(/\{"name"\s*:\s*"[^"]+"\s*,\s*"parameters"\s*:\s*\{[^}]+\}\s*\}/, '')
+          end
+          cleaned_response.strip!
+
+          # Add assistant message (with cleaned content)
+          assistant_content = cleaned_response.strip.presence || 'I will fetch additional data to complete the analysis.'
           @messages << {
             role: 'assistant',
-            content: stream_response
+            content: assistant_content
           }
 
           # Execute tools
           tool_calls.each do |tool_call|
-            tool_name = tool_call['tool']
-            tool_args = tool_call['arguments'] || {}
+            tool_name = tool_call['tool'] || tool_call[:tool] || tool_call['name'] || tool_call[:name]
+            tool_args = tool_call['arguments'] || tool_call[:arguments] || tool_call['parameters'] || tool_call[:parameters] || {}
 
-            Rails.logger.debug { "[Smc::AiAnalyzer] Executing tool: #{tool_name}" }
+            Rails.logger.info { "[Smc::AiAnalyzer] Executing tool: #{tool_name} with args: #{tool_args.inspect}" }
 
             tool_result = execute_tool(tool_name, tool_args)
 
@@ -269,7 +280,7 @@ module Smc
 
           @messages << {
             role: 'user',
-            content: 'Continue your analysis based on the tool results.'
+            content: 'Based on the tool results above, continue your analysis. Provide a complete analysis with actionable insights for options trading.'
           }
 
           iteration += 1
@@ -359,49 +370,159 @@ module Smc
       ]
     end
 
-    def extract_tool_calls_from_response(response)
+    def extract_tool_calls_from_response(_response)
       # This method is no longer needed - tool_calls are extracted in execute_conversation
       # Keeping for backward compatibility
       nil
     end
 
     def extract_tool_calls_from_text(text)
-      # Fallback: extract tool calls from text (for streaming or non-native tool calling)
-      json_match = text.match(/\{"tool"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*(\{.*?\})\s*\}/m)
-      return nil unless json_match
+      # Extract tool calls from text - handle multiple formats
+      tool_calls = []
+      seen_tools = []
 
-      begin
-        [{
-          'tool' => json_match[1],
-          'arguments' => JSON.parse(json_match[2])
-        }]
-      rescue JSON::ParserError
+      # Pattern 1: {"name": "tool_name", "parameters": {...}} (Ollama format)
+      # Handle both single-line and multi-line JSON
+      # Use a more lenient pattern that matches the actual format
+      text.scan(/\{"name"\s*:\s*"([^"]+)"\s*,\s*"parameters"\s*:\s*(\{[^}]*\})\s*\}/) do |name, params|
+        next if seen_tools.include?(name) # Avoid duplicates
+
+        begin
+          # Try to parse parameters - handle nested objects
+          parsed_params = JSON.parse(params)
+          tool_calls << {
+            'tool' => name,
+            'arguments' => parsed_params
+          }
+          seen_tools << name unless seen_tools.include?(name)
+          Rails.logger.info { "[Smc::AiAnalyzer] Extracted tool call: #{name} with params: #{parsed_params.inspect}" }
+        rescue JSON::ParserError => e
+          Rails.logger.debug { "[Smc::AiAnalyzer] Failed to parse tool call params for #{name}: #{e.message}, params: #{params[0..100]}" }
+        end
+      end
+
+      # Also try to find complete JSON objects that might be tool calls (more lenient)
+      # Look for patterns like: {"name": "...", "parameters": {...}}
+      text.scan(/\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"parameters"\s*:\s*(\{[^}]*\})[^}]*\}/) do |name, params|
+        next if seen_tools.include?(name) # Avoid duplicates
+
+        begin
+          # Try to parse the full JSON object
+          full_match = text.match(/\{"name"\s*:\s*"#{Regexp.escape(name)}"\s*,\s*"parameters"\s*:\s*(\{[^}]*\})\s*\}/)
+          if full_match
+            parsed_params = JSON.parse(full_match[1])
+            tool_calls << {
+              'tool' => name,
+              'arguments' => parsed_params
+            }
+            seen_tools << name unless seen_tools.include?(name)
+            Rails.logger.info { "[Smc::AiAnalyzer] Extracted tool call (lenient): #{name}" }
+          end
+        rescue JSON::ParserError, NoMethodError
+          # Skip if can't parse
+        end
+      end
+
+      # Pattern 2: {"tool": "tool_name", "arguments": {...}} (alternative format)
+      text.scan(/\{"tool"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*(\{[^}]*\})\s*\}/m) do |tool, args|
+        next if seen_tools.include?(tool) # Avoid duplicates
+
+        begin
+          parsed_args = JSON.parse(args)
+          tool_calls << {
+            'tool' => tool,
+            'arguments' => parsed_args
+          }
+          seen_tools << tool unless seen_tools.include?(tool)
+          Rails.logger.debug { "[Smc::AiAnalyzer] Extracted tool call: #{tool} with args: #{parsed_args.inspect}" }
+        rescue JSON::ParserError => e
+          Rails.logger.debug { "[Smc::AiAnalyzer] Failed to parse tool call args for #{tool}: #{e.message}" }
+        end
+      end
+
+      # Pattern 3: Try to find complete JSON objects (more lenient parsing)
+      # Look for standalone JSON objects that might be tool calls
+      text.scan(/\{["']name["']\s*:\s*["']([^"']+)["']\s*,\s*["']parameters["']\s*:\s*(\{[^}]*(?:\{[^}]*\}[^}]*)*\})\s*\}/m) do |name, params|
+        next if seen_tools.include?(name) # Avoid duplicates
+
+        begin
+          parsed_params = JSON.parse(params)
+          tool_calls << {
+            'tool' => name,
+            'arguments' => parsed_params
+          }
+          seen_tools << name unless seen_tools.include?(name)
+        rescue JSON::ParserError
+          # Skip if can't parse
+        end
+      end
+
+      # Pattern 4: Multiple tool calls in array format [{"name": "...", "parameters": {...}}, ...]
+      array_match = text.match(/\[\s*(\{"name"\s*:\s*"[^"]+"\s*,\s*"parameters"\s*:\s*\{[^}]*\}\s*\},?\s*)+\s*\]/m)
+      if array_match
+        begin
+          parsed = JSON.parse(array_match[0])
+          parsed.each do |tc|
+            tool_name = tc['name'] || tc['tool']
+            next if seen_tools.include?(tool_name) # Avoid duplicates
+
+            tool_calls << {
+              'tool' => tool_name,
+              'arguments' => tc['parameters'] || tc['arguments'] || {}
+            }
+            seen_tools << tool_name unless seen_tools.include?(tool_name)
+          end
+        rescue JSON::ParserError => e
+          Rails.logger.debug { "[Smc::AiAnalyzer] Failed to parse tool call array: #{e.message}" }
+        end
+      end
+
+      if tool_calls.any?
+        Rails.logger.info { "[Smc::AiAnalyzer] Extracted #{tool_calls.size} tool call(s) from text" }
+        tool_calls
+      else
         nil
       end
     end
 
     def execute_tool(tool_name, arguments)
-      case tool_name
+      # Normalize arguments (handle both string keys and symbol keys)
+      args = arguments.is_a?(Hash) ? arguments : {}
+      normalized_args = {}
+      args.each { |k, v| normalized_args[k.to_s] = v }
+
+      case tool_name.to_s
       when 'get_current_ltp'
+        # Ignore any parameters passed (tool takes no parameters)
         get_current_ltp
       when 'get_historical_candles'
+        interval = normalized_args['interval']
+        unless interval
+          return { error: 'interval parameter is required for get_historical_candles' }
+        end
         get_historical_candles(
-          interval: arguments['interval'] || arguments[:interval],
-          limit: (arguments['limit'] || arguments[:limit] || 50).to_i
+          interval: interval,
+          limit: (normalized_args['limit'] || 50).to_i
         )
       when 'get_technical_indicators'
+        timeframe = normalized_args['timeframe']
+        unless timeframe
+          return { error: 'timeframe parameter is required for get_technical_indicators' }
+        end
         get_technical_indicators(
-          timeframe: arguments['timeframe'] || arguments[:timeframe]
+          timeframe: timeframe
         )
       when 'get_option_chain'
+        # expiry_date is optional
         get_option_chain(
-          expiry_date: arguments['expiry_date'] || arguments[:expiry_date]
+          expiry_date: normalized_args['expiry_date']
         )
       else
-        { error: "Unknown tool: #{tool_name}" }
+        { error: "Unknown tool: #{tool_name}. Available tools: get_current_ltp, get_historical_candles, get_technical_indicators, get_option_chain" }
       end
     rescue StandardError => e
       Rails.logger.error("[Smc::AiAnalyzer] Tool error (#{tool_name}): #{e.class} - #{e.message}")
+      Rails.logger.debug { e.backtrace.first(3).join("\n") }
       { error: "#{e.class}: #{e.message}" }
     end
 

@@ -17,6 +17,7 @@ module Services
           # Step 2-6: Loop until ready
           iteration = 0
           max_iterations = ENV.fetch('AI_AGENT_MAX_ITERATIONS', '15').to_i
+          max_iterations = [max_iterations, 5].max # Minimum 5 iterations to ensure data collection
 
           while iteration < max_iterations && !context.ready_for_analysis?
             iteration += 1
@@ -244,25 +245,72 @@ module Services
 
             #{"Option Strikes (ATM ±1 ±2): #{strikes_text}" if context.intent == :options_buying}
 
-            Provide trading analysis and recommendation based on these facts.
+            Provide OPTIONS TRADING analysis and recommendation based on these facts.
+
+            CRITICAL - OPTIONS TRADING FOCUS:
+            - You are analyzing for OPTIONS BUYING (CALL or PUT options), NOT buying the underlying index (NIFTY/SENSEX/BANKNIFTY)
+            - NEVER recommend "BUY NIFTY" or "SELL SENSEX" - always recommend "BUY CALL options" or "BUY PUT options"
+            - MANDATORY: You MUST provide specific strike recommendations with exact strike prices
+            - If option strikes are provided in the data, use them to recommend specific strikes (e.g., "Buy CALL at strike ₹26,300 (ATM) and ₹26,350 (ATM+1)")
+            - If strikes are not provided, calculate ATM strike from LTP and recommend strikes around it (ATM, ATM+1, ATM-1)
+            - Consider time decay (theta) and volatility (IV) for intraday options trading
+            - Provide entry levels, target strikes, and stop-loss levels for the OPTIONS positions
+            - Mention expiry date considerations for intraday trading
+
+            RECOMMENDATION FORMAT (MANDATORY):
+            - "Buy CALL options at strike ₹26,300 (ATM) and ₹26,350 (ATM+1) for bullish move"
+            - "Buy PUT options at strike ₹26,250 (ATM-1) and ₹26,200 (ATM-2) for bearish move"
+            - ALWAYS include at least 2-3 specific strike prices with their labels (ATM, ATM+1, etc.)
+            - Include strike selection reasoning based on technical levels and current LTP
+            - NEVER give vague recommendations like "buy options" - always specify exact strikes
 
             IMPORTANT FORMATTING: Always include spaces between words and numbers.
-            Examples: "at ₹84,900" (correct), NOT "at84900" (incorrect).
-            Examples: "strikes at ₹84,900 and ₹85,000" (correct), NOT "at84900and85000" (incorrect).
+            Examples: "Buy CALL options at strike ₹26,300" (correct), NOT "buycallat26300" (incorrect).
+            Examples: "CALL strikes: ₹26,300 (ATM), ₹26,350 (ATM+1)" (correct).
           PROMPT
         end
 
         def build_synthesis_system_prompt
           <<~PROMPT
-            You are a technical analysis expert for Indian markets.
+            You are a technical analysis expert specializing in OPTIONS TRADING for Indian index derivatives (NIFTY, BANKNIFTY, SENSEX).
+
+            CRITICAL: You are analyzing for OPTIONS BUYING, not buying the underlying index. Focus on:
+            - CALL options for bullish moves
+            - PUT options for bearish moves
+            - Strike selection based on technical levels and risk/reward
+
+            MANDATORY REQUIREMENTS:
+            1. **MUST provide specific strike recommendations** - Never give vague recommendations like "buy options"
+            2. **MUST calculate strikes from LTP if not provided** - Use ATM (At The Money) based on current LTP
+            3. **MUST include at least 2-3 specific strike prices** with labels (ATM, ATM+1, ATM-1, etc.)
+            4. **MUST explain strike selection reasoning** based on technical levels
 
             Based on the provided facts, provide:
-            1. Current market state
-            2. Technical analysis using the indicators
-            3. Trading recommendation (BUY/SELL/HOLD/NO_TRADE)
-            4. Risk considerations
+            1. **Current Market State**: Brief overview of index price and trend (1-2 sentences)
+            2. **Technical Analysis**: Analysis using indicators (RSI, MACD, ADX, Supertrend, ATR) - be specific with values
+            3. **Trading Recommendation** (MANDATORY):
+               - For OPTIONS BUYING: Recommend CALL or PUT with specific reasoning
+               - MUST specify exact strike prices: "Buy CALL options at strike ₹26,300 (ATM) and ₹26,350 (ATM+1)"
+               - If strikes not provided, calculate from LTP: Round LTP to nearest 50 (for indices), then recommend ATM, ATM+1, ATM-1
+               - Entry strategy: Specific entry price levels
+               - Target levels: Specific target strikes or price levels
+            4. **Strike Selection** (MANDATORY):
+               - List 2-3 specific strikes with labels (ATM, ATM+1, ATM-1, etc.)
+               - Explain why these strikes were chosen based on technical analysis
+               - Include premium considerations if available
+            5. **Risk Considerations**:
+               - Stop-loss levels: Specific strike or price level
+               - Position sizing: Relative allocation between strikes
+               - Time decay risks: Mention theta impact for intraday
 
-            Be concise and actionable. Use only the facts provided - do not make assumptions.
+            FORMATTING:
+            - Always include spaces: "at ₹26,300" NOT "at26300"
+            - Specify option type: "CALL options" or "PUT options"
+            - Include strike prices: "Buy CALL at strike ₹26,300 (ATM) and ₹26,350 (ATM+1)"
+            - Use specific numbers, not ranges: "₹26,300" not "around ₹26,300"
+
+            Be concise, actionable, and focused on OPTIONS TRADING. Do not recommend buying the index itself.
+            NEVER give vague recommendations - always specify exact strikes.
           PROMPT
         end
       end
