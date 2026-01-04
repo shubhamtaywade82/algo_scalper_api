@@ -269,51 +269,20 @@ module Smc
     end
 
     def notify(decision, htf, mtf, ltf)
-      # Fetch AI analysis if enabled (reuse contexts to avoid fetching candles again)
-      ai_analysis = nil
-      if ai_enabled?
-        begin
-          # Build details from existing contexts to avoid fetching candles again
-          ltf_series = @instrument.candles(interval: LTF_INTERVAL)
-          avrz = Avrz::Detector.new(ltf_series)
-
-          details_data = {
-            decision: decision,
-            timeframes: {
-              htf: { interval: HTF_INTERVAL, context: htf.to_h },
-              mtf: { interval: MTF_INTERVAL, context: mtf.to_h },
-              ltf: { interval: LTF_INTERVAL, context: ltf.to_h, avrz: avrz.to_h }
-            }
-          }
-
-          prompt = build_smc_analysis_prompt(details_data)
-          model = select_ai_model
-
-          ai_analysis = ai_client.chat(
-            messages: [
-              { role: 'system', content: smc_ai_system_prompt },
-              { role: 'user', content: prompt }
-            ],
-            model: model,
-            temperature: 0.3
-          )
-        rescue StandardError => e
-          Rails.logger.warn("[Smc::BiasEngine] Failed to get AI analysis: #{e.class} - #{e.message}")
-        end
-      end
-
-      signal = Smc::SignalEvent.new(
-        instrument: @instrument,
-        decision: decision,
-        timeframe: '5m',
-        price: current_price,
-        reasons: build_reasons(htf, mtf, ltf),
-        ai_analysis: ai_analysis
+      # Enqueue background job for async AI analysis and Telegram notification
+      # This prevents blocking the scanner rake task while AI fetches response
+      Notifications::Telegram::SendSmcAlertJob.perform_later(
+        instrument_id: @instrument.id,
+        decision: decision.to_s,
+        htf_context: htf.to_h,
+        mtf_context: mtf.to_h,
+        ltf_context: ltf.to_h,
+        price: current_price
       )
 
-      Notifications::Telegram::SmcAlert.new(signal).notify!
+      Rails.logger.info("[Smc::BiasEngine] Enqueued alert job for #{@instrument.symbol_name} - #{decision}")
     rescue StandardError => e
-      Rails.logger.error("[Smc::BiasEngine] Notification error: #{e.class} - #{e.message}")
+      Rails.logger.error("[Smc::BiasEngine] Failed to enqueue alert job: #{e.class} - #{e.message}")
     end
 
     def build_reasons(htf, mtf, ltf)
