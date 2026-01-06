@@ -110,8 +110,10 @@ module Services
             end
 
             # If option chain failed or we have strikes, fetch indicators
+            # Use 15m as primary (25 candles/day) - cleaner signals for options trading
+            # 5m (75 candles/day) is too noisy and generates too many false signals
             if context.indicators.empty?
-              return { tool: 'compute_indicators', args: { instrument_id: context.resolved_instrument.id, timeframes: %w[5m 15m] } }
+              return { tool: 'compute_indicators', args: { instrument_id: context.resolved_instrument.id, timeframes: %w[15m 1h] } }
             end
           when :swing_trading
             # For swing: use higher timeframes, no derivatives
@@ -120,9 +122,10 @@ module Services
               return { tool: 'compute_indicators', args: { instrument_id: context.resolved_instrument.id, timeframes: %w[15m 1h] } }
             end
           when :intraday
-            # For intraday: use lower timeframes
+            # For intraday: use 15m as primary (25 candles/day) for cleaner signals
+            # 5m (75 candles/day) is too noisy for options trading analysis
             if context.indicators.empty?
-              return { tool: 'compute_indicators', args: { instrument_id: context.resolved_instrument.id, timeframes: %w[5m 15m] } }
+              return { tool: 'compute_indicators', args: { instrument_id: context.resolved_instrument.id, timeframes: %w[15m 1h] } }
             end
           else
             # General query: just get indicators if missing

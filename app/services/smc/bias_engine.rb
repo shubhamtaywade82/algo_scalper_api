@@ -90,44 +90,14 @@ module Smc
 
     # Analyze SMC/AVRZ data with AI (Ollama or OpenAI)
     # Returns AI analysis of the market structure, liquidity, and trading bias
+    # Uses new AiAnalyzer with chat completion, history, and tool calling
     def analyze_with_ai(stream: false, &)
       return nil unless ai_enabled?
 
       details_data = details
-      prompt = build_smc_analysis_prompt(details_data)
 
-      model = select_ai_model
-
-      if stream && block_given?
-        full_response = +''
-        begin
-          ai_client.chat_stream(
-            messages: [
-              { role: 'system', content: smc_ai_system_prompt },
-              { role: 'user', content: prompt }
-            ],
-            model: model,
-            temperature: 0.3
-          ) do |chunk|
-            if chunk.present?
-              full_response << chunk
-              yield(chunk)
-            end
-          end
-        rescue StandardError => e
-          Rails.logger.error("[Smc::BiasEngine] AI stream error: #{e.class} - #{e.message}")
-        end
-        full_response.presence
-      else
-        ai_client.chat(
-          messages: [
-            { role: 'system', content: smc_ai_system_prompt },
-            { role: 'user', content: prompt }
-          ],
-          model: model,
-          temperature: 0.3
-        )
-      end
+      analyzer = Smc::AiAnalyzer.new(@instrument, initial_data: details_data)
+      analyzer.analyze(stream: stream, &)
     rescue StandardError => e
       Rails.logger.error("[Smc::BiasEngine] AI analysis error: #{e.class} - #{e.message}")
       nil
@@ -146,18 +116,9 @@ module Smc
 
       # Use details_without_recursion to avoid calling decision again
       details_data = details_without_recursion(decision_value)
-      prompt = build_smc_analysis_prompt(details_data)
 
-      model = select_ai_model
-
-      ai_client.chat(
-        messages: [
-          { role: 'system', content: smc_ai_system_prompt },
-          { role: 'user', content: prompt }
-        ],
-        model: model,
-        temperature: 0.3
-      )
+      analyzer = Smc::AiAnalyzer.new(@instrument, initial_data: details_data)
+      analyzer.analyze
     rescue StandardError => e
       Rails.logger.error("[Smc::BiasEngine] AI analysis error: #{e.class} - #{e.message}")
       nil
@@ -189,63 +150,6 @@ module Smc
       series
     end
 
-    def ai_client
-      Services::Ai::OpenaiClient.instance
-    end
-
-    def select_ai_model
-      if ai_client.provider == :ollama
-        ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3'
-      else
-        'gpt-4o'
-      end
-    end
-
-    def smc_ai_system_prompt
-      <<~PROMPT
-        You are an expert Smart Money Concepts (SMC) and market structure analyst specializing in Indian index options trading (NIFTY, BANKNIFTY, SENSEX).
-
-        Analyze the provided SMC/AVRZ data and provide:
-        1. Market structure assessment (trend, BOS, CHoCH)
-        2. Liquidity analysis (sweeps, liquidity grabs)
-        3. Premium/Discount zone assessment
-        4. Order block identification and significance
-        5. Fair Value Gap (FVG) analysis
-        6. AVRZ rejection confirmation
-        7. Trading bias recommendation (call/put/no_trade) with reasoning
-        8. Risk factors and entry considerations
-
-        Provide clear, actionable analysis focused on practical trading decisions.
-      PROMPT
-    end
-
-    def build_smc_analysis_prompt(details_data)
-      symbol_name = @instrument.symbol_name || 'UNKNOWN'
-      decision = details_data[:decision]
-
-      <<~PROMPT
-        Analyze the following SMC/AVRZ market structure data for #{symbol_name}:
-
-        Trading Decision: #{decision}
-
-        Market Structure Analysis (Multi-Timeframe):
-
-        #{JSON.pretty_generate(details_data[:timeframes])}
-
-        Please provide:
-        1. **Market Structure Summary**: Overall trend, structure breaks, and change of character signals
-        2. **Liquidity Assessment**: Where liquidity is being taken and potential sweep zones
-        3. **Premium/Discount Analysis**: Current market position relative to equilibrium
-        4. **Order Block Significance**: Key order blocks and their relevance
-        5. **FVG Analysis**: Fair value gaps and their trading implications
-        6. **AVRZ Confirmation**: Rejection signals and timing confirmation
-        7. **Trading Recommendation**: Validate or challenge the #{decision} decision with reasoning
-        8. **Risk Factors**: Key risks and considerations for this setup
-        9. **Entry Strategy**: Optimal entry approach if trading signal is valid
-
-        Focus on actionable insights for options trading.
-      PROMPT
-    end
 
     def htf_bias_valid?(ctx)
       ctx.pd.discount? || ctx.pd.premium?

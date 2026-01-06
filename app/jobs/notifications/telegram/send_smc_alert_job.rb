@@ -60,19 +60,11 @@ module Notifications
             }
           }
 
-          prompt = build_smc_analysis_prompt(instrument, details_data)
-          model = select_ai_model
-
           Rails.logger.debug { "[SendSmcAlertJob] Fetching AI analysis for #{instrument.symbol_name}..." }
 
-          ai_client.chat(
-            messages: [
-              { role: 'system', content: smc_ai_system_prompt },
-              { role: 'user', content: prompt }
-            ],
-            model: model,
-            temperature: 0.3
-          )
+          # Use new AiAnalyzer with chat completion, history, and tool calling
+          analyzer = Smc::AiAnalyzer.new(instrument, initial_data: details_data)
+          analyzer.analyze
         rescue StandardError => e
           Rails.logger.warn("[SendSmcAlertJob] Failed to get AI analysis: #{e.class} - #{e.message}")
           nil
@@ -86,63 +78,6 @@ module Notifications
         false
       end
 
-      def ai_client
-        Services::Ai::OpenaiClient.instance
-      end
-
-      def select_ai_model
-        if ai_client.provider == :ollama
-          ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3'
-        else
-          'gpt-4o'
-        end
-      end
-
-      def smc_ai_system_prompt
-        <<~PROMPT
-          You are an expert Smart Money Concepts (SMC) and market structure analyst specializing in Indian index options trading (NIFTY, BANKNIFTY, SENSEX).
-
-          Analyze the provided SMC/AVRZ data and provide:
-          1. Market structure assessment (trend, BOS, CHoCH)
-          2. Liquidity analysis (sweeps, liquidity grabs)
-          3. Premium/Discount zone assessment
-          4. Order block identification and significance
-          5. Fair Value Gap (FVG) analysis
-          6. AVRZ rejection confirmation
-          7. Trading bias recommendation (call/put/no_trade) with reasoning
-          8. Risk factors and entry considerations
-
-          Provide clear, actionable analysis focused on practical trading decisions.
-        PROMPT
-      end
-
-      def build_smc_analysis_prompt(instrument, details_data)
-        symbol_name = instrument.symbol_name || 'UNKNOWN'
-        decision = details_data[:decision]
-
-        <<~PROMPT
-          Analyze the following SMC/AVRZ market structure data for #{symbol_name}:
-
-          Trading Decision: #{decision}
-
-          Market Structure Analysis (Multi-Timeframe):
-
-          #{JSON.pretty_generate(details_data[:timeframes])}
-
-          Please provide:
-          1. **Market Structure Summary**: Overall trend, structure breaks, and change of character signals
-          2. **Liquidity Assessment**: Where liquidity is being taken and potential sweep zones
-          3. **Premium/Discount Analysis**: Current market position relative to equilibrium
-          4. **Order Block Significance**: Key order blocks and their relevance
-          5. **FVG Analysis**: Fair value gaps and their trading implications
-          6. **AVRZ Confirmation**: Rejection signals and timing confirmation
-          7. **Trading Recommendation**: Validate or challenge the #{decision} decision with reasoning
-          8. **Risk Factors**: Key risks and considerations for this setup
-          9. **Entry Strategy**: Optimal entry approach if trading signal is valid
-
-          Focus on actionable insights for options trading.
-        PROMPT
-      end
 
       def build_reasons(htf_context, mtf_context, ltf_context)
         reasons = []

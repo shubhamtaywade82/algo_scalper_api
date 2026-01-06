@@ -223,7 +223,7 @@ namespace :ai do
       # Send typing indicator to Telegram if enabled
       TelegramNotifier.send_chat_action(action: 'typing') if telegram_enabled
 
-      # Accumulate chunks for Telegram
+      # Accumulate chunks for Telegram (filtered - no verbose logs)
       telegram_buffer = String.new # Create mutable string (frozen_string_literal is enabled)
       # Escape HTML special characters in query
       escaped_query = query.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
@@ -234,8 +234,17 @@ namespace :ai do
           print chunk
           $stdout.flush
 
-          # Accumulate for Telegram
-          telegram_buffer << chunk if telegram_enabled
+          # Filter out verbose logs for Telegram - only keep actual analysis content
+          if telegram_enabled
+            # Skip verbose agent logs (intent, symbol, tool calls, agent status)
+            # Match patterns at start of line or anywhere in chunk
+            if chunk.to_s.match?(/🔍 \[Intent\]|📊 \[Symbol\]|🔧 \[Tool\]|✅ \[Tool\]|⚠️  \[Agent\]|📝 \[Agent\]|💭 \[Agent\]|📋 \[Tool\]|⚙️  \[Tool\]|⏹️  \[Agent\]/)
+              next
+            end
+
+            # Only accumulate actual analysis content (not verbose logs)
+            telegram_buffer << chunk
+          end
         end
       end
 
@@ -244,20 +253,43 @@ namespace :ai do
       puts '-' * 100
       puts "Generated at: #{result[:generated_at]}" if result
 
-      # Send complete message to Telegram
+      # Send complete message to Telegram (cleaned)
       if telegram_enabled && telegram_buffer.present?
-        telegram_buffer << "\n\n"
-        telegram_buffer << "⏰ Generated at: #{result[:generated_at]}" if result&.dig(:generated_at)
-        telegram_buffer << "\n🤖 Provider: #{result[:provider]}" if result&.dig(:provider)
+        # Clean up the buffer - remove any remaining verbose logs
+        cleaned_buffer = telegram_buffer.dup
+        # Remove all verbose log patterns (comprehensive cleanup)
+        cleaned_buffer.gsub!(/🔍 \[Intent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/📊 \[Symbol\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/🔧 \[Tool\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/✅ \[Tool\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/⚠️  \[Agent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/📝 \[Agent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/💭 \[Agent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/⚙️  \[Tool\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/⏹️  \[Agent\][^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/📋 \[Tool\] Result:[^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/📋 \[Tool\] Result:\s*\n/, '')
+        # Remove JSON tool call results
+        cleaned_buffer.gsub!(/\{"tool"[^}]*\}[^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/\{"name"[^}]*\}[^\n]*\n?/, '')
+        cleaned_buffer.gsub!(/\n{3,}/, "\n\n") # Remove excessive newlines
+        cleaned_buffer.strip!
 
-        begin
-          # Escape HTML special characters in the analysis content
-          escaped_buffer = telegram_buffer.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
-          TelegramNotifier.send_message(escaped_buffer, parse_mode: 'HTML')
-          puts "\n✅ Analysis sent to Telegram"
-        rescue StandardError => e
-          Rails.logger.error("[AI Technical Analysis] Failed to send to Telegram: #{e.class} - #{e.message}")
-          puts "\n⚠️  Failed to send to Telegram: #{e.message}"
+        # Only send if there's actual content (not just headers)
+        if cleaned_buffer.strip.length > 50 # Minimum meaningful content
+          cleaned_buffer << "\n\n"
+          cleaned_buffer << "⏰ Generated at: #{result[:generated_at]}" if result&.dig(:generated_at)
+          cleaned_buffer << "\n🤖 Provider: #{result[:provider]}" if result&.dig(:provider)
+
+          begin
+            # Escape HTML special characters in the analysis content
+            escaped_buffer = cleaned_buffer.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+            TelegramNotifier.send_message(escaped_buffer, parse_mode: 'HTML')
+            puts "\n✅ Analysis sent to Telegram"
+          rescue StandardError => e
+            Rails.logger.error("[AI Technical Analysis] Failed to send to Telegram: #{e.class} - #{e.message}")
+            puts "\n⚠️  Failed to send to Telegram: #{e.message}"
+          end
         end
       end
     else
