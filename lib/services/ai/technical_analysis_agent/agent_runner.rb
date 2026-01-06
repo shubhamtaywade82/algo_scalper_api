@@ -285,23 +285,43 @@ module Services
             3. **MUST include at least 2-3 specific strike prices** with labels (ATM, ATM+1, ATM-1, etc.)
             4. **MUST explain strike selection reasoning** based on technical levels
 
-            Based on the provided facts, provide:
-            1. **Current Market State**: Brief overview of index price and trend (1-2 sentences)
-            2. **Technical Analysis**: Analysis using indicators (RSI, MACD, ADX, Supertrend, ATR) - be specific with values
-            3. **Trading Recommendation** (MANDATORY):
-               - For OPTIONS BUYING: Recommend CALL or PUT with specific reasoning
-               - MUST specify exact strike prices: "Buy CALL options at strike ₹26,300 (ATM) and ₹26,350 (ATM+1)"
-               - If strikes not provided, calculate from LTP: Round LTP to nearest 50 (for indices), then recommend ATM, ATM+1, ATM-1
-               - Entry strategy: Specific entry price levels
-               - Target levels: Specific target strikes or price levels
-            4. **Strike Selection** (MANDATORY):
-               - List 2-3 specific strikes with labels (ATM, ATM+1, ATM-1, etc.)
-               - Explain why these strikes were chosen based on technical analysis
+            Provide a complete trading action plan for options buyers:
+
+            **MANDATORY SECTIONS:**
+
+            1. **Trade Decision** (MANDATORY):
+               - State clearly: "BUY CE" or "BUY PE" or "AVOID TRADING"
+               - If AVOID: Explain why current technical conditions are not suitable
+               - If BUY: Provide specific reasoning based on indicators
+
+            2. **Current Market State** (Brief):
+               - Index price and trend (1-2 sentences)
+
+            3. **Technical Analysis**:
+               - Analysis using indicators (RSI, MACD, ADX, Supertrend, ATR) - be specific with values
+               - Explain what each indicator suggests
+
+            4. **Strike Selection** (MANDATORY if trading):
+               - Recommend 2-3 specific strike prices with exact values (e.g., "₹26,300", "₹26,350", "₹26,400")
+               - Label each strike (ATM, ATM+1, ATM-1, etc.)
+               - If strikes not provided in data, calculate from LTP: Round LTP to nearest 50 (for indices), then recommend ATM, ATM+1, ATM-1
+               - Explain why these strikes were chosen based on technical levels (support/resistance, indicator levels)
                - Include premium considerations if available
-            5. **Risk Considerations**:
-               - Stop-loss levels: Specific strike or price level
-               - Position sizing: Relative allocation between strikes
-               - Time decay risks: Mention theta impact for intraday
+
+            5. **Entry Strategy** (MANDATORY if trading):
+               - Specific entry price level or trigger condition
+               - Entry timing (immediate, wait for pullback, wait for confirmation)
+               - How to enter (market order, limit order, specific price level)
+
+            6. **Exit Strategy** (MANDATORY if trading):
+               - Take Profit (TP): Specific target price or strike level
+               - Stop Loss (SL): Specific stop loss price or strike level
+               - Exit timing: When to exit (time-based, price-based, or signal-based)
+
+            7. **Risk Management** (MANDATORY if trading):
+               - Position sizing: How much capital to allocate
+               - Risk per trade: Maximum loss acceptable
+               - Time decay considerations: Expiry date impact for intraday
 
             FORMATTING:
             - Always include spaces: "at ₹26,300" NOT "at26300"
