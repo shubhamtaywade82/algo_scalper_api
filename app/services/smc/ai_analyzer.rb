@@ -60,6 +60,9 @@ module Smc
                         else 50
                         end
 
+      # Get lot size from nearest future expiry derivative
+      lot_size = @instrument.lot_size_from_derivatives
+
       @messages = [
         {
           role: 'system',
@@ -77,9 +80,19 @@ module Smc
         },
         {
           role: 'user',
-          content: "Current LTP for #{symbol_name}: ₹#{ltp_value.round(2)}. Use this exact price to calculate strikes. Round to nearest #{strike_rounding} for #{symbol_name}. DO NOT use strikes from other indices."
+          content: build_initial_context_message(symbol_name, ltp_value, strike_rounding, lot_size)
         }
       ]
+    end
+
+    def build_initial_context_message(symbol_name, ltp_value, strike_rounding, lot_size)
+      message = "Current LTP for #{symbol_name}: ₹#{ltp_value.round(2)}. Use this exact price to calculate strikes. Round to nearest #{strike_rounding} for #{symbol_name}. DO NOT use strikes from other indices."
+
+      if lot_size&.positive?
+        message += " Lot size for #{symbol_name} options: #{lot_size} (1 lot = #{lot_size} shares). Use this for position sizing calculations."
+      end
+
+      message
     end
 
     def system_prompt
@@ -109,7 +122,15 @@ module Smc
         - For SENSEX: Round strikes to nearest 100 (e.g., 85,500, 85,600, 85,700)
         - For BANKNIFTY: Round strikes to nearest 100 (e.g., 52,000, 52,100, 52,200)
         - NEVER guess strike prices - ALWAYS calculate from actual LTP
-        - Specify entry/exit levels clearly
+        - ALWAYS use get_option_chain tool to get actual premium prices (LTP), DELTA, THETA, and expiry date for selected strikes
+        - Stop Loss (SL) and Take Profit (TP) MUST be based on premium percentages, NOT underlying prices
+        - CRITICAL: Calculate percentages correctly - if entry is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50)
+        - Use DELTA to calculate underlying levels: Underlying move = Premium move / Delta
+        - Consider THETA (time decay) and expiry date when setting targets
+        - Intraday realistic expectations: TP 10-25% gain, SL 15-25% loss (NOT 50-100% for intraday)
+        - SL/TP Format: "If premium is ₹X, SL at ₹Y (Z% loss), TP at ₹W (V% gain). Underlying: SL at ₹ABC, TP at ₹DEF (calculated using Delta)"
+        - NEVER use hallucinated values - ALWAYS use actual premium prices, delta, theta from get_option_chain tool
+        - Specify entry/exit levels clearly with both premium prices and underlying levels (calculated using delta)
         - Include risk management details
         - Never give vague recommendations - always be specific and actionable
       PROMPT
@@ -149,19 +170,44 @@ module Smc
            - If option chain data is needed, use the get_option_chain tool
 
         3. **Entry Strategy** (MANDATORY if trading):
-           - Specific entry price level or trigger condition
+           - YOU MUST call get_option_chain tool to get actual premium prices (LTP) for selected strikes
+           - Specific entry premium price (e.g., "Enter at premium ₹X" - use actual LTP from option chain)
            - Entry timing (immediate, wait for pullback, wait for confirmation)
-           - How to enter (market order, limit order, specific price level)
+           - How to enter (market order, limit order, specific premium price level)
 
         4. **Exit Strategy** (MANDATORY if trading):
-           - Take Profit (TP): Specific target price or strike level
-           - Stop Loss (SL): Specific stop loss price or strike level
-           - Exit timing: When to exit (time-based, price-based, or signal-based)
+           - YOU MUST calculate SL/TP based on premium percentages, NOT underlying prices
+           - Use actual premium price from get_option_chain tool for calculations
+           - CRITICAL: Calculate percentages correctly:
+             * If entry premium is ₹100 and you want 30% loss: SL = ₹100 × (1 - 0.30) = ₹70 (NOT ₹30)
+             * If entry premium is ₹100 and you want 50% gain: TP = ₹100 × (1 + 0.50) = ₹150 (NOT ₹50)
+           - Use DELTA from option chain to calculate underlying levels:
+             * Delta tells you how much option price moves per ₹1 move in underlying
+             * Example: If delta is 0.5 and premium needs to move ₹30, underlying needs to move ₹30/0.5 = ₹60
+             * SL underlying level = Current spot - (Premium loss / Delta)
+             * TP underlying level = Current spot + (Premium gain / Delta)
+           - Consider THETA (time decay) and expiry date:
+             * For intraday: Use conservative targets (10-25% gain, 15-25% loss)
+             * For weekly expiry: Adjust based on days remaining (more days = more time decay risk)
+             * Near expiry (< 3 days): Use tighter targets (10-20% gain, 15-20% loss)
+             * Far expiry (> 7 days): Can use wider targets (20-40% gain, 20-30% loss)
+           - Take Profit (TP):
+             * Premium target: "TP at ₹X (Y% gain from entry premium ₹Z)"
+             * Calculate underlying level using: Current spot + (Premium gain / Delta)
+             * Intraday realistic TP: 10-25% premium gain (NOT 50-100% for intraday)
+           - Stop Loss (SL):
+             * Premium stop: "SL at ₹X (Y% loss from entry premium ₹Z)"
+             * Calculate underlying level using: Current spot - (Premium loss / Delta)
+             * Intraday realistic SL: 15-25% premium loss (NOT 30%+ for intraday)
+           - NEVER use underlying prices directly for SL/TP (e.g., "SL at ₹84800" is WRONG - use premium prices)
+           - NEVER calculate percentages incorrectly (e.g., "30% loss = ₹22.69 from ₹113.45" is WRONG - correct is ₹79.42)
+           - Exit timing: When to exit (time-based, premium-based, or signal-based)
 
         5. **Risk Management** (MANDATORY if trading):
-           - Position sizing: How much capital to allocate
+           - Position sizing: How much capital to allocate (consider lot size - 1 lot = X shares)
            - Risk per trade: Maximum loss acceptable
            - Time decay considerations: Expiry date impact
+           - Lot size: Use the lot size provided in the context for position sizing (e.g., if lot size is 75, minimum position is 75 shares)
 
         6. **Market Structure Context** (Brief):
            - Overall trend and structure breaks
@@ -572,13 +618,13 @@ module Smc
           type: 'function',
           function: {
             name: 'get_option_chain',
-            description: 'Get option chain data for the index (if applicable)',
+            description: 'Get option chain data for the index (if applicable). IMPORTANT: Do NOT provide expiry_date unless you are certain of a valid expiry date. It is safer to leave expiry_date empty and let the system automatically select the nearest available expiry date.',
             parameters: {
               type: 'object',
               properties: {
                 expiry_date: {
                   type: 'string',
-                  description: 'Expiry date in YYYY-MM-DD format (optional - if not provided, will automatically use the nearest available expiry date)'
+                  description: 'Expiry date in YYYY-MM-DD format. CRITICAL: Only provide this if you know the exact valid expiry date from previous tool results. DO NOT guess or calculate expiry dates. If unsure, leave this empty and the system will automatically use the nearest available expiry date. Indian index options expire on specific Thursdays, not arbitrary dates.'
                 }
               },
               required: []
@@ -933,14 +979,19 @@ module Smc
       Rails.logger.debug { "[Smc::AiAnalyzer] Loading option chain for #{index_key} expiry #{expiry} with spot #{spot}" }
       chain = analyzer.load_chain_for_expiry(expiry, spot)
 
+      # Get lot size from instrument for this index
+      lot_size = @instrument.lot_size_from_derivatives
+
       # If chain is empty, return helpful message
       if chain.empty?
         return {
           index: index_key,
           expiry: expiry.to_s,
           spot: spot,
+          lot_size: lot_size,
+          available_expiries: valid_expiries.first(10).map(&:to_s),
           options: [],
-          note: "No option chain data available for expiry #{expiry}. Use LTP (#{spot}) to calculate strikes manually."
+          note: "No option chain data available for expiry #{expiry}. Available expiry dates: #{valid_expiries.first(5).map(&:to_s).join(', ')}. Use LTP (#{spot}) to calculate strikes manually. Lot size: #{lot_size || 'N/A'}."
         }
       end
 
@@ -948,13 +999,22 @@ module Smc
         index: index_key,
         expiry: expiry.to_s,
         spot: spot,
+        lot_size: lot_size,
+        available_expiries: valid_expiries.first(10).map(&:to_s),
+        note: "Available expiry dates for #{index_key}: #{valid_expiries.first(5).map(&:to_s).join(', ')}. Current expiry used: #{expiry} (#{(Date.parse(expiry.to_s) - Time.zone.today).to_i} days away). Lot size: #{lot_size || 'N/A'} (1 lot = #{lot_size || 'N/A'} shares). IMPORTANT: Use premium prices (ltp field) for SL/TP calculations, NOT underlying prices. Calculate percentages correctly: if entry premium is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50). Use DELTA to calculate underlying levels: Underlying move = Premium move / Delta. Consider THETA (time decay) and days to expiry. For intraday: realistic TP 10-25%, SL 15-25%. For weekly expiry: adjust based on days remaining.",
         options: chain.first(20).map do |opt|
           {
             strike: opt[:strike],
             option_type: opt[:option_type],
             ltp: opt[:ltp],
+            premium: opt[:ltp], # Alias for clarity
+            delta: opt[:delta],
+            theta: opt[:theta],
+            gamma: opt[:gamma],
+            iv: opt[:iv],
             oi: opt[:oi],
-            change: opt[:change]
+            change: opt[:change],
+            lot_size: opt[:lot_size] || lot_size
           }
         end
       }

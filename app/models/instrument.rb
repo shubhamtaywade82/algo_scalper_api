@@ -282,4 +282,18 @@ class Instrument < ApplicationRecord
   def option_chain(expiry: nil)
     fetch_option_chain(expiry)
   end
+
+  # Get lot size from the nearest future expiry derivative
+  # Returns the lot_size of the first derivative with expiry_date >= today
+  # @return [Integer, nil] Lot size from nearest future expiry derivative, or nil if not found
+  def lot_size_from_derivatives
+    today = Time.zone.today
+    nearest_derivative = derivatives
+                         .where('expiry_date >= ?', today)
+                         .where.not(lot_size: nil)
+                         .order(expiry_date: :asc)
+                         .first
+
+    nearest_derivative&.lot_size&.to_i
+  end
 end

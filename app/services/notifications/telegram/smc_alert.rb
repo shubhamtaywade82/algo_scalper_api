@@ -262,7 +262,11 @@ module Notifications
       end
 
       def get_lot_size_for_instrument
-        # Try to get from index config
+        # First, try to get from nearest future expiry derivative in database
+        lot_size = @signal.instrument.lot_size_from_derivatives
+        return lot_size if lot_size&.positive?
+
+        # Fallback to index config
         symbol_name = @signal.instrument.symbol_name.to_s.upcase
         index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == symbol_name }
         return index_cfg[:lot_size].to_i if index_cfg && index_cfg[:lot_size]
