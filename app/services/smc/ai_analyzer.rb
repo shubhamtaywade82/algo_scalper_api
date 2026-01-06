@@ -855,14 +855,58 @@ module Smc
 
       index_key = @instrument.symbol_name
 
-      # If expiry_date is provided, validate it; otherwise get nearest expiry from instrument directly
+      # Get expiry list directly from instrument (needed for validation)
+      expiry_list = @instrument.expiry_list
+      unless expiry_list&.any?
+        Rails.logger.warn("[Smc::AiAnalyzer] No expiry list available for #{index_key}")
+        return { error: 'No expiry dates available for this index' }
+      end
+
+      # Parse expiry list to Date objects
+      today = Time.zone.today
+      parsed_expiries = expiry_list.compact.filter_map do |raw|
+        case raw
+        when Date then raw
+        when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
+        when String
+          begin
+            Date.parse(raw)
+          rescue ArgumentError
+            nil
+          end
+        else
+          nil
+        end
+      end
+
+      # Filter to future expiries only
+      valid_expiries = parsed_expiries.select { |date| date >= today }.sort
+      unless valid_expiries.any?
+        Rails.logger.warn("[Smc::AiAnalyzer] No future expiry dates found for #{index_key}")
+        return { error: 'No future expiry dates available for this index' }
+      end
+
+      # If expiry_date is provided, validate it exists in the expiry list
+      expiry = nil
       if expiry_date
         begin
-          expiry = Date.parse(expiry_date.to_s)
-          # Validate that expiry is not in the past
-          if expiry < Time.zone.today
-            Rails.logger.warn("[Smc::AiAnalyzer] Provided expiry #{expiry} is in the past, ignoring and using nearest expiry")
-            expiry = nil
+          provided_expiry = Date.parse(expiry_date.to_s)
+          # Check if provided expiry is in the valid expiry list
+          if valid_expiries.include?(provided_expiry)
+            expiry = provided_expiry
+            days_away = (expiry - today).to_i
+            Rails.logger.info("[Smc::AiAnalyzer] Using provided expiry: #{expiry} (#{days_away} days away) for #{index_key}")
+          else
+            # Provided expiry doesn't exist in list - find nearest valid expiry
+            nearest_valid = valid_expiries.min_by { |d| (d - provided_expiry).abs }
+            Rails.logger.warn(
+              "[Smc::AiAnalyzer] Provided expiry #{provided_expiry} not in expiry list. " \
+              "Available expiries: #{valid_expiries.first(5).join(', ')}. " \
+              "Using nearest valid expiry: #{nearest_valid}"
+            )
+            expiry = nearest_valid
+            days_away = (expiry - today).to_i
+            Rails.logger.info("[Smc::AiAnalyzer] Using nearest valid expiry: #{expiry} (#{days_away} days away) for #{index_key}")
           end
         rescue ArgumentError
           Rails.logger.warn("[Smc::AiAnalyzer] Invalid expiry date format: #{expiry_date}, using nearest expiry")
@@ -870,45 +914,10 @@ module Smc
         end
       end
 
-      # If expiry is still nil, get nearest expiry from instrument's expiry_list
-      if expiry
-        days_away = (expiry - Time.zone.today).to_i
-        Rails.logger.info("[Smc::AiAnalyzer] Using provided expiry: #{expiry} (#{days_away} days away) for #{index_key}")
-      else
-        Rails.logger.debug { "[Smc::AiAnalyzer] No expiry_date provided, finding nearest expiry from instrument for #{index_key}" }
-
-        # Get expiry list directly from instrument (more reliable than going through DerivativeChainAnalyzer)
-        expiry_list = @instrument.expiry_list
-        unless expiry_list&.any?
-          Rails.logger.warn("[Smc::AiAnalyzer] No expiry list available for #{index_key}")
-          return { error: 'No expiry dates available for this index' }
-        end
-
-        # Parse and find nearest expiry
-        today = Time.zone.today
-        parsed_expiries = expiry_list.compact.filter_map do |raw|
-          case raw
-          when Date then raw
-          when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
-          when String
-            begin
-              Date.parse(raw)
-            rescue ArgumentError
-              nil
-            end
-          else
-            nil
-          end
-        end
-
-        nearest_expiry_date = parsed_expiries.select { |date| date >= today }.min
-        unless nearest_expiry_date
-          Rails.logger.warn("[Smc::AiAnalyzer] No future expiry dates found for #{index_key}")
-          return { error: 'No future expiry dates available for this index' }
-        end
-
-        expiry = nearest_expiry_date
-        days_away = (expiry - Time.zone.today).to_i
+      # If no expiry provided or validation failed, use nearest expiry
+      unless expiry
+        expiry = valid_expiries.min
+        days_away = (expiry - today).to_i
         Rails.logger.info("[Smc::AiAnalyzer] Using nearest expiry from instrument: #{expiry} (#{days_away} days away) for #{index_key}")
       end
 
