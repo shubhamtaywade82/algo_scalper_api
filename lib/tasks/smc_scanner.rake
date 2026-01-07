@@ -3,10 +3,24 @@ DELAY_BETWEEN_INSTRUMENTS = 2.0 # seconds
 DELAY_BETWEEN_CANDLE_FETCHES = 1.0 # seconds
 
 namespace :smc do
-  desc 'Run SMC/AVRZ analysis for all configured indices'
-  task scan: :environment do
+  desc 'Run SMC/AVRZ analysis for all configured indices (or specific index if INDEX_KEY is provided)'
+  desc 'Usage: rake smc:scan                    # Scan all indices'
+  desc '       rake smc:scan[INDEX_KEY]         # Scan specific index (e.g., rake smc:scan[NIFTY])'
+  task :scan, [:index_key] => :environment do |_t, args|
     indices = IndexConfigLoader.load_indices
     Rails.logger.info("[SMCSanner] Loaded #{indices.size} indices from config...")
+
+    # Filter by specific index if provided
+    if args[:index_key].present?
+      index_key = args[:index_key].to_s.upcase
+      indices = indices.select { |idx| (idx[:key] || idx['key']).to_s.upcase == index_key }
+      if indices.empty?
+        Rails.logger.error("[SMCSanner] Index '#{index_key}' not found in configured indices")
+        Rails.logger.info("[SMCSanner] Available indices: #{IndexConfigLoader.load_indices.map { |i| i[:key] || i['key'] }.compact.join(', ')}")
+        exit 1
+      end
+      Rails.logger.info("[SMCSanner] Filtered to specific index: #{index_key}")
+    end
 
     # Filter indices by expiry (only analyze indices with expiry <= 7 days)
     filtered_indices = filter_indices_by_expiry(indices)
