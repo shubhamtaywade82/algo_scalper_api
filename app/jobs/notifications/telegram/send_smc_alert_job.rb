@@ -20,6 +20,12 @@ module Notifications
         # Fetch AI analysis asynchronously (this is the slow part)
         ai_analysis = fetch_ai_analysis(instrument, decision, htf_context, mtf_context, ltf_context)
 
+        if ai_analysis.present?
+          Rails.logger.info("[SendSmcAlertJob] AI analysis received (#{ai_analysis.length} chars) for #{instrument.symbol_name}")
+        else
+          Rails.logger.warn("[SendSmcAlertJob] AI analysis is empty or nil for #{instrument.symbol_name}")
+        end
+
         # Build signal event
         signal = Smc::SignalEvent.new(
           instrument: instrument,
@@ -29,6 +35,8 @@ module Notifications
           reasons: build_reasons(htf_context, mtf_context, ltf_context),
           ai_analysis: ai_analysis
         )
+
+        Rails.logger.debug { "[SendSmcAlertJob] Signal created - decision: #{signal.decision}, ai_analysis present: #{signal.ai_analysis.present?}, valid: #{signal.valid?}" }
 
         # Send Telegram notification (with chunking support)
         SmcAlert.new(signal).notify!
@@ -64,7 +72,15 @@ module Notifications
 
           # Use new AiAnalyzer with chat completion, history, and tool calling
           analyzer = Smc::AiAnalyzer.new(instrument, initial_data: details_data)
-          analyzer.analyze
+          result = analyzer.analyze
+
+          if result.present?
+            Rails.logger.info("[SendSmcAlertJob] AI analysis generated successfully (#{result.length} chars) for #{instrument.symbol_name}")
+          else
+            Rails.logger.warn("[SendSmcAlertJob] AI analyzer returned empty result for #{instrument.symbol_name}")
+          end
+
+          result
         rescue StandardError => e
           Rails.logger.warn("[SendSmcAlertJob] Failed to get AI analysis: #{e.class} - #{e.message}")
           nil
@@ -77,7 +93,6 @@ module Notifications
       rescue StandardError
         false
       end
-
 
       def build_reasons(htf_context, mtf_context, ltf_context)
         reasons = []

@@ -41,6 +41,11 @@ module Notifications
 
         message = format_message
 
+        Rails.logger.debug { "[SmcAlert] AI analysis present: #{@signal.ai_analysis.present?}, message length: #{message.length}" }
+        if @signal.ai_analysis.present?
+          Rails.logger.debug { "[SmcAlert] AI analysis preview: #{@signal.ai_analysis.to_s.first(100)}..." }
+        end
+
         Rails.logger.info("[SmcAlert] Sending alert for #{@signal.instrument.symbol_name} - #{@signal.decision} (#{message.length} chars)")
 
         # Client will automatically split into chunks if needed
