@@ -17,12 +17,8 @@ module Notifications
 
         Rails.logger.info("[SendSmcAlertJob] Processing alert for #{instrument.symbol_name} - #{decision}")
 
-        # Fetch fresh AVRZ data once (this is the only real-time timing input we need)
-        ltf_series = instrument.candles(interval: Smc::BiasEngine::LTF_INTERVAL)
-        avrz = Avrz::Detector.new(ltf_series)
-
         # Fetch AI analysis asynchronously (this is the slow part)
-        ai_analysis = fetch_ai_analysis(instrument, decision, htf_context, mtf_context, ltf_context, avrz: avrz)
+        ai_analysis = fetch_ai_analysis(instrument, decision, htf_context, mtf_context, ltf_context)
 
         if ai_analysis.present?
           Rails.logger.info("[SendSmcAlertJob] AI analysis received (#{ai_analysis.length} chars) for #{instrument.symbol_name}")
@@ -36,7 +32,7 @@ module Notifications
           decision: decision.to_sym,
           timeframe: '5m',
           price: price,
-          reasons: build_reasons(htf_context, mtf_context, ltf_context, avrz: avrz),
+          reasons: build_reasons(htf_context, mtf_context, ltf_context),
           ai_analysis: ai_analysis
         )
 
@@ -54,19 +50,17 @@ module Notifications
 
       private
 
-      def fetch_ai_analysis(instrument, decision, htf_context, mtf_context, ltf_context, avrz:)
+      def fetch_ai_analysis(instrument, decision, htf_context, mtf_context, ltf_context)
         return nil unless ai_enabled?
 
         begin
+          # Fetch fresh AVRZ data (this is the only real-time data we need)
+          ltf_series = instrument.candles(interval: Smc::BiasEngine::LTF_INTERVAL)
+          avrz = Avrz::Detector.new(ltf_series)
+
           # Build details for AI prompt using serialized context data
           details_data = {
             decision: decision.to_sym,
-            permission: Smc::PermissionResolver.call(
-              htf: htf_context,
-              mtf: mtf_context,
-              ltf: ltf_context,
-              avrz: avrz
-            )&.permission,
             timeframes: {
               htf: { interval: Smc::BiasEngine::HTF_INTERVAL, context: htf_context },
               mtf: { interval: Smc::BiasEngine::MTF_INTERVAL, context: mtf_context },
@@ -100,13 +94,8 @@ module Notifications
         false
       end
 
-      def build_reasons(htf_context, mtf_context, ltf_context, avrz:)
+      def build_reasons(htf_context, mtf_context, ltf_context)
         reasons = []
-
-        permission = Smc::PermissionResolver.call(htf: htf_context, mtf: mtf_context, ltf: ltf_context, avrz: avrz)
-        if permission
-          reasons << "Permission: #{permission.permission} (max_lots=#{permission.max_lots}, mode=#{permission.execution_mode})"
-        end
 
         # Use serialized context data to build reasons
         # Context keys: premium_discount, swing_structure (or structure), liquidity
@@ -136,7 +125,7 @@ module Notifications
           end
         end
 
-        reasons << (avrz.rejection? ? 'AVRZ rejection confirmed' : 'AVRZ not confirmed (timing missing)')
+        reasons << 'AVRZ rejection confirmed'
 
         reasons
       end

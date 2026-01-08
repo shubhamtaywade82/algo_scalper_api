@@ -49,7 +49,7 @@ RSpec.describe Smc::BiasEngine do
 
       allow(Smc::Context).to receive(:new).and_return(htf_ctx, mtf_ctx, ltf_ctx)
 
-      avrz = instance_double('Avrz::Detector', rejection?: true, to_h: { rejection: true })
+      avrz = instance_double('Avrz::Detector', rejection?: true)
       expect(Avrz::Detector).to receive(:new).with(ltf_series).and_return(avrz)
 
       # Disable Telegram notifications in test
