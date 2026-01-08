@@ -54,7 +54,7 @@ module Smc
       symbol_name = @instrument.symbol_name.to_s.upcase
 
       # Calculate strike rounding based on index
-      strike_rounding = case symbol_name # rubocop:disable Lint/DuplicateBranch
+      strike_rounding = case symbol_name
                         when 'SENSEX', 'BANKNIFTY' then 100
                         else 50 # Default for NIFTY and others
                         end
@@ -289,7 +289,7 @@ module Smc
 
             # Determine strike rounding based on symbol
             symbol_name = @instrument.symbol_name.to_s.upcase
-            strike_rounding = case symbol_name # rubocop:disable Lint/DuplicateBranch
+            strike_rounding = case symbol_name
                               when 'SENSEX', 'BANKNIFTY' then 100
                               else 50 # Default for NIFTY and others
                               end
@@ -395,17 +395,17 @@ module Smc
               Rails.logger.warn("[Smc::AiAnalyzer] Tool #{tool_name} already called successfully with same parameters. Skipping duplicate call.")
               # Return a message indicating data already available
               tool_result = case tool_name
-                           when 'get_option_chain'
-                             { error: 'Option chain data already retrieved in a previous tool call. Use the data from that response.' }
-                           when 'get_current_ltp'
-                             { error: 'LTP data already retrieved in a previous tool call. Use the data from that response.' }
-                           when 'get_technical_indicators'
-                             { error: 'Technical indicators already retrieved in a previous tool call. Use the data from that response.' }
-                           when 'get_historical_candles'
-                             { error: 'Historical candles already retrieved in a previous tool call. Use the data from that response.' }
-                           else
-                             { error: 'This tool was already called successfully. Use the data from the previous response.' }
-                           end
+                            when 'get_option_chain'
+                              { error: 'Option chain data already retrieved in a previous tool call. Use the data from that response.' }
+                            when 'get_current_ltp'
+                              { error: 'LTP data already retrieved in a previous tool call. Use the data from that response.' }
+                            when 'get_technical_indicators'
+                              { error: 'Technical indicators already retrieved in a previous tool call. Use the data from that response.' }
+                            when 'get_historical_candles'
+                              { error: 'Historical candles already retrieved in a previous tool call. Use the data from that response.' }
+                            else
+                              { error: 'This tool was already called successfully. Use the data from the previous response.' }
+                            end
               # Don't increment consecutive_errors for duplicate calls - this is expected behavior
               # The AI should use the data from the previous call, not keep trying
             else
@@ -736,7 +736,7 @@ module Smc
 
         begin
           # Try to parse parameters - handle nested objects
-          parsed_params = JSON.parse(params_str) # rubocop:disable Lint/UnusedBlockArgument
+          parsed_params = JSON.parse(params_str)
           tool_calls << {
             'tool' => name,
             'arguments' => parsed_params
@@ -840,11 +840,11 @@ module Smc
       args.each do |k, v|
         key = k.to_s
         # For get_option_chain, normalize empty expiry_date string to nil
-        if tool_name == 'get_option_chain' && key == 'expiry_date'
-          normalized[key] = (v.is_a?(String) && v.strip.empty?) ? nil : v
-        else
-          normalized[key] = v
-        end
+        normalized[key] = if tool_name == 'get_option_chain' && key == 'expiry_date'
+                            v.is_a?(String) && v.strip.empty? ? nil : v
+                          else
+                            v
+                          end
       end
       normalized
     end
