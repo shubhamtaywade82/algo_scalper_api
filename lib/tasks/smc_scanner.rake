@@ -1,3 +1,7 @@
+# frozen_string_literal: true
+
+require_relative '../telegram_notifier'
+
 # Delay between API calls to avoid rate limits (DH-904)
 DELAY_BETWEEN_INSTRUMENTS = 2.0 # seconds
 DELAY_BETWEEN_CANDLE_FETCHES = 1.0 # seconds
@@ -56,6 +60,9 @@ namespace :smc do
           if ai_analysis.present?
             Rails.logger.info("[SMCSanner] AI Analysis for #{idx_cfg[:key]}:")
             Rails.logger.info(ai_analysis)
+
+            # Send instant Telegram notification with AI analysis
+            send_ai_analysis_telegram_notification(idx_cfg[:key], decision, ai_analysis)
           else
             Rails.logger.warn("[SMCSanner] AI analysis returned empty for #{idx_cfg[:key]}")
           end
@@ -156,5 +163,28 @@ namespace :smc do
     max_days.to_i
   rescue StandardError
     7 # Default to 7 days if config unavailable
+  end
+
+  # Send instant Telegram notification with AI analysis
+  # Sends synchronously (not via background job) for immediate delivery
+  def send_ai_analysis_telegram_notification(index_key, decision, ai_analysis)
+    return unless TelegramNotifier.enabled?
+
+    # Format message with index, decision, and AI analysis
+    message = <<~MESSAGE
+      🤖 <b>SMC AI Analysis: #{index_key}</b>
+
+      <b>Decision:</b> #{decision.to_s.upcase}
+
+      <b>AI Analysis:</b>
+      #{ai_analysis}
+    MESSAGE
+
+    begin
+      TelegramNotifier.send_message(message, parse_mode: 'HTML')
+      Rails.logger.info("[SMCSanner] Sent AI analysis Telegram notification for #{index_key}")
+    rescue StandardError => e
+      Rails.logger.error("[SMCSanner] Failed to send AI analysis Telegram notification: #{e.class} - #{e.message}")
+    end
   end
 end
