@@ -54,10 +54,9 @@ module Smc
       symbol_name = @instrument.symbol_name.to_s.upcase
 
       # Calculate strike rounding based on index
-      strike_rounding = case symbol_name
-                        when 'NIFTY' then 50
+      strike_rounding = case symbol_name # rubocop:disable Lint/DuplicateBranch
                         when 'SENSEX', 'BANKNIFTY' then 100
-                        else 50
+                        else 50 # Default for NIFTY and others
                         end
 
       # Get lot size from nearest future expiry derivative
@@ -223,6 +222,7 @@ module Smc
       iteration = 0
       full_response = ''
       failed_tools = [] # Track failed tool calls to prevent infinite loops
+      successful_tools = [] # Track successful tool calls to prevent duplicate calls
       consecutive_errors = 0 # Track consecutive errors
 
       while iteration < MAX_ITERATIONS
@@ -289,10 +289,9 @@ module Smc
 
             # Determine strike rounding based on symbol
             symbol_name = @instrument.symbol_name.to_s.upcase
-            strike_rounding = case symbol_name
-                              when 'NIFTY' then 50
+            strike_rounding = case symbol_name # rubocop:disable Lint/DuplicateBranch
                               when 'SENSEX', 'BANKNIFTY' then 100
-                              else 50
+                              else 50 # Default for NIFTY and others
                               end
 
             final_prompt = if ltp_value
@@ -382,12 +381,33 @@ module Smc
 
             Rails.logger.debug { "[Smc::AiAnalyzer] Executing tool: #{tool_name} with args: #{tool_args.inspect}" }
 
+            # Normalize tool args for comparison (convert empty strings to nil for expiry_date)
+            normalized_tool_args = normalize_tool_args_for_comparison(tool_name, tool_args)
+            tool_key = "#{tool_name}:#{normalized_tool_args.to_json}"
+
             # Check if this tool has failed before
-            tool_key = "#{tool_name}:#{tool_args.to_json}"
             if failed_tools.include?(tool_key)
               Rails.logger.warn("[Smc::AiAnalyzer] Skipping previously failed tool: #{tool_name}")
               tool_result = { error: 'This tool failed previously. Skipping to avoid infinite loop.' }
               consecutive_errors += 1
+            # Check if this tool was already called successfully with same parameters
+            elsif successful_tools.include?(tool_key)
+              Rails.logger.warn("[Smc::AiAnalyzer] Tool #{tool_name} already called successfully with same parameters. Skipping duplicate call.")
+              # Return a message indicating data already available
+              tool_result = case tool_name
+                           when 'get_option_chain'
+                             { error: 'Option chain data already retrieved in a previous tool call. Use the data from that response.' }
+                           when 'get_current_ltp'
+                             { error: 'LTP data already retrieved in a previous tool call. Use the data from that response.' }
+                           when 'get_technical_indicators'
+                             { error: 'Technical indicators already retrieved in a previous tool call. Use the data from that response.' }
+                           when 'get_historical_candles'
+                             { error: 'Historical candles already retrieved in a previous tool call. Use the data from that response.' }
+                           else
+                             { error: 'This tool was already called successfully. Use the data from the previous response.' }
+                           end
+              # Don't increment consecutive_errors for duplicate calls - this is expected behavior
+              # The AI should use the data from the previous call, not keep trying
             else
               tool_result = execute_tool(tool_name, tool_args)
 
@@ -412,14 +432,22 @@ module Smc
                   failed_tools << tool_key
                   consecutive_errors += 1
                 elsif is_empty_result || is_empty_option_chain
-                  # Don't mark as failed, but track that we got empty results
-                  Rails.logger.warn("[Smc::AiAnalyzer] Tool returned empty/null results: #{tool_name}")
-                  # Still increment consecutive_errors to eventually force analysis
-                  consecutive_errors += 1
+                  # Empty results - mark as "called" to prevent duplicate calls, but don't treat as error
+                  # This prevents the AI from calling the same tool repeatedly when no data is available
+                  successful_tools << tool_key
+                  Rails.logger.warn("[Smc::AiAnalyzer] Tool returned empty/null results: #{tool_name}. Marked as called to prevent duplicate calls.")
+                  # Don't increment consecutive_errors for empty results - they're not errors, just no data
+                  # Reset error counter since this is a valid (though empty) response
+                  consecutive_errors = 0
                 else
+                  # Tool succeeded with data - mark as successful and reset error counter
+                  successful_tools << tool_key
                   consecutive_errors = 0 # Reset on success
+                  Rails.logger.debug { "[Smc::AiAnalyzer] Tool #{tool_name} succeeded, added to successful_tools" }
                 end
               else
+                # Non-hash result (shouldn't happen, but treat as success)
+                successful_tools << tool_key
                 consecutive_errors = 0 # Reset on success
               end
             end
@@ -444,16 +472,71 @@ module Smc
             }
           end
 
+          # Check if AI has called get_option_chain successfully - verify actual data exists
+          has_option_chain = @messages.any? do |m|
+            next false unless m[:role] == 'tool' && m[:name] == 'get_option_chain'
+
+            # Verify the tool result actually contains option chain data (not just an error)
+            content = m[:content].to_s
+            content.include?('"index"') && content.exclude?('"error"')
+          end
+
+          # Check if AI has called get_current_ltp successfully
+          has_ltp = @messages.any? do |m|
+            next false unless m[:role] == 'tool' && m[:name] == 'get_current_ltp'
+
+            # Verify the tool result actually contains LTP data (not just an error)
+            content = m[:content].to_s
+            content.include?('"ltp"') && content.exclude?('"error"')
+          end
+
+          # Check if get_technical_indicators returned empty results
+          has_empty_technical_indicators = @messages.any? do |m|
+            next false unless m[:role] == 'tool' && m[:name] == 'get_technical_indicators'
+
+            # Check if the result indicates empty/null values
+            content = m[:content].to_s
+            content.include?('"rsi":null') && content.include?('"macd":null') && content.exclude?('"error"')
+          end
+
           # Add user message prompting for analysis
           # If we've had errors or empty results, be more directive to prevent loops
-          user_prompt = if consecutive_errors >= 3
-                          'STOP CALLING TOOLS IMMEDIATELY. You have reached the maximum iterations or encountered multiple tool errors/empty results. You MUST provide your analysis NOW based on the SMC market structure data provided initially and the LTP (₹85,762.01 for SENSEX). Calculate strikes from LTP (round to nearest 50 for SENSEX). Provide your complete trading recommendation with: 1) Trade Decision (BUY CE/PE or AVOID), 2) Specific Strike Selection, 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management. DO NOT call any more tools.'
+          user_prompt = if consecutive_errors >= 3 || iteration >= MAX_ITERATIONS - 2
+                          # Force stop - near max iterations or too many errors
+                          ltp_info = @messages.find { |m| m[:role] == 'tool' && m[:content]&.include?('"ltp"') }
+                          ltp_value = if ltp_info
+                                        ltp_match = ltp_info[:content].match(/"ltp":\s*([\d.]+)/)
+                                        ltp_match ? ltp_match[1] : nil
+                                      end
+                          symbol_name = @instrument.symbol_name.to_s.upcase
+                          strike_rounding = case symbol_name
+                                            when 'NIFTY' then 50
+                                            when 'SENSEX', 'BANKNIFTY' then 100
+                                            else 50
+                                            end
+                          if ltp_value
+                            "STOP CALLING TOOLS IMMEDIATELY. You have reached maximum iterations or encountered multiple errors. Provide your analysis NOW. You have SMC data and LTP (₹#{ltp_value}) for #{symbol_name}. Calculate strikes from LTP (round to nearest #{strike_rounding}). Provide complete trading recommendation: 1) Trade Decision, 2) Strike Selection, 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management. DO NOT call any more tools."
+                          else
+                            'STOP CALLING TOOLS IMMEDIATELY. Provide your analysis NOW based on the SMC data you have. DO NOT call any more tools.'
+                          end
                         elsif consecutive_errors >= 2
-                          'STOP CALLING TOOLS. You have encountered multiple tool errors or empty results. Provide your analysis NOW based on the SMC market structure data provided initially and the LTP you have. Calculate strikes from LTP (round to nearest 50 for indices). Provide your complete trading recommendation with strike selection, entry/exit strategy, and risk management.'
+                          'STOP CALLING TOOLS. You have encountered multiple tool errors. Provide your analysis NOW based on the SMC market structure data and any successful tool results you have. Calculate strikes from LTP if available. DO NOT call more tools.'
+                        elsif has_empty_technical_indicators && iteration >= 3
+                          # Technical indicators returned empty - tell AI to stop trying
+                          'CRITICAL: The get_technical_indicators tool has already been called and returned empty/null results (no data available). DO NOT call get_technical_indicators again - it will return the same empty results. You have option chain data and LTP which is sufficient for your analysis. Provide your complete trading recommendation NOW using the data you have. DO NOT call get_technical_indicators or any other tools again.'
+                        elsif has_option_chain && has_ltp && iteration >= 2
+                          # AI has option chain and LTP - should have enough data after 2+ iterations
+                          'CRITICAL: You have already received option chain data AND LTP data in previous tool responses. DO NOT call get_option_chain or get_current_ltp again. You have ALL the data you need. Provide your complete trading recommendation NOW with: 1) Trade Decision, 2) Strike Selection (use actual premiums from the option chain data you already have), 3) Entry Strategy, 4) Exit Strategy (SL/TP based on premium percentages), 5) Risk Management. DO NOT call any more tools - provide your analysis immediately.'
+                        elsif has_option_chain && iteration >= 2
+                          # Has option chain but still calling tools - force analysis earlier
+                          'CRITICAL: You have already received option chain data in a previous tool response. DO NOT call get_option_chain again - you already have this data. Provide your complete trading recommendation NOW using the option chain data you already have. DO NOT call any more tools.'
                         elsif consecutive_errors > 0
-                          'You have encountered some tool errors or empty results. Please provide your analysis now based on the SMC data and any successful tool results. Calculate strikes from the LTP if needed. Do not call more tools - provide your complete trading recommendation.'
+                          'You have encountered some tool errors. Please provide your analysis now based on the SMC data and any successful tool results. Do not call more tools - provide your complete trading recommendation.'
+                        elsif iteration >= 3
+                          # After 3 iterations, be more directive
+                          'You have made multiple tool calls. Check your previous tool responses - if you have option chain data and LTP, you have enough information. Provide your complete trading recommendation NOW. DO NOT call the same tools again - use the data you already have.'
                         else
-                          'Based on the tool results, continue your analysis. If you have all the data you need, provide your complete analysis now.'
+                          'Based on the tool results, continue your analysis. IMPORTANT: Before calling any tool, check if you already have that data from a previous tool response. If you have option chain data and LTP, you have enough information - provide your complete analysis now. Only call additional tools if you are missing critical data that you do not already have.'
                         end
 
           @messages << {
@@ -618,13 +701,13 @@ module Smc
           type: 'function',
           function: {
             name: 'get_option_chain',
-            description: 'Get option chain data for the index (if applicable). IMPORTANT: Do NOT provide expiry_date unless you are certain of a valid expiry date. It is safer to leave expiry_date empty and let the system automatically select the nearest available expiry date.',
+            description: 'Get option chain data for the index (if applicable). IMPORTANT: Do NOT call this tool if you have already received option chain data in a previous tool response. If you need option chain data, call this tool ONCE and use the data from that response. Do NOT provide expiry_date parameter unless you are certain of a valid expiry date from previous tool results. If unsure, omit the expiry_date parameter completely (do not pass empty string) and the system will automatically select the nearest available expiry date.',
             parameters: {
               type: 'object',
               properties: {
                 expiry_date: {
                   type: 'string',
-                  description: 'Expiry date in YYYY-MM-DD format. CRITICAL: Only provide this if you know the exact valid expiry date from previous tool results. DO NOT guess or calculate expiry dates. If unsure, leave this empty and the system will automatically use the nearest available expiry date. Indian index options expire on specific Thursdays, not arbitrary dates.'
+                  description: 'Expiry date in YYYY-MM-DD format. CRITICAL: Only provide this if you know the exact valid expiry date from previous tool results. DO NOT guess or calculate expiry dates. If unsure, OMIT this parameter completely (do not pass empty string ""). The system will automatically use the nearest available expiry date. Indian index options expire on specific Thursdays, not arbitrary dates.'
                 }
               },
               required: []
@@ -653,7 +736,7 @@ module Smc
 
         begin
           # Try to parse parameters - handle nested objects
-          parsed_params = JSON.parse(params_str)
+          parsed_params = JSON.parse(params_str) # rubocop:disable Lint/UnusedBlockArgument
           tool_calls << {
             'tool' => name,
             'arguments' => parsed_params
@@ -749,6 +832,23 @@ module Smc
       end
     end
 
+    # Normalize tool arguments for comparison (to detect duplicate calls)
+    # Converts empty strings to nil for optional parameters like expiry_date
+    def normalize_tool_args_for_comparison(tool_name, arguments)
+      args = arguments.is_a?(Hash) ? arguments.dup : {}
+      normalized = {}
+      args.each do |k, v|
+        key = k.to_s
+        # For get_option_chain, normalize empty expiry_date string to nil
+        if tool_name == 'get_option_chain' && key == 'expiry_date'
+          normalized[key] = (v.is_a?(String) && v.strip.empty?) ? nil : v
+        else
+          normalized[key] = v
+        end
+      end
+      normalized
+    end
+
     def execute_tool(tool_name, arguments)
       # Normalize arguments (handle both string keys and symbol keys)
       args = arguments.is_a?(Hash) ? arguments : {}
@@ -775,9 +875,11 @@ module Smc
           timeframe: timeframe
         )
       when 'get_option_chain'
-        # expiry_date is optional - will use nearest expiry if not provided
+        # expiry_date is optional - normalize empty string to nil
+        expiry_date = normalized_args['expiry_date']
+        expiry_date = nil if expiry_date.is_a?(String) && expiry_date.strip.empty?
         get_option_chain(
-          expiry_date: normalized_args['expiry_date']
+          expiry_date: expiry_date
         )
       else
         { error: "Unknown tool: #{tool_name}. Available tools: get_current_ltp, get_historical_candles, get_technical_indicators, get_option_chain" }
@@ -1003,9 +1105,23 @@ module Smc
         available_expiries: valid_expiries.first(10).map(&:to_s),
         note: "Available expiry dates for #{index_key}: #{valid_expiries.first(5).map(&:to_s).join(', ')}. Current expiry used: #{expiry} (#{(Date.parse(expiry.to_s) - Time.zone.today).to_i} days away). Lot size: #{lot_size || 'N/A'} (1 lot = #{lot_size || 'N/A'} shares). IMPORTANT: Use premium prices (ltp field) for SL/TP calculations, NOT underlying prices. Calculate percentages correctly: if entry premium is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50). Use DELTA to calculate underlying levels: Underlying move = Premium move / Delta. Consider THETA (time decay) and days to expiry. For intraday: realistic TP 10-25%, SL 15-25%. For weekly expiry: adjust based on days remaining.",
         options: chain.first(20).map do |opt|
+          # Normalize option_type: Chain uses :type, ensure it's 'CE' or 'PE'
+          raw_type = opt[:type] || opt[:option_type]
+          normalized_type = case raw_type.to_s.upcase
+                            when 'CE', 'CALL' then 'CE'
+                            when 'PE', 'PUT' then 'PE'
+                            else
+                              # Infer from delta if type is missing: positive delta = CE, negative = PE
+                              if opt[:delta] && opt[:delta] != 0
+                                opt[:delta].positive? ? 'CE' : 'PE'
+                              else
+                                nil
+                              end
+                            end
+
           {
             strike: opt[:strike],
-            option_type: opt[:option_type],
+            option_type: normalized_type,
             ltp: opt[:ltp],
             premium: opt[:ltp], # Alias for clarity
             delta: opt[:delta],
