@@ -30,7 +30,12 @@ class SmcController < ApplicationController
       if params[:details].to_s == '1'
         { ok: true }.merge(engine.details)
       else
-        { ok: true, decision: engine.decision }
+        {
+          ok: true,
+          decision: engine.decision,
+          permission: engine.permission,
+          permission_details: engine.permission_details
+        }
       end
 
     # Add AI analysis if requested

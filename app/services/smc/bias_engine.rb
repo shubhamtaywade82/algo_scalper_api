@@ -15,6 +15,8 @@ module Smc
       @delay_seconds = delay_seconds.to_f
       @cached_decision = nil
       @cached_contexts = nil
+      @cached_permission = nil
+      @cached_series_by_interval = {}
     end
 
     def decision
@@ -24,19 +26,51 @@ module Smc
       mtf = context_for(interval: MTF_INTERVAL, max_candles: MTF_CANDLES)
       ltf = context_for(interval: LTF_INTERVAL, max_candles: LTF_CANDLES)
 
-      return :no_trade unless htf_bias_valid?(htf)
-      return :no_trade unless mtf_aligns?(htf, mtf)
+      unless htf_bias_valid?(htf)
+        cache_result(decision: :no_trade, contexts: { htf: htf, mtf: mtf, ltf: ltf }, permission: blocked_permission)
+        return :no_trade
+      end
 
-      decision = ltf_entry(htf, mtf, ltf)
+      unless mtf_aligns?(htf, mtf)
+        cache_result(decision: :no_trade, contexts: { htf: htf, mtf: mtf, ltf: ltf }, permission: blocked_permission)
+        return :no_trade
+      end
+
+      avrz = Avrz::Detector.new(ltf_series)
+      permission = Smc::PermissionResolver.call(htf: htf, mtf: mtf, ltf: ltf, avrz: avrz)
+      decision = strict_execution_decision(htf, ltf, avrz)
 
       # Cache decision and contexts to avoid re-computation
-      @cached_decision = decision
-      @cached_contexts = { htf: htf, mtf: mtf, ltf: ltf }
+      cache_result(decision: decision, contexts: { htf: htf, mtf: mtf, ltf: ltf }, permission: permission)
 
       # Notify for trading signals OR for no_trade if AI is enabled (to get AI analysis)
       notify(decision, htf, mtf, ltf) if %i[call put].include?(decision) || (decision == :no_trade && ai_enabled?)
 
       decision
+    end
+
+    def permission
+      return @cached_permission.permission if @cached_permission
+
+      # Compute decision once to populate caches (and avoid duplicating candle fetches)
+      decision
+      @cached_permission&.permission || :blocked
+    end
+
+    def permission_details
+      # Ensure caches are populated
+      decision
+      p = @cached_permission
+      return { permission: :blocked, bias: :neutral, max_lots: 0, execution_mode: :none, reasons: ['Unavailable'] } unless p
+
+      {
+        permission: p.permission,
+        bias: p.bias,
+        max_lots: p.max_lots,
+        execution_mode: p.execution_mode,
+        entry_signal: p.entry_signal,
+        reasons: p.reasons
+      }.compact
     end
 
     def details
@@ -49,11 +83,14 @@ module Smc
         mtf = context_for(interval: MTF_INTERVAL, max_candles: MTF_CANDLES)
         ltf = context_for(interval: LTF_INTERVAL, max_candles: LTF_CANDLES)
 
-        cached_decision = if htf_bias_valid?(htf) && mtf_aligns?(htf, mtf)
-                            ltf_entry(htf, mtf, ltf)
-                          else
-                            :no_trade
-                          end
+        if htf_bias_valid?(htf) && mtf_aligns?(htf, mtf)
+          avrz = Avrz::Detector.new(ltf_series)
+          @cached_permission = Smc::PermissionResolver.call(htf: htf, mtf: mtf, ltf: ltf, avrz: avrz)
+          cached_decision = strict_execution_decision(htf, ltf, avrz)
+        else
+          @cached_permission = blocked_permission
+          cached_decision = :no_trade
+        end
       end
 
       details_without_recursion(cached_decision)
@@ -77,9 +114,18 @@ module Smc
       ltf = Smc::Context.new(trim_series(ltf_series, max_candles: LTF_CANDLES))
 
       avrz = Avrz::Detector.new(ltf_series)
+      permission = Smc::PermissionResolver.call(htf: htf, mtf: mtf, ltf: ltf, avrz: avrz)
 
       {
         decision: decision_value,
+        permission: {
+          level: permission.permission,
+          bias: permission.bias,
+          max_lots: permission.max_lots,
+          execution_mode: permission.execution_mode,
+          entry_signal: permission.entry_signal,
+          reasons: permission.reasons
+        }.compact,
         timeframes: {
           htf: { interval: HTF_INTERVAL, context: htf.to_h },
           mtf: { interval: MTF_INTERVAL, context: mtf.to_h },
@@ -132,6 +178,7 @@ module Smc
 
       series = @instrument.candles(interval: interval)
       trimmed = trim_series(series, max_candles: max_candles)
+      @cached_series_by_interval[interval.to_s] = trimmed
       Smc::Context.new(trimmed)
     end
 
@@ -159,9 +206,12 @@ module Smc
       htf.structure.trend == mtf.structure.trend || mtf.structure.choch?
     end
 
-    def ltf_entry(htf, _mtf, ltf)
-      avrz = Avrz::Detector.new(@instrument.candles(interval: LTF_INTERVAL))
-      return :no_trade unless avrz.rejection?
+    def ltf_series
+      @cached_series_by_interval[LTF_INTERVAL] || @cached_series_by_interval[LTF_INTERVAL.to_s]
+    end
+
+    def strict_execution_decision(htf, ltf, avrz)
+      return :no_trade unless avrz&.rejection?
 
       if htf.pd.discount? && ltf.liquidity.sell_side_taken? && ltf.structure.choch?
         :call
@@ -170,6 +220,23 @@ module Smc
       else
         :no_trade
       end
+    end
+
+    def cache_result(decision:, contexts:, permission:)
+      @cached_decision = decision
+      @cached_contexts = contexts
+      @cached_permission = permission
+    end
+
+    def blocked_permission
+      Smc::PermissionResolver::Result.new(
+        permission: :blocked,
+        bias: :neutral,
+        max_lots: 0,
+        execution_mode: :none,
+        reasons: ['Blocked by HTF/MTF'],
+        entry_signal: nil
+      )
     end
 
     def notify(decision, htf, mtf, ltf)
