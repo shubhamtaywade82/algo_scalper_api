@@ -205,6 +205,10 @@ module Options
         end
       end
 
+      # BATCH LTP FETCH: Collect all derivatives that need LTP and fetch in ONE API call
+      # This replaces the previous approach of calling API individually for each strike
+      batch_ltp_results = batch_fetch_ltp_for_derivatives(derivatives, atm_strike_approx)
+
       # Merge Derivative records with API data and live ticks
       # If api_chain is nil, we'll still build candidates using just DB and tick data
       built_count = 0
@@ -234,40 +238,12 @@ module Options
         exchange_seg = derivative.exchange_segment || 'NSE_FNO'
         tick = Live::RedisTickCache.instance.fetch_tick(exchange_seg, derivative.security_id)
 
-        # For ATM candidates (within 2 strikes), try API fallback if no tick data
-        # This is a performance optimization - we can't fetch LTP for 500+ derivatives
-        if (!tick || !tick[:ltp]&.positive?) && atm_strike_approx
-          strike_distance = (derivative.strike_price.to_f - atm_strike_approx).abs
-          strike_increment = derivative.strike_price.to_f >= 10_000 ? 100 : 50
-          max_distance = strike_increment * 2
-
-          if strike_distance <= max_distance # Within 2 strikes of ATM
-            # Try API fallback using fetch_ltp_from_api_for_segment (includes WebSocket subscription logic)
-            begin
-              # Derivatives use NSE_FNO segment, not 'derivatives'
-              segment = derivative.exchange_segment || 'NSE_FNO'
-              security_id = derivative.security_id.to_s
-
-              # Skip if segment or security_id is missing (shouldn't happen for real derivatives)
-              if segment.present? && security_id.present?
-                Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Fetching LTP for ATM candidate: #{derivative.display_name} (strike: #{derivative.strike_price}, distance: #{strike_distance.round(0)}, segment: #{segment}, sid: #{security_id})" }
-
-                # Use InstrumentHelpers method directly (includes WebSocket subscription + API fallback)
-                api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
-                sleep(1)
-                if api_ltp&.positive?
-                  tick = tick ? tick.dup : {}
-                  tick[:ltp] = api_ltp
-                  Rails.logger.info("[Options::DerivativeChainAnalyzer] ✅ Got LTP from API for #{derivative.display_name}: ₹#{api_ltp}")
-                else
-                  Rails.logger.debug { "[Options::DerivativeChainAnalyzer] ⚠️  API LTP fetch returned nil for #{derivative.symbol_name}" }
-                end
-              else
-                Rails.logger.debug { "[Options::DerivativeChainAnalyzer] ⚠️  Missing segment or security_id for #{derivative.symbol_name}: segment=#{segment}, sid=#{security_id}" }
-              end
-            rescue StandardError => e
-              Rails.logger.warn("[Options::DerivativeChainAnalyzer] ❌ API LTP fetch failed for #{derivative.symbol_name}: #{e.class} - #{e.message}")
-            end
+        # If no tick data, check batch LTP results
+        if !tick || !tick[:ltp]&.positive?
+          batch_ltp = batch_ltp_results[derivative.security_id.to_s]
+          if batch_ltp&.positive?
+            tick = tick ? tick.dup : {}
+            tick[:ltp] = batch_ltp
           end
         end
 
@@ -278,6 +254,76 @@ module Options
 
       Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Built #{result.size} option data entries from #{derivatives.count} derivatives" }
       result
+    end
+
+    # Batch fetch LTP for multiple derivatives in ONE API call
+    # This is much more efficient than calling API for each strike individually
+    # @param derivatives [ActiveRecord::Relation] Derivatives to fetch LTP for
+    # @param atm_strike_approx [Float] Approximate ATM strike for filtering
+    # @return [Hash] { security_id => ltp } mapping
+    def batch_fetch_ltp_for_derivatives(derivatives, atm_strike_approx)
+      return {} unless derivatives.any?
+
+      # Collect all security IDs that need LTP (within 2 strikes of ATM)
+      strike_increment = atm_strike_approx.to_f >= 10_000 ? 100 : 50
+      max_distance = strike_increment * 2
+
+      security_ids_by_segment = Hash.new { |h, k| h[k] = [] }
+
+      derivatives.each do |derivative|
+        next if derivative.security_id.to_s.start_with?('TEST_')
+
+        # Check if already in tick cache
+        exchange_seg = derivative.exchange_segment || 'NSE_FNO'
+        tick = Live::RedisTickCache.instance.fetch_tick(exchange_seg, derivative.security_id)
+        next if tick && tick[:ltp]&.positive?
+
+        # Only fetch for ATM candidates (within 2 strikes)
+        if atm_strike_approx
+          strike_distance = (derivative.strike_price.to_f - atm_strike_approx).abs
+          next if strike_distance > max_distance
+        end
+
+        segment = derivative.exchange_segment || 'NSE_FNO'
+        security_ids_by_segment[segment] << derivative.security_id.to_i
+      end
+
+      return {} if security_ids_by_segment.empty?
+
+      # Make ONE batch API call per segment (typically just NSE_FNO)
+      results = {}
+      security_ids_by_segment.each do |segment, security_ids|
+        next if security_ids.empty?
+
+        Rails.logger.info("[Options::DerivativeChainAnalyzer] Batch fetching LTP for #{security_ids.size} derivatives (segment: #{segment})")
+
+        begin
+          payload = { segment => security_ids }
+          response = DhanHQ::Models::MarketFeed.ltp(payload)
+
+          if response.is_a?(Hash) && response['status'] == 'success'
+            data = response.dig('data', segment) || {}
+            data.each do |sid, quote|
+              ltp = quote&.dig('last_price')
+              if ltp&.positive?
+                results[sid.to_s] = ltp
+                Rails.logger.debug { "[Options::DerivativeChainAnalyzer] ✅ Batch LTP for #{sid}: ₹#{ltp}" }
+              end
+            end
+            Rails.logger.info("[Options::DerivativeChainAnalyzer] ✅ Batch fetched #{results.size} LTPs in ONE API call")
+          else
+            Rails.logger.warn("[Options::DerivativeChainAnalyzer] Batch LTP response not success: #{response}")
+          end
+        rescue StandardError => e
+          error_msg = e.message.to_s
+          is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit')
+          unless is_rate_limit
+            Rails.logger.error("[Options::DerivativeChainAnalyzer] Batch LTP fetch failed: #{e.class} - #{e.message}")
+          end
+        end
+      end
+
+      results
     end
 
     # Fetch option chain from DhanHQ API
@@ -392,35 +438,11 @@ module Options
         end
 
         # Require LTP for scoring (can't score without price)
-        # For ATM candidates, try one more time to get LTP if missing
+        # LTP should already be populated from batch fetch in load_chain_for_expiry
+        # Skip candidates without LTP - batch fetch already tried to get it
         unless option[:ltp]&.positive?
-          # Last chance: try API for ATM strikes only
-          strike_distance_check = (option[:strike] - spot).abs
-          max_distance_check = spot * 0.02 * 2 # Same as filter above
-          if strike_distance_check <= max_distance_check && option[:derivative]
-            begin
-              derivative = option[:derivative]
-              segment = derivative.exchange_segment || 'NSE_FNO'
-              security_id = derivative.security_id.to_s
-
-              # Skip if segment or security_id is missing (shouldn't happen for real derivatives)
-              if segment.present? && security_id.present?
-                api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
-                if api_ltp&.positive?
-                  option[:ltp] = api_ltp
-                  Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Got LTP in score_chain for #{derivative.symbol_name}: ₹#{api_ltp}" }
-                end
-              end
-            rescue StandardError => e
-              Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Final LTP fetch failed: #{e.message}" }
-            end
-          end
-
-          # Still no LTP? Skip this candidate
-          unless option[:ltp]&.positive?
-            candidates_filtered += 1
-            next
-          end
+          candidates_filtered += 1
+          next
         end
 
         candidates_with_ltp += 1
