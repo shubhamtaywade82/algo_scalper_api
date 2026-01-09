@@ -3,8 +3,12 @@
 module Smc
   # AI-powered SMC analysis using chat completion with history and tool calling
   class AiAnalyzer
-    MAX_ITERATIONS = ENV.fetch('SMC_AI_MAX_ITERATIONS', '10').to_i
+    # Reduced from 10 to 5 - if model hasn't provided analysis by iteration 5, force output
+    MAX_ITERATIONS = ENV.fetch('SMC_AI_MAX_ITERATIONS', '5').to_i
     MAX_MESSAGE_HISTORY = ENV.fetch('SMC_AI_MAX_MESSAGE_HISTORY', '12').to_i
+
+    # Circuit breaker: After this many duplicate tool calls, skip straight to forced analysis
+    MAX_DUPLICATE_TOOL_CALLS = 2
 
     def initialize(instrument, initial_data:)
       @instrument = instrument
@@ -360,6 +364,8 @@ module Smc
       failed_tools = [] # Track failed tool calls to prevent infinite loops
       successful_tools = [] # Track successful tool calls to prevent duplicate calls
       consecutive_errors = 0 # Track consecutive errors
+      duplicate_tool_calls = 0 # Circuit breaker: track duplicate tool calls
+      cached_option_chain_data = nil # Pre-cache option chain data for final prompt
 
       while iteration < MAX_ITERATIONS
         Rails.logger.debug { "[Smc::AiAnalyzer] Iteration #{iteration + 1}/#{MAX_ITERATIONS}" }
@@ -414,33 +420,12 @@ module Smc
           Rails.logger.debug { "[Smc::AiAnalyzer] Tool calls detected: #{tool_names.join(', ')}" }
           Rails.logger.debug { "[Smc::AiAnalyzer] Tool calls structure: #{tool_calls.inspect}" }
 
-          # Check if we've had too many consecutive errors - force analysis
-          if consecutive_errors >= 3 || iteration >= MAX_ITERATIONS - 1
-            Rails.logger.warn("[Smc::AiAnalyzer] Too many consecutive errors (#{consecutive_errors}) or near max iterations (#{iteration}), forcing final analysis")
-            ltp_info = @messages.find { |m| m[:role] == 'tool' && m[:content]&.include?('"ltp"') }
-            ltp_value = if ltp_info
-                          ltp_match = ltp_info[:content].match(/"ltp":\s*([\d.]+)/)
-                          ltp_match ? ltp_match[1] : nil
-                        end
+          # Circuit breaker: Force analysis if we've had too many consecutive errors, duplicate calls, or near max iterations
+          if consecutive_errors >= 3 || duplicate_tool_calls >= MAX_DUPLICATE_TOOL_CALLS || iteration >= MAX_ITERATIONS - 1
+            Rails.logger.warn("[Smc::AiAnalyzer] Circuit breaker triggered: consecutive_errors=#{consecutive_errors}, duplicate_calls=#{duplicate_tool_calls}, iteration=#{iteration}. Forcing final analysis.")
 
-            # Determine strike rounding based on symbol
-            symbol_name = @instrument.symbol_name.to_s.upcase
-            strike_rounding = case symbol_name
-                              when 'SENSEX', 'BANKNIFTY' then 100
-                              else 50 # Default for NIFTY and others
-                              end
-
-            # Get decision from initial data
-            decision = @initial_data[:decision]
-
-            final_prompt = if ltp_value
-                             "STOP CALLING TOOLS. Provide your analysis NOW. You have the SMC market structure data and LTP (₹#{ltp_value}) for #{symbol_name}. " \
-                               'CRITICAL: Before deciding BUY CE or BUY PE, check the Price Trend Analysis at the beginning. If trend is BEARISH (declining prices, gap downs), DO NOT recommend BUY CE - use BUY PE or AVOID instead. ' \
-                               "SMC Decision: #{decision}. If this is 'no_trade' AND price is declining, recommend AVOID or BUY PE. " \
-                               "Calculate strikes from LTP (round to nearest #{strike_rounding} for #{symbol_name}). Provide complete trading recommendation: 1) Trade Decision (BUY CE/PE or AVOID - MUST match price trend), 2) Specific Strike Selection (exact values like ₹#{((ltp_value.to_f / strike_rounding).round * strike_rounding).to_i}), 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management."
-                           else
-                             'STOP CALLING TOOLS. Provide your analysis NOW based on the SMC data you already have. CRITICAL: Check the Price Trend Analysis first - your direction MUST match the actual price trend. If price is declining, do NOT recommend BUY CE. Provide a complete trading recommendation with strike selection based on the current LTP and SMC analysis.'
-                           end
+            # Build comprehensive final prompt with all available data pre-injected
+            final_prompt = build_forced_analysis_prompt(cached_option_chain_data)
 
             @messages << {
               role: 'user',
@@ -534,7 +519,8 @@ module Smc
               consecutive_errors += 1
             # Check if this tool was already called successfully with same parameters
             elsif successful_tools.include?(tool_key)
-              Rails.logger.warn("[Smc::AiAnalyzer] Tool #{tool_name} already called successfully with same parameters. Skipping duplicate call.")
+              duplicate_tool_calls += 1
+              Rails.logger.warn("[Smc::AiAnalyzer] Tool #{tool_name} already called successfully with same parameters. Skipping duplicate call. (duplicate count: #{duplicate_tool_calls}/#{MAX_DUPLICATE_TOOL_CALLS})")
               # Return a message indicating data already available
               tool_result = case tool_name
                             when 'get_option_chain'
@@ -586,6 +572,12 @@ module Smc
                   successful_tools << tool_key
                   consecutive_errors = 0 # Reset on success
                   Rails.logger.debug { "[Smc::AiAnalyzer] Tool #{tool_name} succeeded, added to successful_tools" }
+
+                  # Cache option chain data for later use in forced final prompt
+                  if tool_name == 'get_option_chain' && tool_result.is_a?(Hash) && tool_result[:options]&.any?
+                    cached_option_chain_data = tool_result
+                    Rails.logger.info("[Smc::AiAnalyzer] Cached option chain data with #{tool_result[:options].size} options")
+                  end
                 end
               else
                 # Non-hash result (shouldn't happen, but treat as success)
@@ -642,8 +634,8 @@ module Smc
           end
 
           # Add user message prompting for analysis
-          # If we've had errors or empty results, be more directive to prevent loops
-          user_prompt = if consecutive_errors >= 3 || iteration >= MAX_ITERATIONS - 2
+          # If we've had errors, empty results, or duplicate tool calls, be more directive to prevent loops
+          user_prompt = if consecutive_errors >= 3 || duplicate_tool_calls >= MAX_DUPLICATE_TOOL_CALLS || iteration >= MAX_ITERATIONS - 2
                           # Force stop - near max iterations or too many errors
                           ltp_info = @messages.find { |m| m[:role] == 'tool' && m[:content]&.include?('"ltp"') }
                           ltp_value = if ltp_info
@@ -1498,6 +1490,216 @@ module Smc
       recent_msgs = conversation_msgs.last(MAX_MESSAGE_HISTORY - 1)
 
       [system_msg] + recent_msgs
+    end
+
+    # Build a comprehensive final prompt with all pre-extracted data
+    # This ensures the model has all the data it needs without calling tools
+    def build_forced_analysis_prompt(cached_option_chain_data)
+      symbol_name = @instrument.symbol_name.to_s.upcase
+      decision = @initial_data[:decision]
+
+      # Get LTP from messages or instrument
+      ltp_value = extract_ltp_from_messages || @instrument.ltp&.to_f || @instrument.latest_ltp&.to_f
+
+      # Determine strike rounding based on symbol
+      strike_rounding = case symbol_name
+                        when 'SENSEX', 'BANKNIFTY' then 100
+                        else 50 # Default for NIFTY and others
+                        end
+
+      # Calculate ATM strike
+      atm_strike = ((ltp_value.to_f / strike_rounding).round * strike_rounding).to_i if ltp_value
+
+      # Determine trend direction from initial data to show ONLY relevant option
+      trend_direction = determine_trend_direction_from_context
+
+      # Build option chain data section - ONLY for the relevant option type based on trend
+      option_data_section = build_option_data_section(
+        cached_option_chain_data, atm_strike, symbol_name, trend_direction
+      )
+
+      # Build the comprehensive final prompt
+      prompt_parts = []
+      prompt_parts << "STOP CALLING TOOLS. Provide your complete trading analysis NOW."
+      prompt_parts << ""
+      prompt_parts << "=" * 60
+      prompt_parts << "ALL DATA YOU NEED IS PROVIDED BELOW - DO NOT CALL ANY TOOLS"
+      prompt_parts << "=" * 60
+      prompt_parts << ""
+      prompt_parts << "**INDEX:** #{symbol_name}"
+      prompt_parts << "**CURRENT LTP:** ₹#{ltp_value&.round(2) || 'N/A'}"
+      prompt_parts << "**ATM STRIKE:** ₹#{atm_strike || 'N/A'} (rounded to nearest #{strike_rounding})"
+      prompt_parts << "**SMC DECISION:** #{decision}"
+      prompt_parts << "**DETECTED TREND:** #{trend_direction.to_s.upcase}"
+      prompt_parts << ""
+
+      # Add trend-based recommendation
+      case trend_direction
+      when :bearish
+        prompt_parts << "⚠️ **BEARISH TREND DETECTED** - Your ONLY options are: BUY PE or AVOID"
+        prompt_parts << "   DO NOT recommend BUY CE in a bearish market!"
+        recommended_option = 'PE'
+      when :bullish
+        prompt_parts << "✅ **BULLISH TREND DETECTED** - Your ONLY options are: BUY CE or AVOID"
+        prompt_parts << "   DO NOT recommend BUY PE in a bullish market!"
+        recommended_option = 'CE'
+      else
+        prompt_parts << "⚠️ **NEUTRAL/UNCLEAR TREND** - Recommend AVOID trading"
+        recommended_option = nil
+      end
+      prompt_parts << ""
+
+      # Add option chain data if available
+      prompt_parts << option_data_section if option_data_section.present?
+
+      prompt_parts << ""
+      prompt_parts << "**YOUR TASK:**"
+      if recommended_option
+        prompt_parts << "Decide between: **BUY #{recommended_option}** or **AVOID TRADING**"
+        prompt_parts << "If you choose to trade, use the #{recommended_option} option data provided above."
+      else
+        prompt_parts << "Given the unclear trend, recommend **AVOID TRADING**."
+      end
+      prompt_parts << ""
+      prompt_parts << "**PROVIDE YOUR COMPLETE ANALYSIS NOW:**"
+      prompt_parts << "1. Trade Decision (state clearly: BUY #{recommended_option || 'PE/CE'} or AVOID)"
+      prompt_parts << "2. Strike Selection (use ₹#{atm_strike})"
+      prompt_parts << "3. Entry Strategy (use the premium value above)"
+      prompt_parts << "4. Exit Strategy (SL/TP using premium and delta above)"
+      prompt_parts << "5. Risk Management (risk per lot calculation)"
+
+      prompt_parts.join("\n")
+    end
+
+    # Determine trend direction from initial data and messages
+    def determine_trend_direction_from_context
+      # Check initial data for trend indicators
+      htf_trend = @initial_data.dig(:timeframes, :htf, :trend)
+      mtf_trend = @initial_data.dig(:timeframes, :mtf, :trend)
+      ltf_trend = @initial_data.dig(:timeframes, :ltf, :trend)
+
+      # Count bearish vs bullish signals
+      bearish_count = [htf_trend, mtf_trend, ltf_trend].count { |t| t.to_s == 'bearish' }
+      bullish_count = [htf_trend, mtf_trend, ltf_trend].count { |t| t.to_s == 'bullish' }
+
+      # Also check the messages for trend analysis
+      trend_msg = @messages.find { |m| m[:content]&.include?('**Overall Trend:') }
+      if trend_msg
+        content = trend_msg[:content].to_s
+        bearish_count += 2 if content.include?('Overall Trend: BEARISH')
+        bullish_count += 2 if content.include?('Overall Trend: BULLISH')
+        bearish_count += 1 if content.include?('LOWER LOWS')
+        bearish_count += 1 if content.include?('LOWER HIGHS')
+        bullish_count += 1 if content.include?('HIGHER LOWS')
+        bullish_count += 1 if content.include?('HIGHER HIGHS')
+      end
+
+      if bearish_count > bullish_count
+        :bearish
+      elsif bullish_count > bearish_count
+        :bullish
+      else
+        :neutral
+      end
+    end
+
+    # Extract LTP value from previous tool messages
+    def extract_ltp_from_messages
+      ltp_info = @messages.find { |m| m[:role] == 'tool' && m[:content]&.include?('"ltp"') }
+      return nil unless ltp_info
+
+      ltp_match = ltp_info[:content].match(/"ltp":\s*([\d.]+)/)
+      ltp_match ? ltp_match[1].to_f : nil
+    end
+
+    # Build the option data section with pre-extracted values
+    # Only shows the RELEVANT option type based on trend direction to avoid confusion
+    def build_option_data_section(cached_option_chain_data, atm_strike, symbol_name, trend_direction)
+      return nil unless cached_option_chain_data&.dig(:options)&.any?
+
+      options = cached_option_chain_data[:options]
+      expiry = cached_option_chain_data[:expiry]
+      spot = cached_option_chain_data[:spot]
+      lot_size = cached_option_chain_data[:lot_size]
+
+      lines = []
+      lines << "**OPTION CHAIN DATA (Pre-extracted - use these EXACT values):**"
+      lines << "- Expiry: #{expiry}"
+      lines << "- Spot: ₹#{spot&.round(2)}"
+      lines << "- Lot Size: #{lot_size} (1 lot = #{lot_size} shares)"
+      lines << ""
+
+      # Find ATM options
+      ce_options = options.select { |o| o[:option_type] == 'CE' }
+      pe_options = options.select { |o| o[:option_type] == 'PE' }
+      atm_ce = ce_options.min_by { |o| (o[:strike].to_f - atm_strike.to_f).abs } if atm_strike && ce_options.any?
+      atm_pe = pe_options.min_by { |o| (o[:strike].to_f - atm_strike.to_f).abs } if atm_strike && pe_options.any?
+
+      # Only show the RELEVANT option based on trend direction
+      # This prevents the AI from getting confused and suggesting both
+      case trend_direction
+      when :bearish
+        # Bearish trend = show PE option only
+        lines << build_single_option_section(atm_pe, 'PE', symbol_name, lot_size, :bearish) if atm_pe
+      when :bullish
+        # Bullish trend = show CE option only
+        lines << build_single_option_section(atm_ce, 'CE', symbol_name, lot_size, :bullish) if atm_ce
+      else
+        # Neutral = show both for reference, but recommend AVOID
+        lines << "**NOTE:** Trend is unclear. Recommend AVOID TRADING."
+        lines << ""
+        lines << build_single_option_section(atm_pe, 'PE', symbol_name, lot_size, :neutral) if atm_pe
+      end
+
+      lines.join("\n")
+    end
+
+    # Build section for a single option (CE or PE)
+    def build_single_option_section(option, option_type, symbol_name, default_lot_size, trend)
+      return '' unless option
+
+      lines = []
+      strike = option[:strike].to_i
+      premium = option[:ltp]&.to_f
+      delta = option[:delta]&.to_f&.abs || 0.5
+      theta = option[:theta]
+      opt_lot_size = option[:lot_size] || default_lot_size
+
+      lines << "**RECOMMENDED: ATM #{option_type} OPTION (Strike ₹#{strike}):**"
+      lines << "- Premium (LTP): ₹#{premium&.round(2)} ← USE THIS for entry"
+      lines << "- Delta: #{option[:delta]&.round(5)} ← USE THIS for underlying calculations"
+      lines << "- Theta: #{theta&.round(5)} (daily decay)"
+      lines << "- Lot Size: #{opt_lot_size}"
+      lines << ""
+
+      if premium&.positive?
+        sl_premium = (premium * 0.80).round(2) # 20% loss
+        tp_premium = (premium * 1.20).round(2) # 20% gain
+        premium_loss = (premium - sl_premium).round(2)
+        premium_gain = (tp_premium - premium).round(2)
+        underlying_move_sl = delta.positive? ? (premium_loss / delta).round(2) : 0
+        underlying_move_tp = delta.positive? ? (premium_gain / delta).round(2) : 0
+        risk_per_lot = (premium_loss * opt_lot_size.to_i).round(2)
+
+        lines << "**PRE-CALCULATED VALUES (use these directly):**"
+        lines << "- Entry Premium: ₹#{premium.round(2)}"
+        lines << "- SL Premium: ₹#{sl_premium} (20% loss from entry)"
+        lines << "- TP Premium: ₹#{tp_premium} (20% gain from entry)"
+
+        # Direction-specific underlying move descriptions
+        if option_type == 'PE'
+          lines << "- Underlying SL level: #{symbol_name} rises by ₹#{underlying_move_sl} → exit at loss"
+          lines << "- Underlying TP level: #{symbol_name} falls by ₹#{underlying_move_tp} → exit at profit"
+        else
+          lines << "- Underlying SL level: #{symbol_name} falls by ₹#{underlying_move_sl} → exit at loss"
+          lines << "- Underlying TP level: #{symbol_name} rises by ₹#{underlying_move_tp} → exit at profit"
+        end
+
+        lines << "- Risk per lot: ₹#{risk_per_lot} (₹#{premium_loss} × #{opt_lot_size} shares)"
+        lines << ""
+      end
+
+      lines.join("\n")
     end
   end
 end
