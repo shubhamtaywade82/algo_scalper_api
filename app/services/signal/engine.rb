@@ -168,6 +168,22 @@ module Signal
           return
         end
 
+        # ===== DIRECTION GATE (HARD FILTER) =====
+        # MUST run BEFORE SMC, AVRZ, Permission resolution, or any entry logic.
+        # Blocks impossible trades based on market regime.
+        trade_side = final_direction == :bullish ? :CE : :PE
+        candles_15m = instrument.candle_series(interval: '15')&.candles || []
+        regime = Market::MarketRegimeResolver.resolve(candles_15m: candles_15m)
+
+        unless Trading::DirectionGate.allow?(regime: regime, side: trade_side)
+          Rails.logger.info(
+            "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: #{trade_side} trade in #{regime} regime"
+          )
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+        # ===== END DIRECTION GATE =====
+
         primary_series = primary_analysis[:series]
         validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
                                                      primary_analysis[:supertrend], { value: primary_analysis[:adx_value] })

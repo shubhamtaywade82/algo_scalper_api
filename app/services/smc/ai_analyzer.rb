@@ -100,9 +100,31 @@ module Smc
 
         Your PRIMARY GOAL: Provide clear, actionable trading recommendations for options buyers.
 
+        **CRITICAL: DIRECTION ACCURACY IS YOUR TOP PRIORITY**
+
+        Before recommending BUY CE or BUY PE, you MUST:
+        1. **Analyze the ACTUAL price trend from candle data** - NOT just SMC signals
+        2. **Check for gap ups/downs** - Gap downs indicate bearish momentum, gap ups indicate bullish
+        3. **Verify price direction over last 2-3 days** - Is price making lower lows (bearish) or higher highs (bullish)?
+        4. **Match your recommendation to actual price movement** - DO NOT recommend BUY CE when price is declining
+
+        **TREND DETECTION RULES:**
+        - If price has declined >1% over 2-3 days AND making lower lows → BEARISH → BUY PE or AVOID
+        - If price has risen >1% over 2-3 days AND making higher highs → BULLISH → BUY CE
+        - If there's a gap down at market open → BEARISH signal → BUY PE or AVOID (NOT BUY CE)
+        - If there's a gap up at market open → BULLISH signal → BUY CE
+        - If SMC shows "no_trade" AND price is declining → AVOID or BUY PE
+        - If SMC shows "no_trade" AND price is rising → AVOID or BUY CE
+
+        **DO NOT:**
+        - Recommend BUY CE when price is clearly declining (lower highs, lower lows)
+        - Ignore gap downs/ups when making recommendations
+        - Give bullish recommendations in a bearish trend
+        - Override clear price action with SMC signals alone
+
         You analyze market structure, liquidity, premium/discount zones, order blocks, and AVRZ rejections to determine:
         - Whether to trade or avoid trading
-        - If trading: Buy CE (CALL) or Buy PE (PUT)
+        - If trading: Buy CE (CALL) or Buy PE (PUT) - MUST match actual price direction
         - Specific strike prices to select
         - Entry strategy (when and how to enter)
         - Exit strategy (when to take profit and stop loss)
@@ -149,11 +171,15 @@ module Smc
     def initial_analysis_prompt
       symbol_name = @instrument.symbol_name || 'UNKNOWN'
       decision = @initial_data[:decision]
+      trend_analysis = compute_trend_analysis
 
       <<~PROMPT
         Analyze the following SMC/AVRZ market structure data for #{symbol_name}:
 
-        Trading Decision: #{decision}
+        Trading Decision from SMC Engine: #{decision}
+
+        **CRITICAL: PRICE TREND ANALYSIS (USE THIS FOR DIRECTION DECISION)**
+        #{trend_analysis}
 
         Market Structure Analysis (Multi-Timeframe):
 
@@ -163,10 +189,24 @@ module Smc
 
         **MANDATORY SECTIONS:**
 
+        0. **Trend Confirmation** (MANDATORY - DO THIS FIRST):
+           - Look at the Price Trend Analysis above
+           - Is the overall trend BULLISH or BEARISH?
+           - Are there any gap downs/ups?
+           - What is the multi-day price movement direction?
+           - YOUR TRADE DIRECTION MUST ALIGN WITH THE ACTUAL PRICE TREND
+
         1. **Trade Decision** (MANDATORY):
            - State clearly: "BUY CE" or "BUY PE" or "AVOID TRADING"
+           - **CRITICAL**: Your decision MUST match the actual price trend:
+             * If trend is BEARISH (declining prices, lower lows) → BUY PE or AVOID (NOT BUY CE)
+             * If trend is BULLISH (rising prices, higher highs) → BUY CE or AVOID (NOT BUY PE)
+             * If there was a gap down → BEARISH bias → BUY PE or AVOID
+             * If there was a gap up → BULLISH bias → BUY CE or AVOID
+           - If the SMC decision is "no_trade" AND price trend is bearish → AVOID or BUY PE
+           - If the SMC decision is "no_trade" AND price trend is bullish → AVOID or BUY CE
            - If AVOID: Explain why current market conditions are not suitable
-           - If BUY: Validate or challenge the #{decision} decision with reasoning
+           - If BUY: Validate that your direction matches the price trend analysis above
 
         2. **Strike Selection** (MANDATORY if trading):
            - YOU MUST call get_current_ltp tool FIRST to get the current price
@@ -390,10 +430,16 @@ module Smc
                               else 50 # Default for NIFTY and others
                               end
 
+            # Get decision from initial data
+            decision = @initial_data[:decision]
+
             final_prompt = if ltp_value
-                             "STOP CALLING TOOLS. Provide your analysis NOW. You have the SMC market structure data and LTP (₹#{ltp_value}) for #{symbol_name}. Calculate strikes from LTP (round to nearest #{strike_rounding} for #{symbol_name}). Provide complete trading recommendation: 1) Trade Decision (BUY CE/PE or AVOID), 2) Specific Strike Selection (exact values like ₹#{((ltp_value.to_f / strike_rounding).round * strike_rounding).to_i}), 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management."
+                             "STOP CALLING TOOLS. Provide your analysis NOW. You have the SMC market structure data and LTP (₹#{ltp_value}) for #{symbol_name}. " \
+                               'CRITICAL: Before deciding BUY CE or BUY PE, check the Price Trend Analysis at the beginning. If trend is BEARISH (declining prices, gap downs), DO NOT recommend BUY CE - use BUY PE or AVOID instead. ' \
+                               "SMC Decision: #{decision}. If this is 'no_trade' AND price is declining, recommend AVOID or BUY PE. " \
+                               "Calculate strikes from LTP (round to nearest #{strike_rounding} for #{symbol_name}). Provide complete trading recommendation: 1) Trade Decision (BUY CE/PE or AVOID - MUST match price trend), 2) Specific Strike Selection (exact values like ₹#{((ltp_value.to_f / strike_rounding).round * strike_rounding).to_i}), 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management."
                            else
-                             'STOP CALLING TOOLS. Provide your analysis NOW based on the SMC data you already have. Do not call any more tools - provide a complete trading recommendation with strike selection based on the current LTP and SMC analysis.'
+                             'STOP CALLING TOOLS. Provide your analysis NOW based on the SMC data you already have. CRITICAL: Check the Price Trend Analysis first - your direction MUST match the actual price trend. If price is declining, do NOT recommend BUY CE. Provide a complete trading recommendation with strike selection based on the current LTP and SMC analysis.'
                            end
 
             @messages << {
@@ -611,12 +657,14 @@ module Smc
                                             else 50
                                             end
                           if ltp_value
-                            "STOP CALLING TOOLS IMMEDIATELY. You have reached maximum iterations or encountered multiple errors. Provide your analysis NOW. You have SMC data and LTP (₹#{ltp_value}) for #{symbol_name}. Calculate strikes from LTP (round to nearest #{strike_rounding}). Provide complete trading recommendation: 1) Trade Decision, 2) Strike Selection, 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management. DO NOT call any more tools."
+                            "STOP CALLING TOOLS IMMEDIATELY. You have reached maximum iterations or encountered multiple errors. Provide your analysis NOW. You have SMC data and LTP (₹#{ltp_value}) for #{symbol_name}. " \
+                              'CRITICAL: Check the Price Trend Analysis - if trend is BEARISH (declining prices), recommend BUY PE or AVOID, NOT BUY CE. Your direction MUST match the actual price trend. ' \
+                              "Calculate strikes from LTP (round to nearest #{strike_rounding}). Provide complete trading recommendation: 1) Trade Decision (MUST match price trend), 2) Strike Selection, 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management. DO NOT call any more tools."
                           else
-                            'STOP CALLING TOOLS IMMEDIATELY. Provide your analysis NOW based on the SMC data you have. DO NOT call any more tools.'
+                            'STOP CALLING TOOLS IMMEDIATELY. Provide your analysis NOW based on the SMC data you have. CRITICAL: Your trade direction MUST match the Price Trend Analysis. If price is declining, recommend BUY PE or AVOID, NOT BUY CE. DO NOT call any more tools.'
                           end
                         elsif consecutive_errors >= 2
-                          'STOP CALLING TOOLS. You have encountered multiple tool errors. Provide your analysis NOW based on the SMC market structure data and any successful tool results you have. Calculate strikes from LTP if available. DO NOT call more tools.'
+                          'STOP CALLING TOOLS. You have encountered multiple tool errors. Provide your analysis NOW based on the SMC market structure data and any successful tool results you have. CRITICAL: Check Price Trend Analysis - if price is declining, recommend BUY PE or AVOID, NOT BUY CE. Calculate strikes from LTP if available. DO NOT call more tools.'
                         elsif has_empty_technical_indicators && iteration >= 3
                           # Technical indicators returned empty - tell AI to stop trying
                           'CRITICAL: The get_technical_indicators tool has already been called and returned empty/null results (no data available). DO NOT call get_technical_indicators again - it will return the same empty results. You have option chain data and LTP which is sufficient for your analysis. Provide your complete trading recommendation NOW using the data you have. DO NOT call get_technical_indicators or any other tools again.'
@@ -1015,6 +1063,187 @@ module Smc
     def get_current_ltp
       ltp = @instrument.ltp || @instrument.latest_ltp
       { ltp: ltp&.to_f || 0.0, symbol: @instrument.symbol_name }
+    end
+
+    # Compute actual price trend analysis from OHLC data
+    # This helps AI make correct direction decisions
+    def compute_trend_analysis
+      series = @instrument.candles(interval: '5')
+      candles = series&.candles || []
+
+      return 'Insufficient candle data for trend analysis' if candles.size < 10
+
+      # Get last 3 days of data (approx 75 candles per day)
+      recent_candles = candles.last(225) # ~3 days
+
+      # Find daily high/low/close for each day
+      daily_data = group_candles_by_day(recent_candles)
+
+      # Calculate trend metrics
+      current_price = candles.last.close
+      first_price = recent_candles.first.close
+      price_change = current_price - first_price
+      price_change_pct = (price_change / first_price * 100).round(2)
+
+      # Detect gaps (significant open vs previous close)
+      gap_analysis = detect_gaps(recent_candles)
+
+      # Determine trend direction
+      trend_direction = if price_change_pct < -0.5
+                          'BEARISH'
+                        elsif price_change_pct > 0.5
+                          'BULLISH'
+                        else
+                          'SIDEWAYS'
+                        end
+
+      # Check for lower lows / higher highs pattern
+      pattern = detect_swing_pattern(daily_data)
+
+      # Build analysis string
+      <<~ANALYSIS
+        **Overall Trend: #{trend_direction}**
+        - Price change over period: #{'+' if price_change >= 0}#{price_change.round(2)} points (#{'+' if price_change_pct >= 0}#{price_change_pct}%)
+        - First candle close: ₹#{first_price.round(2)}
+        - Current price: ₹#{current_price.round(2)}
+
+        **Gap Analysis:**
+        #{gap_analysis}
+
+        **Swing Pattern:**
+        #{pattern}
+
+        **Daily Summary:**
+        #{format_daily_summary(daily_data)}
+
+        **DIRECTION RECOMMENDATION:**
+        #{direction_recommendation(trend_direction, gap_analysis, pattern)}
+      ANALYSIS
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::AiAnalyzer] Trend analysis error: #{e.message}")
+      'Trend analysis unavailable - proceed with caution and analyze candle data manually'
+    end
+
+    def group_candles_by_day(candles)
+      return {} if candles.empty?
+
+      grouped = candles.group_by { |c| c.timestamp.to_date }
+      grouped.transform_values do |day_candles|
+        {
+          open: day_candles.first.open,
+          high: day_candles.map(&:high).max,
+          low: day_candles.map(&:low).min,
+          close: day_candles.last.close,
+          date: day_candles.first.timestamp.to_date
+        }
+      end
+    end
+
+    def detect_gaps(candles)
+      gaps = []
+      prev_candle = nil
+
+      candles.each do |candle|
+        if prev_candle
+          # Check for significant gap (> 0.3% of price)
+          gap = candle.open - prev_candle.close
+          gap_pct = (gap / prev_candle.close * 100).abs
+
+          if gap_pct > 0.3
+            gap_type = gap.positive? ? 'GAP UP' : 'GAP DOWN'
+            gaps << {
+              type: gap_type,
+              size: gap.abs.round(2),
+              pct: gap_pct.round(2),
+              time: candle.timestamp
+            }
+          end
+        end
+        prev_candle = candle
+      end
+
+      if gaps.empty?
+        '- No significant gaps detected'
+      else
+        recent_gaps = gaps.last(3) # Show last 3 gaps
+        recent_gaps.map do |g|
+          "- #{g[:type]}: #{g[:size]} points (#{g[:pct]}%) at #{g[:time]}"
+        end.join("\n")
+      end
+    end
+
+    def detect_swing_pattern(daily_data)
+      return '- Insufficient daily data' if daily_data.size < 2
+
+      dates = daily_data.keys.sort
+      lows = dates.map { |d| daily_data[d][:low] }
+      highs = dates.map { |d| daily_data[d][:high] }
+
+      lower_lows = lows.each_cons(2).all? { |a, b| b < a }
+      lower_highs = highs.each_cons(2).all? { |a, b| b < a }
+      higher_lows = lows.each_cons(2).all? { |a, b| b > a }
+      higher_highs = highs.each_cons(2).all? { |a, b| b > a }
+
+      patterns = []
+      patterns << '- LOWER LOWS detected (bearish)' if lower_lows
+      patterns << '- LOWER HIGHS detected (bearish)' if lower_highs
+      patterns << '- HIGHER LOWS detected (bullish)' if higher_lows
+      patterns << '- HIGHER HIGHS detected (bullish)' if higher_highs
+
+      if patterns.empty?
+        '- Mixed pattern (no clear trend)'
+      else
+        patterns.join("\n")
+      end
+    end
+
+    def format_daily_summary(daily_data)
+      return '- No daily data available' if daily_data.empty?
+
+      dates = daily_data.keys.sort.last(3) # Last 3 days
+      dates.map do |date|
+        d = daily_data[date]
+        "- #{date}: Open ₹#{d[:open].round(2)}, High ₹#{d[:high].round(2)}, Low ₹#{d[:low].round(2)}, Close ₹#{d[:close].round(2)}"
+      end.join("\n")
+    end
+
+    def direction_recommendation(trend, gap_analysis, pattern)
+      bearish_signals = 0
+      bullish_signals = 0
+
+      # Count trend signals
+      bearish_signals += 2 if trend == 'BEARISH'
+      bullish_signals += 2 if trend == 'BULLISH'
+
+      # Count gap signals
+      bearish_signals += 2 if gap_analysis.include?('GAP DOWN')
+      bullish_signals += 2 if gap_analysis.include?('GAP UP')
+
+      # Count pattern signals
+      bearish_signals += 1 if pattern.include?('LOWER LOWS')
+      bearish_signals += 1 if pattern.include?('LOWER HIGHS')
+      bullish_signals += 1 if pattern.include?('HIGHER LOWS')
+      bullish_signals += 1 if pattern.include?('HIGHER HIGHS')
+
+      if bearish_signals > bullish_signals + 1
+        <<~REC
+          ⚠️ BEARISH BIAS DETECTED - DO NOT RECOMMEND BUY CE
+          - If trading: Consider BUY PE or AVOID
+          - Bearish signals: #{bearish_signals}, Bullish signals: #{bullish_signals}
+        REC
+      elsif bullish_signals > bearish_signals + 1
+        <<~REC
+          ✅ BULLISH BIAS DETECTED - BUY CE may be appropriate
+          - If trading: Consider BUY CE
+          - Bullish signals: #{bullish_signals}, Bearish signals: #{bearish_signals}
+        REC
+      else
+        <<~REC
+          ⚠️ MIXED SIGNALS - Consider AVOID TRADING
+          - No clear directional bias
+          - Bullish signals: #{bullish_signals}, Bearish signals: #{bearish_signals}
+        REC
+      end
     end
 
     def get_historical_candles(interval:, limit:)
