@@ -2,10 +2,11 @@
 
 # Background job to run SMC scanner for all configured indices
 class SmcScannerJob < ApplicationJob
-  queue_as :default
+  queue_as :background
 
   # Retry with exponential backoff for transient failures
-  retry_on StandardError, wait: :exponentially_longer, attempts: 3
+  # Use proc for exponential backoff: 2^attempt seconds
+  retry_on StandardError, wait: ->(executions) { 2**executions }, attempts: 3
 
   def perform
     Rails.logger.info('[SmcScannerJob] Starting SMC scan...')
@@ -81,8 +82,8 @@ class SmcScannerJob < ApplicationJob
   def filter_indices_by_expiry(indices)
     return indices if indices.empty?
 
-    max_expiry_days = get_max_expiry_days
-    today = Time.zone.today
+    max_expiry_days = self.max_expiry_days
+    Time.zone.today
     filtered = []
 
     indices.each do |idx_cfg|
@@ -136,8 +137,6 @@ class SmcScannerJob < ApplicationJob
         rescue ArgumentError
           nil
         end
-      else
-        nil
       end
     end
 
@@ -152,7 +151,7 @@ class SmcScannerJob < ApplicationJob
   end
 
   # Get maximum expiry days from config (default: 7 days)
-  def get_max_expiry_days
+  def max_expiry_days
     config = AlgoConfig.fetch[:signals] || {}
     max_days = config[:max_expiry_days] || 7
     max_days.to_i

@@ -179,7 +179,7 @@ namespace :ai do
   task :technical_analysis, [:query] => :environment do |_t, args|
     query = args[:query] || ENV.fetch('QUERY', nil)
 
-    unless query.present?
+    if query.blank?
       puts 'Usage: bundle exec rake ai:technical_analysis["your question"]'
       puts '   Or: QUERY="your question" bundle exec rake ai:technical_analysis'
       puts ''
@@ -224,7 +224,7 @@ namespace :ai do
       TelegramNotifier.send_chat_action(action: 'typing') if telegram_enabled
 
       # Accumulate chunks for Telegram (filtered - no verbose logs)
-      telegram_buffer = String.new # Create mutable string (frozen_string_literal is enabled)
+      telegram_buffer = +'' # Create mutable string (frozen_string_literal is enabled)
       # Escape HTML special characters in query
       escaped_query = query.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
       telegram_buffer << "📊 <b>Technical Analysis: #{escaped_query}</b>\n\n"
@@ -307,7 +307,7 @@ namespace :ai do
         if telegram_enabled && result[:analysis].present?
           # Escape HTML special characters in query
           escaped_query = query.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
-          telegram_message = String.new("📊 <b>Technical Analysis: #{escaped_query}</b>\n\n") # Create mutable string
+          telegram_message = "📊 <b>Technical Analysis: #{escaped_query}</b>\n\n" # Create mutable string
           # Escape HTML in analysis content
           escaped_analysis = result[:analysis].to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
           telegram_message << escaped_analysis

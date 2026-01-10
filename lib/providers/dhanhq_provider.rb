@@ -54,7 +54,7 @@ module Providers
     end
 
     def fetch_api_type
-      raw = ENV['DHAN_API_TYPE'] || ENV['DHANHQ_API_TYPE']
+      raw = ENV['DHAN_API_TYPE'] || ENV.fetch('DHANHQ_API_TYPE', nil)
       return DEFAULT_API_TYPE unless raw
 
       candidate = raw.to_s.strip.downcase.to_sym
@@ -62,4 +62,3 @@ module Providers
     end
   end
 end
-

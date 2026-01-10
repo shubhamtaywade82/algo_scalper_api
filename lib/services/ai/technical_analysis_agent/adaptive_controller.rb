@@ -94,7 +94,7 @@ module Services
         end
 
         def repeating_step?(context, tool_name)
-          recent_tools = context.tool_history.last(MAX_REPEAT_STEPS).map { |h| h[:tool] }
+          recent_tools = context.tool_history.last(MAX_REPEAT_STEPS).pluck(:tool)
           recent_tools.count(tool_name) >= MAX_REPEAT_STEPS
         end
 

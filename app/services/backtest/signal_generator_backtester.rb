@@ -24,9 +24,7 @@ module Backtest
       }
 
       @instrument = Instrument.segment_index.find_by(symbol_name: symbol)
-      unless @instrument
-        raise "Instrument #{symbol} not found"
-      end
+      raise "Instrument #{symbol} not found" unless @instrument
 
       Rails.logger.info("[SignalBacktest] Initialized backtest for #{symbol}")
     end
@@ -47,14 +45,12 @@ module Backtest
 
       if optimized[:source] == :optimized
         $stdout.puts "[SignalBacktest] Using optimized parameters (Score: #{optimized[:score]&.round(3)})"
-        $stdout.flush
       elsif optimized[:source] == :manual
-        $stdout.puts "[SignalBacktest] Using manual override parameters"
-        $stdout.flush
+        $stdout.puts '[SignalBacktest] Using manual override parameters'
       else
-        $stdout.puts "[SignalBacktest] Using default parameters (no optimization found)"
-        $stdout.flush
+        $stdout.puts '[SignalBacktest] Using default parameters (no optimization found)'
       end
+      $stdout.flush
 
       service = new(
         symbol: symbol,
@@ -91,7 +87,7 @@ module Backtest
       end
 
       # Build candle series
-      $stdout.puts "[SignalBacktest] Building candle series..."
+      $stdout.puts '[SignalBacktest] Building candle series...'
       $stdout.flush
       series_1m = build_candle_series(bars_1m, interval_1m)
       series_5m = build_candle_series(bars_5m, interval_5m)
@@ -105,7 +101,7 @@ module Backtest
       end
 
       $stdout.puts "[SignalBacktest] ✅ Built series: 1m=#{series_1m.candles.size}, 5m=#{series_5m.candles.size}"
-      $stdout.puts "[SignalBacktest] Analyzing signals..."
+      $stdout.puts '[SignalBacktest] Analyzing signals...'
       $stdout.flush
 
       # Analyze signals
@@ -128,7 +124,7 @@ module Backtest
       losing = @signal_stats[:losing_signals]
 
       # Calculate price movement statistics
-      price_movements = @results.map { |r| r[:price_move_pct] }.compact
+      price_movements = @results.pluck(:price_move_pct).compact
       avg_move = price_movements.any? ? (price_movements.sum / price_movements.size) : 0
       max_move = price_movements.any? ? price_movements.max : 0
       min_move = price_movements.any? ? price_movements.min : 0
@@ -155,31 +151,31 @@ module Backtest
       return if s.empty?
 
       divider = '=' * 80
-      puts "\n#{divider}"
-      puts 'SIGNAL GENERATOR BACKTEST SUMMARY'
-      puts divider
-      puts "Supertrend: period=#{@supertrend_cfg[:period]}, multiplier=#{@supertrend_cfg[:base_multiplier]}"
-      puts "ADX Min Strength: #{@adx_min_strength}"
-      puts divider
-      puts "Total Signals:        #{s[:total_signals]}"
-      puts "Bullish Signals:      #{s[:bullish_signals]} (#{s[:bullish_pct]}%)"
-      puts "Bearish Signals:      #{s[:bearish_signals]} (#{s[:bearish_pct]}%)"
-      puts divider
-      puts "Profitable Signals:   #{s[:profitable_signals]}"
-      puts "Losing Signals:       #{s[:losing_signals]}"
-      puts "Accuracy:             #{s[:accuracy_pct]}%"
-      puts divider
-      puts "Avg Price Move:       #{s[:avg_price_move_pct]}%"
-      puts "Max Price Move:       #{s[:max_price_move_pct]}%"
-      puts "Min Price Move:       #{s[:min_price_move_pct]}%"
-      puts "Signals with Moves:   #{s[:signals_with_moves]} (#{s[:signals_with_moves_pct]}%)"
-      puts divider
+      Rails.logger.debug { "\n#{divider}" }
+      Rails.logger.debug 'SIGNAL GENERATOR BACKTEST SUMMARY'
+      Rails.logger.debug divider
+      Rails.logger.debug { "Supertrend: period=#{@supertrend_cfg[:period]}, multiplier=#{@supertrend_cfg[:base_multiplier]}" }
+      Rails.logger.debug { "ADX Min Strength: #{@adx_min_strength}" }
+      Rails.logger.debug divider
+      Rails.logger.debug { "Total Signals:        #{s[:total_signals]}" }
+      Rails.logger.debug { "Bullish Signals:      #{s[:bullish_signals]} (#{s[:bullish_pct]}%)" }
+      Rails.logger.debug { "Bearish Signals:      #{s[:bearish_signals]} (#{s[:bearish_pct]}%)" }
+      Rails.logger.debug divider
+      Rails.logger.debug { "Profitable Signals:   #{s[:profitable_signals]}" }
+      Rails.logger.debug { "Losing Signals:       #{s[:losing_signals]}" }
+      Rails.logger.debug { "Accuracy:             #{s[:accuracy_pct]}%" }
+      Rails.logger.debug divider
+      Rails.logger.debug { "Avg Price Move:       #{s[:avg_price_move_pct]}%" }
+      Rails.logger.debug { "Max Price Move:       #{s[:max_price_move_pct]}%" }
+      Rails.logger.debug { "Min Price Move:       #{s[:min_price_move_pct]}%" }
+      Rails.logger.debug { "Signals with Moves:   #{s[:signals_with_moves]} (#{s[:signals_with_moves_pct]}%)" }
+      Rails.logger.debug divider
     end
 
     private
 
     def fetch_ohlc_data(interval)
-      to_date = Date.today - 1.day
+      to_date = Time.zone.today - 1.day
       from_date = to_date - @days_back.days
 
       Rails.logger.info("[SignalBacktest] Fetching #{interval}m OHLC from API: #{from_date} to #{to_date}")
@@ -196,15 +192,18 @@ module Backtest
       elapsed = Time.current - start_time
 
       if data.present?
-        size = data.is_a?(Hash) && data['high'].is_a?(Array) ? data['high'].size : (data.is_a?(Array) ? data.size : data.keys.size)
+        size = if data.is_a?(Hash) && data['high'].is_a?(Array)
+                 data['high'].size
+               else
+                 (data.is_a?(Array) ? data.size : data.keys.size)
+               end
         Rails.logger.info("[SignalBacktest] Fetched #{interval}m OHLC: #{size} records in #{elapsed.round(2)}s")
         $stdout.puts "[SignalBacktest]   ✅ Fetched #{size} records in #{elapsed.round(2)}s"
-        $stdout.flush
       else
         Rails.logger.warn("[SignalBacktest] No data returned for #{interval}m OHLC")
-        $stdout.puts "[SignalBacktest]   ⚠️  No data returned"
-        $stdout.flush
+        $stdout.puts '[SignalBacktest]   ⚠️  No data returned'
       end
+      $stdout.flush
 
       data
     rescue StandardError => e
@@ -267,7 +266,7 @@ module Backtest
       end
     end
 
-    def generate_signal(series_1m, series_5m, index, current_time, last_5m_index = 0)
+    def generate_signal(_series_1m, series_5m, _index, current_time, last_5m_index = 0)
       # Find corresponding 5m candle
       candle_5m_index = find_5m_candle_index(series_5m, current_time, start_from: last_5m_index)
       return { signal: nil, direction: nil } if candle_5m_index.nil?
@@ -291,9 +290,7 @@ module Backtest
       adx_value = calculate_adx_for_series(series_5m, candle_5m_index)
 
       # Apply ADX filter if enabled
-      if @adx_min_strength.positive? && adx_value < @adx_min_strength
-        return { signal: nil, direction: nil }
-      end
+      return { signal: nil, direction: nil } if @adx_min_strength.positive? && adx_value < @adx_min_strength
 
       # Determine direction
       return { signal: nil, direction: nil } if st_result.blank? || st_result[:trend].nil?
@@ -342,7 +339,7 @@ module Backtest
 
       {
         move_pct: move_pct.round(2),
-        profitable: move_pct > 0,
+        profitable: move_pct.positive?,
         candles: end_index - signal_index
       }
     end
@@ -379,7 +376,7 @@ module Backtest
       confidence += 5 if adx_value >= 20
 
       # Add confidence for clear trend
-      confidence += 10 if st_result[:trend] == :bullish || st_result[:trend] == :bearish
+      confidence += 10 if %i[bullish bearish].include?(st_result[:trend])
 
       [confidence, 100].min
     end
@@ -396,13 +393,8 @@ module Backtest
         candle = candles[idx]
         next_candle = candles[idx + 1] if idx + 1 < candles.size
 
-        if candle.timestamp <= target_time
-          if idx == candles.size - 1 || next_candle.nil? || next_candle.timestamp > target_time
-            return idx
-          end
-        else
-          break
-        end
+        break unless candle.timestamp <= target_time
+        return idx if idx == candles.size - 1 || next_candle.nil? || next_candle.timestamp > target_time
       end
 
       # Fallback: full search
@@ -418,8 +410,7 @@ module Backtest
 
     def trading_hours?(time)
       time_str = time.strftime('%H:%M')
-      time_str >= '09:15' && time_str <= '15:15'
+      time_str.between?('09:15', '15:15')
     end
   end
 end
-

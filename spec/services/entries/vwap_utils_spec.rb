@@ -115,8 +115,7 @@ RSpec.describe Entries::VWAPUtils do
         build(:candle, high: 25_200, low: 25_000, close: 25_050) # Between VWAP and AVWAP
       ]
 
-      allow(described_class).to receive(:calculate_vwap).and_return(vwap)
-      allow(described_class).to receive(:calculate_avwap).and_return(avwap)
+      allow(described_class).to receive_messages(calculate_vwap: vwap, calculate_avwap: avwap)
 
       result = described_class.trapped_between_vwap_avwap?(bars)
 
@@ -131,8 +130,7 @@ RSpec.describe Entries::VWAPUtils do
         build(:candle, high: 25_200, low: 25_000, close: 25_200) # Outside range
       ]
 
-      allow(described_class).to receive(:calculate_vwap).and_return(vwap)
-      allow(described_class).to receive(:calculate_avwap).and_return(avwap)
+      allow(described_class).to receive_messages(calculate_vwap: vwap, calculate_avwap: avwap)
 
       result = described_class.trapped_between_vwap_avwap?(bars)
 
@@ -148,8 +146,7 @@ RSpec.describe Entries::VWAPUtils do
     it 'returns false when VWAP or AVWAP cannot be calculated' do
       bars = [build(:candle, high: 25_100, low: 24_900, close: 25_000)]
 
-      allow(described_class).to receive(:calculate_vwap).and_return(nil)
-      allow(described_class).to receive(:calculate_avwap).and_return(25_100)
+      allow(described_class).to receive_messages(calculate_vwap: nil, calculate_avwap: 25_100)
 
       result = described_class.trapped_between_vwap_avwap?(bars)
 

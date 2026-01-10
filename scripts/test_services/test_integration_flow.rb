@@ -115,9 +115,9 @@ begin
 
       ServiceTestHelper.print_success("Quantity calculated: #{qty} lots")
       ServiceTestHelper.print_info("  Entry price: ₹#{ltp}")
-      ServiceTestHelper.print_info("  Lot size: 75")
+      ServiceTestHelper.print_info('  Lot size: 75')
     else
-      ServiceTestHelper.print_warning("NIFTY config not found in AlgoConfig")
+      ServiceTestHelper.print_warning('NIFTY config not found in AlgoConfig')
     end
   end
 rescue StandardError => e
@@ -140,7 +140,8 @@ begin
 
   if derivative
     # Get instrument for exposure check (derivative has instrument_id)
-    instrument = Instrument.find_by(id: derivative.instrument_id) || Instrument.find_by(exchange: 'nse', segment: 'index', security_id: '13')
+    instrument = Instrument.find_by(id: derivative.instrument_id) || Instrument.find_by(exchange: 'nse',
+                                                                                        segment: 'index', security_id: '13')
 
     if instrument
       # Get index config for max_same_side
@@ -230,7 +231,7 @@ ServiceTestHelper.print_info('TrailingEngine initialized')
 
 # Test trailing stop logic
 begin
-  if cached_positions > 0 || (tracker && active_cache.get_by_tracker_id(tracker.id))
+  if cached_positions.positive? || (tracker && active_cache.get_by_tracker_id(tracker.id))
     position_data = active_cache.get_by_tracker_id(tracker.id) if tracker
 
     if position_data
@@ -239,7 +240,7 @@ begin
       position_data.update_ltp(profit_ltp)
 
       result = trailing_engine.process_tick(position_data, exit_engine: nil)
-      ServiceTestHelper.print_info("TrailingEngine result:")
+      ServiceTestHelper.print_info('TrailingEngine result:')
       ServiceTestHelper.print_info("  Peak updated: #{result[:peak_updated]}")
       ServiceTestHelper.print_info("  SL updated: #{result[:sl_updated]}")
       ServiceTestHelper.print_info("  Exit triggered: #{result[:exit_triggered]}")
@@ -280,7 +281,7 @@ begin
           ServiceTestHelper.print_info("Position exited: #{exit_reason || 'N/A'}")
         end
       else
-        ServiceTestHelper.print_info("Exit not triggered (drawdown may be below threshold)")
+        ServiceTestHelper.print_info('Exit not triggered (drawdown may be below threshold)')
       end
     end
   end
@@ -292,7 +293,7 @@ end
 ServiceTestHelper.print_section('Step 9: PnL Tracking')
 pnl_cache = Live::RedisPnlCache.instance
 
-if active_positions > 0 || (tracker && tracker.status == 'active')
+if active_positions.positive? || (tracker && tracker.status == 'active')
   test_tracker = tracker || PositionTracker.active.first
   if test_tracker
     pnl_data = pnl_cache.fetch_pnl(test_tracker.id)

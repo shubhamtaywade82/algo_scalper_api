@@ -33,7 +33,7 @@ module Signal
 
       def eod_window?
         now = Time.current.in_time_zone('Asia/Kolkata').strftime('%H:%M')
-        now >= EOD_MIN && now <= EOD_MAX
+        now.between?(EOD_MIN, EOD_MAX)
       end
     end
   end

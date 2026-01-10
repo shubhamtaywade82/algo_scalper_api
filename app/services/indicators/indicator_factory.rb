@@ -12,9 +12,9 @@ module Indicators
         indicator_configs = config[:indicators] || []
         return [] if indicator_configs.empty?
 
-        indicator_configs.map do |indicator_config|
+        indicator_configs.filter_map do |indicator_config|
           build_indicator(series: series, config: indicator_config, global_config: config)
-        end.compact
+        end
       end
 
       # Build a single indicator from configuration

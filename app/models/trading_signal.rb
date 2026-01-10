@@ -50,7 +50,7 @@ class TradingSignal < ApplicationRecord
       confidence_score: confidence_score,
       metadata: metadata
     )
-  rescue ActiveRecord::RecordInvalid => e
+  rescue ActiveRecord::RecordInvalid
     # Rails.logger.error("Failed to persist trading signal: #{e.record.errors.full_messages.to_sentence}")
     nil
   end

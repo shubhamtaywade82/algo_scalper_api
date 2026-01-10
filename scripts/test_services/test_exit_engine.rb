@@ -14,11 +14,13 @@ ServiceTestHelper.setup_test_derivatives
 # Try multiple times to get real spot price (API might be rate limited)
 spot_price = nil
 3.times do |i|
-  spot_price = ServiceTestHelper.fetch_ltp(segment: 'IDX_I', security_id: '13', suppress_rate_limit_warning: i > 0)
+  spot_price = ServiceTestHelper.fetch_ltp(segment: 'IDX_I', security_id: '13',
+                                           suppress_rate_limit_warning: i.positive?)
   break if spot_price&.positive?
+
   sleep 0.5 if i < 2
 end
-spot_price ||= 26_000.0  # Fallback only if all attempts fail
+spot_price ||= 26_000.0 # Fallback only if all attempts fail
 
 strike_interval = 50
 atm_strike = (spot_price / strike_interval).round * strike_interval
@@ -26,14 +28,17 @@ target_strikes = [atm_strike, atm_strike + strike_interval, atm_strike + (2 * st
 
 source = spot_price == 26_000.0 ? 'fallback' : 'API'
 ServiceTestHelper.print_info("Spot Price: ₹#{spot_price.round(2)} (#{source}), ATM Strike: #{atm_strike}")
-ServiceTestHelper.print_info("Target Strikes: #{target_strikes.map { |s| offset = (s - atm_strike) / strike_interval; offset == 0 ? "#{s} (ATM)" : "#{s} (ATM+#{offset.to_i})" }.join(', ')}")
+ServiceTestHelper.print_info("Target Strikes: #{target_strikes.map do |s|
+  offset = (s - atm_strike) / strike_interval
+  offset.zero? ? "#{s} (ATM)" : "#{s} (ATM+#{offset.to_i})"
+end.join(', ')}")
 
 # Check if we have positions with ATM/2OTM strikes
 existing_atm_positions = PositionTracker.active
-                                         .where(watchable_type: 'Derivative')
-                                         .joins('INNER JOIN derivatives ON position_trackers.watchable_id = derivatives.id')
-                                         .where('derivatives.strike_price IN (?)', target_strikes)
-                                         .where('derivatives.option_type = ?', 'CE')
+                                        .where(watchable_type: 'Derivative')
+                                        .joins('INNER JOIN derivatives ON position_trackers.watchable_id = derivatives.id')
+                                        .where(derivatives: { strike_price: target_strikes })
+                                        .where(derivatives: { option_type: 'CE' })
 
 if existing_atm_positions.empty?
   # Find ATM or 2 OTM derivative (prefer ATM, fallback to ATM+2)
@@ -74,7 +79,7 @@ if existing_atm_positions.empty?
       end
 
       unless ltp&.positive?
-        ltp = 150.0  # Fallback option price
+        ltp = 150.0 # Fallback option price
         ServiceTestHelper.print_info("Using fallback option LTP: ₹#{ltp}")
       end
 
@@ -84,7 +89,7 @@ if existing_atm_positions.empty?
         security_id: sid.to_s,
         segment: seg,
         side: 'long_ce',
-        quantity: 75,  # 1 lot
+        quantity: 75, # 1 lot
         entry_price: ltp,
         paper: true
       )
@@ -104,28 +109,31 @@ else
 end
 
 router = TradingSystem::OrderRouter.new
-exit_engine = Live::ExitEngine.new(order_router: router)
+Live::ExitEngine.new(order_router: router)
 
 # Test 1: Check active positions (ATM or 2 OTM derivatives only)
 ServiceTestHelper.print_section('1. Active Positions (ATM or 2 OTM Only)')
 # Use same spot price and strikes calculated above
 ServiceTestHelper.print_info("Using Spot Price: ₹#{spot_price.round(2)}, ATM Strike: #{atm_strike}")
-ServiceTestHelper.print_info("Target Strikes: #{target_strikes.map { |s| offset = (s - atm_strike) / strike_interval; offset == 0 ? "#{s} (ATM)" : "#{s} (ATM+#{offset.to_i})" }.join(', ')}")
+ServiceTestHelper.print_info("Target Strikes: #{target_strikes.map do |s|
+  offset = (s - atm_strike) / strike_interval
+  offset.zero? ? "#{s} (ATM)" : "#{s} (ATM+#{offset.to_i})"
+end.join(', ')}")
 
 # Filter to derivatives only (options) with ATM or 2 OTM strikes
 active_positions = PositionTracker.active
-                                   .where(watchable_type: 'Derivative')
-                                   .joins('INNER JOIN derivatives ON position_trackers.watchable_id = derivatives.id')
-                                   .where('derivatives.strike_price IN (?)', target_strikes)
-                                   .where('derivatives.option_type = ?', 'CE')
-                                   .includes(:watchable)
+                                  .where(watchable_type: 'Derivative')
+                                  .joins('INNER JOIN derivatives ON position_trackers.watchable_id = derivatives.id')
+                                  .where(derivatives: { strike_price: target_strikes })
+                                  .where(derivatives: { option_type: 'CE' })
+                                  .includes(:watchable)
 
 ServiceTestHelper.print_info("Found #{active_positions.count} active derivative positions (ATM or 2 OTM)")
 
 # If no ATM/2OTM positions, create one
 if active_positions.empty?
-  ServiceTestHelper.print_warning("No ATM/2OTM derivative positions found")
-  ServiceTestHelper.print_info("Creating ATM position for testing...")
+  ServiceTestHelper.print_warning('No ATM/2OTM derivative positions found')
+  ServiceTestHelper.print_info('Creating ATM position for testing...')
 
   # Find ATM derivative
   derivative = ServiceTestHelper.find_atm_or_otm_derivative(
@@ -158,11 +166,11 @@ if active_positions.empty?
 
     # Reload active positions
     active_positions = PositionTracker.active
-                                       .where(watchable_type: 'Derivative')
-                                       .joins('INNER JOIN derivatives ON position_trackers.watchable_id = derivatives.id')
-                                       .where('derivatives.strike_price IN (?)', target_strikes)
-                                       .where('derivatives.option_type = ?', 'CE')
-                                       .includes(:watchable)
+                                      .where(watchable_type: 'Derivative')
+                                      .joins('INNER JOIN derivatives ON position_trackers.watchable_id = derivatives.id')
+                                      .where(derivatives: { strike_price: target_strikes })
+                                      .where(derivatives: { option_type: 'CE' })
+                                      .includes(:watchable)
   end
 end
 
@@ -185,14 +193,14 @@ active_positions.limit(3).each do |tracker|
   if is_derivative
     strike = watchable.strike_price
     strike_label = if strike == atm_strike
-                    'ATM'
-                  elsif strike == atm_strike + strike_interval
-                    'ATM+1'
-                  elsif strike == atm_strike + (2 * strike_interval)
-                    'ATM+2'
-                  else
-                    'OTHER'
-                  end
+                     'ATM'
+                   elsif strike == atm_strike + strike_interval
+                     'ATM+1'
+                   elsif strike == atm_strike + (2 * strike_interval)
+                     'ATM+2'
+                   else
+                     'OTHER'
+                   end
 
     ServiceTestHelper.print_info("  Strike: ₹#{strike} (#{strike_label})")
     ServiceTestHelper.print_info("  Option Type: #{watchable.option_type}")
@@ -200,7 +208,7 @@ active_positions.limit(3).each do |tracker|
 
     # Warn if not ATM/2OTM
     unless ['ATM', 'ATM+1', 'ATM+2'].include?(strike_label)
-      ServiceTestHelper.print_warning("  ⚠️  This position is not ATM or 2 OTM - should be filtered out")
+      ServiceTestHelper.print_warning('  ⚠️  This position is not ATM or 2 OTM - should be filtered out')
     end
   end
 
@@ -215,9 +223,7 @@ active_positions.limit(3).each do |tracker|
   ltp = nil
 
   # 1. Try TickCache
-  if seg && sid
-    ltp = Live::TickCache.ltp(seg, sid)
-  end
+  ltp = Live::TickCache.ltp(seg, sid) if seg && sid
 
   # 2. Try RedisTickCache
   unless ltp&.positive?
@@ -226,8 +232,9 @@ active_positions.limit(3).each do |tracker|
   end
 
   # 3. Try DhanHQ API
-  unless ltp&.positive?
-    ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s, suppress_rate_limit_warning: true) if seg && sid
+  if !ltp&.positive? && seg && sid && seg && sid
+    ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s,
+                                      suppress_rate_limit_warning: true)
   end
 
   # 4. If derivative, try fetching via derivative object
@@ -257,7 +264,7 @@ active_positions.limit(3).each do |tracker|
     end
 
     # Check if exit should be triggered (this would be done by exit_engine internally)
-    ServiceTestHelper.print_info("  Exit evaluation: Checked by ExitEngine service")
+    ServiceTestHelper.print_info('  Exit evaluation: Checked by ExitEngine service')
   else
     ServiceTestHelper.print_warning("  No LTP available for #{tracker.symbol}")
     ServiceTestHelper.print_info("  Segment: #{seg}, Security ID: #{sid}")
@@ -280,14 +287,14 @@ if test_tracker
   if is_derivative
     strike = watchable.strike_price
     strike_label = if strike == atm_strike
-                    'ATM'
-                  elsif strike == atm_strike + strike_interval
-                    'ATM+1'
-                  elsif strike == atm_strike + (2 * strike_interval)
-                    'ATM+2'
-                  else
-                    'OTHER'
-                  end
+                     'ATM'
+                   elsif strike == atm_strike + strike_interval
+                     'ATM+1'
+                   elsif strike == atm_strike + (2 * strike_interval)
+                     'ATM+2'
+                   else
+                     'OTHER'
+                   end
 
     if ['ATM', 'ATM+1', 'ATM+2'].include?(strike_label)
       ServiceTestHelper.print_success("  ✅ Testing with #{strike_label} derivative position (correct for ExitEngine)")
@@ -295,12 +302,12 @@ if test_tracker
       ServiceTestHelper.print_warning("  ⚠️  Testing with #{strike_label} position (should be ATM or 2 OTM)")
     end
   else
-    ServiceTestHelper.print_warning("  ⚠️  Testing with underlying index (ExitEngine should work with derivatives)")
+    ServiceTestHelper.print_warning('  ⚠️  Testing with underlying index (ExitEngine should work with derivatives)')
   end
 
   ServiceTestHelper.print_warning('This is a dry run - no actual exit will be executed')
 
-  # Note: Actual exit execution would be:
+  # NOTE: Actual exit execution would be:
   # exit_engine.execute_exit(tracker: test_tracker, reason: 'test')
   # But we won't do this in a test script to avoid real trades
 else
@@ -309,12 +316,12 @@ end
 
 # Test 4: Check exit reasons
 ServiceTestHelper.print_section('4. Exit Reasons')
-exit_reasons = [
-  'stop_loss_hit',
-  'take_profit_hit',
-  'risk_limit_exceeded',
-  'time_based_exit',
-  'manual_exit'
+exit_reasons = %w[
+  stop_loss_hit
+  take_profit_hit
+  risk_limit_exceeded
+  time_based_exit
+  manual_exit
 ]
 
 exit_reasons.each do |reason|
@@ -323,4 +330,3 @@ end
 
 ServiceTestHelper.print_success('Live::ExitEngine test completed')
 ServiceTestHelper.print_info('Exit engine runs continuously - check logs for exit events')
-

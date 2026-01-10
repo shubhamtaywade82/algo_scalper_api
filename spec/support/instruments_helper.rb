@@ -14,7 +14,8 @@ module InstrumentsHelper
       csv_content = csv_path.read
     else
       Rails.logger.warn "[InstrumentsHelper] CSV cache not found at #{csv_path}"
-      Rails.logger.warn '[InstrumentsHelper] Run `RAILS_ENV=test bin/rails test:instruments:import` to download and import'
+      Rails.logger.warn '[InstrumentsHelper] Run `RAILS_ENV=test bin/rails test:instruments:import` ' \
+                        'to download and import'
       return false
     end
 

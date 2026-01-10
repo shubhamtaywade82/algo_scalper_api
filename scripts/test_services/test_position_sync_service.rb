@@ -81,4 +81,3 @@ ServiceTestHelper.print_success('Manual sync completed')
 
 ServiceTestHelper.print_success('PositionSyncService test completed')
 ServiceTestHelper.print_info('Sync service runs periodically - check logs for sync details')
-

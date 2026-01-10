@@ -4,7 +4,7 @@
 # Supports different confirmation modes: all, majority, weighted, any
 class MultiIndicatorStrategy
   CONFIRMATION_MODES = {
-    all: :all_must_agree,      # All indicators must agree
+    all: :all_must_agree, # All indicators must agree
     majority: :majority_vote,   # Majority of indicators must agree
     weighted: :weighted_sum,    # Weighted sum of indicator confidences
     any: :any_confirms          # Any indicator can confirm
@@ -15,12 +15,12 @@ class MultiIndicatorStrategy
   def initialize(series:, indicators: [], confirmation_mode: :all, min_confidence: nil, **config)
     @series = series
     @indicators = build_indicators(indicators, config)
-    
+
     # Allow threshold config to override confirmation_mode and min_confidence
     threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:multi_indicator, config)
     effective_confirmation_mode = threshold_config[:confirmation_mode] || confirmation_mode
     effective_min_confidence = min_confidence || threshold_config[:min_confidence] || 60
-    
+
     @confirmation_mode = CONFIRMATION_MODES[effective_confirmation_mode] || :all_must_agree
     @min_confidence = effective_min_confidence
     @config = config
@@ -61,9 +61,9 @@ class MultiIndicatorStrategy
   private
 
   def build_indicators(indicator_configs, global_config)
-    indicator_configs.map do |indicator_config|
+    indicator_configs.filter_map do |indicator_config|
       build_indicator(indicator_config, global_config)
-    end.compact
+    end
   end
 
   def build_indicator(indicator_config, global_config)
@@ -122,7 +122,7 @@ class MultiIndicatorStrategy
   end
 
   def all_must_agree(results)
-    directions = results.map { |r| r[:direction] }.uniq
+    directions = results.pluck(:direction).uniq
     return nil if directions.size > 1
 
     direction = directions.first
@@ -139,13 +139,9 @@ class MultiIndicatorStrategy
     total = results.size
     return nil if bullish_count == bearish_count # Tie
 
-    if bullish_count > bearish_count && bullish_count > neutral_count
-      return :ce if bullish_count.to_f / total >= 0.5
-    end
+    return :ce if bullish_count > bearish_count && bullish_count > neutral_count && (bullish_count.to_f / total >= 0.5)
 
-    if bearish_count > bullish_count && bearish_count > neutral_count
-      return :pe if bearish_count.to_f / total >= 0.5
-    end
+    return :pe if bearish_count > bullish_count && bearish_count > neutral_count && (bearish_count.to_f / total >= 0.5)
 
     nil
   end
@@ -255,14 +251,14 @@ class MultiIndicatorStrategy
 
     # Determine confluence strength
     confluence_strength = if confluence_score >= 80
-                             :strong
-                           elsif confluence_score >= 60
-                             :moderate
-                           elsif confluence_score >= 40
-                             :weak
-                           else
-                             :none
-                           end
+                            :strong
+                          elsif confluence_score >= 60
+                            :moderate
+                          elsif confluence_score >= 40
+                            :weak
+                          else
+                            :none
+                          end
 
     # Build indicator breakdown
     indicator_breakdown = results.map do |result|

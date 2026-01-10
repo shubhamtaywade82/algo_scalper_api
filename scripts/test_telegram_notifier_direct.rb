@@ -56,4 +56,3 @@ puts 'If you still don\'t see messages:'
 puts '  1. Make sure you\'ve sent /start to the bot'
 puts '  2. Verify you\'re checking the correct chat'
 puts '  3. Check the Rails logs for any errors'
-

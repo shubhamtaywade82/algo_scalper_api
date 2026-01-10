@@ -70,9 +70,7 @@ if all_keys.any?
 
   # Test trackers_for method
   trackers = position_index.trackers_for(test_key)
-  if trackers.any?
-    ServiceTestHelper.print_success("Found #{trackers.size} tracker(s) for security_id: #{test_key}")
-  end
+  ServiceTestHelper.print_success("Found #{trackers.size} tracker(s) for security_id: #{test_key}") if trackers.any?
 end
 
 # Test 5: Remove position
@@ -90,8 +88,8 @@ if all_keys.any? && active_positions.any?
     exists_after = keys_after.include?(test_key)
     ServiceTestHelper.check_condition(
       !exists_after || position_index.trackers_for(test_key).empty?,
-      "Position removed successfully",
-      "Position still exists after removal"
+      'Position removed successfully',
+      'Position still exists after removal'
     )
   else
     ServiceTestHelper.print_warning("Could not find tracker for security_id: #{test_key}")
@@ -116,17 +114,17 @@ if active_positions.any?
     seg = tracker.segment || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
     sid = tracker.security_id
 
-    if seg.present? && sid.present? && tracker.entry_price.present? && tracker.quantity.present?
-      metadata = {
-        id: tracker.id,
-        security_id: sid,
-        entry_price: tracker.entry_price.to_f,
-        quantity: tracker.quantity.to_i,
-        segment: seg
-      }
-      position_index.add(metadata)
-      rebuilt_count += 1
-    end
+    next unless seg.present? && sid.present? && tracker.entry_price.present? && tracker.quantity.present?
+
+    metadata = {
+      id: tracker.id,
+      security_id: sid,
+      entry_price: tracker.entry_price.to_f,
+      quantity: tracker.quantity.to_i,
+      segment: seg
+    }
+    position_index.add(metadata)
+    rebuilt_count += 1
   end
 
   rebuilt_keys = position_index.all_keys
@@ -139,8 +137,8 @@ begin
   # Find test trackers created by setup_test_position_tracker
   # They are identified by: paper=true, order_no starts with "TEST-", and created recently
   test_trackers = PositionTracker.where(paper: true)
-                                  .where("order_no LIKE 'TEST-%'")
-                                  .where('created_at > ?', 10.minutes.ago)
+                                 .where("order_no LIKE 'TEST-%'")
+                                 .where('created_at > ?', 10.minutes.ago)
 
   if test_trackers.any?
     deleted_count = test_trackers.count
@@ -158,4 +156,3 @@ rescue StandardError => e
 end
 
 ServiceTestHelper.print_success('PositionIndex test completed')
-

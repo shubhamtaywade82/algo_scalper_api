@@ -5,9 +5,8 @@ require 'rails_helper'
 RSpec.describe Smc::Detectors::Structure do
   describe '#trend' do
     it 'returns :range with insufficient swings' do
-      series = instance_double('CandleSeries', candles: [], closes: [])
-      allow(series).to receive(:swing_high?).and_return(false)
-      allow(series).to receive(:swing_low?).and_return(false)
+      series = instance_double(CandleSeries, candles: [], closes: [])
+      allow(series).to receive_messages(swing_high?: false, swing_low?: false)
 
       detector = described_class.new(series)
       expect(detector.trend).to eq(:range)
@@ -19,7 +18,7 @@ RSpec.describe Smc::Detectors::Structure do
         build(:candle, high: 101, low: 89),
         build(:candle, high: 110, low: 95) # swing high
       ]
-      series = instance_double('CandleSeries', candles: candles, closes: [95, 96, 97])
+      series = instance_double(CandleSeries, candles: candles, closes: [95, 96, 97])
 
       allow(series).to receive(:swing_high?) { |i| i == 2 }
       allow(series).to receive(:swing_low?) { |i| i == 1 }
@@ -35,7 +34,7 @@ RSpec.describe Smc::Detectors::Structure do
         build(:candle, high: 100, low: 90),
         build(:candle, high: 110, low: 95)
       ]
-      series = instance_double('CandleSeries', candles: candles, closes: [95, 120])
+      series = instance_double(CandleSeries, candles: candles, closes: [95, 120])
 
       allow(series).to receive(:swing_high?) { |i| i == 1 }
       allow(series).to receive(:swing_low?).and_return(false)
@@ -48,9 +47,8 @@ RSpec.describe Smc::Detectors::Structure do
   describe '#choch?' do
     it 'returns false when there is not enough swing context' do
       candles = [build(:candle)]
-      series = instance_double('CandleSeries', candles: candles, closes: [1.0])
-      allow(series).to receive(:swing_high?).and_return(false)
-      allow(series).to receive(:swing_low?).and_return(false)
+      series = instance_double(CandleSeries, candles: candles, closes: [1.0])
+      allow(series).to receive_messages(swing_high?: false, swing_low?: false)
 
       detector = described_class.new(series)
       expect(detector.choch?).to be(false)
@@ -66,7 +64,7 @@ RSpec.describe Smc::Detectors::Structure do
         build(:candle, high: 110, low: 96), # swing high (last)
         build(:candle, high: 108, low: 94, close: 98) # closes below last swing high
       ]
-      series = instance_double('CandleSeries', candles: candles, closes: [90, 96, 105, 100, 107, 98])
+      series = instance_double(CandleSeries, candles: candles, closes: [90, 96, 105, 100, 107, 98])
       # 3 swings: low at 0, high at 2, high at 4
       allow(series).to receive(:swing_high?) { |i| [2, 4].include?(i) }
       allow(series).to receive(:swing_low?) { |i| i == 0 }
@@ -89,7 +87,7 @@ RSpec.describe Smc::Detectors::Structure do
         build(:candle, high: 100, low: 85), # swing low (last)
         build(:candle, high: 102, low: 87, close: 92) # closes above last swing low
       ]
-      series = instance_double('CandleSeries', candles: candles, closes: [110, 95, 88, 90, 85, 92])
+      series = instance_double(CandleSeries, candles: candles, closes: [110, 95, 88, 90, 85, 92])
       # 3 swings: high at 0, low at 2, low at 4
       allow(series).to receive(:swing_high?) { |i| i == 0 }
       allow(series).to receive(:swing_low?) { |i| [2, 4].include?(i) }
@@ -110,7 +108,7 @@ RSpec.describe Smc::Detectors::Structure do
         build(:candle, high: 101, low: 89),
         build(:candle, high: 110, low: 95)
       ]
-      series = instance_double('CandleSeries', candles: candles, closes: [95, 96, 97])
+      series = instance_double(CandleSeries, candles: candles, closes: [95, 96, 97])
       allow(series).to receive(:swing_high?) { |i| i == 2 }
       allow(series).to receive(:swing_low?) { |i| i == 1 }
 
@@ -126,4 +124,3 @@ RSpec.describe Smc::Detectors::Structure do
     end
   end
 end
-

@@ -13,7 +13,7 @@ module Positions
       return derivative.underlying_symbol if derivative&.underlying_symbol.present?
 
       instrument = tracker.instrument
-      return instrument.underlying_symbol if instrument&.respond_to?(:underlying_symbol) &&
+      return instrument.underlying_symbol if instrument.respond_to?(:underlying_symbol) &&
                                              instrument.underlying_symbol.present?
 
       tracker.symbol

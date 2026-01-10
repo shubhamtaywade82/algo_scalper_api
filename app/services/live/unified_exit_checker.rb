@@ -19,8 +19,8 @@ module Live
         if early_exit_triggered?(tracker, snapshot)
           return {
             exit: true,
-            reason: "EARLY_TREND_FAILURE",
-            path: "early_trend_failure",
+            reason: 'EARLY_TREND_FAILURE',
+            path: 'early_trend_failure',
             pnl_pct: pnl_pct
           }
         end
@@ -29,8 +29,8 @@ module Live
         if loss_limit_hit?(tracker, snapshot)
           return {
             exit: true,
-            reason: "STOP_LOSS",
-            path: "stop_loss",
+            reason: 'STOP_LOSS',
+            path: 'stop_loss',
             pnl_pct: pnl_pct
           }
         end
@@ -39,8 +39,8 @@ module Live
         if profit_target_hit?(tracker, snapshot)
           return {
             exit: true,
-            reason: "TAKE_PROFIT",
-            path: "take_profit",
+            reason: 'TAKE_PROFIT',
+            path: 'take_profit',
             pnl_pct: pnl_pct
           }
         end
@@ -49,8 +49,8 @@ module Live
         if trailing_stop_hit?(tracker, snapshot)
           return {
             exit: true,
-            reason: "TRAILING_STOP",
-            path: "trailing_stop",
+            reason: 'TRAILING_STOP',
+            path: 'trailing_stop',
             pnl_pct: pnl_pct
           }
         end
@@ -59,8 +59,8 @@ module Live
         if time_based_exit?(tracker)
           return {
             exit: true,
-            reason: "TIME_BASED",
-            path: "time_based",
+            reason: 'TIME_BASED',
+            path: 'time_based',
             pnl_pct: pnl_pct
           }
         end
@@ -97,7 +97,7 @@ module Live
         pnl_pct = snapshot[:pnl_pct].to_f * 100.0
 
         # Dynamic reverse SL (if enabled and below entry)
-        if pnl_pct < 0 && config[:stop_loss][:type] == 'adaptive'
+        if pnl_pct.negative? && config[:stop_loss][:type] == 'adaptive'
           seconds_below = seconds_below_entry(tracker)
           atr_ratio = calculate_atr_ratio(tracker)
 
@@ -115,7 +115,7 @@ module Live
         pnl_pct <= -static_sl
       end
 
-      def profit_target_hit?(tracker, snapshot)
+      def profit_target_hit?(_tracker, snapshot)
         config = exit_config
         pnl_pct = snapshot[:pnl_pct].to_f * 100.0
         tp = config[:take_profit].to_f
@@ -157,7 +157,7 @@ module Live
         drop_pct >= drop_threshold
       end
 
-      def time_based_exit?(tracker)
+      def time_based_exit?(_tracker)
         config = exit_config
         return false unless config[:time_based][:enabled]
 
@@ -177,11 +177,10 @@ module Live
         pnl_pct = snapshot[:pnl_pct]
         return 0 if pnl_pct.nil? || pnl_pct >= 0
 
+        Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
         if cached
-          Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
           (Time.current - cached).to_i
         else
-          Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
           0
         end
       rescue StandardError
@@ -221,13 +220,22 @@ module Live
         end
 
         return 0.0 if true_ranges.empty?
+
         true_ranges.sum / true_ranges.size
       end
 
-      def build_position_data(tracker, snapshot, instrument)
-        series = instrument.candle_series(interval: '5') rescue nil
+      def build_position_data(tracker, _snapshot, instrument)
+        series = begin
+          instrument.candle_series(interval: '5')
+        rescue StandardError
+          nil
+        end
         candles = series&.candles || []
-        adx_value = instrument.adx(14, interval: '5') rescue nil
+        adx_value = begin
+          instrument.adx(14, interval: '5')
+        rescue StandardError
+          nil
+        end
         adx_hash = adx_value.is_a?(Hash) ? adx_value : { value: adx_value }
 
         OpenStruct.new(
@@ -236,8 +244,8 @@ module Live
           adx: adx_hash[:value],
           atr_ratio: calculate_atr_ratio(tracker),
           underlying_price: tracker.entry_price.to_f,
-          vwap: candles.any? ? candles.last(20).map(&:close).sum / candles.last(20).size : tracker.entry_price.to_f,
-          is_long?: tracker.side == 'long_ce' || tracker.side == 'long_pe'
+          vwap: candles.any? ? candles.last(20).sum(&:close) / candles.last(20).size : tracker.entry_price.to_f,
+          is_long?: %w[long_ce long_pe].include?(tracker.side)
         )
       end
 

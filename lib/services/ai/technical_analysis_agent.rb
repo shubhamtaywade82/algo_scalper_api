@@ -79,8 +79,6 @@ module Services
               verdict: result[:verdict] || 'UNKNOWN',
               context: result[:context]
             }
-          else
-            nil
           end
         else
           # Fallback to old conversation executor (for backward compatibility)

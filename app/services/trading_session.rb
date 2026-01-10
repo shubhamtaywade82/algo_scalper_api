@@ -56,7 +56,7 @@ module TradingSession
 
         # Force exit if at or after 3:15 PM IST
         if hour > EXIT_DEADLINE_HOUR || (hour == EXIT_DEADLINE_HOUR && minute >= EXIT_DEADLINE_MINUTE)
-          deadline = current_ist.change(hour: EXIT_DEADLINE_HOUR, min: EXIT_DEADLINE_MINUTE)
+          current_ist.change(hour: EXIT_DEADLINE_HOUR, min: EXIT_DEADLINE_MINUTE)
           {
             should_exit: true,
             reason: "Session end deadline reached (#{EXIT_DEADLINE_HOUR}:#{format_minute(EXIT_DEADLINE_MINUTE)} IST)",

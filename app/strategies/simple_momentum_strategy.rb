@@ -107,9 +107,7 @@ class SimpleMomentumStrategy
     end
 
     # Add confidence for volume (if available)
-    if candle.volume > 0 && prev1.volume > 0
-      confidence += 10 if candle.volume > prev1.volume * 1.2
-    end
+    confidence += 10 if candle.volume.positive? && prev1.volume.positive? && (candle.volume > prev1.volume * 1.2)
 
     [confidence, 100].min
   end

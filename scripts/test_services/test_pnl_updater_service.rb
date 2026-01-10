@@ -99,9 +99,7 @@ active_positions.limit(5).each do |tracker|
   ltp = Live::TickCache.ltp(seg, sid) if seg && sid
 
   # If no LTP in cache, fetch from DhanHQ API
-  unless ltp&.positive?
-    ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s) if seg && sid
-  end
+  ltp = ServiceTestHelper.fetch_ltp(segment: seg, security_id: sid.to_s) if !ltp&.positive? && seg && sid
 
   next unless ltp&.positive?
 
@@ -130,4 +128,3 @@ at_exit do
 end
 
 ServiceTestHelper.print_success('PnlUpdaterService test completed')
-

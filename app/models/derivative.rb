@@ -62,7 +62,9 @@ class Derivative < ApplicationRecord
 
   belongs_to :instrument
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
-  has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: 'WatchlistItem'
+  has_one  :watchlist_item,  lambda {
+    where(active: true)
+  }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
   has_many :position_trackers, as: :watchable, dependent: :destroy
 
   validates :security_id, presence: true, uniqueness: { scope: %i[symbol_name exchange segment] }
@@ -144,7 +146,7 @@ class Derivative < ApplicationRecord
         product_type: product_type
       }
     )
-    return nil unless order&.respond_to?(:order_id) && order.order_id.present?
+    return nil unless order.respond_to?(:order_id) && order.order_id.present?
 
     side_label = option_type.to_s.upcase == 'CE' ? 'long_ce' : 'long_pe'
 

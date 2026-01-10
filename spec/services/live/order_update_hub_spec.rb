@@ -14,7 +14,7 @@ RSpec.describe Live::OrderUpdateHub do
 
     # Stub AlgoConfig
     allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
-    
+
     # Stub environment variables
     allow(ENV).to receive(:[]).and_call_original
     allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return('test_client_id')
@@ -321,13 +321,13 @@ RSpec.describe Live::OrderUpdateHub do
     end
 
     it 'handles callback errors gracefully' do
-      hub.on_update { |_p| raise StandardError.new('Callback error') }
+      hub.on_update { |_p| raise StandardError, 'Callback error' }
 
       expect { hub.send(:handle_update, payload) }.not_to raise_error
     end
 
     it 'logs callback errors' do
-      hub.on_update { |_p| raise StandardError.new('Callback error') }
+      hub.on_update { |_p| raise StandardError, 'Callback error' }
 
       expect(Rails.logger).to receive(:error).with(/OrderUpdateHub.*Order update callback failed/)
 

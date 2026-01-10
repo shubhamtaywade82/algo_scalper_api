@@ -3,25 +3,25 @@
 # Script to analyze PositionTracker PnL decline
 # Usage: rails runner scripts/analyze_pnl_decline.rb
 
-puts "\n" + "=" * 80
-puts "PNL DECLINE ANALYSIS"
-puts "=" * 80 + "\n"
+puts "\n#{'=' * 80}"
+puts 'PNL DECLINE ANALYSIS'
+puts "#{'=' * 80}\n"
 
 # Get all paper trading positions
 all_trackers = PositionTracker.paper.order(created_at: :asc)
 exited_trackers = PositionTracker.paper.exited.order(created_at: :asc)
 active_trackers = PositionTracker.paper.active.order(created_at: :asc)
 
-puts "📊 OVERVIEW"
-puts "-" * 80
+puts '📊 OVERVIEW'
+puts '-' * 80
 puts "Total Positions: #{all_trackers.count}"
 puts "  - Exited: #{exited_trackers.count}"
 puts "  - Active: #{active_trackers.count}"
-puts ""
+puts ''
 
 # Calculate cumulative PnL over time
-puts "📈 CUMULATIVE PNL PROGRESSION"
-puts "-" * 80
+puts '📈 CUMULATIVE PNL PROGRESSION'
+puts '-' * 80
 cumulative_pnl = 0.0
 peak_pnl = 0.0
 peak_time = nil
@@ -63,44 +63,48 @@ puts "Peak PnL: ₹#{peak_pnl.round(2)} at #{peak_time&.strftime('%Y-%m-%d %H:%M
 puts "Current PnL: ₹#{cumulative_pnl.round(2)}"
 puts "Maximum Drawdown: ₹#{max_drawdown.round(2)} (#{((max_drawdown / peak_pnl) * 100).round(2)}%) at #{max_drawdown_time&.strftime('%Y-%m-%d %H:%M:%S')}"
 puts "Total Decline: ₹#{(peak_pnl - cumulative_pnl).round(2)}"
-puts ""
+puts ''
 
 # Analyze losing trades
-puts "❌ LOSING TRADES ANALYSIS"
-puts "-" * 80
+puts '❌ LOSING TRADES ANALYSIS'
+puts '-' * 80
 losing_trades = exited_trackers.select { |t| (t.last_pnl_rupees || 0).negative? }
 total_loss = losing_trades.sum { |t| t.last_pnl_rupees.to_f }
 
 puts "Total Losing Trades: #{losing_trades.count}"
 puts "Total Loss: ₹#{total_loss.round(2)}"
-puts "Average Loss per Trade: ₹#{(total_loss / losing_trades.count).round(2)}" if losing_trades.count.positive?
-puts ""
+puts "Average Loss per Trade: ₹#{(total_loss / losing_trades.count).round(2)}" if losing_trades.any?
+puts ''
 
 if losing_trades.any?
-  puts "Top 10 Worst Trades:"
+  puts 'Top 10 Worst Trades:'
   losing_trades.sort_by { |t| t.last_pnl_rupees.to_f }.first(10).each_with_index do |tracker, idx|
     puts "  #{idx + 1}. #{tracker.symbol} | Loss: ₹#{tracker.last_pnl_rupees.to_f.round(2)} (#{tracker.last_pnl_pct.to_f.round(2)}%) | " \
-         "Entry: ₹#{tracker.entry_price.to_f.round(2)} | Exit: ₹#{tracker.exit_price.to_f.round(2) rescue 'N/A'} | " \
+         "Entry: ₹#{tracker.entry_price.to_f.round(2)} | Exit: ₹#{begin
+           tracker.exit_price.to_f.round(2)
+         rescue StandardError
+           'N/A'
+         end} | " \
          "HWM: ₹#{tracker.high_water_mark_pnl.to_f.round(2)} | " \
          "Exit Reason: #{(tracker.meta.is_a?(Hash) ? tracker.meta['exit_reason'] : nil) || 'N/A'}"
   end
-  puts ""
+  puts ''
 end
 
 # Analyze winning trades
-puts "✅ WINNING TRADES ANALYSIS"
-puts "-" * 80
+puts '✅ WINNING TRADES ANALYSIS'
+puts '-' * 80
 winning_trades = exited_trackers.select { |t| (t.last_pnl_rupees || 0).positive? }
 total_profit = winning_trades.sum { |t| t.last_pnl_rupees.to_f }
 
 puts "Total Winning Trades: #{winning_trades.count}"
 puts "Total Profit: ₹#{total_profit.round(2)}"
-puts "Average Profit per Trade: ₹#{(total_profit / winning_trades.count).round(2)}" if winning_trades.count.positive?
-puts ""
+puts "Average Profit per Trade: ₹#{(total_profit / winning_trades.count).round(2)}" if winning_trades.any?
+puts ''
 
 # Analyze by symbol/index
-puts "📊 ANALYSIS BY SYMBOL/INDEX"
-puts "-" * 80
+puts '📊 ANALYSIS BY SYMBOL/INDEX'
+puts '-' * 80
 by_symbol = all_trackers.group_by { |t| t.symbol || 'UNKNOWN' }
 by_symbol.each do |symbol, trackers|
   total_pnl = trackers.sum { |t| t.last_pnl_rupees.to_f }
@@ -112,12 +116,12 @@ by_symbol.each do |symbol, trackers|
   puts "#{symbol}:"
   puts "  Total Trades: #{trackers.count} (Exited: #{trackers.count(&:exited?)}, Active: #{trackers.count(&:active?)})"
   puts "  Total PnL: ₹#{total_pnl.round(2)} (Realized: ₹#{exited_pnl.round(2)}, Unrealized: ₹#{active_pnl.round(2)})"
-  puts ""
+  puts ''
 end
 
 # Analyze by index_key
-puts "📊 ANALYSIS BY INDEX"
-puts "-" * 80
+puts '📊 ANALYSIS BY INDEX'
+puts '-' * 80
 by_index = {}
 all_trackers.each do |tracker|
   meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
@@ -138,12 +142,12 @@ by_index.each do |index_key, trackers|
   puts "  Total PnL: ₹#{total_pnl.round(2)} (Realized: ₹#{exited_pnl.round(2)}, Unrealized: ₹#{active_pnl.round(2)})"
   puts "  Winners: #{trackers.count { |t| t.exited? && (t.last_pnl_rupees || 0).positive? }}"
   puts "  Losers: #{trackers.count { |t| t.exited? && (t.last_pnl_rupees || 0).negative? }}"
-  puts ""
+  puts ''
 end
 
 # Analyze drawdowns from HWM
-puts "📉 DRAWDOWN ANALYSIS"
-puts "-" * 80
+puts '📉 DRAWDOWN ANALYSIS'
+puts '-' * 80
 positions_with_drawdown = all_trackers.select do |t|
   t.high_water_mark_pnl.present? && t.high_water_mark_pnl.to_f.positive? &&
     t.last_pnl_rupees.present? && t.last_pnl_rupees.to_f < t.high_water_mark_pnl.to_f
@@ -151,18 +155,20 @@ end
 
 if positions_with_drawdown.any?
   puts "Positions that dropped from HWM: #{positions_with_drawdown.count}"
-  positions_with_drawdown.sort_by { |t| (t.high_water_mark_pnl.to_f - t.last_pnl_rupees.to_f) }.reverse.first(10).each do |tracker|
+  positions_with_drawdown.sort_by do |t|
+    (t.high_water_mark_pnl.to_f - t.last_pnl_rupees.to_f)
+  end.last(10).reverse_each do |tracker|
     drawdown = tracker.high_water_mark_pnl.to_f - tracker.last_pnl_rupees.to_f
     drawdown_pct = tracker.high_water_mark_pnl.to_f.positive? ? (drawdown / tracker.high_water_mark_pnl.to_f * 100) : 0
     puts "  #{tracker.symbol} | HWM: ₹#{tracker.high_water_mark_pnl.to_f.round(2)} | Current: ₹#{tracker.last_pnl_rupees.to_f.round(2)} | " \
          "Drawdown: ₹#{drawdown.round(2)} (#{drawdown_pct.round(2)}%) | Status: #{tracker.status}"
   end
-  puts ""
+  puts ''
 end
 
 # Analyze exit reasons
-puts "🚪 EXIT REASONS ANALYSIS"
-puts "-" * 80
+puts '🚪 EXIT REASONS ANALYSIS'
+puts '-' * 80
 exit_reasons = {}
 exited_trackers.each do |tracker|
   meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
@@ -178,12 +184,12 @@ exit_reasons.sort_by { |_k, v| v[:total_pnl] }.each do |reason, data|
   puts "  Count: #{data[:count]}"
   puts "  Total PnL: ₹#{data[:total_pnl].round(2)}"
   puts "  Avg PnL: ₹#{avg_pnl.round(2)}"
-  puts ""
+  puts ''
 end
 
 # Timeline of major events
-puts "⏰ TIMELINE OF MAJOR EVENTS"
-puts "-" * 80
+puts '⏰ TIMELINE OF MAJOR EVENTS'
+puts '-' * 80
 significant_events = pnl_timeline.select do |event|
   event[:pnl].abs > 1000 || # Large individual PnL
     (event[:cumulative] - peak_pnl).abs > 5000 # Significant cumulative change
@@ -196,7 +202,6 @@ significant_events.sort_by { |e| e[:time] }.each do |event|
        "Status: #{event[:status]}"
 end
 
-puts "\n" + "=" * 80
-puts "ANALYSIS COMPLETE"
-puts "=" * 80 + "\n"
-
+puts "\n#{'=' * 80}"
+puts 'ANALYSIS COMPLETE'
+puts "#{'=' * 80}\n"

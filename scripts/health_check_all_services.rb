@@ -155,7 +155,7 @@ begin
     puts "   Thread: #{thread&.alive? ? '✅ ALIVE' : '❌ DEAD'}"
     puts "   Thread name: #{thread&.name || 'N/A'}"
   else
-    puts "   ❌ Not found in supervisor"
+    puts '   ❌ Not found in supervisor'
   end
 rescue StandardError => e
   puts "   ❌ ERROR: #{e.class} - #{e.message}"
@@ -173,7 +173,7 @@ begin
     puts "   Thread: #{thread&.alive? ? '✅ ALIVE' : '❌ DEAD'}"
     puts "   Thread name: #{thread&.name || 'N/A'}"
   else
-    puts "   ❌ Not found in supervisor"
+    puts '   ❌ Not found in supervisor'
   end
 rescue StandardError => e
   puts "   ❌ ERROR: #{e.class} - #{e.message}"
@@ -206,7 +206,7 @@ begin
     puts "   Thread: #{thread&.alive? ? '✅ ALIVE' : '❌ DEAD'}"
     puts "   Thread name: #{thread&.name || 'N/A'}"
   else
-    puts "   ❌ Not found in supervisor"
+    puts '   ❌ Not found in supervisor'
   end
 rescue StandardError => e
   puts "   ❌ ERROR: #{e.class} - #{e.message}"
@@ -225,7 +225,7 @@ begin
     puts "   Thread: #{thread&.alive? ? '✅ ALIVE' : '❌ DEAD'}"
     puts "   Thread name: #{thread&.name || 'N/A'}"
   else
-    puts "   ❌ Not found in supervisor"
+    puts '   ❌ Not found in supervisor'
   end
 rescue StandardError => e
   puts "   ❌ ERROR: #{e.class} - #{e.message}"
@@ -244,7 +244,7 @@ begin
     puts "   Thread: #{thread&.alive? ? '✅ ALIVE' : '❌ DEAD'}"
     puts "   Thread name: #{thread&.name || 'N/A'}"
   else
-    puts "   ❌ Not found in supervisor"
+    puts '   ❌ Not found in supervisor'
   end
 rescue StandardError => e
   puts "   ❌ ERROR: #{e.class} - #{e.message}"
@@ -283,4 +283,3 @@ else
   puts '  3. Check individual service: rails runner scripts/test_services/test_<service>.rb'
   exit 1
 end
-

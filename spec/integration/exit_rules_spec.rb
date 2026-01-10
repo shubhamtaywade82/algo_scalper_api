@@ -109,8 +109,8 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                     tracker_id: position_tracker.id,
                                     pnl_pct: -30.0,
                                     active?: true)
-        allow(risk_manager).to receive(:active_cache_positions).and_return([mock_position_data])
-        allow(risk_manager).to receive(:trackers_for_positions).and_return({ position_tracker.id => position_tracker })
+        allow(risk_manager).to receive_messages(active_cache_positions: [mock_position_data],
+                                                trackers_for_positions: { position_tracker.id => position_tracker })
         allow(risk_manager).to receive(:sync_position_pnl_from_redis)
 
         # When exit_engine is provided, it calls exit_engine.execute_exit, not risk_manager.execute_exit
@@ -147,8 +147,8 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                     tracker_id: position_tracker.id,
                                     pnl_pct: 50.0,
                                     active?: true)
-        allow(risk_manager).to receive(:active_cache_positions).and_return([mock_position_data])
-        allow(risk_manager).to receive(:trackers_for_positions).and_return({ position_tracker.id => position_tracker })
+        allow(risk_manager).to receive_messages(active_cache_positions: [mock_position_data],
+                                                trackers_for_positions: { position_tracker.id => position_tracker })
         allow(risk_manager).to receive(:sync_position_pnl_from_redis)
 
         # When exit_engine is provided, it calls exit_engine.execute_exit, not risk_manager.execute_exit
@@ -195,8 +195,8 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                     tracker_id: position_tracker.id,
                                     pnl_pct: -1.0,
                                     active?: true)
-        allow(risk_manager).to receive(:active_cache_positions).and_return([mock_position_data])
-        allow(risk_manager).to receive(:trackers_for_positions).and_return({ position_tracker.id => position_tracker })
+        allow(risk_manager).to receive_messages(active_cache_positions: [mock_position_data],
+                                                trackers_for_positions: { position_tracker.id => position_tracker })
         allow(risk_manager).to receive(:sync_position_pnl_from_redis)
 
         # NOTE: enforce_hard_limits only checks sl_pct (30%) and tp_pct (50%)
@@ -237,8 +237,8 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                     tracker_id: position_tracker.id,
                                     pnl_pct: -40.0,
                                     active?: true)
-        allow(risk_manager).to receive(:active_cache_positions).and_return([mock_position_data])
-        allow(risk_manager).to receive(:trackers_for_positions).and_return({ position_tracker.id => position_tracker })
+        allow(risk_manager).to receive_messages(active_cache_positions: [mock_position_data],
+                                                trackers_for_positions: { position_tracker.id => position_tracker })
         allow(risk_manager).to receive(:sync_position_pnl_from_redis)
 
         # When exit_engine is provided, it calls exit_engine.execute_exit
@@ -257,8 +257,8 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                     tracker_id: position_tracker.id,
                                     pnl_pct: -40.0,
                                     active?: true)
-        allow(risk_manager).to receive(:active_cache_positions).and_return([mock_position_data])
-        allow(risk_manager).to receive(:trackers_for_positions).and_return({ position_tracker.id => position_tracker })
+        allow(risk_manager).to receive_messages(active_cache_positions: [mock_position_data],
+                                                trackers_for_positions: { position_tracker.id => position_tracker })
         allow(risk_manager).to receive(:sync_position_pnl_from_redis)
 
         # When exit_engine is provided, it calls exit_engine.execute_exit
@@ -324,8 +324,8 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                     pnl: 500.0,
                                     high_water_mark: 50.0,
                                     active?: true)
-        allow(risk_manager).to receive(:active_cache_positions).and_return([mock_position_data])
-        allow(risk_manager).to receive(:trackers_for_positions).and_return({ position_tracker.id => position_tracker })
+        allow(risk_manager).to receive_messages(active_cache_positions: [mock_position_data],
+                                                trackers_for_positions: { position_tracker.id => position_tracker })
 
         # When PnL increases above HWM, trailing stop should not be triggered
         expect(mock_exit_engine).not_to receive(:execute_exit)

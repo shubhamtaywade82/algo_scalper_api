@@ -96,7 +96,7 @@ module Notifications
       return unless enabled?
 
       ::TelegramNotifier.send_chat_action(action: 'typing')
-      sleep(duration) if duration > 0
+      sleep(duration) if duration.positive?
     rescue StandardError => e
       Rails.logger.error("[TelegramNotifier] Failed to send typing indicator: #{e.class} - #{e.message}")
     end
@@ -169,7 +169,7 @@ module Notifications
 
     def format_exit_message(tracker, exit_reason, exit_price, pnl)
       symbol = tracker.symbol || 'N/A'
-      entry_price = tracker.entry_price&.to_f || 0.0
+      entry_price = tracker.entry_price.to_f
       exit_price_value = exit_price&.to_f || tracker.exit_price&.to_f || 0.0
       quantity = tracker.quantity || 0
       pnl_value = pnl&.to_f || tracker.last_pnl_rupees&.to_f || 0.0
@@ -230,11 +230,11 @@ module Notifications
 
     def format_pnl_message(tracker, pnl, pnl_pct)
       symbol = tracker.symbol || 'N/A'
-      entry_price = tracker.entry_price&.to_f || 0.0
+      entry_price = tracker.entry_price.to_f
       current_price = tracker.avg_price&.to_f || entry_price
-      quantity = tracker.quantity || 0
+      tracker.quantity || 0
       pnl_value = pnl.to_f
-      pnl_pct_value = pnl_pct&.to_f || 0.0
+      pnl_pct_value = pnl_pct.to_f
 
       emoji = if pnl_value.positive?
                 '📈'
@@ -291,13 +291,13 @@ module Notifications
     end
 
     def format_trading_stats(stats)
-      total_pnl_emoji = stats[:total_pnl_rupees] >= 0 ? '📈' : '📉'
+      stats[:total_pnl_rupees] >= 0 ? '📈' : '📉'
       realized_pnl_emoji = stats[:realized_pnl_rupees] >= 0 ? '✅' : '❌'
 
       message = "📊 <b>Daily Trading Statistics</b>\n"
       message += "📅 <b>Date:</b> #{Time.zone.today.strftime('%Y-%m-%d')}\n\n"
       message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-      message += "<b>📈 Total PnL:</b> ₹#{stats[:total_pnl_rupees].round(2)} (#{stats[:total_pnl_pct].round(2)}%)\n"
+      message += "<b>#{total_pnl_emoji} Total PnL:</b> ₹#{stats[:total_pnl_rupees].round(2)} (#{stats[:total_pnl_pct].round(2)}%)\n"
       message += "<b>#{realized_pnl_emoji} Realized PnL:</b> ₹#{stats[:realized_pnl_rupees].round(2)} (#{stats[:realized_pnl_pct].round(2)}%)\n"
       message += "<b>⏳ Unrealized PnL:</b> ₹#{stats[:unrealized_pnl_rupees].round(2)} (#{stats[:unrealized_pnl_pct].round(2)}%)\n"
       message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"

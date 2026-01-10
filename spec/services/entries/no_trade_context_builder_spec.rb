@@ -27,13 +27,10 @@ RSpec.describe Entries::NoTradeContextBuilder do
       )
 
       # Mock structure detection
-      allow(Entries::StructureDetector).to receive(:bos?).and_return(true)
-      allow(Entries::StructureDetector).to receive(:inside_opposite_ob?).and_return(false)
-      allow(Entries::StructureDetector).to receive(:inside_fvg?).and_return(false)
+      allow(Entries::StructureDetector).to receive_messages(bos?: true, inside_opposite_ob?: false, inside_fvg?: false)
 
       # Mock VWAP utilities
-      allow(Entries::VWAPUtils).to receive(:near_vwap?).and_return(false)
-      allow(Entries::VWAPUtils).to receive(:trapped_between_vwap_avwap?).and_return(false)
+      allow(Entries::VWAPUtils).to receive_messages(near_vwap?: false, trapped_between_vwap_avwap?: false)
 
       # Mock range utilities
       allow(Entries::RangeUtils).to receive(:range_pct).and_return(0.5)
@@ -46,11 +43,8 @@ RSpec.describe Entries::NoTradeContextBuilder do
 
       # Mock option chain wrapper
       chain_wrapper = instance_double(Entries::OptionChainWrapper)
-      allow(chain_wrapper).to receive(:ce_oi_rising?).and_return(false)
-      allow(chain_wrapper).to receive(:pe_oi_rising?).and_return(false)
-      allow(chain_wrapper).to receive(:atm_iv).and_return(15.0)
-      allow(chain_wrapper).to receive(:iv_falling?).and_return(false)
-      allow(chain_wrapper).to receive(:spread_wide?).and_return(false)
+      allow(chain_wrapper).to receive_messages(ce_oi_rising?: false, pe_oi_rising?: false, atm_iv: 15.0,
+                                               iv_falling?: false, spread_wide?: false)
       allow(Entries::OptionChainWrapper).to receive(:new).and_return(chain_wrapper)
     end
 
@@ -150,11 +144,8 @@ RSpec.describe Entries::NoTradeContextBuilder do
 
     it 'handles OptionChainWrapper instance' do
       chain_wrapper = instance_double(Entries::OptionChainWrapper)
-      allow(chain_wrapper).to receive(:ce_oi_rising?).and_return(false)
-      allow(chain_wrapper).to receive(:pe_oi_rising?).and_return(false)
-      allow(chain_wrapper).to receive(:atm_iv).and_return(15.0)
-      allow(chain_wrapper).to receive(:iv_falling?).and_return(false)
-      allow(chain_wrapper).to receive(:spread_wide?).and_return(false)
+      allow(chain_wrapper).to receive_messages(ce_oi_rising?: false, pe_oi_rising?: false, atm_iv: 15.0,
+                                               iv_falling?: false, spread_wide?: false)
 
       ctx = described_class.build(
         index: index_key,

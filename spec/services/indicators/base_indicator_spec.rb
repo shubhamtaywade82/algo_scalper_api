@@ -43,10 +43,12 @@ RSpec.describe Indicators::BaseIndicator do
     end
 
     it 'handles namespaced classes' do
-      class Indicators::TestNamespacedIndicator < Indicators::BaseIndicator
-        def min_required_candles; 10; end
-        def ready?(index); index >= 10; end
-        def calculate_at(index); nil; end
+      module Indicators
+        class TestNamespacedIndicator < Indicators::BaseIndicator
+          def min_required_candles = 10
+          def ready?(index) = index >= 10
+          def calculate_at(_index) = nil
+        end
       end
 
       indicator = Indicators::TestNamespacedIndicator.new(series: series, config: config)
@@ -63,10 +65,10 @@ RSpec.describe Indicators::BaseIndicator do
       it 'returns true for candles within trading hours' do
         candle = Candle.new(
           ts: Time.zone.parse('2024-01-01 10:30:00 IST'),
-          open: 22000,
-          high: 22050,
-          low: 21980,
-          close: 22020,
+          open: 22_000,
+          high: 22_050,
+          low: 21_980,
+          close: 22_020,
           volume: 1000
         )
         expect(indicator.trading_hours?(candle)).to be true
@@ -75,10 +77,10 @@ RSpec.describe Indicators::BaseIndicator do
       it 'returns false for candles outside trading hours' do
         candle = Candle.new(
           ts: Time.zone.parse('2024-01-01 09:00:00 IST'),
-          open: 22000,
-          high: 22050,
-          low: 21980,
-          close: 22020,
+          open: 22_000,
+          high: 22_050,
+          low: 21_980,
+          close: 22_020,
           volume: 1000
         )
         expect(indicator.trading_hours?(candle)).to be false
@@ -91,10 +93,10 @@ RSpec.describe Indicators::BaseIndicator do
       it 'returns true for all candles' do
         candle = Candle.new(
           ts: Time.zone.parse('2024-01-01 09:00:00 IST'),
-          open: 22000,
-          high: 22050,
-          low: 21980,
-          close: 22020,
+          open: 22_000,
+          high: 22_050,
+          low: 21_980,
+          close: 22_020,
           volume: 1000
         )
         expect(indicator.trading_hours?(candle)).to be true
@@ -105,19 +107,19 @@ RSpec.describe Indicators::BaseIndicator do
   describe 'abstract methods' do
     it 'raises NotImplementedError for calculate_at' do
       expect do
-        Indicators::BaseIndicator.new(series: series, config: config).calculate_at(0)
+        described_class.new(series: series, config: config).calculate_at(0)
       end.to raise_error(NotImplementedError)
     end
 
     it 'raises NotImplementedError for ready?' do
       expect do
-        Indicators::BaseIndicator.new(series: series, config: config).ready?(0)
+        described_class.new(series: series, config: config).ready?(0)
       end.to raise_error(NotImplementedError)
     end
 
     it 'raises NotImplementedError for min_required_candles' do
       expect do
-        Indicators::BaseIndicator.new(series: series, config: config).min_required_candles
+        described_class.new(series: series, config: config).min_required_candles
       end.to raise_error(NotImplementedError)
     end
   end

@@ -51,4 +51,3 @@ RSpec.describe Live::PnlUpdaterService do
     end
   end
 end
-

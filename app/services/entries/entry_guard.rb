@@ -5,7 +5,7 @@ require_relative '../concerns/broker_fee_calculator'
 module Entries
   class EntryGuard
     class << self
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil)
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         # Time regime validation (session-aware entry rules)
         unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
           Rails.logger.info("[EntryGuard] Entry blocked by time regime rules for #{index_cfg[:key]}")
@@ -71,14 +71,56 @@ module Entries
           return false
         end
 
-        quantity = Capital::Allocator.qty_for(
+        # ===== Unified instrument profile + capital cap sizing (hard rules) =====
+        symbol = index_cfg[:key].to_s.upcase
+        permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
+
+        # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
+        if %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
+          Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
+          return false
+        end
+
+        profile = Trading::InstrumentExecutionProfile.for(symbol)
+
+        if permission_sym == :execution_only && profile[:allow_execution_only] == false
+          Rails.logger.info("[EntryGuard] Execution-only blocked for #{symbol} by profile")
+          return false
+        end
+
+        permission_cap = profile[:max_lots_by_permission][permission_sym].to_i
+        lot_size = Trading::LotCalculator.lot_size_for(symbol)
+
+        cap_lots = Trading::CapitalAllocator.max_lots(
+          premium: ltp.to_f,
+          lot_size: lot_size,
+          permission_cap: permission_cap
+        )
+
+        if cap_lots <= 0
+          Rails.logger.info(
+            "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, " \
+            "permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
+          )
+          return false
+        end
+
+        quantity_by_existing_allocator = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
           entry_price: ltp.to_f,
-          derivative_lot_size: pick[:lot_size],
+          derivative_lot_size: lot_size,
           scale_multiplier: multiplier
         )
-        if quantity <= 0
-          Rails.logger.warn("[EntryGuard] Invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, ltp: #{ltp}, lot_size: #{pick[:lot_size]})")
+
+        quantity_by_cap = cap_lots * lot_size
+        quantity = [quantity_by_existing_allocator.to_i, quantity_by_cap.to_i].min
+        quantity = (quantity / lot_size) * lot_size # ensure lot-aligned
+
+        if quantity <= 0 || quantity < lot_size
+          Rails.logger.warn(
+            "[EntryGuard] Quantity blocked for #{index_cfg[:key]}: #{pick[:symbol]} " \
+            "(qty=#{quantity}, cap_qty=#{quantity_by_cap}, alloc_qty=#{quantity_by_existing_allocator}, lot_size=#{lot_size}, ltp=#{ltp})"
+          )
           return false
         end
 
@@ -315,6 +357,27 @@ module Entries
         last.present? && (Time.current - last) < cooldown
       end
 
+      def weekly_contract?(pick:, index_cfg:)
+        # Prefer derivative_id if present
+        derivative =
+          if pick[:derivative_id].present?
+            Derivative.find_by(id: pick[:derivative_id])
+          else
+            Derivative.find_by(
+              security_id: pick[:security_id].to_s,
+              segment: (pick[:segment] || index_cfg[:segment]).to_s
+            )
+          end
+
+        return false unless derivative
+
+        flag = derivative.expiry_flag.to_s.upcase
+        flag.start_with?('W') # WEEK / WEEKLY
+      rescue StandardError => e
+        Rails.logger.warn("[EntryGuard] Weekly contract check failed: #{e.class} - #{e.message}")
+        false
+      end
+
       # Checks if we need to fetch LTP from REST API
       # @param pick [Hash] Pick data from signal
       # @return [Boolean]
@@ -422,7 +485,7 @@ module Entries
         if regime == Live::TimeRegimeService::CHOP_DECAY
           # Allow ONLY if exceptional conditions (ADX ≥ 22, expansion present, large impulse)
           # This should be checked in signal generation, but we log here
-          Rails.logger.info("[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met")
+          Rails.logger.info('[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met')
         end
 
         # Special rules for CLOSE_GAMMA regime
@@ -432,7 +495,7 @@ module Entries
           if current_time >= '14:45'
             # No fresh breakouts after 14:45 IST - only continuation moves
             # This should be checked in signal generation
-            Rails.logger.info("[EntryGuard] Entry after 14:45 IST - ensure continuation move only")
+            Rails.logger.info('[EntryGuard] Entry after 14:45 IST - ensure continuation move only')
           end
         end
 
@@ -443,11 +506,9 @@ module Entries
       end
 
       def time_regime_rules_enabled?
-        begin
-          AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
-        rescue StandardError
-          false
-        end
+        AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
+      rescue StandardError
+        false
       end
 
       # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
@@ -472,13 +533,13 @@ module Entries
             return false
           when 'global_daily_loss_limit_exceeded'
             Rails.logger.warn(
-              "[EntryGuard] Global daily loss limit exceeded: " \
+              '[EntryGuard] Global daily loss limit exceeded: ' \
               "₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
             )
             return false
           when 'daily_profit_target_reached'
             Rails.logger.info(
-              "[EntryGuard] Daily profit target reached: " \
+              '[EntryGuard] Daily profit target reached: ' \
               "₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
             )
             return false
@@ -493,13 +554,11 @@ module Entries
       end
 
       def daily_limits_enabled?
-        begin
-          config = AlgoConfig.fetch[:risk] || {}
-          daily_limits_cfg = config[:daily_limits] || {}
-          daily_limits_cfg[:enable] != false
-        rescue StandardError
-          true # Default to enabled
-        end
+        config = AlgoConfig.fetch[:risk] || {}
+        daily_limits_cfg = config[:daily_limits] || {}
+        daily_limits_cfg[:enable] != false
+      rescue StandardError
+        true # Default to enabled
       end
 
       private

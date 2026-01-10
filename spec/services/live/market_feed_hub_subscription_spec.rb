@@ -41,4 +41,3 @@ RSpec.describe Live::MarketFeedHub do
     hub.unsubscribe_instrument(segment: 'NSE_FNO', security_id: '99999')
   end
 end
-

@@ -63,7 +63,7 @@ paper_positions.limit(3).each do |tracker|
   if pnl_data
     ServiceTestHelper.print_success("  Redis PnL: ₹#{pnl_data[:pnl]}")
   else
-    ServiceTestHelper.print_warning("  Redis PnL: Not cached yet")
+    ServiceTestHelper.print_warning('  Redis PnL: Not cached yet')
   end
 end
 
@@ -85,4 +85,3 @@ end
 
 ServiceTestHelper.print_success('PaperPnlRefresher test completed')
 ServiceTestHelper.print_info('Refresher runs continuously - check logs for refresh details')
-

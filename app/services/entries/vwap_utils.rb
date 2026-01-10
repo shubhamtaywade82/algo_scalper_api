@@ -9,7 +9,7 @@ module Entries
       # @param threshold_pct [Float] Threshold percentage (default: 0.1%)
       # @return [Boolean]
       def near_vwap?(bars, threshold_pct: 0.1)
-        return false if bars.nil? || bars.empty?
+        return false if bars.blank?
 
         current_price = bars.last&.close
         return false unless current_price&.positive?
@@ -27,7 +27,7 @@ module Entries
       # @param min_candles [Integer] Minimum candles in chop (e.g., 3 for NIFTY, 2 for SENSEX)
       # @return [Boolean]
       def vwap_chop?(bars, threshold_pct:, min_candles:)
-        return false if bars.nil? || bars.empty? || bars.size < min_candles
+        return false if bars.blank? || bars.size < min_candles
 
         vwap = calculate_vwap(bars)
         return false unless vwap&.positive?
@@ -82,7 +82,7 @@ module Entries
         return false unless vwap && avwap
 
         # Check if price is between the two
-        [vwap, avwap].min <= current_price && current_price <= [vwap, avwap].max
+        current_price.between?([vwap, avwap].min, [vwap, avwap].max)
       end
     end
   end

@@ -75,18 +75,18 @@ RSpec.describe Live::EarlyTrendFailure, 'configuration variations' do
   end
 
   describe '.early_trend_failure? with different configs' do
-      let(:position_data) do
-        data = OpenStruct.new(
-          trend_score: 50.0,
-          peak_trend_score: 50.0,
-          adx: 25.0,
-          atr_ratio: 1.0,
-          underlying_price: 100.0,
-          vwap: 100.0
-        )
-        data.define_singleton_method(:is_long?) { true }
-        data
-      end
+    let(:position_data) do
+      data = OpenStruct.new(
+        trend_score: 50.0,
+        peak_trend_score: 50.0,
+        adx: 25.0,
+        atr_ratio: 1.0,
+        underlying_price: 100.0,
+        vwap: 100.0
+      )
+      data.define_singleton_method(:is_long?) { true }
+      data
+    end
 
     context 'sensitive trend score drop' do
       let(:config) do

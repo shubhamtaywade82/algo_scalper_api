@@ -4,24 +4,6 @@ require 'rails_helper'
 
 RSpec.describe Live::RiskManagerService do
   let(:service) { described_class.new }
-  let(:instrument) { create(:instrument, :nifty_future, security_id: '9999') }
-
-  # Stub MarketFeedHub globally to prevent WebSocket subscription errors during tracker creation
-  let(:market_feed_hub) do
-    instance_double(Live::MarketFeedHub).tap do |hub|
-      allow(hub).to receive(:running?).and_return(true)
-      allow(hub).to receive(:subscribed?).and_return(false)
-      allow(hub).to receive(:subscribe).and_return({ segment: 'NSE_FNO', security_id: '50074' })
-      allow(hub).to receive(:unsubscribe).and_return(true)
-      allow(hub).to receive(:start!).and_return(true)
-    end
-  end
-
-  before do
-    # Stub MarketFeedHub before any trackers are created
-    allow(Live::MarketFeedHub).to receive(:instance).and_return(market_feed_hub)
-  end
-
   let(:tracker) do
     create(
       :position_tracker,
@@ -35,6 +17,20 @@ RSpec.describe Live::RiskManagerService do
       entry_price: 100.0,
       avg_price: 100.0
     )
+  end
+  let(:instrument) { create(:instrument, :nifty_future, security_id: '9999') }
+
+  # Stub MarketFeedHub globally to prevent WebSocket subscription errors during tracker creation
+  let(:market_feed_hub) do
+    instance_double(Live::MarketFeedHub).tap do |hub|
+      allow(hub).to receive_messages(running?: true, subscribed?: false,
+                                     subscribe: { segment: 'NSE_FNO', security_id: '50074' }, unsubscribe: true, start!: true)
+    end
+  end
+
+  before do
+    # Stub MarketFeedHub before any trackers are created
+    allow(Live::MarketFeedHub).to receive(:instance).and_return(market_feed_hub)
   end
 
   describe 'EPIC G — G1: Enforce Simplified Exit Rules' do
@@ -270,8 +266,7 @@ RSpec.describe Live::RiskManagerService do
           # Entry: ₹100, LTP: ₹110 (10% profit)
           allow(service).to receive(:current_ltp_with_freshness_check).with(tracker,
                                                                             position).and_return(BigDecimal('110.0'))
-          allow(service).to receive(:compute_pnl).and_return(BigDecimal('750.0')) # 75 qty × ₹10 profit
-          allow(service).to receive(:compute_pnl_pct).and_return(BigDecimal('0.10'))
+          allow(service).to receive_messages(compute_pnl: BigDecimal('750.0'), compute_pnl_pct: BigDecimal('0.10'))
 
           service.send(:enforce_trailing_stops, { '50074' => position })
 
@@ -283,8 +278,7 @@ RSpec.describe Live::RiskManagerService do
           tracker.update(meta: { breakeven_locked: true })
           allow(service).to receive(:current_ltp_with_freshness_check).with(tracker,
                                                                             position).and_return(BigDecimal('110.0'))
-          allow(service).to receive(:compute_pnl).and_return(BigDecimal('750.0'))
-          allow(service).to receive(:compute_pnl_pct).and_return(BigDecimal('0.10'))
+          allow(service).to receive_messages(compute_pnl: BigDecimal('750.0'), compute_pnl_pct: BigDecimal('0.10'))
 
           expect(tracker).not_to receive(:lock_breakeven!)
 
@@ -295,8 +289,7 @@ RSpec.describe Live::RiskManagerService do
           # Entry: ₹100, LTP: ₹109 (9% profit, below 10% threshold)
           allow(service).to receive(:current_ltp_with_freshness_check).with(tracker,
                                                                             position).and_return(BigDecimal('109.0'))
-          allow(service).to receive(:compute_pnl).and_return(BigDecimal('675.0'))
-          allow(service).to receive(:compute_pnl_pct).and_return(BigDecimal('0.09'))
+          allow(service).to receive_messages(compute_pnl: BigDecimal('675.0'), compute_pnl_pct: BigDecimal('0.09'))
 
           expect(tracker).not_to receive(:lock_breakeven!)
 
@@ -321,8 +314,7 @@ RSpec.describe Live::RiskManagerService do
           # Current PnL ₹1455 should trigger exit
           allow(service).to receive(:current_ltp_with_freshness_check).with(tracker,
                                                                             position).and_return(BigDecimal('119.4'))
-          allow(service).to receive(:compute_pnl).and_return(BigDecimal('1455.0')) # At threshold
-          allow(service).to receive(:compute_pnl_pct).and_return(BigDecimal('0.194'))
+          allow(service).to receive_messages(compute_pnl: BigDecimal('1455.0'), compute_pnl_pct: BigDecimal('0.194'))
 
           expect(service).to receive(:execute_exit).with(
             position,
@@ -339,8 +331,7 @@ RSpec.describe Live::RiskManagerService do
           # Use ₹1460 which is above threshold
           allow(service).to receive(:current_ltp_with_freshness_check).with(tracker,
                                                                             position).and_return(BigDecimal('119.47'))
-          allow(service).to receive(:compute_pnl).and_return(BigDecimal('1460.0')) # Above threshold
-          allow(service).to receive(:compute_pnl_pct).and_return(BigDecimal('0.1947'))
+          allow(service).to receive_messages(compute_pnl: BigDecimal('1460.0'), compute_pnl_pct: BigDecimal('0.1947'))
 
           expect(service).not_to receive(:execute_exit)
 
@@ -364,8 +355,7 @@ RSpec.describe Live::RiskManagerService do
           # New higher LTP: ₹115 (15% profit) = ₹1125 PnL
           allow(service).to receive(:current_ltp_with_freshness_check).with(tracker,
                                                                             position).and_return(BigDecimal('115.0'))
-          allow(service).to receive(:compute_pnl).and_return(BigDecimal('1125.0')) # 15% profit
-          allow(service).to receive(:compute_pnl_pct).and_return(BigDecimal('0.15'))
+          allow(service).to receive_messages(compute_pnl: BigDecimal('1125.0'), compute_pnl_pct: BigDecimal('0.15'))
 
           service.send(:enforce_trailing_stops, { '50074' => position })
 
@@ -398,11 +388,10 @@ RSpec.describe Live::RiskManagerService do
       end
 
       before do
-        allow(service).to receive(:fetch_positions_indexed).and_return({ '50074' => position })
-        allow(service).to receive(:risk_config).and_return({
-                                                               time_exit_hhmm: '15:20',
-                                                               market_close_hhmm: '15:30'
-                                                             })
+        allow(service).to receive_messages(fetch_positions_indexed: { '50074' => position }, risk_config: {
+                                             time_exit_hhmm: '15:20',
+                                             market_close_hhmm: '15:30'
+                                           })
       end
 
       context 'when time is 15:20 IST or later' do
@@ -674,10 +663,10 @@ RSpec.describe Live::RiskManagerService do
       context 'when Redis cache has fresh tick' do
         it 'returns LTP from Redis cache if fresh' do
           redis_cache = Live::RedisPnlCache.instance
-          allow(redis_cache).to receive(:is_tick_fresh?).and_return(true)
-          allow(redis_cache).to receive(:fetch_tick).and_return(
-            { ltp: 105.0, timestamp: Time.current }
-          )
+          allow(redis_cache).to receive_messages(is_tick_fresh?: true,
+                                                 fetch_tick: {
+                                                   ltp: 105.0, timestamp: Time.current
+                                                 })
 
           ltp = service.send(:current_ltp_with_freshness_check, tracker, position, max_age_seconds: 5)
 
@@ -861,7 +850,6 @@ RSpec.describe Live::RiskManagerService do
 
       before do
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
-        allow(service).to receive(:fetch_positions_indexed).and_return({ '50074' => position })
         # Allow methods to be called but track them (don't stub, let them run)
         allow(service).to receive(:enforce_hard_limits).and_call_original
         allow(service).to receive(:enforce_trailing_stops).and_call_original
@@ -876,15 +864,11 @@ RSpec.describe Live::RiskManagerService do
         allow(service).to receive(:execute_exit)
         allow(service).to receive(:sleep)
         # Mock internal methods that enforce methods call
-        allow(service).to receive(:current_ltp).and_return(BigDecimal('100.0'))
-        allow(service).to receive(:current_ltp_with_freshness_check).and_return(BigDecimal('100.0'))
-        allow(service).to receive(:compute_pnl).and_return(BigDecimal('0'))
-        allow(service).to receive(:compute_pnl_pct).and_return(BigDecimal('0'))
+        allow(service).to receive_messages(fetch_positions_indexed: { '50074' => position },
+                                           current_ltp: BigDecimal('100.0'), current_ltp_with_freshness_check: BigDecimal('100.0'), compute_pnl: BigDecimal(0), compute_pnl_pct: BigDecimal(0))
         allow(service).to receive(:update_pnl_in_redis)
         allow(tracker).to receive(:with_lock).and_yield
-        allow(tracker).to receive(:instrument).and_return(instrument)
-        allow(tracker).to receive(:security_id).and_return('50074')
-        allow(tracker).to receive(:status).and_return('active')
+        allow(tracker).to receive_messages(instrument: instrument, security_id: '50074', status: 'active')
       end
 
       after do
@@ -908,8 +892,7 @@ RSpec.describe Live::RiskManagerService do
         allow(service).to receive(:exit_position).and_return(true)
         allow(Live::RedisPnlCache.instance).to receive(:clear_tracker)
         allow(tracker).to receive(:mark_exited!)
-        allow(tracker).to receive(:last_pnl_rupees).and_return(BigDecimal('0'))
-        allow(tracker).to receive(:order_no).and_return('ORD123456')
+        allow(tracker).to receive_messages(last_pnl_rupees: BigDecimal(0), order_no: 'ORD123456')
 
         # execute_exit is a private method, verify it exists and can be called
         expect(service.send(:method, :execute_exit)).to be_a(Method)
@@ -972,10 +955,8 @@ RSpec.describe Live::RiskManagerService do
           allow(Live::RedisPnlCache.instance).to receive(:clear_tracker)
           allow(tracker).to receive(:mark_exited!)
           allow(tracker).to receive(:with_lock).and_yield
-          allow(tracker).to receive(:status).and_return(PositionTracker::STATUSES[:active])
-          allow(tracker).to receive(:security_id).and_return('50074')
-          allow(tracker).to receive(:order_no).and_return('ORD123456')
-          allow(tracker).to receive(:last_pnl_rupees).and_return(BigDecimal('0'))
+          allow(tracker).to receive_messages(status: PositionTracker::STATUSES[:active], security_id: '50074',
+                                             order_no: 'ORD123456', last_pnl_rupees: BigDecimal(0))
 
           service.start
           sleep 0.6 # Allow time for thread to execute enforce_time_based_exit
@@ -1047,8 +1028,7 @@ RSpec.describe Live::RiskManagerService do
         allow(service).to receive(:exit_position).and_return(true)
         allow(Live::RedisPnlCache.instance).to receive(:clear_tracker)
         allow(tracker).to receive(:mark_exited!)
-        allow(tracker).to receive(:order_no).and_return('ORD123456')
-        allow(tracker).to receive(:last_pnl_rupees).and_return(BigDecimal('-750'))
+        allow(tracker).to receive_messages(order_no: 'ORD123456', last_pnl_rupees: BigDecimal('-750'))
         allow(service).to receive(:store_exit_reason)
 
         # Call execute_exit directly to verify logging
@@ -1207,9 +1187,9 @@ RSpec.describe Live::RiskManagerService do
           segment: tracker.segment,
           entry_price: tracker.entry_price,
           quantity: tracker.quantity,
-          pnl: BigDecimal('500'),
+          pnl: BigDecimal(500),
           pnl_pct: 5.0,
-          high_water_mark: BigDecimal('600'),
+          high_water_mark: BigDecimal(600),
           last_updated_at: Time.current
         )
       end
@@ -1269,9 +1249,9 @@ RSpec.describe Live::RiskManagerService do
             segment: tracker2.segment,
             entry_price: tracker2.entry_price,
             quantity: tracker2.quantity,
-            pnl: BigDecimal('100'),
+            pnl: BigDecimal(100),
             pnl_pct: 1.0,
-            high_water_mark: BigDecimal('150'),
+            high_water_mark: BigDecimal(150),
             last_updated_at: Time.current
           )
         end
@@ -1314,10 +1294,10 @@ RSpec.describe Live::RiskManagerService do
         let(:redis_cache) { instance_double(Live::RedisPnlCache) }
         let(:redis_pnl_data) do
           {
-            pnl: BigDecimal('750'),
+            pnl: BigDecimal(750),
             pnl_pct: 10.0,
-            ltp: BigDecimal('110'),
-            hwm_pnl: BigDecimal('800'),
+            ltp: BigDecimal(110),
+            hwm_pnl: BigDecimal(800),
             timestamp: Time.current.to_i
           }
         end
@@ -1404,7 +1384,7 @@ RSpec.describe Live::RiskManagerService do
         end
 
         it 'fetches Redis PnL if not cached for fallback positions' do
-          redis_pnl = { pnl: BigDecimal('2000'), pnl_pct: 20.0, timestamp: Time.current.to_i }
+          redis_pnl = { pnl: BigDecimal(2000), pnl_pct: 20.0, timestamp: Time.current.to_i }
           service.instance_variable_set(:@redis_pnl_cache, {})
           allow(redis_cache).to receive(:fetch_pnl).and_return(redis_pnl)
 
@@ -1435,9 +1415,9 @@ RSpec.describe Live::RiskManagerService do
           segment: tracker.segment,
           entry_price: tracker.entry_price,
           quantity: tracker.quantity,
-          pnl: BigDecimal('500'),
+          pnl: BigDecimal(500),
           pnl_pct: 5.0,
-          high_water_mark: BigDecimal('600'),
+          high_water_mark: BigDecimal(600),
           last_updated_at: Time.current
         )
       end
@@ -1788,7 +1768,7 @@ RSpec.describe Live::RiskManagerService do
 
     describe '#pnl_snapshot' do
       let(:redis_cache) { instance_double(Live::RedisPnlCache) }
-      let(:pnl_data) { { pnl: BigDecimal('500'), pnl_pct: 5.0 } }
+      let(:pnl_data) { { pnl: BigDecimal(500), pnl_pct: 5.0 } }
 
       before do
         allow(Live::RedisPnlCache).to receive(:instance).and_return(redis_cache)
@@ -1819,7 +1799,7 @@ RSpec.describe Live::RiskManagerService do
       end
 
       it 'updates PnL if last update was more than 1 minute ago' do
-        last_update = Time.current - 2.minutes
+        last_update = 2.minutes.ago
 
         service.send(:update_paper_positions_pnl_if_due, last_update)
 
@@ -1827,7 +1807,7 @@ RSpec.describe Live::RiskManagerService do
       end
 
       it 'skips update if last update was less than 1 minute ago' do
-        last_update = Time.current - 30.seconds
+        last_update = 30.seconds.ago
 
         service.send(:update_paper_positions_pnl_if_due, last_update)
 
@@ -1844,7 +1824,7 @@ RSpec.describe Live::RiskManagerService do
         allow(service).to receive(:update_paper_positions_pnl).and_raise(StandardError, 'Update error')
         allow(Rails.logger).to receive(:error)
 
-        expect { service.send(:update_paper_positions_pnl_if_due, Time.current - 2.minutes) }.not_to raise_error
+        expect { service.send(:update_paper_positions_pnl_if_due, 2.minutes.ago) }.not_to raise_error
         expect(Rails.logger).to have_received(:error).with(match(/update_paper_positions_pnl_if_due failed/))
       end
     end
@@ -1940,11 +1920,9 @@ RSpec.describe Live::RiskManagerService do
         allow(PositionTracker).to receive_message_chain(:active, :includes).and_return(
           double(to_a: [tracker])
         )
-        allow(service).to receive(:fetch_positions_indexed).and_return({ tracker.security_id.to_s => position })
         allow(service).to receive(:stagger_api_calls)
-        allow(service).to receive(:current_ltp).and_return(BigDecimal('110.0'))
-        allow(service).to receive(:compute_pnl).and_return(BigDecimal('750.0'))
-        allow(service).to receive(:compute_pnl_pct).and_return(BigDecimal('0.10'))
+        allow(service).to receive_messages(fetch_positions_indexed: { tracker.security_id.to_s => position },
+                                           current_ltp: BigDecimal('110.0'), compute_pnl: BigDecimal('750.0'), compute_pnl_pct: BigDecimal('0.10'))
         allow(service).to receive(:update_pnl_in_redis)
         allow(tracker).to receive(:hydrate_pnl_from_cache!)
       end
@@ -2233,10 +2211,8 @@ RSpec.describe Live::RiskManagerService do
     describe '#ensure_all_positions_subscribed' do
       let(:hub) do
         instance_double(Live::MarketFeedHub).tap do |h|
-          allow(h).to receive(:running?).and_return(true)
-          allow(h).to receive(:subscribed?).and_return(false)
-          allow(h).to receive(:subscribe).and_return({ segment: 'NSE_FNO', security_id: '50074' })
-          allow(h).to receive(:start!).and_return(true)
+          allow(h).to receive_messages(running?: true, subscribed?: false,
+                                       subscribe: { segment: 'NSE_FNO', security_id: '50074' }, start!: true)
         end
       end
 
@@ -2272,8 +2248,8 @@ RSpec.describe Live::RiskManagerService do
       it 'returns early if hub is not running' do
         allow(hub).to receive(:running?).and_return(false)
         test_tracker = create(:position_tracker, watchable: instrument, instrument: instrument,
-                             order_no: 'ORD999999', security_id: '50074', segment: 'NSE_FNO',
-                             status: 'active', quantity: 75, entry_price: 100.0, avg_price: 100.0)
+                                                 order_no: 'ORD999999', security_id: '50074', segment: 'NSE_FNO',
+                                                 status: 'active', quantity: 75, entry_price: 100.0, avg_price: 100.0)
         allow(PositionTracker).to receive_message_chain(:active, :find_each).and_yield(test_tracker)
         allow(test_tracker).to receive(:subscribe)
 
@@ -2467,8 +2443,8 @@ RSpec.describe Live::RiskManagerService do
 
       it 'increases backoff on subsequent errors' do
         service.instance_variable_set(:@rate_limit_errors, {
-          cache_key => { backoff_seconds: 4.0, retry_count: 1, last_error: Time.current - 5.seconds }
-        })
+                                        cache_key => { backoff_seconds: 4.0, retry_count: 1, last_error: 5.seconds.ago }
+                                      })
 
         service.send(:handle_rate_limit_error, rate_limit_error, cache_key)
 
@@ -2479,12 +2455,12 @@ RSpec.describe Live::RiskManagerService do
 
       it 'stops retrying after MAX_RETRIES_ON_RATE_LIMIT' do
         service.instance_variable_set(:@rate_limit_errors, {
-          cache_key => {
-            backoff_seconds: 16.0,
-            retry_count: Live::RiskManagerService::MAX_RETRIES_ON_RATE_LIMIT,
-            last_error: Time.current - 20.seconds
-          }
-        })
+                                        cache_key => {
+                                          backoff_seconds: 16.0,
+                                          retry_count: Live::RiskManagerService::MAX_RETRIES_ON_RATE_LIMIT,
+                                          last_error: 20.seconds.ago
+                                        }
+                                      })
 
         service.send(:handle_rate_limit_error, rate_limit_error, cache_key)
 
@@ -2505,7 +2481,7 @@ RSpec.describe Live::RiskManagerService do
     describe '#loop_sleep_interval' do
       before do
         allow(service).to receive(:risk_config).and_return(
-          loop_interval_idle: 10000,
+          loop_interval_idle: 10_000,
           loop_interval_active: 1000
         )
       end
@@ -2637,7 +2613,7 @@ RSpec.describe Live::RiskManagerService do
       it 'returns BigDecimal(0) on error' do
         result = service.send(:pct_value, 'invalid')
 
-        expect(result).to eq(BigDecimal('0'))
+        expect(result).to eq(BigDecimal(0))
       end
     end
 

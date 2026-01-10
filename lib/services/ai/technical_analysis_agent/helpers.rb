@@ -39,7 +39,7 @@ module Services
 
         # Estimate token count for a prompt (rough approximation)
         def estimate_prompt_tokens(text)
-          return 0 unless text.present?
+          return 0 if text.blank?
 
           # Rough approximation: 1 token ≈ 4 characters
           (text.length / 4.0).ceil

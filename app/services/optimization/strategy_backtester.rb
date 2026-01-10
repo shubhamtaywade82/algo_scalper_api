@@ -18,14 +18,14 @@ module Optimization
 
       # Check if indicators computed successfully
       unless @rsi_values && @macd_full && @adx_values && @di_pos && @di_neg && @supertrend
-        Rails.logger.warn("[StrategyBacktester] Indicators not computed successfully")
+        Rails.logger.warn('[StrategyBacktester] Indicators not computed successfully')
         return nil
       end
 
       trades = generate_trades
 
       if trades.empty?
-        Rails.logger.warn("[StrategyBacktester] No trades generated")
+        Rails.logger.warn('[StrategyBacktester] No trades generated')
         return nil
       end
 
@@ -41,13 +41,13 @@ module Optimization
     def compute_indicators!
       # RSI: Calculate per-index using partial series (series.rsi returns single value)
       @rsi_values = calculate_rsi_series
-      Rails.logger.debug("[StrategyBacktester] RSI values: #{@rsi_values&.compact&.size || 0} non-nil")
+      Rails.logger.debug { "[StrategyBacktester] RSI values: #{@rsi_values&.compact&.size || 0} non-nil" }
 
       # MACD: Calculate per-index using partial series
       # RubyTechnicalAnalysis::Macd returns [last_macd, last_signal, last_histogram] (floats, not arrays)
       # So we need to calculate on partial series for each index
       @macd_full = calculate_macd_series
-      Rails.logger.debug("[StrategyBacktester] MACD: #{@macd_full ? @macd_full[0]&.size || 0 : 'nil'} values")
+      Rails.logger.debug { "[StrategyBacktester] MACD: #{@macd_full ? @macd_full[0]&.size || 0 : 'nil'} values" }
 
       # Supertrend: Use your existing Indicators::Supertrend service
       begin
@@ -56,7 +56,7 @@ module Optimization
           period: @params[:st_atr] || 10,
           base_multiplier: @params[:st_mult] || 2.0
         ).call
-        Rails.logger.debug("[StrategyBacktester] Supertrend: #{@supertrend[:line]&.compact&.size || 0} non-nil values")
+        Rails.logger.debug { "[StrategyBacktester] Supertrend: #{@supertrend[:line]&.compact&.size || 0} non-nil values" }
       rescue StandardError => e
         Rails.logger.warn("[StrategyBacktester] Supertrend calculation failed: #{e.message}")
         @supertrend = nil
@@ -89,7 +89,7 @@ module Optimization
         @di_pos = Array.new(warmup, nil) + @di_pos
         @di_neg = Array.new(warmup, nil) + @di_neg
 
-        Rails.logger.debug("[StrategyBacktester] ADX: #{@adx_values.compact.size} non-nil values")
+        Rails.logger.debug { "[StrategyBacktester] ADX: #{@adx_values.compact.size} non-nil values" }
       rescue StandardError => e
         Rails.logger.warn("[StrategyBacktester] ADX calculation failed: #{e.message}")
         @adx_values = []
@@ -135,7 +135,7 @@ module Optimization
           signal_period: signal
         ).call
 
-        if macd_result && macd_result.is_a?(Array) && macd_result.size >= 3
+        if macd_result.is_a?(Array) && macd_result.size >= 3
           macd_line << macd_result[0]
           signal_line << macd_result[1]
           histogram_line << macd_result[2]
@@ -225,17 +225,15 @@ module Optimization
 
       @candles.each_with_index do |candle, idx|
         st_val = supertrend_line[idx]
-        if st_val && candle.close
-          trends << (candle.close >= st_val ? :bullish : :bearish)
-        else
-          trends << nil
-        end
+        trends << if st_val && candle.close
+                    (candle.close >= st_val ? :bullish : :bearish)
+                  end
       end
 
       trends
     end
 
-    def signal_at(idx, supertrend_line, supertrend_trends)
+    def signal_at(idx, _supertrend_line, supertrend_trends)
       return nil if idx < 30
       return nil unless @rsi_values && @macd_full && @adx_values && @di_pos && @di_neg
 
@@ -284,8 +282,8 @@ module Optimization
 
       return :buy if long_condition
       return :sell if short_condition
+
       nil
     end
   end
 end
-

@@ -55,7 +55,7 @@ module Indicators
       return :neutral if index < 2
 
       candles = series.candles[0..index]
-      recent_closes = candles.last(3).map(&:close).compact
+      recent_closes = candles.last(3).filter_map(&:close)
 
       return :neutral if recent_closes.size < 2
 

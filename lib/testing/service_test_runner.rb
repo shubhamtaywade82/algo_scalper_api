@@ -9,7 +9,7 @@
 #   test_risk_manager_service
 
 module ServiceTestRunner
-  extend self
+  module_function
 
   # Colors for console output
   COLORS = {
@@ -27,29 +27,29 @@ module ServiceTestRunner
   end
 
   def print_header(title)
-    puts "\n#{colorize('=' * 80, :bold)}"
-    puts colorize("  #{title}", :bold)
-    puts colorize('=' * 80, :reset)
+    Rails.logger.debug { "\n#{colorize('=' * 80, :bold)}" }
+    Rails.logger.debug colorize("  #{title}", :bold)
+    Rails.logger.debug colorize('=' * 80, :reset)
   end
 
   def print_section(title)
-    puts "\n#{colorize("▶ #{title}", :cyan)}"
+    Rails.logger.debug { "\n#{colorize("▶ #{title}", :cyan)}" }
   end
 
   def print_success(message)
-    puts "#{colorize('✓', :green)} #{message}"
+    Rails.logger.debug { "#{colorize('✓', :green)} #{message}" }
   end
 
   def print_error(message)
-    puts "#{colorize('✗', :red)} #{message}"
+    Rails.logger.debug { "#{colorize('✗', :red)} #{message}" }
   end
 
   def print_warning(message)
-    puts "#{colorize('⚠', :yellow)} #{message}"
+    Rails.logger.debug { "#{colorize('⚠', :yellow)} #{message}" }
   end
 
   def print_info(message)
-    puts "#{colorize('ℹ', :blue)} #{message}"
+    Rails.logger.debug { "#{colorize('ℹ', :blue)} #{message}" }
   end
 
   def wait_for_logs(seconds = 5)
@@ -132,7 +132,11 @@ module ServiceTestRunner
     exit_engine = Live::ExitEngine.new(order_router: order_router)
     trailing_engine = Live::TrailingEngine.new
     # RuleEngine is created via factory - RiskManagerService will create it if nil
-    rule_engine = Risk::Rules::RuleFactory.create_engine(risk_config: {}) rescue nil
+    rule_engine = begin
+      Risk::Rules::RuleFactory.create_engine(risk_config: {})
+    rescue StandardError
+      nil
+    end
 
     service = Live::RiskManagerService.new(
       exit_engine: exit_engine,
@@ -243,7 +247,7 @@ module ServiceTestRunner
     wait_for_logs(10)
 
     print_section('Manual Refresh Test')
-    if paper_count > 0
+    if paper_count.positive?
       tracker = PositionTracker.active.where(paper: true).first
       print_info("Manually refreshing tracker #{tracker.id}")
       service.refresh_tracker(tracker)
@@ -343,14 +347,14 @@ module ServiceTestRunner
     wait_for_logs(30)
 
     print_section('Testing Manual Signal Processing')
-    indices = ['NIFTY', 'BANKNIFTY']
+    indices = %w[NIFTY BANKNIFTY]
     indices.each do |index_key|
       index_cfg = AlgoConfig.fetch('indices', index_key)
-      if index_cfg
-        print_info("Processing #{index_key}...")
-        # scheduler.process_index(index_cfg) # Uncomment to test
-        print_info("  Config: #{index_cfg.inspect}")
-      end
+      next unless index_cfg
+
+      print_info("Processing #{index_key}...")
+      # scheduler.process_index(index_cfg) # Uncomment to test
+      print_info("  Config: #{index_cfg.inspect}")
     end
 
     print_success('Signal::Scheduler test completed')
@@ -470,7 +474,7 @@ module ServiceTestRunner
     end
 
     print_section('Testing Structure Break Check')
-    indices = ['NIFTY', 'BANKNIFTY']
+    indices = %w[NIFTY BANKNIFTY]
     indices.each do |index_key|
       broken = monitor.structure_broken?(index_key: index_key)
       print_info("#{index_key} structure broken: #{broken}")
@@ -533,18 +537,16 @@ module ServiceTestRunner
     ]
 
     services_to_test.each do |service|
-      begin
-        print_info("\n#{'=' * 80}")
-        print_info("Testing #{service[:name]}")
-        print_info('=' * 80)
+      print_info("\n#{'=' * 80}")
+      print_info("Testing #{service[:name]}")
+      print_info('=' * 80)
 
-        result = public_send(service[:method])
-        results[service[:name]] = { status: :success, result: result }
-        sleep(2) # Brief pause between services
-      rescue StandardError => e
-        print_error("#{service[:name]} failed: #{e.class} - #{e.message}")
-        results[service[:name]] = { status: :error, error: e.message }
-      end
+      result = public_send(service[:method])
+      results[service[:name]] = { status: :success, result: result }
+      sleep(2) # Brief pause between services
+    rescue StandardError => e
+      print_error("#{service[:name]} failed: #{e.class} - #{e.message}")
+      results[service[:name]] = { status: :error, error: e.message }
     end
 
     print_header('TEST RESULTS SUMMARY')
@@ -603,26 +605,25 @@ end
 # Make methods available in console
 include ServiceTestRunner
 
-puts "\n#{ServiceTestRunner.colorize('=' * 80, :bold)}"
-puts ServiceTestRunner.colorize('  Service Test Runner Loaded', :bold)
-puts ServiceTestRunner.colorize('=' * 80, :reset)
-puts "\nAvailable test methods:"
-puts "  - test_market_feed_hub"
-puts "  - test_risk_manager_service"
-puts "  - test_pnl_updater_service"
-puts "  - test_paper_pnl_refresher"
-puts "  - test_exit_engine"
-puts "  - test_trailing_engine"
-puts "  - test_signal_scheduler"
-puts "  - test_tick_cache"
-puts "  - test_redis_pnl_cache"
-puts "  - test_active_cache"
-puts "  - test_underlying_monitor"
-puts "  - test_order_router"
-puts "  - test_all_services (runs all tests)"
-puts "\nHelper methods:"
-puts "  - show_service_status"
-puts "  - show_active_positions"
-puts "  - monitor_logs(seconds)"
-puts "\n"
-
+Rails.logger.debug { "\n#{ServiceTestRunner.colorize('=' * 80, :bold)}" }
+Rails.logger.debug ServiceTestRunner.colorize('  Service Test Runner Loaded', :bold)
+Rails.logger.debug ServiceTestRunner.colorize('=' * 80, :reset)
+Rails.logger.debug "\nAvailable test methods:"
+Rails.logger.debug '  - test_market_feed_hub'
+Rails.logger.debug '  - test_risk_manager_service'
+Rails.logger.debug '  - test_pnl_updater_service'
+Rails.logger.debug '  - test_paper_pnl_refresher'
+Rails.logger.debug '  - test_exit_engine'
+Rails.logger.debug '  - test_trailing_engine'
+Rails.logger.debug '  - test_signal_scheduler'
+Rails.logger.debug '  - test_tick_cache'
+Rails.logger.debug '  - test_redis_pnl_cache'
+Rails.logger.debug '  - test_active_cache'
+Rails.logger.debug '  - test_underlying_monitor'
+Rails.logger.debug '  - test_order_router'
+Rails.logger.debug '  - test_all_services (runs all tests)'
+Rails.logger.debug "\nHelper methods:"
+Rails.logger.debug '  - show_service_status'
+Rails.logger.debug '  - show_active_positions'
+Rails.logger.debug '  - monitor_logs(seconds)'
+Rails.logger.debug "\n"

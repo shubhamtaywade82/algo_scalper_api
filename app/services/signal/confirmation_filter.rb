@@ -12,11 +12,10 @@ module Signal
       # @param index_key [String] Index key for logging context
       # @return [Hash] { confirmed: Boolean, reason: String, current_ltp: Numeric, last_close: Numeric }
       def confirm(initial_signal:, last_close_price:, instrument:, index_key:)
-
-        pp "initial_signal: #{initial_signal}"
-        pp "last_close_price: #{last_close_price}"
-        pp "instrument: #{instrument}"
-        pp "index_key: #{index_key}"
+        Rails.logger.debug { "initial_signal: #{initial_signal}" }
+        Rails.logger.debug { "last_close_price: #{last_close_price}" }
+        Rails.logger.debug { "instrument: #{instrument}" }
+        Rails.logger.debug { "index_key: #{index_key}" }
 
         unless %i[
           bullish bearish

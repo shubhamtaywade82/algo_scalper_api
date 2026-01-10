@@ -39,7 +39,7 @@ module Notifications
           # If adding indicator would exceed limit, truncate text
           max_text_length = TELEGRAM_MAX_MESSAGE_LENGTH - chunk_indicator.length
           display_text = if text.length > max_text_length
-                           text[0..max_text_length - 4] + '...' + chunk_indicator
+                           "#{text[0..(max_text_length - 4)]}...#{chunk_indicator}"
                          else
                            text + chunk_indicator
                          end
@@ -49,7 +49,7 @@ module Notifications
 
         # Final safety check - truncate if still too long
         if display_text.length > TELEGRAM_MAX_MESSAGE_LENGTH
-          display_text = display_text[0..TELEGRAM_MAX_MESSAGE_LENGTH - 4] + '...'
+          display_text = "#{display_text[0..(TELEGRAM_MAX_MESSAGE_LENGTH - 4)]}..."
         end
 
         payload = {
@@ -69,7 +69,7 @@ module Notifications
 
         if response.is_a?(Net::HTTPSuccess)
           chunk_info = chunk_number ? " (chunk #{chunk_number}/#{total_chunks})" : ''
-          Rails.logger.debug("[Telegram] Message sent successfully to chat #{@chat_id}#{chunk_info}")
+          Rails.logger.debug { "[Telegram] Message sent successfully to chat #{@chat_id}#{chunk_info}" }
           return true
         end
 
@@ -102,7 +102,7 @@ module Notifications
         max_chunk_size = TELEGRAM_MAX_MESSAGE_LENGTH - 50
 
         lines.each do |line|
-          line_with_newline = line + "\n"
+          line_with_newline = "#{line}\n"
 
           # If a single line is too long, split it
           if line.length > max_chunk_size
@@ -129,4 +129,3 @@ module Notifications
     end
   end
 end
-

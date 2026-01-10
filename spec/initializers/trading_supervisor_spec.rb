@@ -19,9 +19,7 @@ module TradingSystem
     def start_all
       return if @running
 
-      @services.each do |_name, service|
-        service.start
-      end
+      @services.each_value(&:start)
 
       @running = true
     end
@@ -40,14 +38,14 @@ end
 
 RSpec.describe 'TradingSystem::Supervisor Market Close Behavior' do
   let(:supervisor) { TradingSystem::Supervisor.new }
-  let(:market_feed) { instance_double('MarketFeedHubService', start: true, stop: true) }
+  let(:market_feed) { instance_double(MarketFeedHubService, start: true, stop: true) }
   let(:signal_scheduler) { instance_double(Signal::Scheduler, start: true, stop: true) }
   let(:risk_manager) { instance_double(Live::RiskManagerService, start: true, stop: true) }
   let(:heartbeat) { instance_double(TradingSystem::PositionHeartbeat, start: true, stop: true) }
   let(:router) { instance_double(TradingSystem::OrderRouter, start: true, stop: true) }
   let(:pnl_refresher) { instance_double(Live::PaperPnlRefresher, start: true, stop: true) }
   let(:exit_engine) { instance_double(Live::ExitEngine, start: true, stop: true) }
-  let(:active_cache) { instance_double('ActiveCacheService', start: true, stop: true) }
+  let(:active_cache) { instance_double(ActiveCacheService, start: true, stop: true) }
   let(:reconciliation) { instance_double(Live::ReconciliationService, start: true, stop: true) }
 
   before do

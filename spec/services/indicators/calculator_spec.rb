@@ -197,4 +197,3 @@ RSpec.describe Indicators::Calculator, type: :service do
     end
   end
 end
-

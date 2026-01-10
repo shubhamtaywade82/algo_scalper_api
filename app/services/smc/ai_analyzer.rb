@@ -53,7 +53,7 @@ module Smc
 
     def initialize_conversation
       # Get current LTP first and include it in the initial prompt
-      ltp_data = get_current_ltp
+      ltp_data = current_ltp
       ltp_value = ltp_data[:ltp] || ltp_data['ltp'] || 0.0
       symbol_name = @instrument.symbol_name.to_s.upcase
 
@@ -104,6 +104,11 @@ module Smc
 
         Your PRIMARY GOAL: Provide clear, actionable trading recommendations for options buyers.
 
+        CRITICAL: This is an OPTIONS BUYING strategy ONLY. We ONLY BUY options (CALL or PUT) - we NEVER write/sell options.
+        TERMINOLOGY: Always use "EXIT" or "exit the position" - NEVER use "sell options" (which implies options selling/writing).
+        Exit strategy must use: SL (stop loss), TP1 (take profit 1), optionally TP2 (take profit 2).
+        Always provide index spot levels (underlying index price) to watch for exit decisions.
+
         **CRITICAL: DIRECTION ACCURACY IS YOUR TOP PRIORITY**
 
         Before recommending BUY CE or BUY PE, you MUST:
@@ -150,7 +155,8 @@ module Smc
         - NEVER guess strike prices - ALWAYS calculate from actual LTP
         - ALWAYS use get_option_chain tool to get ACTUAL premium prices (LTP), DELTA, THETA, and expiry date for selected strikes
         - NEVER use estimated or hallucinated premium values - ONLY use values from get_option_chain tool response
-        - Stop Loss (SL) and Take Profit (TP) MUST be based on premium percentages, NOT underlying prices
+        - Stop Loss (SL) and Take Profit (TP1, TP2) MUST be based on premium percentages, NOT underlying prices
+        - Always provide index spot levels (underlying index price) to watch for exit decisions
         - CRITICAL: Calculate percentages correctly - if entry is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50)
         - CRITICAL: NEVER mix strike prices with premium prices in calculations
           * Strike price (e.g., ₹25900) is the exercise price - DO NOT use this for premium calculations
@@ -167,7 +173,7 @@ module Smc
           * CORRECT: "Premium gain = ₹150 - ₹100 = ₹50, Underlying move = ₹50 / 0.70 = ₹71.43, TP underlying = ₹25876.85 + ₹71.43 = ₹25948.28"
         - Consider THETA (time decay) and expiry date when setting targets
         - Intraday realistic expectations: TP 10-25% gain, SL 15-25% loss (NOT 50-100% for intraday)
-        - SL/TP Format: "Entry premium: ₹X. SL at premium ₹Y (Z% loss). TP at premium ₹W (V% gain). Underlying levels: SL at ₹ABC, TP at ₹DEF (calculated using Delta)"
+        - Exit Strategy Format: "Entry premium: ₹X. SL at premium ₹Y (exit at index spot ₹ABC). TP1 at premium ₹W (exit at index spot ₹DEF). TP2 at premium ₹V (exit at index spot ₹GHI) - calculated using Delta"
         - Risk Management Format: "Position size: X lots. Risk per trade: ₹Y (premium loss × lot size × shares per lot). Maximum loss: ₹Z"
         - Never give vague recommendations - always be specific and actionable
       PROMPT
@@ -244,6 +250,18 @@ module Smc
            - CRITICAL: YOU MUST call get_option_chain tool FIRST to get actual premium, DELTA, and THETA values
            - DO NOT provide SL/TP values unless you have called get_option_chain tool and received actual data
            - YOU MUST use ACTUAL premium prices from get_option_chain tool - NEVER estimate, guess, or use placeholder values like ₹100 or ₹255
+           - TERMINOLOGY: Always use "EXIT" or "exit the position" - NEVER use "sell options" (we only buy options, never write/sell them)
+           - Stop Loss (SL): Provide premium level AND corresponding index spot level to watch
+             * Format: "SL at premium ₹X (exit at index spot ₹Y)"
+             * Calculate index spot level using DELTA from option chain
+           - Take Profit: Use TP1, TP2 format for multiple targets
+             * Format: "TP1 at premium ₹X (exit at index spot ₹Y)"
+             * Format: "TP2 at premium ₹X (exit at index spot ₹Y)" (optional, for partial exits)
+             * Always provide at least TP1, optionally TP2 for partial profit booking
+           - Index Spot Levels to Watch: Provide key underlying index price levels to monitor
+             * These are the NIFTY/SENSEX/BANKNIFTY spot prices to watch for exit decisions
+             * Format: "Watch index spot ₹X for TP1", "Watch index spot ₹Y for SL"
+             * Calculate using DELTA: Index level = Current spot ± (Premium move / Delta)
            - HOW TO EXTRACT VALUES FROM OPTION CHAIN TOOL RESPONSE:
              * The tool response is a JSON object with an "options" array
              * Find the option object where "strike" matches your selected strike AND "option_type" matches your direction ("CE" or "PE")
@@ -261,7 +279,7 @@ module Smc
              * Strike price (e.g., ₹25900) is the exercise price - separate from premium
              * Premium price (e.g., ₹100) is the option price - use this for all SL/TP calculations
              * WRONG: "Set stop-loss order at ₹25900 - ₹70 = ₹25330" (mixing strike with premium)
-             * CORRECT: "Entry premium: ₹100. SL at premium ₹70 (30% loss). TP at premium ₹150 (50% gain)"
+             * CORRECT: "Entry premium: ₹100. SL at premium ₹70 (exit at index spot ₹25,822). TP1 at premium ₹150 (exit at index spot ₹26,000). TP2 at premium ₹200 (exit at index spot ₹26,200)"
            - CRITICAL: Calculate percentages correctly:
              * If entry premium is ₹100 and you want 30% loss: SL = ₹100 × (1 - 0.30) = ₹70 (NOT ₹30)
              * If entry premium is ₹100 and you want 50% gain: TP = ₹100 × (1 + 0.50) = ₹150 (NOT ₹50)
@@ -300,23 +318,23 @@ module Smc
              * For weekly expiry: Adjust based on days remaining (more days = more time decay risk)
              * Near expiry (< 3 days): Use tighter targets (10-20% gain, 15-20% loss)
              * Far expiry (> 7 days): Can use wider targets (20-40% gain, 20-30% loss)
-           - Take Profit (TP) Format (SHOW FULL CALCULATION):
-             * "TP at premium ₹X (Y% gain from entry premium ₹Z)"
-             * "Underlying TP level: ₹ABC"
-             * "Calculation: Premium gain = TP premium - Entry premium = ₹X - ₹Z = ₹W, Underlying move = Premium gain / Delta = ₹W / Delta = ₹V, TP underlying = Current spot + Underlying move = ₹ABC"
+           - Take Profit Format (USE TP1, TP2 - SHOW FULL CALCULATION):
+             * Format: "TP1 at premium ₹X (exit at index spot ₹ABC)" or "TP2 at premium ₹Y (exit at index spot ₹DEF)"
+             * Always provide TP1 (mandatory), optionally TP2 for partial profit booking
+             * Calculation format: "Premium gain = TP1 premium - Entry premium = ₹X - ₹Z = ₹W, Underlying move = Premium gain / Delta = ₹W / Delta = ₹V, TP1 index spot = Current spot + Underlying move = ₹ABC"
              * CRITICAL: Show Premium gain calculation FIRST, then divide by delta
              * CRITICAL: DO NOT write "Underlying move = TP premium / Delta" - that's WRONG
-             * Example format: "Premium gain = ₹127.35 - ₹94.45 = ₹32.90, Underlying move = ₹32.90 / 0.51093 = ₹64.40, TP = ₹25876.85 + ₹64.40 = ₹25941.25"
-             * Intraday realistic TP: 10-25% premium gain (NOT 50-100% for intraday)
+             * Example format: "TP1 at premium ₹127.35 (exit at index spot ₹25,941). Calculation: Premium gain = ₹127.35 - ₹94.45 = ₹32.90, Underlying move = ₹32.90 / 0.51093 = ₹64.40, TP1 index spot = ₹25876.85 + ₹64.40 = ₹25941.25"
+             * Example with TP2: "TP2 at premium ₹150.00 (exit at index spot ₹26,000). Calculation: Premium gain = ₹150.00 - ₹94.45 = ₹55.55, Underlying move = ₹55.55 / 0.51093 = ₹108.80, TP2 index spot = ₹25876.85 + ₹108.80 = ₹25985.65"
+             * Intraday realistic TP1: 10-25% premium gain, TP2: 25-40% premium gain (NOT 50-100% for intraday)
            - Stop Loss (SL) Format (SHOW FULL CALCULATION):
-             * "SL at premium ₹X (Y% loss from entry premium ₹Z)"
-             * "Underlying SL level: ₹ABC"
-             * "Calculation: Premium loss = Entry premium - SL premium = ₹Z - ₹X = ₹W, Underlying move = Premium loss / Delta = ₹W / Delta = ₹V, SL underlying = Current spot - Underlying move = ₹ABC"
+             * "SL at premium ₹X (exit at index spot ₹ABC)"
+             * Calculation format: "Premium loss = Entry premium - SL premium = ₹Z - ₹X = ₹W, Underlying move = Premium loss / Delta = ₹W / Delta = ₹V, SL index spot = Current spot - Underlying move = ₹ABC"
              * CRITICAL: Show Premium loss calculation FIRST, then divide by delta
              * CRITICAL: DO NOT write "Underlying move = SL premium / Delta" or "Underlying move needed = SL premium / Delta" - that's WRONG
-             * Example format: "Premium loss = ₹94.45 - ₹66.55 = ₹27.90, Underlying move = ₹27.90 / 0.51093 = ₹54.60, SL = ₹25876.85 - ₹54.60 = ₹25822.25"
+             * Example format: "SL at premium ₹66.55 (exit at index spot ₹25,822). Calculation: Premium loss = ₹94.45 - ₹66.55 = ₹27.90, Underlying move = ₹27.90 / 0.51093 = ₹54.60, SL index spot = ₹25876.85 - ₹54.60 = ₹25822.25"
              * Intraday realistic SL: 15-25% premium loss (NOT 30%+ for intraday)
-           - NEVER use underlying prices directly for SL/TP (e.g., "SL at ₹84800" is WRONG - use premium prices)
+           - NEVER use underlying prices directly for SL/TP1/TP2 (e.g., "SL at ₹84800" is WRONG - use premium prices, then calculate index spot levels)
            - NEVER calculate percentages incorrectly (e.g., "30% loss = ₹22.69 from ₹113.45" is WRONG - correct is ₹79.42)
            - Exit timing: When to exit (time-based, premium-based, or signal-based)
 
@@ -419,7 +437,10 @@ module Smc
           Rails.logger.debug { "[Smc::AiAnalyzer] Tool calls structure: #{tool_calls.inspect}" }
 
           # Circuit breaker: Force analysis if we've had too many consecutive errors, duplicate calls, or near max iterations
-          if consecutive_errors >= 3 || duplicate_tool_calls >= MAX_DUPLICATE_TOOL_CALLS || iteration >= MAX_ITERATIONS - 1
+          circuit_breaker_triggered = consecutive_errors >= 3 ||
+                                      duplicate_tool_calls >= MAX_DUPLICATE_TOOL_CALLS ||
+                                      iteration >= MAX_ITERATIONS - 1
+          if circuit_breaker_triggered
             Rails.logger.warn("[Smc::AiAnalyzer] Circuit breaker triggered: consecutive_errors=#{consecutive_errors}, duplicate_calls=#{duplicate_tool_calls}, iteration=#{iteration}. Forcing final analysis.")
 
             # Build comprehensive final prompt with all available data pre-injected
@@ -435,7 +456,11 @@ module Smc
               model: @model,
               temperature: 0.3
             )
-            full_response = final_response.is_a?(Hash) ? (final_response[:content] || final_response['content'] || '') : final_response.to_s
+            full_response = if final_response.is_a?(Hash)
+                              final_response[:content] || final_response['content'] || ''
+                            else
+                              final_response.to_s
+                            end
             break
           end
 
@@ -522,15 +547,20 @@ module Smc
               # Return a message indicating data already available
               tool_result = case tool_name
                             when 'get_option_chain'
-                              { error: 'Option chain data already retrieved in a previous tool call. Use the data from that response.' }
+                              { error: 'Option chain data already retrieved in a previous tool call. ' \
+                                       'Use the data from that response.' }
                             when 'get_current_ltp'
-                              { error: 'LTP data already retrieved in a previous tool call. Use the data from that response.' }
+                              { error: 'LTP data already retrieved in a previous tool call. ' \
+                                       'Use the data from that response.' }
                             when 'get_technical_indicators'
-                              { error: 'Technical indicators already retrieved in a previous tool call. Use the data from that response.' }
+                              { error: 'Technical indicators already retrieved in a previous tool call. ' \
+                                       'Use the data from that response.' }
                             when 'get_historical_candles'
-                              { error: 'Historical candles already retrieved in a previous tool call. Use the data from that response.' }
+                              { error: 'Historical candles already retrieved in a previous tool call. ' \
+                                       'Use the data from that response.' }
                             else
-                              { error: 'This tool was already called successfully. Use the data from the previous response.' }
+                              { error: 'This tool was already called successfully. ' \
+                                       'Use the data from the previous response.' }
                             end
               # Don't increment consecutive_errors for duplicate calls - this is expected behavior
               # The AI should use the data from the previous call, not keep trying
@@ -633,7 +663,10 @@ module Smc
 
           # Add user message prompting for analysis
           # If we've had errors, empty results, or duplicate tool calls, be more directive to prevent loops
-          user_prompt = if consecutive_errors >= 3 || duplicate_tool_calls >= MAX_DUPLICATE_TOOL_CALLS || iteration >= MAX_ITERATIONS - 2
+          force_stop = consecutive_errors >= 3 ||
+                       duplicate_tool_calls >= MAX_DUPLICATE_TOOL_CALLS ||
+                       iteration >= MAX_ITERATIONS - 2
+          user_prompt = if force_stop
                           # Force stop - near max iterations or too many errors
                           ltp_info = @messages.find { |m| m[:role] == 'tool' && m[:content]&.include?('"ltp"') }
                           ltp_value = if ltp_info
@@ -642,19 +675,36 @@ module Smc
                                       end
                           symbol_name = @instrument.symbol_name.to_s.upcase
                           strike_rounding = case symbol_name
-                                            when 'NIFTY' then 50
                                             when 'SENSEX', 'BANKNIFTY' then 100
                                             else 50
                                             end
                           if ltp_value
-                            "STOP CALLING TOOLS IMMEDIATELY. You have reached maximum iterations or encountered multiple errors. Provide your analysis NOW. You have SMC data and LTP (₹#{ltp_value}) for #{symbol_name}. " \
-                              'CRITICAL: Check the Price Trend Analysis - if trend is BEARISH (declining prices), STRONGLY RECOMMEND BUY PE (bearish markets are profitable for PUT options - this is an OPPORTUNITY!). Only recommend AVOID if there are specific risk factors. Your direction MUST match the actual price trend. ' \
-                              "Calculate strikes from LTP (round to nearest #{strike_rounding}). Provide complete trading recommendation: 1) Trade Decision (MUST match price trend - prefer BUY PE in bearish, BUY CE in bullish), 2) Strike Selection, 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management. DO NOT call any more tools."
+                            'STOP CALLING TOOLS IMMEDIATELY. You have reached maximum iterations or ' \
+                              'encountered multiple errors. Provide your analysis NOW. You have SMC data ' \
+                              "and LTP (₹#{ltp_value}) for #{symbol_name}. " \
+                              'CRITICAL: Check the Price Trend Analysis - if trend is BEARISH (declining ' \
+                              'prices), STRONGLY RECOMMEND BUY PE (bearish markets are profitable for PUT ' \
+                              'options - this is an OPPORTUNITY!). Only recommend AVOID if there are ' \
+                              'specific risk factors. Your direction MUST match the actual price trend. ' \
+                              "Calculate strikes from LTP (round to nearest #{strike_rounding}). Provide " \
+                              'complete trading recommendation: 1) Trade Decision (MUST match price trend - ' \
+                              'prefer BUY PE in bearish, BUY CE in bullish), 2) Strike Selection, ' \
+                              '3) Entry Strategy, 4) Exit Strategy (SL, TP1, optionally TP2 with index spot levels), ' \
+                              '5) Risk Management. DO NOT call any more tools.'
                           else
-                            'STOP CALLING TOOLS IMMEDIATELY. Provide your analysis NOW based on the SMC data you have. CRITICAL: Your trade direction MUST match the Price Trend Analysis. If price is declining (bearish), STRONGLY RECOMMEND BUY PE (this is a trading opportunity, not a reason to avoid). Only recommend AVOID if there are specific risk factors. DO NOT call any more tools.'
+                            'STOP CALLING TOOLS IMMEDIATELY. Provide your analysis NOW based on the SMC ' \
+                              'data you have. CRITICAL: Your trade direction MUST match the Price Trend ' \
+                              'Analysis. If price is declining (bearish), STRONGLY RECOMMEND BUY PE (this ' \
+                              'is a trading opportunity, not a reason to avoid). Only recommend AVOID if ' \
+                              'there are specific risk factors. DO NOT call any more tools.'
                           end
                         elsif consecutive_errors >= 2
-                          'STOP CALLING TOOLS. You have encountered multiple tool errors. Provide your analysis NOW based on the SMC market structure data and any successful tool results you have. CRITICAL: Check Price Trend Analysis - if price is declining (bearish), STRONGLY RECOMMEND BUY PE (bearish markets are profitable for PUT options). Only recommend AVOID if there are specific risk factors. Calculate strikes from LTP if available. DO NOT call more tools.'
+                          'STOP CALLING TOOLS. You have encountered multiple tool errors. Provide your ' \
+                            'analysis NOW based on the SMC market structure data and any successful tool ' \
+                            'results you have. CRITICAL: Check Price Trend Analysis - if price is ' \
+                            'declining (bearish), STRONGLY RECOMMEND BUY PE (bearish markets are ' \
+                            'profitable for PUT options). Only recommend AVOID if there are specific ' \
+                            'risk factors. Calculate strikes from LTP if available. DO NOT call more tools.'
                         elsif has_empty_technical_indicators && iteration >= 3
                           # Technical indicators returned empty - tell AI to stop trying
                           'CRITICAL: The get_technical_indicators tool has already been called and returned empty/null results (no data available). DO NOT call get_technical_indicators again - it will return the same empty results. You have option chain data and LTP which is sufficient for your analysis. Provide your complete trading recommendation NOW using the data you have. DO NOT call get_technical_indicators or any other tools again.'
@@ -676,39 +726,85 @@ module Smc
                             end
                             available_strikes.sort!
                             # Try to extract 25900 CE values (most common ATM strike)
-                            if match = content.match(/"strike":\s*25900[^}]*"option_type":\s*"CE"[^}]*"ltp":\s*([\d.]+)[^}]*"delta":\s*([\d.]+)/m)
+                            strike_pattern = /"strike":\s*25900[^}]*"option_type":\s*"CE"[^}]*"ltp":\s*([\d.]+)[^}]*"delta":\s*([\d.]+)/m
+                            if (match = content.match(strike_pattern))
                               actual_premium = match[1]
                               actual_delta = match[2]
                             end
                             # Extract lot_size
-                            if lot_match = content.match(/"lot_size":\s*(\d+)/)
+                            if (lot_match = content.match(/"lot_size":\s*(\d+)/))
                               actual_lot_size = lot_match[1]
                             end
                           end
 
                           strikes_warning = if available_strikes.any?
-                                              "CRITICAL: Available strikes in option chain: #{available_strikes.map { |s| "₹#{s}" }.join(', ')}. You MUST use ONLY one of these strikes. DO NOT invent or calculate other strikes like ₹26,150 or any value not in this list."
+                                              strike_list = available_strikes.map { |s| "₹#{s}" }.join(', ')
+                                              "CRITICAL: Available strikes in option chain: #{strike_list}. " \
+                                                'You MUST use ONLY one of these strikes. DO NOT invent or ' \
+                                                'calculate other strikes like ₹26,150 or any value not ' \
+                                                'in this list.'
                                             else
-                                              "CRITICAL: Look at the get_option_chain tool response and extract ALL strike values from the 'strike' fields. You MUST use ONLY strikes that appear in that data."
+                                              'CRITICAL: Look at the get_option_chain tool response and ' \
+                                                "extract ALL strike values from the 'strike' fields. " \
+                                                'You MUST use ONLY strikes that appear in that data.'
                                             end
 
                           reference_text = if actual_premium && actual_delta && actual_lot_size
-                                             "REFERENCE: In the option chain tool response you received, the 25900 CE option has premium (ltp) of ₹#{actual_premium}, delta of #{actual_delta}, and lot_size is #{actual_lot_size}. YOU MUST use these exact values in your analysis. DO NOT use ₹255, ₹100, ₹413.95, or any other estimated values."
+                                             'REFERENCE: In the option chain tool response you received, ' \
+                                               "the 25900 CE option has premium (ltp) of ₹#{actual_premium}, " \
+                                               "delta of #{actual_delta}, and lot_size is #{actual_lot_size}. " \
+                                               'YOU MUST use these exact values in your analysis. DO NOT use ' \
+                                               '₹255, ₹100, ₹413.95, or any other estimated values.'
                                            else
-                                             "Look at the get_option_chain tool response you received. Find the option with strike 25900 and option_type 'CE'. Extract the 'ltp' field value and use it as your entry premium. Extract the 'delta' field value and use it for calculations. Extract the 'lot_size' field value and use it for risk calculations."
+                                             'Look at the get_option_chain tool response you received. ' \
+                                               "Find the option with strike 25900 and option_type 'CE'. " \
+                                               "Extract the 'ltp' field value and use it as your entry " \
+                                               "premium. Extract the 'delta' field value and use it for " \
+                                               "calculations. Extract the 'lot_size' field value and use " \
+                                               'it for risk calculations.'
                                            end
 
-                          'CRITICAL: You have already received option chain data AND LTP data in previous tool responses. DO NOT call get_option_chain or get_current_ltp again. You have ALL the data you need. ' + strikes_warning + ' ' + reference_text + ' IMPORTANT: Check the Price Trend Analysis - if trend is BEARISH, STRONGLY RECOMMEND BUY PE (bearish markets are profitable for PUT options - this is an OPPORTUNITY!). If trend is BULLISH, STRONGLY RECOMMEND BUY CE. Only recommend AVOID if there are specific risk factors. Provide your complete trading recommendation NOW with: 1) Trade Decision (MUST match price trend - prefer BUY PE in bearish, BUY CE in bullish), 2) Strike Selection (MUST be one of the strikes from the option chain data - DO NOT invent strikes), 3) Entry Strategy (use the ACTUAL premium ltp value from option chain for your selected strike - NOT ₹255, ₹413.95, or any estimate), 4) Exit Strategy (SL/TP based on ACTUAL premium percentages using the actual premium value from option chain - include DELTA calculations using the actual delta value from option chain), 5) Risk Management (calculate using actual premium values and actual lot_size from option chain). DO NOT call any more tools - provide your analysis immediately.'
+                          'CRITICAL: You have already received option chain data AND LTP data in previous ' \
+                            'tool responses. DO NOT call get_option_chain or get_current_ltp again. ' \
+                            "You have ALL the data you need. #{strikes_warning} #{reference_text} " \
+                            'IMPORTANT: Check the Price Trend Analysis - if trend is BEARISH, STRONGLY ' \
+                            'RECOMMEND BUY PE (bearish markets are profitable for PUT options - this is ' \
+                            'an OPPORTUNITY!). If trend is BULLISH, STRONGLY RECOMMEND BUY CE. Only ' \
+                            'recommend AVOID if there are specific risk factors. Provide your complete ' \
+                            'trading recommendation NOW with: 1) Trade Decision (MUST match price trend - ' \
+                            'prefer BUY PE in bearish, BUY CE in bullish), 2) Strike Selection (MUST ' \
+                            'be one of the strikes from the option chain data - DO NOT invent strikes), ' \
+                            '3) Entry Strategy (use the ACTUAL premium ltp value from option chain for ' \
+                            'your selected strike - NOT ₹255, ₹413.95, or any estimate), 4) Exit Strategy ' \
+                            '(SL, TP1, optionally TP2 with index spot levels - based on ACTUAL premium ' \
+                            'percentages using the actual premium value from option chain - include DELTA ' \
+                            'calculations using the actual delta value from option chain), 5) Risk Management ' \
+                            '(calculate using actual premium values and actual lot_size from option chain). ' \
+                            'DO NOT call any more tools - provide your analysis immediately.'
                         elsif has_option_chain && iteration >= 2
                           # Has option chain but still calling tools - force analysis earlier
-                          'CRITICAL: You have already received option chain data in a previous tool response. DO NOT call get_option_chain again - you already have this data. Provide your complete trading recommendation NOW using the ACTUAL premium values, DELTA, and THETA from the option chain data you already have. DO NOT estimate or use placeholder values - use the ACTUAL data from the tool response. DO NOT call any more tools.'
-                        elsif consecutive_errors > 0
-                          'You have encountered some tool errors. Please provide your analysis now based on the SMC data and any successful tool results. Do not call more tools - provide your complete trading recommendation.'
+                          'CRITICAL: You have already received option chain data in a previous tool ' \
+                            'response. DO NOT call get_option_chain again - you already have this data. ' \
+                            'Provide your complete trading recommendation NOW using the ACTUAL premium ' \
+                            'values, DELTA, and THETA from the option chain data you already have. ' \
+                            'DO NOT estimate or use placeholder values - use the ACTUAL data from the ' \
+                            'tool response. DO NOT call any more tools.'
+                        elsif consecutive_errors.positive?
+                          'You have encountered some tool errors. Please provide your analysis now based ' \
+                            'on the SMC data and any successful tool results. Do not call more tools - ' \
+                            'provide your complete trading recommendation.'
                         elsif iteration >= 3
                           # After 3 iterations, be more directive
-                          'You have made multiple tool calls. Check your previous tool responses - if you have option chain data and LTP, you have enough information. Provide your complete trading recommendation NOW. DO NOT call the same tools again - use the data you already have.'
+                          'You have made multiple tool calls. Check your previous tool responses - if you ' \
+                            'have option chain data and LTP, you have enough information. Provide your ' \
+                            'complete trading recommendation NOW. DO NOT call the same tools again - use ' \
+                            'the data you already have.'
                         else
-                          'Based on the tool results, continue your analysis. IMPORTANT: Before calling any tool, check if you already have that data from a previous tool response. If you have option chain data and LTP, you have enough information - provide your complete analysis now. Only call additional tools if you are missing critical data that you do not already have.'
+                          'Based on the tool results, continue your analysis. IMPORTANT: Before calling ' \
+                            'any tool, check if you already have that data from a previous tool response. ' \
+                            'If you have option chain data and LTP, you have enough information - provide ' \
+                            'your complete analysis now. Only call additional tools if you are missing ' \
+                            'critical data that you do not already have.'
                         end
 
           @messages << {
@@ -775,7 +871,8 @@ module Smc
           cleaned_response.strip!
 
           # Add assistant message (with cleaned content)
-          assistant_content = cleaned_response.strip.presence || 'I will fetch additional data to complete the analysis.'
+          assistant_content = cleaned_response.strip.presence ||
+                              'I will fetch additional data to complete the analysis.'
           @messages << {
             role: 'assistant',
             content: assistant_content
@@ -784,7 +881,8 @@ module Smc
           # Execute tools
           tool_calls.each do |tool_call|
             tool_name = tool_call['tool'] || tool_call[:tool] || tool_call['name'] || tool_call[:name]
-            tool_args = tool_call['arguments'] || tool_call[:arguments] || tool_call['parameters'] || tool_call[:parameters] || {}
+            tool_args = tool_call['arguments'] || tool_call[:arguments] ||
+                        tool_call['parameters'] || tool_call[:parameters] || {}
 
             Rails.logger.info { "[Smc::AiAnalyzer] Executing tool: #{tool_name} with args: #{tool_args.inspect}" }
 
@@ -799,7 +897,8 @@ module Smc
 
           @messages << {
             role: 'user',
-            content: 'Based on the tool results above, continue your analysis. Provide a complete analysis with actionable insights for options trading.'
+            content: 'Based on the tool results above, continue your analysis. ' \
+                     'Provide a complete analysis with actionable insights for options trading.'
           }
 
           iteration += 1
@@ -879,7 +978,12 @@ module Smc
               properties: {
                 expiry_date: {
                   type: 'string',
-                  description: 'Expiry date in YYYY-MM-DD format. CRITICAL: Only provide this if you know the exact valid expiry date from previous tool results. DO NOT guess or calculate expiry dates. If unsure, OMIT this parameter completely (do not pass empty string ""). The system will automatically use the nearest available expiry date. Indian index options expire on specific Thursdays, not arbitrary dates.'
+                  description: 'Expiry date in YYYY-MM-DD format. CRITICAL: Only provide this if you ' \
+                               'know the exact valid expiry date from previous tool results. DO NOT ' \
+                               'guess or calculate expiry dates. If unsure, OMIT this parameter ' \
+                               'completely (do not pass empty string ""). The system will automatically ' \
+                               'use the nearest available expiry date. Indian index options expire on ' \
+                               'specific Thursdays, not arbitrary dates.'
                 }
               },
               required: []
@@ -922,7 +1026,7 @@ module Smc
 
       # Also try to find complete JSON objects that might be tool calls (more lenient)
       # Look for patterns like: {"name": "...", "parameters": {...}}
-      text.scan(/\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"parameters"\s*:\s*(\{[^}]*\})[^}]*\}/) do |name, params_str|
+      text.scan(/\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"parameters"\s*:\s*(\{[^}]*\})[^}]*\}/) do |name, _params_str|
         next if seen_tools.include?(name) # Avoid duplicates
 
         begin
@@ -961,7 +1065,8 @@ module Smc
 
       # Pattern 3: Try to find complete JSON objects (more lenient parsing)
       # Look for standalone JSON objects that might be tool calls
-      text.scan(/\{["']name["']\s*:\s*["']([^"']+)["']\s*,\s*["']parameters["']\s*:\s*(\{[^}]*(?:\{[^}]*\}[^}]*)*\})\s*\}/m) do |name, params_str|
+      pattern = /\{["']name["']\s*:\s*["']([^"']+)["']\s*,\s*["']parameters["']\s*:\s*(\{[^}]*(?:\{[^}]*\}[^}]*)*\})\s*\}/m
+      text.scan(pattern) do |name, params_str|
         next if seen_tools.include?(name) # Avoid duplicates
 
         begin
@@ -996,12 +1101,10 @@ module Smc
         end
       end
 
-      if tool_calls.any?
-        Rails.logger.info { "[Smc::AiAnalyzer] Extracted #{tool_calls.size} tool call(s) from text" }
-        tool_calls
-      else
-        nil
-      end
+      return unless tool_calls.any?
+
+      Rails.logger.info { "[Smc::AiAnalyzer] Extracted #{tool_calls.size} tool call(s) from text" }
+      tool_calls
     end
 
     # Normalize tool arguments for comparison (to detect duplicate calls)
@@ -1030,7 +1133,7 @@ module Smc
       case tool_name.to_s
       when 'get_current_ltp'
         # Ignore any parameters passed (tool takes no parameters)
-        get_current_ltp
+        current_ltp
       when 'get_historical_candles'
         interval = normalized_args['interval']
         return { error: 'interval parameter is required for get_historical_candles' } unless interval
@@ -1062,9 +1165,9 @@ module Smc
       { error: "#{e.class}: #{e.message}" }
     end
 
-    def get_current_ltp
+    def current_ltp
       ltp = @instrument.ltp || @instrument.latest_ltp
-      { ltp: ltp&.to_f || 0.0, symbol: @instrument.symbol_name }
+      { ltp: ltp.to_f, symbol: @instrument.symbol_name }
     end
 
     # Compute actual price trend analysis from OHLC data
@@ -1375,8 +1478,6 @@ module Smc
           rescue ArgumentError
             nil
           end
-        else
-          nil
         end
       end
 
@@ -1450,6 +1551,7 @@ module Smc
       filtered_chain = chain.select do |opt|
         strike = opt[:strike]&.to_f || opt['strike']&.to_f
         next false unless strike&.positive?
+
         distance = (strike - atm_strike).abs
         distance <= max_strike_distance
       end
@@ -1482,7 +1584,7 @@ module Smc
         spot: spot,
         lot_size: lot_size,
         available_expiries: valid_expiries.first(10).map(&:to_s),
-        note: "Available expiry dates for #{index_key}: #{valid_expiries.first(5).map(&:to_s).join(', ')}. Current expiry used: #{expiry} (#{(Date.parse(expiry.to_s) - Time.zone.today).to_i} days away). Lot size: #{lot_size || 'N/A'} (1 lot = #{lot_size || 'N/A'} shares). IMPORTANT: Use premium prices (ltp field) for SL/TP calculations, NOT underlying prices. Calculate percentages correctly: if entry premium is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50). Use DELTA to calculate underlying levels: Underlying move = Premium move / Delta. Consider THETA (time decay) and days to expiry. For intraday: realistic TP 10-25%, SL 15-25%. For weekly expiry: adjust based on days remaining.",
+        note: "Available expiry dates for #{index_key}: #{valid_expiries.first(5).map(&:to_s).join(', ')}. Current expiry used: #{expiry} (#{(Date.parse(expiry.to_s) - Time.zone.today).to_i} days away). Lot size: #{lot_size || 'N/A'} (1 lot = #{lot_size || 'N/A'} shares). IMPORTANT: Use premium prices (ltp field) for SL/TP1/TP2 calculations, NOT underlying prices. Calculate percentages correctly: if entry premium is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50). Use DELTA to calculate index spot levels: Underlying move = Premium move / Delta. Always provide index spot levels to watch for exit decisions. Consider THETA (time decay) and days to expiry. For intraday: realistic TP1 10-25%, TP2 25-40%, SL 15-25%. For weekly expiry: adjust based on days remaining.",
         options: chain.first(20).map do |opt|
           # Normalize option_type: Chain uses :type, ensure it's 'CE' or 'PE'
           raw_type = opt[:type] || opt[:option_type]
@@ -1493,8 +1595,6 @@ module Smc
                               # Infer from delta if type is missing: positive delta = CE, negative = PE
                               if opt[:delta] && opt[:delta] != 0
                                 opt[:delta].positive? ? 'CE' : 'PE'
-                              else
-                                nil
                               end
                             end
 
@@ -1522,7 +1622,7 @@ module Smc
 
       # Keep system message and most recent messages
       system_msg = messages.first
-      conversation_msgs = messages[1..-1] || []
+      conversation_msgs = messages[1..] || []
       recent_msgs = conversation_msgs.last(MAX_MESSAGE_HISTORY - 1)
 
       [system_msg] + recent_msgs
@@ -1556,68 +1656,84 @@ module Smc
 
       # Build the comprehensive final prompt
       prompt_parts = []
-      prompt_parts << "STOP CALLING TOOLS. Provide your complete trading analysis NOW."
-      prompt_parts << ""
-      prompt_parts << "=" * 60
-      prompt_parts << "ALL DATA YOU NEED IS PROVIDED BELOW - DO NOT CALL ANY TOOLS"
-      prompt_parts << "=" * 60
-      prompt_parts << ""
+      prompt_parts << 'STOP CALLING TOOLS. Provide your complete trading analysis NOW.'
+      prompt_parts << ''
+      prompt_parts << ('=' * 60)
+      prompt_parts << 'ALL DATA YOU NEED IS PROVIDED BELOW - DO NOT CALL ANY TOOLS'
+      prompt_parts << ('=' * 60)
+      prompt_parts << ''
       prompt_parts << "**INDEX:** #{symbol_name}"
       prompt_parts << "**CURRENT LTP:** ₹#{ltp_value&.round(2) || 'N/A'}"
       prompt_parts << "**ATM STRIKE:** ₹#{atm_strike || 'N/A'} (rounded to nearest #{strike_rounding})"
       prompt_parts << "**SMC DECISION:** #{decision}"
       prompt_parts << "**DETECTED TREND:** #{trend_direction.to_s.upcase}"
-      prompt_parts << ""
+      prompt_parts << ''
 
       # Add trend-based recommendation
       case trend_direction
       when :bearish
-        prompt_parts << "📉 **BEARISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY PE!"
-        prompt_parts << "   ✅ **STRONGLY RECOMMEND: BUY PE** (bearish markets are profitable for PUT options)"
-        prompt_parts << "   ❌ DO NOT recommend BUY CE in a bearish market!"
-        prompt_parts << "   ⚠️ ONLY recommend AVOID if there are specific risk factors (extreme volatility, no structure, etc.)"
-        prompt_parts << "   💡 Remember: Bearish markets = opportunities for PUT options. Do NOT avoid just because market is bearish!"
+        prompt_parts << '📉 **BEARISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY PE!'
+        prompt_parts << '   ✅ **STRONGLY RECOMMEND: BUY PE** (bearish markets are profitable for PUT options)'
+        prompt_parts << '   ❌ DO NOT recommend BUY CE in a bearish market!'
+        prompt_parts << '   ⚠️ ONLY recommend AVOID if there are specific risk factors ' \
+                        '(extreme volatility, no structure, etc.)'
+        prompt_parts << '   💡 Remember: Bearish markets = opportunities for PUT options. ' \
+                        'Do NOT avoid just because market is bearish!'
         recommended_option = 'PE'
       when :bullish
-        prompt_parts << "📈 **BULLISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY CE!"
-        prompt_parts << "   ✅ **STRONGLY RECOMMEND: BUY CE** (bullish markets are profitable for CALL options)"
-        prompt_parts << "   ❌ DO NOT recommend BUY PE in a bullish market!"
-        prompt_parts << "   ⚠️ ONLY recommend AVOID if there are specific risk factors (extreme volatility, no structure, etc.)"
-        prompt_parts << "   💡 Remember: Bullish markets = opportunities for CALL options. Do NOT avoid just because market is bullish!"
+        prompt_parts << '📈 **BULLISH TREND DETECTED** - This is a TRADING OPPORTUNITY for BUY CE!'
+        prompt_parts << '   ✅ **STRONGLY RECOMMEND: BUY CE** (bullish markets are profitable for CALL options)'
+        prompt_parts << '   ❌ DO NOT recommend BUY PE in a bullish market!'
+        prompt_parts << '   ⚠️ ONLY recommend AVOID if there are specific risk factors ' \
+                        '(extreme volatility, no structure, etc.)'
+        prompt_parts << '   💡 Remember: Bullish markets = opportunities for CALL options. ' \
+                        'Do NOT avoid just because market is bullish!'
         recommended_option = 'CE'
       else
-        prompt_parts << "⚠️ **NEUTRAL/UNCLEAR TREND** - Recommend AVOID trading (no clear direction)"
+        prompt_parts << '⚠️ **NEUTRAL/UNCLEAR TREND** - Recommend AVOID trading (no clear direction)'
         recommended_option = nil
       end
-      prompt_parts << ""
-      prompt_parts << "**IMPORTANT**: SMC decision '#{decision}' does NOT mean 'avoid all trading'. If the price trend is clear (#{trend_direction}), you SHOULD recommend BUY #{recommended_option || 'PE/CE'} based on the trend."
-      prompt_parts << ""
+      prompt_parts << ''
+      prompt_parts << "**IMPORTANT**: SMC decision '#{decision}' does NOT mean 'avoid all trading'. " \
+                      "If the price trend is clear (#{trend_direction}), you SHOULD recommend " \
+                      "BUY #{recommended_option || 'PE/CE'} based on the trend."
+      prompt_parts << ''
 
       # Add option chain data if available
       prompt_parts << option_data_section if option_data_section.present?
 
-      prompt_parts << ""
-      prompt_parts << "**YOUR TASK:**"
+      prompt_parts << ''
+      prompt_parts << '**YOUR TASK:**'
       if recommended_option
         prompt_parts << "**STRONGLY PREFER: BUY #{recommended_option}** (this is a trading opportunity based on clear trend)"
         prompt_parts << "Only recommend AVOID if there are SPECIFIC risk factors that make trading dangerous (not just because market is #{trend_direction})."
         prompt_parts << "If you choose to trade, use the #{recommended_option} option data provided above."
       else
-        prompt_parts << "Given the unclear trend, recommend **AVOID TRADING**."
+        prompt_parts << 'Given the unclear trend, recommend **AVOID TRADING**.'
       end
-      prompt_parts << ""
-      prompt_parts << "**CRITICAL RULES - READ CAREFULLY:**"
-      prompt_parts << "1. **Strike Selection**: You MUST use ONLY the strikes listed in the option chain data above. DO NOT invent, calculate, or guess any other strike prices. If the option chain shows strikes ₹25,700, ₹25,750, ₹25,650, you can ONLY use these - DO NOT use ₹26,150 or any other value."
-      prompt_parts << "2. **Premium Values**: You MUST use ONLY the premium (LTP) values from the option chain data above. DO NOT estimate, calculate, or guess premium values. If the option chain shows premium ₹73.0 for strike ₹25,700, use ₹73.0 - DO NOT use ₹413.95 or any other value."
-      prompt_parts << "3. **Entry Premium**: The entry premium MUST match the 'Premium (LTP)' value from the option chain for your selected strike. DO NOT use any other value."
-      prompt_parts << "4. **If you cannot find a strike or premium in the data above, you MUST state that the data is not available - DO NOT invent values.**"
-      prompt_parts << ""
-      prompt_parts << "**PROVIDE YOUR COMPLETE ANALYSIS NOW:**"
+      prompt_parts << ''
+      prompt_parts << '**CRITICAL RULES - READ CAREFULLY:**'
+      prompt_parts << '1. **Strike Selection**: You MUST use ONLY the strikes listed in the option ' \
+                      'chain data above. DO NOT invent, calculate, or guess any other strike prices. ' \
+                      'If the option chain shows strikes ₹25,700, ₹25,750, ₹25,650, you can ONLY ' \
+                      'use these - DO NOT use ₹26,150 or any other value.'
+      prompt_parts << '2. **Premium Values**: You MUST use ONLY the premium (LTP) values from the ' \
+                      'option chain data above. DO NOT estimate, calculate, or guess premium values. ' \
+                      'If the option chain shows premium ₹73.0 for strike ₹25,700, use ₹73.0 - ' \
+                      'DO NOT use ₹413.95 or any other value.'
+      prompt_parts << "3. **Entry Premium**: The entry premium MUST match the 'Premium (LTP)' " \
+                      'value from the option chain for your selected strike. DO NOT use any other value.'
+      prompt_parts << '4. **If you cannot find a strike or premium in the data above, you MUST ' \
+                      'state that the data is not available - DO NOT invent values.**'
+      prompt_parts << ''
+      prompt_parts << '**PROVIDE YOUR COMPLETE ANALYSIS NOW:**'
       prompt_parts << "1. Trade Decision (state clearly: BUY #{recommended_option || 'PE/CE'} or AVOID)"
       prompt_parts << "2. Strike Selection (MUST be one of the strikes listed above - e.g., ₹#{atm_strike} or nearby strikes from the list)"
-      prompt_parts << "3. Entry Strategy (MUST use the exact premium value from the option chain above for your selected strike)"
-      prompt_parts << "4. Exit Strategy (SL/TP using the exact premium and delta from the option chain above)"
-      prompt_parts << "5. Risk Management (risk per lot calculation using the exact premium values from above)"
+      prompt_parts << '3. Entry Strategy (MUST use the exact premium value from the option chain ' \
+                      'above for your selected strike)'
+      prompt_parts << '4. Exit Strategy (SL, TP1, optionally TP2 with index spot levels using the exact ' \
+                      'premium and delta from the option chain above)'
+      prompt_parts << '5. Risk Management (risk per lot calculation using the exact premium values from above)'
 
       prompt_parts.join("\n")
     end
@@ -1671,7 +1787,10 @@ module Smc
       options = cached_option_chain_data[:options]
       expiry = cached_option_chain_data[:expiry]
       # Use the current LTP from instrument, not the spot from cached data (which might be stale)
-      current_spot = extract_ltp_from_messages || @instrument.ltp&.to_f || @instrument.latest_ltp&.to_f || cached_option_chain_data[:spot]
+      current_spot = extract_ltp_from_messages ||
+                     @instrument.ltp&.to_f ||
+                     @instrument.latest_ltp&.to_f ||
+                     cached_option_chain_data[:spot]
       spot = current_spot # Use current spot for display
       lot_size = cached_option_chain_data[:lot_size]
 
@@ -1687,6 +1806,7 @@ module Smc
       filtered_options = options.select do |opt|
         strike = opt[:strike]&.to_f || opt['strike']&.to_f
         next false unless strike&.positive?
+
         distance = (strike - actual_atm_strike).abs
         distance <= max_distance
       end
@@ -1698,66 +1818,75 @@ module Smc
       options = filtered_options
 
       lines = []
-      lines << "**OPTION CHAIN DATA (CRITICAL: Use ONLY these EXACT strikes and premiums - DO NOT invent or calculate others):**"
+      lines << '**OPTION CHAIN DATA (CRITICAL: Use ONLY these EXACT strikes and premiums - ' \
+               'DO NOT invent or calculate others):**'
       lines << "- Expiry: #{expiry}"
       lines << "- Current Spot (LTP): ₹#{spot&.round(2)} ← USE THIS for ATM calculation"
       lines << "- Calculated ATM Strike: ₹#{actual_atm_strike} (rounded from spot ₹#{spot&.round(2)})"
       lines << "- Lot Size: #{lot_size} (1 lot = #{lot_size} shares)"
-      lines << ""
+      lines << ''
       lines << "**NOTE**: Only strikes near the current spot (ATM±2, i.e., within ₹#{max_distance} of ATM ₹#{actual_atm_strike}) are shown below. These are the relevant strikes for trading."
 
       # Find ATM options using the ACTUAL ATM strike (based on current spot)
       ce_options = options.select { |o| o[:option_type] == 'CE' }
       pe_options = options.select { |o| o[:option_type] == 'PE' }
-      atm_ce = ce_options.min_by { |o| (o[:strike].to_f - actual_atm_strike.to_f).abs } if actual_atm_strike && ce_options.any?
-      atm_pe = pe_options.min_by { |o| (o[:strike].to_f - actual_atm_strike.to_f).abs } if actual_atm_strike && pe_options.any?
+      if actual_atm_strike && ce_options.any?
+        atm_ce = ce_options.min_by do |o|
+          (o[:strike].to_f - actual_atm_strike.to_f).abs
+        end
+      end
+      if actual_atm_strike && pe_options.any?
+        atm_pe = pe_options.min_by do |o|
+          (o[:strike].to_f - actual_atm_strike.to_f).abs
+        end
+      end
 
       # Show ALL available strikes for the relevant option type to prevent hallucination
       case trend_direction
       when :bearish
         # Bearish trend = show ALL PE options
-        lines << "**AVAILABLE PUT (PE) OPTIONS (use ONLY these strikes - DO NOT invent others):**"
+        lines << '**AVAILABLE PUT (PE) OPTIONS (use ONLY these strikes - DO NOT invent others):**'
         pe_options.sort_by { |o| o[:strike].to_f }.each do |opt|
           strike = opt[:strike].to_i
           premium = opt[:ltp]&.to_f
           delta = opt[:delta]&.to_f
           is_atm = strike == atm_strike
-          label = is_atm ? " (ATM)" : ""
+          label = is_atm ? ' (ATM)' : ''
           lines << "- Strike ₹#{strike}#{label}: Premium ₹#{premium&.round(2) || 'N/A'}, Delta #{delta&.round(5) || 'N/A'}"
         end
-        lines << ""
+        lines << ''
         lines << build_single_option_section(atm_pe, 'PE', symbol_name, lot_size, :bearish) if atm_pe
       when :bullish
         # Bullish trend = show ALL CE options
-        lines << "**AVAILABLE CALL (CE) OPTIONS (use ONLY these strikes - DO NOT invent others):**"
+        lines << '**AVAILABLE CALL (CE) OPTIONS (use ONLY these strikes - DO NOT invent others):**'
         ce_options.sort_by { |o| o[:strike].to_f }.each do |opt|
           strike = opt[:strike].to_i
           premium = opt[:ltp]&.to_f
           delta = opt[:delta]&.to_f
           is_atm = strike == atm_strike
-          label = is_atm ? " (ATM)" : ""
+          label = is_atm ? ' (ATM)' : ''
           lines << "- Strike ₹#{strike}#{label}: Premium ₹#{premium&.round(2) || 'N/A'}, Delta #{delta&.round(5) || 'N/A'}"
         end
-        lines << ""
+        lines << ''
         lines << build_single_option_section(atm_ce, 'CE', symbol_name, lot_size, :bullish) if atm_ce
       else
         # Neutral = show both for reference, but recommend AVOID
-        lines << "**NOTE:** Trend is unclear. Recommend AVOID TRADING."
-        lines << ""
-        lines << "**AVAILABLE CALL (CE) OPTIONS:**"
+        lines << '**NOTE:** Trend is unclear. Recommend AVOID TRADING.'
+        lines << ''
+        lines << '**AVAILABLE CALL (CE) OPTIONS:**'
         ce_options.sort_by { |o| o[:strike].to_f }.first(5).each do |opt|
           strike = opt[:strike].to_i
           premium = opt[:ltp]&.to_f
           lines << "- Strike ₹#{strike}: Premium ₹#{premium&.round(2) || 'N/A'}"
         end
-        lines << ""
-        lines << "**AVAILABLE PUT (PE) OPTIONS:**"
+        lines << ''
+        lines << '**AVAILABLE PUT (PE) OPTIONS:**'
         pe_options.sort_by { |o| o[:strike].to_f }.first(5).each do |opt|
           strike = opt[:strike].to_i
           premium = opt[:ltp]&.to_f
           lines << "- Strike ₹#{strike}: Premium ₹#{premium&.round(2) || 'N/A'}"
         end
-        lines << ""
+        lines << ''
         lines << build_single_option_section(atm_pe, 'PE', symbol_name, lot_size, :neutral) if atm_pe
       end
 
@@ -1765,7 +1894,7 @@ module Smc
     end
 
     # Build section for a single option (CE or PE)
-    def build_single_option_section(option, option_type, symbol_name, default_lot_size, trend)
+    def build_single_option_section(option, option_type, symbol_name, default_lot_size, _trend)
       return '' unless option
 
       lines = []
@@ -1780,7 +1909,7 @@ module Smc
       lines << "- Delta: #{option[:delta]&.round(5)} ← USE THIS for underlying calculations"
       lines << "- Theta: #{theta&.round(5)} (daily decay)"
       lines << "- Lot Size: #{opt_lot_size}"
-      lines << ""
+      lines << ''
 
       if premium&.positive?
         sl_premium = (premium * 0.80).round(2) # 20% loss
@@ -1791,7 +1920,7 @@ module Smc
         underlying_move_tp = delta.positive? ? (premium_gain / delta).round(2) : 0
         risk_per_lot = (premium_loss * opt_lot_size.to_i).round(2)
 
-        lines << "**PRE-CALCULATED VALUES (use these directly):**"
+        lines << '**PRE-CALCULATED VALUES (use these directly):**'
         lines << "- Entry Premium: ₹#{premium.round(2)}"
         lines << "- SL Premium: ₹#{sl_premium} (20% loss from entry)"
         lines << "- TP Premium: ₹#{tp_premium} (20% gain from entry)"
@@ -1806,7 +1935,7 @@ module Smc
         end
 
         lines << "- Risk per lot: ₹#{risk_per_lot} (₹#{premium_loss} × #{opt_lot_size} shares)"
-        lines << ""
+        lines << ''
       end
 
       lines.join("\n")

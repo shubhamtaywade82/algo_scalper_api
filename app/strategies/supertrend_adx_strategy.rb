@@ -25,7 +25,5 @@ class SupertrendAdxStrategy
 
   # Generates entry signal at given candle index
   # Returns: { type: :ce/:pe, confidence: 0-100 } or nil
-  def generate_signal(index)
-    @multi_indicator_strategy.generate_signal(index)
-  end
+  delegate :generate_signal, to: :@multi_indicator_strategy
 end

@@ -4,6 +4,7 @@
 # Test Summary Generator
 # Analyzes test results and provides a summary of passing/failing services
 
+require 'English'
 require_relative 'base'
 ServiceTestHelper.setup_rails
 
@@ -17,7 +18,7 @@ test_results = {
 }
 
 # List of all test scripts
-test_scripts = Dir[File.join(__dir__, 'test_*.rb')].sort.map { |f| File.basename(f) }
+test_scripts = Dir[File.join(__dir__, 'test_*.rb')].map { |f| File.basename(f) }
 
 ServiceTestHelper.print_section('Running Tests...')
 
@@ -27,14 +28,14 @@ test_scripts.each do |script|
 
   # Run test and capture output
   output = `ruby #{File.join(__dir__, script)} 2>&1`
-  exit_code = $?.exitstatus
+  exit_code = $CHILD_STATUS.exitstatus
 
   # Analyze output
-  if exit_code == 0
-    if output.include?('✅') && !output.include?('❌')
+  if exit_code.zero?
+    if output.include?('✅') && output.exclude?('❌')
       test_results[:passed] << script_name
       ServiceTestHelper.print_success("#{script_name}: PASSED")
-    elsif output.include?('⚠️') && !output.include?('❌')
+    elsif output.include?('⚠️') && output.exclude?('❌')
       test_results[:warnings] << script_name
       ServiceTestHelper.print_warning("#{script_name}: WARNINGS")
     else
@@ -46,10 +47,10 @@ test_scripts.each do |script|
     ServiceTestHelper.print_error("#{script_name}: FAILED (exit code: #{exit_code})")
 
     # Extract error message
-    error_line = output.lines.find { |l| l.include?('Error') || l.include?('undefined method') || l.include?('NoMethodError') }
-    if error_line
-      ServiceTestHelper.print_info("  Error: #{error_line.strip}")
+    error_line = output.lines.find do |l|
+      l.include?('Error') || l.include?('undefined method') || l.include?('NoMethodError')
     end
+    ServiceTestHelper.print_info("  Error: #{error_line.strip}") if error_line
   end
 end
 
@@ -90,4 +91,3 @@ else
   ServiceTestHelper.print_success("\n✅ All services are working correctly!")
   exit 0
 end
-

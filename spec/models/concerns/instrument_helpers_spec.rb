@@ -11,8 +11,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
   let(:redis_cache) { Live::RedisPnlCache.instance }
 
   before do
-    allow(ws_hub).to receive(:running?).and_return(true)
-    allow(ws_hub).to receive(:subscribe).and_return(true)
+    allow(ws_hub).to receive_messages(running?: true, subscribe: true)
     allow(redis_cache).to receive(:fetch_tick).and_return(nil)
     allow(redis_cache).to receive(:clear_tick)
   end
@@ -136,10 +135,9 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
 
     it 'converts security_id to string' do
-      allow(ws_hub).to receive(:running?).and_return(true)
-      allow(ws_hub).to receive(:subscribe).and_return(true)
+      allow(ws_hub).to receive_messages(running?: true, subscribe: true)
 
-      instrument.ensure_ws_subscription!(segment: 'NSE_FNO', security_id: 12345)
+      instrument.ensure_ws_subscription!(segment: 'NSE_FNO', security_id: 12_345)
       expect(ws_hub).to have_received(:subscribe).with(seg: 'NSE_FNO', sid: '12345')
     end
   end
@@ -148,8 +146,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
     let(:order_response) { double('Order', order_id: 'ORD123456') }
 
     before do
-      allow(ws_hub).to receive(:running?).and_return(true)
-      allow(ws_hub).to receive(:subscribe).and_return(true)
+      allow(ws_hub).to receive_messages(running?: true, subscribe: true)
       allow(redis_cache).to receive(:clear_tick)
     end
 
@@ -230,7 +227,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
         instrument: instrument,
         order_no: 'ORD123456',
         segment: 'NSE_FNO',
-        security_id: 12345,
+        security_id: 12_345,
         side: 'LONG',
         qty: 50,
         entry_price: BigDecimal('100.5'),
@@ -242,4 +239,3 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
   end
 end
-

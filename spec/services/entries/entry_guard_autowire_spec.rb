@@ -4,7 +4,9 @@ require 'rails_helper'
 
 RSpec.describe Entries::EntryGuard do
   describe '.post_entry_wiring' do
-    let(:feature_flags) { { feature_flags: { enable_auto_subscribe_unsubscribe: true }, risk: { sl_pct: 0.10, tp_pct: 0.20 } } }
+    let(:feature_flags) do
+      { feature_flags: { enable_auto_subscribe_unsubscribe: true }, risk: { sl_pct: 0.10, tp_pct: 0.20 } }
+    end
     let(:hub) do
       instance_double(
         Live::MarketFeedHub,
@@ -84,4 +86,3 @@ RSpec.describe Entries::EntryGuard do
     end
   end
 end
-

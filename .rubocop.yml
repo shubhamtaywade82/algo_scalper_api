@@ -55,7 +55,7 @@ RSpec/ContextWording:
 # RSpec/ExampleLength: Keep examples focused and short
 RSpec/ExampleLength:
   Max: 25
-  CountAsOne: ["block", "heredoc"]
+  CountAsOne: ["heredoc"]
   Exclude:
     - "spec/features/**/*"
     - "spec/integration/**/*"

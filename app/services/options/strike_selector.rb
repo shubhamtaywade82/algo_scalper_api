@@ -204,7 +204,7 @@ module Options
           return spot if spot&.positive?
         end
       rescue StandardError => e
-        Rails.logger.debug("[Options::StrikeSelector] API fallback failed for #{index_key}: #{e.message}")
+        Rails.logger.debug { "[Options::StrikeSelector] API fallback failed for #{index_key}: #{e.message}" }
       end
 
       nil

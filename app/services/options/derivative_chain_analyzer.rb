@@ -102,12 +102,31 @@ module Options
         end
       end
 
-      next_expiry = parsed.select { |date| date >= today }.min
-      next_expiry&.strftime('%Y-%m-%d')
+      future = parsed.select { |date| date >= today }.sort
+      return nil if future.empty?
+
+      # Weekly expiry only (hard rule) for NIFTY/SENSEX.
+      # Prefer expiry dates that have WEEK derivatives in DB.
+      if %w[NIFTY SENSEX].include?(@index_key)
+        weekly = future.find { |d| weekly_expiry_in_db?(d) }
+        return weekly.strftime('%Y-%m-%d') if weekly
+      end
+
+      future.first.strftime('%Y-%m-%d')
     end
 
     # Public alias for find_nearest_expiry
     alias nearest_expiry find_nearest_expiry
+
+    def weekly_expiry_in_db?(expiry_date)
+      expiry = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
+      Derivative.where(underlying_symbol: @index_key, expiry_date: expiry)
+                .where("expiry_flag ILIKE 'W%'")
+                .where.not(option_type: [nil, ''])
+                .exists?
+    rescue StandardError
+      false
+    end
 
     # Load chain using Derivative records and merge with live data
     # Public method for external access
@@ -137,9 +156,9 @@ module Options
       api_chain = fetch_api_chain(expiry_str)
 
       # If API chain is available, filter derivatives to only include strikes that exist in API chain
-      if api_chain && api_chain.any?
+      if api_chain&.any?
         # Get all strikes from API chain (keys are strike strings like "22700.000000")
-        api_strikes = api_chain.keys.map { |k| BigDecimal(k.to_s) }.to_set
+        api_strikes = api_chain.keys.to_set { |k| BigDecimal(k.to_s) }
 
         # Filter derivatives to only those with strikes in API chain
         original_count = derivatives.count
@@ -181,7 +200,7 @@ module Options
         window = 2 if window <= 0 || window > 2 # Cap at 2OTM only
         target_strikes = (-window..window).map do |offset|
           atm_strike_approx + (offset * strike_increment)
-        end.select { |strike| strike.positive? }.uniq
+        end.select(&:positive?).uniq
 
         if target_strikes.any?
           target_strikes_bd = target_strikes.map { |strike| BigDecimal(strike.to_s) }
@@ -363,7 +382,7 @@ module Options
       # Calculate OI change: prefer tick data, fallback to API data (current_oi - previous_oi)
       current_oi = tick&.dig(:oi)&.to_i || api_data&.dig('oi')&.to_i || 0
       oi_change_from_tick = tick&.dig(:oi_change)&.to_i
-      previous_oi = api_data&.dig('previous_oi')&.to_i || 0
+      previous_oi = api_data&.dig('previous_oi').to_i
       oi_change = if oi_change_from_tick && oi_change_from_tick != 0
                     oi_change_from_tick
                   elsif current_oi.positive? && previous_oi.positive?

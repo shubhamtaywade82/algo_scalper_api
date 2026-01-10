@@ -106,7 +106,7 @@ module Live
 
       key = pnl_key(tracker_id)
       raw = @redis.hgetall(key)
-      return nil if raw.nil? || raw.empty?
+      return nil if raw.blank?
 
       {
         pnl: raw['pnl']&.to_f,
@@ -255,7 +255,7 @@ module Live
       return false unless @redis
 
       # Use cached active positions to avoid redundant query
-      active_ids = Positions::ActivePositionsCache.instance.active_tracker_ids.map(&:to_s).to_set
+      active_ids = Positions::ActivePositionsCache.instance.active_tracker_ids.to_set(&:to_s)
 
       deleted_count = 0
       pattern = 'pnl:tracker:*'
@@ -276,7 +276,7 @@ module Live
 
     # Remove all pnl/tick entries except those for the given tracker IDs
     def prune_except(allowed_ids)
-      allowed_set = allowed_ids.map(&:to_s).to_set
+      allowed_set = allowed_ids.to_set(&:to_s)
 
       # PnL cache keys
       each_tracker_key do |_key, tracker_id|

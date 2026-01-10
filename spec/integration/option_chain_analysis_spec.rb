@@ -94,7 +94,7 @@ RSpec.describe 'Option Chain Analysis Integration', :vcr, type: :integration do
     ]
   end
   let(:chain_analyzer) { Options::ChainAnalyzer }
-  let(:atm_options_service) { instance_double('AtmOptionsService') }
+  let(:atm_options_service) { instance_double(AtmOptionsService) }
   let(:index_config) { { key: 'nifty', segment: 'NSE_FNO', security_id: '12345' } }
 
   before do

@@ -4,7 +4,7 @@
 module ServiceTestHelper
   def self.setup_rails
     # Calculate path relative to this file's location
-    script_dir = File.expand_path(File.dirname(__FILE__))
+    script_dir = __dir__
     rails_root = File.expand_path(File.join(script_dir, '..', '..'))
     env_file = File.join(rails_root, 'config', 'environment.rb')
     require env_file
@@ -13,7 +13,7 @@ module ServiceTestHelper
     # Test scripts should run in development mode to use actual API calls
     unless Rails.env.development? || Rails.env.production?
       puts "⚠️  WARNING: Running in #{Rails.env} environment. DhanHQ may be disabled."
-      puts "   Set RAILS_ENV=development to use actual API calls."
+      puts '   Set RAILS_ENV=development to use actual API calls.'
     end
 
     # Check DhanHQ credentials
@@ -23,23 +23,23 @@ module ServiceTestHelper
   end
 
   def self.check_dhanhq_credentials
-    client_id = ENV['DHANHQ_CLIENT_ID'] || ENV['CLIENT_ID']
-    access_token = ENV['DHANHQ_ACCESS_TOKEN'] || ENV['ACCESS_TOKEN']
+    client_id = ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil)
+    access_token = ENV['DHANHQ_ACCESS_TOKEN'] || ENV.fetch('ACCESS_TOKEN', nil)
 
-    unless client_id.present? && access_token.present?
-      print_warning("DhanHQ credentials not found in environment variables!")
-      print_info("  Required: CLIENT_ID (or DHANHQ_CLIENT_ID) and ACCESS_TOKEN (or DHANHQ_ACCESS_TOKEN)")
-      print_info("  Without credentials, API calls will fail.")
-      print_info("  Set these in your environment or .env file to use actual DhanHQ API calls.")
+    if client_id.present? && access_token.present?
+      print_info('DhanHQ credentials found - API calls will use actual DhanHQ endpoints')
     else
-      print_info("DhanHQ credentials found - API calls will use actual DhanHQ endpoints")
+      print_warning('DhanHQ credentials not found in environment variables!')
+      print_info('  Required: CLIENT_ID (or DHANHQ_CLIENT_ID) and ACCESS_TOKEN (or DHANHQ_ACCESS_TOKEN)')
+      print_info('  Without credentials, API calls will fail.')
+      print_info('  Set these in your environment or .env file to use actual DhanHQ API calls.')
     end
   end
 
   def self.print_header(title)
-    puts "\n" + "=" * 80
+    puts "\n#{'=' * 80}"
     puts "  #{title}"
-    puts "=" * 80
+    puts '=' * 80
   end
 
   def self.print_section(title)
@@ -117,24 +117,24 @@ module ServiceTestHelper
         security_id: idx[:security_id]
       )
 
-      unless item.persisted?
-        item.watchable = instrument
-        item.kind = idx[:kind]
-        item.active = true
-        item.label = idx[:symbol]
-        item.save!
-        created_count += 1
-      end
+      next if item.persisted?
+
+      item.watchable = instrument
+      item.kind = idx[:kind]
+      item.active = true
+      item.label = idx[:symbol]
+      item.save!
+      created_count += 1
     end
 
-    if created_count > 0
+    if created_count.positive?
       print_success("Created #{created_count} test watchlist items")
     else
-      print_info("Test watchlist items already exist")
+      print_info('Test watchlist items already exist')
     end
   rescue StandardError => e
     print_warning("Watchlist setup failed: #{e.message}")
-    print_info("Continuing with existing data...")
+    print_info('Continuing with existing data...')
   end
 
   def self.setup_test_instruments
@@ -146,7 +146,7 @@ module ServiceTestHelper
     # Create test derivatives for NIFTY with ATM and 2 OTM strikes using option chain data
     nifty_instrument = Instrument.find_by(exchange: 'nse', segment: 'index', security_id: '13')
     unless nifty_instrument
-      print_info("NIFTY instrument not found - skipping derivatives setup")
+      print_info('NIFTY instrument not found - skipping derivatives setup')
       return
     end
 
@@ -154,31 +154,31 @@ module ServiceTestHelper
     begin
       chain_data = nifty_instrument.fetch_option_chain
       unless chain_data && chain_data[:oc]&.any?
-        print_warning("No option chain data available - using fallback method")
+        print_warning('No option chain data available - using fallback method')
         return setup_test_derivatives_fallback(nifty_instrument)
       end
 
       spot_price = chain_data[:last_price]&.to_f
-      unless spot_price&.positive?
+      if spot_price&.positive?
+        print_info("Using spot price from option chain: ₹#{spot_price}")
+      else
         spot_price = fetch_ltp(segment: 'IDX_I', security_id: '13', suppress_rate_limit_warning: true) || 26_000.0
         print_info("Using LTP from API as spot price: ₹#{spot_price}")
-      else
-        print_info("Using spot price from option chain: ₹#{spot_price}")
       end
 
       # Get available strikes from option chain
       available_strikes = chain_data[:oc].keys.map(&:to_f).sort
       unless available_strikes.any?
-        print_warning("No strikes in option chain - using fallback method")
+        print_warning('No strikes in option chain - using fallback method')
         return setup_test_derivatives_fallback(nifty_instrument)
       end
 
       # Calculate strike interval from available strikes
       strike_interval = if available_strikes.size >= 2
-                         available_strikes[1] - available_strikes[0]
-                       else
-                         50  # Fallback for NIFTY
-                       end
+                          available_strikes[1] - available_strikes[0]
+                        else
+                          50 # Fallback for NIFTY
+                        end
 
       # Find ATM strike (closest to spot)
       atm_strike = available_strikes.min_by { |s| (s - spot_price).abs }
@@ -205,30 +205,34 @@ module ServiceTestHelper
       # Get expiry from option chain or instrument
       expiry_date = nil
       if nifty_instrument.expiry_list&.any?
-        today = Date.today
+        today = Time.zone.today
         parsed_expiries = nifty_instrument.expiry_list.compact.filter_map do |raw|
           case raw
           when Date then raw
           when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
-          when String then Date.parse(raw) rescue nil
+          when String then begin
+            Date.parse(raw)
+          rescue StandardError
+            nil
+          end
           end
         end
         expiry_date = parsed_expiries.select { |date| date >= today }.min
       end
-      expiry_date ||= Date.today + 7.days
+      expiry_date ||= Time.zone.today + 7.days
 
       created_count = 0
       test_types = { 'CE' => ce_strikes, 'PE' => pe_strikes }
 
       test_types.each do |type, strikes|
         strikes.each_with_index do |strike, index|
-          strike_label = if index == 0
-                          'ATM'
-                        elsif type == 'CE'
-                          "ATM+#{index}"
-                        else
-                          "ATM-#{index}"
-                        end
+          strike_label = if index.zero?
+                           'ATM'
+                         elsif type == 'CE'
+                           "ATM+#{index}"
+                         else
+                           "ATM-#{index}"
+                         end
 
           # Get option data from chain
           option_data = chain_data[:oc][strike.to_s] || chain_data[:oc][strike.to_i.to_s]
@@ -244,29 +248,29 @@ module ServiceTestHelper
             security_id: security_id
           )
 
-          unless derivative.persisted?
-            derivative.strike_price = strike
-            derivative.option_type = type
-            derivative.underlying_symbol = 'NIFTY'
-            derivative.underlying_security_id = '13'
-            derivative.expiry_date = expiry_date
-            derivative.lot_size = 75  # NIFTY lot size
-            derivative.symbol_name = "NIFTY-#{expiry_date.strftime('%b%Y')}-#{strike.to_i}-#{type}"
-            derivative.save!
-            created_count += 1
-            print_info("  Created #{strike_label}: #{derivative.symbol_name} (Strike: ₹#{strike})")
-          end
+          next if derivative.persisted?
+
+          derivative.strike_price = strike
+          derivative.option_type = type
+          derivative.underlying_symbol = 'NIFTY'
+          derivative.underlying_security_id = '13'
+          derivative.expiry_date = expiry_date
+          derivative.lot_size = 75 # NIFTY lot size
+          derivative.symbol_name = "NIFTY-#{expiry_date.strftime('%b%Y')}-#{strike.to_i}-#{type}"
+          derivative.save!
+          created_count += 1
+          print_info("  Created #{strike_label}: #{derivative.symbol_name} (Strike: ₹#{strike})")
         end
       end
 
-      if created_count > 0
+      if created_count.positive?
         print_success("Created #{created_count} test derivatives (ATM and 2 OTM) from option chain")
       else
-        print_info("Test derivatives already exist (ATM and 2 OTM)")
+        print_info('Test derivatives already exist (ATM and 2 OTM)')
       end
     rescue StandardError => e
       print_warning("Derivatives setup failed: #{e.message}")
-      print_info("Falling back to manual calculation...")
+      print_info('Falling back to manual calculation...')
       setup_test_derivatives_fallback(nifty_instrument)
     end
   end
@@ -280,14 +284,18 @@ module ServiceTestHelper
     ce_strikes = [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval)]
     pe_strikes = [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval)]
 
-    expiry_date = Date.today + 7.days
+    expiry_date = Time.zone.today + 7.days
     if nifty_instrument.expiry_list&.any?
-      today = Date.today
+      today = Time.zone.today
       parsed_expiries = nifty_instrument.expiry_list.compact.filter_map do |raw|
         case raw
         when Date then raw
         when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
-        when String then Date.parse(raw) rescue nil
+        when String then begin
+          Date.parse(raw)
+        rescue StandardError
+          nil
+        end
         end
       end
       next_expiry = parsed_expiries.select { |date| date >= today }.min
@@ -299,13 +307,13 @@ module ServiceTestHelper
 
     test_types.each do |type, strikes|
       strikes.each_with_index do |strike, index|
-        strike_label = if index == 0
-                        'ATM'
-                      elsif type == 'CE'
-                        "ATM+#{index}"
-                      else
-                        "ATM-#{index}"
-                      end
+        strike_label = if index.zero?
+                         'ATM'
+                       elsif type == 'CE'
+                         "ATM+#{index}"
+                       else
+                         "ATM-#{index}"
+                       end
 
         security_id = "TEST_#{strike}_#{type}_#{expiry_date.strftime('%Y%m%d')}"
         derivative = Derivative.find_or_initialize_by(
@@ -315,29 +323,29 @@ module ServiceTestHelper
           security_id: security_id
         )
 
-        unless derivative.persisted?
-          derivative.strike_price = strike
-          derivative.option_type = type
-          derivative.underlying_symbol = 'NIFTY'
-          derivative.underlying_security_id = '13'
-          derivative.expiry_date = expiry_date
-          derivative.lot_size = 75
-          derivative.symbol_name = "NIFTY-#{expiry_date.strftime('%b%Y')}-#{strike.to_i}-#{type}"
-          derivative.save!
-          created_count += 1
-          print_info("  Created #{strike_label}: #{derivative.symbol_name} (Strike: ₹#{strike})")
-        end
+        next if derivative.persisted?
+
+        derivative.strike_price = strike
+        derivative.option_type = type
+        derivative.underlying_symbol = 'NIFTY'
+        derivative.underlying_security_id = '13'
+        derivative.expiry_date = expiry_date
+        derivative.lot_size = 75
+        derivative.symbol_name = "NIFTY-#{expiry_date.strftime('%b%Y')}-#{strike.to_i}-#{type}"
+        derivative.save!
+        created_count += 1
+        print_info("  Created #{strike_label}: #{derivative.symbol_name} (Strike: ₹#{strike})")
       end
     end
 
-    if created_count > 0
+    if created_count.positive?
       print_success("Created #{created_count} test derivatives (ATM and 2 OTM) - fallback method")
     else
-      print_info("Test derivatives already exist (ATM and 2 OTM)")
+      print_info('Test derivatives already exist (ATM and 2 OTM)')
     end
   rescue StandardError => e
     print_warning("Fallback derivatives setup failed: #{e.message}")
-    print_info("Continuing without test derivatives...")
+    print_info('Continuing without test derivatives...')
   end
 
   # Find ATM or 2 OTM derivative for testing using option chain data
@@ -360,7 +368,8 @@ module ServiceTestHelper
         return find_atm_or_otm_derivative_fallback(instrument, underlying_symbol, option_type, preference, index_cfg)
       end
 
-      spot_price = chain_data[:last_price]&.to_f || fetch_ltp(segment: index_cfg[:segment], security_id: index_cfg[:sid].to_s, suppress_rate_limit_warning: true) || 26_000.0
+      spot_price = chain_data[:last_price]&.to_f || fetch_ltp(segment: index_cfg[:segment],
+                                                              security_id: index_cfg[:sid].to_s, suppress_rate_limit_warning: true) || 26_000.0
 
       # Get available strikes from option chain
       available_strikes = chain_data[:oc].keys.map(&:to_f).sort
@@ -378,11 +387,13 @@ module ServiceTestHelper
                         atm_strike
                       when :atm_plus_1, :atm_plus_2
                         raise ArgumentError, "Invalid preference #{preference} for #{option_type}" if option_type == 'PE'
+
                         offset = preference == :atm_plus_1 ? 1 : 2
                         candidate = atm_strike + (offset * strike_interval)
                         available_strikes.include?(candidate) ? candidate : nil
                       when :atm_minus_1, :atm_minus_2
                         raise ArgumentError, "Invalid preference #{preference} for #{option_type}" if option_type == 'CE'
+
                         offset = preference == :atm_minus_1 ? 1 : 2
                         candidate = atm_strike - (offset * strike_interval)
                         available_strikes.include?(candidate) ? candidate : nil
@@ -395,17 +406,21 @@ module ServiceTestHelper
       # Get expiry from option chain or instrument
       expiry_date = nil
       if instrument.expiry_list&.any?
-        today = Date.today
+        today = Time.zone.today
         parsed_expiries = instrument.expiry_list.compact.filter_map do |raw|
           case raw
           when Date then raw
           when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
-          when String then Date.parse(raw) rescue nil
+          when String then begin
+            Date.parse(raw)
+          rescue StandardError
+            nil
+          end
           end
         end
         expiry_date = parsed_expiries.select { |date| date >= today }.min
       end
-      expiry_date ||= Date.today + 7.days
+      expiry_date ||= Time.zone.today + 7.days
 
       # Get option data from chain
       option_data = chain_data[:oc][target_strike.to_s] || chain_data[:oc][target_strike.to_i.to_s]
@@ -431,14 +446,14 @@ module ServiceTestHelper
 
       if derivative
         strike_label = if target_strike == atm_strike
-                        'ATM'
-                      elsif option_type == 'CE'
-                        offset = (target_strike - atm_strike) / strike_interval
-                        "ATM+#{offset.to_i}"
-                      else
-                        offset = (atm_strike - target_strike) / strike_interval
-                        "ATM-#{offset.to_i}"
-                      end
+                         'ATM'
+                       elsif option_type == 'CE'
+                         offset = (target_strike - atm_strike) / strike_interval
+                         "ATM+#{offset.to_i}"
+                       else
+                         offset = (atm_strike - target_strike) / strike_interval
+                         "ATM-#{offset.to_i}"
+                       end
         print_info("Found #{strike_label} derivative: #{derivative.symbol_name} (Strike: ₹#{target_strike})")
       end
 
@@ -451,7 +466,8 @@ module ServiceTestHelper
 
   def self.find_atm_or_otm_derivative_fallback(instrument, underlying_symbol, option_type, preference, index_cfg)
     # Fallback method using manual calculation
-    spot_price = fetch_ltp(segment: index_cfg[:segment], security_id: index_cfg[:sid].to_s, suppress_rate_limit_warning: true) || 26_000.0
+    spot_price = fetch_ltp(segment: index_cfg[:segment], security_id: index_cfg[:sid].to_s,
+                           suppress_rate_limit_warning: true) || 26_000.0
     strike_interval = 50
     atm_strike = (spot_price / strike_interval).round * strike_interval
 
@@ -460,10 +476,12 @@ module ServiceTestHelper
                       atm_strike
                     when :atm_plus_1, :atm_plus_2
                       raise ArgumentError, "Invalid preference #{preference} for #{option_type}" if option_type == 'PE'
+
                       offset = preference == :atm_plus_1 ? 1 : 2
                       atm_strike + (offset * strike_interval)
                     when :atm_minus_1, :atm_minus_2
                       raise ArgumentError, "Invalid preference #{preference} for #{option_type}" if option_type == 'CE'
+
                       offset = preference == :atm_minus_1 ? 1 : 2
                       atm_strike - (offset * strike_interval)
                     else
@@ -472,26 +490,28 @@ module ServiceTestHelper
 
     expiry_date = nil
     if instrument.expiry_list&.any?
-      today = Date.today
+      today = Time.zone.today
       parsed_expiries = instrument.expiry_list.compact.filter_map do |raw|
         case raw
         when Date then raw
         when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
-        when String then Date.parse(raw) rescue nil
+        when String then begin
+          Date.parse(raw)
+        rescue StandardError
+          nil
+        end
         end
       end
       expiry_date = parsed_expiries.select { |date| date >= today }.min
     end
-    expiry_date ||= Date.today + 7.days
+    expiry_date ||= Time.zone.today + 7.days
 
-    derivative = Derivative.where(
+    Derivative.where(
       underlying_symbol: underlying_symbol,
       option_type: option_type,
       strike_price: target_strike,
       expiry_date: expiry_date
     ).first
-
-    derivative
   rescue StandardError => e
     print_warning("Failed to find ATM/OTM derivative (fallback): #{e.message}")
     nil
@@ -520,34 +540,7 @@ module ServiceTestHelper
       trend_score: nil # Use default (ATM only)
     )
 
-    unless instrument_hash
-      print_warning("Could not find ATM derivative for #{index_key} - trying fallback method...")
-
-      # Fallback: Use find_atm_or_otm_derivative helper
-      option_type = direction == :bullish ? 'CE' : 'PE'
-      derivative = find_atm_or_otm_derivative(
-        underlying_symbol: index_key,
-        option_type: option_type,
-        preference: :atm
-      )
-
-      unless derivative
-        print_warning("Could not find ATM derivative using fallback - cannot create test position")
-        return
-      end
-
-      # Build instrument hash from derivative
-      # Use exchange_segment (NSE_FNO) not segment (derivatives) for PositionTracker
-      instrument_hash = {
-        segment: derivative.exchange_segment || 'NSE_FNO', # Use exchange_segment for tradable segment
-        security_id: derivative.security_id.to_s,
-        symbol: derivative.symbol_name,
-        lot_size: derivative.lot_size || 50,
-        ltp: nil # Will be resolved
-      }
-
-      print_info("Found ATM derivative via fallback: #{derivative.symbol_name}")
-    else
+    if instrument_hash
       print_info("Found ATM derivative via StrikeSelector: #{instrument_hash[:symbol]}")
       # StrikeSelector returns :exchange_segment, but we need :segment for PositionTracker
       # Map exchange_segment to segment if needed
@@ -564,9 +557,36 @@ module ServiceTestHelper
           print_info("Updated segment to exchange_segment: #{instrument_hash[:segment]}")
         else
           instrument_hash[:segment] = 'NSE_FNO' # Default fallback
-          print_warning("Could not find derivative to get exchange_segment, using NSE_FNO")
+          print_warning('Could not find derivative to get exchange_segment, using NSE_FNO')
         end
       end
+    else
+      print_warning("Could not find ATM derivative for #{index_key} - trying fallback method...")
+
+      # Fallback: Use find_atm_or_otm_derivative helper
+      option_type = direction == :bullish ? 'CE' : 'PE'
+      derivative = find_atm_or_otm_derivative(
+        underlying_symbol: index_key,
+        option_type: option_type,
+        preference: :atm
+      )
+
+      unless derivative
+        print_warning('Could not find ATM derivative using fallback - cannot create test position')
+        return
+      end
+
+      # Build instrument hash from derivative
+      # Use exchange_segment (NSE_FNO) not segment (derivatives) for PositionTracker
+      instrument_hash = {
+        segment: derivative.exchange_segment || 'NSE_FNO', # Use exchange_segment for tradable segment
+        security_id: derivative.security_id.to_s,
+        symbol: derivative.symbol_name,
+        lot_size: derivative.lot_size || 50,
+        ltp: nil # Will be resolved
+      }
+
+      print_info("Found ATM derivative via fallback: #{derivative.symbol_name}")
     end
 
     # Find or create the derivative instrument first (needed for ltp method)
@@ -615,13 +635,13 @@ module ServiceTestHelper
     # Re-find derivative if not found above (for PositionTracker creation)
     unless derivative
       print_warning("Derivative not found in database for #{instrument_hash[:segment]}:#{instrument_hash[:security_id]}")
-      print_info("Attempting to find by symbol...")
+      print_info('Attempting to find by symbol...')
 
       # Try to find by symbol
       derivative = Derivative.find_by(symbol_name: instrument_hash[:symbol])
 
       unless derivative
-        print_warning("Cannot create test position - derivative not found in database")
+        print_warning('Cannot create test position - derivative not found in database')
         print_info("  Segment: #{instrument_hash[:segment]}")
         print_info("  Security ID: #{instrument_hash[:security_id]}")
         print_info("  Symbol: #{instrument_hash[:symbol]}")
@@ -658,7 +678,7 @@ module ServiceTestHelper
     print_info("  Entry Price: ₹#{entry_price}, Quantity: #{tracker.quantity}")
   rescue StandardError => e
     print_warning("Position tracker setup failed: #{e.message}")
-    print_info("Continuing without test position...")
+    print_info('Continuing without test position...')
     Rails.logger.debug { e.backtrace.first(5).join("\n") } if defined?(Rails.logger)
   end
 
@@ -683,9 +703,7 @@ module ServiceTestHelper
       is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit')
 
       # Suppress warnings for rate limits if requested (they're expected during rapid API calls)
-      unless suppress_rate_limit_warning && is_rate_limit
-        print_warning("Failed to fetch LTP from API: #{e.message}")
-      end
+      print_warning("Failed to fetch LTP from API: #{e.message}") unless suppress_rate_limit_warning && is_rate_limit
     end
     nil
   end
@@ -710,12 +728,12 @@ module ServiceTestHelper
     begin
       response = DhanHQ::Models::Funds.fetch
       if response.is_a?(Hash) && response['status'] == 'success'
-        data = response.dig('data')
+        data = response['data']
         # Validate that we have reasonable balance data
         if data
-          cash = data.dig('available_cash') || data.dig('cash')
+          cash = data['available_cash'] || data['cash']
           # Return data only if cash is present and reasonable (> 0)
-          return data if cash && cash.to_f.positive?
+          return data if cash&.to_f&.positive?
         end
       end
     rescue StandardError => e
@@ -728,16 +746,15 @@ module ServiceTestHelper
     # Get capital for testing - uses API if available, otherwise hardcoded fallback
     real_funds = fetch_funds
     if real_funds
-      api_cash = real_funds.dig('available_cash') || real_funds.dig('cash')
-      if api_cash && api_cash.to_f > 10_000 # Ensure minimum reasonable balance
-        return api_cash.to_f
-      end
+      api_cash = real_funds['available_cash'] || real_funds['cash']
+      return api_cash.to_f if api_cash && api_cash.to_f > 10_000 # Ensure minimum reasonable balance
     end
     # Use hardcoded fallback
     fallback
   end
 
-  def self.create_position_tracker(watchable:, segment:, security_id:, side: 'long', quantity: 1, entry_price: nil, paper: true)
+  def self.create_position_tracker(watchable:, segment:, security_id:, side: 'long', quantity: 1, entry_price: nil,
+                                   paper: true)
     # Create a PositionTracker record in DB (instead of placing real order)
     # entry_price will be fetched from DhanHQ API if not provided
     entry_price ||= fetch_ltp(segment: segment, security_id: security_id)
@@ -772,4 +789,3 @@ module ServiceTestHelper
     fetch_ltp(segment: segment, security_id: security_id)
   end
 end
-

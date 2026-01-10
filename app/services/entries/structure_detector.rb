@@ -9,7 +9,7 @@ module Entries
       # @param lookback_minutes [Integer] Minutes to look back for BOS
       # @return [Boolean]
       def bos?(bars, lookback_minutes: 10)
-        return false if bars.nil? || bars.empty? || bars.size < 3
+        return false if bars.blank? || bars.size < 3
 
         lookback_count = [lookback_minutes, bars.size].min
         recent_bars = bars.last(lookback_count)
@@ -133,9 +133,9 @@ module Entries
         gaps = []
         return gaps if bars.size < 3
 
-        (0..bars.size - 3).each do |i|
+        (0..(bars.size - 3)).each do |i|
           candle1 = bars[i]
-          candle2 = bars[i + 1]
+          bars[i + 1]
           candle3 = bars[i + 2]
 
           # Bullish FVG: gap between candle1 high and candle3 low
@@ -148,13 +148,13 @@ module Entries
           end
 
           # Bearish FVG: gap between candle1 low and candle3 high
-          if candle3.high < candle1.low
-            gaps << {
-              type: :bearish,
-              low: candle3.high,
-              high: candle1.low
-            }
-          end
+          next unless candle3.high < candle1.low
+
+          gaps << {
+            type: :bearish,
+            low: candle3.high,
+            high: candle1.low
+          }
         end
 
         gaps
@@ -162,7 +162,7 @@ module Entries
 
       def price_inside_fvg?(candle, fvg)
         price = candle.close
-        price >= fvg[:low] && price <= fvg[:high]
+        price.between?(fvg[:low], fvg[:high])
       end
     end
   end

@@ -146,7 +146,8 @@ RSpec.describe Signal::TrendScorer do
         allow(series).to receive(:macd).with(12, 26, 9).and_return([1.5, 1.2, 0.3]) # Bullish MACD
         allow(series).to receive(:adx).with(14).and_return(25.0) # Strong ADX
         allow(series).to receive(:atr).with(14).and_return(100.0) # ATR available but not used for scoring
-        allow(Indicators::Supertrend).to receive(:new).with(series: series, period: 10, base_multiplier: 2.0).and_return(supertrend_service)
+        allow(Indicators::Supertrend).to receive(:new).with(series: series, period: 10,
+                                                            base_multiplier: 2.0).and_return(supertrend_service)
         allow(supertrend_service).to receive(:call).and_return({ trend: :bullish })
       end
 
@@ -167,7 +168,8 @@ RSpec.describe Signal::TrendScorer do
         allow(series).to receive(:macd).with(12, 26, 9).and_return([-1.5, -1.2, -0.3]) # Bearish MACD
         allow(series).to receive(:adx).with(14).and_return(15.0) # Weak ADX
         allow(series).to receive(:atr).with(14).and_return(100.0) # ATR available but not used for scoring
-        allow(Indicators::Supertrend).to receive(:new).with(series: series, period: 10, base_multiplier: 2.0).and_return(supertrend_service)
+        allow(Indicators::Supertrend).to receive(:new).with(series: series, period: 10,
+                                                            base_multiplier: 2.0).and_return(supertrend_service)
         allow(supertrend_service).to receive(:call).and_return({ trend: :bearish })
       end
 
@@ -280,4 +282,3 @@ RSpec.describe Signal::TrendScorer do
     end
   end
 end
-

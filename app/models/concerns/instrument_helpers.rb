@@ -173,7 +173,7 @@ module InstrumentHelpers
   # @param segment [String]
   # @param security_id [String]
   # @return [true]
-  def ensure_ws_subscription!(segment:, security_id:)
+  def ensure_ws_subscription!(segment:, security_id:) # rubocop:disable Naming/PredicateMethod
     hub = Live::WsHub.instance
     unless hub.running?
       Rails.logger.error('[InstrumentHelpers] WebSocket hub is not running. Aborting subscription.')
@@ -195,7 +195,7 @@ module InstrumentHelpers
   # @param symbol [String]
   # @param index_key [String, nil]
   # @return [PositionTracker]
-  def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:,
+  def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:, # rubocop:disable Metrics/ParameterLists
                          index_key: nil)
     # Determine watchable: if self is a Derivative, use self; otherwise use instrument
     watchable = is_a?(Derivative) ? self : instrument
@@ -264,7 +264,7 @@ module InstrumentHelpers
     error_msg = e.message.to_s
     is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit')
     unless is_rate_limit
-      error_info = DhanhqErrorHandler.handle_dhanhq_error(
+      DhanhqErrorHandler.handle_dhanhq_error(
         e,
         context: "fetch_ltp_from_api(#{self.class.name} #{security_id})"
       )
@@ -289,7 +289,7 @@ module InstrumentHelpers
     response = DhanHQ::Models::MarketFeed.ohlc(exch_segment_enum)
     response['status'] == 'success' ? response.dig('data', exchange_segment, security_id.to_s) : nil
   rescue StandardError => e
-    error_info = DhanhqErrorHandler.handle_dhanhq_error(
+    DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "ohlc(#{self.class.name} #{security_id})"
     )
@@ -297,7 +297,7 @@ module InstrumentHelpers
     nil
   end
 
-  def historical_ohlc(from_date: nil, to_date: nil, oi: false)
+  def historical_ohlc(from_date: nil, to_date: nil, oi: false) # rubocop:disable Naming/MethodParameterName
     DhanHQ::Models::HistoricalData.daily(
       securityId: security_id,
       exchangeSegment: exchange_segment,
@@ -312,7 +312,7 @@ module InstrumentHelpers
     nil
   end
 
-  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2)
+  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2) # rubocop:disable Naming/MethodParameterName
     to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
                   Market::Calendar.today_or_last_trading_day.to_s
                 elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
@@ -341,7 +341,7 @@ module InstrumentHelpers
       to_date: to_date || (Time.zone.today - 1).to_s
     )
   rescue StandardError => e
-    error_info = DhanhqErrorHandler.handle_dhanhq_error(
+    DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "intraday_ohlc(#{self.class.name} #{security_id})"
     )

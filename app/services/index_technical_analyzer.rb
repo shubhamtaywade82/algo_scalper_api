@@ -360,8 +360,6 @@ class IndexTechnicalAnalyzer < ApplicationService
       macd_result = series.macd(periods[:macd_fast], periods[:macd_slow], periods[:macd_signal])
       macd_hash = if macd_result.is_a?(Array) && macd_result.size >= 3
                     { macd: macd_result[0], signal: macd_result[1], hist: macd_result[2] }
-                  else
-                    nil
                   end
 
       indicators_data[tf] = {

@@ -12,7 +12,7 @@ module Services
           # Find all matching instruments
           candidates = Instrument.where(underlying_symbol: symbol.upcase)
 
-          if candidates.count > 1
+          if candidates.many?
             # Disambiguate based on intent
             case context.intent
             when :swing_trading
@@ -100,7 +100,7 @@ module Services
             # For options: fetch chain, then indicators
             # Check if we've already tried fetch_option_chain and it failed
             option_chain_attempts = context.tool_history.count { |obs| obs[:tool] == 'fetch_option_chain' }
-            option_chain_failed = context.tool_history.any? do |obs|
+            context.tool_history.any? do |obs|
               obs[:tool] == 'fetch_option_chain' && obs[:result].is_a?(Hash) && obs[:result][:error]
             end
 
@@ -141,7 +141,7 @@ module Services
           { tool: 'abort', args: { reason: 'Cannot determine next step - insufficient data' } }
         end
 
-        def calculate_atm_strike(spot, strikes)
+        def calculate_atm_strike(spot, _strikes)
           # Calculate ATM strike (round to nearest 50 for indices, 5 for stocks)
           round_to = if spot.to_f > 10_000 # Likely an index
                        50

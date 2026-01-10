@@ -40,13 +40,14 @@ module Signal
             index_cfg: index_cfg,
             pick: pick,
             direction: signal,
-            scale_multiplier: 1
+            scale_multiplier: 1,
+            permission: :scale_ready
           )
 
           if result
             Rails.logger.info("[ENTRY] #{index_cfg[:key]} | Entry successful: #{pick[:symbol]}")
           else
-            Rails.logger.debug("[ENTRY] #{index_cfg[:key]} | Entry failed: #{pick[:symbol]}")
+            Rails.logger.debug { "[ENTRY] #{index_cfg[:key]} | Entry failed: #{pick[:symbol]}" }
           end
         end
 
@@ -107,27 +108,23 @@ module Signal
         }
       end
 
-      def get_simple_momentum_signal(index_cfg, timeframe)
+      def get_simple_momentum_signal(_index_cfg, timeframe)
         # Placeholder - implement if needed
         { signal: :avoid, strategy: 'simple_momentum', timeframe: timeframe }
       end
 
-      def get_inside_bar_signal(index_cfg, timeframe)
+      def get_inside_bar_signal(_index_cfg, timeframe)
         # Placeholder - implement if needed
         { signal: :avoid, strategy: 'inside_bar', timeframe: timeframe }
       end
 
       # Simple validation (single mode)
-      def validate_signal(index_cfg, signal_result)
+      def validate_signal(_index_cfg, signal_result)
         config = entry_config
         validation_mode = config[:validation] || 'balanced'
 
-        checks = []
-
         # Market timing (always check)
-        unless Market::Calendar.trading_day_today?
-          return { valid: false, reason: 'Not a trading day' }
-        end
+        return { valid: false, reason: 'Not a trading day' } unless Market::Calendar.trading_day_today?
 
         # IV Rank check (if enabled)
         if validation_mode != 'aggressive'
@@ -135,10 +132,8 @@ module Signal
         end
 
         # ADX check (if enabled)
-        if signal_result[:adx] && config[:adx_min]
-          if signal_result[:adx][:value].to_f < config[:adx_min].to_f
-            return { valid: false, reason: "ADX too weak: #{signal_result[:adx][:value]}" }
-          end
+        if signal_result[:adx] && config[:adx_min] && (signal_result[:adx][:value].to_f < config[:adx_min].to_f)
+          return { valid: false, reason: "ADX too weak: #{signal_result[:adx][:value]}" }
         end
 
         { valid: true, reason: 'All checks passed' }

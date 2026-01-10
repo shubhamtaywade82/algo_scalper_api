@@ -12,7 +12,7 @@ RSpec.describe Indicators::MacdIndicator do
   before do
     # Create enough candles for MACD calculation
     50.times do |i|
-      price = 22000.0 + (i * 10)
+      price = 22_000.0 + (i * 10)
       candle = Candle.new(
         ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
         open: price,
@@ -58,7 +58,7 @@ RSpec.describe Indicators::MacdIndicator do
       allow(indicator).to receive(:create_partial_series).and_return(partial_series)
       allow(partial_series).to receive(:macd).with(12, 26, 9).and_return([1.5, 1.0, 0.5])
 
-      result = indicator.calculate_at(index)
+      indicator.calculate_at(index)
       expect(partial_series).to have_received(:macd).with(12, 26, 9)
     end
 

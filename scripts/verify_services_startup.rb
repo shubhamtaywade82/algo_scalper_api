@@ -59,20 +59,20 @@ services.each do |name, service|
     running_status = service.instance.running?
     puts "  Running (via instance): #{running_status ? '✅ YES' : '❌ NO'}"
   else
-    puts "  Running: ⚠️  N/A (no running? method)"
+    puts '  Running: ⚠️  N/A (no running? method)'
   end
 
   # Try to call start (if not running)
   if has_start
     begin
       service.start
-      puts "  Start call: ✅ SUCCESS"
+      puts '  Start call: ✅ SUCCESS'
     rescue StandardError => e
       puts "  Start call: ❌ FAILED - #{e.class}: #{e.message}"
       all_ok = false
     end
   else
-    puts "  Start call: ❌ SKIPPED (no start method)"
+    puts '  Start call: ❌ SKIPPED (no start method)'
     all_ok = false
   end
 
@@ -103,7 +103,7 @@ if scheduler
   puts "   Thread alive: #{thread&.alive? ? '✅' : '❌'}"
   puts "   Thread name: #{thread&.name || 'N/A'}"
 else
-  puts "   ❌ Not found in supervisor"
+  puts '   ❌ Not found in supervisor'
 end
 puts ''
 
@@ -116,7 +116,7 @@ if risk
   puts "   Thread alive: #{thread&.alive? ? '✅' : '❌'}"
   puts "   Thread name: #{thread&.name || 'N/A'}"
 else
-  puts "   ❌ Not found in supervisor"
+  puts '   ❌ Not found in supervisor'
 end
 puts ''
 
@@ -138,7 +138,7 @@ if heartbeat
   puts "   Thread alive: #{thread&.alive? ? '✅' : '❌'}"
   puts "   Thread name: #{thread&.name || 'N/A'}"
 else
-  puts "   ❌ Not found in supervisor"
+  puts '   ❌ Not found in supervisor'
 end
 puts ''
 
@@ -152,7 +152,7 @@ if pnl
   puts "   Thread alive: #{thread&.alive? ? '✅' : '❌'}"
   puts "   Thread name: #{thread&.name || 'N/A'}"
 else
-  puts "   ❌ Not found in supervisor"
+  puts '   ❌ Not found in supervisor'
 end
 puts ''
 
@@ -166,7 +166,7 @@ if exit_engine
   puts "   Thread alive: #{thread&.alive? ? '✅' : '❌'}"
   puts "   Thread name: #{thread&.name || 'N/A'}"
 else
-  puts "   ❌ Not found in supervisor"
+  puts '   ❌ Not found in supervisor'
 end
 puts ''
 
@@ -196,4 +196,3 @@ end
 
 puts ''
 puts '=' * 80
-

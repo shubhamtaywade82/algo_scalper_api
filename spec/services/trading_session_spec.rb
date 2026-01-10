@@ -195,4 +195,3 @@ RSpec.describe TradingSession::Service do
     end
   end
 end
-

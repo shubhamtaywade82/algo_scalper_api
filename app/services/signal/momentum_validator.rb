@@ -44,7 +44,7 @@ module Signal
 
       unless valid
         reasons << "Insufficient momentum confirmation: #{score}/3 checks confirm (minimum: #{min_confirmations})"
-        reasons.concat(factors.values.select { |f| !f[:confirms] }.map { |f| f[:reason] })
+        reasons.concat(factors.values.reject { |f| f[:confirms] }.pluck(:reason))
       end
 
       Result.new(
@@ -57,8 +57,6 @@ module Signal
       Rails.logger.error("[MomentumValidator] Validation error: #{e.class} - #{e.message}")
       invalid_result("Validation error: #{e.message}")
     end
-
-    private
 
     def self.check_ltp_vs_swing(instrument:, series:, direction:)
       return { confirms: false, reason: 'Series unavailable' } unless series&.candles&.any?
@@ -77,7 +75,7 @@ module Signal
       when :bullish
         # For bullish, check if LTP > last swing high
         swing_highs = []
-        (lookback..bars.size - 1 - lookback).each do |i|
+        (lookback..(bars.size - 1 - lookback)).each do |i|
           bar = bars[i]
           # Check if this is a swing high (higher than neighbors on both sides)
           left_highs = bars[(i - lookback)..(i - 1)].map(&:high)
@@ -94,7 +92,7 @@ module Signal
       when :bearish
         # For bearish, check if LTP < last swing low
         swing_lows = []
-        (lookback..bars.size - 1 - lookback).each do |i|
+        (lookback..(bars.size - 1 - lookback)).each do |i|
           bar = bars[i]
           # Check if this is a swing low (lower than neighbors on both sides)
           left_lows = bars[(i - lookback)..(i - 1)].map(&:low)

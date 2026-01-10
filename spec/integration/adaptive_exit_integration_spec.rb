@@ -17,8 +17,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
 
   before do
     allow(exit_engine).to receive(:execute_exit)
-    allow(service).to receive(:seconds_below_entry).and_return(0)
-    allow(service).to receive(:calculate_atr_ratio).and_return(1.0)
+    allow(service).to receive_messages(seconds_below_entry: 0, calculate_atr_ratio: 1.0)
   end
 
   describe 'full exit flow with different configurations' do
@@ -86,7 +85,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
           {
             pnl: BigDecimal('-200.0'), # -4% loss
             pnl_pct: BigDecimal('-0.04'),
-            hwm_pnl: BigDecimal('0')
+            hwm_pnl: BigDecimal(0)
           }
         end
 
@@ -165,7 +164,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
           {
             pnl: BigDecimal('-300.0'), # -6% loss
             pnl_pct: BigDecimal('-0.06'),
-            hwm_pnl: BigDecimal('0')
+            hwm_pnl: BigDecimal(0)
           }
         end
 
@@ -248,17 +247,16 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
           }
         }
       end
-
-      before do
-        allow(AlgoConfig).to receive(:fetch).and_return(config)
-      end
-
       let(:pnl_data) do
         {
           pnl: BigDecimal('250.0'),
           pnl_pct: BigDecimal('0.05'),
           hwm_pnl: BigDecimal('250.0')
         }
+      end
+
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(config)
       end
 
       it 'falls back to static SL/TP only' do

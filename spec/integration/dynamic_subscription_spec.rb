@@ -693,12 +693,10 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         market_feed_hub.instance_variable_set(:@ws_client, mock_ws_client)
 
         # Mock the enabled? method to avoid environment variable issues
-        allow(market_feed_hub).to receive(:enabled?).and_return(true)
-        allow(market_feed_hub).to receive(:connected?).and_return(true)
 
         # Stub load_watchlist to return our test watchlist
         # (subscribe_watchlist calls load_watchlist which would reload from DB/ENV)
-        allow(market_feed_hub).to receive(:load_watchlist).and_return(watchlist)
+        allow(market_feed_hub).to receive_messages(enabled?: true, connected?: true, load_watchlist: watchlist)
 
         # Verify that subscribe_many is called with normalized format
         # The implementation converts to ExchangeSegment and SecurityId keys
@@ -718,9 +716,8 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
     context 'when handling concurrent subscriptions' do
       it 'handles concurrent subscription requests' do
         # Mock the enabled? method to avoid environment variable issues
-        allow(market_feed_hub).to receive(:enabled?).and_return(true)
         # Mock subscribed? to return false initially (allowing subscriptions)
-        allow(market_feed_hub).to receive(:subscribed?).and_return(false)
+        allow(market_feed_hub).to receive_messages(enabled?: true, subscribed?: false)
 
         # Simulate concurrent subscription requests
         threads = Array.new(5) do |_i|

@@ -26,8 +26,6 @@ module Signal
           :bullish
         elsif score <= bearish_threshold
           :bearish
-        else
-          nil
         end
 
       Rails.logger.debug do
@@ -368,8 +366,6 @@ module Signal
             candle.public_send(candle_attr)
           elsif candle.is_a?(Hash)
             candle[candle_attr] || candle[candle_attr.to_s]
-          else
-            nil
           end
         end
       else

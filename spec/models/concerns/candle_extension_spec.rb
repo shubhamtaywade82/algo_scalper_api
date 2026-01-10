@@ -33,11 +33,11 @@ RSpec.describe CandleExtension do
 
   before do
     allow(AlgoConfig).to receive(:fetch).and_return({
-      data_freshness: {
-        disable_ohlc_caching: false,
-        ohlc_cache_duration_minutes: 5
-      }
-    })
+                                                      data_freshness: {
+                                                        disable_ohlc_caching: false,
+                                                        ohlc_cache_duration_minutes: 5
+                                                      }
+                                                    })
   end
 
   describe '#candles' do
@@ -69,10 +69,10 @@ RSpec.describe CandleExtension do
     context 'when caching is disabled' do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({
-          data_freshness: {
-            disable_ohlc_caching: true
-          }
-        })
+                                                          data_freshness: {
+                                                            disable_ohlc_caching: true
+                                                          }
+                                                        })
       end
 
       it 'always fetches fresh data' do
@@ -272,10 +272,10 @@ RSpec.describe CandleExtension do
 
     it 'uses configured cache duration' do
       allow(AlgoConfig).to receive(:fetch).and_return({
-        data_freshness: {
-          ohlc_cache_duration_minutes: 10
-        }
-      })
+                                                        data_freshness: {
+                                                          ohlc_cache_duration_minutes: 10
+                                                        }
+                                                      })
       instrument.instance_variable_set(:@last_ohlc_fetched, { '5' => 5.minutes.ago })
       expect(instrument.ohlc_stale?('5')).to be false
     end
@@ -305,4 +305,3 @@ RSpec.describe CandleExtension do
     end
   end
 end
-

@@ -58,7 +58,7 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
     context 'when structure break against position' do
       let(:underlying_state) do
         instance_double(
-          'UnderlyingState',
+          UnderlyingState,
           bos_state: :broken,
           bos_direction: :bearish,
           trend_score: 15.0,
@@ -82,7 +82,7 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
     context 'when trend is weak' do
       let(:underlying_state) do
         instance_double(
-          'UnderlyingState',
+          UnderlyingState,
           bos_state: :intact,
           trend_score: 8.0,
           atr_trend: :rising,
@@ -106,7 +106,7 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
     context 'when ATR collapses' do
       let(:underlying_state) do
         instance_double(
-          'UnderlyingState',
+          UnderlyingState,
           bos_state: :intact,
           trend_score: 15.0,
           atr_trend: :falling,
@@ -130,7 +130,7 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
     context 'when underlying state is OK' do
       let(:underlying_state) do
         instance_double(
-          'UnderlyingState',
+          UnderlyingState,
           bos_state: :intact,
           trend_score: 15.0,
           atr_trend: :rising,

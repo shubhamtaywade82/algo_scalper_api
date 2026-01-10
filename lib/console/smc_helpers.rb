@@ -8,7 +8,7 @@
 #   series_1h = fetch_candles_with_history(instrument, interval: "60", target_candles: 60)
 
 module SmcConsoleHelpers
-  extend self
+  module_function
 
   # Calculate trading days needed for a given interval and target candle count
   def trading_days_for_candles(interval_minutes, target_candles)
@@ -41,7 +41,7 @@ module SmcConsoleHelpers
                 end
 
     # Add delay to avoid rate limits
-    sleep(delay_seconds) if delay_seconds > 0
+    sleep(delay_seconds) if delay_seconds.positive?
 
     raw_data = instrument.intraday_ohlc(
       interval: interval.to_s,
@@ -62,7 +62,7 @@ module SmcConsoleHelpers
 
   # Trim candle series to last N candles
   def trim_series(series, max_candles:)
-    return series unless series&.respond_to?(:candles)
+    return series unless series.respond_to?(:candles)
 
     trimmed = CandleSeries.new(symbol: series.symbol, interval: series.interval)
     series.candles.last(max_candles).each { |c| trimmed.add_candle(c) }
@@ -73,17 +73,16 @@ end
 # Make methods available in console
 include SmcConsoleHelpers
 
-puts "\n#{'=' * 80}"
-puts '  SMC Console Helpers Loaded'
-puts '=' * 80
-puts "\nAvailable helper methods:"
-puts '  - fetch_candles_with_history(instrument, interval:, target_candles:)'
-puts '  - trading_days_for_candles(interval_minutes, target_candles)'
-puts '  - trim_series(series, max_candles:)'
-puts "\nExample usage:"
-puts '  instrument = Instrument.find_by_sid_and_segment(security_id: "13", segment_code: "IDX_I")'
-puts '  series_1h = fetch_candles_with_history(instrument, interval: "60", target_candles: 60)'
-puts '  series_15m = fetch_candles_with_history(instrument, interval: "15", target_candles: 100)'
-puts '  series_5m = fetch_candles_with_history(instrument, interval: "5", target_candles: 150)'
-puts "\n"
-
+Rails.logger.debug { "\n#{'=' * 80}" }
+Rails.logger.debug '  SMC Console Helpers Loaded'
+Rails.logger.debug '=' * 80
+Rails.logger.debug "\nAvailable helper methods:"
+Rails.logger.debug '  - fetch_candles_with_history(instrument, interval:, target_candles:)'
+Rails.logger.debug '  - trading_days_for_candles(interval_minutes, target_candles)'
+Rails.logger.debug '  - trim_series(series, max_candles:)'
+Rails.logger.debug "\nExample usage:"
+Rails.logger.debug '  instrument = Instrument.find_by_sid_and_segment(security_id: "13", segment_code: "IDX_I")'
+Rails.logger.debug '  series_1h = fetch_candles_with_history(instrument, interval: "60", target_candles: 60)'
+Rails.logger.debug '  series_15m = fetch_candles_with_history(instrument, interval: "15", target_candles: 100)'
+Rails.logger.debug '  series_5m = fetch_candles_with_history(instrument, interval: "5", target_candles: 150)'
+Rails.logger.debug "\n"

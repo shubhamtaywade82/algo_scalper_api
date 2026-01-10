@@ -195,6 +195,16 @@ module Signal
 
         Rails.logger.info("[Signal] Proceeding with #{final_direction} signal for #{index_cfg[:key]}")
 
+        # ===== PERMISSION RESOLUTION (HARD) =====
+        # Source-of-truth permission derived from SMC + AVRZ (deterministic).
+        permission = Trading::PermissionResolver.resolve(symbol: index_cfg[:key], instrument: instrument)
+        if permission == :blocked
+          Rails.logger.info("[Signal] PermissionResolver BLOCKED #{index_cfg[:key]} - no trade")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+        # ===== END PERMISSION RESOLUTION =====
+
         # Get state snapshot first for signal persistence
         state_snapshot = Signal::StateTracker.record(
           index_key: index_cfg[:key],
@@ -248,7 +258,34 @@ module Signal
 
         # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
 
-        picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: final_direction)
+        # ===== STRIKE QUALIFICATION LAYER (HARD GATE) =====
+        # First point where we have:
+        # - symbol (index_cfg[:key])
+        # - side (from final_direction)
+        # - permission (from PermissionResolver)
+        # - option chain (fetched inside ChainAnalyzer)
+        # - expected spot move (ATR-derived from series)
+        expected_spot_move =
+          begin
+            atr = primary_series.atr(14)
+            atr&.to_f
+          rescue StandardError
+            nil
+          end
+
+        unless expected_spot_move&.positive?
+          Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
+        picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
+          index_cfg: index_cfg,
+          direction: final_direction,
+          permission: permission,
+          expected_spot_move: expected_spot_move
+        )
+        # ===== END STRIKE QUALIFICATION LAYER =====
 
         if picks.blank?
           Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
@@ -266,7 +303,8 @@ module Signal
           effective_timeframe: effective_timeframe,
           confirmation_timeframe: confirmation_tf,
           confirmation_enabled: enable_confirmation,
-          validation_mode: signals_cfg[:validation_mode] || 'balanced'
+          validation_mode: signals_cfg[:validation_mode] || 'balanced',
+          permission: permission
         }
 
         picks.each_with_index do |pick, _index|
@@ -276,7 +314,8 @@ module Signal
             pick: pick,
             direction: final_direction,
             scale_multiplier: state_snapshot[:multiplier],
-            entry_metadata: entry_metadata
+            entry_metadata: entry_metadata,
+            permission: permission
           )
 
           if result
@@ -616,7 +655,6 @@ module Signal
       def validate_market_timing
         # TODO: Implement market timing validation if needed
         current_time = Time.zone.now
-        { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
 
         # First check if it's a trading day using Market::Calendar
         unless Market::Calendar.trading_day_today?
@@ -719,8 +757,8 @@ module Signal
           strategy_config: strategy_config
         )
 
-        pp series.candles.last
-        pp series.candles.first
+        Rails.logger.debug series.candles.last
+        Rails.logger.debug series.candles.first
         if result[:status] == :ok && result[:direction] == :avoid
           Rails.logger.info("[Signal] #{strategy_recommendation[:strategy_name]} did not generate a signal for #{index_cfg[:key]} - checking conditions...")
           # Log why signal might not be generated

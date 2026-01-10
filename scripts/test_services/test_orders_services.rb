@@ -13,12 +13,12 @@ ServiceTestHelper.setup_test_position_tracker(paper: true)
 
 # Test 1: OrderRouter
 ServiceTestHelper.print_section('1. OrderRouter')
-router = TradingSystem::OrderRouter.new
+TradingSystem::OrderRouter.new
 ServiceTestHelper.print_success('OrderRouter initialized')
 
 # Test 2: Orders::Placer
 ServiceTestHelper.print_section('2. Orders::Placer')
-placer = Orders::Placer.new
+Orders::Placer.new
 ServiceTestHelper.print_success('Orders::Placer initialized')
 
 # Test 3: Orders::Gateway
@@ -26,10 +26,10 @@ ServiceTestHelper.print_section('3. Orders::Gateway')
 paper_mode = AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
 
 if paper_mode
-  gateway = Orders::GatewayPaper.new
+  Orders::GatewayPaper.new
   ServiceTestHelper.print_info('Using Paper Gateway')
 else
-  gateway = Orders::GatewayLive.new
+  Orders::GatewayLive.new
   ServiceTestHelper.print_info('Using Live Gateway')
 end
 
@@ -114,15 +114,10 @@ end
 # Test 8: Order statistics
 ServiceTestHelper.print_section('8. Order Statistics')
 entry_stats = entry_manager.instance_variable_get(:@stats)
-if entry_stats
-  ServiceTestHelper.print_info("EntryManager stats:\n#{ServiceTestHelper.format_hash(entry_stats)}")
-end
+ServiceTestHelper.print_info("EntryManager stats:\n#{ServiceTestHelper.format_hash(entry_stats)}") if entry_stats
 
 bracket_stats = bracket_placer.instance_variable_get(:@stats)
-if bracket_stats
-  ServiceTestHelper.print_info("BracketPlacer stats:\n#{ServiceTestHelper.format_hash(bracket_stats)}")
-end
+ServiceTestHelper.print_info("BracketPlacer stats:\n#{ServiceTestHelper.format_hash(bracket_stats)}") if bracket_stats
 
 ServiceTestHelper.print_success('Orders services test completed')
 ServiceTestHelper.print_warning('Note: Actual order placement requires proper signal results and market conditions')
-

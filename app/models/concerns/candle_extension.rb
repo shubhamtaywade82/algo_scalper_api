@@ -152,13 +152,10 @@ module CandleExtension
       end
 
       TechnicalAnalysis::Obv.calculate(dcv)
-    rescue ArgumentError => e
+    rescue NoMethodError => e
+      raise e
+    rescue StandardError => e
       # OBV.calculate might have different signature - try alternative approach
-      Rails.logger.warn("[CandleExtension] OBV calculation failed: #{e.message}")
-      nil
-    rescue TypeError, StandardError => e
-      raise if e.is_a?(NoMethodError)
-
       Rails.logger.warn("[CandleExtension] OBV calculation failed: #{e.message}")
       nil
     end

@@ -34,7 +34,7 @@ module Positions
       if profit_pct.to_f >= profit_end
         raw = dd_end
       else
-        normalized = [[(profit_pct.to_f - profit_start) / (profit_end - profit_start), 0.0].max, 1.0].min
+        normalized = ((profit_pct.to_f - profit_start) / (profit_end - profit_start)).clamp(0.0, 1.0)
         raw = dd_end + ((dd_start - dd_end) * Math.exp(-k * normalized))
       end
 
@@ -69,10 +69,10 @@ module Positions
 
       loss_pct = [-pnl_pct.to_f, span].min
       ratio = (loss_pct / span.to_f)
-      new_sl = max_loss + (ratio * (min_loss - max_loss)) # note min_loss < max_loss (negative direction)
+      new_sl = max_loss + (ratio * (min_loss - max_loss)) # NOTE: min_loss < max_loss (negative direction)
 
       # Apply time-based tightening
-      if seconds_below_entry.to_i > 0 && cfg2[:time_tighten_per_min]
+      if seconds_below_entry.to_i.positive? && cfg2[:time_tighten_per_min]
         minutes = seconds_below_entry.to_f / 60.0
         new_sl -= (minutes * cfg2[:time_tighten_per_min].to_f) # subtract because we're tightening (reducing allowed loss)
       end
@@ -90,7 +90,7 @@ module Positions
       end
 
       # Clamp to [min_loss, max_loss] range
-      [[new_sl, min_loss].max, max_loss].min.round(4)
+      new_sl.clamp(min_loss, max_loss).round(4)
     end
 
     # Helper: Convert entry price and loss percent to SL price

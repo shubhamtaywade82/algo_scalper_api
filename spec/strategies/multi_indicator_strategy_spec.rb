@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe MultiIndicatorStrategy do
   let(:series) { CandleSeries.new(symbol: 'NIFTY', interval: '5') }
-  let(:base_price) { 22000.0 }
+  let(:base_price) { 22_000.0 }
 
   before do
     # Create enough candles for indicators
@@ -70,7 +70,7 @@ RSpec.describe MultiIndicatorStrategy do
         # Signal may or may not be generated depending on indicator agreement
         expect(signal).to be_a(Hash).or be_nil
         if signal
-          expect(signal[:type]).to be_in([:ce, :pe])
+          expect(signal[:type]).to be_in(%i[ce pe])
           expect(signal[:confidence]).to be_between(0, 100)
         end
       end
@@ -78,7 +78,7 @@ RSpec.describe MultiIndicatorStrategy do
       it 'returns nil when indicators disagree' do
         # Mock indicators to return conflicting directions
         allow_any_instance_of(Indicators::SupertrendIndicator).to receive(:calculate_at).and_return(
-          { value: 22000, direction: :bullish, confidence: 80 }
+          { value: 22_000, direction: :bullish, confidence: 80 }
         )
         allow_any_instance_of(Indicators::AdxIndicator).to receive(:calculate_at).and_return(
           { value: 25, direction: :bearish, confidence: 70 }
@@ -114,7 +114,7 @@ RSpec.describe MultiIndicatorStrategy do
       it 'returns nil when there is a tie' do
         # Mock to create a tie situation
         allow_any_instance_of(Indicators::SupertrendIndicator).to receive(:calculate_at).and_return(
-          { value: 22000, direction: :bullish, confidence: 80 }
+          { value: 22_000, direction: :bullish, confidence: 80 }
         )
         allow_any_instance_of(Indicators::AdxIndicator).to receive(:calculate_at).and_return(
           { value: 25, direction: :bearish, confidence: 70 }
@@ -232,7 +232,8 @@ RSpec.describe MultiIndicatorStrategy do
       end
 
       it 'handles errors gracefully' do
-        allow_any_instance_of(Indicators::SupertrendIndicator).to receive(:calculate_at).and_raise(StandardError, 'Test error')
+        allow_any_instance_of(Indicators::SupertrendIndicator).to receive(:calculate_at).and_raise(StandardError,
+                                                                                                   'Test error')
         expect(Rails.logger).to receive(:error).with(match(/Error calculating/))
 
         index = series.candles.size - 1
@@ -247,7 +248,7 @@ RSpec.describe MultiIndicatorStrategy do
     let(:bearish_result) { { direction: :bearish, confidence: 70 } }
     let(:neutral_result) { { direction: :neutral, confidence: 50 } }
 
-    context 'all_must_agree' do
+    context 'when using all_must_agree' do
       it 'returns :ce when all are bullish' do
         results = [
           { indicator: 'st', **bullish_result },
@@ -279,7 +280,7 @@ RSpec.describe MultiIndicatorStrategy do
       end
     end
 
-    context 'majority_vote' do
+    context 'when using majority_vote' do
       it 'returns :ce when majority is bullish' do
         results = [
           { indicator: 'st', **bullish_result },
@@ -302,7 +303,7 @@ RSpec.describe MultiIndicatorStrategy do
       end
     end
 
-    context 'weighted_sum' do
+    context 'when using weighted_sum' do
       it 'returns :ce when bullish score is higher' do
         results = [
           { indicator: 'st', **bullish_result },
@@ -324,7 +325,7 @@ RSpec.describe MultiIndicatorStrategy do
       end
     end
 
-    context 'any_confirms' do
+    context 'when using any_confirms' do
       it 'returns :ce when any indicator is bullish' do
         results = [
           { indicator: 'st', **bullish_result },

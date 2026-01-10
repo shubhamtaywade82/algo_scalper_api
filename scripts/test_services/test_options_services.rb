@@ -65,12 +65,16 @@ begin
     begin
       chain_data = nifty_instrument.fetch_option_chain
       if chain_data && nifty_instrument.expiry_list&.any?
-        today = Date.today
+        today = Time.zone.today
         parsed_expiries = nifty_instrument.expiry_list.compact.filter_map do |raw|
           case raw
           when Date then raw
           when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
-          when String then Date.parse(raw) rescue nil
+          when String then begin
+            Date.parse(raw)
+          rescue StandardError
+            nil
+          end
           end
         end
         expiry_date = parsed_expiries.select { |date| date >= today }.min
@@ -80,12 +84,12 @@ begin
       ServiceTestHelper.print_warning("Could not get expiry from option chain: #{e.message}")
     end
   end
-  expiry_date ||= Date.today + 7.days
+  expiry_date ||= Time.zone.today + 7.days
 
   # Use lenient config for testing (lower thresholds)
   test_config = {
-    min_oi: 1000,  # Lower than default 10,000
-    min_iv: 1.0,  # Lower than default 5.0
+    min_oi: 1000, # Lower than default 10,000
+    min_iv: 1.0, # Lower than default 5.0
     max_iv: 100.0, # Higher than default 60.0
     max_spread_pct: 0.10, # 10% instead of default 3%
     strike_distance_pct: 0.05 # 5% instead of default 2%
@@ -125,7 +129,7 @@ begin
     if spot&.positive?
       ServiceTestHelper.print_info("  ✓ Spot LTP available: ₹#{spot.round(2)}")
     else
-      ServiceTestHelper.print_warning("  ✗ Spot LTP not available")
+      ServiceTestHelper.print_warning('  ✗ Spot LTP not available')
       # Try to fetch from API
       begin
         nifty_instrument = Instrument.find_by(exchange: 'nse', segment: 'index', security_id: '13')
@@ -133,9 +137,9 @@ begin
           api_spot = nifty_instrument.ltp&.to_f
           if api_spot&.positive?
             ServiceTestHelper.print_info("  ✓ Fetched spot LTP from API: ₹#{api_spot.round(2)}")
-            # Note: This won't update the analyzer's internal spot, but shows it's available
+            # NOTE: This won't update the analyzer's internal spot, but shows it's available
           else
-            ServiceTestHelper.print_warning("  ✗ Could not fetch spot LTP from API either")
+            ServiceTestHelper.print_warning('  ✗ Could not fetch spot LTP from API either')
           end
         end
       rescue StandardError => e
@@ -153,7 +157,7 @@ begin
         ce_options = chain.select { |o| o[:type] == 'CE' }.first(3)
         pe_options = chain.select { |o| o[:type] == 'PE' }.first(3)
 
-        ServiceTestHelper.print_info("  Sample CE options:")
+        ServiceTestHelper.print_info('  Sample CE options:')
         ce_options.first(3).each do |opt|
           derivative = opt[:derivative]
           is_test = derivative&.security_id.to_s.start_with?('TEST_')
@@ -165,59 +169,60 @@ begin
           # Debug: Check API chain data directly
           api_chain = analyzer.send(:fetch_api_chain, expiry)
 
-          if api_chain
-            # Try different strike string formats (matching DerivativeChainAnalyzer logic)
-            strike_float = opt[:strike].to_f
-            strike_formats = [
-              sprintf('%.6f', strike_float), # "27950.000000" - API format
-              strike_float.to_s,              # "27950.0" - default float format
-              strike_float.to_i.to_s,         # "27950" - integer format
-              sprintf('%.2f', strike_float)   # "27950.00" - 2 decimal places
-            ].uniq
+          next unless api_chain
 
-            api_ce = nil
-            api_pe = nil
-            strike_formats.each do |strike_str|
-              api_ce ||= api_chain.dig(strike_str, 'ce')
-              api_pe ||= api_chain.dig(strike_str, 'pe')
-              break if api_ce && api_pe
-            end
+          # Try different strike string formats (matching DerivativeChainAnalyzer logic)
+          strike_float = opt[:strike].to_f
+          strike_formats = [
+            format('%.6f', strike_float), # "27950.000000" - API format
+            strike_float.to_s,              # "27950.0" - default float format
+            strike_float.to_i.to_s,         # "27950" - integer format
+            format('%.2f', strike_float) # "27950.00" - 2 decimal places
+          ].uniq
 
-            ServiceTestHelper.print_info("      API chain lookup for strike #{opt[:strike]}:")
-            ServiceTestHelper.print_info("        Tried formats: #{strike_formats.map { |f| "'#{f}'" }.join(', ')}")
-            ServiceTestHelper.print_info("        CE found: #{api_ce ? 'YES' : 'NO'}")
-            ServiceTestHelper.print_info("        PE found: #{api_pe ? 'YES' : 'NO'}")
+          api_ce = nil
+          api_pe = nil
+          strike_formats.each do |strike_str|
+            api_ce ||= api_chain.dig(strike_str, 'ce')
+            api_pe ||= api_chain.dig(strike_str, 'pe')
+            break if api_ce && api_pe
+          end
 
-            if api_ce
-              ServiceTestHelper.print_success("        ✓ CE OI: #{api_ce['oi']}, IV: #{api_ce['implied_volatility']}%, LTP: ₹#{api_ce['last_price']}")
+          ServiceTestHelper.print_info("      API chain lookup for strike #{opt[:strike]}:")
+          ServiceTestHelper.print_info("        Tried formats: #{strike_formats.map { |f| "'#{f}'" }.join(', ')}")
+          ServiceTestHelper.print_info("        CE found: #{api_ce ? 'YES' : 'NO'}")
+          ServiceTestHelper.print_info("        PE found: #{api_pe ? 'YES' : 'NO'}")
+
+          if api_ce
+            ServiceTestHelper.print_success("        ✓ CE OI: #{api_ce['oi']}, IV: #{api_ce['implied_volatility']}%, LTP: ₹#{api_ce['last_price']}")
+          else
+            # Show what strikes ARE available in the API chain
+            available_strikes = api_chain.keys.map(&:to_f).sort
+            min_strike = available_strikes.first
+            max_strike = available_strikes.last
+            current_spot = analyzer.send(:spot_ltp) || ServiceTestHelper.fetch_ltp(segment: 'IDX_I',
+                                                                                   security_id: '13', suppress_rate_limit_warning: true) || 26_000.0
+            atm_range = available_strikes.select { |s| (s - current_spot).abs <= current_spot * 0.02 }.first(5)
+
+            ServiceTestHelper.print_warning("        ✗ CE not found for strike #{opt[:strike]}")
+            ServiceTestHelper.print_info("        API chain has #{available_strikes.size} strikes")
+            ServiceTestHelper.print_info("        Strike range: #{min_strike} - #{max_strike}")
+            ServiceTestHelper.print_info("        Looking for ATM (~#{current_spot.round}), but API has strikes: #{available_strikes.first(10).join(', ')}...")
+            if atm_range.any?
+              ServiceTestHelper.print_info("        Near ATM strikes in API: #{atm_range.join(', ')}")
+              ServiceTestHelper.print_warning("        ⚠️  Derivative strike #{opt[:strike]} doesn't match API chain strikes")
+              ServiceTestHelper.print_info('        This is likely because:')
+              ServiceTestHelper.print_info("          - Test derivative with synthetic strike#{' (TEST_ security ID)' if is_test}")
+              ServiceTestHelper.print_info('          - Derivative from different expiry than API chain')
+              ServiceTestHelper.print_info('          - Strike format mismatch')
             else
-              # Show what strikes ARE available in the API chain
-              available_strikes = api_chain.keys.map(&:to_f).sort
-              min_strike = available_strikes.first
-              max_strike = available_strikes.last
-              current_spot = analyzer.send(:spot_ltp) || ServiceTestHelper.fetch_ltp(segment: 'IDX_I', security_id: '13', suppress_rate_limit_warning: true) || 26_000.0
-              atm_range = available_strikes.select { |s| (s - current_spot).abs <= current_spot * 0.02 }.first(5)
-
-              ServiceTestHelper.print_warning("        ✗ CE not found for strike #{opt[:strike]}")
-              ServiceTestHelper.print_info("        API chain has #{available_strikes.size} strikes")
-              ServiceTestHelper.print_info("        Strike range: #{min_strike} - #{max_strike}")
-              ServiceTestHelper.print_info("        Looking for ATM (~#{current_spot.round}), but API has strikes: #{available_strikes.first(10).join(', ')}...")
-              if atm_range.any?
-                ServiceTestHelper.print_info("        Near ATM strikes in API: #{atm_range.join(', ')}")
-                ServiceTestHelper.print_warning("        ⚠️  Derivative strike #{opt[:strike]} doesn't match API chain strikes")
-                ServiceTestHelper.print_info("        This is likely because:")
-                ServiceTestHelper.print_info("          - Test derivative with synthetic strike#{is_test ? ' (TEST_ security ID)' : ''}")
-                ServiceTestHelper.print_info("          - Derivative from different expiry than API chain")
-                ServiceTestHelper.print_info("          - Strike format mismatch")
-              else
-                ServiceTestHelper.print_warning("        ⚠️  No strikes near current spot (#{current_spot.round}) in API chain")
-                ServiceTestHelper.print_warning("        This suggests: expiry mismatch, stale data, or market closed")
-              end
+              ServiceTestHelper.print_warning("        ⚠️  No strikes near current spot (#{current_spot.round}) in API chain")
+              ServiceTestHelper.print_warning('        This suggests: expiry mismatch, stale data, or market closed')
             end
           end
         end
 
-        ServiceTestHelper.print_info("  Sample PE options:")
+        ServiceTestHelper.print_info('  Sample PE options:')
         pe_options.first(3).each do |opt|
           derivative = opt[:derivative]
           is_test = derivative&.security_id.to_s.start_with?('TEST_')
@@ -231,10 +236,10 @@ begin
           atm = analyzer.send(:find_atm_strike, chain, spot)
           ServiceTestHelper.print_info("  ATM Strike: #{atm || 'nil (no spot available)'}")
         else
-          ServiceTestHelper.print_warning("  Cannot calculate ATM strike - spot price not available")
+          ServiceTestHelper.print_warning('  Cannot calculate ATM strike - spot price not available')
         end
 
-        ServiceTestHelper.print_info("  Filtering criteria:")
+        ServiceTestHelper.print_info('  Filtering criteria:')
         ServiceTestHelper.print_info("    min_oi: #{test_config[:min_oi]} (options with OI < this are filtered)")
         ServiceTestHelper.print_info("    min_iv: #{test_config[:min_iv]}% (options with IV < this are filtered)")
         ServiceTestHelper.print_info("    max_spread: #{test_config[:max_spread_pct] * 100}% (options with spread > this are filtered)")
@@ -242,20 +247,20 @@ begin
         # Count how many pass each filter
         ce_filtered = chain.select { |o| o[:type] == 'CE' }
         oi_passed = ce_filtered.count { |o| o[:oi].to_i >= test_config[:min_oi] }
-        iv_passed = ce_filtered.count { |o| o[:iv].to_f >= test_config[:min_iv] && o[:iv].to_f <= test_config[:max_iv] }
+        iv_passed = ce_filtered.count { |o| o[:iv].to_f.between?(test_config[:min_iv], test_config[:max_iv]) }
         spread_passed = ce_filtered.count do |o|
           spread = analyzer.send(:calc_spread, o[:bid], o[:ask], o[:ltp])
           spread && spread <= test_config[:max_spread_pct]
         end
 
-        ServiceTestHelper.print_info("  CE options filter results:")
+        ServiceTestHelper.print_info('  CE options filter results:')
         ServiceTestHelper.print_info("    Total CE: #{ce_filtered.size}")
         ServiceTestHelper.print_info("    Pass OI filter (>=#{test_config[:min_oi]}): #{oi_passed}")
         ServiceTestHelper.print_info("    Pass IV filter (#{test_config[:min_iv]}%-#{test_config[:max_iv]}%): #{iv_passed}")
         ServiceTestHelper.print_info("    Pass spread filter (<=#{test_config[:max_spread_pct] * 100}%): #{spread_passed}")
       end
     else
-      ServiceTestHelper.print_warning("  ✗ No expiry found")
+      ServiceTestHelper.print_warning('  ✗ No expiry found')
     end
   end
 rescue NameError
@@ -275,7 +280,8 @@ if nifty_instrument
     # Fetch option chain using Instrument#fetch_option_chain
     chain_data = nifty_instrument.fetch_option_chain
     if chain_data && chain_data[:oc]&.any?
-      spot_price = chain_data[:last_price]&.to_f || ServiceTestHelper.fetch_ltp(segment: 'IDX_I', security_id: '13', suppress_rate_limit_warning: true) || 26_000.0
+      spot_price = chain_data[:last_price]&.to_f || ServiceTestHelper.fetch_ltp(segment: 'IDX_I', security_id: '13',
+                                                                                suppress_rate_limit_warning: true) || 26_000.0
 
       # Get available strikes from option chain
       available_strikes = chain_data[:oc].keys.map(&:to_f).sort
@@ -300,23 +306,29 @@ if nifty_instrument
       ].select { |s| available_strikes.include?(s) }
 
       ServiceTestHelper.print_info("Spot Price: ₹#{spot_price.round(2)}, ATM Strike: #{atm_strike}")
-      ServiceTestHelper.print_info("CE Strikes (OTM): #{ce_strikes.map { |s| offset = (s - atm_strike) / strike_interval; offset == 0 ? "#{s} (ATM)" : "#{s} (ATM+#{offset.to_i})" }.join(', ')}")
-      ServiceTestHelper.print_info("PE Strikes (OTM): #{pe_strikes.map { |s| offset = (s - atm_strike) / strike_interval; offset == 0 ? "#{s} (ATM)" : "#{s} (ATM#{offset.to_i})" }.join(', ')}")
+      ServiceTestHelper.print_info("CE Strikes (OTM): #{ce_strikes.map do |s|
+        offset = (s - atm_strike) / strike_interval
+        offset.zero? ? "#{s} (ATM)" : "#{s} (ATM+#{offset.to_i})"
+      end.join(', ')}")
+      ServiceTestHelper.print_info("PE Strikes (OTM): #{pe_strikes.map do |s|
+        offset = (s - atm_strike) / strike_interval
+        offset.zero? ? "#{s} (ATM)" : "#{s} (ATM#{offset.to_i})"
+      end.join(', ')}")
 
       # Filter derivatives to only ATM/2OTM strikes with correct option types
       # Exclude test derivatives (security_id starts with "TEST_")
       # Only include current/upcoming expiries
-      today = Date.today
+      today = Time.zone.today
       derivatives = Derivative.where(underlying_symbol: 'NIFTY')
-                               .where(
-                                 '(strike_price IN (?) AND option_type = ?) OR (strike_price IN (?) AND option_type = ?)',
-                                 ce_strikes, 'CE',
-                                 pe_strikes, 'PE'
-                               )
-                               .where.not("security_id LIKE 'TEST_%'")
-                               .where('expiry_date >= ?', today)
-                               .order(:strike_price, :option_type, :expiry_date)
-                               .limit(20)
+                              .where(
+                                '(strike_price IN (?) AND option_type = ?) OR (strike_price IN (?) AND option_type = ?)',
+                                ce_strikes, 'CE',
+                                pe_strikes, 'PE'
+                              )
+                              .where.not("security_id LIKE 'TEST_%'")
+                              .where(expiry_date: today..)
+                              .order(:strike_price, :option_type, :expiry_date)
+                              .limit(20)
 
       ServiceTestHelper.print_info("NIFTY derivatives (ATM/2OTM, real only, current expiry): #{derivatives.count}")
 
@@ -327,9 +339,9 @@ if nifty_instrument
 
         grouped.each do |(strike, opt_type), group|
           offset = (strike - atm_strike) / strike_interval
-          strike_label = if offset == 0
+          strike_label = if offset.zero?
                            'ATM'
-                         elsif offset > 0
+                         elsif offset.positive?
                            "ATM+#{offset.to_i}"
                          else
                            "ATM#{offset.to_i}"
@@ -350,14 +362,14 @@ if nifty_instrument
         end
       else
         ServiceTestHelper.print_warning('No ATM/2OTM derivatives found in database')
-        ServiceTestHelper.print_info('Available strikes in option chain: ' + available_strikes.first(10).join(', ') + '...')
+        ServiceTestHelper.print_info("Available strikes in option chain: #{available_strikes.first(10).join(', ')}...")
       end
     else
       ServiceTestHelper.print_warning('No option chain data available - showing all derivatives (excluding test)')
       derivatives = Derivative.where(underlying_symbol: 'NIFTY')
-                               .where.not("security_id LIKE 'TEST_%'")
-                               .where('expiry_date >= ?', Date.today)
-                               .limit(5)
+                              .where.not("security_id LIKE 'TEST_%'")
+                              .where(expiry_date: Time.zone.today..)
+                              .limit(5)
       ServiceTestHelper.print_info("NIFTY derivatives: #{derivatives.count}")
       derivatives.each do |derivative|
         ServiceTestHelper.print_info("  #{derivative.strike_price} #{derivative.option_type} - Security ID: #{derivative.security_id}, Expiry: #{derivative.expiry_date}")
@@ -366,9 +378,9 @@ if nifty_instrument
   rescue StandardError => e
     ServiceTestHelper.print_warning("Failed to fetch option chain: #{e.message}")
     derivatives = Derivative.where(underlying_symbol: 'NIFTY')
-                             .where.not("security_id LIKE 'TEST_%'")
-                             .where('expiry_date >= ?', Date.today)
-                             .limit(5)
+                            .where.not("security_id LIKE 'TEST_%'")
+                            .where(expiry_date: Time.zone.today..)
+                            .limit(5)
     ServiceTestHelper.print_info("NIFTY derivatives: #{derivatives.count}")
     derivatives.each do |derivative|
       ServiceTestHelper.print_info("  #{derivative.strike_price} #{derivative.option_type} - Security ID: #{derivative.security_id}, Expiry: #{derivative.expiry_date}")
@@ -377,9 +389,9 @@ if nifty_instrument
 else
   ServiceTestHelper.print_warning('NIFTY instrument not found')
   derivatives = Derivative.where(underlying_symbol: 'NIFTY')
-                           .where.not("security_id LIKE 'TEST_%'")
-                           .where('expiry_date >= ?', Date.today)
-                           .limit(5)
+                          .where.not("security_id LIKE 'TEST_%'")
+                          .where(expiry_date: Time.zone.today..)
+                          .limit(5)
   ServiceTestHelper.print_info("NIFTY derivatives: #{derivatives.count}")
 end
 
@@ -458,7 +470,11 @@ if defined?(derivatives) && defined?(atm_strike) && defined?(strike_interval) &&
 
       if ltp&.positive?
         offset = (atm_derivative.strike_price - atm_strike) / strike_interval
-        strike_label = offset == 0 ? 'ATM' : (offset > 0 ? "ATM+#{offset.to_i}" : "ATM#{offset.to_i}")
+        strike_label = if offset.zero?
+                         'ATM'
+                       else
+                         (offset.positive? ? "ATM+#{offset.to_i}" : "ATM#{offset.to_i}")
+                       end
         expiry_str = atm_derivative.expiry_date.strftime('%Y-%m-%d')
         ServiceTestHelper.print_success("#{strike_label} (#{atm_derivative.strike_price} #{atm_derivative.option_type}, Expiry: #{expiry_str}): LTP = ₹#{ltp.round(2)}")
       else
@@ -473,7 +489,11 @@ if defined?(derivatives) && defined?(atm_strike) && defined?(strike_interval) &&
             test_ltp = derivative.ltp&.to_f
             if test_ltp&.positive?
               offset = (derivative.strike_price - atm_strike) / strike_interval
-              strike_label = offset == 0 ? 'ATM' : (offset > 0 ? "ATM+#{offset.to_i}" : "ATM#{offset.to_i}")
+              strike_label = if offset.zero?
+                               'ATM'
+                             else
+                               (offset.positive? ? "ATM+#{offset.to_i}" : "ATM#{offset.to_i}")
+                             end
               expiry_str = derivative.expiry_date.strftime('%Y-%m-%d')
               ServiceTestHelper.print_success("#{strike_label} (#{derivative.strike_price} #{derivative.option_type}, Expiry: #{expiry_str}): LTP = ₹#{test_ltp.round(2)}")
               found_ltp = true
@@ -486,11 +506,11 @@ if defined?(derivatives) && defined?(atm_strike) && defined?(strike_interval) &&
 
         unless found_ltp
           ServiceTestHelper.print_info("#{atm_derivative.strike_price} #{atm_derivative.option_type}: No LTP available")
-          ServiceTestHelper.print_info("  Tried: derivative.ltp(), TickCache, RedisTickCache, fetch_ltp_from_api_for_segment(), direct API")
-          ServiceTestHelper.print_info("  This is normal if:")
-          ServiceTestHelper.print_info("    - Market is closed")
-          ServiceTestHelper.print_info("    - Derivative is not actively traded")
-          ServiceTestHelper.print_info("    - WebSocket is not subscribed to this derivative")
+          ServiceTestHelper.print_info('  Tried: derivative.ltp(), TickCache, RedisTickCache, fetch_ltp_from_api_for_segment(), direct API')
+          ServiceTestHelper.print_info('  This is normal if:')
+          ServiceTestHelper.print_info('    - Market is closed')
+          ServiceTestHelper.print_info('    - Derivative is not actively traded')
+          ServiceTestHelper.print_info('    - WebSocket is not subscribed to this derivative')
         end
       end
     end
@@ -498,4 +518,3 @@ if defined?(derivatives) && defined?(atm_strike) && defined?(strike_interval) &&
 end
 
 ServiceTestHelper.print_success('Options services test completed')
-

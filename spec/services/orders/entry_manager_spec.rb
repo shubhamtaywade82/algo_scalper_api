@@ -4,11 +4,6 @@ require 'rails_helper'
 
 RSpec.describe Orders::EntryManager do
   let(:daily_limits) { instance_double(Live::DailyLimits) }
-
-  before do
-    allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
-    allow(daily_limits).to receive(:record_trade).and_return(true)
-  end
   let(:event_bus) { instance_double(Core::EventBus) }
   let(:active_cache) { instance_double(Positions::ActiveCache) }
   let(:entry_manager) { described_class.new(event_bus: event_bus, active_cache: active_cache) }
@@ -38,6 +33,8 @@ RSpec.describe Orders::EntryManager do
   let(:position_data) { instance_double(Positions::ActiveCache::PositionData) }
 
   before do
+    allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
+    allow(daily_limits).to receive(:record_trade).and_return(true)
     allow(Entries::EntryGuard).to receive(:try_enter).and_return(true)
     allow(entry_manager).to receive(:find_tracker_for_pick).and_return(tracker)
     allow(active_cache).to receive(:add_position).and_return(position_data)

@@ -7,9 +7,9 @@
 require_relative '../config/environment'
 
 index_key = ARGV[0] || 'NIFTY'
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts "  Testing StrikeSelector for #{index_key}"
-puts ('=' * 80) + "\n"
+puts "#{'=' * 80}\n"
 
 # 1. Check AlgoConfig
 puts "\n--- 1. Checking AlgoConfig ---"
@@ -228,6 +228,6 @@ rescue StandardError => e
   puts "⚠️  Could not check MarketFeedHub: #{e.message}"
 end
 
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts '  Test Complete'
-puts ('=' * 80) + "\n"
+puts "#{'=' * 80}\n"

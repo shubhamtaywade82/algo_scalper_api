@@ -113,17 +113,17 @@ class PositionTracker < ApplicationRecord
       # Calculate average per-trade percentages (for reference)
       # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
       avg_realized_pnl_pct = if exited.any?
-                               (exited.map do |t|
-                                 (t.last_pnl_pct.to_f || 0.0) * 100.0
-                               end.compact.sum / exited.count.to_f).round(2)
+                               (exited.filter_map do |t|
+                                 t.last_pnl_pct.to_f * 100.0
+                               end.sum / exited.count.to_f).round(2)
                              else
                                0.0
                              end
       # current_pnl_pct returns decimal from Redis, convert to percentage for display
       avg_unrealized_pnl_pct = if active.any?
-                                 (active.map do |t|
+                                 (active.filter_map do |t|
                                    (t.current_pnl_pct || 0).to_f * 100.0
-                                 end.compact.sum / active.count.to_f).round(2)
+                                 end.sum / active.count.to_f).round(2)
                                else
                                  0.0
                                end

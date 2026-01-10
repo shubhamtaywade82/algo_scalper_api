@@ -20,7 +20,7 @@ selector = Signal::IndexSelector.new(
   }
 )
 
-ServiceTestHelper.print_info("IndexSelector initialized with min_trend_score: 15.0")
+ServiceTestHelper.print_info('IndexSelector initialized with min_trend_score: 15.0')
 
 # Test 2: Select best index
 ServiceTestHelper.print_section('2. Select Best Index')
@@ -32,7 +32,7 @@ if best_index
   ServiceTestHelper.print_info("  Reason: #{best_index[:reason]}")
 
   if best_index[:breakdown]
-    ServiceTestHelper.print_info("  Breakdown:")
+    ServiceTestHelper.print_info('  Breakdown:')
     ServiceTestHelper.print_info("    PA: #{best_index[:breakdown][:pa].round(2)}/7")
     ServiceTestHelper.print_info("    IND: #{best_index[:breakdown][:ind].round(2)}/7")
     ServiceTestHelper.print_info("    MTF: #{best_index[:breakdown][:mtf].round(2)}/7")
@@ -60,13 +60,13 @@ if best_index
     end
   end
 else
-  ServiceTestHelper.print_warning("No index qualified (all below minimum trend score or error)")
+  ServiceTestHelper.print_warning('No index qualified (all below minimum trend score or error)')
 end
 
 # Test 5: Test with all configured indices
 ServiceTestHelper.print_section('5. All Configured Indices')
 indices = AlgoConfig.fetch[:indices] || []
-ServiceTestHelper.print_info("Configured indices: #{indices.map { |idx| idx[:key] }.join(', ')}")
+ServiceTestHelper.print_info("Configured indices: #{indices.pluck(:key).join(', ')}")
 
 indices.each do |index_cfg|
   index_key = index_cfg[:key] || index_cfg['key']
@@ -79,12 +79,9 @@ indices.each do |index_cfg|
   scorer = Signal::TrendScorer.new(instrument: instrument, primary_tf: '1m', confirmation_tf: '5m')
   result = scorer.compute_trend_score
 
-  if result && result[:trend_score]
-    ServiceTestHelper.print_info("  #{index_key}: #{result[:trend_score].round(2)}/21")
-  end
+  ServiceTestHelper.print_info("  #{index_key}: #{result[:trend_score].round(2)}/21") if result && result[:trend_score]
 end
 
 ServiceTestHelper.print_section('Summary')
-ServiceTestHelper.print_info("IndexSelector test completed")
-ServiceTestHelper.print_info("Use this service to select the best index for trading based on trend scores")
-
+ServiceTestHelper.print_info('IndexSelector test completed')
+ServiceTestHelper.print_info('Use this service to select the best index for trading based on trend scores')

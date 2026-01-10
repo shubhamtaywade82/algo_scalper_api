@@ -117,7 +117,7 @@ module Notifications
       end
 
       def format_ai_analysis
-        return '' unless @signal.ai_analysis.present?
+        return '' if @signal.ai_analysis.blank?
 
         # Escape HTML special characters
         analysis = escape_html(@signal.ai_analysis.to_s.strip)
@@ -196,7 +196,7 @@ module Notifications
 
         # Get available strikes (keys are strings like "24000.000000")
         strike_map = {} # float => string key mapping
-        chain_data[:oc].each do |strike_str, _data|
+        chain_data[:oc].each_key do |strike_str|
           strike_float = strike_str.to_f
           strike_map[strike_float] = strike_str
         end

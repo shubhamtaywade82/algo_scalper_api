@@ -57,4 +57,3 @@ end
 
 ServiceTestHelper.print_success('Signal Scheduler test completed')
 ServiceTestHelper.print_info('Scheduler runs continuously - check logs for signal details')
-

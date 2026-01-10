@@ -23,19 +23,19 @@ module Services
         @client = Services::Ai::OpenaiClient.instance
       end
 
-      def analyze_trading_day(date: Time.zone.today, stream: false, &block)
+      def analyze_trading_day(date: Time.zone.today, stream: false)
         return nil unless @client.enabled?
 
         stats = PositionTracker.paper_trading_stats_with_pct(date: date)
         positions = PositionTracker.paper
-                                   .where('created_at >= ?', date.beginning_of_day)
+                                   .where(created_at: date.beginning_of_day..)
                                    .exited
                                    .order(:exited_at)
                                    .limit(50) # Limit for token efficiency
 
         prompt = build_analysis_prompt(stats: stats, positions: positions, date: date)
 
-        pp prompt
+        Rails.logger.debug prompt
         # Auto-select model (will use best available for Ollama)
         model = if @client.provider == :ollama
                   @client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3'
@@ -90,7 +90,7 @@ module Services
         nil
       end
 
-      def suggest_strategy_improvements(performance_data:, stream: false, &block)
+      def suggest_strategy_improvements(performance_data:, stream: false)
         return nil unless @client.enabled?
 
         prompt = build_strategy_prompt(performance_data: performance_data)
@@ -148,7 +148,7 @@ module Services
         nil
       end
 
-      def analyze_market_conditions(market_data:, stream: false, &block)
+      def analyze_market_conditions(market_data:, stream: false)
         return nil unless @client.enabled?
 
         prompt = build_market_analysis_prompt(market_data: market_data)

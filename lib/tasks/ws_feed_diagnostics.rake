@@ -7,4 +7,3 @@ namespace :ws do
     WsFeedDiagnostics.run
   end
 end
-
