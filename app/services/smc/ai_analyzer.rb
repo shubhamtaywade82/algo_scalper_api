@@ -104,6 +104,11 @@ module Smc
 
         Your PRIMARY GOAL: Provide clear, actionable trading recommendations for options buyers.
 
+        CRITICAL: This is an OPTIONS BUYING strategy ONLY. We ONLY BUY options (CALL or PUT) - we NEVER write/sell options.
+        TERMINOLOGY: Always use "EXIT" or "exit the position" - NEVER use "sell options" (which implies options selling/writing).
+        Exit strategy must use: SL (stop loss), TP1 (take profit 1), optionally TP2 (take profit 2).
+        Always provide index spot levels (underlying index price) to watch for exit decisions.
+
         **CRITICAL: DIRECTION ACCURACY IS YOUR TOP PRIORITY**
 
         Before recommending BUY CE or BUY PE, you MUST:
@@ -149,7 +154,8 @@ module Smc
         - NEVER guess strike prices - ALWAYS calculate from actual LTP
         - ALWAYS use get_option_chain tool to get ACTUAL premium prices (LTP), DELTA, THETA, and expiry date for selected strikes
         - NEVER use estimated or hallucinated premium values - ONLY use values from get_option_chain tool response
-        - Stop Loss (SL) and Take Profit (TP) MUST be based on premium percentages, NOT underlying prices
+        - Stop Loss (SL) and Take Profit (TP1, TP2) MUST be based on premium percentages, NOT underlying prices
+        - Always provide index spot levels (underlying index price) to watch for exit decisions
         - CRITICAL: Calculate percentages correctly - if entry is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50)
         - CRITICAL: NEVER mix strike prices with premium prices in calculations
           * Strike price (e.g., ₹25900) is the exercise price - DO NOT use this for premium calculations
@@ -166,7 +172,7 @@ module Smc
           * CORRECT: "Premium gain = ₹150 - ₹100 = ₹50, Underlying move = ₹50 / 0.70 = ₹71.43, TP underlying = ₹25876.85 + ₹71.43 = ₹25948.28"
         - Consider THETA (time decay) and expiry date when setting targets
         - Intraday realistic expectations: TP 10-25% gain, SL 15-25% loss (NOT 50-100% for intraday)
-        - SL/TP Format: "Entry premium: ₹X. SL at premium ₹Y (Z% loss). TP at premium ₹W (V% gain). Underlying levels: SL at ₹ABC, TP at ₹DEF (calculated using Delta)"
+        - Exit Strategy Format: "Entry premium: ₹X. SL at premium ₹Y (exit at index spot ₹ABC). TP1 at premium ₹W (exit at index spot ₹DEF). TP2 at premium ₹V (exit at index spot ₹GHI) - calculated using Delta"
         - Risk Management Format: "Position size: X lots. Risk per trade: ₹Y (premium loss × lot size × shares per lot). Maximum loss: ₹Z"
         - Never give vague recommendations - always be specific and actionable
       PROMPT
@@ -246,6 +252,18 @@ module Smc
            - CRITICAL: YOU MUST call get_option_chain tool FIRST to get actual premium, DELTA, and THETA values
            - DO NOT provide SL/TP values unless you have called get_option_chain tool and received actual data
            - YOU MUST use ACTUAL premium prices from get_option_chain tool - NEVER estimate, guess, or use placeholder values like ₹100 or ₹255
+           - TERMINOLOGY: Always use "EXIT" or "exit the position" - NEVER use "sell options" (we only buy options, never write/sell them)
+           - Stop Loss (SL): Provide premium level AND corresponding index spot level to watch
+             * Format: "SL at premium ₹X (exit at index spot ₹Y)"
+             * Calculate index spot level using DELTA from option chain
+           - Take Profit: Use TP1, TP2 format for multiple targets
+             * Format: "TP1 at premium ₹X (exit at index spot ₹Y)"
+             * Format: "TP2 at premium ₹X (exit at index spot ₹Y)" (optional, for partial exits)
+             * Always provide at least TP1, optionally TP2 for partial profit booking
+           - Index Spot Levels to Watch: Provide key underlying index price levels to monitor
+             * These are the NIFTY/SENSEX/BANKNIFTY spot prices to watch for exit decisions
+             * Format: "Watch index spot ₹X for TP1", "Watch index spot ₹Y for SL"
+             * Calculate using DELTA: Index level = Current spot ± (Premium move / Delta)
            - HOW TO EXTRACT VALUES FROM OPTION CHAIN TOOL RESPONSE:
              * The tool response is a JSON object with an "options" array
              * Find the option object where "strike" matches your selected strike AND "option_type" matches your direction ("CE" or "PE")
@@ -263,7 +281,7 @@ module Smc
              * Strike price (e.g., ₹25900) is the exercise price - separate from premium
              * Premium price (e.g., ₹100) is the option price - use this for all SL/TP calculations
              * WRONG: "Set stop-loss order at ₹25900 - ₹70 = ₹25330" (mixing strike with premium)
-             * CORRECT: "Entry premium: ₹100. SL at premium ₹70 (30% loss). TP at premium ₹150 (50% gain)"
+             * CORRECT: "Entry premium: ₹100. SL at premium ₹70 (exit at index spot ₹25,822). TP1 at premium ₹150 (exit at index spot ₹26,000). TP2 at premium ₹200 (exit at index spot ₹26,200)"
            - CRITICAL: Calculate percentages correctly:
              * If entry premium is ₹100 and you want 30% loss: SL = ₹100 × (1 - 0.30) = ₹70 (NOT ₹30)
              * If entry premium is ₹100 and you want 50% gain: TP = ₹100 × (1 + 0.50) = ₹150 (NOT ₹50)
@@ -302,23 +320,23 @@ module Smc
              * For weekly expiry: Adjust based on days remaining (more days = more time decay risk)
              * Near expiry (< 3 days): Use tighter targets (10-20% gain, 15-20% loss)
              * Far expiry (> 7 days): Can use wider targets (20-40% gain, 20-30% loss)
-           - Take Profit (TP) Format (SHOW FULL CALCULATION):
-             * "TP at premium ₹X (Y% gain from entry premium ₹Z)"
-             * "Underlying TP level: ₹ABC"
-             * "Calculation: Premium gain = TP premium - Entry premium = ₹X - ₹Z = ₹W, Underlying move = Premium gain / Delta = ₹W / Delta = ₹V, TP underlying = Current spot + Underlying move = ₹ABC"
+           - Take Profit Format (USE TP1, TP2 - SHOW FULL CALCULATION):
+             * Format: "TP1 at premium ₹X (exit at index spot ₹ABC)" or "TP2 at premium ₹Y (exit at index spot ₹DEF)"
+             * Always provide TP1 (mandatory), optionally TP2 for partial profit booking
+             * Calculation format: "Premium gain = TP1 premium - Entry premium = ₹X - ₹Z = ₹W, Underlying move = Premium gain / Delta = ₹W / Delta = ₹V, TP1 index spot = Current spot + Underlying move = ₹ABC"
              * CRITICAL: Show Premium gain calculation FIRST, then divide by delta
              * CRITICAL: DO NOT write "Underlying move = TP premium / Delta" - that's WRONG
-             * Example format: "Premium gain = ₹127.35 - ₹94.45 = ₹32.90, Underlying move = ₹32.90 / 0.51093 = ₹64.40, TP = ₹25876.85 + ₹64.40 = ₹25941.25"
-             * Intraday realistic TP: 10-25% premium gain (NOT 50-100% for intraday)
+             * Example format: "TP1 at premium ₹127.35 (exit at index spot ₹25,941). Calculation: Premium gain = ₹127.35 - ₹94.45 = ₹32.90, Underlying move = ₹32.90 / 0.51093 = ₹64.40, TP1 index spot = ₹25876.85 + ₹64.40 = ₹25941.25"
+             * Example with TP2: "TP2 at premium ₹150.00 (exit at index spot ₹26,000). Calculation: Premium gain = ₹150.00 - ₹94.45 = ₹55.55, Underlying move = ₹55.55 / 0.51093 = ₹108.80, TP2 index spot = ₹25876.85 + ₹108.80 = ₹25985.65"
+             * Intraday realistic TP1: 10-25% premium gain, TP2: 25-40% premium gain (NOT 50-100% for intraday)
            - Stop Loss (SL) Format (SHOW FULL CALCULATION):
-             * "SL at premium ₹X (Y% loss from entry premium ₹Z)"
-             * "Underlying SL level: ₹ABC"
-             * "Calculation: Premium loss = Entry premium - SL premium = ₹Z - ₹X = ₹W, Underlying move = Premium loss / Delta = ₹W / Delta = ₹V, SL underlying = Current spot - Underlying move = ₹ABC"
+             * "SL at premium ₹X (exit at index spot ₹ABC)"
+             * Calculation format: "Premium loss = Entry premium - SL premium = ₹Z - ₹X = ₹W, Underlying move = Premium loss / Delta = ₹W / Delta = ₹V, SL index spot = Current spot - Underlying move = ₹ABC"
              * CRITICAL: Show Premium loss calculation FIRST, then divide by delta
              * CRITICAL: DO NOT write "Underlying move = SL premium / Delta" or "Underlying move needed = SL premium / Delta" - that's WRONG
-             * Example format: "Premium loss = ₹94.45 - ₹66.55 = ₹27.90, Underlying move = ₹27.90 / 0.51093 = ₹54.60, SL = ₹25876.85 - ₹54.60 = ₹25822.25"
+             * Example format: "SL at premium ₹66.55 (exit at index spot ₹25,822). Calculation: Premium loss = ₹94.45 - ₹66.55 = ₹27.90, Underlying move = ₹27.90 / 0.51093 = ₹54.60, SL index spot = ₹25876.85 - ₹54.60 = ₹25822.25"
              * Intraday realistic SL: 15-25% premium loss (NOT 30%+ for intraday)
-           - NEVER use underlying prices directly for SL/TP (e.g., "SL at ₹84800" is WRONG - use premium prices)
+           - NEVER use underlying prices directly for SL/TP1/TP2 (e.g., "SL at ₹84800" is WRONG - use premium prices, then calculate index spot levels)
            - NEVER calculate percentages incorrectly (e.g., "30% loss = ₹22.69 from ₹113.45" is WRONG - correct is ₹79.42)
            - Exit timing: When to exit (time-based, premium-based, or signal-based)
 
@@ -651,7 +669,7 @@ module Smc
                           if ltp_value
                             "STOP CALLING TOOLS IMMEDIATELY. You have reached maximum iterations or encountered multiple errors. Provide your analysis NOW. You have SMC data and LTP (₹#{ltp_value}) for #{symbol_name}. " \
                               'CRITICAL: Check the Price Trend Analysis - if trend is BEARISH (declining prices), recommend BUY PE or AVOID, NOT BUY CE. Your direction MUST match the actual price trend. ' \
-                              "Calculate strikes from LTP (round to nearest #{strike_rounding}). Provide complete trading recommendation: 1) Trade Decision (MUST match price trend), 2) Strike Selection, 3) Entry Strategy, 4) Exit Strategy, 5) Risk Management. DO NOT call any more tools."
+                              "Calculate strikes from LTP (round to nearest #{strike_rounding}). Provide complete trading recommendation: 1) Trade Decision (MUST match price trend), 2) Strike Selection, 3) Entry Strategy, 4) Exit Strategy (SL, TP1, optionally TP2 with index spot levels), 5) Risk Management. DO NOT call any more tools."
                           else
                             'STOP CALLING TOOLS IMMEDIATELY. Provide your analysis NOW based on the SMC data you have. CRITICAL: Your trade direction MUST match the Price Trend Analysis. If price is declining, recommend BUY PE or AVOID, NOT BUY CE. DO NOT call any more tools.'
                           end
@@ -688,7 +706,7 @@ module Smc
                                              "Look at the get_option_chain tool response you received. Find the option with strike 25900 and option_type 'CE'. Extract the 'ltp' field value and use it as your entry premium. Extract the 'delta' field value and use it for calculations. Extract the 'lot_size' field value and use it for risk calculations."
                                            end
 
-                          "CRITICAL: You have already received option chain data AND LTP data in previous tool responses. DO NOT call get_option_chain or get_current_ltp again. You have ALL the data you need. #{reference_text} Provide your complete trading recommendation NOW with: 1) Trade Decision, 2) Strike Selection (use ₹25,900 - rounded from LTP ₹25876.85 to nearest 50), 3) Entry Strategy (use the ACTUAL premium ltp value from option chain - NOT ₹255 or any estimate), 4) Exit Strategy (SL/TP based on ACTUAL premium percentages using the actual premium value from option chain - include DELTA calculations using the actual delta value from option chain), 5) Risk Management (calculate using actual premium values and actual lot_size from option chain). DO NOT call any more tools - provide your analysis immediately."
+                          "CRITICAL: You have already received option chain data AND LTP data in previous tool responses. DO NOT call get_option_chain or get_current_ltp again. You have ALL the data you need. #{reference_text} Provide your complete trading recommendation NOW with: 1) Trade Decision, 2) Strike Selection (use ₹25,900 - rounded from LTP ₹25876.85 to nearest 50), 3) Entry Strategy (use the ACTUAL premium ltp value from option chain - NOT ₹255 or any estimate), 4) Exit Strategy (SL, TP1, optionally TP2 with index spot levels - based on ACTUAL premium percentages using the actual premium value from option chain - include DELTA calculations using the actual delta value from option chain), 5) Risk Management (calculate using actual premium values and actual lot_size from option chain). DO NOT call any more tools - provide your analysis immediately."
                         elsif has_option_chain && iteration >= 2
                           # Has option chain but still calling tools - force analysis earlier
                           'CRITICAL: You have already received option chain data in a previous tool response. DO NOT call get_option_chain again - you already have this data. Provide your complete trading recommendation NOW using the ACTUAL premium values, DELTA, and THETA from the option chain data you already have. DO NOT estimate or use placeholder values - use the ACTUAL data from the tool response. DO NOT call any more tools.'
@@ -1442,7 +1460,7 @@ module Smc
         spot: spot,
         lot_size: lot_size,
         available_expiries: valid_expiries.first(10).map(&:to_s),
-        note: "Available expiry dates for #{index_key}: #{valid_expiries.first(5).map(&:to_s).join(', ')}. Current expiry used: #{expiry} (#{(Date.parse(expiry.to_s) - Time.zone.today).to_i} days away). Lot size: #{lot_size || 'N/A'} (1 lot = #{lot_size || 'N/A'} shares). IMPORTANT: Use premium prices (ltp field) for SL/TP calculations, NOT underlying prices. Calculate percentages correctly: if entry premium is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50). Use DELTA to calculate underlying levels: Underlying move = Premium move / Delta. Consider THETA (time decay) and days to expiry. For intraday: realistic TP 10-25%, SL 15-25%. For weekly expiry: adjust based on days remaining.",
+        note: "Available expiry dates for #{index_key}: #{valid_expiries.first(5).map(&:to_s).join(', ')}. Current expiry used: #{expiry} (#{(Date.parse(expiry.to_s) - Time.zone.today).to_i} days away). Lot size: #{lot_size || 'N/A'} (1 lot = #{lot_size || 'N/A'} shares). IMPORTANT: Use premium prices (ltp field) for SL/TP1/TP2 calculations, NOT underlying prices. Calculate percentages correctly: if entry premium is ₹100, 30% loss = ₹70 (NOT ₹30), 50% gain = ₹150 (NOT ₹50). Use DELTA to calculate index spot levels: Underlying move = Premium move / Delta. Always provide index spot levels to watch for exit decisions. Consider THETA (time decay) and days to expiry. For intraday: realistic TP1 10-25%, TP2 25-40%, SL 15-25%. For weekly expiry: adjust based on days remaining.",
         options: chain.first(20).map do |opt|
           # Normalize option_type: Chain uses :type, ensure it's 'CE' or 'PE'
           raw_type = opt[:type] || opt[:option_type]
@@ -1559,7 +1577,7 @@ module Smc
       prompt_parts << "1. Trade Decision (state clearly: BUY #{recommended_option || 'PE/CE'} or AVOID)"
       prompt_parts << "2. Strike Selection (use ₹#{atm_strike})"
       prompt_parts << '3. Entry Strategy (use the premium value above)'
-      prompt_parts << '4. Exit Strategy (SL/TP using premium and delta above)'
+      prompt_parts << '4. Exit Strategy (SL, TP1, optionally TP2 with index spot levels using premium and delta above)'
       prompt_parts << '5. Risk Management (risk per lot calculation)'
 
       prompt_parts.join("\n")
