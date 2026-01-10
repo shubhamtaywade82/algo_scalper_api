@@ -2,7 +2,7 @@
 
 # Background job to run SMC scanner for all configured indices
 class SmcScannerJob < ApplicationJob
-  queue_as :default
+  queue_as :background
 
   # Retry with exponential backoff for transient failures
   # Use proc for exponential backoff: 2^attempt seconds
