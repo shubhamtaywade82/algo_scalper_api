@@ -195,6 +195,16 @@ module Signal
 
         Rails.logger.info("[Signal] Proceeding with #{final_direction} signal for #{index_cfg[:key]}")
 
+        # ===== PERMISSION RESOLUTION (HARD) =====
+        # Source-of-truth permission derived from SMC + AVRZ (deterministic).
+        permission = Trading::PermissionResolver.resolve(symbol: index_cfg[:key], instrument: instrument)
+        if permission == :blocked
+          Rails.logger.info("[Signal] PermissionResolver BLOCKED #{index_cfg[:key]} - no trade")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+        # ===== END PERMISSION RESOLUTION =====
+
         # Get state snapshot first for signal persistence
         state_snapshot = Signal::StateTracker.record(
           index_key: index_cfg[:key],
@@ -202,8 +212,6 @@ module Signal
           candle_timestamp: primary_analysis[:last_candle_timestamp],
           config: signals_cfg
         )
-
-        permission = permission_from_state_snapshot(state_snapshot)
 
         # Persist signal with confidence score
         confidence_score = calculate_confidence_score(
@@ -294,20 +302,6 @@ module Signal
       rescue StandardError => e
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
         Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
-      end
-
-      def permission_from_state_snapshot(state_snapshot)
-        count = state_snapshot.is_a?(Hash) ? state_snapshot[:count].to_i : 0
-
-        if count <= 1
-          :execution_only
-        elsif count == 2
-          :scale_ready
-        else
-          :full_deploy
-        end
-      rescue StandardError
-        :blocked
       end
 
       def analyze_timeframe(index_cfg:, instrument:, timeframe:, supertrend_cfg:, adx_min_strength:)

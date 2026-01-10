@@ -75,6 +75,14 @@ module Entries
         symbol = index_cfg[:key].to_s.upcase
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
 
+        # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
+        if %w[NIFTY SENSEX].include?(symbol)
+          unless weekly_contract?(pick: pick, index_cfg: index_cfg)
+            Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
+            return false
+          end
+        end
+
         profile = Trading::InstrumentExecutionProfile.for(symbol)
 
         if permission_sym == :execution_only && profile[:allow_execution_only] == false
@@ -349,6 +357,27 @@ module Entries
 
         last = Rails.cache.read("reentry:#{symbol}")
         last.present? && (Time.current - last) < cooldown
+      end
+
+      def weekly_contract?(pick:, index_cfg:)
+        # Prefer derivative_id if present
+        derivative =
+          if pick[:derivative_id].present?
+            Derivative.find_by(id: pick[:derivative_id])
+          else
+            Derivative.find_by(
+              security_id: pick[:security_id].to_s,
+              segment: (pick[:segment] || index_cfg[:segment]).to_s
+            )
+          end
+
+        return false unless derivative
+
+        flag = derivative.expiry_flag.to_s.upcase
+        flag.start_with?('W') # WEEK / WEEKLY
+      rescue StandardError => e
+        Rails.logger.warn("[EntryGuard] Weekly contract check failed: #{e.class} - #{e.message}")
+        false
       end
 
       # Checks if we need to fetch LTP from REST API

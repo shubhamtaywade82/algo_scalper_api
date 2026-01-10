@@ -102,12 +102,31 @@ module Options
         end
       end
 
-      next_expiry = parsed.select { |date| date >= today }.min
-      next_expiry&.strftime('%Y-%m-%d')
+      future = parsed.select { |date| date >= today }.sort
+      return nil if future.empty?
+
+      # Weekly expiry only (hard rule) for NIFTY/SENSEX.
+      # Prefer expiry dates that have WEEK derivatives in DB.
+      if %w[NIFTY SENSEX].include?(@index_key)
+        weekly = future.find { |d| weekly_expiry_in_db?(d) }
+        return weekly.strftime('%Y-%m-%d') if weekly
+      end
+
+      future.first.strftime('%Y-%m-%d')
     end
 
     # Public alias for find_nearest_expiry
     alias nearest_expiry find_nearest_expiry
+
+    def weekly_expiry_in_db?(expiry_date)
+      expiry = expiry_date.is_a?(Date) ? expiry_date : Date.parse(expiry_date.to_s)
+      Derivative.where(underlying_symbol: @index_key, expiry_date: expiry)
+                .where("expiry_flag ILIKE 'W%'")
+                .where.not(option_type: [nil, ''])
+                .exists?
+    rescue StandardError
+      false
+    end
 
     # Load chain using Derivative records and merge with live data
     # Public method for external access
