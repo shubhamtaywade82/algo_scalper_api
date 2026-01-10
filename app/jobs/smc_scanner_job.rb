@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../lib/telegram_notifier'
+
 # Background job to run SMC scanner for all configured indices
 class SmcScannerJob < ApplicationJob
   queue_as :background
@@ -45,6 +47,22 @@ class SmcScannerJob < ApplicationJob
         decision = engine.decision # This will enqueue Telegram alert job if conditions met
 
         Rails.logger.info("[SmcScannerJob] #{idx_cfg[:key]}: #{decision}")
+
+        # If AI is enabled, get AI analysis and send notification (matching rake task behavior)
+        if engine.ai_enabled?
+          Rails.logger.info("[SmcScannerJob] Getting AI analysis for #{idx_cfg[:key]} #{decision} signal...")
+          ai_analysis = engine.analyze_with_ai
+          if ai_analysis.present?
+            Rails.logger.info("[SmcScannerJob] AI Analysis for #{idx_cfg[:key]}:")
+            Rails.logger.info(ai_analysis)
+
+            # Send instant Telegram notification with AI analysis
+            send_ai_analysis_telegram_notification(idx_cfg[:key], decision, ai_analysis)
+          else
+            Rails.logger.warn("[SmcScannerJob] AI analysis returned empty for #{idx_cfg[:key]}")
+          end
+        end
+
         success_count += 1
       rescue DhanHQ::RateLimitError => e
         Rails.logger.error("[SmcScannerJob] Rate limit error for #{idx_cfg[:key]}: #{e.message}")
@@ -157,5 +175,35 @@ class SmcScannerJob < ApplicationJob
     max_days.to_i
   rescue StandardError
     7 # Default to 7 days if config unavailable
+  end
+
+  # Send instant Telegram notification with AI analysis
+  # Sends synchronously (not via background job) for immediate delivery
+  # This matches the behavior of the rake task
+  def send_ai_analysis_telegram_notification(index_key, decision, ai_analysis)
+    return unless telegram_enabled?
+
+    # Format message with index, decision, and AI analysis
+    message = <<~MESSAGE
+      🤖 <b>SMC AI Analysis: #{index_key}</b>
+
+      <b>Decision:</b> #{decision.to_s.upcase}
+
+      <b>AI Analysis:</b>
+      #{ai_analysis}
+    MESSAGE
+
+    begin
+      TelegramNotifier.send_message(message, parse_mode: 'HTML')
+      Rails.logger.info("[SmcScannerJob] Sent AI analysis Telegram notification for #{index_key}")
+    rescue StandardError => e
+      Rails.logger.error("[SmcScannerJob] Failed to send AI analysis Telegram notification: #{e.class} - #{e.message}")
+    end
+  end
+
+  def telegram_enabled?
+    ENV['TELEGRAM_BOT_TOKEN'].present? && ENV['TELEGRAM_CHAT_ID'].present?
+  rescue StandardError
+    false
   end
 end

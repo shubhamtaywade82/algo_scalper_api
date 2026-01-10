@@ -5,6 +5,13 @@ require 'English'
 class AiTechnicalAnalysisJob < ApplicationJob
   queue_as :background
 
+  # Mutex to serialize chdir operations (Dir.chdir is not thread-safe)
+  @chdir_mutex = Mutex.new
+
+  class << self
+    attr_reader :chdir_mutex
+  end
+
   def perform(index_name)
     market_closed = TradingSession::Service.market_closed?
 
@@ -21,14 +28,17 @@ class AiTechnicalAnalysisJob < ApplicationJob
 
     # Execute the rake task with STREAM environment variable
     # Change to Rails root directory and execute
-    Dir.chdir(Rails.root) do
-      # Set environment variable and execute command
-      result = system({ 'STREAM' => 'true' }, "bundle exec rake 'ai:technical_analysis[\"#{query}\"]'")
+    # Use mutex to serialize chdir operations (Dir.chdir is not thread-safe)
+    self.class.chdir_mutex.synchronize do
+      Dir.chdir(Rails.root) do
+        # Set environment variable and execute command
+        result = system({ 'STREAM' => 'true' }, "bundle exec rake 'ai:technical_analysis[\"#{query}\"]'")
 
-      if result
-        Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")
-      else
-        Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$CHILD_STATUS.exitstatus})")
+        if result
+          Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")
+        else
+          Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$CHILD_STATUS.exitstatus})")
+        end
       end
     end
   rescue StandardError => e
