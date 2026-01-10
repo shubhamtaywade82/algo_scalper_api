@@ -8,7 +8,7 @@ module Notifications
       # Retry with exponential backoff for transient failures
       retry_on StandardError, wait: :exponentially_longer, attempts: 3
 
-      def perform(instrument_id:, decision:, htf_context:, mtf_context:, ltf_context:, price:)
+      def perform(instrument_id:, decision:, contexts:, price:)
         instrument = Instrument.find_by(id: instrument_id)
         unless instrument
           Rails.logger.warn("[SendSmcAlertJob] Instrument not found: #{instrument_id}")
@@ -18,17 +18,13 @@ module Notifications
         Rails.logger.info("[SendSmcAlertJob] Processing alert for #{instrument.symbol_name} - #{decision}")
 
         # Fetch AI analysis asynchronously (this is the slow part)
-        ai_analysis = fetch_ai_analysis(instrument, decision, htf_context, mtf_context, ltf_context)
+        ai_analysis = fetch_ai_analysis(instrument, decision, contexts)
 
         # Enforce permission-based AI output constraints (no discretionary overrides)
         permission = decision.to_s == 'no_trade' ? :blocked : :scale_ready
         Trading::AiOutputSanitizer.validate!(permission: permission, output: ai_analysis) if ai_analysis.present?
 
-        if ai_analysis.present?
-          Rails.logger.info("[SendSmcAlertJob] AI analysis received (#{ai_analysis.length} chars) for #{instrument.symbol_name}")
-        else
-          Rails.logger.warn("[SendSmcAlertJob] AI analysis is empty or nil for #{instrument.symbol_name}")
-        end
+        log_ai_analysis_status(instrument: instrument, ai_analysis: ai_analysis)
 
         # Build signal event
         signal = Smc::SignalEvent.new(
@@ -36,7 +32,7 @@ module Notifications
           decision: decision.to_sym,
           timeframe: '5m',
           price: price,
-          reasons: build_reasons(htf_context, mtf_context, ltf_context),
+          reasons: build_reasons(contexts),
           ai_analysis: ai_analysis
         )
 
@@ -54,8 +50,12 @@ module Notifications
 
       private
 
-      def fetch_ai_analysis(instrument, decision, htf_context, mtf_context, ltf_context)
+      def fetch_ai_analysis(instrument, decision, contexts)
         return nil unless ai_enabled?
+
+        htf_context = contexts[:htf] || {}
+        mtf_context = contexts[:mtf] || {}
+        ltf_context = contexts[:ltf] || {}
 
         begin
           # Fetch fresh AVRZ data (this is the only real-time data we need)
@@ -98,7 +98,11 @@ module Notifications
         false
       end
 
-      def build_reasons(htf_context, mtf_context, ltf_context)
+      def build_reasons(contexts)
+        htf_context = contexts[:htf] || {}
+        mtf_context = contexts[:mtf] || {}
+        ltf_context = contexts[:ltf] || {}
+
         reasons = []
 
         # Use serialized context data to build reasons
@@ -113,9 +117,8 @@ module Notifications
         end
 
         # Check for CHoCH in MTF swing structure
-        if mtf_context[:swing_structure] && mtf_context[:swing_structure][:choch]
-          reasons << '15m CHoCH detected'
-        elsif mtf_context[:structure] && mtf_context[:structure][:choch]
+        if (mtf_context[:swing_structure] && mtf_context[:swing_structure][:choch]) ||
+           (mtf_context[:structure] && mtf_context[:structure][:choch])
           reasons << '15m CHoCH detected'
         end
 
@@ -132,6 +135,16 @@ module Notifications
         reasons << 'AVRZ rejection confirmed'
 
         reasons
+      end
+
+      def log_ai_analysis_status(instrument:, ai_analysis:)
+        if ai_analysis.present?
+          Rails.logger.info(
+            "[SendSmcAlertJob] AI analysis received (#{ai_analysis.length} chars) for #{instrument.symbol_name}"
+          )
+        else
+          Rails.logger.warn("[SendSmcAlertJob] AI analysis is empty or nil for #{instrument.symbol_name}")
+        end
       end
     end
   end

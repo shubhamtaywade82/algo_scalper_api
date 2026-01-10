@@ -178,9 +178,11 @@ module Smc
       Notifications::Telegram::SendSmcAlertJob.perform_later(
         instrument_id: @instrument.id,
         decision: decision.to_s,
-        htf_context: htf.to_h,
-        mtf_context: mtf.to_h,
-        ltf_context: ltf.to_h,
+        contexts: {
+          htf: htf.to_h,
+          mtf: mtf.to_h,
+          ltf: ltf.to_h
+        },
         price: current_price
       )
 
