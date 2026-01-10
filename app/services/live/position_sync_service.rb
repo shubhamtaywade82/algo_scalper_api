@@ -102,7 +102,7 @@ module Live
         Rails.logger.warn("[PositionSync] Failed to subscribe paper position #{tracker.order_no}: #{e.message}")
       end
 
-      Rails.logger.debug { "[PositionSync] Paper sync: #{subscribed_count} new subscriptions, #{skipped_count} already subscribed" } if subscribed_count > 0 || skipped_count > 0
+      Rails.logger.debug { "[PositionSync] Paper sync: #{subscribed_count} new subscriptions, #{skipped_count} already subscribed" } if subscribed_count.positive? || skipped_count.positive?
 
       @last_sync = Time.current
       Rails.logger.info("[PositionSync] Paper position sync completed - ensured #{paper_positions.size} positions are subscribed")

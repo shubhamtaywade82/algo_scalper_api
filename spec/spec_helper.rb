@@ -18,7 +18,7 @@ RSpec.configure do |config|
   config.order = :random
   Kernel.srand config.seed
 
-  # Note: RSpec runs sequentially by default
+  # NOTE: RSpec runs sequentially by default
   # Parallel execution requires the 'parallel_tests' gem
   # Tests run one at a time to prevent API rate limits
 end

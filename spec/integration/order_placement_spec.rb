@@ -219,7 +219,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
     # Otherwise fall back to factory-created derivatives
     let(:real_derivative) do
       Derivative.where(underlying_symbol: 'NIFTY', instrument_type: 'OPTION', option_type: 'CE')
-                .where('expiry_date >= ?', Date.today)
+                .where(expiry_date: Time.zone.today..)
                 .order(:expiry_date, :strike_price)
                 .first || begin
                   # Find or create instrument first to avoid validation errors

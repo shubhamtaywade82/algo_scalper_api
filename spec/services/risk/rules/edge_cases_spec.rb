@@ -38,7 +38,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
     end
 
     it 'zero threshold means rule is effectively disabled' do
-      result = engine.evaluate(context)
+      engine.evaluate(context)
       # SL/TP rules skip, other rules might trigger
       sl_rule = engine.find_rule(Risk::Rules::StopLossRule)
       expect(sl_rule.config[:sl_pct]).to eq(0)
@@ -152,10 +152,8 @@ RSpec.describe 'Rule Engine Edge Cases' do
       error_rule = instance_double(Risk::Rules::BaseRule)
       sl_rule = Risk::Rules::StopLossRule.new(config: risk_config)
 
-      allow(error_rule).to receive(:priority).and_return(15)
-      allow(error_rule).to receive(:enabled?).and_return(true)
       allow(error_rule).to receive(:evaluate).and_raise(StandardError.new('Test error'))
-      allow(error_rule).to receive(:name).and_return('error_rule')
+      allow(error_rule).to receive_messages(priority: 15, enabled?: true, name: 'error_rule')
 
       engine = Risk::Rules::RuleEngine.new(rules: [error_rule, sl_rule])
 

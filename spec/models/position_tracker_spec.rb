@@ -5,24 +5,25 @@ require 'rails_helper'
 RSpec.describe PositionTracker do
   let(:instrument) { create(:instrument, :nifty_future) }
   let(:tracker) do
-        create(
-          :position_tracker,
-          :pending,
-          instrument: instrument,
-          watchable: instrument,
-          order_no: 'ORD123456',
-          security_id: '50074',
-          segment: 'NSE_FNO',
-          quantity: 75,
-          entry_price: 100.0
-        )
+    create(
+      :position_tracker,
+      :pending,
+      instrument: instrument,
+      watchable: instrument,
+      order_no: 'ORD123456',
+      security_id: '50074',
+      segment: 'NSE_FNO',
+      quantity: 75,
+      entry_price: 100.0
+    )
   end
 
   describe 'EPIC F — F1: Place Entry Order & Subscribe Option Tick' do
     let(:redis_cache) { Live::RedisPnlCache.instance }
 
     before do
-      mock_redis = instance_double('Redis', set: true, get: nil, del: true, hset: true, ttl: 3600, expire: true, hgetall: {})
+      mock_redis = instance_double(Redis, set: true, get: nil, del: true, hset: true, ttl: 3600, expire: true,
+                                          hgetall: {})
       allow(Redis).to receive(:new).and_return(mock_redis)
       redis_cache.instance_variable_set(:@redis, mock_redis)
 
@@ -149,16 +150,16 @@ RSpec.describe PositionTracker do
     end
 
     describe '#unsubscribe' do
-        it 'unsubscribes from option tick feed' do
-          market_feed_hub = Live::MarketFeedHub.instance
-          allow(market_feed_hub).to receive(:running?).and_return(true)
-          expect(market_feed_hub).to receive(:unsubscribe).with(
-            segment: 'NSE_FNO',
-            security_id: '50074'
-          )
+      it 'unsubscribes from option tick feed' do
+        market_feed_hub = Live::MarketFeedHub.instance
+        allow(market_feed_hub).to receive(:running?).and_return(true)
+        expect(market_feed_hub).to receive(:unsubscribe).with(
+          segment: 'NSE_FNO',
+          security_id: '50074'
+        )
 
-          tracker.unsubscribe
-        end
+        tracker.unsubscribe
+      end
 
       it 'unsubscribes underlying instrument if option' do
         underlying = Instrument.find_or_create_by!(security_id: '13') do |inst|
@@ -179,7 +180,7 @@ RSpec.describe PositionTracker do
           segment: 'NSE_FNO',
           security_id: '50074'
         )
-        # Note: unsubscribe does NOT unsubscribe from IDX_I segments (they're needed for signal generation)
+        # NOTE: unsubscribe does NOT unsubscribe from IDX_I segments (they're needed for signal generation)
         expect(market_feed_hub).not_to receive(:unsubscribe).with(
           segment: 'IDX_I',
           security_id: underlying.security_id

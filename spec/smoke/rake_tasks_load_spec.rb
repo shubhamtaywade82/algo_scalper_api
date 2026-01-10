@@ -5,7 +5,7 @@ require 'rake'
 
 RSpec.describe 'Smoke: Rake tasks load' do
   it 'loads all rake task files under lib/tasks' do
-    rake_files = Dir[Rails.root.join('lib/tasks/**/*.rake')].sort
+    rake_files = Rails.root.glob('lib/tasks/**/*.rake')
     expect(rake_files).not_to be_empty
 
     app = Rake::Application.new
@@ -24,4 +24,3 @@ RSpec.describe 'Smoke: Rake tasks load' do
     Rake.application = Rake::Application.new
   end
 end
-

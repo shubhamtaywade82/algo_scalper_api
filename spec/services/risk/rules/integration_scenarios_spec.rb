@@ -158,13 +158,9 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
     end
 
     before do
-      allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
-      allow(Positions::TrailingConfig).to receive(:peak_drawdown_active?).and_return(true)
-      allow(Positions::TrailingConfig).to receive(:config).and_return(
-        peak_drawdown_pct: 5.0,
-        activation_profit_pct: 25.0,
-        activation_sl_offset_pct: 10.0
-      )
+      allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: true, peak_drawdown_active?: true, config: { peak_drawdown_pct: 5.0,
+                                                                                                                                  activation_profit_pct: 25.0,
+                                                                                                                                  activation_sl_offset_pct: 10.0 })
     end
 
     it 'exits due to peak drawdown' do
@@ -279,7 +275,7 @@ RSpec.describe 'Rule Engine Integration Scenarios' do
     end
 
     it 'stop loss rule disabled - position not exited' do
-      result = engine.evaluate(context)
+      engine.evaluate(context)
       # Other rules might trigger, but SL won't
       sl_rule = engine.find_rule(Risk::Rules::StopLossRule)
       expect(sl_rule.config[:sl_pct]).to eq(0)

@@ -20,7 +20,7 @@ end
 def print_header(text)
   puts "\n#{'=' * 80}".cyan.bold
   puts "  #{text}".cyan.bold
-  puts "#{'=' * 80}".cyan.bold
+  puts ('=' * 80).to_s.cyan.bold
 end
 
 def print_success(text)

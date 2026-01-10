@@ -6,19 +6,19 @@ namespace :backtest do
     task :nifty_sensex, [:days_back] => :environment do |_t, args|
       days_back = (args[:days_back] || ENV['DAYS_BACK'] || '30').to_i
 
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts 'Signal Generator Backtest - NIFTY & SENSEX'
       puts '=' * 100
       puts "Lookback Period: #{days_back} days"
       puts 'Timeframes: 1m (execution), 5m (signals)'
       puts 'Indices: NIFTY, SENSEX'
-      puts ('=' * 100) + "\n"
+      puts "#{'=' * 100}\n"
 
       indices = %w[NIFTY SENSEX]
       all_results = {}
 
       indices.each do |index_key|
-        puts "\n" + ('-' * 100)
+        puts "\n#{'-' * 100}"
         puts "Backtesting Signal Generator for #{index_key}"
         puts '-' * 100
 
@@ -54,7 +54,7 @@ namespace :backtest do
       end
 
       # Summary comparison
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts 'SIGNAL GENERATOR BACKTEST SUMMARY'
       puts '=' * 100
 
@@ -66,7 +66,7 @@ namespace :backtest do
         puts "   Signals: #{result[:total_signals]} | Accuracy: #{result[:accuracy_pct]}% | Avg Move: #{result[:avg_price_move_pct]}%"
       end
 
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts '✅ Backtest Complete!'
       puts '=' * 100
       puts "\n"
@@ -77,11 +77,11 @@ namespace :backtest do
       index_key = args[:index] || ENV['INDEX'] || 'NIFTY'
       days_back = (args[:days_back] || ENV['DAYS_BACK'] || '30').to_i
 
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts "Signal Generator Backtest - #{index_key}"
       puts '=' * 100
       puts "Lookback Period: #{days_back} days"
-      puts ('=' * 100) + "\n"
+      puts "#{'=' * 100}\n"
 
       # Use optimized parameters if available (pass nil to auto-load)
       result = Backtest::SignalGeneratorBacktester.run(
@@ -95,7 +95,7 @@ namespace :backtest do
 
       result.print_summary
 
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts '✅ Backtest Complete!'
       puts '=' * 100
       puts "\n"

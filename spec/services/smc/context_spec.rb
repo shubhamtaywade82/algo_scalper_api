@@ -14,4 +14,3 @@ RSpec.describe Smc::Context do
     expect(ctx.pd).to be_a(Smc::Detectors::PremiumDiscount)
   end
 end
-

@@ -78,7 +78,11 @@ module Smc
 
     class NormalizedSmc
       def initialize(raw)
-        @raw = raw.respond_to?(:to_h) ? raw.to_h : (raw.is_a?(Hash) ? raw : {})
+        @raw = if raw.respond_to?(:to_h)
+                 raw.to_h
+               else
+                 (raw.is_a?(Hash) ? raw : {})
+               end
       end
 
       def structure_state
@@ -134,7 +138,7 @@ module Smc
           dig(:liquidity, :trap_active) ||
           dig(:liquidity, :trap)
 
-        v.nil? ? true : (bool(v) == true)
+        v.nil? || (bool(v) == true)
       end
 
       def trap_resolved?
@@ -185,7 +189,7 @@ module Smc
       end
 
       def bool(v)
-        return v if v == true || v == false
+        return v if [true, false].include?(v)
         return true if v.is_a?(String) && v.strip.downcase == 'true'
         return false if v.is_a?(String) && v.strip.downcase == 'false'
 
@@ -195,7 +199,11 @@ module Smc
 
     class NormalizedAvrz
       def initialize(raw)
-        @raw = raw.respond_to?(:to_h) ? raw.to_h : (raw.is_a?(Hash) ? raw : {})
+        @raw = if raw.respond_to?(:to_h)
+                 raw.to_h
+               else
+                 (raw.is_a?(Hash) ? raw : {})
+               end
       end
 
       def state
@@ -213,4 +221,3 @@ module Smc
     end
   end
 end
-

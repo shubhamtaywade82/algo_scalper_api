@@ -6,13 +6,13 @@ namespace :backtest do
     task :nifty_sensex_intraday, [:days_back] => :environment do |_t, args|
       days_back = (args[:days_back] || ENV['DAYS_BACK'] || '30').to_i
 
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts 'NoTradeEngine Backtest - NIFTY & SENSEX (Intraday)'
       puts '=' * 100
       puts "Lookback Period: #{days_back} days"
       puts 'Timeframes: 1m and 5m'
       puts 'Indices: NIFTY, SENSEX'
-      puts ('=' * 100) + "\n"
+      puts "#{'=' * 100}\n"
 
       indices = %w[NIFTY SENSEX]
       timeframes = %w[1 5]
@@ -22,7 +22,7 @@ namespace :backtest do
         all_results[index_key] = {}
 
         timeframes.each do |timeframe|
-          puts "\n" + ('-' * 100)
+          puts "\n#{'-' * 100}"
           puts "Backtesting #{index_key} @ #{timeframe}m (Intraday)"
           puts '-' * 100
 
@@ -84,7 +84,7 @@ namespace :backtest do
       end
 
       # Summary comparison
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts 'BACKTEST SUMMARY - NoTradeEngine Performance'
       puts '=' * 100
 
@@ -112,7 +112,7 @@ namespace :backtest do
         puts "   Win Rate: #{best[:win_rate]&.round(2)}% | P&L: #{best[:pnl]&.round(2)}% | Expectancy: #{best[:expectancy]&.round(2)}%"
       end
 
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts '✅ Backtest Complete!'
       puts '=' * 100
       puts "\n"
@@ -124,11 +124,11 @@ namespace :backtest do
       timeframe = args[:timeframe] || ENV['TIMEFRAME'] || '5'
       days_back = (args[:days_back] || ENV['DAYS_BACK'] || '30').to_i
 
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts "NoTradeEngine Backtest - #{index_key} @ #{timeframe}m"
       puts '=' * 100
       puts "Lookback Period: #{days_back} days"
-      puts ('=' * 100) + "\n"
+      puts "#{'=' * 100}\n"
 
       interval_1m = '1'
       interval_5m = '5' # Always fetch 5m separately from API for ADX calculations
@@ -166,7 +166,7 @@ namespace :backtest do
               .each { |reason, count| puts "     - #{reason}: #{count}" }
       end
 
-      puts "\n" + ('=' * 100)
+      puts "\n#{'=' * 100}"
       puts '✅ Backtest Complete!'
       puts '=' * 100
       puts "\n"

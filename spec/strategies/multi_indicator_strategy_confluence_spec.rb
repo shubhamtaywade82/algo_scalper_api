@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe MultiIndicatorStrategy, 'Confluence Detection' do
   let(:series) { CandleSeries.new(symbol: 'NIFTY', interval: '5') }
-  let(:base_price) { 22000.0 }
+  let(:base_price) { 22_000.0 }
 
   before do
     50.times do |i|
@@ -101,7 +101,7 @@ RSpec.describe MultiIndicatorStrategy, 'Confluence Detection' do
       end
     end
 
-    context 'indicator breakdown' do
+    context 'when showing indicator breakdown' do
       it 'includes breakdown of all indicators' do
         results = [
           { indicator: 'supertrend', direction: :bullish, confidence: 80 },
@@ -130,7 +130,7 @@ RSpec.describe MultiIndicatorStrategy, 'Confluence Detection' do
       end
     end
 
-    context 'confluence strength levels' do
+    context 'for confluence strength levels' do
       it 'returns :strong for score >= 80' do
         results = [
           { indicator: 'supertrend', direction: :bullish, confidence: 80 },

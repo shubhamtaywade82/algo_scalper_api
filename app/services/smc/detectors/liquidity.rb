@@ -69,7 +69,7 @@ module Smc
       end
 
       def tolerance
-        return 0.0 unless @series&.highs && @series&.lows
+        return 0.0 unless @series&.highs && @series.lows
 
         range = @series.highs.max - @series.lows.min
         range * @threshold
@@ -77,4 +77,3 @@ module Smc
     end
   end
 end
-

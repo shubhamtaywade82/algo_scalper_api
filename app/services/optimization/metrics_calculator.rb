@@ -11,18 +11,26 @@ module Optimization
 
       returns = @trades.map { |t| t[:exit] - t[:entry] }
 
-      wins = returns.select { |r| r > 0 }
+      wins = returns.select(&:positive?)
       losses = returns.select { |r| r <= 0 }
 
       win_rate = wins.count.to_f / @trades.count
-      avg_win = wins.sum / wins.count rescue 0
-      avg_loss = losses.sum.abs / losses.count rescue 0
+      avg_win = begin
+        wins.sum / wins.count
+      rescue StandardError
+        0
+      end
+      avg_loss = begin
+        losses.sum.abs / losses.count
+      rescue StandardError
+        0
+      end
 
       expectancy = (win_rate * avg_win) - ((1 - win_rate) * avg_loss)
 
       # Sharpe: mean return / std dev
       mean_return = returns.sum / returns.size.to_f
-      variance = returns.map { |r| (r - mean_return)**2 }.sum / returns.size.to_f
+      variance = returns.sum { |r| (r - mean_return)**2 } / returns.size.to_f
       std_dev = Math.sqrt(variance)
       sharpe = std_dev.positive? ? (mean_return / std_dev) : 0.0
 
@@ -51,4 +59,3 @@ module Optimization
     end
   end
 end
-

@@ -4,11 +4,6 @@ require 'rails_helper'
 
 RSpec.describe Entries::EntryGuard do
   let(:daily_limits) { instance_double(Live::DailyLimits) }
-
-  before do
-    allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
-    allow(daily_limits).to receive(:can_trade?).and_return({ allowed: true, reason: nil })
-  end
   let(:nifty_instrument) { create(:instrument, :nifty_future, security_id: '9999', symbol_name: 'NIFTY') }
   let(:index_cfg) do
     {
@@ -30,6 +25,11 @@ RSpec.describe Entries::EntryGuard do
     }
   end
 
+  before do
+    allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
+    allow(daily_limits).to receive(:can_trade?).and_return({ allowed: true, reason: nil })
+  end
+
   describe 'EPIC F — F1: Place Entry Order & Subscribe Option Tick' do
     describe '.try_enter' do
       before do
@@ -37,9 +37,7 @@ RSpec.describe Entries::EntryGuard do
         allow(described_class).to receive(:ensure_ws_connection!)
         allow(Capital::Allocator).to receive(:qty_for).and_return(75)
         allow(Orders.config).to receive(:place_market).and_return(double(order_id: 'ORD123456'))
-        allow(described_class).to receive(:extract_order_no).and_return('ORD123456')
-        allow(described_class).to receive(:exposure_ok?).and_return(true)
-        allow(described_class).to receive(:cooldown_active?).and_return(false)
+        allow(described_class).to receive_messages(extract_order_no: 'ORD123456', exposure_ok?: true, cooldown_active?: false)
         # Mock trading session and paper trading
         allow(TradingSession::Service).to receive(:entry_allowed?).and_return({ allowed: true })
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
@@ -255,17 +253,15 @@ RSpec.describe Entries::EntryGuard do
 
         it 'falls back to paper mode when enabled and live balance is insufficient' do
           allow(Capital::Allocator).to receive(:qty_for).and_return(0)
-          allow(described_class).to receive(:paper_trading_enabled?).and_return(false)
-          allow(described_class).to receive(:auto_paper_fallback_enabled?).and_return(true)
-          allow(described_class).to receive(:insufficient_live_balance?).and_return(true)
+          allow(described_class).to receive_messages(paper_trading_enabled?: false, auto_paper_fallback_enabled?: true, insufficient_live_balance?: true)
 
-          expect {
+          expect do
             described_class.try_enter(
               index_cfg: index_cfg,
               pick: pick,
               direction: :bullish
             )
-          }.to change(PositionTracker, :count).by(1)
+          end.to change(PositionTracker, :count).by(1)
 
           tracker = PositionTracker.last
           expect(tracker.paper?).to be true

@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe 'Smoke: Services load' do
   it 'loads all service source files' do
-    service_paths = Dir[Rails.root.join('app/services/**/*.rb')].sort
+    service_paths = Rails.root.glob('app/services/**/*.rb')
     expect(service_paths).not_to be_empty
 
     service_paths.each do |path|
@@ -12,4 +12,3 @@ RSpec.describe 'Smoke: Services load' do
     end
   end
 end
-

@@ -32,4 +32,3 @@ RSpec.describe Signal::Scheduler do
     end
   end
 end
-

@@ -14,10 +14,10 @@ module Risk
         # Check trailing activation threshold (pnl_pct >= trailing_activation_pct)
         # Peak drawdown rule only activates after trailing activation threshold is met
         unless context.trailing_activated?
-          Rails.logger.debug(
+          Rails.logger.debug do
             "[PeakDrawdownRule] Trailing not activated: pnl_pct=#{context.pnl_pct&.round(2)}% " \
-            "< activation_pct=#{context.trailing_activation_pct.to_f.round(2)}%"
-          )
+              "< activation_pct=#{context.trailing_activation_pct.to_f.round(2)}%"
+          end
           return skip_result
         end
 
@@ -28,24 +28,22 @@ module Risk
         # Skip if peak is 0% or negative (position never profitable)
         # Peak drawdown rule should only trigger when position had profit and is drawing down
         if peak_profit_pct.to_f <= 0
-          Rails.logger.debug(
+          Rails.logger.debug do
             "[PeakDrawdownRule] Skipping: peak=#{peak_profit_pct.round(2)}% <= 0% " \
-            "(position never profitable, should use Stop Loss rule instead)"
-          )
+              '(position never profitable, should use Stop Loss rule instead)'
+          end
           return skip_result
         end
 
         # Check if peak drawdown threshold is breached (uses tiered protection)
-        unless peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
-          return no_action_result
-        end
+        return no_action_result unless peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
 
         # Log which tier was used for transparency
         drawdown_threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak_profit_pct)
-        Rails.logger.debug(
+        Rails.logger.debug do
           "[PeakDrawdownRule] Tiered protection: peak=#{peak_profit_pct.round(2)}% " \
-          "threshold=#{drawdown_threshold.round(2)}% drawdown=#{(peak_profit_pct - current_profit_pct).round(2)}%"
-        )
+            "threshold=#{drawdown_threshold.round(2)}% drawdown=#{(peak_profit_pct - current_profit_pct).round(2)}%"
+        end
 
         # Apply peak-drawdown activation gating (if enabled)
         if peak_drawdown_activation_enabled?
@@ -54,11 +52,11 @@ module Risk
             current_sl_offset_pct: current_sl_offset_pct(context)
           )
           unless activation_ready
-            Rails.logger.debug(
+            Rails.logger.debug do
               "[PeakDrawdownRule] Peak drawdown gating: peak=#{peak_profit_pct.round(2)}% " \
-              "sl_offset=#{current_sl_offset_pct(context)&.round(2)}% " \
-              "not activated (drawdown=#{(peak_profit_pct - current_profit_pct).round(2)}%)"
-            )
+                "sl_offset=#{current_sl_offset_pct(context)&.round(2)}% " \
+                "not activated (drawdown=#{(peak_profit_pct - current_profit_pct).round(2)}%)"
+            end
             return no_action_result
           end
         end

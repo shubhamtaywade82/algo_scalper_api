@@ -68,7 +68,7 @@ module Positions
       return false unless @cached_at && @cached_trackers
 
       # Use longer TTL if market is closed and there are no positions
-      ttl = if TradingSession::Service.market_closed? && @cached_trackers.size.zero?
+      ttl = if TradingSession::Service.market_closed? && @cached_trackers.empty?
               CACHE_TTL_MARKET_CLOSED
             else
               CACHE_TTL

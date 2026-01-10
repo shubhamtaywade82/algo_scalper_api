@@ -44,7 +44,7 @@ module Live
             end
 
             sleep 2 # Update every 2 seconds
-          rescue StandardError => e
+          rescue StandardError
             # Rails.logger.error("[MockData] Error: #{e.message}")
             sleep 5
           end

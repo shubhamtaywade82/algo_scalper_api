@@ -23,13 +23,13 @@ intervals = %w[1 5 15]
 # Optimization order: ADX → Supertrend → MACD → ATR → RSI
 indicators = %i[adx supertrend macd atr rsi]
 
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts 'Single Indicator Parameter Optimization - All Timeframes'
 puts '=' * 80
 puts "Index: #{index_key}"
 puts "Timeframes: #{intervals.join('m, ')}m"
 puts "Lookback: #{lookback_days} days"
-puts ('=' * 80) + "\n"
+puts "#{'=' * 80}\n"
 
 # Get index configuration
 algo_config = AlgoConfig.fetch
@@ -54,9 +54,9 @@ puts "📊 Instrument: #{instrument.symbol_name} (SID: #{instrument.security_id}
 all_results = {}
 
 intervals.each do |interval|
-  puts "\n" + ('=' * 80)
+  puts "\n#{'=' * 80}"
   puts "TIMEFRAME: #{interval}m"
-  puts ('=' * 80) + "\n"
+  puts "#{'=' * 80}\n"
 
   indicators.each do |indicator|
     puts '-' * 80
@@ -109,7 +109,7 @@ intervals.each do |interval|
 end
 
 # Final Summary
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts 'FINAL OPTIMIZATION SUMMARY'
 puts '=' * 80
 
@@ -127,7 +127,7 @@ indicators.each do |indicator|
   end
 end
 
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts '✅ Done! Results saved to best_indicator_params table'
 puts '=' * 80
 puts "\nTo retrieve optimized parameters:"

@@ -13,9 +13,8 @@ RSpec.describe Orders::GatewayLive do
   end
 
   before do
-    allow(Orders::Placer).to receive(:exit_position!).and_return(double('order', id: '123'))
-    allow(Orders::Placer).to receive(:buy_market!).and_return(double('order', id: '456'))
-    allow(Orders::Placer).to receive(:sell_market!).and_return(double('order', id: '789'))
+    allow(Orders::Placer).to receive_messages(exit_position!: double('order', id: '123'),
+                                              buy_market!: double('order', id: '456'), sell_market!: double('order', id: '789'))
     allow(DhanHQ::Models::Position).to receive(:active).and_return([])
     allow(DhanHQ::Models::FundLimit).to receive(:fetch).and_return(
       double('funds', available: 100_000, utilized: 50_000, margin: 25_000)
@@ -169,7 +168,8 @@ RSpec.describe Orders::GatewayLive do
         attempts = 0
         allow(Orders::Placer).to receive(:buy_market!) do
           attempts += 1
-          raise Timeout::Error.new('Timeout') if attempts < 2
+          raise Timeout::Error, 'Timeout' if attempts < 2
+
           double('order', id: '123')
         end
 
@@ -188,7 +188,7 @@ RSpec.describe Orders::GatewayLive do
         attempts = 0
         allow(Orders::Placer).to receive(:buy_market!) do
           attempts += 1
-          raise ArgumentError.new('Invalid argument')
+          raise ArgumentError, 'Invalid argument'
         end
 
         expect do
@@ -207,7 +207,7 @@ RSpec.describe Orders::GatewayLive do
         attempts = 0
         allow(Orders::Placer).to receive(:buy_market!) do
           attempts += 1
-          raise Timeout::Error.new('Timeout')
+          raise Timeout::Error, 'Timeout'
         end
 
         expect do
@@ -269,13 +269,13 @@ RSpec.describe Orders::GatewayLive do
 
     it 'matches position by security_id and segment' do
       other_position = double('position',
-                               security_id: '55112',
-                               exchange_segment: 'NSE_FNO',
-                               net_qty: 100,
-                               cost_price: 200.0,
-                               product_type: 'INTRADAY',
-                               position_type: 'LONG',
-                               trading_symbol: 'OTHER')
+                              security_id: '55112',
+                              exchange_segment: 'NSE_FNO',
+                              net_qty: 100,
+                              cost_price: 200.0,
+                              product_type: 'INTRADAY',
+                              position_type: 'LONG',
+                              trading_symbol: 'OTHER')
       allow(DhanHQ::Models::Position).to receive(:active).and_return([other_position, dhan_position])
 
       result = gateway.position(segment: 'NSE_FNO', security_id: '55111')

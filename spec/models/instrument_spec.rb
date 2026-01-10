@@ -57,25 +57,24 @@
 
 require 'rails_helper'
 
-RSpec.describe Instrument, type: :model do
-    let(:instrument) do
-      Instrument.find_or_create_by!(security_id: '13') do |inst|
-        inst.assign_attributes(
-          symbol_name: 'NIFTY',
-          exchange: 'nse',
-          segment: 'index',
-          instrument_type: 'INDEX',
-          instrument_code: 'index'
-        )
-      end
+RSpec.describe Instrument do
+  let(:instrument) do
+    described_class.find_or_create_by!(security_id: '13') do |inst|
+      inst.assign_attributes(
+        symbol_name: 'NIFTY',
+        exchange: 'nse',
+        segment: 'index',
+        instrument_type: 'INDEX',
+        instrument_code: 'index'
+      )
     end
+  end
   let(:order_response) { double('Order', order_id: 'ORD123456') }
   let(:redis_cache) { Live::RedisPnlCache.instance }
   let(:ws_hub) { Live::WsHub.instance }
 
   before do
-    allow(ws_hub).to receive(:running?).and_return(true)
-    allow(ws_hub).to receive(:subscribe).and_return(true)
+    allow(ws_hub).to receive_messages(running?: true, subscribe: true)
     allow(redis_cache).to receive(:clear_tick)
     allow(redis_cache).to receive(:fetch_tick).and_return(nil)
     allow(Orders.config).to receive(:place_market).and_return(order_response)
@@ -189,16 +188,16 @@ RSpec.describe Instrument, type: :model do
 
   describe '#sell_market!' do
     let(:active_tracker) do
-        create(
-          :position_tracker,
-          :nifty_position,
-          instrument: instrument,
-          watchable: instrument,
-          security_id: instrument.security_id.to_s,
-          segment: 'NSE_FNO',
-          quantity: 5,
-          status: 'active'
-        )
+      create(
+        :position_tracker,
+        :nifty_position,
+        instrument: instrument,
+        watchable: instrument,
+        security_id: instrument.security_id.to_s,
+        segment: 'NSE_FNO',
+        quantity: 5,
+        status: 'active'
+      )
     end
 
     before do
@@ -286,4 +285,3 @@ RSpec.describe Instrument, type: :model do
     end
   end
 end
-

@@ -78,7 +78,7 @@ RSpec.describe WatchlistItem do
       end
 
       it 'has active defaulting to true' do
-        watchlist_item = WatchlistItem.new(segment: 'IDX_I', security_id: '99')
+        watchlist_item = described_class.new(segment: 'IDX_I', security_id: '99')
         watchlist_item.valid? # Trigger validation to set defaults
         expect(watchlist_item.active).to be true
       end

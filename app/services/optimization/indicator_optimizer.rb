@@ -38,7 +38,7 @@ module Optimization
       $stdout.flush
 
       load_series!
-      return { error: 'Failed to load series' } unless @series && @series.candles.any?
+      return { error: 'Failed to load series' } unless @series&.candles&.any?
 
       Rails.logger.info("[Optimization] Loaded #{@series.candles.size} candles")
       $stdout.puts "[Optimization] Loaded #{@series.candles.size} candles"
@@ -57,7 +57,7 @@ module Optimization
         metrics = backtest(candidate)
 
         if processed <= 3 && !metrics
-          Rails.logger.debug("[Optimization] Backtest returned nil for params #{candidate.inspect}")
+          Rails.logger.debug { "[Optimization] Backtest returned nil for params #{candidate.inspect}" }
         end
 
         next unless metrics && metrics[:sharpe]
@@ -80,12 +80,12 @@ module Optimization
         end
 
         # Progress logging every 10%
-        if processed % [total_combinations / 10, 1].max == 0
-          progress_pct = (processed.to_f / total_combinations * 100).round(1)
-          Rails.logger.info("[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
-          $stdout.puts "[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
-          $stdout.flush
-        end
+        next unless (processed % [total_combinations / 10, 1].max).zero?
+
+        progress_pct = (processed.to_f / total_combinations * 100).round(1)
+        Rails.logger.info("[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
+        $stdout.puts "[Optimization] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
+        $stdout.flush
       end
 
       Rails.logger.info("[Optimization] Optimization complete. Best Sharpe: #{best[:score].round(3)}")
@@ -108,7 +108,7 @@ module Optimization
         days: @lookback
       )
 
-      raise "No intraday OHLC for #{@instrument.symbol_name}" unless raw.present?
+      raise "No intraday OHLC for #{@instrument.symbol_name}" if raw.blank?
 
       @series = CandleSeries.new(symbol: @instrument.symbol_name, interval: @interval)
       @series.load_from_raw(raw)
@@ -130,7 +130,7 @@ module Optimization
         keys = param_space.keys
         values = param_space.values
         values.first.product(*values.drop(1)).map do |vals|
-          Hash[keys.zip(vals)]
+          keys.zip(vals).to_h
         end
       end
     end
@@ -160,11 +160,10 @@ module Optimization
           score: best[:score],
           updated_at: Time.current
         },
-        unique_by: [:instrument_id, :interval]
+        unique_by: %i[instrument_id interval]
       )
     rescue StandardError => e
       Rails.logger.warn("[Optimization] Failed to persist result: #{e.message}")
     end
   end
 end
-

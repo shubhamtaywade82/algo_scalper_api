@@ -10,7 +10,7 @@ RSpec.describe Positions::ActiveCache do
       PositionTracker,
       id: 42,
       active?: true,
-      entry_price: BigDecimal('100'),
+      entry_price: BigDecimal(100),
       segment: 'NSE_FNO',
       security_id: '12345',
       quantity: 50,
@@ -66,4 +66,3 @@ RSpec.describe Positions::ActiveCache do
     ActiveSupport::Notifications.unsubscribe(subscriber)
   end
 end
-

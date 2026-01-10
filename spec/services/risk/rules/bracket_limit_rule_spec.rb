@@ -62,8 +62,7 @@ RSpec.describe Risk::Rules::BracketLimitRule do
 
     context 'when neither SL nor TP is hit' do
       before do
-        allow(position_data).to receive(:sl_hit?).and_return(false)
-        allow(position_data).to receive(:tp_hit?).and_return(false)
+        allow(position_data).to receive_messages(sl_hit?: false, tp_hit?: false)
       end
 
       it 'returns no_action' do

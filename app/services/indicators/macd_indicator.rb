@@ -58,10 +58,10 @@ module Indicators
 
     def determine_direction(macd_line, signal_line, histogram)
       # Bullish: MACD crosses above signal and histogram is positive
-      if macd_line > signal_line && histogram > 0
+      if macd_line > signal_line && histogram.positive?
         :bullish
       # Bearish: MACD crosses below signal and histogram is negative
-      elsif macd_line < signal_line && histogram < 0
+      elsif macd_line < signal_line && histogram.negative?
         :bearish
       else
         :neutral
@@ -73,11 +73,11 @@ module Indicators
 
       case direction
       when :bullish
-        base += 20 if histogram > 0
+        base += 20 if histogram.positive?
         base += 20 if macd_line > signal_line
         base += 10 if histogram.abs > 0.5 # Strong signal
       when :bearish
-        base += 20 if histogram < 0
+        base += 20 if histogram.negative?
         base += 20 if macd_line < signal_line
         base += 10 if histogram.abs > 0.5 # Strong signal
       end

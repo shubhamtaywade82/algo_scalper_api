@@ -13,7 +13,7 @@ RSpec.describe CandleSeries do
     end
 
     it 'defaults interval to 5' do
-      series = CandleSeries.new(symbol: 'NIFTY')
+      series = described_class.new(symbol: 'NIFTY')
       expect(series.interval).to eq('5')
     end
   end
@@ -33,8 +33,7 @@ RSpec.describe CandleSeries do
       series.add_candle(candle1)
       series.add_candle(candle2)
 
-      collected = []
-      series.each { |c| collected << c }
+      collected = series.map { |c| c }
       expect(collected).to eq([candle1, candle2])
     end
   end

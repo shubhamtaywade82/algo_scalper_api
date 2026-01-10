@@ -3,9 +3,9 @@
 # Script to analyze ADX values for each index to set appropriate thresholds
 # Usage: rails runner scripts/analyze_index_adx_values.rb
 
-puts "\n" + "=" * 100
-puts "INDEX ADX VALUE ANALYSIS - Setting Appropriate Thresholds"
-puts "=" * 100 + "\n"
+puts "\n#{'=' * 100}"
+puts 'INDEX ADX VALUE ANALYSIS - Setting Appropriate Thresholds'
+puts "#{'=' * 100}\n"
 
 indices = AlgoConfig.fetch[:indices] || []
 signals_cfg = AlgoConfig.fetch[:signals] || {}
@@ -15,23 +15,23 @@ adx_cfg = signals_cfg[:adx] || {}
 primary_tf = signals_cfg[:primary_timeframe] || '1m'
 confirmation_tf = signals_cfg[:confirmation_timeframe] || '5m'
 
-puts "Current Configuration:"
+puts 'Current Configuration:'
 puts "  Primary Timeframe: #{primary_tf}"
 puts "  Confirmation Timeframe: #{confirmation_tf}"
 puts "  ADX Min Strength (1m): #{adx_cfg[:min_strength] || 'N/A'}"
 puts "  ADX Confirmation Min Strength (5m): #{adx_cfg[:confirmation_min_strength] || 'N/A'}"
-puts ""
+puts ''
 
 results = {}
 
 indices.each do |index_cfg|
   puts "📊 Analyzing #{index_cfg[:key]}"
-  puts "-" * 100
+  puts '-' * 100
 
   instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
   unless instrument
-    puts "  ❌ Instrument not found"
-    puts ""
+    puts '  ❌ Instrument not found'
+    puts ''
     next
   end
 
@@ -83,24 +83,24 @@ indices.each do |index_cfg|
     confirmation_trend: confirmation_trend
   }
 
-  puts ""
+  puts ''
 end
 
 # Calculate recommended thresholds
-puts "📊 RECOMMENDED THRESHOLDS"
-puts "-" * 100
+puts '📊 RECOMMENDED THRESHOLDS'
+puts '-' * 100
 
 # Get current thresholds
 current_1m_threshold = adx_cfg[:min_strength] || 18
 current_5m_threshold = adx_cfg[:confirmation_min_strength] || 20
 
-puts "Current Thresholds:"
+puts 'Current Thresholds:'
 puts "  1m ADX: #{current_1m_threshold}"
 puts "  5m ADX: #{current_5m_threshold}"
-puts ""
+puts ''
 
 # Calculate per-index recommendations
-puts "Per-Index Recommendations:"
+puts 'Per-Index Recommendations:'
 results.each do |index_key, data|
   primary_adx = data[:primary_adx]
   confirmation_adx = data[:confirmation_adx]
@@ -122,13 +122,13 @@ results.each do |index_key, data|
     puts "    ⚠️  5m threshold (#{current_5m_threshold}) is too high! Should be <= #{recommended_5m}"
   end
 
-  puts ""
+  puts ''
 end
 
 # Overall recommendation
-puts "Overall Recommendation:"
-all_primary_adx = results.values.map { |r| r[:primary_adx] }.select(&:positive?)
-all_confirmation_adx = results.values.map { |r| r[:confirmation_adx] }.select(&:positive?)
+puts 'Overall Recommendation:'
+all_primary_adx = results.values.pluck(:primary_adx).select(&:positive?)
+all_confirmation_adx = results.values.pluck(:confirmation_adx).select(&:positive?)
 
 if all_primary_adx.any?
   avg_primary = all_primary_adx.sum / all_primary_adx.size
@@ -144,6 +144,5 @@ if all_confirmation_adx.any?
   puts "  Recommended global 5m threshold: #{recommended_global_5m}"
 end
 
-puts ""
-puts "=" * 100 + "\n"
-
+puts ''
+puts "#{'=' * 100}\n"

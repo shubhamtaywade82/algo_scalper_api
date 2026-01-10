@@ -153,7 +153,7 @@ namespace :trading do
 
         # Print formatted table
         puts '=' * 80
-        puts format('%-30s | %15s | %15s', 'Metric', 'Rupees (₹)', 'Percentage (%)')
+        puts 'Metric                         |      Rupees (₹) |  Percentage (%)'
         puts '-' * 80
         puts format('%-30s | %15s | %15s', 'Total Trades', stats[:total_trades].to_s, '-')
         puts format('%-30s | %15s | %15s', 'Active Positions', stats[:active_positions].to_s, '-')

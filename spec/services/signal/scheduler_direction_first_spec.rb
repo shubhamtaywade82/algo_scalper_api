@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe Signal::Scheduler do
   describe '#evaluate_supertrend_signal' do
     let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', sid: '13' } }
-    let(:instrument) { instance_double('Instrument') }
+    let(:instrument) { instance_double(Instrument) }
     let(:chain_analyzer) { instance_double(Options::ChainAnalyzer) }
 
     before do
@@ -50,8 +50,9 @@ RSpec.describe Signal::Scheduler do
         timeframe_results: { primary: { adx_value: 27 } }
       )
       allow(chain_analyzer).to receive(:select_candidates).and_return([
-        { segment: 'NSE_FNO', security_id: '12345', symbol: 'TEST', lot_size: 25 }
-      ])
+                                                                        { segment: 'NSE_FNO', security_id: '12345',
+                                                                          symbol: 'TEST', lot_size: 25 }
+                                                                      ])
 
       scheduler = described_class.new
       result = scheduler.send(:evaluate_supertrend_signal, index_cfg)
@@ -63,4 +64,3 @@ RSpec.describe Signal::Scheduler do
     end
   end
 end
-

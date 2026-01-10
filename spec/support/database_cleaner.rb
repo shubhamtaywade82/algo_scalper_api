@@ -45,11 +45,13 @@ RSpec.configure do |config|
         end
       else
         Rails.logger.warn "[DatabaseCleaner] CSV cache not found at #{csv_path}"
-        Rails.logger.warn '[DatabaseCleaner] Run `RAILS_ENV=test bin/rails test:instruments:import` to download and cache CSV'
+        Rails.logger.warn '[DatabaseCleaner] Run `RAILS_ENV=test bin/rails test:instruments:import` ' \
+                          'to download and cache CSV'
         Rails.logger.warn '[DatabaseCleaner] Tests will use factory-created instruments as fallback'
       end
     else
-      Rails.logger.info '[DatabaseCleaner] Instrument import skipped (set IMPORT_INSTRUMENTS_FOR_TESTS=true or AUTO_IMPORT_INSTRUMENTS=true to enable)'
+      Rails.logger.info '[DatabaseCleaner] Instrument import skipped ' \
+                        '(set IMPORT_INSTRUMENTS_FOR_TESTS=true or AUTO_IMPORT_INSTRUMENTS=true to enable)'
     end
   end
 

@@ -24,12 +24,12 @@ interval = ARGV[0] || '5'
 lookback_days = (ARGV[1] || '45').to_i
 test_mode = ['test', '--test'].include?(ARGV[2])
 
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts 'Indicator Parameter Optimization - NIFTY & SENSEX'
 puts '=' * 80
 puts "Interval: #{interval}m"
 puts "Lookback: #{lookback_days} days"
-puts ('=' * 80) + "\n"
+puts "#{'=' * 80}\n"
 
 # Get index configurations
 algo_config = AlgoConfig.fetch
@@ -48,7 +48,7 @@ end
 
 # Helper to run optimization
 def run_optimization(index_name, index_cfg, interval, lookback_days, test_mode = false)
-  puts "\n" + ('-' * 80)
+  puts "\n#{'-' * 80}"
   puts "Optimizing #{index_name} (#{interval}m, #{lookback_days} days)"
   puts '-' * 80
 
@@ -69,7 +69,7 @@ def run_optimization(index_name, index_cfg, interval, lookback_days, test_mode =
     puts '   Testing data fetch...'
     $stdout.flush
     test_data = instrument.intraday_ohlc(interval: interval, days: lookback_days)
-    if test_data.nil? || test_data.empty?
+    if test_data.blank?
       puts '   ❌ No data returned from API'
       return nil
     end
@@ -148,7 +148,7 @@ results[:nifty] = run_optimization('NIFTY', nifty_cfg, interval, lookback_days, 
 results[:sensex] = run_optimization('SENSEX', sensex_cfg, interval, lookback_days, test_mode) if sensex_cfg
 
 # Summary
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts 'OPTIMIZATION SUMMARY'
 puts '=' * 80
 
@@ -172,7 +172,7 @@ else
   puts "\n❌ SENSEX: Optimization failed or not configured"
 end
 
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts '✅ Done! Results saved to best_indicator_params table'
 puts '=' * 80
 puts "\nTo retrieve optimized parameters:"

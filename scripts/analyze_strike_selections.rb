@@ -12,9 +12,9 @@ class StrikeSelectionAnalyzer
   end
 
   def analyze_all_paper_positions
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts 'STRIKE SELECTION ANALYSIS FOR PAPER POSITIONS'
-    puts ('=' * 80) + "\n"
+    puts "#{'=' * 80}\n"
 
     paper_positions = PositionTracker.paper.includes(:watchable, :instrument).order(created_at: :desc)
 
@@ -177,14 +177,14 @@ class StrikeSelectionAnalyzer
     last_trading_day = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
                          Market::Calendar.trading_days_ago(1) # Get yesterday (1 trading day ago)
                        else
-                         Date.today - 1.day
+                         Time.zone.today - 1.day
                        end
 
     # For today's entries, use last trading day (yesterday) to today to get all available data
     # For past entries, use the entry date
-    if entry_date == Date.today
+    if entry_date == Time.zone.today
       from_date = last_trading_day.to_s
-      to_date = Date.today.to_s
+      to_date = Time.zone.today.to_s
     else
       from_date = entry_date.to_s
       to_date = entry_date.to_s
@@ -195,37 +195,39 @@ class StrikeSelectionAnalyzer
     raw_data = instrument.intraday_ohlc(interval: '1', from_date: from_date, to_date: to_date, days: 1)
 
     # If no data and entry is today, try to get current LTP as fallback
-    if raw_data.blank? && entry_date == Date.today
+    if raw_data.blank? && entry_date == Time.zone.today
       # Try multiple methods to get LTP
       ltp = instrument.ltp
       ltp ||= Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id.to_s)
       ltp ||= Live::RedisTickCache.instance.fetch_tick(instrument.exchange_segment,
-        instrument.security_id.to_s)&.dig(:ltp)&.to_f
+                                                       instrument.security_id.to_s)&.dig(:ltp)&.to_f
 
-        if ltp&.positive?
-          puts "  ⚠️  Using current LTP as fallback (no historical OHLC available): ₹#{ltp.round(2)}"
-          return ltp.to_f
-        end
+      if ltp&.positive?
+        puts "  ⚠️  Using current LTP as fallback (no historical OHLC available): ₹#{ltp.round(2)}"
+        return ltp.to_f
       end
+    end
 
-      return nil unless raw_data.present?
+    return nil if raw_data.blank?
 
-      # Parse OHLC data
-      candles = parse_ohlc_data(raw_data)
-      return nil if candles.empty?
+    # Parse OHLC data
+    candles = parse_ohlc_data(raw_data)
+    return nil if candles.empty?
 
-      # Find the candle that contains the entry time
-      # Use the candle that starts before or at the entry time
-      matching_candle = candles.find do |candle|
-        candle_time = candle[:timestamp]
-        next false unless candle_time
+    # Find the candle that contains the entry time
+    # Use the candle that starts before or at the entry time
+    matching_candle = candles.find do |candle|
+      candle_time = candle[:timestamp]
+      next false unless candle_time
 
-        # Candle contains entry time if entry_time is >= candle start and < candle start + 1 minute
-        entry_time >= candle_time && entry_time < (candle_time + 1.minute)
-      end
+      # Candle contains entry time if entry_time is >= candle start and < candle start + 1 minute
+      entry_time >= candle_time && entry_time < (candle_time + 1.minute)
+    end
 
-      # If no exact match, find the closest candle before entry time
-      matching_candle ||= candles.select { |c| c[:timestamp] && c[:timestamp] <= entry_time }.max_by { |c| c[:timestamp] }
+    # If no exact match, find the closest candle before entry time
+    matching_candle ||= candles.select do |c|
+      c[:timestamp] && c[:timestamp] <= entry_time
+    end.max_by { |c| c[:timestamp] }
 
     return nil unless matching_candle
 
@@ -234,7 +236,7 @@ class StrikeSelectionAnalyzer
   end
 
   def parse_ohlc_data(raw_data)
-    return [] unless raw_data.present?
+    return [] if raw_data.blank?
 
     if raw_data.is_a?(Array)
       raw_data.map do |row|
@@ -289,8 +291,6 @@ class StrikeSelectionAnalyzer
       else
         Time.zone.parse(ts)
       end
-    else
-      nil
     end
   end
 
@@ -305,12 +305,12 @@ class StrikeSelectionAnalyzer
 
   def parse_strike_from_symbol(symbol)
     # Parse symbols like "NIFTY-Dec2025-26200-PE" or "BANKNIFTY25JAN26200CE"
-    return nil unless symbol.present?
+    return nil if symbol.blank?
 
     symbol_str = symbol.to_s.upcase
 
     # Pattern 1: NIFTY-Dec2025-26200-PE or NIFTY-25DEC-26200-PE
-    if match = symbol_str.match(/^(\w+)-.*?(\d{5})-?(CE|PE)$/)
+    if (match = symbol_str.match(/^(\w+)-.*?(\d{5})-?(CE|PE)$/))
       underlying = match[1]
       strike = match[2].to_f
       option_type = match[3]
@@ -318,7 +318,7 @@ class StrikeSelectionAnalyzer
     end
 
     # Pattern 2: BANKNIFTY25JAN26200CE (no dashes)
-    if match = symbol_str.match(/^(\w+)(\d{2}[A-Z]{3})(\d{5})(CE|PE)$/)
+    if (match = symbol_str.match(/^(\w+)(\d{2}[A-Z]{3})(\d{5})(CE|PE)$/))
       underlying = match[1]
       strike = match[3].to_f
       option_type = match[4]
@@ -326,7 +326,7 @@ class StrikeSelectionAnalyzer
     end
 
     # Pattern 3: NIFTY 25 DEC 26200 PE (with spaces)
-    if match = symbol_str.match(/^(\w+)\s+(\d{2}\s+[A-Z]{3}\s+)?(\d{5})\s*(CE|PE)$/)
+    if (match = symbol_str.match(/^(\w+)\s+(\d{2}\s+[A-Z]{3}\s+)?(\d{5})\s*(CE|PE)$/))
       underlying = match[1]
       strike = match[3].to_f
       option_type = match[4]
@@ -394,9 +394,9 @@ class StrikeSelectionAnalyzer
   end
 
   def print_summary
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts 'SUMMARY'
-    puts ('=' * 80) + "\n"
+    puts "#{'=' * 80}\n"
 
     total = @results.size
     matches = @results.count { |r| r[:strike_match][:match] }
@@ -415,8 +415,8 @@ class StrikeSelectionAnalyzer
       end
     end
 
-    if mismatches > 0
-      puts "\n" + ('-' * 80)
+    if mismatches.positive?
+      puts "\n#{'-' * 80}"
       puts 'MISMATCH DETAILS:'
       puts '-' * 80
       @results.select { |r| !r[:strike_match][:match] && !r[:strike_match][:close] }.each do |result|
@@ -431,7 +431,7 @@ class StrikeSelectionAnalyzer
       end
     end
 
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
   end
 end
 

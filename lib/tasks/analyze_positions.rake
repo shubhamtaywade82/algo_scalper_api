@@ -14,7 +14,7 @@ namespace :trading do
     exited = PositionTracker.exited_paper.order(created_at: :desc)
     active = PositionTracker.paper.active
 
-    puts "📊 SUMMARY"
+    puts '📊 SUMMARY'
     puts '-' * 100
     puts "Total Exited Positions: #{exited.count}"
     puts "Active Positions: #{active.count}"
@@ -65,13 +65,12 @@ namespace :trading do
     puts
 
     if high_hwm_losses.any?
-      puts "Top 20 Worst Cases (HWM Profit → Final Loss):"
+      puts 'Top 20 Worst Cases (HWM Profit → Final Loss):'
       puts '-' * 100
-      puts format('%-8s | %-12s | %-10s | %-10s | %-12s | %-12s | %-15s | %-20s',
-                  'ID', 'Order No', 'Entry Time', 'Exit Time', 'HWM (₹)', 'Final PnL (₹)', 'Drop from Peak', 'Exit Reason')
+      puts 'ID       | Order No     | Entry Time | Exit Time  | HWM (₹)      | Final PnL (₹) | Drop from Peak  | Exit Reason         '
       puts '-' * 100
 
-      sorted = high_hwm_losses.sort_by { |t| t.high_water_mark_pnl.to_f }.reverse.first(20)
+      sorted = high_hwm_losses.sort_by { |t| t.high_water_mark_pnl.to_f }.last(20).reverse
       sorted.each do |tracker|
         hwm = tracker.high_water_mark_pnl.to_f
         final = tracker.last_pnl_rupees.to_f
@@ -79,7 +78,7 @@ namespace :trading do
         entry_time = tracker.created_at.strftime('%H:%M:%S')
         exit_time = tracker.updated_at.strftime('%H:%M:%S')
         exit_reason = (tracker.meta.is_a?(Hash) ? tracker.meta['exit_reason'] : nil) || 'unknown'
-        duration = ((tracker.updated_at - tracker.created_at) / 60.0).round(1)
+        ((tracker.updated_at - tracker.created_at) / 60.0).round(1)
 
         puts format('%-8d | %-12s | %-10s | %-10s | %-12.2f | %-12.2f | %-15.2f%% | %-20s',
                     tracker.id, tracker.order_no, entry_time, exit_time, hwm, final, drop, exit_reason)
@@ -108,7 +107,7 @@ namespace :trading do
     positions_with_hwm = exited.select { |t| t.high_water_mark_pnl.to_f.positive? }
     return unless positions_with_hwm.any?
 
-    drops = positions_with_hwm.map do |tracker|
+    drops = positions_with_hwm.filter_map do |tracker|
       hwm = tracker.high_water_mark_pnl.to_f
       final = tracker.last_pnl_rupees.to_f
       next nil if hwm.zero? || hwm.negative?
@@ -116,7 +115,7 @@ namespace :trading do
       drop_rupees = hwm - final
       drop_pct = hwm.positive? ? (drop_rupees / hwm * 100.0) : 0.0
       { tracker: tracker, drop_rupees: drop_rupees, drop_pct: drop_pct, hwm: hwm, final: final }
-    end.compact
+    end
 
     return if drops.empty?
 
@@ -141,17 +140,17 @@ namespace :trading do
     puts "⚠️  Drops > 20%: #{extreme_drops.count} (#{(extreme_drops.count.to_f / drops.count * 100).round(2)}%)"
     puts
 
-    if extreme_drops.any?
-      puts "Top 10 Extreme Drops (>20% from peak):"
-      puts '-' * 100
-      sorted = extreme_drops.sort_by { |d| d[:drop_pct] }.reverse.first(10)
-      sorted.each do |d|
-        t = d[:tracker]
-        puts format('ID: %d | HWM: ₹%.2f → Final: ₹%.2f | Drop: %.2f%% | Reason: %s',
-                    t.id, d[:hwm], d[:final], d[:drop_pct], (t.meta.is_a?(Hash) ? t.meta['exit_reason'] : nil) || 'unknown')
-      end
-      puts
+    return unless extreme_drops.any?
+
+    puts 'Top 10 Extreme Drops (>20% from peak):'
+    puts '-' * 100
+    sorted = extreme_drops.sort_by { |d| d[:drop_pct] }.last(10).reverse
+    sorted.each do |d|
+      t = d[:tracker]
+      puts format('ID: %d | HWM: ₹%.2f → Final: ₹%.2f | Drop: %.2f%% | Reason: %s',
+                  t.id, d[:hwm], d[:final], d[:drop_pct], (t.meta.is_a?(Hash) ? t.meta['exit_reason'] : nil) || 'unknown')
     end
+    puts
   end
 
   def analyze_by_exit_reason(exited)
@@ -185,7 +184,7 @@ namespace :trading do
 
     # Group by hour of entry
     by_entry_hour = exited.group_by { |t| t.created_at.hour }
-    puts "Positions by Entry Hour:"
+    puts 'Positions by Entry Hour:'
     by_entry_hour.sort.each do |hour, trackers|
       winners = trackers.select { |t| t.last_pnl_rupees.to_f.positive? }
       avg_pnl = trackers.sum { |t| t.last_pnl_rupees.to_f } / trackers.count
@@ -195,7 +194,7 @@ namespace :trading do
 
     # Group by hour of exit
     by_exit_hour = exited.group_by { |t| t.updated_at.hour }
-    puts "Positions by Exit Hour:"
+    puts 'Positions by Exit Hour:'
     by_exit_hour.sort.each do |hour, trackers|
       winners = trackers.select { |t| t.last_pnl_rupees.to_f.positive? }
       avg_pnl = trackers.sum { |t| t.last_pnl_rupees.to_f } / trackers.count
@@ -244,7 +243,7 @@ namespace :trading do
 
     if high_hwm_losses.any?
       puts "1. ⚠️  HIGH HWM → LOSS PATTERN: #{high_hwm_losses.count} positions"
-      puts "   These positions had significant profit (HWM > ₹500) but closed in loss."
+      puts '   These positions had significant profit (HWM > ₹500) but closed in loss.'
       puts "   Average HWM: ₹#{high_hwm_losses.sum { |t| t.high_water_mark_pnl.to_f } / high_hwm_losses.count.round(2)}"
       puts "   Average Final Loss: ₹#{high_hwm_losses.sum { |t| t.last_pnl_rupees.to_f } / high_hwm_losses.count.round(2)}"
       puts
@@ -262,7 +261,7 @@ namespace :trading do
 
     if large_drops.any?
       puts "2. ⚠️  LARGE DROP FROM PEAK (>10%): #{large_drops.count} positions"
-      puts "   These positions dropped more than 10% from their peak before exit."
+      puts '   These positions dropped more than 10% from their peak before exit.'
       puts
     end
 
@@ -275,11 +274,11 @@ namespace :trading do
       hwm.positive? && final.negative? && duration > 30 # More than 30 minutes
     end
 
-    if early_hwm_losses.any?
-      puts "3. ⚠️  EARLY HWM → LOSS PATTERN: #{early_hwm_losses.count} positions"
-      puts "   These positions hit HWM early but gave back all gains over time."
-      puts
-    end
+    return unless early_hwm_losses.any?
+
+    puts "3. ⚠️  EARLY HWM → LOSS PATTERN: #{early_hwm_losses.count} positions"
+    puts '   These positions hit HWM early but gave back all gains over time.'
+    puts
   end
 
   def generate_recommendations(exited)
@@ -307,73 +306,71 @@ namespace :trading do
     puts
 
     if high_hwm_losses.any? || large_drops.any?
-      puts "🔴 CRITICAL ISSUES FOUND:"
+      puts '🔴 CRITICAL ISSUES FOUND:'
       puts
 
       if high_hwm_losses.any?
-        avg_drop = high_hwm_losses.map do |t|
+        avg_drop = high_hwm_losses.sum do |t|
           hwm = t.high_water_mark_pnl.to_f
           final = t.last_pnl_rupees.to_f
           hwm.positive? ? ((hwm - final) / hwm * 100.0) : 0.0
-        end.sum / high_hwm_losses.count
+        end / high_hwm_losses.count
 
-        puts "1. Peak Drawdown Protection Too Weak"
+        puts '1. Peak Drawdown Protection Too Weak'
         puts "   - #{high_hwm_losses.count} positions had high HWM but closed in loss"
         puts "   - Average drop from peak: #{avg_drop.round(2)}%"
-        puts "   - Current peak_drawdown_exit_pct: 5%"
+        puts '   - Current peak_drawdown_exit_pct: 5%'
         puts
-        puts "   💡 RECOMMENDATION:"
-        puts "   - Reduce peak_drawdown_exit_pct from 5% to 3% (tighter protection)"
-        puts "   - OR enable peak_drawdown_activation with lower thresholds"
-        puts "   - Consider dynamic drawdown based on profit level:"
-        puts "     * <10% profit: 2% drawdown"
-        puts "     * 10-25% profit: 3% drawdown"
-        puts "     * >25% profit: 5% drawdown"
+        puts '   💡 RECOMMENDATION:'
+        puts '   - Reduce peak_drawdown_exit_pct from 5% to 3% (tighter protection)'
+        puts '   - OR enable peak_drawdown_activation with lower thresholds'
+        puts '   - Consider dynamic drawdown based on profit level:'
+        puts '     * <10% profit: 2% drawdown'
+        puts '     * 10-25% profit: 3% drawdown'
+        puts '     * >25% profit: 5% drawdown'
         puts
       end
 
       if large_drops.any?
-        puts "2. Trailing Stop Not Aggressive Enough"
+        puts '2. Trailing Stop Not Aggressive Enough'
         puts "   - #{large_drops.count} positions dropped >10% from peak"
-        puts "   - Current trailing tiers may be too lenient"
+        puts '   - Current trailing tiers may be too lenient'
         puts
-        puts "   💡 RECOMMENDATION:"
-        puts "   - Tighten trailing tiers for higher profit levels:"
-        puts "     * At 25% profit: SL offset should be 5% (not 10%)"
-        puts "     * At 40% profit: SL offset should be 10% (not 20%)"
-        puts "     * At 60% profit: SL offset should be 15% (not 30%)"
-        puts "   - Add more tiers between 15-25% profit range"
+        puts '   💡 RECOMMENDATION:'
+        puts '   - Tighten trailing tiers for higher profit levels:'
+        puts '     * At 25% profit: SL offset should be 5% (not 10%)'
+        puts '     * At 40% profit: SL offset should be 10% (not 20%)'
+        puts '     * At 60% profit: SL offset should be 15% (not 30%)'
+        puts '   - Add more tiers between 15-25% profit range'
         puts
       end
 
-      puts "3. Time-Based Exit Optimization"
-      puts "   - Review positions that exited near market close"
-      puts "   - Consider earlier exit time (3:15 PM instead of 3:20 PM)"
-      puts "   - Add profit protection: if PnL > X% at 3:10 PM, exit immediately"
-      puts
+      puts '3. Time-Based Exit Optimization'
+      puts '   - Review positions that exited near market close'
+      puts '   - Consider earlier exit time (3:15 PM instead of 3:20 PM)'
+      puts '   - Add profit protection: if PnL > X% at 3:10 PM, exit immediately'
     else
-      puts "✅ No critical issues found. Current exit strategy appears effective."
-      puts
+      puts '✅ No critical issues found. Current exit strategy appears effective.'
     end
+    puts
 
-    puts "📋 SUGGESTED CONFIG CHANGES:"
+    puts '📋 SUGGESTED CONFIG CHANGES:'
     puts
-    puts "risk:"
-    puts "  peak_drawdown_exit_pct: 3  # Reduced from 5"
-    puts "  peak_drawdown_activation_profit_pct: 10.0  # Reduced from 25.0"
-    puts "  peak_drawdown_activation_sl_offset_pct: 5.0  # Reduced from 10.0"
+    puts 'risk:'
+    puts '  peak_drawdown_exit_pct: 3  # Reduced from 5'
+    puts '  peak_drawdown_activation_profit_pct: 10.0  # Reduced from 25.0'
+    puts '  peak_drawdown_activation_sl_offset_pct: 5.0  # Reduced from 10.0'
     puts
-    puts "  trailing_tiers:"
-    puts "    - { trigger_pct: 5, sl_offset_pct: -15 }"
-    puts "    - { trigger_pct: 10, sl_offset_pct: -5 }"
-    puts "    - { trigger_pct: 15, sl_offset_pct: 0 }"
-    puts "    - { trigger_pct: 20, sl_offset_pct: 5 }  # NEW: Tighter at 20%"
-    puts "    - { trigger_pct: 25, sl_offset_pct: 5 }  # Changed from 10"
-    puts "    - { trigger_pct: 40, sl_offset_pct: 10 }  # Changed from 20"
-    puts "    - { trigger_pct: 60, sl_offset_pct: 15 }  # Changed from 30"
-    puts "    - { trigger_pct: 80, sl_offset_pct: 25 }  # Changed from 40"
-    puts "    - { trigger_pct: 120, sl_offset_pct: 50 }  # Changed from 60"
+    puts '  trailing_tiers:'
+    puts '    - { trigger_pct: 5, sl_offset_pct: -15 }'
+    puts '    - { trigger_pct: 10, sl_offset_pct: -5 }'
+    puts '    - { trigger_pct: 15, sl_offset_pct: 0 }'
+    puts '    - { trigger_pct: 20, sl_offset_pct: 5 }  # NEW: Tighter at 20%'
+    puts '    - { trigger_pct: 25, sl_offset_pct: 5 }  # Changed from 10'
+    puts '    - { trigger_pct: 40, sl_offset_pct: 10 }  # Changed from 20'
+    puts '    - { trigger_pct: 60, sl_offset_pct: 15 }  # Changed from 30'
+    puts '    - { trigger_pct: 80, sl_offset_pct: 25 }  # Changed from 40'
+    puts '    - { trigger_pct: 120, sl_offset_pct: 50 }  # Changed from 60'
     puts
   end
 end
-

@@ -85,7 +85,7 @@ RSpec.describe Risk::Rules::SecureProfitRule do
       it 'returns no_action when profit exactly equals threshold' do
         position_data.pnl = 1000.0
         position_data.pnl_pct = 10.0
-        result = rule.evaluate(context)
+        rule.evaluate(context)
         # Should activate, but check drawdown
         position_data.peak_profit_pct = 10.0
         result = rule.evaluate(context)

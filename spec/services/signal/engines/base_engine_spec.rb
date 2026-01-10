@@ -14,7 +14,7 @@ RSpec.describe Signal::Engines::BaseEngine do
   let(:config) { { multiplier: 1 } }
   let(:option_candidate) do
     {
-      security_id: 12345,
+      security_id: 12_345,
       segment: 'NSE_FNO',
       symbol: 'NIFTY24FEB20000CE',
       lot_size: 50
@@ -36,7 +36,7 @@ RSpec.describe Signal::Engines::BaseEngine do
 
       expect(signal).to be_a(Hash)
       expect(signal[:segment]).to eq('NSE_FNO')
-      expect(signal[:security_id]).to eq(12345)
+      expect(signal[:security_id]).to eq(12_345)
       expect(signal[:reason]).to eq('test reason')
       expect(signal[:meta]).to include(
         index: 'NIFTY',
@@ -93,4 +93,3 @@ RSpec.describe Signal::Engines::BaseEngine do
     end
   end
 end
-

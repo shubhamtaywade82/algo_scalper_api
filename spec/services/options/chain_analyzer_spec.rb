@@ -13,8 +13,8 @@ RSpec.describe Options::ChainAnalyzer do
       }
     end
 
-    let(:instrument) { instance_double('Instrument') }
-    let(:mock_expiry_list) { ['2024-01-25', '2024-02-01', '2024-02-08'] }
+    let(:instrument) { instance_double(Instrument) }
+    let(:mock_expiry_list) { %w[2024-01-25 2024-02-01 2024-02-08] }
     let(:mock_chain_data) do
       {
         last_price: 18_500.0,
@@ -98,7 +98,7 @@ RSpec.describe Options::ChainAnalyzer do
     end
 
     let(:mock_derivative_18400_ce) do
-      instance_double('Derivative',
+      instance_double(Derivative,
                       strike_price: 18_400.0,
                       expiry_date: Date.parse('2024-01-25'),
                       option_type: 'CE',
@@ -108,7 +108,7 @@ RSpec.describe Options::ChainAnalyzer do
     end
 
     let(:mock_derivative_18500_ce) do
-      instance_double('Derivative',
+      instance_double(Derivative,
                       strike_price: 18_500.0,
                       expiry_date: Date.parse('2024-01-25'),
                       option_type: 'CE',
@@ -118,7 +118,7 @@ RSpec.describe Options::ChainAnalyzer do
     end
 
     let(:mock_derivative_18600_ce) do
-      instance_double('Derivative',
+      instance_double(Derivative,
                       strike_price: 18_600.0,
                       expiry_date: Date.parse('2024-01-25'),
                       option_type: 'CE',
@@ -136,14 +136,11 @@ RSpec.describe Options::ChainAnalyzer do
       allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_cfg).and_return(instrument)
 
       # Mock instrument methods
-      allow(instrument).to receive(:expiry_list).and_return(mock_expiry_list)
       allow(instrument).to receive(:fetch_option_chain).with('2024-01-25').and_return(mock_chain_data)
-      allow(instrument).to receive(:symbol_name).and_return('NIFTY')
-      allow(instrument).to receive(:exchange_segment).and_return('NSE_FNO')
-      allow(instrument).to receive(:derivatives).and_return(mock_derivatives)
+      allow(instrument).to receive_messages(expiry_list: mock_expiry_list, symbol_name: 'NIFTY',
+                                            exchange_segment: 'NSE_FNO', derivatives: mock_derivatives)
 
-      allow(Time.zone).to receive(:today).and_return(Date.parse('2024-01-15'))
-      allow(Time.zone).to receive(:now).and_return(Time.zone.parse('2024-01-15 10:00:00'))
+      allow(Time.zone).to receive_messages(today: Date.parse('2024-01-15'), now: Time.zone.parse('2024-01-15 10:00:00'))
 
       # Mock AlgoConfig
       allow(AlgoConfig).to receive(:fetch).and_return({
@@ -222,7 +219,7 @@ RSpec.describe Options::ChainAnalyzer do
 
         it 'skips the strike instead of returning a placeholder security id' do
           test_derivative = instance_double(
-            'Derivative',
+            Derivative,
             strike_price: 18_500.0,
             expiry_date: Date.parse('2024-01-25'),
             option_type: 'CE',
@@ -407,7 +404,7 @@ RSpec.describe Options::ChainAnalyzer do
             end
 
             # If we got results, a warning should have been logged for missing derivatives
-            expect(warn_calls.any? { |msg| msg.to_s.match(/No derivative found for NIFTY/) }).to be true
+            expect(warn_calls.any? { |msg| msg.to_s.include?('No derivative found for NIFTY') }).to be true
           else
             # If no results, strikes were filtered out before derivative lookup
             # This is also valid behavior - the test verifies the method handles missing derivatives
@@ -419,7 +416,7 @@ RSpec.describe Options::ChainAnalyzer do
 
     describe '.find_next_expiry' do
       it 'returns first upcoming expiry from list' do
-        expiry_list = ['2024-01-25', '2024-02-01', '2024-02-08']
+        expiry_list = %w[2024-01-25 2024-02-01 2024-02-08]
         result = described_class.find_next_expiry(expiry_list)
 
         expect(result).to eq('2024-01-25')
@@ -451,8 +448,8 @@ RSpec.describe Options::ChainAnalyzer do
       it 'calculates ATM strike from spot price and strike interval' do
         # Spot price: 18500, strike interval: 100 (from mock chain data)
         # ATM should be rounded to nearest 100: 18500
-          result = described_class.pick_strikes(index_cfg: index_cfg, direction: :bullish)
-          puts "DEBUG result after ATM test: #{result.inspect}"
+        result = described_class.pick_strikes(index_cfg: index_cfg, direction: :bullish)
+        puts "DEBUG result after ATM test: #{result.inspect}"
 
         # ATM strike should be 18500 (based on mock data)
         atm_strikes = result.select { |r| r[:symbol].include?('18500') }
@@ -624,12 +621,12 @@ RSpec.describe Options::ChainAnalyzer do
 
       it 'falls back to instrument segment if derivative segment not available' do
         # Mock derivative without exchange_segment
-        derivative_without_segment = instance_double('Derivative',
-                                                      strike_price: 18_500.0,
-                                                      expiry_date: Date.parse('2024-01-25'),
-                                                      option_type: 'CE',
-                                                      security_id: '18500CE',
-                                                      lot_size: 75)
+        derivative_without_segment = instance_double(Derivative,
+                                                     strike_price: 18_500.0,
+                                                     expiry_date: Date.parse('2024-01-25'),
+                                                     option_type: 'CE',
+                                                     security_id: '18500CE',
+                                                     lot_size: 75)
         allow(derivative_without_segment).to receive(:respond_to?).with(:exchange_segment).and_return(false)
         allow(instrument).to receive(:derivatives).and_return([derivative_without_segment])
 

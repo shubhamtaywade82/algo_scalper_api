@@ -14,9 +14,7 @@ module Live
         key = cache_key_for(position_data)
         now = monotonic_now
         cached = cache[key]
-        if cached && (now - cached[:at]) < CACHE_TTL
-          return cached[:state]
-        end
+        return cached[:state] if cached && (now - cached[:at]) < CACHE_TTL
 
         state = compute_state(position_data)
         cache[key] = { state: state, at: now }
@@ -92,9 +90,7 @@ module Live
         segment = position_data.underlying_segment
         index_key = position_data.index_key || position_data.underlying_symbol
 
-        if sid.present? && segment.present? && index_key.present?
-          return { key: index_key, segment: segment, sid: sid }
-        end
+        return { key: index_key, segment: segment, sid: sid } if sid.present? && segment.present? && index_key.present?
 
         cfg = Positions::MetadataResolver.index_config_for_key(index_key)
         return unless cfg
@@ -132,43 +128,41 @@ module Live
       end
 
       def structure_state(candles, direction)
-        return [:unknown, :neutral] unless candles&.respond_to?(:candles) && candles.candles.any?
+        return %i[unknown neutral] unless candles.respond_to?(:candles) && candles.candles.any?
 
         last_close = candles.candles.last.close
         case direction
         when :bearish
           swing_high = candles.respond_to?(:previous_swing_high) ? candles.previous_swing_high : nil
           if swing_high && last_close > swing_high
-            [:broken, :bullish]
+            %i[broken bullish]
           else
-            [:intact, :neutral]
+            %i[intact neutral]
           end
         else
           swing_low = candles.respond_to?(:previous_swing_low) ? candles.previous_swing_low : nil
           if swing_low && last_close < swing_low
-            [:broken, :bearish]
+            %i[broken bearish]
           else
-            [:intact, :neutral]
+            %i[intact neutral]
           end
         end
       rescue StandardError => e
         Rails.logger.error("[UnderlyingMonitor] structure_state failed: #{e.class} - #{e.message}")
-        [:unknown, :neutral]
+        %i[unknown neutral]
       end
 
       def atr_snapshot(candles, period = 14)
-        return [nil, nil, :unknown] unless candles&.respond_to?(:candles)
+        return [nil, nil, :unknown] unless candles.respond_to?(:candles)
 
         data = candles.candles
         return [nil, nil, :unknown] if data.size < (period * 2)
 
         recent = data.last(period + 1)
-        previous = data.slice(-(2 * period + 1), period + 1)
+        previous = data.slice(-((2 * period) + 1), period + 1)
         atr_now = average_true_range(recent)
         atr_prev = average_true_range(previous)
-        ratio = if atr_prev.to_f.positive?
-                  atr_now.to_f / atr_prev.to_f
-                end
+        ratio = (atr_now.to_f / atr_prev if atr_prev.to_f.positive?)
         trend =
           if ratio && ratio < 0.85
             :falling

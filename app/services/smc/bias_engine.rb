@@ -150,7 +150,6 @@ module Smc
       series
     end
 
-
     def htf_bias_valid?(ctx)
       ctx.pd.discount? || ctx.pd.premium?
     end

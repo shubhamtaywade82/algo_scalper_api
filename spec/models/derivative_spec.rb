@@ -59,26 +59,27 @@
 
 require 'rails_helper'
 
-RSpec.describe Derivative, type: :model do
-    let(:instrument) do
-      Instrument.find_or_create_by!(security_id: '13') do |inst|
-        inst.assign_attributes(
-          symbol_name: 'NIFTY',
-          exchange: 'nse',
-          segment: 'index',
-          instrument_type: 'INDEX',
-          instrument_code: 'index'
-        )
-      end
+RSpec.describe Derivative do
+  let(:instrument) do
+    Instrument.find_or_create_by!(security_id: '13') do |inst|
+      inst.assign_attributes(
+        symbol_name: 'NIFTY',
+        exchange: 'nse',
+        segment: 'index',
+        instrument_type: 'INDEX',
+        instrument_code: 'index'
+      )
     end
-  let(:derivative) { create(:derivative, :nifty_call_option, instrument: instrument, security_id: '60001', lot_size: 25) }
+  end
+  let(:derivative) do
+    create(:derivative, :nifty_call_option, instrument: instrument, security_id: '60001', lot_size: 25)
+  end
   let(:order_response) { double('Order', order_id: 'ORD654321') }
   let(:redis_cache) { Live::RedisPnlCache.instance }
   let(:ws_hub) { Live::WsHub.instance }
 
   before do
-    allow(ws_hub).to receive(:running?).and_return(true)
-    allow(ws_hub).to receive(:subscribe).and_return(true)
+    allow(ws_hub).to receive_messages(running?: true, subscribe: true)
     allow(redis_cache).to receive(:clear_tick)
     allow(redis_cache).to receive(:fetch_tick).and_return(nil)
     allow(Orders.config).to receive(:place_market).and_return(order_response)
@@ -166,7 +167,8 @@ RSpec.describe Derivative, type: :model do
       end
 
       it 'uses long_pe for put options' do
-        put_derivative = create(:derivative, :nifty_put_option, instrument: instrument, security_id: '60002', lot_size: 25)
+        put_derivative = create(:derivative, :nifty_put_option, instrument: instrument, security_id: '60002',
+                                                                lot_size: 25)
         allow(put_derivative).to receive(:resolve_ltp).and_return(BigDecimal('80.50'))
         allow(Capital::Allocator).to receive(:qty_for).and_return(50)
         allow(Orders.config).to receive(:place_market).and_return(order_response)
@@ -358,4 +360,3 @@ RSpec.describe Derivative, type: :model do
     end
   end
 end
-

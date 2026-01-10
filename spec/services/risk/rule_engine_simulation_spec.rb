@@ -109,17 +109,12 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
     allow(AlgoConfig).to receive(:fetch).and_return(risk: risk_config)
 
     # Mock TradingSession
-    allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
-    allow(TradingSession::Service).to receive(:session_ending?).and_return(false)
+    allow(TradingSession::Service).to receive_messages(market_closed?: false, session_ending?: false)
 
     # Mock Positions::TrailingConfig for peak drawdown
-    allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
-    allow(Positions::TrailingConfig).to receive(:peak_drawdown_active?).and_return(true)
-    allow(Positions::TrailingConfig).to receive(:config).and_return(
-      peak_drawdown_pct: 5.0,
-      activation_profit_pct: 25.0,
-      activation_sl_offset_pct: 10.0
-    )
+    allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: false, peak_drawdown_active?: true, config: { peak_drawdown_pct: 5.0,
+                                                                                                                                 activation_profit_pct: 25.0,
+                                                                                                                                 activation_sl_offset_pct: 10.0 })
 
     # Mock UnderlyingMonitor for underlying exit tests
     allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(nil)
@@ -421,8 +416,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
       allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(underlying_state)
 
       # Mock RiskManager's underlying exit check
-      allow(risk_manager).to receive(:handle_underlying_exit).and_return(true)
-      allow(risk_manager).to receive(:underlying_exits_enabled?).and_return(true)
+      allow(risk_manager).to receive_messages(handle_underlying_exit: true, underlying_exits_enabled?: true)
 
       position = create_position_in_cache(
         pnl: 0.15 * buy_value,

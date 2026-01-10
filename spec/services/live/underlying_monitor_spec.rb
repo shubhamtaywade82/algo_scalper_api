@@ -31,7 +31,9 @@ RSpec.describe Live::UnderlyingMonitor do
 
     context 'when data is available' do
       let(:instrument) { instance_double(Instrument, candle_series: candle_series) }
-      let(:candle_series) { instance_double(CandleSeries, candles: candle_objects, previous_swing_low: 95.0, previous_swing_high: 110.0) }
+      let(:candle_series) do
+        instance_double(CandleSeries, candles: candle_objects, previous_swing_low: 95.0, previous_swing_high: 110.0)
+      end
       let(:candle_objects) do
         Array.new(30) do |i|
           OpenStruct.new(

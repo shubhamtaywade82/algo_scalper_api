@@ -292,13 +292,9 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
     let(:rule) { Risk::Rules::PeakDrawdownRule.new(config: risk_config) }
 
     before do
-      allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
-      allow(Positions::TrailingConfig).to receive(:peak_drawdown_active?).and_return(true)
-      allow(Positions::TrailingConfig).to receive(:config).and_return(
-        peak_drawdown_pct: 5.0,
-        activation_profit_pct: 25.0,
-        activation_sl_offset_pct: 10.0
-      )
+      allow(Positions::TrailingConfig).to receive_messages(peak_drawdown_triggered?: true, peak_drawdown_active?: true, config: { peak_drawdown_pct: 5.0,
+                                                                                                                                  activation_profit_pct: 25.0,
+                                                                                                                                  activation_sl_offset_pct: 10.0 })
       allow(AlgoConfig).to receive(:fetch).and_return(feature_flags: {})
     end
 

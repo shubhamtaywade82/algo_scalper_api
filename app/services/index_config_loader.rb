@@ -100,7 +100,7 @@ class IndexConfigLoader
     }
 
     # Merge with algo.yml config (algo.yml takes precedence for non-identity fields)
-    if matching_config && matching_config.is_a?(Hash)
+    if matching_config.is_a?(Hash)
       # Merge: WatchlistItem provides identity (segment, sid), algo.yml provides rest
       base_config.merge(matching_config.except(:key, :segment, :sid))
     else

@@ -51,7 +51,7 @@ unless tracker
 end
 
 unless tracker
-  ServiceTestHelper.print_error("Failed to find or create paper PositionTracker")
+  ServiceTestHelper.print_error('Failed to find or create paper PositionTracker')
   exit 1
 end
 
@@ -83,7 +83,7 @@ exit_engine = Live::ExitEngine.new(order_router: order_router)
 
 # Test 2: Simulate tick sequence - gradual profit increase
 ServiceTestHelper.print_section('2. Tick Sequence: Gradual Profit Increase')
-ServiceTestHelper.print_info("Simulating gradual profit increase to test trailing tiers...")
+ServiceTestHelper.print_info('Simulating gradual profit increase to test trailing tiers...')
 
 tick_sequence_profit = [
   { tick: 1, ltp: 152.0, profit: 1.33, description: 'Small profit' },
@@ -107,16 +107,16 @@ tick_sequence_profit.each do |tick_data|
   ServiceTestHelper.print_info("    SL updated: #{result[:sl_updated]}")
   ServiceTestHelper.print_info("    Exit triggered: #{result[:exit_triggered]}")
 
-  if result[:sl_updated]
-    current_sl = active_cache.get_by_tracker_id(tracker.id)&.sl_price
-    sl_offset_pct = ((current_sl - position_data.entry_price) / position_data.entry_price * 100).round(2)
-    ServiceTestHelper.print_info("    Current SL: ₹#{current_sl.round(2)} (#{sl_offset_pct}% offset)")
-  end
+  next unless result[:sl_updated]
+
+  current_sl = active_cache.get_by_tracker_id(tracker.id)&.sl_price
+  sl_offset_pct = ((current_sl - position_data.entry_price) / position_data.entry_price * 100).round(2)
+  ServiceTestHelper.print_info("    Current SL: ₹#{current_sl.round(2)} (#{sl_offset_pct}% offset)")
 end
 
 # Test 3: Simulate peak-drawdown exit scenario
 ServiceTestHelper.print_section('3. Tick Sequence: Peak-Drawdown Exit')
-ServiceTestHelper.print_info("Simulating profit to peak, then drawdown to trigger exit...")
+ServiceTestHelper.print_info('Simulating profit to peak, then drawdown to trigger exit...')
 
 # Reset to high profit (peak)
 position_data.update_ltp(187.5) # 25% profit (peak)
@@ -141,28 +141,28 @@ drawdown_sequence.each do |tick_data|
   ServiceTestHelper.print_info("    Drawdown from peak: #{tick_data[:drawdown].round(2)}%")
   ServiceTestHelper.print_info("    Exit triggered: #{result[:exit_triggered]}")
 
-  if result[:exit_triggered]
-    ServiceTestHelper.print_success("    ✅ Peak-drawdown exit triggered!")
-    ServiceTestHelper.print_info("    Exit reason: #{result[:reason]}")
-    # Check if position was actually exited
-    tracker.reload
-    if tracker.status == 'exited'
-      exit_reason = tracker.meta.is_a?(Hash) ? tracker.meta['exit_reason'] : nil
-      ServiceTestHelper.print_info("    Position status: exited")
-      ServiceTestHelper.print_info("    Database exit reason: #{exit_reason || 'N/A'}")
-    end
-    break # Exit triggered, stop sequence
+  next unless result[:exit_triggered]
+
+  ServiceTestHelper.print_success('    ✅ Peak-drawdown exit triggered!')
+  ServiceTestHelper.print_info("    Exit reason: #{result[:reason]}")
+  # Check if position was actually exited
+  tracker.reload
+  if tracker.status == 'exited'
+    exit_reason = tracker.meta.is_a?(Hash) ? tracker.meta['exit_reason'] : nil
+    ServiceTestHelper.print_info('    Position status: exited')
+    ServiceTestHelper.print_info("    Database exit reason: #{exit_reason || 'N/A'}")
   end
+  break # Exit triggered, stop sequence
 end
 
 # Test 4: Idempotency test - verify no double exit
 ServiceTestHelper.print_section('4. Idempotency Test: No Double Exit')
-ServiceTestHelper.print_info("Testing that exit is not triggered multiple times...")
+ServiceTestHelper.print_info('Testing that exit is not triggered multiple times...')
 
 # Check if position is already exited from previous test
 tracker.reload
 if tracker.status == 'exited'
-  ServiceTestHelper.print_info("  Position already exited from previous test, creating new position for idempotency test...")
+  ServiceTestHelper.print_info('  Position already exited from previous test, creating new position for idempotency test...')
   # Create a new position for this test
   derivative = ServiceTestHelper.find_atm_or_otm_derivative(
     underlying_symbol: 'NIFTY',
@@ -214,14 +214,14 @@ ServiceTestHelper.print_info("  Final status: #{tracker.status}")
 ServiceTestHelper.print_info("  Exit triggered count: #{exit_triggered_count}")
 
 if tracker.status == 'exited' && exit_triggered_count <= 1
-  ServiceTestHelper.print_success("Exit is idempotent (position stays exited, no double exit)")
+  ServiceTestHelper.print_success('Exit is idempotent (position stays exited, no double exit)')
 else
   ServiceTestHelper.print_warning("Exit may not be fully idempotent (status: #{tracker.status}, triggers: #{exit_triggered_count})")
 end
 
 # Test 5: Complex scenario - profit, drawdown, recovery, drawdown again
 ServiceTestHelper.print_section('5. Complex Scenario: Profit → Drawdown → Recovery → Drawdown')
-ServiceTestHelper.print_info("Simulating realistic trading scenario...")
+ServiceTestHelper.print_info('Simulating realistic trading scenario...')
 
 # Start fresh
 position_data.update_ltp(150.0) # Back to entry
@@ -243,9 +243,7 @@ complex_sequence.each do |step|
 
   ServiceTestHelper.print_info("  #{step[:phase]}: LTP=₹#{step[:ltp]}, Profit=#{step[:profit].round(2)}%")
   ServiceTestHelper.print_info("    Peak: #{position_data.peak_profit_pct.round(2)}%")
-  if step[:drawdown]
-    ServiceTestHelper.print_info("    Drawdown: #{step[:drawdown].round(2)}%")
-  end
+  ServiceTestHelper.print_info("    Drawdown: #{step[:drawdown].round(2)}%") if step[:drawdown]
   ServiceTestHelper.print_info("    Exit triggered: #{result[:exit_triggered]}")
 
   if result[:exit_triggered]
@@ -256,7 +254,7 @@ end
 
 # Test 6: Verify trailing SL moves only up
 ServiceTestHelper.print_section('6. Trailing SL Direction Test')
-ServiceTestHelper.print_info("Verifying SL only moves up (trailing), never down...")
+ServiceTestHelper.print_info('Verifying SL only moves up (trailing), never down...')
 
 # Set to high profit first
 position_data.update_ltp(187.5) # 25% profit
@@ -265,26 +263,23 @@ high_sl = active_cache.get_by_tracker_id(tracker.id)&.sl_price
 
 # Simulate price drop (but still profitable)
 position_data.update_ltp(180.0) # 20% profit (lower than peak)
-result = trailing_engine.process_tick(position_data, exit_engine: nil)
+trailing_engine.process_tick(position_data, exit_engine: nil)
 new_sl = active_cache.get_by_tracker_id(tracker.id)&.sl_price
 
 if new_sl >= high_sl
-  ServiceTestHelper.print_success("SL correctly maintained or increased (trailing up)")
-  ServiceTestHelper.print_info("  Previous SL: ₹#{high_sl.round(2)}")
-  ServiceTestHelper.print_info("  Current SL: ₹#{new_sl.round(2)}")
+  ServiceTestHelper.print_success('SL correctly maintained or increased (trailing up)')
 else
-  ServiceTestHelper.print_error("SL moved down (should only trail up)")
-  ServiceTestHelper.print_info("  Previous SL: ₹#{high_sl.round(2)}")
-  ServiceTestHelper.print_info("  Current SL: ₹#{new_sl.round(2)}")
+  ServiceTestHelper.print_error('SL moved down (should only trail up)')
 end
+ServiceTestHelper.print_info("  Previous SL: ₹#{high_sl.round(2)}")
+ServiceTestHelper.print_info("  Current SL: ₹#{new_sl.round(2)}")
 
 ServiceTestHelper.print_section('Summary')
-ServiceTestHelper.print_info("Trailing simulation test completed")
-ServiceTestHelper.print_info("Key scenarios verified:")
-ServiceTestHelper.print_info("  ✅ Gradual profit increase with tiered SL moves")
-ServiceTestHelper.print_info("  ✅ Peak-drawdown exit trigger")
-ServiceTestHelper.print_info("  ✅ Idempotency (no double exit)")
-ServiceTestHelper.print_info("  ✅ Complex profit/drawdown/recovery scenarios")
-ServiceTestHelper.print_info("  ✅ SL only trails up (never down)")
-ServiceTestHelper.print_info("  ✅ Exchange segment: NSE_FNO (Futures & Options)")
-
+ServiceTestHelper.print_info('Trailing simulation test completed')
+ServiceTestHelper.print_info('Key scenarios verified:')
+ServiceTestHelper.print_info('  ✅ Gradual profit increase with tiered SL moves')
+ServiceTestHelper.print_info('  ✅ Peak-drawdown exit trigger')
+ServiceTestHelper.print_info('  ✅ Idempotency (no double exit)')
+ServiceTestHelper.print_info('  ✅ Complex profit/drawdown/recovery scenarios')
+ServiceTestHelper.print_info('  ✅ SL only trails up (never down)')
+ServiceTestHelper.print_info('  ✅ Exchange segment: NSE_FNO (Futures & Options)')

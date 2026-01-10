@@ -93,4 +93,3 @@ RSpec.describe Smc::Detectors::Fvg do
     end
   end
 end
-

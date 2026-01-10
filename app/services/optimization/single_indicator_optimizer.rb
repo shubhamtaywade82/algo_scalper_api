@@ -25,15 +25,15 @@ module Optimization
       }
     }.freeze
 
-    def initialize(instrument:, interval:, lookback_days: 45, indicator:)
+    def initialize(instrument:, interval:, indicator:, lookback_days: 45)
       @instrument = instrument
       @interval = interval
       @lookback = lookback_days
       @indicator = indicator.to_sym
 
-      unless INDICATOR_PARAM_SPACES.key?(@indicator)
-        raise ArgumentError, "Unknown indicator: #{@indicator}. Must be one of: #{INDICATOR_PARAM_SPACES.keys.join(', ')}"
-      end
+      return if INDICATOR_PARAM_SPACES.key?(@indicator)
+
+      raise ArgumentError, "Unknown indicator: #{@indicator}. Must be one of: #{INDICATOR_PARAM_SPACES.keys.join(', ')}"
     end
 
     def run
@@ -42,7 +42,7 @@ module Optimization
       $stdout.flush
 
       load_series!
-      return { error: 'Failed to load series' } unless @series && @series.candles.any?
+      return { error: 'Failed to load series' } unless @series&.candles&.any?
 
       Rails.logger.info("[SingleIndicatorOptimizer] Loaded #{@series.candles.size} candles")
       $stdout.puts "[SingleIndicatorOptimizer] Loaded #{@series.candles.size} candles"
@@ -81,12 +81,12 @@ module Optimization
         end
 
         # Progress logging every 10%
-        if processed % [total_combinations / 10, 1].max == 0
-          progress_pct = (processed.to_f / total_combinations * 100).round(1)
-          Rails.logger.info("[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
-          $stdout.puts "[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
-          $stdout.flush
-        end
+        next unless (processed % [total_combinations / 10, 1].max).zero?
+
+        progress_pct = (processed.to_f / total_combinations * 100).round(1)
+        Rails.logger.info("[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})")
+        $stdout.puts "[SingleIndicatorOptimizer] Progress: #{progress_pct}% (#{processed}/#{total_combinations})"
+        $stdout.flush
       end
 
       Rails.logger.info("[SingleIndicatorOptimizer] Optimization complete. Best AvgMove: #{best[:score].round(4)}%")
@@ -103,7 +103,7 @@ module Optimization
 
     def load_series!
       Rails.logger.info("[SingleIndicatorOptimizer] Fetching intraday OHLC for #{@instrument.symbol_name} @ #{@interval}m (#{@lookback} days)")
-      $stdout.puts "[SingleIndicatorOptimizer] Fetching intraday OHLC..."
+      $stdout.puts '[SingleIndicatorOptimizer] Fetching intraday OHLC...'
       $stdout.flush
 
       raw = @instrument.intraday_ohlc(
@@ -111,7 +111,7 @@ module Optimization
         days: @lookback
       )
 
-      unless raw.present?
+      if raw.blank?
         error_msg = "No intraday OHLC data returned for #{@instrument.symbol_name} @ #{@interval}m"
         Rails.logger.error("[SingleIndicatorOptimizer] #{error_msg}")
         $stdout.puts "[SingleIndicatorOptimizer] ❌ #{error_msg}"
@@ -120,7 +120,7 @@ module Optimization
       end
 
       Rails.logger.info("[SingleIndicatorOptimizer] Received #{raw.is_a?(Hash) ? raw.keys.size : raw.size} records from API")
-      $stdout.puts "[SingleIndicatorOptimizer] Received data from API"
+      $stdout.puts '[SingleIndicatorOptimizer] Received data from API'
       $stdout.flush
 
       @series = CandleSeries.new(symbol: @instrument.symbol_name, interval: @interval)
@@ -154,7 +154,7 @@ module Optimization
         keys = param_space.keys
         values = param_space.values
         values.first.product(*values.drop(1)).map do |vals|
-          Hash[keys.zip(vals)]
+          keys.zip(vals).to_h
         end
       end
     end
@@ -186,7 +186,7 @@ module Optimization
             score: best[:score],
             updated_at: Time.current
           },
-          unique_by: [:instrument_id, :interval, :indicator]
+          unique_by: %i[instrument_id interval indicator]
         )
       else
         # Fallback for old schema
@@ -199,7 +199,7 @@ module Optimization
             score: best[:score],
             updated_at: Time.current
           },
-          unique_by: [:instrument_id, :interval]
+          unique_by: %i[instrument_id interval]
         )
       end
     rescue StandardError => e
@@ -207,4 +207,3 @@ module Optimization
     end
   end
 end
-

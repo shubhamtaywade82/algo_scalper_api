@@ -13,7 +13,7 @@ ServiceTestHelper.setup_test_watchlist_items
 # Test 1: Initialize TrendScorer for NIFTY
 ServiceTestHelper.print_section('1. TrendScorer Initialization')
 indices = AlgoConfig.fetch[:indices] || []
-nifty_index = indices.find { |idx| idx[:key] == 'NIFTY' || idx[:key] == :NIFTY }
+nifty_index = indices.find { |idx| ['NIFTY', :NIFTY].include?(idx[:key]) }
 
 if nifty_index
   # get_or_fetch expects full index_cfg hash with :key, :sid, :segment
@@ -29,7 +29,7 @@ if nifty_index
       confirmation_tf: '5m'
     )
 
-    ServiceTestHelper.print_info("TrendScorer initialized with primary_tf: 1m, confirmation_tf: 5m")
+    ServiceTestHelper.print_info('TrendScorer initialized with primary_tf: 1m, confirmation_tf: 5m')
 
     # Test 2: Compute trend score
     ServiceTestHelper.print_section('2. Compute Trend Score')
@@ -47,18 +47,18 @@ if nifty_index
       trend_score = result[:trend_score]
 
       if trend_score >= 18
-        ServiceTestHelper.print_success("Strong trend (>=18) - Allows 2OTM strikes")
+        ServiceTestHelper.print_success('Strong trend (>=18) - Allows 2OTM strikes')
       elsif trend_score >= 12
-        ServiceTestHelper.print_info("Moderate trend (>=12) - Allows 1OTM strikes")
+        ServiceTestHelper.print_info('Moderate trend (>=12) - Allows 1OTM strikes')
       elsif trend_score >= 7
-        ServiceTestHelper.print_warning("Weak trend (>=7) - ATM only")
+        ServiceTestHelper.print_warning('Weak trend (>=7) - ATM only')
       else
-        ServiceTestHelper.print_warning("Very weak trend (<7) - ATM only, low confidence")
+        ServiceTestHelper.print_warning('Very weak trend (<7) - ATM only, low confidence')
       end
 
       # Test 4: Test with different timeframes
       ServiceTestHelper.print_section('4. Different Timeframe Configurations')
-      ['1m', '5m', '15m'].each do |primary_tf|
+      %w[1m 5m 15m].each do |primary_tf|
         scorer_tf = Signal::TrendScorer.new(
           instrument: nifty_instrument,
           primary_tf: primary_tf,
@@ -77,8 +77,8 @@ if nifty_index
       begin
         scorer_nil = Signal::TrendScorer.new(instrument: nil, primary_tf: '1m')
         result_nil = scorer_nil.compute_trend_score
-        if result_nil && result_nil[:trend_score] == 0
-          ServiceTestHelper.print_success("Gracefully handles nil instrument (returns 0 score)")
+        if result_nil && result_nil[:trend_score].zero?
+          ServiceTestHelper.print_success('Gracefully handles nil instrument (returns 0 score)')
         else
           ServiceTestHelper.print_info("Nil instrument handled: #{result_nil || 'nil'}")
         end
@@ -95,16 +95,15 @@ if nifty_index
         ServiceTestHelper.print_success("Error handled correctly: #{e.class} - #{e.message}")
       end
     else
-      ServiceTestHelper.print_error("Failed to compute trend score")
+      ServiceTestHelper.print_error('Failed to compute trend score')
     end
   else
-    ServiceTestHelper.print_error("NIFTY instrument not found")
+    ServiceTestHelper.print_error('NIFTY instrument not found')
   end
 else
-  ServiceTestHelper.print_error("NIFTY index config not found in algo.yml")
+  ServiceTestHelper.print_error('NIFTY index config not found in algo.yml')
 end
 
 ServiceTestHelper.print_section('Summary')
-ServiceTestHelper.print_info("TrendScorer test completed")
-ServiceTestHelper.print_info("Use this service to evaluate trend strength for index selection")
-
+ServiceTestHelper.print_info('TrendScorer test completed')
+ServiceTestHelper.print_info('Use this service to evaluate trend strength for index selection')

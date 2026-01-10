@@ -25,7 +25,7 @@ module Services
 
         def tool_get_comprehensive_analysis(args)
           underlying_symbol = args['underlying_symbol'] || args['symbol_name'] # Support both for backward compatibility
-          return { error: 'Missing underlying_symbol' } unless underlying_symbol.present?
+          return { error: 'Missing underlying_symbol' } if underlying_symbol.blank?
 
           # Auto-detect exchange and segment
           exchange = detect_exchange_for_index(underlying_symbol, args['exchange'])
@@ -123,13 +123,13 @@ module Services
                 histogram: histogram
               }
               # Add interpretation
-              macd_interpretation = if macd_line > signal_line && histogram > 0
+              macd_interpretation = if macd_line > signal_line && histogram.positive?
                                       'bullish'
-                                    elsif macd_line < signal_line && histogram < 0
+                                    elsif macd_line < signal_line && histogram.negative?
                                       'bearish'
-                                    elsif macd_line > signal_line && histogram < 0
+                                    elsif macd_line > signal_line && histogram.negative?
                                       'bullish_weakening'
-                                    elsif macd_line < signal_line && histogram > 0
+                                    elsif macd_line < signal_line && histogram.positive?
                                       'bearish_weakening'
                                     else
                                       'neutral'
@@ -265,7 +265,7 @@ module Services
 
         def tool_get_instrument_ltp(args)
           underlying_symbol = args['underlying_symbol'] || args['symbol_name'] # Support both for backward compatibility
-          return { error: 'Missing underlying_symbol' } unless underlying_symbol.present?
+          return { error: 'Missing underlying_symbol' } if underlying_symbol.blank?
 
           # Auto-detect exchange and segment
           exchange = detect_exchange_for_index(underlying_symbol, args['exchange'])
@@ -316,7 +316,7 @@ module Services
 
         def tool_get_ohlc(args)
           underlying_symbol = args['underlying_symbol'] || args['symbol_name'] # Support both for backward compatibility
-          return { error: 'Missing underlying_symbol' } unless underlying_symbol.present?
+          return { error: 'Missing underlying_symbol' } if underlying_symbol.blank?
 
           # Auto-detect exchange and segment
           exchange = detect_exchange_for_index(underlying_symbol, args['exchange'])
@@ -428,8 +428,6 @@ module Services
                      if bb_result
                        { upper: bb_result[:upper], middle: bb_result[:middle],
                          lower: bb_result[:lower] }
-                     else
-                       nil
                      end
                    else
                      return { error: "Unknown indicator: #{indicator_name}. Available: RSI, MACD, ADX, Supertrend, ATR, BollingerBands" }
@@ -447,7 +445,7 @@ module Services
 
         def tool_get_historical_data(args)
           underlying_symbol = args['underlying_symbol'] || args['symbol_name'] # Support both for backward compatibility
-          return { error: 'Missing underlying_symbol' } unless underlying_symbol.present?
+          return { error: 'Missing underlying_symbol' } if underlying_symbol.blank?
 
           # Auto-detect exchange and segment
           exchange = detect_exchange_for_index(underlying_symbol, args['exchange'])
@@ -538,7 +536,7 @@ module Services
               days: days
             )
 
-            return { error: 'No historical data available' } unless data.present?
+            return { error: 'No historical data available' } if data.blank?
 
             {
               underlying_symbol: underlying_symbol,
@@ -944,7 +942,7 @@ module Services
                         instrument.underlying_symbol || instrument.symbol_name
                       end
 
-          return { error: "Could not resolve index_key for instrument #{instrument_id}" } unless index_key.present?
+          return { error: "Could not resolve index_key for instrument #{instrument_id}" } if index_key.blank?
 
           # Verify index_key exists in config
           @index_config_cache ||= IndexConfigLoader.load_indices
@@ -988,7 +986,7 @@ module Services
           end
 
           # Extract unique strikes (since we have both CE and PE for each strike)
-          unique_strikes = filtered.map { |o| o[:strike] || o['strike'] }.compact.uniq.sort.first(5)
+          unique_strikes = filtered.filter_map { |o| o[:strike] || o['strike'] }.uniq.sort.first(5)
 
           # Build strikes array in format expected by context
           strikes = unique_strikes.map do |strike_val|
@@ -1005,14 +1003,10 @@ module Services
               ce: if ce_option
                     { ltp: ce_option[:ltp] || ce_option['ltp'],
                       premium: ce_option[:ltp] || ce_option['ltp'] }
-                  else
-                    nil
                   end,
               pe: if pe_option
                     { ltp: pe_option[:ltp] || pe_option['ltp'],
                       premium: pe_option[:ltp] || pe_option['ltp'] }
-                  else
-                    nil
                   end
             }
           end

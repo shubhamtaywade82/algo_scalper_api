@@ -50,8 +50,7 @@ RSpec.describe Live::RiskManagerService, '#process_trailing_for_all_positions' d
 
   before do
     allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
-    allow(active_cache).to receive(:all_positions).and_return([position_data])
-    allow(active_cache).to receive(:update_position).and_return(true)
+    allow(active_cache).to receive_messages(all_positions: [position_data], update_position: true)
     allow(Live::TickCache).to receive(:ltp).and_return(position_data.current_ltp)
     allow(Live::RedisTickCache).to receive(:instance).and_return(redis_tick_cache)
     allow(exit_engine).to receive(:execute_exit)

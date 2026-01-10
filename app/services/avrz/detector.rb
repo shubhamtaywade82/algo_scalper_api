@@ -58,7 +58,7 @@ module Avrz
     end
 
     def avg_volume(items)
-      vols = items.map { |c| c.volume.to_f }.select { |v| v.positive? }
+      vols = items.map { |c| c.volume.to_f }.select(&:positive?)
       return 0.0 if vols.empty?
 
       vols.sum / vols.size
@@ -92,4 +92,3 @@ module Avrz
     end
   end
 end
-

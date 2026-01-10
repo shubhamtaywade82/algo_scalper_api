@@ -11,7 +11,7 @@ namespace :trading do
 
     # Get all paper positions for today, ordered by exit time (or created_at if not exited)
     all_positions = PositionTracker.paper
-                                   .where('created_at >= ?', today.beginning_of_day)
+                                   .where(created_at: today.beginning_of_day..)
                                    .order(Arel.sql('COALESCE(exited_at, created_at) ASC'))
 
     exited_positions = all_positions.exited.order(:exited_at)
@@ -42,7 +42,7 @@ namespace :trading do
     puts '=' * 100
     puts ''
 
-    exited_positions.each_with_index do |position, idx|
+    exited_positions.each_with_index do |position, _idx|
       pnl = position.last_pnl_rupees || BigDecimal(0)
       pnl_pct = (position.last_pnl_pct || 0) * 100.0 # Convert decimal to percentage
       cumulative_realized_pnl += pnl

@@ -62,11 +62,11 @@ RSpec.describe Signal::Engine, :vcr do
 
     before do
       allow(AlgoConfig).to receive(:fetch).and_return({
-        signals: signals_cfg.merge(
-          supertrend: { period: 7, multiplier: 3.0 },
-          adx: { min_strength: 18 }
-        )
-      })
+                                                        signals: signals_cfg.merge(
+                                                          supertrend: { period: 7, multiplier: 3.0 },
+                                                          adx: { min_strength: 18 }
+                                                        )
+                                                      })
     end
 
     context 'when indicators are enabled' do

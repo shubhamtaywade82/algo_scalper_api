@@ -99,7 +99,7 @@ module Indicators
 
         next unless wma_half && wma_full
 
-        raw_hma = 2 * wma_half - wma_full
+        raw_hma = (2 * wma_half) - wma_full
         raw_hma_series << raw_hma
       end
 
@@ -130,7 +130,7 @@ module Indicators
 
       return nil unless wma_half && wma_full
 
-      raw_hma = 2 * wma_half - wma_full
+      raw_hma = (2 * wma_half) - wma_full
 
       # For single point calculation, we need accumulated raw HMA values
       # This is a simplified version - use calculate_hma_series for accurate results
@@ -211,9 +211,9 @@ module Indicators
       base += 20 if @trend_count >= @trend_length
 
       # Higher confidence if current duration matches probable duration
-      if probable_duration > 0
+      if probable_duration.positive?
         duration_ratio = @trend_count.to_f / probable_duration
-        if duration_ratio >= 0.8 && duration_ratio <= 1.2
+        if duration_ratio.between?(0.8, 1.2)
           base += 15 # Trend is in expected range
         elsif duration_ratio < 0.5
           base += 10 # Early in trend, more room to run

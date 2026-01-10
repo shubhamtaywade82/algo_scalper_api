@@ -16,7 +16,7 @@ class AgentMonitor
   end
 
   def monitor_query(query, stream: false)
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts "QUERY: #{query}".bold
     puts '=' * 80
     puts "Time: #{Time.current}"
@@ -35,7 +35,7 @@ class AgentMonitor
 
       elapsed = Time.current - start_time
 
-      puts "\n" + ('-' * 80)
+      puts "\n#{'-' * 80}"
       puts 'RESULT SUMMARY'.bold
       puts '-' * 80
       puts "Elapsed time: #{elapsed.round(2)}s"
@@ -67,13 +67,13 @@ class AgentMonitor
 
       # Check output for errors
       output.each do |line|
-        if line.match?(/error|Error|ERROR|failed|Failed|FAILED/i) && !line.match?(/NO_TRADE/)
+        if line.match?(/error|Error|ERROR|failed|Failed|FAILED/i) && line.exclude?('NO_TRADE')
           puts "⚠️  Warning in output: #{line.strip}".yellow
         end
       end
     rescue StandardError => e
       elapsed = Time.current - start_time
-      puts "\n" + ('-' * 80)
+      puts "\n#{'-' * 80}"
       puts 'EXCEPTION CAUGHT'.bold.red
       puts '-' * 80
       puts "Error: #{e.class} - #{e.message}".red
@@ -88,7 +88,7 @@ class AgentMonitor
   end
 
   def print_summary
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts 'MONITORING SESSION SUMMARY'.bold
     puts '=' * 80
     puts "Successes: #{@success_count}".green

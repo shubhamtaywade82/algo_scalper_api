@@ -463,7 +463,7 @@ RSpec.describe Capital::Allocator do
         end
 
         it 'uses environment variable overrides when set' do
-          # Note: The implementation prefers band values over ENV (band[:alloc_pct] || ENV[...])
+          # NOTE: The implementation prefers band values over ENV (band[:alloc_pct] || ENV[...])
           # So ENV only applies when band value is nil. For 100_000 balance, band alloc_pct is 0.25
           # To test ENV override, we need to use a balance that falls into a band without alloc_pct
           # or modify the test to expect the band value (0.25) instead

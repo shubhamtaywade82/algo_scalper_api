@@ -7,4 +7,3 @@ RSpec.describe 'Smoke: Zeitwerk eager load' do
     expect { Rails.application.eager_load! }.not_to raise_error
   end
 end
-

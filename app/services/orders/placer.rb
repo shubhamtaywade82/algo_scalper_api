@@ -87,7 +87,7 @@ module Orders
           return nil
         end
 
-        actual_qty = if position && position[:net_qty].to_i > 0
+        actual_qty = if position && position[:net_qty].to_i.positive?
                        position[:net_qty]
                      else
                        qty

@@ -295,7 +295,7 @@ module Live
         # BIDIRECTIONAL TRAILING LOGIC
 
         # 1. UPWARD TRAILING (when profitable): Use adaptive drawdown schedule
-        if pnl_pct_value > 0
+        if pnl_pct_value.positive?
           # Calculate peak profit percentage
           peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
 
@@ -475,7 +475,7 @@ module Live
         pnl_pct_value = pnl_pct.to_f * 100.0
 
         # Below-entry dynamic reverse SL (takes precedence over static sl_pct)
-        if pnl_pct_value < 0
+        if pnl_pct_value.negative?
           seconds_below = seconds_below_entry(tracker)
           atr_ratio = calculate_atr_ratio(tracker)
           tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
@@ -701,7 +701,7 @@ module Live
     # If exit_engine is an object responding to execute_exit, delegate to it.
     # If exit_engine == self (or nil) we fallback to internal execute_exit implementation.
     def dispatch_exit(exit_engine, tracker, reason)
-      if exit_engine && exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
+      if exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
         begin
           exit_engine.execute_exit(tracker, reason)
         rescue StandardError => e
@@ -866,7 +866,7 @@ module Live
       end
 
       tradable = tracker.tradable
-      return tradable.ltp if tradable && tradable.ltp
+      return tradable.ltp if tradable&.ltp
 
       segment = tracker.segment.presence || tracker.instrument&.exchange_segment
       cached = Live::TickCache.ltp(segment, tracker.security_id)
@@ -953,7 +953,7 @@ module Live
     end
 
     def compute_pnl_pct(tracker, ltp, position = nil)
-      if position&.respond_to?(:cost_price)
+      if position.respond_to?(:cost_price)
         cost_price = position.cost_price.to_f
         return nil if cost_price.zero?
 
@@ -969,7 +969,7 @@ module Live
     end
 
     def update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
-      return unless pnl && ltp && ltp.to_f.positive?
+      return unless pnl && ltp&.to_f&.positive?
 
       Live::PnlUpdaterService.instance.cache_intermediate_pnl(
         tracker_id: tracker.id,
@@ -1025,7 +1025,7 @@ module Live
       # Live exit flow: try Orders.config flat_position (recommended) -> DhanHQ SDK fallbacks
       begin
         segment = tracker.segment.presence || tracker.tradable&.exchange_segment || tracker.instrument&.exchange_segment
-        unless segment.present?
+        if segment.blank?
           Rails.logger.error("[RiskManager] Cannot exit #{tracker.order_no}: no segment available")
           return { success: false, exit_price: nil }
         end
@@ -1042,7 +1042,7 @@ module Live
         # Fallback: try DhanHQ position convenience methods
         positions = fetch_positions_indexed
         position = positions[tracker.security_id.to_s]
-        if position && position.respond_to?(:exit!)
+        if position.respond_to?(:exit!)
           ok = position.exit!
           exit_price = begin
             current_ltp(tracker)
@@ -1121,13 +1121,12 @@ module Live
       return 0 if pnl_pct.nil? || pnl_pct >= 0
 
       # If position is below entry, increment counter
+      Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
       if cached
         # Update timestamp if still below entry
-        Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
         (Time.current - cached).to_i
       else
         # First time below entry, initialize
-        Rails.cache.write(cache_key, Time.current, expires_in: 1.hour)
         0
       end
     rescue StandardError => e
@@ -1221,7 +1220,7 @@ module Live
       end
 
       # VWAP (simplified: use recent average price)
-      vwap = candles.any? ? candles.last(20).map(&:close).sum / candles.last(20).size : underlying_price
+      vwap = candles.any? ? candles.last(20).sum(&:close) / candles.last(20).size : underlying_price
 
       OpenStruct.new(
         trend_score: trend_score,
@@ -1336,7 +1335,7 @@ module Live
       }.merge(raw)
     end
 
-    def transition_to_secured_profit_zone(tracker, net_pnl_rupees, target_profit_rupees)
+    def transition_to_secured_profit_zone(tracker, net_pnl_rupees, _target_profit_rupees)
       # Check if already transitioned
       return if tracker.meta&.dig('profit_zone_state') == 'secured_profit_zone'
 
@@ -1347,7 +1346,7 @@ module Live
       # Calculate entry price and quantity
       entry_price = tracker.entry_price
       quantity = tracker.quantity
-      return unless entry_price && quantity && quantity.positive?
+      return unless entry_price && quantity&.positive?
 
       # Calculate SL price that gives us secured_sl_rupees profit
       # Formula: (sl_price - entry_price) * quantity - exit_fee = secured_sl_rupees
@@ -1399,11 +1398,11 @@ module Live
 
     def calculate_peak_profit_pct(tracker, snapshot)
       hwm = snapshot[:hwm_pnl]
-      return nil unless hwm && hwm.positive?
+      return nil unless hwm&.positive?
 
       entry_price = tracker.entry_price
       quantity = tracker.quantity
-      return nil unless entry_price && quantity && quantity.positive?
+      return nil unless entry_price && quantity&.positive?
 
       buy_value = entry_price * quantity
       return nil unless buy_value.positive?
@@ -1487,8 +1486,8 @@ module Live
       unless meta['entry_path'] || meta['entry_strategy']
         # Try to find matching TradingSignal to get entry metadata
         signal = TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
-                              .where('created_at >= ?', tracker.created_at - 5.minutes)
-                              .where('created_at <= ?', tracker.created_at + 1.minute)
+                              .where(created_at: (tracker.created_at - 5.minutes)..)
+                              .where(created_at: ..(tracker.created_at + 1.minute))
                               .order(created_at: :desc)
                               .first
 

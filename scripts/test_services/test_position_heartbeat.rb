@@ -49,7 +49,7 @@ ServiceTestHelper.print_info("PositionIndex keys after heartbeat: #{after_keys}"
 if after_keys >= initial_keys
   ServiceTestHelper.print_success("PositionIndex bulk load working (keys: #{initial_keys} → #{after_keys})")
 else
-  ServiceTestHelper.print_info("PositionIndex keys changed (expected if positions were pruned)")
+  ServiceTestHelper.print_info('PositionIndex keys changed (expected if positions were pruned)')
 end
 
 # Test 5: Check PositionTrackerPruner
@@ -66,7 +66,7 @@ ServiceTestHelper.print_info("Active positions after pruner: #{active_after}")
 if active_after <= active_before
   ServiceTestHelper.print_success("PositionTrackerPruner working (positions: #{active_before} → #{active_after})")
 else
-  ServiceTestHelper.print_info("No positions pruned (expected if all positions are valid)")
+  ServiceTestHelper.print_info('No positions pruned (expected if all positions are valid)')
 end
 
 # Test 6: Verify heartbeat continues running
@@ -85,4 +85,3 @@ end
 
 ServiceTestHelper.print_success('PositionHeartbeat test completed')
 ServiceTestHelper.print_info('Heartbeat runs continuously - check logs for heartbeat details')
-

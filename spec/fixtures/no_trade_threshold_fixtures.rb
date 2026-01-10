@@ -315,4 +315,3 @@ module NoTradeThresholdFixtures
     end
   end
 end
-

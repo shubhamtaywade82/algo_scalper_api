@@ -14,8 +14,8 @@ puts
 puts '📋 Environment Variables Check:'
 puts '-' * 70
 
-bot_token = ENV['TELEGRAM_BOT_TOKEN']
-chat_id = ENV['TELEGRAM_CHAT_ID']
+bot_token = ENV.fetch('TELEGRAM_BOT_TOKEN', nil)
+chat_id = ENV.fetch('TELEGRAM_CHAT_ID', nil)
 
 if bot_token.present?
   puts "✅ TELEGRAM_BOT_TOKEN: Set (#{bot_token[0..10]}...)"
@@ -61,12 +61,12 @@ if bot_token.present? && chat_id.present?
     puts 'Test 1: Getting bot information...'
     begin
       bot_info = client.api.get_me
-      puts "   ✅ Bot connected successfully!"
+      puts '   ✅ Bot connected successfully!'
       puts "   → Bot username: @#{bot_info['result']['username']}"
       puts "   → Bot name: #{bot_info['result']['first_name']}"
     rescue StandardError => e
       puts "   ❌ Failed to get bot info: #{e.class} - #{e.message}"
-      puts "   → Check that your TELEGRAM_BOT_TOKEN is correct"
+      puts '   → Check that your TELEGRAM_BOT_TOKEN is correct'
       exit 1
     end
 
@@ -86,27 +86,27 @@ if bot_token.present? && chat_id.present?
         parse_mode: 'HTML'
       )
 
-      puts "   ✅ Message sent successfully!"
+      puts '   ✅ Message sent successfully!'
       puts "   → Message ID: #{result['result']['message_id']}"
-      puts "   → Check your Telegram chat now!"
+      puts '   → Check your Telegram chat now!'
     rescue Telegram::Bot::Exceptions::ResponseError => e
       puts "   ❌ Failed to send message: #{e.class}"
       puts "   → Error: #{e.message}"
 
       if e.message.include?('chat not found') || e.message.include?('400')
         puts
-        puts "   💡 Troubleshooting:"
+        puts '   💡 Troubleshooting:'
         puts "   1. Make sure you've sent at least one message to your bot"
-        puts "   2. Verify your TELEGRAM_CHAT_ID is correct"
-        puts "   3. To get your chat ID:"
-        puts "      - Send a message to your bot"
+        puts '   2. Verify your TELEGRAM_CHAT_ID is correct'
+        puts '   3. To get your chat ID:'
+        puts '      - Send a message to your bot'
         puts "      - Visit: https://api.telegram.org/bot#{bot_token}/getUpdates"
         puts "      - Look for 'chat':{'id': <your_chat_id>}"
       elsif e.message.include?('401') || e.message.include?('Unauthorized')
         puts
-        puts "   💡 Troubleshooting:"
-        puts "   1. Check that your TELEGRAM_BOT_TOKEN is correct"
-        puts "   2. Get a new token from @BotFather if needed"
+        puts '   💡 Troubleshooting:'
+        puts '   1. Check that your TELEGRAM_BOT_TOKEN is correct'
+        puts '   2. Get a new token from @BotFather if needed'
       end
     rescue StandardError => e
       puts "   ❌ Unexpected error: #{e.class} - #{e.message}"
@@ -124,10 +124,9 @@ if bot_token.present? && chat_id.present?
     rescue StandardError => e
       puts "   ❌ Failed to send typing indicator: #{e.class} - #{e.message}"
     end
-
   rescue LoadError => e
     puts "❌ Failed to load telegram-bot gem: #{e.message}"
-    puts "   → Run: bundle install"
+    puts '   → Run: bundle install'
   end
 else
   puts '⚠️  Skipping API tests - environment variables not set'
@@ -156,4 +155,3 @@ puts
 puts '=' * 70
 puts 'Diagnostic complete!'
 puts '=' * 70
-

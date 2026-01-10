@@ -50,7 +50,6 @@ class InsideBarStrategy
     true
   end
 
-
   def calculate_confidence(candle, inside_bar, parent, _direction)
     confidence = 60 # Base for inside bar breakout
 
@@ -68,8 +67,8 @@ class InsideBarStrategy
     confidence += 10 if range_ratio < 0.5 # Inside bar is <50% of parent
 
     # Add confidence for volume expansion on breakout
-    if candle.volume > 0 && inside_bar.volume > 0
-      confidence += 10 if candle.volume > inside_bar.volume * 1.3
+    if candle.volume.positive? && inside_bar.volume.positive? && (candle.volume > inside_bar.volume * 1.3)
+      confidence += 10
     end
 
     [confidence, 100].min

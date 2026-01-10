@@ -76,11 +76,9 @@ module Entries
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
 
         # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
-        if %w[NIFTY SENSEX].include?(symbol)
-          unless weekly_contract?(pick: pick, index_cfg: index_cfg)
-            Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
-            return false
-          end
+        if %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
+          Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
+          return false
         end
 
         profile = Trading::InstrumentExecutionProfile.for(symbol)
@@ -487,7 +485,7 @@ module Entries
         if regime == Live::TimeRegimeService::CHOP_DECAY
           # Allow ONLY if exceptional conditions (ADX ≥ 22, expansion present, large impulse)
           # This should be checked in signal generation, but we log here
-          Rails.logger.info("[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met")
+          Rails.logger.info('[EntryGuard] Entry in CHOP_DECAY regime - ensure exceptional conditions met')
         end
 
         # Special rules for CLOSE_GAMMA regime
@@ -497,7 +495,7 @@ module Entries
           if current_time >= '14:45'
             # No fresh breakouts after 14:45 IST - only continuation moves
             # This should be checked in signal generation
-            Rails.logger.info("[EntryGuard] Entry after 14:45 IST - ensure continuation move only")
+            Rails.logger.info('[EntryGuard] Entry after 14:45 IST - ensure continuation move only')
           end
         end
 
@@ -508,11 +506,9 @@ module Entries
       end
 
       def time_regime_rules_enabled?
-        begin
-          AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
-        rescue StandardError
-          false
-        end
+        AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
+      rescue StandardError
+        false
       end
 
       # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
@@ -537,13 +533,13 @@ module Entries
             return false
           when 'global_daily_loss_limit_exceeded'
             Rails.logger.warn(
-              "[EntryGuard] Global daily loss limit exceeded: " \
+              '[EntryGuard] Global daily loss limit exceeded: ' \
               "₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
             )
             return false
           when 'daily_profit_target_reached'
             Rails.logger.info(
-              "[EntryGuard] Daily profit target reached: " \
+              '[EntryGuard] Daily profit target reached: ' \
               "₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
             )
             return false
@@ -558,13 +554,11 @@ module Entries
       end
 
       def daily_limits_enabled?
-        begin
-          config = AlgoConfig.fetch[:risk] || {}
-          daily_limits_cfg = config[:daily_limits] || {}
-          daily_limits_cfg[:enable] != false
-        rescue StandardError
-          true # Default to enabled
-        end
+        config = AlgoConfig.fetch[:risk] || {}
+        daily_limits_cfg = config[:daily_limits] || {}
+        daily_limits_cfg[:enable] != false
+      rescue StandardError
+        true # Default to enabled
       end
 
       private

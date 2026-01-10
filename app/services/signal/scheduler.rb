@@ -249,7 +249,7 @@ module Signal
       nil
     end
 
-    def evaluate_with_legacy_indicators(index_cfg, instrument)
+    def evaluate_with_legacy_indicators(index_cfg, _instrument)
       # NOTE: This method is DEPRECATED - process_index() now calls Signal::Engine.run_for() directly
       # Kept for backward compatibility if evaluate_supertrend_signal() is called elsewhere
       #
@@ -344,8 +344,6 @@ module Signal
                 rescue ArgumentError
                   nil
                 end
-              else
-                nil
               end
             end
 
@@ -372,7 +370,7 @@ module Signal
       end
 
       # Filter out indices with expiry > max_expiry_days (default: 7 days)
-      max_expiry_days = get_max_expiry_days
+      max_expiry_days = self.max_expiry_days
       filtered = indexed_with_expiry.reject do |item|
         next false if item[:days_to_expiry] <= max_expiry_days
 
@@ -396,7 +394,7 @@ module Signal
       end
 
       # Return just the index configs in sorted order
-      sorted_indices = sorted.map { |item| item[:index_cfg] }
+      sorted_indices = sorted.pluck(:index_cfg)
 
       # Cache result
       @expiry_cache[cache_key] = {
@@ -409,7 +407,7 @@ module Signal
 
     # Get maximum expiry days from config (default: 7 days)
     # Indices with expiry > this limit will be skipped
-    def get_max_expiry_days
+    def max_expiry_days
       config = AlgoConfig.fetch[:signals] || {}
       max_days = config[:max_expiry_days] || 7
       max_days.to_i

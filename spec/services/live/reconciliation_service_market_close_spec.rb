@@ -51,4 +51,3 @@ RSpec.describe Live::ReconciliationService do
     end
   end
 end
-

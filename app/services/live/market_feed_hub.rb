@@ -255,7 +255,7 @@ module Live
       end
 
       skipped_count = list.size - new_subscriptions.size
-      if skipped_count > 0
+      if skipped_count.positive?
         Rails.logger.info("[MarketFeedHub] Skipped #{skipped_count} duplicate subscriptions, subscribed to #{new_subscriptions.size} new instruments")
       else
         Rails.logger.info("[MarketFeedHub] Successfully subscribed to #{new_subscriptions.count} instruments")
@@ -453,7 +453,7 @@ module Live
       # For each metadata push minimal payload (last-wins)
       trackers.each do |meta|
         # defensive checks
-        next unless meta[:entry_price] && meta[:quantity] && meta[:quantity].to_i > 0
+        next unless meta[:entry_price] && meta[:quantity] && meta[:quantity].to_i.positive?
 
         Live::PnlUpdaterService.instance.cache_intermediate_pnl(
           tracker_id: meta[:id],
@@ -668,7 +668,7 @@ module Live
           Rails.logger.info("[MarketFeedHub] Reconnecting: Resubscribing #{positions.size} active positions")
 
           positions.each do |tracker|
-            next unless tracker.security_id.present?
+            next if tracker.security_id.blank?
 
             segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
             next unless segment_key

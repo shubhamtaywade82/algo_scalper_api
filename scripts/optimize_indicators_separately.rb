@@ -20,13 +20,13 @@ index_key = ARGV[0] || 'NIFTY'
 interval = ARGV[1] || '5'
 lookback_days = (ARGV[2] || '45').to_i
 
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts 'Single Indicator Parameter Optimization'
 puts '=' * 80
 puts "Index: #{index_key}"
 puts "Interval: #{interval}m"
 puts "Lookback: #{lookback_days} days"
-puts ('=' * 80) + "\n"
+puts "#{'=' * 80}\n"
 
 # Get index configuration
 algo_config = AlgoConfig.fetch
@@ -126,7 +126,7 @@ indicators.each do |indicator|
   end
 end
 
-puts "\n" + ('=' * 80)
+puts "\n#{'=' * 80}"
 puts '✅ Done! Results saved to best_indicator_params table'
 puts '=' * 80
 puts "\nTo retrieve optimized parameters:"

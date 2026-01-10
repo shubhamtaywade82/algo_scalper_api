@@ -157,7 +157,7 @@ RSpec.describe Signal::IndexSelector do
         it 'applies tie-breakers' do
           result = selector.select_best_index
           expect(result).to be_a(Hash)
-          expect(result[:index_key]).to be_in([:NIFTY, :BANKNIFTY])
+          expect(result[:index_key]).to be_in(%i[NIFTY BANKNIFTY])
         end
       end
     end
@@ -211,10 +211,9 @@ RSpec.describe Signal::IndexSelector do
       it 'selects best index from qualified candidates' do
         result = selector.send(:apply_tie_breakers, qualified)
         expect(result).to be_a(Hash)
-        expect(result[:index_key]).to be_in([:NIFTY, :BANKNIFTY])
+        expect(result[:index_key]).to be_in(%i[NIFTY BANKNIFTY])
         expect(result[:reason]).to be_present
       end
     end
   end
 end
-

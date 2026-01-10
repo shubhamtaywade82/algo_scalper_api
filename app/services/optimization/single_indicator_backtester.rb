@@ -110,7 +110,7 @@ module Optimization
       # Calculate ATR moving average for trend detection
       atr_ma_period = [period / 2, 5].max
       atr_ma = []
-      (period + atr_ma_period...@candles.size).each do |idx|
+      ((period + atr_ma_period)...@candles.size).each do |idx|
         recent_atrs = atr_values[(idx - atr_ma_period + 1)..idx].compact
         next if recent_atrs.empty?
 
@@ -122,7 +122,7 @@ module Optimization
 
       # Generate signals based on ATR volatility patterns
       # Signal when ATR is increasing (volatility expansion) - potential breakout
-      (period + atr_ma_period...@candles.size).each do |idx|
+      ((period + atr_ma_period)...@candles.size).each do |idx|
         current_atr = atr_values[idx]
         prev_atr = atr_values[idx - 1]
         avg_atr = atr_ma[idx]
@@ -192,7 +192,7 @@ module Optimization
           signal_period: signal_period
         ).call
 
-        if macd_result && macd_result.is_a?(Array) && macd_result.size >= 3
+        if macd_result.is_a?(Array) && macd_result.size >= 3
           macd_line << macd_result[0]
           signal_line << macd_result[1]
         else
@@ -271,15 +271,14 @@ module Optimization
 
           candle = @candles[next_idx]
 
-          if signal_type == :buy
-            # For buy: measure upward movement
-            move = candle.high - entry_price
-            move_pct = ((move / entry_price) * 100.0).round(4)
-          else
-            # For sell: measure downward movement
-            move = entry_price - candle.low
-            move_pct = ((move / entry_price) * 100.0).round(4)
-          end
+          move = if signal_type == :buy
+                   # For buy: measure upward movement
+                   candle.high - entry_price
+                 else
+                   # For sell: measure downward movement
+                   entry_price - candle.low
+                 end
+          move_pct = ((move / entry_price) * 100.0).round(4)
 
           if move_pct > max_move_pct
             max_move = move
@@ -301,11 +300,11 @@ module Optimization
     def calculate_metrics(signals, price_movements)
       return nil if price_movements.empty?
 
-      movements_pct = price_movements.map { |m| m[:max_move_pct] }
+      movements_pct = price_movements.pluck(:max_move_pct)
       avg_move = movements_pct.sum / movements_pct.size.to_f
 
       # Count wins (positive movement)
-      wins = movements_pct.select { |m| m > 0 }
+      wins = movements_pct.select(&:positive?)
       win_rate = wins.size.to_f / movements_pct.size
 
       # Average win

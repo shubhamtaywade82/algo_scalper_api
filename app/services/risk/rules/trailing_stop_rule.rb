@@ -18,10 +18,10 @@ module Risk
 
         # Check trailing activation threshold (pnl_pct >= trailing_activation_pct)
         unless context.trailing_activated?
-          Rails.logger.debug(
+          Rails.logger.debug do
             "[TrailingStopRule] Trailing not activated: pnl_pct=#{context.pnl_pct&.round(2)}% " \
-            "< activation_pct=#{context.trailing_activation_pct.to_f.round(2)}%"
-          )
+              "< activation_pct=#{context.trailing_activation_pct.to_f.round(2)}%"
+          end
           return skip_result
         end
 
@@ -29,7 +29,7 @@ module Risk
         hwm = context.high_water_mark
         return skip_result if pnl.nil? || hwm.nil? || hwm.zero?
 
-        drop_threshold = context.config_bigdecimal(:exit_drop_pct, BigDecimal('0'))
+        drop_threshold = context.config_bigdecimal(:exit_drop_pct, BigDecimal(0))
         return skip_result if drop_threshold.zero?
 
         drop_pct = (hwm - pnl) / hwm

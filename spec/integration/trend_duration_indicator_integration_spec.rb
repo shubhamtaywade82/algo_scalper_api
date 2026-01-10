@@ -10,7 +10,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
   describe 'end-to-end trend duration calculation' do
     before do
       # Create realistic market data with trend changes
-      base_price = 22000.0
+      base_price = 22_000.0
       current_time = Time.zone.parse('2024-01-01 10:00:00 IST')
 
       # Phase 1: Bullish trend (20 bars)
@@ -68,7 +68,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
       results = []
       min_candles = indicator.min_required_candles
 
-      (min_candles..series.candles.size - 1).each do |index|
+      (min_candles..(series.candles.size - 1)).each do |index|
         result = indicator.calculate_at(index)
         results << result if result
       end
@@ -76,7 +76,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
       expect(results).not_to be_empty
 
       # Should have detected trends
-      trends = results.map { |r| r[:value][:trend_direction] }.compact.uniq
+      trends = results.filter_map { |r| r[:value][:trend_direction] }.uniq
       expect(trends).to include(:bullish, :bearish)
     end
 
@@ -88,7 +88,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
 
       # Process all candles to build history
       min_candles = indicator.min_required_candles
-      (min_candles..series.candles.size - 1).each do |index|
+      (min_candles..(series.candles.size - 1)).each do |index|
         indicator.calculate_at(index)
       end
 
@@ -102,7 +102,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
 
   describe 'integration with MultiIndicatorStrategy' do
     before do
-      base_price = 22000.0
+      base_price = 22_000.0
       min_candles = 50 # Enough for trend duration indicator
 
       min_candles.times do |i|
@@ -143,7 +143,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
       if signal
         expect(signal).to have_key(:type)
         expect(signal).to have_key(:confidence)
-        expect(signal[:type]).to be_in([:ce, :pe])
+        expect(signal[:type]).to be_in(%i[ce pe])
         expect(signal[:confidence]).to be_between(0, 100)
       end
     end
@@ -180,7 +180,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
   describe 'real-world scenario: trend continuation signal' do
     before do
       # Simulate a strong bullish trend
-      base_price = 22000.0
+      base_price = 22_000.0
       min_candles = 50
 
       min_candles.times do |i|
@@ -211,9 +211,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
       expect(result[:confidence]).to be >= 50
 
       # Strong trend should have high confidence
-      if result[:value][:real_length] >= 10
-        expect(result[:confidence]).to be >= 60
-      end
+      expect(result[:confidence]).to be >= 60 if result[:value][:real_length] >= 10
     end
 
     it 'provides actionable signal data' do
@@ -229,10 +227,10 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
 
       # Signal should contain all necessary information
       expect(result[:value][:hma]).to be_a(Numeric)
-      expect(result[:value][:trend_direction]).to be_in([:bullish, :bearish])
+      expect(result[:value][:trend_direction]).to be_in(%i[bullish bearish])
       expect(result[:value][:real_length]).to be_a(Integer)
       expect(result[:value][:probable_length]).to be_a(Numeric)
-      expect(result[:value][:slope]).to be_in(['up', 'down'])
+      expect(result[:value][:slope]).to be_in(%w[up down])
 
       # Can be used for options trading decisions
       if result[:direction] == :bullish && result[:confidence] >= 60

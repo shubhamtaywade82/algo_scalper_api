@@ -41,11 +41,10 @@ ServiceTestHelper.print_section('2. WebSocket Connection Status')
 if hub.running?
   if hub.connected?
     ServiceTestHelper.print_success("WebSocket connected: #{hub.connected?}")
-    ServiceTestHelper.print_info("Connection state: #{hub.instance_variable_get(:@connection_state)}")
   else
     ServiceTestHelper.print_warning('WebSocket not connected yet (may still be connecting)')
-    ServiceTestHelper.print_info("Connection state: #{hub.instance_variable_get(:@connection_state)}")
   end
+  ServiceTestHelper.print_info("Connection state: #{hub.instance_variable_get(:@connection_state)}")
 else
   ServiceTestHelper.print_error('MarketFeedHub is not running')
   exit 1
@@ -58,7 +57,7 @@ watchlist_items = WatchlistItem.where(active: true).includes(:watchable)
 ServiceTestHelper.print_info("Found #{watchlist_items.count} active watchlist items")
 
 if watchlist_items.any?
-  pairs = watchlist_items.map do |item|
+  pairs = watchlist_items.filter_map do |item|
     # Use watchable (polymorphic) - can be Instrument or Derivative
     watchable = item.watchable
     if watchable
@@ -69,11 +68,11 @@ if watchlist_items.any?
       # Fallback to item's own segment/security_id if no watchable
       { segment: item.segment, security_id: item.security_id.to_s }
     end
-  end.compact
+  end
 
   hub.subscribe_many(pairs)
   ServiceTestHelper.print_success("Subscribed to #{pairs.count} instruments")
-  ServiceTestHelper.print_info("Subscribed pairs:\n#{ServiceTestHelper.format_hash(pairs.map { |p| [p[:segment], p[:security_id]] }.to_h)}")
+  ServiceTestHelper.print_info("Subscribed pairs:\n#{ServiceTestHelper.format_hash(pairs.to_h { |p| [p[:segment], p[:security_id]] })}")
 else
   ServiceTestHelper.print_warning('No active watchlist items found')
 end
@@ -86,9 +85,9 @@ test_pairs = watchlist_items.limit(3)
 if test_pairs.any?
   test_pairs.each do |item|
     watchable = item.watchable
-    seg = watchable&.respond_to?(:exchange_segment) ? watchable.exchange_segment : item.segment
-    sid = watchable&.respond_to?(:security_id) ? watchable.security_id : item.security_id
-    symbol = watchable&.respond_to?(:symbol_name) ? watchable.symbol_name : (item.label || item.security_id)
+    seg = watchable.respond_to?(:exchange_segment) ? watchable.exchange_segment : item.segment
+    sid = watchable.respond_to?(:security_id) ? watchable.security_id : item.security_id
+    symbol = watchable.respond_to?(:symbol_name) ? watchable.symbol_name : (item.label || item.security_id)
     ltp = tick_cache.ltp(seg, sid.to_s)
 
     # If no LTP in cache, fetch from DhanHQ API
@@ -123,7 +122,7 @@ ServiceTestHelper.print_info("Total ticks in cache: #{tick_count}")
 
 # Test 6: Sample tick data
 ServiceTestHelper.print_section('6. Sample Tick Data')
-if all_ticks && tick_count > 0
+if all_ticks && tick_count.positive?
   sample_key = all_ticks.keys.first
   sample_tick = all_ticks[sample_key]
   ServiceTestHelper.print_info("Sample tick (#{sample_key}):")

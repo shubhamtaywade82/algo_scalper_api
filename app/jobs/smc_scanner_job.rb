@@ -81,8 +81,8 @@ class SmcScannerJob < ApplicationJob
   def filter_indices_by_expiry(indices)
     return indices if indices.empty?
 
-    max_expiry_days = get_max_expiry_days
-    today = Time.zone.today
+    max_expiry_days = self.max_expiry_days
+    Time.zone.today
     filtered = []
 
     indices.each do |idx_cfg|
@@ -136,8 +136,6 @@ class SmcScannerJob < ApplicationJob
         rescue ArgumentError
           nil
         end
-      else
-        nil
       end
     end
 
@@ -152,7 +150,7 @@ class SmcScannerJob < ApplicationJob
   end
 
   # Get maximum expiry days from config (default: 7 days)
-  def get_max_expiry_days
+  def max_expiry_days
     config = AlgoConfig.fetch[:signals] || {}
     max_days = config[:max_expiry_days] || 7
     max_days.to_i

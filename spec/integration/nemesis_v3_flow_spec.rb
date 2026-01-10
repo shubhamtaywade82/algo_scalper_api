@@ -32,7 +32,6 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
     mock_redis = instance_double(Redis)
     allow(Redis).to receive(:new).and_return(mock_redis)
     allow(mock_redis).to receive(:get) { |key| @redis_store[key]&.to_s }
-    allow(mock_redis).to receive(:setex).and_return(true)
     allow(mock_redis).to receive(:incr) do |key|
       @redis_store[key] = (@redis_store[key] || 0).to_i + 1
       @redis_store[key]
@@ -41,9 +40,8 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
       @redis_store[key] = ((@redis_store[key] || 0).to_f + amount.to_f)
       @redis_store[key]
     end
-    allow(mock_redis).to receive(:expire).and_return(true)
     allow(mock_redis).to receive(:scan_each).and_yield
-    allow(mock_redis).to receive(:del).and_return(true)
+    allow(mock_redis).to receive_messages(setex: true, expire: true, del: true)
 
     # Mock MarketFeedHub
     allow(Live::MarketFeedHub.instance).to receive_messages(

@@ -77,7 +77,7 @@ puts
 # Test 5: Message chunking (long message)
 puts 'Test 5: Message chunking (long message > 4000 chars)...'
 begin
-  long_message = "This is a very long message. " * 200 # ~5000 chars
+  long_message = 'This is a very long message. ' * 200 # ~5000 chars
   TelegramNotifier.send_message(long_message)
   puts '✅ Message chunking works'
 rescue StandardError => e
@@ -90,4 +90,3 @@ puts 'All tests completed!'
 puts '=' * 70
 puts
 puts 'Check your Telegram chat to verify messages were received.'
-

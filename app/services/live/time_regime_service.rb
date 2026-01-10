@@ -49,9 +49,7 @@ module Live
         start_time = regime_cfg[:start]
         end_time = regime_cfg[:end]
 
-        if time_within_range?(time_str, start_time, end_time)
-          return regime_name.to_sym
-        end
+        return regime_name.to_sym if time_within_range?(time_str, start_time, end_time)
       end
 
       # Fallback to trend continuation if no match
@@ -194,10 +192,11 @@ module Live
         start_time = parse_time(start_str)
         end_time = parse_time(end_str)
         return false unless time && start_time && end_time
+
         time >= start_time || time <= end_time
       else
         # Normal case: simple string comparison works for HH:MM format
-        time_str >= start_str && time_str <= end_str
+        time_str.between?(start_str, end_str)
       end
     end
 

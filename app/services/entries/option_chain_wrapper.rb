@@ -56,7 +56,8 @@ module Entries
       atm_pe = find_atm_option(:pe)
 
       # Use average of CE and PE IV, or whichever is available
-      ivs = [atm_ce&.dig('implied_volatility'), atm_pe&.dig('implied_volatility')].compact.map(&:to_f)
+      instruments = [atm_ce, atm_pe].compact
+      ivs = instruments.filter_map { |inst| inst&.dig('implied_volatility') }.map(&:to_f)
       return nil if ivs.empty?
 
       ivs.sum / ivs.size
@@ -82,23 +83,13 @@ module Entries
       # Get threshold from parameter or use index-specific default
       max_spread = hard_reject_threshold || get_index_spread_threshold
 
-      # Check CE spread
-      if atm_ce
-        bid = atm_ce['top_bid_price']&.to_f || 0
-        ask = atm_ce['top_ask_price']&.to_f || 0
-        ltp = atm_ce['last_price']&.to_f || 0
+      # Check spreads for both CE and PE
+      [atm_ce, atm_pe].each do |instrument|
+        next unless instrument
 
-        if bid.positive? && ask.positive? && ltp.positive?
-          spread = ask - bid
-          return true if spread > max_spread
-        end
-      end
-
-      # Check PE spread
-      if atm_pe
-        bid = atm_pe['top_bid_price']&.to_f || 0
-        ask = atm_pe['top_ask_price']&.to_f || 0
-        ltp = atm_pe['last_price']&.to_f || 0
+        bid = instrument['top_bid_price']&.to_f || 0
+        ask = instrument['top_ask_price']&.to_f || 0
+        ltp = instrument['last_price']&.to_f || 0
 
         if bid.positive? && ask.positive? && ltp.positive?
           spread = ask - bid

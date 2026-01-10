@@ -41,4 +41,3 @@ module Smc
     end
   end
 end
-

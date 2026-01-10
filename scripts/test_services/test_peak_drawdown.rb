@@ -48,7 +48,7 @@ unless tracker
 end
 
 unless tracker
-  ServiceTestHelper.print_error("Failed to find or create paper PositionTracker")
+  ServiceTestHelper.print_error('Failed to find or create paper PositionTracker')
   exit 1
 end
 
@@ -65,7 +65,7 @@ position_data = active_cache.add_position(
 )
 
 # Simulate profit to 25% (peak)
-ServiceTestHelper.print_info("Simulating profit increase to 25%...")
+ServiceTestHelper.print_info('Simulating profit increase to 25%...')
 position_data.update_ltp(187.5) # 25% profit
 ServiceTestHelper.print_success("Position at peak profit: #{position_data.peak_profit_pct.round(2)}%")
 ServiceTestHelper.print_info("  Entry: ₹#{position_data.entry_price.round(2)}")
@@ -99,9 +99,9 @@ drawdown_scenarios.each do |scenario|
   ServiceTestHelper.print_info("    Actually triggered: #{triggered}")
 
   if triggered == scenario[:should_exit]
-    ServiceTestHelper.print_success("    ✅ Correct behavior")
+    ServiceTestHelper.print_success('    ✅ Correct behavior')
   else
-    ServiceTestHelper.print_error("    ❌ Unexpected behavior")
+    ServiceTestHelper.print_error('    ❌ Unexpected behavior')
   end
 end
 
@@ -123,7 +123,7 @@ exit_engine = Live::ExitEngine.new(order_router: order_router)
 result = trailing_engine.process_tick(position_data, exit_engine: exit_engine)
 
 if result[:exit_triggered]
-  ServiceTestHelper.print_success("Peak drawdown exit triggered successfully")
+  ServiceTestHelper.print_success('Peak drawdown exit triggered successfully')
   ServiceTestHelper.print_info("  Exit reason: #{result[:reason]}")
   ServiceTestHelper.print_info("  Peak: #{position_data.peak_profit_pct.round(2)}%")
   ServiceTestHelper.print_info("  Current: #{position_data.pnl_pct.round(2)}%")
@@ -133,18 +133,18 @@ if result[:exit_triggered]
   tracker.reload
   if tracker.status == 'exited'
     exit_reason = tracker.meta.is_a?(Hash) ? tracker.meta['exit_reason'] : nil
-    ServiceTestHelper.print_info("  Position status: exited")
+    ServiceTestHelper.print_info('  Position status: exited')
     ServiceTestHelper.print_info("  Database exit reason: #{exit_reason || 'N/A'}")
   else
     ServiceTestHelper.print_info("  Position status: #{tracker.status} (exit may have failed)")
   end
 else
-  ServiceTestHelper.print_warning("Exit not triggered (may need adjustment)")
+  ServiceTestHelper.print_warning('Exit not triggered (may need adjustment)')
 end
 
 # Test 5: Test idempotency (no double exit)
 ServiceTestHelper.print_section('5. Idempotency Test')
-ServiceTestHelper.print_info("Testing that exit is not triggered multiple times...")
+ServiceTestHelper.print_info('Testing that exit is not triggered multiple times...')
 
 # Reload tracker to get current status
 tracker.reload
@@ -166,16 +166,15 @@ ServiceTestHelper.print_info("  Exit triggered count: #{exit_triggered_count}")
 
 # Idempotency: Once exited, status should remain 'exited' and no more exits should trigger
 if tracker.status == 'exited' && exit_triggered_count <= 1
-  ServiceTestHelper.print_success("Exit is idempotent (position stays exited, no double exit)")
+  ServiceTestHelper.print_success('Exit is idempotent (position stays exited, no double exit)')
 else
   ServiceTestHelper.print_warning("Exit may not be fully idempotent (status: #{tracker.status}, triggers: #{exit_triggered_count})")
 end
 
 ServiceTestHelper.print_section('Summary')
-ServiceTestHelper.print_info("Peak drawdown exit test completed")
-ServiceTestHelper.print_info("Key features verified:")
+ServiceTestHelper.print_info('Peak drawdown exit test completed')
+ServiceTestHelper.print_info('Key features verified:')
 ServiceTestHelper.print_info("  ✅ Peak drawdown threshold: #{peak_drawdown_pct}%")
-ServiceTestHelper.print_info("  ✅ Exit triggers at threshold")
-ServiceTestHelper.print_info("  ✅ Exit execution integration")
-ServiceTestHelper.print_info("  ✅ Idempotency (no double exit)")
-
+ServiceTestHelper.print_info('  ✅ Exit triggers at threshold')
+ServiceTestHelper.print_info('  ✅ Exit execution integration')
+ServiceTestHelper.print_info('  ✅ Idempotency (no double exit)')
