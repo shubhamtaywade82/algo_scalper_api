@@ -203,6 +203,8 @@ module Signal
           config: signals_cfg
         )
 
+        permission = permission_from_state_snapshot(state_snapshot)
+
         # Persist signal with confidence score
         confidence_score = calculate_confidence_score(
           primary_analysis: primary_analysis,
@@ -266,7 +268,8 @@ module Signal
           effective_timeframe: effective_timeframe,
           confirmation_timeframe: confirmation_tf,
           confirmation_enabled: enable_confirmation,
-          validation_mode: signals_cfg[:validation_mode] || 'balanced'
+          validation_mode: signals_cfg[:validation_mode] || 'balanced',
+          permission: permission
         }
 
         picks.each_with_index do |pick, _index|
@@ -276,7 +279,8 @@ module Signal
             pick: pick,
             direction: final_direction,
             scale_multiplier: state_snapshot[:multiplier],
-            entry_metadata: entry_metadata
+            entry_metadata: entry_metadata,
+            permission: permission
           )
 
           if result
@@ -290,6 +294,20 @@ module Signal
       rescue StandardError => e
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
         Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
+      end
+
+      def permission_from_state_snapshot(state_snapshot)
+        count = state_snapshot.is_a?(Hash) ? state_snapshot[:count].to_i : 0
+
+        if count <= 1
+          :execution_only
+        elsif count == 2
+          :scale_ready
+        else
+          :full_deploy
+        end
+      rescue StandardError
+        :blocked
       end
 
       def analyze_timeframe(index_cfg:, instrument:, timeframe:, supertrend_cfg:, adx_min_strength:)

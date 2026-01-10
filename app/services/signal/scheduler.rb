@@ -156,7 +156,8 @@ module Signal
         index_cfg: index_cfg,
         pick: pick,
         direction: direction,
-        scale_multiplier: multiplier
+        scale_multiplier: multiplier,
+        permission: :scale_ready
       )
 
       if entry_successful

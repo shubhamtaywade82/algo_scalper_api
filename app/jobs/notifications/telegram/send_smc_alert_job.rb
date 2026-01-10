@@ -20,6 +20,10 @@ module Notifications
         # Fetch AI analysis asynchronously (this is the slow part)
         ai_analysis = fetch_ai_analysis(instrument, decision, htf_context, mtf_context, ltf_context)
 
+        # Enforce permission-based AI output constraints (no discretionary overrides)
+        permission = decision.to_s == 'no_trade' ? :blocked : :scale_ready
+        Trading::AiOutputSanitizer.validate!(permission: permission, output: ai_analysis) if ai_analysis.present?
+
         if ai_analysis.present?
           Rails.logger.info("[SendSmcAlertJob] AI analysis received (#{ai_analysis.length} chars) for #{instrument.symbol_name}")
         else

@@ -55,7 +55,8 @@ module Orders
         index_cfg: index_cfg,
         pick: pick,
         direction: direction,
-        scale_multiplier: scale_multiplier
+        scale_multiplier: scale_multiplier,
+        permission: default_permission_for_entry(scale_multiplier)
       )
         @stats[:validation_failures] += 1
         return failure_result('Entry validation failed')
@@ -78,7 +79,7 @@ module Orders
       end
 
       # Calculate SL/TP prices
-      sl_price, tp_price = calculate_sl_tp(tracker.entry_price, direction)
+      sl_price, tp_price = calculate_sl_tp(tracker.entry_price, direction, index_cfg[:key])
 
       # Add to ActiveCache
       position_data = @active_cache.add_position(
@@ -92,13 +93,17 @@ module Orders
       end
 
       # Place bracket orders via BracketPlacer
-      bracket_placer = Orders::BracketPlacer.new
-      bracket_result = bracket_placer.place_bracket(
-        tracker: tracker,
-        sl_price: sl_price,
-        tp_price: tp_price,
-        reason: 'initial_bracket'
-      )
+      bracket_result = if tp_price
+                         bracket_placer = Orders::BracketPlacer.new
+                         bracket_placer.place_bracket(
+                           tracker: tracker,
+                           sl_price: sl_price,
+                           tp_price: tp_price,
+                           reason: 'initial_bracket'
+                         )
+                       else
+                         { success: true, sl_price: sl_price, tp_price: nil, reason: 'profile_convexity_no_tp' }
+                       end
 
       unless bracket_result[:success]
         Rails.logger.warn("[Orders::EntryManager] Bracket placement failed for #{tracker.order_no}: #{bracket_result[:error]}")
@@ -191,9 +196,14 @@ module Orders
     # @param entry_price [BigDecimal, Float] Entry price
     # @param direction [Symbol] :bullish or :bearish
     # @return [Array<Float, Float>] [sl_price, tp_price]
-    def calculate_sl_tp(entry_price, direction)
+    def calculate_sl_tp(entry_price, direction, index_key = nil)
       entry = entry_price.to_f
       return [nil, nil] unless entry.positive?
+
+      if index_key
+        profile = Trading::InstrumentExecutionProfile.for(index_key)
+        return [calculate_sl(entry, direction), nil] if profile[:target_model] == :convexity
+      end
 
       # Default NEMESIS V3 values: SL = 30% below, TP = 60% above for long positions
       if direction == :bullish
@@ -206,6 +216,24 @@ module Orders
       end
 
       [sl.round(2), tp.round(2)]
+    end
+
+    def calculate_sl(entry, direction)
+      if direction == :bullish
+        (entry * 0.70).round(2)
+      else
+        (entry * 1.30).round(2)
+      end
+    end
+
+    def default_permission_for_entry(scale_multiplier)
+      mult = scale_multiplier.to_i
+      return :execution_only if mult <= 1
+      return :scale_ready if mult == 2
+
+      :full_deploy
+    rescue StandardError
+      :blocked
     end
 
     # Emit entry_filled event via EventBus

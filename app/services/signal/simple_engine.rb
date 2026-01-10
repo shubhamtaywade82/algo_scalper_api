@@ -40,7 +40,8 @@ module Signal
             index_cfg: index_cfg,
             pick: pick,
             direction: signal,
-            scale_multiplier: 1
+            scale_multiplier: 1,
+            permission: :scale_ready
           )
 
           if result
