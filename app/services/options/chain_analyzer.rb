@@ -623,6 +623,133 @@ module Options
         end
       end
 
+      # Strike Qualification Layer (context-aware + expected-move hard gate)
+      #
+      # IMPORTANT:
+      # - This is additive and does NOT change existing pick_strikes behavior.
+      # - If qualification fails, it returns [] to HARD-BLOCK entry.
+      #
+      # @param index_cfg [Hash] Index configuration
+      # @param direction [Symbol] :bullish or :bearish
+      # @param permission [Symbol] :execution_only, :scale_ready, :full_deploy
+      # @param expected_spot_move [Float] Expected spot move in points (ATR-derived)
+      # @return [Array<Hash>] Array with a single qualified pick, or [] if blocked
+      def pick_strikes_with_qualification(index_cfg:, direction:, permission:, expected_spot_move:)
+        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+        unless instrument
+          Rails.logger.warn("[Options] No instrument found for #{index_cfg[:key]}") if defined?(Rails)
+          return []
+        end
+
+        expiry_list = instrument.expiry_list
+        unless expiry_list&.any?
+          Rails.logger.warn("[Options] No expiry list available for #{index_cfg[:key]}") if defined?(Rails)
+          return []
+        end
+
+        expiry_date = find_next_expiry(expiry_list)
+        unless expiry_date
+          Rails.logger.warn("[Options] Could not determine next expiry for #{index_cfg[:key]}") if defined?(Rails)
+          return []
+        end
+
+        chain_data = begin
+          instrument.fetch_option_chain(expiry_date)
+        rescue StandardError => e
+          Rails.logger.warn(
+            "[Options] Could not fetch option chain for #{index_cfg[:key]} #{expiry_date}: #{e.class} - #{e.message}"
+          ) if defined?(Rails)
+          nil
+        end
+        return [] unless chain_data && chain_data[:oc].is_a?(Hash)
+
+        spot = chain_data[:last_price]&.to_f
+        unless spot&.positive?
+          Rails.logger.warn("[Options] No SPOT/last_price available for #{index_cfg[:key]}") if defined?(Rails)
+          return []
+        end
+
+        normalized_permission = permission.to_s.downcase.to_sym
+        expected_move = expected_spot_move.to_f
+        unless expected_move.positive?
+          Rails.logger.info("[Options] Expected move unavailable -> BLOCK #{index_cfg[:key]}") if defined?(Rails)
+          return []
+        end
+
+        side_sym = direction == :bullish ? :CE : :PE
+        oc_side = direction == :bullish ? :ce : :pe
+
+        selector = Options::StrikeQualification::StrikeSelector.new
+        selection = selector.call(
+          index_key: index_cfg[:key],
+          side: side_sym,
+          permission: normalized_permission,
+          spot: spot,
+          option_chain: chain_data[:oc],
+          trend: direction
+        )
+
+        unless selection[:ok]
+          Rails.logger.info(
+            "[Options] StrikeSelector BLOCKED #{index_cfg[:key]}: #{selection[:reason]}"
+          ) if defined?(Rails)
+          return []
+        end
+
+        # Try selected strike first, then fallback to ATM only.
+        legs = filter_and_rank_from_instrument_data(
+          chain_data[:oc],
+          atm: spot,
+          side: oc_side,
+          index_cfg: index_cfg,
+          expiry_date: expiry_date,
+          instrument: instrument,
+          target_strikes: [selection[:strike].to_f]
+        )
+
+        used_strike_type = selection[:strike_type]
+
+        if legs.blank? && selection[:strike_type] != :ATM
+          legs = filter_and_rank_from_instrument_data(
+            chain_data[:oc],
+            atm: spot,
+            side: oc_side,
+            index_cfg: index_cfg,
+            expiry_date: expiry_date,
+            instrument: instrument,
+            target_strikes: [selection[:atm_strike].to_f]
+          )
+          used_strike_type = :ATM
+        end
+
+        return [] if legs.blank?
+
+        leg = legs.first
+        pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
+                 .merge(strike_type: used_strike_type)
+
+        validator = Options::StrikeQualification::ExpectedMoveValidator.new
+        validation = validator.call(
+          index_key: index_cfg[:key],
+          strike_type: used_strike_type,
+          permission: normalized_permission,
+          expected_spot_move: expected_move,
+          option_ltp: pick[:ltp]
+        )
+
+        unless validation[:ok]
+          Rails.logger.info(
+            "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
+          ) if defined?(Rails)
+          return []
+        end
+
+        [pick]
+      rescue StandardError => e
+        Rails.logger.error("[Options] pick_strikes_with_qualification failed: #{e.class} - #{e.message}") if defined?(Rails)
+        []
+      end
+
       def find_next_expiry(expiry_list)
         return nil unless expiry_list.respond_to?(:each)
 
@@ -647,7 +774,8 @@ module Options
         next_expiry&.strftime('%Y-%m-%d')
       end
 
-      def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, index_cfg:, expiry_date:, instrument:)
+      def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, index_cfg:, expiry_date:, instrument:,
+                                               target_strikes: nil)
         # Force reload - debugging index_cfg scope issue
         return [] unless option_chain_data
 
@@ -678,19 +806,16 @@ module Options
 
         # For buying options, focus on ATM and nearby strikes only (ATM, 1OTM, 2OTM max)
         # This prevents selecting expensive ITM options or far OTM options
-        target_strikes = if [:ce, 'ce'].include?(side)
+        computed_target_strikes = if [:ce, 'ce'].include?(side)
                            # CE: ATM, ATM+1, ATM+2 (OTM calls, max 2OTM)
                            [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval)]
-                             .select do |s|
-                             oc_strikes.include?(s)
-                           end
                          else
                            # PE: ATM, ATM-1, ATM-2 (OTM puts, max 2OTM)
                            [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval)]
-                             .select do |s|
-                             oc_strikes.include?(s)
-                           end
                          end
+        available_strikes = option_chain_data.keys.map(&:to_f)
+        target_strikes = (target_strikes.presence || computed_target_strikes).map(&:to_f)
+        target_strikes = target_strikes.select { |s| available_strikes.include?(s) }
 
         # Rails.logger.debug { "[Options] Target strikes for #{side}: #{target_strikes}" }
 
