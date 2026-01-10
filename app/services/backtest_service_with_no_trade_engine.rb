@@ -132,7 +132,7 @@ class BacktestServiceWithNoTradeEngine
   def summary
     return {} if @results.empty?
 
-    wins = @results.select { |r| r[:pnl_percent] > 0 }
+    wins = @results.select { |r| r[:pnl_percent].positive? }
     losses = @results.select { |r| r[:pnl_percent] <= 0 }
     trade_count = @results.size
     win_total_percent = wins.sum { |w| w[:pnl_percent] }
@@ -157,45 +157,45 @@ class BacktestServiceWithNoTradeEngine
 
   def print_summary
     s = summary
-    return puts 'No trades executed' if s.empty?
+    return Rails.logger.debug 'No trades executed' if s.empty?
 
     separator = '=' * 80
     divider = '-' * 80
 
-    puts "\n#{separator}"
-    puts "BACKTEST RESULTS: #{instrument.symbol_name} (WITH NO-TRADE ENGINE)"
-    puts separator
-    puts "Period: Last #{days_back} days | Intervals: #{interval_1m}m (signal), #{interval_5m}m (ADX)"
-    puts divider
-    puts "Total Trades:      #{s[:total_trades]}"
-    puts "Winning Trades:    #{s[:winning_trades]} (#{s[:win_rate]}%)"
-    puts "Losing Trades:     #{s[:losing_trades]}"
-    puts divider
-    puts "Avg Win:           +#{s[:avg_win_percent]}%"
-    puts "Avg Loss:          #{s[:avg_loss_percent]}%"
-    puts "Max Win:           +#{s[:max_win]}%"
-    puts "Max Loss:          #{s[:max_loss]}%"
-    puts divider
-    puts "Total P&L:         #{'+' if s[:total_pnl_percent] > 0}#{s[:total_pnl_percent]}%"
-    puts "Expectancy:        #{'+' if s[:expectancy] > 0}#{s[:expectancy]}% per trade"
-    puts divider
-    puts 'NO-TRADE ENGINE STATS:'
-    puts "  Phase 1 Blocked:  #{s[:no_trade_stats][:phase1_blocked]}"
-    puts "  Phase 2 Blocked:  #{s[:no_trade_stats][:phase2_blocked]}"
-    puts "  Signals Generated: #{s[:no_trade_stats][:signal_generated]}"
-    puts "  Trades Executed:  #{s[:no_trade_stats][:trades_executed]}"
+    Rails.logger.debug { "\n#{separator}" }
+    Rails.logger.debug { "BACKTEST RESULTS: #{instrument.symbol_name} (WITH NO-TRADE ENGINE)" }
+    Rails.logger.debug separator
+    Rails.logger.debug { "Period: Last #{days_back} days | Intervals: #{interval_1m}m (signal), #{interval_5m}m (ADX)" }
+    Rails.logger.debug divider
+    Rails.logger.debug { "Total Trades:      #{s[:total_trades]}" }
+    Rails.logger.debug { "Winning Trades:    #{s[:winning_trades]} (#{s[:win_rate]}%)" }
+    Rails.logger.debug { "Losing Trades:     #{s[:losing_trades]}" }
+    Rails.logger.debug divider
+    Rails.logger.debug { "Avg Win:           +#{s[:avg_win_percent]}%" }
+    Rails.logger.debug { "Avg Loss:          #{s[:avg_loss_percent]}%" }
+    Rails.logger.debug { "Max Win:           +#{s[:max_win]}%" }
+    Rails.logger.debug { "Max Loss:          #{s[:max_loss]}%" }
+    Rails.logger.debug divider
+    Rails.logger.debug { "Total P&L:         #{'+' if s[:total_pnl_percent].positive?}#{s[:total_pnl_percent]}%" }
+    Rails.logger.debug { "Expectancy:        #{'+' if s[:expectancy].positive?}#{s[:expectancy]}% per trade" }
+    Rails.logger.debug divider
+    Rails.logger.debug 'NO-TRADE ENGINE STATS:'
+    Rails.logger.debug { "  Phase 1 Blocked:  #{s[:no_trade_stats][:phase1_blocked]}" }
+    Rails.logger.debug { "  Phase 2 Blocked:  #{s[:no_trade_stats][:phase2_blocked]}" }
+    Rails.logger.debug { "  Signals Generated: #{s[:no_trade_stats][:signal_generated]}" }
+    Rails.logger.debug { "  Trades Executed:  #{s[:no_trade_stats][:trades_executed]}" }
     block_rate = calculate_block_rate(s[:no_trade_stats])
-    puts "  Block Rate:       #{block_rate}%"
-    puts divider
-    puts 'Top Phase 1 Block Reasons:'
+    Rails.logger.debug { "  Block Rate:       #{block_rate}%" }
+    Rails.logger.debug divider
+    Rails.logger.debug 'Top Phase 1 Block Reasons:'
     s[:no_trade_stats][:phase1_reasons].sort_by { |_k, v| -v }.first(5).each do |reason, count|
-      puts "  #{reason}: #{count}"
+      Rails.logger.debug "  #{reason}: #{count}"
     end
-    puts 'Top Phase 2 Block Reasons:'
+    Rails.logger.debug 'Top Phase 2 Block Reasons:'
     s[:no_trade_stats][:phase2_reasons].sort_by { |_k, v| -v }.first(5).each do |reason, count|
-      puts "  #{reason}: #{count}"
+      Rails.logger.debug "  #{reason}: #{count}"
     end
-    puts "#{separator}\n"
+    Rails.logger.debug { "#{separator}\n" }
   end
 
   private
@@ -204,7 +204,7 @@ class BacktestServiceWithNoTradeEngine
   # This makes a separate API call for each interval (1m and 5m)
   # We do NOT aggregate or build 5m from 1m - each is fetched independently
   def fetch_ohlc_data(interval)
-    to_date = Date.today - 1.day
+    to_date = Time.zone.today - 1.day
     from_date = to_date - @days_back.days
 
     Rails.logger.info("[Backtest] Fetching #{interval}m OHLC from API: #{from_date} to #{to_date}")
@@ -225,12 +225,11 @@ class BacktestServiceWithNoTradeEngine
       size = data.is_a?(Hash) ? data.keys.size : data.size
       Rails.logger.info("[Backtest] Fetched #{interval}m OHLC: #{size} records in #{elapsed.round(2)}s")
       $stdout.puts "[Backtest]   ✅ Fetched #{size} records in #{elapsed.round(2)}s"
-      $stdout.flush
     else
       Rails.logger.warn("[Backtest] No data returned for #{interval}m OHLC")
       $stdout.puts '[Backtest]   ⚠️  No data returned'
-      $stdout.flush
     end
+    $stdout.flush
 
     data
   rescue StandardError => e
@@ -376,7 +375,7 @@ class BacktestServiceWithNoTradeEngine
 
         unless phase2_result && phase2_result[:allowed]
           @no_trade_stats[:phase2_blocked] += 1
-          phase2_result[:reasons].each { |r| @no_trade_stats[:phase2_reasons][r] += 1 } if phase2_result[:reasons]
+          phase2_result[:reasons]&.each { |r| @no_trade_stats[:phase2_reasons][r] += 1 }
           i += 1
           next
         end
@@ -403,12 +402,12 @@ class BacktestServiceWithNoTradeEngine
 
     # Time windows
     time_str = current_time.strftime('%H:%M')
-    if time_str >= '09:15' && time_str <= '09:18'
+    if time_str.between?('09:15', '09:18')
       reasons << 'Avoid first 3 minutes'
       score += 1
     end
 
-    if time_str >= '11:20' && time_str <= '13:30'
+    if time_str.between?('11:20', '13:30')
       reasons << 'Lunch-time theta zone'
       score += 1
     end
@@ -595,9 +594,9 @@ class BacktestServiceWithNoTradeEngine
 
     name = symbol_name.to_s.upcase
     # Check for BANKNIFTY first (more specific pattern)
-    return 'BANKNIFTY' if name.match?(/BANK/)
-    return 'SENSEX' if name.match?(/SENSEX/)
-    return 'NIFTY' if name.match?(/NIFTY/)
+    return 'BANKNIFTY' if name.include?('BANK')
+    return 'SENSEX' if name.include?('SENSEX')
+    return 'NIFTY' if name.include?('NIFTY')
 
     'NIFTY' # Default fallback (same as NIFTY match, but needed for clarity)
   end
@@ -756,7 +755,7 @@ class BacktestServiceWithNoTradeEngine
     return false unless current && start_min && end_min
 
     if start_min <= end_min
-      current >= start_min && current <= end_min
+      current.between?(start_min, end_min)
     else
       current >= start_min || current <= end_min
     end

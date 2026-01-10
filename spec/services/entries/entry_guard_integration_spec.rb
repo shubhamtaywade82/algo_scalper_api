@@ -45,4 +45,3 @@ RSpec.describe Entries::EntryGuard do
     end
   end
 end
-

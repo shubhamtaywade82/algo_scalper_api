@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe 'Smoke: lib/ loads' do
   it 'loads all lib Ruby source files' do
-    lib_paths = Dir[Rails.root.join('lib/**/*.rb')].sort
+    lib_paths = Rails.root.glob('lib/**/*.rb')
     expect(lib_paths).not_to be_empty
 
     lib_paths.each do |path|
@@ -15,4 +15,3 @@ RSpec.describe 'Smoke: lib/ loads' do
     end
   end
 end
-

@@ -66,10 +66,10 @@ module Live
       # Skip if peak is 0% or negative (position never profitable)
       # Peak drawdown rule should only trigger when position had profit and is drawing down
       if peak <= 0
-        Rails.logger.debug(
+        Rails.logger.debug do
           "[TrailingEngine] Skipping peak drawdown check: peak=#{peak.round(2)}% <= 0% " \
-          "(position never profitable)"
-        )
+            '(position never profitable)'
+        end
         return false
       end
 
@@ -92,11 +92,11 @@ module Live
         )
         unless activation_ready
           capital_info = capital_deployed ? " capital=₹#{capital_deployed.round(0)}" : ''
-          Rails.logger.debug(
+          Rails.logger.debug do
             "[TrailingEngine] Peak drawdown gating: peak=#{peak.round(2)}% " \
-            "sl_offset=#{current_sl_offset_pct(position_data)&.round(2)}% " \
-            "not activated (drawdown=#{(peak - current).round(2)}%#{capital_info})"
-          )
+              "sl_offset=#{current_sl_offset_pct(position_data)&.round(2)}% " \
+              "not activated (drawdown=#{(peak - current).round(2)}%#{capital_info})"
+          end
           return false
         end
       end

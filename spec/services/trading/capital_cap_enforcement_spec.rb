@@ -18,4 +18,3 @@ RSpec.describe '₹30,000 capital cap enforcement' do
     expect(buy_value).to be <= 30_000.0
   end
 end
-

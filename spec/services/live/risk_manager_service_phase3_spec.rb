@@ -27,8 +27,10 @@ RSpec.describe Live::RiskManagerService, 'Phase 3: Metrics & Circuit Breaker' do
 
       it 'tracks minimum and maximum cycle times' do
         service.record_cycle_metrics(cycle_time: 0.3, positions_count: 5, redis_fetches: 2, db_queries: 1, api_calls: 1)
-        service.record_cycle_metrics(cycle_time: 0.8, positions_count: 15, redis_fetches: 8, db_queries: 5, api_calls: 3)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.8, positions_count: 15, redis_fetches: 8, db_queries: 5,
+                                     api_calls: 3)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
 
         metrics = service.get_metrics
         expect(metrics[:min_cycle_time]).to eq(0.3)
@@ -36,32 +38,40 @@ RSpec.describe Live::RiskManagerService, 'Phase 3: Metrics & Circuit Breaker' do
       end
 
       it 'accumulates positions count' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 15, redis_fetches: 5, db_queries: 3, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 15, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
 
         metrics = service.get_metrics
         expect(metrics[:total_positions]).to eq(25)
       end
 
       it 'accumulates Redis fetch count' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 8, db_queries: 3, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 8, db_queries: 3,
+                                     api_calls: 2)
 
         metrics = service.get_metrics
         expect(metrics[:total_redis_fetches]).to eq(13)
       end
 
       it 'accumulates DB query count' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 7, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 7,
+                                     api_calls: 2)
 
         metrics = service.get_metrics
         expect(metrics[:total_db_queries]).to eq(10)
       end
 
       it 'accumulates API call count' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 5)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 5)
 
         metrics = service.get_metrics
         expect(metrics[:total_api_calls]).to eq(7)
@@ -112,40 +122,50 @@ RSpec.describe Live::RiskManagerService, 'Phase 3: Metrics & Circuit Breaker' do
 
       it 'calculates average cycle time correctly' do
         service.record_cycle_metrics(cycle_time: 0.3, positions_count: 5, redis_fetches: 2, db_queries: 1, api_calls: 1)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.7, positions_count: 15, redis_fetches: 8, db_queries: 5, api_calls: 3)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.7, positions_count: 15, redis_fetches: 8, db_queries: 5,
+                                     api_calls: 3)
 
         metrics = service.get_metrics
         expect(metrics[:avg_cycle_time]).to be_within(0.01).of(0.5)
       end
 
       it 'calculates average positions per cycle' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 20, redis_fetches: 5, db_queries: 3, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 20, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
 
         metrics = service.get_metrics
         expect(metrics[:avg_positions_per_cycle]).to eq(15)
       end
 
       it 'calculates average Redis fetches per cycle' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 10, db_queries: 3, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 10, db_queries: 3,
+                                     api_calls: 2)
 
         metrics = service.get_metrics
         expect(metrics[:avg_redis_fetches_per_cycle]).to eq(7.5)
       end
 
       it 'calculates average DB queries per cycle' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 7, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 7,
+                                     api_calls: 2)
 
         metrics = service.get_metrics
         expect(metrics[:avg_db_queries_per_cycle]).to eq(5)
       end
 
       it 'calculates average API calls per cycle' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 8)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 8)
 
         metrics = service.get_metrics
         expect(metrics[:avg_api_calls_per_cycle]).to eq(5)
@@ -183,7 +203,8 @@ RSpec.describe Live::RiskManagerService, 'Phase 3: Metrics & Circuit Breaker' do
 
     describe '#reset_metrics' do
       it 'resets all metrics to zero' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
         service.increment_metric(:exit_stop_loss)
         service.increment_metric(:error_api_error)
 
@@ -199,7 +220,8 @@ RSpec.describe Live::RiskManagerService, 'Phase 3: Metrics & Circuit Breaker' do
       end
 
       it 'allows recording metrics after reset' do
-        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3, api_calls: 2)
+        service.record_cycle_metrics(cycle_time: 0.5, positions_count: 10, redis_fetches: 5, db_queries: 3,
+                                     api_calls: 2)
         service.reset_metrics
         service.record_cycle_metrics(cycle_time: 0.3, positions_count: 5, redis_fetches: 2, db_queries: 1, api_calls: 1)
 

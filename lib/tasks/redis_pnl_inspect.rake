@@ -1,11 +1,13 @@
+# frozen_string_literal: true
+
 # lib/tasks/redis_pnl_inspect.rake
 namespace :redis do
-  desc "Inspect pnl:tracker:* keys with color-coded PnL"
+  desc 'Inspect pnl:tracker:* keys with color-coded PnL'
   task inspect: :environment do
     redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://localhost:6379/0'))
     keys = redis.keys('pnl:tracker:*')
     if keys.empty?
-      puts "No pnl:tracker keys found."
+      puts 'No pnl:tracker keys found.'
       next
     end
 
@@ -14,12 +16,12 @@ namespace :redis do
       pnl = data['pnl']&.to_f
       pnl_pct = data['pnl_pct']&.to_f
       ltp = data['ltp']&.to_f
-      updated = Time.at(data['updated_at'].to_i).strftime('%H:%M:%S')
+      updated = Time.zone.at(data['updated_at'].to_i).strftime('%H:%M:%S')
 
       color =
-        if pnl.to_f > 0
+        if pnl.to_f.positive?
           "\e[32m"  # green
-        elsif pnl.to_f < 0
+        elsif pnl.to_f.negative?
           "\e[31m"  # red
         else
           "\e[33m"  # yellow

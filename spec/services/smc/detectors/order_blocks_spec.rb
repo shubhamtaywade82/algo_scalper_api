@@ -131,4 +131,3 @@ RSpec.describe Smc::Detectors::OrderBlocks do
     end
   end
 end
-

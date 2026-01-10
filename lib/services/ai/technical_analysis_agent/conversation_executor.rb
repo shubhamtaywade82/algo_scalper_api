@@ -22,7 +22,7 @@ module Services
         def limit_message_history(messages)
           # Always keep system message (first)
           system_msg = messages.first
-          conversation_msgs = messages[1..-1] || []
+          conversation_msgs = messages[1..] || []
 
           # Keep only the most recent messages
           max_conversation = MAX_MESSAGE_HISTORY - 1 # -1 for system message
@@ -187,12 +187,12 @@ module Services
             provider: @client.provider,
             iterations: iteration,
             errors_encountered: @error_history.size,
-            learned_patterns_applied: @learned_patterns.select do |p|
+            learned_patterns_applied: @learned_patterns.count do |p|
               keywords = p[:keywords] || []
               keywords.any? do |kw|
                 @current_query_keywords&.include?(kw)
               end
-            end.size
+            end
           }
         rescue StandardError => e
           Rails.logger.error("[TechnicalAnalysisAgent] Error: #{e.class} - #{e.message}")
@@ -411,12 +411,12 @@ module Services
             provider: @client.provider,
             iterations: iteration,
             errors_encountered: @error_history.size,
-            learned_patterns_applied: @learned_patterns.select do |p|
+            learned_patterns_applied: @learned_patterns.count do |p|
               keywords = p[:keywords] || []
               keywords.any? do |kw|
                 @current_query_keywords&.include?(kw)
               end
-            end.size
+            end
           }
         rescue StandardError => e
           error_msg = "[Agent] Error: #{e.class} - #{e.message}\n"

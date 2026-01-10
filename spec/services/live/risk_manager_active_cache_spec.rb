@@ -24,9 +24,9 @@ RSpec.describe Live::RiskManagerService, '#enforce_hard_limits via ActiveCache' 
       segment: tracker.segment,
       entry_price: tracker.entry_price,
       quantity: tracker.quantity,
-      pnl: BigDecimal('2500'),
+      pnl: BigDecimal(2500),
       pnl_pct: 25.0,
-      high_water_mark: BigDecimal('3000'),
+      high_water_mark: BigDecimal(3000),
       last_updated_at: Time.current
     )
   end
@@ -34,7 +34,8 @@ RSpec.describe Live::RiskManagerService, '#enforce_hard_limits via ActiveCache' 
 
   before do
     allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
-    allow(service).to receive(:risk_config).and_return(sl_pct: 0.1, tp_pct: 0.2, exit_drop_pct: 0.03, min_profit_rupees: 0)
+    allow(service).to receive(:risk_config).and_return(sl_pct: 0.1, tp_pct: 0.2, exit_drop_pct: 0.03,
+                                                       min_profit_rupees: 0)
   end
 
   it 'dispatches exits using tracker data from ActiveCache' do
@@ -51,4 +52,3 @@ RSpec.describe Live::RiskManagerService, '#enforce_hard_limits via ActiveCache' 
     service.send(:enforce_hard_limits, exit_engine: service)
   end
 end
-

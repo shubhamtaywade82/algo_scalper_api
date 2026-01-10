@@ -63,7 +63,7 @@ module Services
           end
 
           # Save patterns periodically (every 5 errors)
-          save_learned_patterns if @error_history.size % 5 == 0
+          save_learned_patterns if (@error_history.size % 5).zero?
         end
 
         def classify_error(error_message)
@@ -91,8 +91,6 @@ module Services
             "Provide: #{::Regexp.last_match(1)}"
           when /Invalid (.*?)(?:\s|$)/i
             "Fix: #{::Regexp.last_match(1)}"
-          else
-            nil
           end
         end
 
@@ -135,7 +133,7 @@ module Services
 
           if learned_complexity.any?
             # Increase iterations if we've seen errors with similar queries
-            avg_errors = learned_complexity.map { |p| p[:error_count] || 0 }.sum.to_f / learned_complexity.size
+            avg_errors = learned_complexity.sum { |p| p[:error_count] || 0 }.to_f / learned_complexity.size
             complexity_score += [avg_errors.to_i, 2].min # Cap at +2
           end
 

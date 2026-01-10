@@ -53,7 +53,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       trend_length = config[:trend_length] || 5
       # Need min_candles + trend_length to have enough HMA values for trend detection
       total_candles = min_candles + trend_length + 5 # Extra buffer
-      base_price = 22000.0
+      base_price = 22_000.0
 
       total_candles.times do |i|
         # Create upward trending candles
@@ -100,7 +100,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
 
       it 'returns direction as :bullish or :bearish' do
         result = indicator.calculate_at(index)
-        expect(result[:direction]).to be_in([:bullish, :bearish])
+        expect(result[:direction]).to be_in(%i[bullish bearish])
       end
 
       it 'returns confidence between 0 and 100' do
@@ -115,7 +115,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
 
       before do
         min_candles = indicator_filtered.min_required_candles
-        base_price = 22000.0
+        base_price = 22_000.0
 
         min_candles.times do |i|
           # Create candles outside trading hours (9 AM)
@@ -146,7 +146,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
     before do
       # Create test data
       min_candles = indicator.min_required_candles
-      base_price = 22000.0
+      base_price = 22_000.0
 
       min_candles.times do |i|
         price = base_price + (i * 10)
@@ -171,7 +171,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       # Add more candles if needed
       while series.candles.size < total_needed
         i = series.candles.size
-        price = 22000.0 + (i * 10)
+        price = 22_000.0 + (i * 10)
         candle = Candle.new(
           ts: Time.zone.now + i.minutes,
           open: price,
@@ -197,7 +197,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         min_candles = indicator.min_required_candles
         trend_length = config[:trend_length] || 5
         total_needed = min_candles + trend_length + 5
-        base_price = 22000.0
+        base_price = 22_000.0
 
         total_needed.times do |i|
           # Strong upward trend
@@ -229,7 +229,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         min_candles = indicator.min_required_candles
         trend_length = config[:trend_length] || 5
         total_needed = min_candles + trend_length + 5
-        base_price = 22000.0
+        base_price = 22_000.0
 
         total_needed.times do |i|
           # Strong downward trend
@@ -259,8 +259,8 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
 
   describe 'trend duration tracking' do
     before do
-      min_candles = indicator.min_required_candles
-      base_price = 22000.0
+      indicator.min_required_candles
+      base_price = 22_000.0
 
       # Create initial bullish trend
       min_candles = indicator.min_required_candles
@@ -309,7 +309,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         config: indicator_config,
         global_config: {}
       )
-      expect(created).to be_a(Indicators::TrendDurationIndicator)
+      expect(created).to be_a(described_class)
     end
   end
 
@@ -323,7 +323,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
 
     it 'handles nil values gracefully' do
       min_candles = indicator.min_required_candles
-      base_price = 22000.0
+      base_price = 22_000.0
 
       min_candles.times do |i|
         price = base_price + (i * 10)

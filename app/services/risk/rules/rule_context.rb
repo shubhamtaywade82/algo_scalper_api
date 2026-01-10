@@ -17,9 +17,7 @@ module Risk
 
       # Get PnL percentage from position
       # @return [Float, nil] PnL percentage or nil if not available
-      def pnl_pct
-        position.pnl_pct
-      end
+      delegate :pnl_pct, to: :position
 
       # Get PnL in rupees from position
       # @return [Float, nil] PnL in rupees or nil if not available
@@ -29,33 +27,23 @@ module Risk
 
       # Get high water mark from position
       # @return [Float, nil] High water mark or nil if not available
-      def high_water_mark
-        position.high_water_mark
-      end
+      delegate :high_water_mark, to: :position
 
       # Get peak profit percentage from position
       # @return [Float, nil] Peak profit percentage or nil if not available
-      def peak_profit_pct
-        position.peak_profit_pct
-      end
+      delegate :peak_profit_pct, to: :position
 
       # Get current LTP from position
       # @return [BigDecimal, nil] Current LTP or nil if not available
-      def current_ltp
-        position.current_ltp
-      end
+      delegate :current_ltp, to: :position
 
       # Get entry price from tracker
       # @return [BigDecimal, nil] Entry price or nil if not available
-      def entry_price
-        tracker.entry_price
-      end
+      delegate :entry_price, to: :tracker
 
       # Get quantity from tracker
       # @return [Integer, nil] Quantity or nil if not available
-      def quantity
-        tracker.quantity
-      end
+      delegate :quantity, to: :tracker
 
       # Check if position is active
       # @return [Boolean] true if active, false otherwise
@@ -75,7 +63,7 @@ module Risk
       # @param key [Symbol, String] Config key
       # @param default [BigDecimal] Default value if key not found
       # @return [BigDecimal] Config value as BigDecimal
-      def config_bigdecimal(key, default = BigDecimal('0'))
+      def config_bigdecimal(key, default = BigDecimal(0))
         value = config_value(key, default)
         BigDecimal(value.to_s)
       rescue StandardError

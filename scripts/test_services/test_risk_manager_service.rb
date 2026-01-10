@@ -46,11 +46,11 @@ if active_positions.any?
       ServiceTestHelper.print_info("  Current PnL: ₹#{pnl_data[:pnl]}")
       ServiceTestHelper.print_info("  PnL %: #{pnl_data[:pnl_pct]}%")
     else
-      ServiceTestHelper.print_warning("  PnL not yet calculated")
+      ServiceTestHelper.print_warning('  PnL not yet calculated')
     end
 
     # Risk manager checks these internally
-    ServiceTestHelper.print_info("  Risk evaluation: Checked by RiskManager service")
+    ServiceTestHelper.print_info('  Risk evaluation: Checked by RiskManager service')
   end
 else
   ServiceTestHelper.print_warning('No active positions to check')
@@ -84,4 +84,3 @@ end
 
 ServiceTestHelper.print_success('RiskManagerService test completed')
 ServiceTestHelper.print_info('Risk manager runs continuously - check logs for risk checks')
-

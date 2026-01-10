@@ -115,4 +115,3 @@ module Entries
     end
   end
 end
-

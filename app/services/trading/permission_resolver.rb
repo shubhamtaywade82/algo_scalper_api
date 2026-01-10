@@ -86,7 +86,7 @@ module Trading
           bos_recent: (mtf_struct[:bos] == true),
           displacement: fvg_gaps.any?, # proxy: presence of FVG gaps
           liquidity_event_resolved: (liquidity_h[:sweep] == true),
-          active_liquidity_trap: (liquidity_h[:equal_highs] == true || liquidity_h[:equal_lows] == true),
+          active_liquidity_trap: liquidity_h[:equal_highs] == true || liquidity_h[:equal_lows] == true,
           trap_resolved: false,
           follow_through: (ltf_struct[:bos] == true)
         }
@@ -96,4 +96,3 @@ module Trading
     end
   end
 end
-

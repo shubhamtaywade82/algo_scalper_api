@@ -6,7 +6,9 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
   let(:service) { described_class.new }
   let(:exit_engine) { instance_double(Live::ExitEngine) }
   let(:instrument) { create(:instrument, :nifty_call_option, symbol_name: 'NIFTY') }
-  let(:tracker) { create(:position_tracker, instrument: instrument, entry_price: 100.0, quantity: 50, segment: 'NSE_FNO') }
+  let(:tracker) do
+    create(:position_tracker, instrument: instrument, entry_price: 100.0, quantity: 50, segment: 'NSE_FNO')
+  end
 
   before do
     allow(service).to receive(:pnl_snapshot).and_return(pnl_data)
@@ -222,17 +224,16 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
         }
       }
     end
-
-    before do
-      allow(AlgoConfig).to receive(:fetch).and_return(config)
-    end
-
     let(:pnl_data) do
       {
         pnl: BigDecimal('100.0'),
         pnl_pct: BigDecimal('0.02'),
         hwm_pnl: BigDecimal('500.0')
       }
+    end
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return(config)
     end
 
     it 'does not run trailing checks' do
@@ -266,7 +267,7 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
         {
           pnl: BigDecimal('100.0'),
           pnl_pct: BigDecimal('0.02'),
-          hwm_pnl: BigDecimal('0')
+          hwm_pnl: BigDecimal(0)
         }
       end
 
@@ -296,7 +297,7 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
         {
           pnl: BigDecimal('-100.0'), # -2% loss
           pnl_pct: BigDecimal('-0.02'),
-          hwm_pnl: BigDecimal('0')
+          hwm_pnl: BigDecimal(0)
         }
       end
 

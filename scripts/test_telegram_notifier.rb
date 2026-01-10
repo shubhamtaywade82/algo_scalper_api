@@ -40,7 +40,7 @@ puts
 puts 'Test 2: Sending test message...'
 begin
   test_message = "This is a test message from the Telegram Notifier.\n\n" \
-                 "If you received this, the notifier is working correctly! 🎉"
+                 'If you received this, the notifier is working correctly! 🎉'
   notifier.send_test_message(test_message)
   puts '✅ Test message sent successfully'
 rescue StandardError => e
@@ -76,4 +76,3 @@ puts 'Test completed!'
 puts '=' * 60
 puts
 puts 'Check your Telegram chat to verify all messages were received.'
-

@@ -85,7 +85,7 @@ module Live
       return if seg.blank? || sid.blank?
 
       ltp = Live::TickCache.ltp(seg, sid)
-      return unless ltp.present?
+      return if ltp.blank?
 
       entry = BigDecimal(tracker.entry_price.to_s)
       qty   = tracker.quantity.to_i

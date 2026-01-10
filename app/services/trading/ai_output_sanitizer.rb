@@ -75,4 +75,3 @@ module Trading
     end
   end
 end
-

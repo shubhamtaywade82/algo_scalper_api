@@ -64,7 +64,7 @@ module Entries
         return 0 if bars.size < 2
 
         count = 0
-        (1..bars.size - 1).each do |i|
+        (1..(bars.size - 1)).each do |i|
           prev = bars[i - 1]
           curr = bars[i]
 

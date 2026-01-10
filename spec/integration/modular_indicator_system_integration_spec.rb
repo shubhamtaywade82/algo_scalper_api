@@ -48,7 +48,7 @@ RSpec.describe 'Modular Indicator System Integration', type: :integration do
       expect(indicators.size).to eq(2)
 
       index = series.candles.size - 1
-      results = indicators.map { |ind| ind.calculate_at(index) }.compact
+      results = indicators.filter_map { |ind| ind.calculate_at(index) }
 
       expect(results).not_to be_empty
       results.each do |result|
@@ -207,7 +207,7 @@ RSpec.describe 'Modular Indicator System Integration', type: :integration do
     end
 
     it 'builds strategy from configuration' do
-      enabled_indicators = signals_cfg[:indicators].select { |ic| ic[:enabled] != false }
+      enabled_indicators = signals_cfg[:indicators].reject { |ic| ic[:enabled] == false }
       global_config = { supertrend_cfg: { period: 7, multiplier: 3.0 } }
 
       strategy = MultiIndicatorStrategy.new(
@@ -232,7 +232,7 @@ RSpec.describe 'Modular Indicator System Integration', type: :integration do
         config: { period: 14 }
       }
 
-      enabled_indicators = signals_cfg[:indicators].select { |ic| ic[:enabled] != false }
+      enabled_indicators = signals_cfg[:indicators].reject { |ic| ic[:enabled] == false }
 
       strategy = MultiIndicatorStrategy.new(
         series: series,
@@ -241,7 +241,7 @@ RSpec.describe 'Modular Indicator System Integration', type: :integration do
       )
 
       expect(strategy.indicators.size).to eq(2)
-      expect(strategy.indicators.none? { |ind| ind.is_a?(Indicators::RsiIndicator) }).to be true
+      expect(strategy.indicators.none?(Indicators::RsiIndicator)).to be true
     end
   end
 

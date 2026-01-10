@@ -12,7 +12,7 @@ RSpec.describe Indicators::RsiIndicator do
   before do
     # Create enough candles for RSI calculation
     50.times do |i|
-      price = 22000.0 + (i * 10)
+      price = 22_000.0 + (i * 10)
       candle = Candle.new(
         ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
         open: price,
@@ -56,7 +56,7 @@ RSpec.describe Indicators::RsiIndicator do
       allow(indicator).to receive(:create_partial_series).and_return(partial_series)
       allow(partial_series).to receive(:rsi).with(14).and_return(65.0)
 
-      result = indicator.calculate_at(index)
+      indicator.calculate_at(index)
       expect(partial_series).to have_received(:rsi).with(14)
     end
 

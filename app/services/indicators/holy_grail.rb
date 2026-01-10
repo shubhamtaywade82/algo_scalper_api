@@ -110,7 +110,7 @@ module Indicators
           false
         end
 
-      latest_time = Time.zone.at(stamps.last)
+      Time.zone.at(stamps.last)
       # Rails.logger.debug { "[HolyGrail] (#{latest_time}) proceed?=#{proceed}" }
 
       trend =

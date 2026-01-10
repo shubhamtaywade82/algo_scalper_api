@@ -3,9 +3,9 @@
 namespace :compare do
   desc 'Compare debug:smc_options and smc:scan results for NIFTY'
   task smc_results: :environment do
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts 'COMPARING SMC OPTION CHAIN RESULTS'
-    puts ('=' * 80) + "\n"
+    puts "#{'=' * 80}\n"
 
     # Get NIFTY index config
     indices = IndexConfigLoader.load_indices
@@ -48,8 +48,6 @@ namespace :compare do
             rescue ArgumentError
               nil
             end
-          else
-            nil
           end
         end
 
@@ -71,7 +69,7 @@ namespace :compare do
     end
 
     # Method 2: Through DerivativeChainAnalyzer (like Smc::AiAnalyzer before fix)
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts 'METHOD 2: Through DerivativeChainAnalyzer (Old Method)'
     puts '=' * 80
     begin
@@ -94,7 +92,7 @@ namespace :compare do
     end
 
     # Method 3: Through Smc::AiAnalyzer (new fixed method)
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts 'METHOD 3: Through Smc::AiAnalyzer (New Fixed Method)'
     puts '=' * 80
     if instrument1
@@ -130,7 +128,7 @@ namespace :compare do
     end
 
     # Comparison Summary
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts 'COMPARISON SUMMARY'
     puts '=' * 80
 
@@ -146,8 +144,6 @@ namespace :compare do
           rescue ArgumentError
             nil
           end
-        else
-          nil
         end
       end
       nearest_expiry1 = parsed_expiries1.select { |date| date >= today }.min
@@ -177,9 +173,8 @@ namespace :compare do
       end
     end
 
-    puts "\n" + ('=' * 80)
+    puts "\n#{'=' * 80}"
     puts '✅ Comparison complete'
-    puts ('=' * 80) + "\n"
+    puts "#{'=' * 80}\n"
   end
 end
-

@@ -49,7 +49,8 @@ RSpec.describe Entries::ATRUtils do
       # Create series with decreasing ATR
       # First window: higher volatility
       20.times do |i|
-        candle = build(:candle, timestamp: i.minutes.ago, high: 25_200 + i * 10, low: 24_800 - i * 10, close: 25_000 + i * 5)
+        candle = build(:candle, timestamp: i.minutes.ago, high: 25_200 + (i * 10), low: 24_800 - (i * 10),
+                                close: 25_000 + (i * 5))
         series.add_candle(candle)
       end
     end

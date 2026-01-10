@@ -13,7 +13,7 @@ RSpec.describe Capital::Allocator do
   let(:derivative_lot_size) { 50 }
 
   before do
-    allow(described_class).to receive(:available_cash).and_return(BigDecimal('100000'))
+    allow(described_class).to receive(:available_cash).and_return(BigDecimal(100_000))
   end
 
   describe 'integer multiplier enforcement' do
@@ -52,7 +52,7 @@ RSpec.describe Capital::Allocator do
     end
 
     it 'returns 0 when insufficient capital' do
-      allow(described_class).to receive(:available_cash).and_return(BigDecimal('100'))
+      allow(described_class).to receive(:available_cash).and_return(BigDecimal(100))
 
       qty = described_class.qty_for(
         index_cfg: index_cfg,
@@ -97,4 +97,3 @@ RSpec.describe Capital::Allocator do
     end
   end
 end
-

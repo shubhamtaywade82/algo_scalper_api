@@ -29,4 +29,3 @@ module Orders
     end
   end
 end
-

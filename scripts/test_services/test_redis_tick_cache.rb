@@ -302,7 +302,7 @@ TickCache.instance.instance_variable_set(:@map, Concurrent::Map.new)
 
 # Now fetch - should come from Redis
 persist_ltp = Live::TickCache.ltp(test_segment, test_security_id_persist)
-persist_full = Live::TickCache.fetch(test_segment, test_security_id_persist)
+Live::TickCache.fetch(test_segment, test_security_id_persist)
 
 persist_ok = persist_ltp && (persist_ltp - 30_000.0).abs < 0.01
 

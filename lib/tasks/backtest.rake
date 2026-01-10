@@ -3,11 +3,11 @@
 
 namespace :backtest do
   # Ensure services are disabled during backtests
-  task :env do
+  task env: :environment do
     ENV['BACKTEST_MODE'] = '1'
   end
   desc 'Run backtest on an instrument'
-  task :run, %i[symbol interval days] => [:env, :environment] do |_t, args|
+  task :run, %i[symbol interval days] => %i[env environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
@@ -26,7 +26,7 @@ namespace :backtest do
   end
 
   desc 'Run backtest on all indices'
-  task :indices, %i[interval days] => [:env, :environment] do |_t, args|
+  task :indices, %i[interval days] => %i[env environment] do |_t, args|
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
 
@@ -114,7 +114,7 @@ namespace :backtest do
   # end
 
   desc 'Compare strategies on an instrument'
-  task :compare, %i[symbol interval days] => [:env, :environment] do |_t, args|
+  task :compare, %i[symbol interval days] => %i[env environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i
@@ -155,7 +155,7 @@ namespace :backtest do
   end
 
   desc 'Run comprehensive backtest on all indices and timeframes'
-  task :all_indices, [:days] => [:env, :environment] do |_t, args|
+  task :all_indices, [:days] => %i[env environment] do |_t, args|
     days = (args[:days] || '90').to_i
     symbols = %w[NIFTY BANKNIFTY SENSEX]
     intervals = %w[5 15]
@@ -173,7 +173,7 @@ namespace :backtest do
       }
     }
 
-    puts "\n" + ('=' * 100)
+    puts "\n#{'=' * 100}"
     puts '🚀 COMPREHENSIVE BACKTEST: All Indices × All Timeframes × All Strategies'
     puts '=' * 100
     puts "Days: #{days} | Symbols: #{symbols.join(', ')} | Intervals: #{intervals.join(', ')}min"
@@ -181,12 +181,12 @@ namespace :backtest do
 
     symbols.each do |symbol|
       intervals.each do |interval|
-        puts "\n" + ('=' * 100)
+        puts "\n#{'=' * 100}"
         puts "📊 #{symbol} - #{interval}min Timeframe"
         puts '=' * 100
 
         strategies.each do |strategy_name, strategy_lambda|
-          puts "\n" + ('-' * 100)
+          puts "\n#{'-' * 100}"
           puts "  Strategy: #{strategy_name}"
           puts '-' * 100
 
@@ -225,7 +225,7 @@ namespace :backtest do
     end
 
     # Summary of best results
-    puts "\n" + ('=' * 100)
+    puts "\n#{'=' * 100}"
     puts '🏆 BEST RESULTS SUMMARY'
     puts '=' * 100
 
@@ -253,7 +253,7 @@ namespace :backtest do
     puts "  Win Rate: #{best_winrate[:summary][:win_rate]}% | Expectancy: #{best_winrate[:summary][:expectancy]}% | Trades: #{best_winrate[:summary][:total_trades]}"
 
     # Top 5 by Expectancy
-    puts "\n" + ('-' * 100)
+    puts "\n#{'-' * 100}"
     puts '📊 Top 5 by Expectancy:'
     puts '-' * 100
     top_5 = all_results.sort_by { |r| -(r[:summary][:expectancy] || -999) }.first(5)
@@ -262,13 +262,13 @@ namespace :backtest do
       puts "     Expectancy: #{result[:summary][:expectancy]}% | P&L: #{result[:summary][:total_pnl_percent]}% | Win Rate: #{result[:summary][:win_rate]}% | Trades: #{result[:summary][:total_trades]}"
     end
 
-    puts "\n" + ('=' * 100)
+    puts "\n#{'=' * 100}"
     puts "✅ Completed #{all_results.size} successful backtests"
     puts '=' * 100
   end
 
   desc 'Export backtest results to CSV'
-  task :export, %i[symbol interval days output] => [:env, :environment] do |_t, args|
+  task :export, %i[symbol interval days output] => %i[env environment] do |_t, args|
     symbol = args[:symbol] || 'NIFTY'
     interval = args[:interval] || '5'
     days = (args[:days] || '90').to_i

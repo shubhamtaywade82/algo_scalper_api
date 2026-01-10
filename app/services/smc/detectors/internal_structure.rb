@@ -11,7 +11,7 @@ module Smc
       INTERNAL_LOOKBACK = 2
 
       def initialize(series, lookback: INTERNAL_LOOKBACK)
-        super(series, lookback: lookback)
+        super
       end
 
       def to_h
@@ -20,4 +20,3 @@ module Smc
     end
   end
 end
-

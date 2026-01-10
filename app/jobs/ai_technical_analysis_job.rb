@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 # Job to execute AI technical analysis rake task
+require 'English'
 class AiTechnicalAnalysisJob < ApplicationJob
   queue_as :background
 
@@ -27,7 +28,7 @@ class AiTechnicalAnalysisJob < ApplicationJob
       if result
         Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")
       else
-        Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$?.exitstatus})")
+        Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$CHILD_STATUS.exitstatus})")
       end
     end
   rescue StandardError => e

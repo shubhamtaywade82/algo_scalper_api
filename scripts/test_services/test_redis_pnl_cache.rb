@@ -370,4 +370,3 @@ ServiceTestHelper.check_condition(
 )
 
 ServiceTestHelper.print_success('RedisPnlCache test completed')
-

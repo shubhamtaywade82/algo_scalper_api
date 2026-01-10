@@ -6,121 +6,127 @@
 module WsFeedDiagnostics
   class << self
     def run
-      puts "\n" + "=" * 80
-      puts "WebSocket Market Feed Diagnostics"
-      puts "=" * 80
-      puts
+      Rails.logger.debug { "\n#{'=' * 80}" }
+      Rails.logger.debug 'WebSocket Market Feed Diagnostics'
+      Rails.logger.debug '=' * 80
+      Rails.logger.debug
 
       hub = Live::MarketFeedHub.instance
       diagnostics = hub.diagnostics
 
       # Hub Status
-      puts "📊 Hub Status:"
-      puts "  Running: #{diagnostics[:hub_status][:running] ? '✅ Yes' : '❌ No'}"
-      puts "  Connected: #{diagnostics[:hub_status][:connected] ? '✅ Yes' : '❌ No'}"
-      puts "  Connection State: #{diagnostics[:hub_status][:connection_state].to_s.upcase}"
-      puts "  Started At: #{diagnostics[:hub_status][:started_at] || 'Not started'}"
-      puts "  Last Tick: #{diagnostics[:last_tick]}"
-      puts "  Watchlist Size: #{diagnostics[:hub_status][:watchlist_size]}"
-      puts
+      Rails.logger.debug '📊 Hub Status:'
+      Rails.logger.debug { "  Running: #{diagnostics[:hub_status][:running] ? '✅ Yes' : '❌ No'}" }
+      Rails.logger.debug { "  Connected: #{diagnostics[:hub_status][:connected] ? '✅ Yes' : '❌ No'}" }
+      Rails.logger.debug { "  Connection State: #{diagnostics[:hub_status][:connection_state].to_s.upcase}" }
+      Rails.logger.debug { "  Started At: #{diagnostics[:hub_status][:started_at] || 'Not started'}" }
+      Rails.logger.debug { "  Last Tick: #{diagnostics[:last_tick]}" }
+      Rails.logger.debug { "  Watchlist Size: #{diagnostics[:hub_status][:watchlist_size]}" }
+      Rails.logger.debug
 
       # Credentials
-      puts "🔐 Credentials:"
-      puts "  Client ID: #{diagnostics[:credentials][:client_id]}"
-      puts "  Access Token: #{diagnostics[:credentials][:access_token]}"
-      puts
+      Rails.logger.debug '🔐 Credentials:'
+      Rails.logger.debug { "  Client ID: #{diagnostics[:credentials][:client_id]}" }
+      Rails.logger.debug { "  Access Token: #{diagnostics[:credentials][:access_token]}" }
+      Rails.logger.debug
 
       # Configuration
-      puts "⚙️  Configuration:"
-      puts "  Enabled: #{diagnostics[:enabled] ? '✅ Yes' : '❌ No'}"
-      puts "  Mode: #{diagnostics[:mode]}"
-      puts
+      Rails.logger.debug '⚙️  Configuration:'
+      Rails.logger.debug { "  Enabled: #{diagnostics[:enabled] ? '✅ Yes' : '❌ No'}" }
+      Rails.logger.debug { "  Mode: #{diagnostics[:mode]}" }
+      Rails.logger.debug
 
       # Last Error
       if diagnostics[:last_error_details]
-        puts "❌ Last Error:"
+        Rails.logger.debug '❌ Last Error:'
         error = diagnostics[:last_error_details]
-        puts "  Error: #{error[:error]}"
-        puts "  At: #{error[:at]}"
-        puts
+        Rails.logger.debug { "  Error: #{error[:error]}" }
+        Rails.logger.debug { "  At: #{error[:at]}" }
+        Rails.logger.debug
       end
 
       # Feed Health Service
-      puts "🏥 Feed Health Service:"
+      Rails.logger.debug '🏥 Feed Health Service:'
       begin
         health_service = Live::FeedHealthService.instance
         ticks_stale = health_service.stale?(:ticks)
-        puts "  Ticks Feed: #{ticks_stale ? '❌ STALE' : '✅ Healthy'}"
+        Rails.logger.debug { "  Ticks Feed: #{ticks_stale ? '❌ STALE' : '✅ Healthy'}" }
 
         if ticks_stale
-          threshold_overrides = health_service.instance_variable_get(:@threshold_overrides) rescue {}
+          threshold_overrides = begin
+            health_service.instance_variable_get(:@threshold_overrides)
+          rescue StandardError
+            {}
+          end
           threshold = threshold_overrides[:ticks] ||
                       Live::FeedHealthService::DEFAULT_THRESHOLDS[:ticks]
-          puts "  Threshold: #{threshold} seconds"
+          Rails.logger.debug { "  Threshold: #{threshold} seconds" }
 
-          timestamps = health_service.instance_variable_get(:@timestamps) rescue {}
+          timestamps = begin
+            health_service.instance_variable_get(:@timestamps)
+          rescue StandardError
+            {}
+          end
           last_seen = timestamps[:ticks]
           if last_seen
             seconds_ago = (Time.current - last_seen).round(1)
-            puts "  Last Success: #{seconds_ago} seconds ago"
+            Rails.logger.debug { "  Last Success: #{seconds_ago} seconds ago" }
           else
-            puts "  Last Success: Never"
+            Rails.logger.debug '  Last Success: Never'
           end
 
-          failures = health_service.instance_variable_get(:@failures) rescue {}
+          failures = begin
+            health_service.instance_variable_get(:@failures)
+          rescue StandardError
+            {}
+          end
           failure_info = failures[:ticks]
           if failure_info
-            puts "  Last Failure: #{failure_info[:error]}"
-            puts "  Failure At: #{failure_info[:at]}"
+            Rails.logger.debug { "  Last Failure: #{failure_info[:error]}" }
+            Rails.logger.debug { "  Failure At: #{failure_info[:at]}" }
           end
         end
       rescue StandardError => e
-        puts "  ⚠️  Could not check FeedHealthService: #{e.message}"
+        Rails.logger.debug { "  ⚠️  Could not check FeedHealthService: #{e.message}" }
       end
-      puts
+      Rails.logger.debug
 
       # Recommendations
-      puts "💡 Recommendations:"
+      Rails.logger.debug '💡 Recommendations:'
       recommendations = []
 
       unless diagnostics[:hub_status][:running]
-        recommendations << "  - Start the hub: Live::MarketFeedHub.instance.start!"
+        recommendations << '  - Start the hub: Live::MarketFeedHub.instance.start!'
       end
 
-      unless diagnostics[:hub_status][:connected]
-        if diagnostics[:hub_status][:running]
-          recommendations << "  - Hub is running but not connected - check WebSocket connection"
-          recommendations << "  - Verify DhanHQ credentials are valid and not expired"
-          recommendations << "  - Check network connectivity to DhanHQ servers"
-        end
+      if !diagnostics[:hub_status][:connected] && diagnostics[:hub_status][:running]
+        recommendations << '  - Hub is running but not connected - check WebSocket connection'
+        recommendations << '  - Verify DhanHQ credentials are valid and not expired'
+        recommendations << '  - Check network connectivity to DhanHQ servers'
       end
 
       if diagnostics[:last_tick] == 'Never' && diagnostics[:hub_status][:running]
-        recommendations << "  - No ticks received - verify subscriptions and market status"
+        recommendations << '  - No ticks received - verify subscriptions and market status'
       end
 
-      if ticks_stale
-        recommendations << "  - Ticks feed is stale - investigate connection issues"
-      end
+      recommendations << '  - Ticks feed is stale - investigate connection issues' if ticks_stale
 
-      if diagnostics[:last_error_details]
-        recommendations << "  - Review last error and check application logs"
-      end
+      recommendations << '  - Review last error and check application logs' if diagnostics[:last_error_details]
 
       if recommendations.empty?
-        puts "  ✅ No issues detected!"
+        Rails.logger.debug '  ✅ No issues detected!'
       else
-        recommendations.each { |rec| puts rec }
+        recommendations.each { |rec| Rails.logger.debug rec }
       end
 
-      puts
-      puts "=" * 80
+      Rails.logger.debug
+      Rails.logger.debug '=' * 80
 
       # Return summary
       {
         healthy: diagnostics[:hub_status][:running] &&
-                 diagnostics[:hub_status][:connected] &&
-                 !ticks_stale,
+          diagnostics[:hub_status][:connected] &&
+          !ticks_stale,
         diagnostics: diagnostics
       }
     end
@@ -129,4 +135,3 @@ end
 
 # Run diagnostics if loaded directly
 WsFeedDiagnostics.run if __FILE__ == $PROGRAM_NAME || defined?(Rails::Console)
-

@@ -151,7 +151,7 @@ RSpec.describe Risk::Rules::RuleContext do
 
   describe '#config_bigdecimal' do
     it 'returns BigDecimal value from config' do
-      result = context.config_bigdecimal(:sl_pct, BigDecimal('0'))
+      result = context.config_bigdecimal(:sl_pct, BigDecimal(0))
       expect(result).to eq(BigDecimal('2.0'))
     end
 
@@ -162,7 +162,7 @@ RSpec.describe Risk::Rules::RuleContext do
 
     it 'handles string values' do
       risk_config[:sl_pct] = '2.5'
-      result = context.config_bigdecimal(:sl_pct, BigDecimal('0'))
+      result = context.config_bigdecimal(:sl_pct, BigDecimal(0))
       expect(result).to eq(BigDecimal('2.5'))
     end
 

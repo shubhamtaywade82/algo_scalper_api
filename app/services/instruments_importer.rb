@@ -171,7 +171,7 @@ class InstrumentsImporter
     # 4. Upsert derivatives
     # ------------------------------------------------------------
     def import_derivatives!(rows)
-      with_parent, without_parent = attach_instrument_ids(rows)
+      with_parent, = attach_instrument_ids(rows)
 
       # Rails.logger.info "Derivatives w/ parent: #{with_parent.size}"
       # Rails.logger.info "Derivatives w/o parent: #{without_parent.size}"
@@ -179,11 +179,13 @@ class InstrumentsImporter
       return if with_parent.empty?
 
       # Validate instrument_ids exist before importing
-      valid_instrument_ids = Instrument.where(id: with_parent.map { |r| r[:instrument_id] }.compact.uniq).pluck(:id).to_set
+      valid_instrument_ids = Instrument.where(id: with_parent.filter_map do |r|
+        r[:instrument_id]
+      end.uniq).pluck(:id).to_set
       validated_rows = with_parent.select { |r| r[:instrument_id] && valid_instrument_ids.include?(r[:instrument_id]) }
 
       if validated_rows.size < with_parent.size
-        skipped = with_parent.size - validated_rows.size
+        with_parent.size - validated_rows.size
         # Rails.logger.warn "Skipping #{skipped} derivatives with invalid instrument_id references"
       end
 

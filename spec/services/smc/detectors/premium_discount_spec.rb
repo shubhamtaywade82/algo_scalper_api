@@ -14,7 +14,7 @@ RSpec.describe Smc::Detectors::PremiumDiscount do
     end
 
     it 'returns nil when no highs or lows available' do
-      series = instance_double('CandleSeries', highs: [], lows: [], closes: [])
+      series = instance_double(CandleSeries, highs: [], lows: [], closes: [])
       detector = described_class.new(series)
       expect(detector.equilibrium).to be_nil
     end
@@ -40,7 +40,7 @@ RSpec.describe Smc::Detectors::PremiumDiscount do
     end
 
     it 'returns false when equilibrium or price is nil' do
-      series = instance_double('CandleSeries', highs: [], lows: [], closes: [])
+      series = instance_double(CandleSeries, highs: [], lows: [], closes: [])
       detector = described_class.new(series)
       expect(detector.premium?).to be(false)
     end
@@ -66,7 +66,7 @@ RSpec.describe Smc::Detectors::PremiumDiscount do
     end
 
     it 'returns false when equilibrium or price is nil' do
-      series = instance_double('CandleSeries', highs: [], lows: [], closes: [])
+      series = instance_double(CandleSeries, highs: [], lows: [], closes: [])
       detector = described_class.new(series)
       expect(detector.discount?).to be(false)
     end
@@ -92,4 +92,3 @@ RSpec.describe Smc::Detectors::PremiumDiscount do
     end
   end
 end
-

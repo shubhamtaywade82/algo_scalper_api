@@ -5,7 +5,7 @@ require 'rails_helper'
 RSpec.describe Signal::Engines::OpenInterestBuyingEngine do
   let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', sid: '13' } }
   let(:config) { { multiplier: 1 } }
-  let(:option_candidate) { { security_id: 12345, segment: 'NSE_FNO', symbol: 'NIFTY24FEB20000CE', lot_size: 50 } }
+  let(:option_candidate) { { security_id: 12_345, segment: 'NSE_FNO', symbol: 'NIFTY24FEB20000CE', lot_size: 50 } }
   let(:tick_cache) { instance_double(Live::RedisTickCache) }
   let(:engine) do
     described_class.new(
@@ -76,4 +76,3 @@ RSpec.describe Signal::Engines::OpenInterestBuyingEngine do
     end
   end
 end
-

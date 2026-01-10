@@ -168,8 +168,12 @@ module Positions
       {
         enabled: direct_trailing[:enabled] == true || direct_trailing['enabled'] == true,
         distance_pct: numeric_or_default(direct_trailing[:distance_pct] || direct_trailing['distance_pct'], 5.0),
-        activation_profit_pct: numeric_or_default(direct_trailing[:activation_profit_pct] || direct_trailing['activation_profit_pct'], 0.0),
-        min_sl_offset_pct: numeric_or_default(direct_trailing[:min_sl_offset_pct] || direct_trailing['min_sl_offset_pct'], -30.0)
+        activation_profit_pct: numeric_or_default(
+          direct_trailing[:activation_profit_pct] || direct_trailing['activation_profit_pct'], 0.0
+        ),
+        min_sl_offset_pct: numeric_or_default(
+          direct_trailing[:min_sl_offset_pct] || direct_trailing['min_sl_offset_pct'], -30.0
+        )
       }
     rescue StandardError
       nil

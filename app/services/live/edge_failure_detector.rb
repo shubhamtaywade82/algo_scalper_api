@@ -135,9 +135,7 @@ module Live
 
       # Check if already paused
       pause_state = get_pause_state(index_key: index_key, reason: 'rolling_pnl_window')
-      if pause_state[:paused]
-        return pause_state
-      end
+      return pause_state if pause_state[:paused]
 
       # Set pause
       pause_duration_minutes = config[:pause_duration_minutes] || 60
@@ -155,7 +153,7 @@ module Live
       )
 
       Rails.logger.warn(
-        "[EdgeFailureDetector] Entries paused: Rolling PnL window breaker " \
+        '[EdgeFailureDetector] Entries paused: Rolling PnL window breaker ' \
         "(last #{window_size} trades: ₹#{net_pnl.round(2)}, threshold: ₹#{threshold_rupees}, " \
         "resume at: #{resume_at.strftime('%H:%M IST')})"
       )
@@ -179,9 +177,7 @@ module Live
 
       # Check if already paused
       pause_state = get_pause_state(index_key: index_key, reason: 'consecutive_sls')
-      if pause_state[:paused]
-        return pause_state
-      end
+      return pause_state if pause_state[:paused]
 
       # Set pause
       pause_duration_minutes = config[:consecutive_sl_pause_minutes] || 60
@@ -197,7 +193,7 @@ module Live
       )
 
       Rails.logger.warn(
-        "[EdgeFailureDetector] Entries paused: Consecutive SL breaker " \
+        '[EdgeFailureDetector] Entries paused: Consecutive SL breaker ' \
         "(#{consecutive_count} consecutive SLs, max allowed: #{max_consecutive_sls}, " \
         "resume at: #{resume_at.strftime('%H:%M IST')})"
       )
@@ -224,13 +220,11 @@ module Live
 
         if consecutive_count >= max_s3_consecutive_sls
           # Pause until S4 (close/gamma zone) starts
-          s4_start = parse_time(config.dig(:s4_start_time) || '13:45')
-          resume_at = s4_start || (Time.current + 2.hours) # Fallback: 2 hours
+          s4_start = parse_time(config[:s4_start_time] || '13:45')
+          resume_at = s4_start || 2.hours.from_now # Fallback: 2 hours
 
           pause_state = get_pause_state(index_key: index_key, reason: 'session_s3_pause')
-          if pause_state[:paused] && pause_state[:resume_at] > Time.current
-            return pause_state
-          end
+          return pause_state if pause_state[:paused] && pause_state[:resume_at] > Time.current
 
           set_pause_state(
             index_key: index_key,
@@ -244,7 +238,7 @@ module Live
           )
 
           Rails.logger.warn(
-            "[EdgeFailureDetector] Entries paused: S3 session breaker " \
+            '[EdgeFailureDetector] Entries paused: S3 session breaker ' \
             "(#{consecutive_count} consecutive SLs in CHOP_DECAY zone, " \
             "resume at S4 start: #{resume_at.strftime('%H:%M IST')})"
           )
@@ -285,7 +279,7 @@ module Live
         trade = JSON.parse(json_str)
         {
           pnl: trade['pnl'].to_f,
-          exit_time: Time.at(trade['exit_time'].to_i)
+          exit_time: Time.zone.at(trade['exit_time'].to_i)
         }
       end
     rescue StandardError => e
@@ -326,7 +320,7 @@ module Live
       return { paused: false, reason: nil } unless data
 
       pause_data = JSON.parse(data)
-      resume_at = Time.at(pause_data['resume_at'].to_i)
+      resume_at = Time.zone.at(pause_data['resume_at'].to_i)
 
       # Check if pause has expired
       if resume_at <= Time.current
@@ -370,11 +364,13 @@ module Live
 
     def normalize_index_key(index_key)
       return 'GLOBAL' unless index_key
+
       index_key.to_s.strip.upcase
     end
 
     def parse_time(time_str)
       return nil unless time_str
+
       Time.zone.parse(time_str)
     rescue StandardError
       nil

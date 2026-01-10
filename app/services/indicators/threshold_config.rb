@@ -14,7 +14,7 @@ module Indicators
         },
         rsi: {
           oversold: 40,            # Less strict - triggers more often
-          overbought: 60,           # Less strict - triggers more often
+          overbought: 60, # Less strict - triggers more often
           confidence_base: 35      # Lower base confidence
         },
         macd: {
@@ -84,7 +84,7 @@ module Indicators
       # PRODUCTION: Optimized based on backtesting results
       production: {
         adx: {
-          min_strength: 20,        # Balanced threshold
+          min_strength: 20, # Balanced threshold
           confidence_base: 55
         },
         rsi: {
@@ -130,7 +130,7 @@ module Indicators
       # @param preset_name [Symbol] Optional preset name, defaults to current preset
       # @return [Hash] Threshold configuration for indicator
       def for_indicator(indicator_name, preset_name = nil)
-        preset = preset_name ? get_preset(preset_name) : get_preset(current_preset)
+        preset = get_preset(preset_name || current_preset)
         preset[indicator_name.to_sym] || {}
       end
 

@@ -14,7 +14,7 @@ ServiceTestHelper.setup_test_derivatives
 # Test 1: Check exposure limits
 ServiceTestHelper.print_section('1. Exposure Limits Check')
 indices = AlgoConfig.fetch[:indices] || []
-nifty_index = indices.find { |idx| idx[:key] == 'NIFTY' || idx[:key] == :NIFTY } || {}
+nifty_index = indices.find { |idx| ['NIFTY', :NIFTY].include?(idx[:key]) } || {}
 index_cfg = nifty_index[:config] || nifty_index || {}
 
 if index_cfg.any?
@@ -86,7 +86,7 @@ if index_cfg.any? && nifty_instrument
     end
 
     unless ltp&.positive?
-      ltp = 150.0  # Fallback
+      ltp = 150.0 # Fallback
       ServiceTestHelper.print_warning("Using fallback LTP: ₹#{ltp}")
     end
 
@@ -100,7 +100,7 @@ if index_cfg.any? && nifty_instrument
       derivative_id: derivative.id
     }
 
-    ServiceTestHelper.print_info("Testing entry with:")
+    ServiceTestHelper.print_info('Testing entry with:')
     ServiceTestHelper.print_info("  Symbol: #{pick[:symbol]}")
     ServiceTestHelper.print_info("  Strike: #{derivative.strike_price}")
     ServiceTestHelper.print_info("  LTP: ₹#{ltp}")
@@ -143,7 +143,7 @@ ServiceTestHelper.print_section('4. Active Positions Summary')
 active_positions = PositionTracker.active.count
 ServiceTestHelper.print_info("Total active positions: #{active_positions}")
 
-if active_positions > 0
+if active_positions.positive?
   PositionTracker.active.limit(5).each do |tracker|
     ServiceTestHelper.print_info("  - #{tracker.symbol}: #{tracker.quantity} @ ₹#{tracker.entry_price} (Side: #{tracker.side})")
   end
@@ -161,11 +161,10 @@ if active_positions >= 1
       ServiceTestHelper.print_success("Pyramiding allowed - first position PnL: ₹#{pnl.round(2)}")
     else
       ServiceTestHelper.print_info("Pyramiding not allowed - first position PnL: ₹#{pnl.round(2)}")
-      ServiceTestHelper.print_info("  (Second position only allowed if first is profitable for 5+ minutes)")
+      ServiceTestHelper.print_info('  (Second position only allowed if first is profitable for 5+ minutes)')
     end
   end
 end
 
 ServiceTestHelper.print_success('Entries::EntryGuard test completed')
 ServiceTestHelper.print_info('EntryGuard uses class methods - call Entries::EntryGuard.try_enter() directly')
-

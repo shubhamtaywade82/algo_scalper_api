@@ -25,7 +25,7 @@ module Risk
         pnl_rupees = context.pnl_rupees
         return skip_result unless pnl_rupees&.positive?
 
-        secure_profit_threshold = context.config_bigdecimal(:secure_profit_threshold_rupees, BigDecimal('1000'))
+        secure_profit_threshold = context.config_bigdecimal(:secure_profit_threshold_rupees, BigDecimal(1000))
         return skip_result if secure_profit_threshold.zero?
 
         # Only activate when profit exceeds secure threshold

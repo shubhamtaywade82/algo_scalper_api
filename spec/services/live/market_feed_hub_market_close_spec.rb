@@ -17,10 +17,9 @@ RSpec.describe Live::MarketFeedHub do
 
   describe '#resubscribe_active_positions_after_reconnect' do
     before do
-      allow(hub).to receive(:running?).and_return(true)
-      allow(hub).to receive(:load_watchlist).and_return([
-        { segment: 'IDX_I', security_id: '13' }
-      ])
+      allow(hub).to receive_messages(running?: true, load_watchlist: [
+                                       { segment: 'IDX_I', security_id: '13' }
+                                     ])
       allow(hub).to receive(:subscribe_many)
       allow(PositionTracker).to receive_message_chain(:active, :includes, :to_a).and_return([tracker])
       allow(hub).to receive(:subscribe)
@@ -55,4 +54,3 @@ RSpec.describe Live::MarketFeedHub do
     end
   end
 end
-

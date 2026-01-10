@@ -6,9 +6,9 @@
 
 require_relative '../config/environment'
 
-puts "\n" + "=" * 80
-puts "  Fake WebSocket Console - MockDataService Test"
-puts "=" * 80
+puts "\n#{'=' * 80}"
+puts '  Fake WebSocket Console - MockDataService Test'
+puts '=' * 80
 puts "\nStarting MockDataService...\n\n"
 
 # Start the mock data service
@@ -16,14 +16,14 @@ mock_service = Live::MockDataService.instance
 mock_service.start!
 
 unless mock_service.running?
-  puts "❌ Failed to start MockDataService"
+  puts '❌ Failed to start MockDataService'
   exit 1
 end
 
-puts "✅ MockDataService started"
-puts "\n" + "-" * 80
-puts "Listening for ticks (press Ctrl+C to stop)..."
-puts "-" * 80 + "\n\n"
+puts '✅ MockDataService started'
+puts "\n#{'-' * 80}"
+puts 'Listening for ticks (press Ctrl+C to stop)...'
+puts "#{'-' * 80}\n\n"
 
 # Demonstrate TickCache access
 last_ticks = {}
@@ -44,48 +44,47 @@ begin
 
       # Only print if value changed
       cache_key = "IDX_I:#{security_id}"
-      if last_ticks[cache_key] != ltp
-        tick_count += 1
-        index_name = index_names[security_id] || "UNKNOWN(#{security_id})"
+      next unless last_ticks[cache_key] != ltp
 
-        timestamp = Time.current.strftime('%H:%M:%S')
-        puts "[#{timestamp}] #{index_name.ljust(12)} | Segment: IDX_I | Security ID: #{security_id.ljust(4)} | LTP: ₹#{ltp.to_f.round(2)}"
+      tick_count += 1
+      index_name = index_names[security_id] || "UNKNOWN(#{security_id})"
 
-        # Method 2: Demonstrate direct LTP access using TickCache.ltp()
-        direct_ltp = Live::TickCache.ltp('IDX_I', security_id)
-        puts "                      └─ Direct LTP access: ₹#{direct_ltp.to_f.round(2)}" if direct_ltp
+      timestamp = Time.current.strftime('%H:%M:%S')
+      puts "[#{timestamp}] #{index_name.ljust(12)} | Segment: IDX_I | Security ID: #{security_id.ljust(4)} | LTP: ₹#{ltp.to_f.round(2)}"
 
-        last_ticks[cache_key] = ltp
-      end
+      # Method 2: Demonstrate direct LTP access using TickCache.ltp()
+      direct_ltp = Live::TickCache.ltp('IDX_I', security_id)
+      puts "                      └─ Direct LTP access: ₹#{direct_ltp.to_f.round(2)}" if direct_ltp
+
+      last_ticks[cache_key] = ltp
     end
 
     # Every 10 ticks, show a summary using TickCache.all
-    if tick_count > 0 && tick_count % 10 == 0
-      puts "\n" + "-" * 80
-      puts "TickCache Summary (using TickCache.all):"
-      puts "-" * 80
+    next unless tick_count.positive? && (tick_count % 10).zero?
 
-      all_ticks = Live::TickCache.all
-      if all_ticks.any?
-        all_ticks.each do |key, tick_data|
-          segment, security_id = key.split(':')
-          ltp = tick_data[:ltp] || tick_data['ltp']
-          index_name = index_names[security_id] || "UNKNOWN(#{security_id})"
+    puts "\n#{'-' * 80}"
+    puts 'TickCache Summary (using TickCache.all):'
+    puts '-' * 80
 
-          puts "  #{index_name.ljust(12)} | Key: #{key.ljust(20)} | LTP: ₹#{ltp.to_f.round(2)}" if ltp
-        end
-      else
-        puts "  No ticks in cache yet"
+    all_ticks = Live::TickCache.all
+    if all_ticks.any?
+      all_ticks.each do |key, tick_data|
+        _, security_id = key.split(':')
+        ltp = tick_data[:ltp] || tick_data['ltp']
+        index_name = index_names[security_id] || "UNKNOWN(#{security_id})"
+
+        puts "  #{index_name.ljust(12)} | Key: #{key.ljust(20)} | LTP: ₹#{ltp.to_f.round(2)}" if ltp
       end
-      puts "-" * 80 + "\n"
+    else
+      puts '  No ticks in cache yet'
     end
+    puts "#{'-' * 80}\n"
   end
 rescue Interrupt
-  puts "\n\n" + "-" * 80
-  puts "Stopping MockDataService..."
+  puts "\n\n#{'-' * 80}"
+  puts 'Stopping MockDataService...'
   mock_service.stop!
-  puts "✅ Stopped"
+  puts '✅ Stopped'
   puts "\nTotal ticks received: #{tick_count}"
-  puts "=" * 80 + "\n"
+  puts "#{'=' * 80}\n"
 end
-

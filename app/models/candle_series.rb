@@ -264,10 +264,7 @@ class CandleSeries
     result # Returns [macd, signal, histogram] array
   rescue NoMethodError => e
     raise e
-  rescue ArgumentError, TypeError, StandardError => e
-    # Re-raise NoMethodError if it was wrapped
-    raise e if e.is_a?(NoMethodError)
-
+  rescue StandardError => e
     Rails.logger.warn("[CandleSeries] MACD calculation failed: #{e.message}")
     nil
   end
@@ -309,11 +306,11 @@ class CandleSeries
     :short_entry if latest_close < latest_trend
   end
 
-  def inside_bar?(i)
-    return false if i < 1
+  def inside_bar?(index)
+    return false if index < 1
 
-    curr = @candles[i]
-    prev = @candles[i - 1]
+    curr = @candles[index]
+    prev = @candles[index - 1]
     curr.high < prev.high && curr.low > prev.low
   end
 
@@ -357,7 +354,7 @@ class CandleSeries
     TechnicalAnalysis::Obv.calculate(dcv)
   rescue NoMethodError => e
     raise e
-  rescue ArgumentError, TypeError, StandardError => e
+  rescue StandardError => e
     # OBV.calculate might have different signature - try alternative approach
     Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
     nil

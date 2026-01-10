@@ -9,7 +9,7 @@ require_relative '../config/environment'
 symbol = ARGV[0] || 'NIFTY'
 days = (ARGV[1] || 90).to_i
 
-puts "\n" + '=' * 80
+puts "\n#{'=' * 80}"
 puts "BACKTEST: #{symbol} with No-Trade Engine + Supertrend + ADX"
 puts "Period: Last #{days} days"
 puts '=' * 80
@@ -30,10 +30,9 @@ begin
   service.print_summary
 
   # Save results
-  results_file = Rails.root.join("tmp/backtest_no_trade_engine_#{symbol.downcase}_#{Date.today}.json")
+  results_file = Rails.root.join("tmp/backtest_no_trade_engine_#{symbol.downcase}_#{Time.zone.today}.json")
   File.write(results_file, JSON.pretty_generate(service.summary))
   puts "\n✅ Results saved to: #{results_file}"
-
 rescue StandardError => e
   puts "\n❌ Error: #{e.class} - #{e.message}"
   puts e.backtrace.first(10).join("\n")

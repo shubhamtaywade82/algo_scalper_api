@@ -213,7 +213,7 @@ if index_cfg.any? || nifty_index.any?
   ServiceTestHelper.print_info("  Available Cash: ₹#{available_cash.round(2)}")
   ServiceTestHelper.print_info("  Calculated Quantity: #{quantity}")
 
-  if quantity > 0
+  if quantity.positive?
     total_cost = test_entry_price * quantity
     lots = quantity / test_lot_size
     ServiceTestHelper.print_success('  ✅ Quantity calculated successfully')
@@ -266,7 +266,7 @@ if index_cfg.any? && test_entry_price && test_lot_size
       derivative_lot_size: test_lot_size,
       scale_multiplier: scale
     )
-    if quantity > 0
+    if quantity.positive?
       total_cost = test_entry_price * quantity
       lots = quantity.to_f / test_lot_size
       ServiceTestHelper.print_success("Scale #{scale}: Quantity = #{quantity} (#{lots.round(2)} lots, Cost: ₹#{total_cost.round(2)})")
@@ -490,7 +490,7 @@ if indices_to_test.any?
         scale_multiplier: 1
       )
 
-      if qty > 0
+      if qty.positive?
         total_cost = entry * qty
         lots = qty.to_f / lot_size
         ServiceTestHelper.print_success("  #{index_key}: Quantity = #{qty} (#{lots.round(2)} lots, Entry: ₹#{entry.round(2)}, Lot: #{lot_size}, Cost: ₹#{total_cost.round(2)})")

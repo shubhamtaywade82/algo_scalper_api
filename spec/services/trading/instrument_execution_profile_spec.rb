@@ -8,7 +8,7 @@ RSpec.describe Trading::InstrumentExecutionProfile do
       it 'returns the expected profile' do
         profile = described_class.for('NIFTY')
 
-        expect(profile[:allow_execution_only]).to eq(true)
+        expect(profile[:allow_execution_only]).to be(true)
         expect(profile[:max_lots_by_permission]).to eq(
           execution_only: 1,
           scale_ready: 2,
@@ -24,7 +24,7 @@ RSpec.describe Trading::InstrumentExecutionProfile do
       it 'returns the expected profile' do
         profile = described_class.for(:sensex)
 
-        expect(profile[:allow_execution_only]).to eq(false)
+        expect(profile[:allow_execution_only]).to be(false)
         expect(profile[:max_lots_by_permission]).to eq(
           execution_only: 0,
           scale_ready: 1,
@@ -45,4 +45,3 @@ RSpec.describe Trading::InstrumentExecutionProfile do
     end
   end
 end
-

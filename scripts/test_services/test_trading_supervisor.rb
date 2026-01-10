@@ -71,13 +71,13 @@ if services.empty?
     supervisor.register(:active_cache, ActiveCacheService.new)
 
     services = supervisor.instance_variable_get(:@services) || {}
-    if services.size > 0
+    if services.size.positive?
       ServiceTestHelper.print_success("Registered #{services.size} services for testing")
-      services.each do |name, _svc|
+      services.each_key do |name|
         ServiceTestHelper.print_info("  ✅ Registered: #{name}")
       end
     else
-      ServiceTestHelper.print_error("Failed to register services - services hash is empty")
+      ServiceTestHelper.print_error('Failed to register services - services hash is empty')
       ServiceTestHelper.print_info("Supervisor class: #{supervisor.class}")
       ServiceTestHelper.print_info("Supervisor methods: #{supervisor.methods.grep(/register/)}")
     end
@@ -101,15 +101,15 @@ end
 
 # Check service types
 ServiceTestHelper.print_section('3. Service Type Verification')
-expected_services = [
-  :market_feed,
-  :signal_scheduler,
-  :risk_manager,
-  :position_heartbeat,
-  :order_router,
-  :paper_pnl_refresher,
-  :exit_manager,
-  :active_cache
+expected_services = %i[
+  market_feed
+  signal_scheduler
+  risk_manager
+  position_heartbeat
+  order_router
+  paper_pnl_refresher
+  exit_manager
+  active_cache
 ]
 
 expected_services.each do |name|
@@ -138,9 +138,17 @@ ServiceTestHelper.print_section('5. Critical Service Dependencies')
 # MarketFeedHub
 if services[:market_feed]
   feed_service = services[:market_feed]
-  hub = feed_service.instance_variable_get(:@hub) rescue nil
+  hub = begin
+    feed_service.instance_variable_get(:@hub)
+  rescue StandardError
+    nil
+  end
   if hub
-    hub_running = hub.running? rescue false
+    hub_running = begin
+      hub.running?
+    rescue StandardError
+      false
+    end
     if hub_running
       ServiceTestHelper.print_success('MarketFeedHub is running')
     else
@@ -152,11 +160,19 @@ end
 # ActiveCache
 if services[:active_cache]
   cache_service = services[:active_cache]
-  cache = cache_service.instance_variable_get(:@cache) rescue nil
+  cache = begin
+    cache_service.instance_variable_get(:@cache)
+  rescue StandardError
+    nil
+  end
   if cache
     ServiceTestHelper.print_success('ActiveCache service found')
     # Check if it's subscribed
-    subscription_id = cache.instance_variable_get(:@subscription_id) rescue nil
+    subscription_id = begin
+      cache.instance_variable_get(:@subscription_id)
+    rescue StandardError
+      nil
+    end
     if subscription_id
       ServiceTestHelper.print_success('ActiveCache is subscribed to MarketFeedHub')
     else
@@ -171,7 +187,11 @@ if services[:signal_scheduler]
   ServiceTestHelper.print_success('Signal::Scheduler service found')
   # Check if it has required dependencies
   if scheduler.respond_to?(:running?)
-    running = scheduler.running? rescue false
+    running = begin
+      scheduler.running?
+    rescue StandardError
+      false
+    end
     ServiceTestHelper.print_info("  Scheduler running: #{running}")
   end
 end
@@ -186,4 +206,3 @@ ServiceTestHelper.print_info('     - Signal::Scheduler should process watchlist 
 ServiceTestHelper.print_info('     - ActiveCache should subscribe to MarketFeedHub')
 
 ServiceTestHelper.print_success('TradingSupervisor test completed')
-

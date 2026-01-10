@@ -80,12 +80,10 @@ RSpec.describe Risk::Rules::RuleEngine do
         sl_rule = instance_double(Risk::Rules::StopLossRule)
         tp_rule = instance_double(Risk::Rules::TakeProfitRule)
 
-        allow(sl_rule).to receive(:priority).and_return(20)
-        allow(tp_rule).to receive(:priority).and_return(30)
-        allow(sl_rule).to receive(:enabled?).and_return(true)
-        allow(tp_rule).to receive(:enabled?).and_return(true)
-        allow(sl_rule).to receive(:evaluate).and_return(Risk::Rules::RuleResult.exit(reason: 'SL'))
-        allow(tp_rule).to receive(:evaluate).and_return(Risk::Rules::RuleResult.exit(reason: 'TP'))
+        allow(sl_rule).to receive_messages(priority: 20, enabled?: true,
+                                           evaluate: Risk::Rules::RuleResult.exit(reason: 'SL'))
+        allow(tp_rule).to receive_messages(priority: 30, enabled?: true,
+                                           evaluate: Risk::Rules::RuleResult.exit(reason: 'TP'))
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
         result = engine.evaluate(context)
@@ -114,10 +112,8 @@ RSpec.describe Risk::Rules::RuleEngine do
         skip_rule = instance_double(Risk::Rules::BaseRule)
         sl_rule = Risk::Rules::StopLossRule.new(config: risk_config)
 
-        allow(skip_rule).to receive(:priority).and_return(15)
-        allow(skip_rule).to receive(:enabled?).and_return(true)
-        allow(skip_rule).to receive(:evaluate).and_return(Risk::Rules::RuleResult.skip)
-        allow(skip_rule).to receive(:name).and_return('skip_rule')
+        allow(skip_rule).to receive_messages(priority: 15, enabled?: true, evaluate: Risk::Rules::RuleResult.skip,
+                                             name: 'skip_rule')
 
         engine = described_class.new(rules: [skip_rule, sl_rule])
         result = engine.evaluate(context)
@@ -132,10 +128,8 @@ RSpec.describe Risk::Rules::RuleEngine do
         error_rule = instance_double(Risk::Rules::BaseRule)
         sl_rule = Risk::Rules::StopLossRule.new(config: risk_config)
 
-        allow(error_rule).to receive(:priority).and_return(15)
-        allow(error_rule).to receive(:enabled?).and_return(true)
         allow(error_rule).to receive(:evaluate).and_raise(StandardError.new('Test error'))
-        allow(error_rule).to receive(:name).and_return('error_rule')
+        allow(error_rule).to receive_messages(priority: 15, enabled?: true, name: 'error_rule')
 
         engine = described_class.new(rules: [error_rule, sl_rule])
         result = engine.evaluate(context)
@@ -147,10 +141,8 @@ RSpec.describe Risk::Rules::RuleEngine do
       it 'logs errors' do
         error_rule = instance_double(Risk::Rules::BaseRule)
 
-        allow(error_rule).to receive(:priority).and_return(15)
-        allow(error_rule).to receive(:enabled?).and_return(true)
         allow(error_rule).to receive(:evaluate).and_raise(StandardError.new('Test error'))
-        allow(error_rule).to receive(:name).and_return('error_rule')
+        allow(error_rule).to receive_messages(priority: 15, enabled?: true, name: 'error_rule')
 
         expect(Rails.logger).to receive(:error).with(/Error evaluating rule error_rule/)
 

@@ -59,7 +59,7 @@ module Live
         rpnl: BigDecimal(0), # Realized PnL not directly available from Position API
         last_ltp: ltp ? BigDecimal(ltp.to_s) : (entry_price || BigDecimal(0))
       }
-    rescue StandardError => e
+    rescue StandardError
       # Rails.logger.error("[Live::Gateway] position failed: #{e.message}")
       nil
     end
@@ -70,19 +70,19 @@ module Live
       return default_wallet unless funds
 
       {
-        cash: BigDecimal(funds.available.to_s || '0'),
-        equity: BigDecimal(funds.available.to_s || '0'), # Simplified
+        cash: BigDecimal(funds.available&.to_s || '0'),
+        equity: BigDecimal(funds.available&.to_s || '0'), # Simplified
         mtm: BigDecimal(0), # Not directly available
         exposure: BigDecimal(0) # Would need to calculate from positions
       }
-    rescue StandardError => e
+    rescue StandardError
       # Rails.logger.error("[Live::Gateway] wallet_snapshot failed: #{e.message}")
       default_wallet
     end
 
     private
 
-    def generate_client_order_id(segment, security_id, side)
+    def generate_client_order_id(_segment, security_id, side)
       timestamp = Time.current.to_i.to_s[-6..]
       "AS-#{side.upcase[0..2]}-#{security_id}-#{timestamp}"
     end

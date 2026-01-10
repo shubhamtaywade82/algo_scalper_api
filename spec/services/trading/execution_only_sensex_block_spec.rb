@@ -13,9 +13,8 @@ RSpec.describe 'Execution-only blocked for SENSEX' do
       permission_cap: permission_cap
     )
 
-    expect(profile[:allow_execution_only]).to eq(false)
+    expect(profile[:allow_execution_only]).to be(false)
     expect(permission_cap).to eq(0)
     expect(lots).to eq(0)
   end
 end
-

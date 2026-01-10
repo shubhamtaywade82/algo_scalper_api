@@ -1,8 +1,11 @@
+# frozen_string_literal: true
+
 module PositionTrackerFactory
   extend ActiveSupport::Concern
 
   class_methods do
-    def build_or_average!(instrument:, security_id:, segment:, quantity:, entry_price:, side:, symbol:, order_no:, meta: {}, watchable: nil, status: 'active')
+    def build_or_average!(instrument:, security_id:, segment:, quantity:, entry_price:, side:, symbol:, order_no:,
+                          meta: {}, watchable: nil, status: 'active')
       sid = security_id.to_s
       seg = segment.to_s
 
@@ -21,7 +24,11 @@ module PositionTrackerFactory
 
       PositionTracker.create!(
         watchable: watchable || (instrument.is_a?(Derivative) ? instrument : instrument),
-        instrument: watchable ? (watchable.is_a?(Derivative) ? watchable.instrument : watchable) : (instrument.is_a?(Derivative) ? instrument.instrument : instrument),
+        instrument: if watchable
+                      watchable.is_a?(Derivative) ? watchable.instrument : watchable
+                    else
+                      (instrument.is_a?(Derivative) ? instrument.instrument : instrument)
+                    end,
         order_no: order_no,
         security_id: sid,
         symbol: symbol,

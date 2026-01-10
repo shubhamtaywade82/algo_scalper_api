@@ -6,7 +6,7 @@ RSpec.describe Live::ExitEngine do
   let(:router) { instance_double(TradingSystem::OrderRouter) }
   let(:watchable) do
     instrument = Instrument.find_or_create_by!(symbol_name: 'NIFTY', segment: 'index') do |i|
-      i.assign_attributes(FactoryBot.attributes_for(:instrument, :nifty_index))
+      i.assign_attributes(attributes_for(:instrument, :nifty_index))
     end
     Derivative.find_or_create_by!(security_id: '55111') do |d|
       d.assign_attributes(
@@ -178,7 +178,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be false
         expect(result[:reason]).to eq('router_failed')
-        expect(result[:error]).to eq(false)
+        expect(result[:error]).to be(false)
       end
 
       it 'returns failure hash when router returns hash with success: false' do
@@ -266,10 +266,7 @@ RSpec.describe Live::ExitEngine do
         # Set tracker to active first
         tracker.update!(status: 'active')
         # After mark_exited! fails, simulate OrderUpdateHandler updating tracker to exited
-        allow(tracker).to receive(:reload).and_return(tracker)
-        allow(tracker).to receive(:exited?).and_return(true)
-        allow(tracker).to receive(:exit_price).and_return(102.0)
-        allow(tracker).to receive(:exit_reason).and_return('previous')
+        allow(tracker).to receive_messages(reload: tracker, exited?: true, exit_price: 102.0, exit_reason: 'previous')
 
         result = engine.execute_exit(tracker, 'new_reason')
 
@@ -301,7 +298,7 @@ RSpec.describe Live::ExitEngine do
       end
 
       it 'handles LTP fetch errors gracefully' do
-        allow(::TickCache.instance).to receive(:ltp).and_raise(StandardError.new('Cache error'))
+        allow(TickCache.instance).to receive(:ltp).and_raise(StandardError.new('Cache error'))
         allow(router).to receive(:exit_market).and_return({ success: true, exit_price: 101.5 })
 
         result = engine.execute_exit(tracker, 'test reason')
@@ -369,4 +366,3 @@ RSpec.describe Live::ExitEngine do
     end
   end
 end
-

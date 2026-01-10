@@ -192,4 +192,3 @@ RSpec.describe Avrz::Detector do
     end
   end
 end
-

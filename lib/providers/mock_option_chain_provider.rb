@@ -25,7 +25,7 @@ module Providers
           oi: rand(50_000..1_000_000),
           iv: rand(15.0..35.0).round(2),
           volume: rand(1000..50_000),
-          prev_close: calculate_mock_ltp(strike, atm_strike) * (0.95 + rand * 0.1)
+          prev_close: calculate_mock_ltp(strike, atm_strike) * (0.95 + (rand * 0.1))
         }
       end
     end
@@ -33,9 +33,8 @@ module Providers
     private
 
     def generate_strikes(atm_strike)
-      strikes = []
-      (-3..3).each do |offset|
-        strikes << atm_strike + (offset * @strike_interval)
+      strikes = (-3..3).map do |offset|
+        (atm_strike + (offset * @strike_interval))
       end
       strikes.select(&:positive?).sort
     end
@@ -59,4 +58,3 @@ module Providers
     end
   end
 end
-

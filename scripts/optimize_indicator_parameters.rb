@@ -30,18 +30,18 @@ class IndicatorParameterOptimizer
   end
 
   def run
-    puts "\n" + ('=' * 100)
+    puts "\n#{'=' * 100}"
     puts 'INDICATOR PARAMETER OPTIMIZATION'
     puts '=' * 100
     puts "Index: #{@index_key}"
     puts "Days: #{@days_back}"
     puts "Interval: #{@interval}min"
-    puts ('=' * 100) + "\n"
+    puts "#{'=' * 100}\n"
 
     # Fetch historical data
     puts '📊 Fetching historical data...'
     series = fetch_historical_data
-    return unless series && series.candles.any?
+    return unless series&.candles&.any?
 
     puts "✅ Loaded #{series.candles.size} candles\n"
 
@@ -51,13 +51,13 @@ class IndicatorParameterOptimizer
     puts "🔍 Testing #{parameter_sets.size} parameter combinations..."
     puts "   (Processing #{series.candles.size} candles per combination)"
     puts "   Estimated time: ~#{(parameter_sets.size * 0.5 / 60).round(1)} minutes"
-    puts ('-' * 100) + "\n"
+    puts "#{'-' * 100}\n"
 
     # Test each parameter combination
     start_time = Time.current
     parameter_sets.each_with_index do |params, idx|
       print "[#{idx + 1}/#{parameter_sets.size}] #{format_params(params)}... "
-      STDOUT.flush
+      $stdout.flush
 
       test_start = Time.current
       result = backtest_parameters(series, params)
@@ -77,7 +77,7 @@ class IndicatorParameterOptimizer
       else
         puts "❌ No trades [#{test_duration.round(1)}s]"
       end
-      STDOUT.flush
+      $stdout.flush
     end
 
     # Analyze and display results
@@ -87,7 +87,7 @@ class IndicatorParameterOptimizer
   private
 
   def fetch_historical_data
-    to_date = Date.today - 1.day
+    to_date = Time.zone.today - 1.day
     from_date = to_date - @days_back.days
 
     ohlc_data = @instrument.intraday_ohlc(
@@ -197,9 +197,9 @@ class IndicatorParameterOptimizer
     adx_calc_idx = 0
     (min_candles...series.candles.size).step(adx_calc_step) do |i|
       adx_calc_idx += 1
-      if adx_calc_count > 50 && adx_calc_idx % 50 == 0
+      if adx_calc_count > 50 && (adx_calc_idx % 50).zero?
         print 'A' # Show ADX calculation progress
-        STDOUT.flush
+        $stdout.flush
       end
 
       partial_series = create_partial_series(series, i)
@@ -219,7 +219,7 @@ class IndicatorParameterOptimizer
       end
     end
     print ' ' if adx_calc_count > 50 # Space after ADX progress
-    STDOUT.flush
+    $stdout.flush
 
     # Use a step size to speed up backtesting (process every Nth candle)
     # This reduces accuracy but significantly speeds up optimization
@@ -232,9 +232,9 @@ class IndicatorParameterOptimizer
       processed += 1
 
       # Show progress every 500 iterations for long backtests
-      if total_iterations > 500 && processed % 500 == 0
+      if total_iterations > 500 && (processed % 500).zero?
         print '.'
-        STDOUT.flush
+        $stdout.flush
       end
 
       # Get pre-calculated values
@@ -343,8 +343,8 @@ class IndicatorParameterOptimizer
     nil
   ensure
     # Clear progress dots if any
-    print "\n" if total_iterations > 1000 && processed > 0
-    STDOUT.flush
+    print "\n" if total_iterations > 1000 && processed.positive?
+    $stdout.flush
   end
 
   def create_partial_series(full_series, end_index)
@@ -355,8 +355,8 @@ class IndicatorParameterOptimizer
 
   def calculate_metrics(trades)
     total_trades = trades.size
-    winning_trades = trades.select { |t| t[:pnl_pct] > 0 }
-    losing_trades = trades.select { |t| t[:pnl_pct] < 0 }
+    winning_trades = trades.select { |t| t[:pnl_pct].positive? }
+    losing_trades = trades.select { |t| t[:pnl_pct].negative? }
 
     win_rate = total_trades.positive? ? (winning_trades.size.to_f / total_trades * 100.0) : 0.0
 
@@ -370,16 +370,16 @@ class IndicatorParameterOptimizer
                       0.0
                     end
 
-    max_win = trades.map { |t| t[:pnl_pct] }.max || 0.0
-    max_loss = trades.map { |t| t[:pnl_pct] }.min || 0.0
+    max_win = trades.pluck(:pnl_pct).max || 0.0
+    max_loss = trades.pluck(:pnl_pct).min || 0.0
 
     # Calculate expectancy
     expectancy = total_trades.positive? ? (total_pnl_pct / total_trades) : 0.0
 
     # Calculate Sharpe-like ratio (simplified)
-    returns = trades.map { |t| t[:pnl_pct] }
+    returns = trades.pluck(:pnl_pct)
     avg_return = returns.sum / returns.size
-    variance = returns.map { |r| (r - avg_return)**2 }.sum / returns.size
+    variance = returns.sum { |r| (r - avg_return)**2 } / returns.size
     std_dev = Math.sqrt(variance)
     sharpe_ratio = std_dev.positive? ? (avg_return / std_dev) : 0.0
 
@@ -407,9 +407,9 @@ class IndicatorParameterOptimizer
   def analyze_results
     return puts "\n❌ No valid results to analyze" if @results.empty?
 
-    puts "\n" + ('=' * 100)
+    puts "\n#{'=' * 100}"
     puts 'OPTIMIZATION RESULTS'
-    puts ('=' * 100) + "\n"
+    puts "#{'=' * 100}\n"
 
     # Sort by multiple criteria (composite score)
     @results.each do |r|
@@ -457,7 +457,7 @@ class IndicatorParameterOptimizer
     puts "  Profit Factor: #{best[:profit_factor].round(2)}"
     puts "  Expectancy: #{best[:expectancy].round(2)}% per trade"
     puts "  Sharpe Ratio: #{best[:sharpe_ratio].round(2)}"
-    puts ('=' * 100) + "\n"
+    puts "#{'=' * 100}\n"
 
     # Save to CSV
     save_results_to_csv(sorted_results)

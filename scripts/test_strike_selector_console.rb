@@ -4,9 +4,9 @@
 # Usage: Just copy and paste the code below into `rails console`
 
 def test_strike_selector(index_key = 'NIFTY')
-  puts "\n" + '=' * 80
+  puts "\n#{'=' * 80}"
   puts "  Testing StrikeSelector for #{index_key}"
-  puts '=' * 80 + "\n"
+  puts "#{'=' * 80}\n"
 
   # 1. Check AlgoConfig
   puts "\n--- 1. Checking AlgoConfig ---"
@@ -37,11 +37,11 @@ def test_strike_selector(index_key = 'NIFTY')
         if spot_price&.positive?
           puts "✅ Spot price from API: ₹#{spot_price.round(2)}"
         else
-          puts "❌ Could not fetch spot price from API"
+          puts '❌ Could not fetch spot price from API'
           return false
         end
       else
-        puts "❌ Index instrument not found in DB"
+        puts '❌ Index instrument not found in DB'
         return false
       end
     rescue StandardError => e
@@ -54,7 +54,7 @@ def test_strike_selector(index_key = 'NIFTY')
   puts "\n--- 3. Checking Derivatives ---"
   instrument = Instrument.find_by(exchange: 'nse', segment: 'index', security_id: spot_sid.to_s)
   if instrument.nil?
-    puts "❌ Index instrument not found in DB"
+    puts '❌ Index instrument not found in DB'
     return false
   end
 
@@ -97,11 +97,11 @@ def test_strike_selector(index_key = 'NIFTY')
 
     candidates = analyzer.select_candidates(limit: 5, direction: :bullish)
     if candidates.empty?
-      puts "❌ DerivativeChainAnalyzer returned no candidates"
+      puts '❌ DerivativeChainAnalyzer returned no candidates'
       puts "\n   Possible reasons:"
-      puts "   - API chain fetch failed (fetch_option_chain returned nil)"
-      puts "   - No LTP available for derivatives (not subscribed via WebSocket)"
-      puts "   - All candidates filtered out by score_chain() filters"
+      puts '   - API chain fetch failed (fetch_option_chain returned nil)'
+      puts '   - No LTP available for derivatives (not subscribed via WebSocket)'
+      puts '   - All candidates filtered out by score_chain() filters'
       puts "\n   Checking chain data..."
 
       # Try to load chain manually
@@ -127,7 +127,7 @@ def test_strike_selector(index_key = 'NIFTY')
           end
         end
       else
-        puts "   ❌ Chain is empty - API fetch likely failed"
+        puts '   ❌ Chain is empty - API fetch likely failed'
       end
     else
       puts "✅ DerivativeChainAnalyzer found #{candidates.count} candidates"
@@ -153,14 +153,14 @@ def test_strike_selector(index_key = 'NIFTY')
     )
 
     if inst_hash.nil?
-      puts "❌ StrikeSelector returned nil"
+      puts '❌ StrikeSelector returned nil'
       puts "\n   Common reasons:"
-      puts "   - No spot price (checked above)"
-      puts "   - No candidates from DerivativeChainAnalyzer (checked above)"
+      puts '   - No spot price (checked above)'
+      puts '   - No candidates from DerivativeChainAnalyzer (checked above)'
       puts "   - Candidates don't match allowed strike distance (ATM only with trend_score=nil)"
-      puts "   - Candidates fail validation (liquidity/spread/premium)"
+      puts '   - Candidates fail validation (liquidity/spread/premium)'
     else
-      puts "✅ StrikeSelector found derivative!"
+      puts '✅ StrikeSelector found derivative!'
       puts "\n   Result:"
       puts "     - Symbol: #{inst_hash[:symbol] || 'N/A'}"
       puts "     - Security ID: #{inst_hash[:security_id]}"
@@ -197,20 +197,20 @@ def test_strike_selector(index_key = 'NIFTY')
   begin
     hub = Live::MarketFeedHub.instance
     if hub.running?
-      puts "✅ MarketFeedHub is running"
+      puts '✅ MarketFeedHub is running'
       puts "   - Subscribed instruments: #{hub.instance_variable_get(:@watchlist)&.count || 0}"
     else
-      puts "⚠️  MarketFeedHub is not running"
-      puts "   - This means no real-time tick data is available"
-      puts "   - StrikeSelector may fail without tick data or API data"
+      puts '⚠️  MarketFeedHub is not running'
+      puts '   - This means no real-time tick data is available'
+      puts '   - StrikeSelector may fail without tick data or API data'
     end
   rescue StandardError => e
     puts "⚠️  Could not check MarketFeedHub: #{e.message}"
   end
 
-  puts "\n" + '=' * 80
-  puts "  Test Complete"
-  puts '=' * 80 + "\n"
+  puts "\n#{'=' * 80}"
+  puts '  Test Complete'
+  puts "#{'=' * 80}\n"
 
   true
 end
@@ -218,4 +218,3 @@ end
 # Example usage:
 # test_strike_selector('NIFTY')
 # test_strike_selector('BANKNIFTY')
-

@@ -105,7 +105,7 @@ module Entries
         return false unless current && start_min && end_min
 
         if start_min <= end_min
-          current >= start_min && current <= end_min
+          current.between?(start_min, end_min)
         else
           # Handles overnight ranges (e.g., 23:00 to 02:00)
           current >= start_min || current <= end_min
@@ -121,7 +121,7 @@ module Entries
         hour = parts[0].to_i
         minute = parts[1].to_i
 
-        hour * 60 + minute
+        (hour * 60) + minute
       end
 
       def calculate_adx_data(bars)
@@ -160,7 +160,11 @@ module Entries
         last_result = result.last
 
         # Handle different property naming (adx/adx, plus_di/plusDi, minus_di/minusDi)
-        adx_value = last_result.respond_to?(:adx) ? last_result.adx : (last_result.respond_to?(:adx_value) ? last_result.adx_value : 0)
+        adx_value = if last_result.respond_to?(:adx)
+                      last_result.adx
+                    else
+                      (last_result.respond_to?(:adx_value) ? last_result.adx_value : 0)
+                    end
         plus_di_value = if last_result.respond_to?(:plus_di)
                           last_result.plus_di
                         elsif last_result.respond_to?(:plusDi)

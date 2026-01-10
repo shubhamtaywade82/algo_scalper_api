@@ -15,10 +15,10 @@ class TelegramNotifier
   # @param extra_params [Hash] Additional parameters (parse_mode, etc.)
   # @return [Net::HTTPResponse, nil]
   def self.send_message(text, chat_id: nil, **extra_params)
-    return unless text.present?
+    return if text.blank?
 
     chat_id ||= ENV.fetch('TELEGRAM_CHAT_ID', nil)
-    return unless chat_id.present?
+    return if chat_id.blank?
 
     chunks(text).each do |chunk|
       post('sendMessage',
@@ -34,7 +34,7 @@ class TelegramNotifier
   # @return [Net::HTTPResponse, nil]
   def self.send_chat_action(action:, chat_id: nil)
     chat_id ||= ENV.fetch('TELEGRAM_CHAT_ID', nil)
-    return unless chat_id.present?
+    return if chat_id.blank?
 
     post('sendChatAction', chat_id: chat_id, action: action)
   end
@@ -53,7 +53,7 @@ class TelegramNotifier
   # @return [Net::HTTPResponse, nil]
   def self.post(method, **params)
     bot_token = ENV.fetch('TELEGRAM_BOT_TOKEN', nil)
-    return unless bot_token.present?
+    return if bot_token.blank?
 
     uri = URI("#{TELEGRAM_API}/bot#{bot_token}/#{method}")
     res = Net::HTTP.post_form(uri, params)
@@ -98,4 +98,3 @@ class TelegramNotifier
 
   private_class_method :chunks
 end
-

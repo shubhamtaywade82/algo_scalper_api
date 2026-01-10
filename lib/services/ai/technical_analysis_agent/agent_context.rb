@@ -42,9 +42,15 @@ module Services
 
           facts = {}
           facts[:ltp] = tool_result[:ltp] || tool_result['ltp'] if tool_result[:ltp] || tool_result['ltp']
-          facts[:indicators] = aggregate_indicators(tool_result) if tool_result[:indicators] || tool_result['indicators']
+          if tool_result[:indicators] || tool_result['indicators']
+            facts[:indicators] =
+              aggregate_indicators(tool_result)
+          end
           facts[:strikes] = filter_strikes_for_context(tool_result[:strikes] || tool_result['strikes']) if tool_result[:strikes] || tool_result['strikes']
-          facts[:instrument_id] = tool_result[:instrument_id] || tool_result['instrument_id'] if tool_result[:instrument_id] || tool_result['instrument_id']
+          if tool_result[:instrument_id] || tool_result['instrument_id']
+            facts[:instrument_id] =
+              tool_result[:instrument_id] || tool_result['instrument_id']
+          end
           facts[:error] = tool_result[:error] || tool_result['error'] if tool_result[:error] || tool_result['error']
           facts
         end
@@ -59,11 +65,11 @@ module Services
             aggregated[timeframe] = {}
             tf_indicators.each do |name, value|
               # Store only the value, not raw arrays
-              if value.is_a?(Hash)
-                aggregated[timeframe][name] = value.select { |k, _v| %w[value signal direction].include?(k.to_s) }
-              else
-                aggregated[timeframe][name] = value
-              end
+              aggregated[timeframe][name] = if value.is_a?(Hash)
+                                              value.select { |k, _v| %w[value signal direction].include?(k.to_s) }
+                                            else
+                                              value
+                                            end
             end
           end
           aggregated
@@ -72,6 +78,7 @@ module Services
         def filter_strikes_for_context(strikes)
           # Already filtered to ATM ±1 ±2, just return as-is
           return [] unless strikes.is_a?(Array)
+
           strikes.first(5) # Max 5 strikes in context
         end
 

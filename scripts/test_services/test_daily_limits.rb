@@ -12,12 +12,12 @@ ServiceTestHelper.print_section('0. Prerequisites Setup')
 daily_limits = Live::DailyLimits.new
 
 unless daily_limits.instance_variable_get(:@redis)
-  ServiceTestHelper.print_error("Redis not available - DailyLimits requires Redis")
-  ServiceTestHelper.print_info("Start Redis: redis-server")
+  ServiceTestHelper.print_error('Redis not available - DailyLimits requires Redis')
+  ServiceTestHelper.print_info('Start Redis: redis-server')
   exit 1
 end
 
-ServiceTestHelper.print_success("DailyLimits initialized with Redis connection")
+ServiceTestHelper.print_success('DailyLimits initialized with Redis connection')
 
 # Test 1: Check initial state
 ServiceTestHelper.print_section('1. Initial State Check')
@@ -75,7 +75,7 @@ risk_config = AlgoConfig.fetch[:risk] || {}
 max_daily_loss = risk_config[:max_daily_loss_pct] || risk_config[:daily_loss_limit_pct] || 5000.0
 max_daily_trades = risk_config[:max_daily_trades] || risk_config[:daily_trade_limit] || 10
 
-ServiceTestHelper.print_info("Configured limits:")
+ServiceTestHelper.print_info('Configured limits:')
 ServiceTestHelper.print_info("  Max daily loss: ₹#{max_daily_loss}")
 ServiceTestHelper.print_info("  Max daily trades: #{max_daily_trades}")
 
@@ -86,9 +86,9 @@ ServiceTestHelper.print_section('5. Limit Enforcement Test')
 if daily_loss >= max_daily_loss
   limit_check = daily_limits.can_trade?(index_key: test_index)
   if limit_check[:allowed] == false && limit_check[:reason] == 'daily_loss_limit_exceeded'
-    ServiceTestHelper.print_success("Loss limit correctly enforced")
+    ServiceTestHelper.print_success('Loss limit correctly enforced')
   else
-    ServiceTestHelper.print_warning("Loss limit not enforced (may need adjustment)")
+    ServiceTestHelper.print_warning('Loss limit not enforced (may need adjustment)')
   end
 else
   ServiceTestHelper.print_info("Loss limit not reached yet (current: ₹#{daily_loss.round(2)}, limit: ₹#{max_daily_loss})")
@@ -98,9 +98,9 @@ end
 if daily_trades >= max_daily_trades
   limit_check = daily_limits.can_trade?(index_key: test_index)
   if limit_check[:allowed] == false && limit_check[:reason] == 'trade_frequency_limit_exceeded'
-    ServiceTestHelper.print_success("Trade frequency limit correctly enforced")
+    ServiceTestHelper.print_success('Trade frequency limit correctly enforced')
   else
-    ServiceTestHelper.print_warning("Trade frequency limit not enforced (may need adjustment)")
+    ServiceTestHelper.print_warning('Trade frequency limit not enforced (may need adjustment)')
   end
 else
   ServiceTestHelper.print_info("Trade frequency limit not reached yet (current: #{daily_trades}, limit: #{max_daily_trades})")
@@ -117,23 +117,22 @@ ServiceTestHelper.print_info("Global daily trades: #{global_trades}")
 max_global_loss = risk_config[:max_global_daily_loss_pct] || risk_config[:global_daily_loss_limit_pct] || 10_000.0
 max_global_trades = risk_config[:max_global_daily_trades] || risk_config[:global_daily_trade_limit] || 20
 
-ServiceTestHelper.print_info("Global limits:")
+ServiceTestHelper.print_info('Global limits:')
 ServiceTestHelper.print_info("  Max global loss: ₹#{max_global_loss}")
 ServiceTestHelper.print_info("  Max global trades: #{max_global_trades}")
 
 # Test 7: Test reset (TTL expiration simulation)
 ServiceTestHelper.print_section('7. TTL and Reset')
-ServiceTestHelper.print_info("DailyLimits uses Redis TTL (25 hours)")
-ServiceTestHelper.print_info("Counters automatically expire after TTL")
-ServiceTestHelper.print_info("No manual reset needed - counters reset daily via TTL")
+ServiceTestHelper.print_info('DailyLimits uses Redis TTL (25 hours)')
+ServiceTestHelper.print_info('Counters automatically expire after TTL')
+ServiceTestHelper.print_info('No manual reset needed - counters reset daily via TTL')
 
 ServiceTestHelper.print_section('Summary')
-ServiceTestHelper.print_info("DailyLimits test completed")
-ServiceTestHelper.print_info("Key features verified:")
-ServiceTestHelper.print_info("  ✅ Trade recording")
-ServiceTestHelper.print_info("  ✅ Loss recording")
-ServiceTestHelper.print_info("  ✅ Per-index limits")
-ServiceTestHelper.print_info("  ✅ Global limits")
-ServiceTestHelper.print_info("  ✅ Limit enforcement")
-ServiceTestHelper.print_info("  ✅ TTL-based reset")
-
+ServiceTestHelper.print_info('DailyLimits test completed')
+ServiceTestHelper.print_info('Key features verified:')
+ServiceTestHelper.print_info('  ✅ Trade recording')
+ServiceTestHelper.print_info('  ✅ Loss recording')
+ServiceTestHelper.print_info('  ✅ Per-index limits')
+ServiceTestHelper.print_info('  ✅ Global limits')
+ServiceTestHelper.print_info('  ✅ Limit enforcement')
+ServiceTestHelper.print_info('  ✅ TTL-based reset')

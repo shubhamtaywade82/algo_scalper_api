@@ -16,4 +16,3 @@ RSpec.describe Trading::LotCalculator do
     end
   end
 end
-

@@ -628,7 +628,6 @@ module Signal
       def validate_market_timing
         # TODO: Implement market timing validation if needed
         current_time = Time.zone.now
-        { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
 
         # First check if it's a trading day using Market::Calendar
         unless Market::Calendar.trading_day_today?
@@ -731,8 +730,8 @@ module Signal
           strategy_config: strategy_config
         )
 
-        pp series.candles.last
-        pp series.candles.first
+        Rails.logger.debug series.candles.last
+        Rails.logger.debug series.candles.first
         if result[:status] == :ok && result[:direction] == :avoid
           Rails.logger.info("[Signal] #{strategy_recommendation[:strategy_name]} did not generate a signal for #{index_cfg[:key]} - checking conditions...")
           # Log why signal might not be generated

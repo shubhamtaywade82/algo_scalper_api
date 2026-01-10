@@ -34,8 +34,8 @@ RSpec.describe Indicators::ThresholdConfig do
       allow(ENV).to receive(:[]).and_call_original
       allow(ENV).to receive(:[]).with('INDICATOR_PRESET').and_return(nil)
       allow(AlgoConfig).to receive(:fetch).and_return({
-        signals: { indicator_preset: :loose }
-      })
+                                                        signals: { indicator_preset: :loose }
+                                                      })
       expect(described_class.current_preset).to eq(:loose)
     end
 

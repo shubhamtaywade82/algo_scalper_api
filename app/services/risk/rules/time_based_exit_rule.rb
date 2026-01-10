@@ -22,7 +22,7 @@ module Risk
         # Check minimum profit requirement
         pnl_rupees = context.pnl_rupees
         if pnl_rupees.to_f.positive?
-          min_profit = context.config_bigdecimal(:min_profit_rupees, BigDecimal('0'))
+          min_profit = context.config_bigdecimal(:min_profit_rupees, BigDecimal(0))
           if min_profit.positive? && BigDecimal(pnl_rupees.to_s) < min_profit
             Rails.logger.info(
               "[TimeBasedExitRule] Time-based exit skipped for #{context.tracker.order_no} - PnL < min_profit"

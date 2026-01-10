@@ -25,4 +25,3 @@ RSpec.describe Trading::CapitalAllocator do
     end
   end
 end
-

@@ -8,10 +8,10 @@ module Entries
       # @param bars [Array<Candle>] Array of candle objects
       # @return [Float] Range as percentage
       def range_pct(bars)
-        return 0.0 if bars.nil? || bars.empty?
+        return 0.0 if bars.blank?
 
-        highs = bars.map(&:high).compact
-        lows = bars.map(&:low).compact
+        highs = bars.filter_map(&:high)
+        lows = bars.filter_map(&:low)
 
         return 0.0 if highs.empty? || lows.empty?
 

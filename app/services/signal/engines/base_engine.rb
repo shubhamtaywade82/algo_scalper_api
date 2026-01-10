@@ -91,9 +91,7 @@ module Signal
       def normalize_index(index)
         return index.deep_symbolize_keys if index.respond_to?(:deep_symbolize_keys)
 
-        Array(index).each_with_object({}) do |(k, v), acc|
-          acc[k.to_sym] = v
-        end
+        Array(index).transform_keys(&:to_sym)
       end
 
       def state_key

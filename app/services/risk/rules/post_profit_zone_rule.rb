@@ -35,8 +35,8 @@ module Risk
         pnl_rupees = context.pnl_rupees
         return skip_result unless pnl_rupees&.positive?
 
-        secured_threshold = config_bigdecimal(:secured_profit_threshold_rupees, BigDecimal('2000'))
-        runner_threshold = config_bigdecimal(:runner_zone_threshold_rupees, BigDecimal('4000'))
+        secured_threshold = config_bigdecimal(:secured_profit_threshold_rupees, BigDecimal(2000))
+        runner_threshold = config_bigdecimal(:runner_zone_threshold_rupees, BigDecimal(4000))
 
         # Determine current zone
         zone = determine_zone(pnl_rupees, secured_threshold, runner_threshold)
@@ -45,14 +45,10 @@ module Risk
         return no_action_result if zone == ENTRY
 
         # Secured Profit Zone: Check if we should exit due to trend/momentum failure
-        if zone == SECURED_PROFIT_ZONE
-          return evaluate_secured_profit_zone(context, pnl_rupees, secured_threshold)
-        end
+        return evaluate_secured_profit_zone(context, pnl_rupees, secured_threshold) if zone == SECURED_PROFIT_ZONE
 
         # Runner Zone: Trailing stop logic (handled by TrailingStopRule, but we can add additional checks)
-        if zone == RUNNER_ZONE
-          return evaluate_runner_zone(context, pnl_rupees, runner_threshold)
-        end
+        return evaluate_runner_zone(context, pnl_rupees, runner_threshold) if zone == RUNNER_ZONE
 
         no_action_result
       rescue StandardError => e
@@ -158,28 +154,20 @@ module Risk
 
         # Check Supertrend direction (via trend_score breakdown or direct check)
         # If trend_score is positive and above threshold, trend is favorable
-        if underlying_state.trend_score && underlying_state.trend_score.to_f < adx_min
-          return false
-        end
+        return false if underlying_state.trend_score && underlying_state.trend_score.to_f < adx_min
 
         # Check structure break
         if underlying_state.bos_state == :broken
           tracker = context.tracker
           position_direction = Positions::MetadataResolver.direction(tracker)
-          if position_direction == :bullish && underlying_state.bos_direction == :bearish
-            return false
-          end
-          if position_direction == :bearish && underlying_state.bos_direction == :bullish
-            return false
-          end
+          return false if position_direction == :bullish && underlying_state.bos_direction == :bearish
+          return false if position_direction == :bearish && underlying_state.bos_direction == :bullish
         end
 
         # Check ATR collapse (falling volatility)
         if underlying_state.atr_trend == :falling
           atr_ratio_threshold = config_value(:underlying_atr_collapse_threshold, 0.65).to_f
-          if underlying_state.atr_ratio && underlying_state.atr_ratio.to_f < atr_ratio_threshold
-            return false
-          end
+          return false if underlying_state.atr_ratio && underlying_state.atr_ratio.to_f < atr_ratio_threshold
         end
 
         # Check candle exhaustion (bodies > wicks)
@@ -228,15 +216,13 @@ module Risk
           older_high = older_highs.max
 
           # If current is not making new highs relative to older period, momentum weakening
-          if current_ltp < older_high * 1.05 # Allow 5% tolerance
-            return false
-          end
+          return false if current_ltp < older_high * 1.05 # Allow 5% tolerance
         end
 
         # Check 3: Pullback from peak (if we have HWM data)
         hwm = context.high_water_mark
-        if hwm && hwm.to_f.positive?
-          peak_ltp = hwm.to_f / context.quantity.to_f + entry_price.to_f
+        if hwm&.to_f&.positive?
+          peak_ltp = (hwm.to_f / context.quantity) + entry_price.to_f
           if peak_ltp > current_ltp
             pullback_from_peak = ((peak_ltp - current_ltp) / peak_ltp) * 100.0
             return false if pullback_from_peak > pullback_max_pct
@@ -276,11 +262,11 @@ module Risk
         unless cached
           # Try to get recent LTP from Redis PnL cache
           redis_pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
-          if redis_pnl && redis_pnl[:ltp]
-            cached = [{ ltp: redis_pnl[:ltp], timestamp: redis_pnl[:timestamp] || Time.current.to_i }]
-          else
-            cached = []
-          end
+          cached = if redis_pnl && redis_pnl[:ltp]
+                     [{ ltp: redis_pnl[:ltp], timestamp: redis_pnl[:timestamp] || Time.current.to_i }]
+                   else
+                     []
+                   end
         end
 
         # Update cache with current LTP
@@ -305,7 +291,7 @@ module Risk
         @config[key.to_sym] || @config[key.to_s] || default
       end
 
-      def config_bigdecimal(key, default = BigDecimal('0'))
+      def config_bigdecimal(key, default = BigDecimal(0))
         value = config_value(key, default)
         BigDecimal(value.to_s)
       rescue StandardError

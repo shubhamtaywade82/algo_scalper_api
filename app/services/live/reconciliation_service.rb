@@ -204,7 +204,7 @@ module Live
       updates[:pnl] = redis_pnl[:pnl].to_f if redis_pnl[:pnl]
       updates[:pnl_pct] = redis_pnl[:pnl_pct].to_f if redis_pnl[:pnl_pct]
       updates[:high_water_mark] = redis_pnl[:hwm_pnl].to_f if redis_pnl[:hwm_pnl]
-      updates[:current_ltp] = redis_pnl[:ltp].to_f if redis_pnl[:ltp] && redis_pnl[:ltp].to_f.positive?
+      updates[:current_ltp] = redis_pnl[:ltp].to_f if redis_pnl[:ltp]&.to_f&.positive?
 
       # Update peak profit if available and higher than current
       if redis_pnl[:peak_profit_pct] && redis_pnl[:peak_profit_pct].to_f > (position.peak_profit_pct || 0)

@@ -73,7 +73,7 @@ independent_services.each do |name, info|
   ServiceTestHelper.print_info("#{name}:")
   ServiceTestHelper.print_info("  Class: #{info[:class]}")
   ServiceTestHelper.print_info("  Singleton: #{info[:singleton] ? '✅ YES' : '❌ NO'}")
-  ServiceTestHelper.print_info("  Responsibilities:")
+  ServiceTestHelper.print_info('  Responsibilities:')
   info[:responsibilities].each do |resp|
     ServiceTestHelper.print_info("    - #{resp}")
   end
@@ -141,7 +141,7 @@ test_instruments.each do |inst|
 
   # Check if tick exists in TickCache
   ltp = Live::TickCache.ltp(seg, sid.to_s)
-  if ltp && ltp.positive?
+  if ltp&.positive?
     tick_received["#{seg}:#{sid}"] = ltp
     ServiceTestHelper.print_success("  ✅ Tick found for #{seg}:#{sid} - LTP: #{ltp}")
   else
@@ -158,7 +158,7 @@ test_instruments.each do |inst|
   sid = inst[:security_id] || inst['security_id']
 
   ltp = Live::TickCache.ltp(seg, sid.to_s)
-  if ltp && ltp.positive?
+  if ltp&.positive?
     tick_received_after["#{seg}:#{sid}"] = ltp
     ServiceTestHelper.print_success("  ✅ Tick received for #{seg}:#{sid} - LTP: #{ltp}")
   else
@@ -194,7 +194,7 @@ test_cases = [
 
 test_cases.each do |test_case|
   ltp = Live::TickCache.ltp(test_case[:segment], test_case[:security_id])
-  if ltp && ltp.positive?
+  if ltp&.positive?
     ServiceTestHelper.print_success("  ✅ #{test_case[:service]} can access LTP for #{test_case[:segment]}:#{test_case[:security_id]} = #{ltp}")
   else
     ServiceTestHelper.print_warning("  ⚠️  #{test_case[:service]} cannot access LTP for #{test_case[:segment]}:#{test_case[:security_id]}")
@@ -222,7 +222,7 @@ end
 # 2.2: TickCache is storing ticks
 ServiceTestHelper.print_info('2.2: TickCache storage...')
 tick_count = tick_received_after.size
-if tick_count > 0
+if tick_count.positive?
   ServiceTestHelper.print_success("  ✅ TickCache has #{tick_count} ticks stored")
 else
   ServiceTestHelper.print_warning('  ⚠️  TickCache has no ticks (may need more time)')
@@ -257,7 +257,11 @@ begin
 
   if risk_service
     # RiskManagerService is wrapped, check the actual service
-    actual_risk = risk_service.instance_variable_get(:@risk_manager) rescue risk_service
+    actual_risk = begin
+      risk_service.instance_variable_get(:@risk_manager)
+    rescue StandardError
+      risk_service
+    end
     risk_running = actual_risk.respond_to?(:running?) ? actual_risk.running? : false
 
     if risk_running
@@ -267,7 +271,7 @@ begin
     end
   else
     # Fallback: Check if RiskManagerService can be instantiated
-    risk_manager = Live::RiskManagerService.new
+    Live::RiskManagerService.new
     ServiceTestHelper.print_info('  ℹ️  RiskManagerService can be instantiated (not in supervisor in test context)')
   end
 rescue StandardError => e
@@ -281,7 +285,11 @@ begin
   exit_service = supervisor&.[](:exit_manager)
 
   if exit_service
-    exit_running = exit_service.instance_variable_get(:@running) rescue false
+    exit_running = begin
+      exit_service.instance_variable_get(:@running)
+    rescue StandardError
+      false
+    end
     if exit_running
       ServiceTestHelper.print_success('  ✅ ExitEngine is running')
     else
@@ -290,7 +298,7 @@ begin
   else
     # Fallback: Check if ExitEngine can be instantiated
     router = TradingSystem::OrderRouter.new
-    exit_engine = Live::ExitEngine.new(order_router: router)
+    Live::ExitEngine.new(order_router: router)
     ServiceTestHelper.print_info('  ℹ️  ExitEngine can be instantiated (not in supervisor in test context)')
   end
 rescue StandardError => e
@@ -311,7 +319,7 @@ test_seg = 'IDX_I'
 test_sid = '13'
 ltp = Live::TickCache.ltp(test_seg, test_sid)
 
-if ltp && ltp.positive?
+if ltp&.positive?
   ServiceTestHelper.print_success("  ✅ TickCache.ltp('#{test_seg}', '#{test_sid}') = #{ltp} (independent access)")
 else
   ServiceTestHelper.print_info("  ℹ️  TickCache.ltp('#{test_seg}', '#{test_sid}') = nil (no data yet)")
@@ -320,7 +328,7 @@ end
 # Test RedisTickCache direct access
 ServiceTestHelper.print_info('3.2: Testing RedisTickCache direct access...')
 redis_tick = redis_tick_cache.fetch_tick(test_seg, test_sid)
-if redis_tick && redis_tick[:ltp] && redis_tick[:ltp].positive?
+if redis_tick && redis_tick[:ltp]&.positive?
   ServiceTestHelper.print_success("  ✅ RedisTickCache.fetch_tick('#{test_seg}', '#{test_sid}') = #{redis_tick[:ltp]}")
 else
   ServiceTestHelper.print_info("  ℹ️  RedisTickCache has no data for #{test_seg}:#{test_sid}")
@@ -384,15 +392,15 @@ begin
       # Verify position is in cache
       cached = active_cache.get_by_tracker_id(tracker.id)
       if cached
-        ServiceTestHelper.print_success("  ✅ Position retrieved from ActiveCache")
+        ServiceTestHelper.print_success('  ✅ Position retrieved from ActiveCache')
       else
-        ServiceTestHelper.print_warning("  ⚠️  Position not found in ActiveCache")
+        ServiceTestHelper.print_warning('  ⚠️  Position not found in ActiveCache')
       end
     else
-      ServiceTestHelper.print_warning("  ⚠️  Failed to add position to ActiveCache")
+      ServiceTestHelper.print_warning('  ⚠️  Failed to add position to ActiveCache')
     end
   else
-    ServiceTestHelper.print_warning("  ⚠️  No test position available")
+    ServiceTestHelper.print_warning('  ⚠️  No test position available')
   end
 rescue StandardError => e
   ServiceTestHelper.print_warning("  ActiveCache position test failed: #{e.message}")
@@ -435,7 +443,7 @@ end
 
 puts ''
 ServiceTestHelper.print_info('Independent Services Summary:')
-independent_services.each do |name, _info|
+independent_services.each_key do |name|
   ServiceTestHelper.print_info("  - #{name}: ✅ Independent (singleton)")
 end
 
@@ -450,4 +458,3 @@ ServiceTestHelper.print_info('  6. RiskManager → uses TickCache.ltp() for PnL 
 ServiceTestHelper.print_info('  7. ExitEngine → uses TickCache.ltp() for exit price resolution')
 
 puts ''
-

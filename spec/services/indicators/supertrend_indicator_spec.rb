@@ -12,7 +12,7 @@ RSpec.describe Indicators::SupertrendIndicator do
   before do
     # Create enough candles for Supertrend calculation
     50.times do |i|
-      price = 22000.0 + (i * 10)
+      price = 22_000.0 + (i * 10)
       candle = Candle.new(
         ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
         open: price,
@@ -69,7 +69,7 @@ RSpec.describe Indicators::SupertrendIndicator do
 
     it 'returns direction as :bullish or :bearish' do
       result = indicator.calculate_at(index)
-      expect(result[:direction]).to be_in([:bullish, :bearish])
+      expect(result[:direction]).to be_in(%i[bullish bearish])
     end
 
     it 'returns confidence between 0 and 100' do
@@ -90,10 +90,10 @@ RSpec.describe Indicators::SupertrendIndicator do
         # Create candle outside trading hours
         candle = Candle.new(
           ts: Time.zone.parse('2024-01-01 09:00:00 IST'),
-          open: 22000,
-          high: 22050,
-          low: 21980,
-          close: 22020,
+          open: 22_000,
+          high: 22_050,
+          low: 21_980,
+          close: 22_020,
           volume: 1000
         )
         series.add_candle(candle)

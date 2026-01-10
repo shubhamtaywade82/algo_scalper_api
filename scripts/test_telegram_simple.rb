@@ -5,11 +5,11 @@
 
 require_relative '../config/environment'
 
-bot_token = ENV['TELEGRAM_BOT_TOKEN']
-chat_id = ENV['TELEGRAM_CHAT_ID']
+bot_token = ENV.fetch('TELEGRAM_BOT_TOKEN', nil)
+chat_id = ENV.fetch('TELEGRAM_CHAT_ID', nil)
 
 unless bot_token && chat_id
-  puts "❌ Missing environment variables!"
+  puts '❌ Missing environment variables!'
   puts "   TELEGRAM_BOT_TOKEN: #{bot_token ? 'Set' : 'NOT SET'}"
   puts "   TELEGRAM_CHAT_ID: #{chat_id ? 'Set' : 'NOT SET'}"
   exit 1
@@ -41,17 +41,15 @@ begin
   )
 
   puts "✅ HTML message sent! ID: #{result2['result']['message_id']}"
-
 rescue Telegram::Bot::Exceptions::ResponseError => e
   puts "❌ Telegram API Error: #{e.message}"
 
   if e.message.include?('chat not found')
     puts "\n💡 The bot can't find your chat. Try:"
     puts "   1. Send /start to your bot: @#{client.api.get_me['result']['username']}"
-    puts "   2. Then run this script again"
+    puts '   2. Then run this script again'
   end
 rescue StandardError => e
   puts "❌ Error: #{e.class} - #{e.message}"
   puts e.backtrace.first(5).map { |l| "   #{l}" }.join("\n")
 end
-

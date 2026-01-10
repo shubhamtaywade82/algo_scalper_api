@@ -103,7 +103,7 @@ module Live
     private
 
     def run_loop
-      @logger.info('[PnlUpdater] started') if @logger
+      @logger&.info('[PnlUpdater] started')
       loop do
         break unless running?
 
@@ -127,7 +127,7 @@ module Live
       @logger.error("[PnlUpdater] crashed: #{e.class} - #{e.message}")
       @running = false
     ensure
-      @logger.info('[PnlUpdater] stopped') if @logger
+      @logger&.info('[PnlUpdater] stopped')
     end
 
     def flush!
@@ -140,10 +140,10 @@ module Live
         batch = @queue.first(MAX_BATCH).to_h
 
         # Remove processed keys
-        batch.keys.each { |k| @queue.delete(k) }
+        batch.each_key { |k| @queue.delete(k) }
       end
 
-      return false unless batch && batch.any?
+      return false unless batch&.any?
 
       # Batch load all trackers in a single query to avoid N+1
       tracker_ids = batch.keys
@@ -210,7 +210,7 @@ module Live
           tick_ltp = payload[:ltp]
         end
 
-        unless tick_ltp && tick_ltp.to_f.positive?
+        unless tick_ltp&.to_f&.positive?
           @logger.debug { "[PnlUpdater] Skip #{tracker_id}: no valid LTP (seg=#{seg} sid=#{security_id})" }
           next
         end
@@ -258,8 +258,8 @@ module Live
           pnl_pct: pnl_pct_bd.to_f,
           ltp: ltp_bd.to_f,
           hwm: hwm_bd.to_f,
-          hwm_pnl_pct: hwm_pnl_pct_bd ? hwm_pnl_pct_bd.to_f : nil,
-          timestamp: Time.now,
+          hwm_pnl_pct: hwm_pnl_pct_bd&.to_f,
+          timestamp: Time.zone.now,
           tracker: tracker
         )
 
@@ -344,9 +344,9 @@ module Live
       milestones.each do |milestone_pct|
         # Check if milestone reached (positive or negative)
         milestone_reached = if pnl_pct_value.positive?
-                              pnl_pct_value >= milestone_pct && !notified_milestones.include?(milestone_pct)
+                              pnl_pct_value >= milestone_pct && notified_milestones.exclude?(milestone_pct)
                             elsif pnl_pct_value.negative?
-                              pnl_pct_value <= -milestone_pct && !notified_milestones.include?(-milestone_pct)
+                              pnl_pct_value <= -milestone_pct && notified_milestones.exclude?(-milestone_pct)
                             else
                               false
                             end

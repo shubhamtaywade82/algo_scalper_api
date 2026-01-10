@@ -9,11 +9,11 @@
 interval_minutes = (ARGV[0]&.to_i || 30).clamp(15, 60)
 interval_seconds = interval_minutes * 60
 
-puts "\n" + "=" * 100
-puts "TRADING SESSION PROFITABILITY ANALYSIS (Supertrend + ADX Strategy)"
-puts "Trading Hours: 9:15 AM - 3:30 PM IST (6.5 hours)"
+puts "\n#{'=' * 100}"
+puts 'TRADING SESSION PROFITABILITY ANALYSIS (Supertrend + ADX Strategy)'
+puts 'Trading Hours: 9:15 AM - 3:30 PM IST (6.5 hours)'
 puts "Analysis Interval: #{interval_minutes} minutes"
-puts "=" * 100 + "\n"
+puts "#{'=' * 100}\n"
 
 # Get all paper trading positions
 all_trackers = PositionTracker.paper.order(created_at: :asc)
@@ -23,6 +23,7 @@ active_trackers = PositionTracker.paper.active.order(created_at: :asc)
 # Filter to trading hours only (9:15 AM - 3:30 PM IST)
 def within_trading_hours?(time)
   return false unless time
+
   hour = time.hour
   minute = time.min
 
@@ -38,16 +39,16 @@ trading_hour_trackers = all_trackers.select { |t| within_trading_hours?(t.create
 trading_hour_exited = exited_trackers.select { |t| within_trading_hours?(t.created_at) }
 trading_hour_active = active_trackers.select { |t| within_trading_hours?(t.created_at) }
 
-puts "📊 OVERVIEW"
-puts "-" * 100
+puts '📊 OVERVIEW'
+puts '-' * 100
 puts "Total Positions (All): #{all_trackers.count}"
 puts "  - Exited: #{exited_trackers.count}"
 puts "  - Active: #{active_trackers.count}"
-puts ""
+puts ''
 puts "Positions During Trading Hours (9:15 AM - 3:30 PM): #{trading_hour_trackers.count}"
 puts "  - Exited: #{trading_hour_exited.count}"
 puts "  - Active: #{trading_hour_active.count}"
-puts ""
+puts ''
 
 # Group positions by time intervals within trading hours
 def group_by_trading_interval(trackers, interval_seconds)
@@ -58,7 +59,7 @@ def group_by_trading_interval(trackers, interval_seconds)
     next unless entry_time
 
     # Round down to nearest interval, but align to trading session boundaries
-    interval_start = Time.at((entry_time.to_i / interval_seconds) * interval_seconds)
+    interval_start = Time.zone.at((entry_time.to_i / interval_seconds) * interval_seconds)
 
     # Format as HH:MM for display (focus on time, not date)
     hour = interval_start.hour
@@ -157,22 +158,25 @@ time_period_metrics = interval_metrics.group_by { |m| m[:time_only] }.map do |ti
     win_rate: win_rate,
     total_pnl: total_pnl,
     avg_pnl_per_trade: avg_pnl_per_trade,
-    profitability: total_pnl.positive? ? '✅ PROFITABLE' : (total_pnl.negative? ? '❌ UNPROFITABLE' : '➖ BREAKEVEN')
+    profitability: if total_pnl.positive?
+                     '✅ PROFITABLE'
+                   else
+                     (total_pnl.negative? ? '❌ UNPROFITABLE' : '➖ BREAKEVEN')
+                   end
   }
 end.sort_by { |m| m[:time_key] }
 
 # Display results - Focus on trading session time periods
-puts "⏰ TRADING SESSION TIME PERIOD ANALYSIS"
-puts "Shows profitability by time period across all trading days"
-puts "-" * 100
-puts format("%-10s | %-8s | %-6s | %-6s | %-8s | %-12s | %-15s | %-15s",
-            'Time', 'Days', 'Trades', 'Exited', 'Win%', 'Total PnL ₹', 'Avg PnL/Trade ₹', 'Status')
-puts "-" * 100
+puts '⏰ TRADING SESSION TIME PERIOD ANALYSIS'
+puts 'Shows profitability by time period across all trading days'
+puts '-' * 100
+puts 'Time       | Days     | Trades | Exited | Win%     | Total PnL ₹  | Avg PnL/Trade ₹ | Status         '
+puts '-' * 100
 
 time_period_metrics.each do |metrics|
-  wl_ratio = metrics[:exited_trades].positive? ? "#{metrics[:winners]}/#{metrics[:losers]}" : 'N/A'
+  metrics[:exited_trades].positive? ? "#{metrics[:winners]}/#{metrics[:losers]}" : 'N/A'
 
-  puts format("%-10s | %-8d | %-6d | %-6d | %-8.1f | %-12.2f | %-15.2f | %-15s",
+  puts format('%-10s | %-8d | %-6d | %-6d | %-8.1f | %-12.2f | %-15.2f | %-15s',
               metrics[:time_key],
               metrics[:interval_count],
               metrics[:total_trades],
@@ -183,33 +187,33 @@ time_period_metrics.each do |metrics|
               metrics[:profitability])
 end
 
-puts "-" * 100
-puts ""
+puts '-' * 100
+puts ''
 
 # Summary statistics for time periods
 profitable_periods = time_period_metrics.select { |m| m[:total_pnl].positive? }
 unprofitable_periods = time_period_metrics.select { |m| m[:total_pnl].negative? }
 breakeven_periods = time_period_metrics.select { |m| m[:total_pnl].zero? }
 
-puts "📈 SUMMARY STATISTICS (Trading Session Time Periods)"
-puts "-" * 100
+puts '📈 SUMMARY STATISTICS (Trading Session Time Periods)'
+puts '-' * 100
 puts "Total Time Periods Analyzed: #{time_period_metrics.count}"
 puts "  ✅ Profitable Periods: #{profitable_periods.count} (#{(profitable_periods.count.to_f / time_period_metrics.count * 100).round(1)}%)"
 puts "  ❌ Unprofitable Periods: #{unprofitable_periods.count} (#{(unprofitable_periods.count.to_f / time_period_metrics.count * 100).round(1)}%)"
 puts "  ➖ Breakeven Periods: #{breakeven_periods.count} (#{(breakeven_periods.count.to_f / time_period_metrics.count * 100).round(1)}%)"
-puts ""
+puts ''
 
 if profitable_periods.any?
   profitable_pnl = profitable_periods.sum { |m| m[:total_pnl] }
   profitable_trades = profitable_periods.sum { |m| m[:total_trades] }
 
-  puts "✅ PROFITABLE TIME PERIODS (Supertrend + ADX Strategy)"
-  puts "-" * 100
+  puts '✅ PROFITABLE TIME PERIODS (Supertrend + ADX Strategy)'
+  puts '-' * 100
   puts "Total Profit: ₹#{profitable_pnl.round(2)}"
   puts "Total Trades: #{profitable_trades}"
-  puts ""
+  puts ''
 
-  puts "Most Profitable Time Periods (Ranked by Total PnL):"
+  puts 'Most Profitable Time Periods (Ranked by Total PnL):'
   profitable_periods.sort_by { |m| -m[:total_pnl] }.each_with_index do |metrics, idx|
     puts "  #{idx + 1}. #{metrics[:time_key]} | " \
          "PnL: ₹#{metrics[:total_pnl].round(2)} | " \
@@ -218,20 +222,20 @@ if profitable_periods.any?
          "Avg PnL/Trade: ₹#{metrics[:avg_pnl_per_trade].round(2)} | " \
          "Days: #{metrics[:interval_count]}"
   end
-  puts ""
+  puts ''
 end
 
 if unprofitable_periods.any?
   unprofitable_pnl = unprofitable_periods.sum { |m| m[:total_pnl] }
   unprofitable_trades = unprofitable_periods.sum { |m| m[:total_trades] }
 
-  puts "❌ UNPROFITABLE TIME PERIODS (Supertrend + ADX Strategy)"
-  puts "-" * 100
+  puts '❌ UNPROFITABLE TIME PERIODS (Supertrend + ADX Strategy)'
+  puts '-' * 100
   puts "Total Loss: ₹#{unprofitable_pnl.round(2)}"
   puts "Total Trades: #{unprofitable_trades}"
-  puts ""
+  puts ''
 
-  puts "Worst Time Periods (Ranked by Total Loss):"
+  puts 'Worst Time Periods (Ranked by Total Loss):'
   unprofitable_periods.sort_by { |m| m[:total_pnl] }.each_with_index do |metrics, idx|
     puts "  #{idx + 1}. #{metrics[:time_key]} | " \
          "PnL: ₹#{metrics[:total_pnl].round(2)} | " \
@@ -240,12 +244,12 @@ if unprofitable_periods.any?
          "Avg PnL/Trade: ₹#{metrics[:avg_pnl_per_trade].round(2)} | " \
          "Days: #{metrics[:interval_count]}"
   end
-  puts ""
+  puts ''
 end
 
 # Hourly analysis (aggregate by hour across all days)
-puts "🕐 HOURLY ANALYSIS (Across All Trading Days)"
-puts "-" * 100
+puts '🕐 HOURLY ANALYSIS (Across All Trading Days)'
+puts '-' * 100
 hourly_groups = time_period_metrics.group_by { |m| m[:time_key].split(':').first.to_i }
 
 hourly_metrics = hourly_groups.map do |hour, periods|
@@ -268,16 +272,19 @@ hourly_metrics = hourly_groups.map do |hour, periods|
     win_rate: win_rate,
     total_pnl: total_pnl,
     avg_pnl_per_trade: avg_pnl_per_trade,
-    profitability: total_pnl.positive? ? '✅ PROFITABLE' : (total_pnl.negative? ? '❌ UNPROFITABLE' : '➖ BREAKEVEN')
+    profitability: if total_pnl.positive?
+                     '✅ PROFITABLE'
+                   else
+                     (total_pnl.negative? ? '❌ UNPROFITABLE' : '➖ BREAKEVEN')
+                   end
   }
 end.sort_by { |m| m[:hour] }
 
-puts format("%-15s | %-8s | %-6s | %-6s | %-8s | %-12s | %-15s | %-15s",
-            'Hour', 'Periods', 'Trades', 'Exited', 'Win%', 'Total PnL ₹', 'Avg PnL/Trade ₹', 'Status')
-puts "-" * 100
+puts 'Hour            | Periods  | Trades | Exited | Win%     | Total PnL ₹  | Avg PnL/Trade ₹ | Status         '
+puts '-' * 100
 
 hourly_metrics.each do |metrics|
-  puts format("%-15s | %-8d | %-6d | %-6d | %-8.1f | %-12.2f | %-15.2f | %-15s",
+  puts format('%-15s | %-8d | %-6d | %-6d | %-8.1f | %-12.2f | %-15.2f | %-15s',
               metrics[:hour_label],
               metrics[:periods_count],
               metrics[:total_trades],
@@ -288,16 +295,16 @@ hourly_metrics.each do |metrics|
               metrics[:profitability])
 end
 
-puts "-" * 100
-puts ""
+puts '-' * 100
+puts ''
 
 # Identify best and worst hours
 profitable_hours = hourly_metrics.select { |m| m[:total_pnl].positive? }
 unprofitable_hours = hourly_metrics.select { |m| m[:total_pnl].negative? }
 
 if profitable_hours.any?
-  puts "✅ BEST TRADING HOURS (Supertrend + ADX Strategy)"
-  puts "-" * 100
+  puts '✅ BEST TRADING HOURS (Supertrend + ADX Strategy)'
+  puts '-' * 100
   profitable_hours.sort_by { |m| -m[:total_pnl] }.each_with_index do |metrics, idx|
     puts "  #{idx + 1}. #{metrics[:hour_label]} | " \
          "PnL: ₹#{metrics[:total_pnl].round(2)} | " \
@@ -305,12 +312,12 @@ if profitable_hours.any?
          "Win Rate: #{metrics[:win_rate].round(1)}% | " \
          "Avg PnL/Trade: ₹#{metrics[:avg_pnl_per_trade].round(2)}"
   end
-  puts ""
+  puts ''
 end
 
 if unprofitable_hours.any?
-  puts "❌ WORST TRADING HOURS (Supertrend + ADX Strategy)"
-  puts "-" * 100
+  puts '❌ WORST TRADING HOURS (Supertrend + ADX Strategy)'
+  puts '-' * 100
   unprofitable_hours.sort_by { |m| m[:total_pnl] }.each_with_index do |metrics, idx|
     puts "  #{idx + 1}. #{metrics[:hour_label]} | " \
          "PnL: ₹#{metrics[:total_pnl].round(2)} | " \
@@ -318,12 +325,12 @@ if unprofitable_hours.any?
          "Win Rate: #{metrics[:win_rate].round(1)}% | " \
          "Avg PnL/Trade: ₹#{metrics[:avg_pnl_per_trade].round(2)}"
   end
-  puts ""
+  puts ''
 end
 
 # Time range analysis (market open, mid-day, close)
-puts "📊 MARKET SESSION ANALYSIS"
-puts "-" * 100
+puts '📊 MARKET SESSION ANALYSIS'
+puts '-' * 100
 
 def classify_session_period(time_key)
   hour = time_key.split(':').first.to_i
@@ -368,12 +375,11 @@ session_metrics = session_groups.map do |session_name, periods|
   }
 end.sort_by { |m| -m[:total_pnl] }
 
-puts format("%-30s | %-8s | %-6s | %-6s | %-8s | %-12s | %-15s",
-            'Session', 'Periods', 'Trades', 'Exited', 'Win%', 'Total PnL ₹', 'Avg PnL/Trade ₹')
-puts "-" * 100
+puts 'Session                        | Periods  | Trades | Exited | Win%     | Total PnL ₹  | Avg PnL/Trade ₹'
+puts '-' * 100
 
 session_metrics.each do |metrics|
-  puts format("%-30s | %-8d | %-6d | %-6d | %-8.1f | %-12.2f | %-15.2f",
+  puts format('%-30s | %-8d | %-6d | %-6d | %-8.1f | %-12.2f | %-15.2f',
               metrics[:session_name],
               metrics[:periods_count],
               metrics[:total_trades],
@@ -383,12 +389,12 @@ session_metrics.each do |metrics|
               metrics[:avg_pnl_per_trade])
 end
 
-puts "-" * 100
-puts ""
+puts '-' * 100
+puts ''
 
 # Recommendations
-puts "💡 RECOMMENDATIONS FOR SUPERTREND + ADX STRATEGY"
-puts "-" * 100
+puts '💡 RECOMMENDATIONS FOR SUPERTREND + ADX STRATEGY'
+puts '-' * 100
 
 best_session = session_metrics.max_by { |m| m[:total_pnl] }
 worst_session = session_metrics.min_by { |m| m[:total_pnl] }
@@ -398,8 +404,8 @@ if best_session && best_session[:total_pnl].positive?
   puts "   - Total PnL: ₹#{best_session[:total_pnl].round(2)}"
   puts "   - Win Rate: #{best_session[:win_rate].round(1)}%"
   puts "   - Average PnL per Trade: ₹#{best_session[:avg_pnl_per_trade].round(2)}"
-  puts "   → Consider focusing trading during this session"
-  puts ""
+  puts '   → Consider focusing trading during this session'
+  puts ''
 end
 
 if worst_session && worst_session[:total_pnl].negative?
@@ -407,8 +413,8 @@ if worst_session && worst_session[:total_pnl].negative?
   puts "   - Total PnL: ₹#{worst_session[:total_pnl].round(2)}"
   puts "   - Win Rate: #{worst_session[:win_rate].round(1)}%"
   puts "   - Average PnL per Trade: ₹#{worst_session[:avg_pnl_per_trade].round(2)}"
-  puts "   → Consider avoiding or reducing exposure during this session"
-  puts ""
+  puts '   → Consider avoiding or reducing exposure during this session'
+  puts ''
 end
 
 # High probability time windows
@@ -417,9 +423,9 @@ high_prob_periods = time_period_metrics.select do |m|
 end
 
 if high_prob_periods.any?
-  puts "🎯 HIGH PROBABILITY TIME PERIODS (≥70% Win Rate, ≥3 Trades, Profitable)"
-  puts "These are the time periods where Supertrend + ADX strategy works with high probability"
-  puts "-" * 100
+  puts '🎯 HIGH PROBABILITY TIME PERIODS (≥70% Win Rate, ≥3 Trades, Profitable)'
+  puts 'These are the time periods where Supertrend + ADX strategy works with high probability'
+  puts '-' * 100
   high_prob_periods.sort_by { |m| -m[:win_rate] }.each do |metrics|
     puts "  • #{metrics[:time_key]} | " \
          "Win Rate: #{metrics[:win_rate].round(1)}% | " \
@@ -429,36 +435,35 @@ if high_prob_periods.any?
          "W/L: #{metrics[:winners]}/#{metrics[:losers]} | " \
          "Days: #{metrics[:interval_count]}"
   end
-  puts ""
+  puts ''
 end
 
 # Final recommendations
-puts "💡 KEY INSIGHTS FOR SUPERTREND + ADX STRATEGY"
-puts "-" * 100
+puts '💡 KEY INSIGHTS FOR SUPERTREND + ADX STRATEGY'
+puts '-' * 100
 
 if profitable_periods.any?
   best_period = profitable_periods.max_by { |m| m[:total_pnl] }
   best_win_rate_period = profitable_periods.max_by { |m| m[:win_rate] }
 
-  puts "✅ OPTIMAL TRADING PERIODS:"
+  puts '✅ OPTIMAL TRADING PERIODS:'
   puts "   Best Profit Period: #{best_period[:time_key]} (₹#{best_period[:total_pnl].round(2)})"
   puts "   Best Win Rate Period: #{best_win_rate_period[:time_key]} (#{best_win_rate_period[:win_rate].round(1)}% win rate)"
-  puts ""
+  puts ''
 end
 
 if unprofitable_periods.any?
   worst_period = unprofitable_periods.min_by { |m| m[:total_pnl] }
-  puts "❌ AVOID THESE PERIODS:"
+  puts '❌ AVOID THESE PERIODS:'
   puts "   Worst Period: #{worst_period[:time_key]} (₹#{worst_period[:total_pnl].round(2)} loss)"
-  puts ""
+  puts ''
 end
 
-puts "📋 RECOMMENDATION:"
-puts "   Focus trading during profitable time periods identified above."
-puts "   Consider reducing or avoiding positions during unprofitable periods."
-puts ""
+puts '📋 RECOMMENDATION:'
+puts '   Focus trading during profitable time periods identified above.'
+puts '   Consider reducing or avoiding positions during unprofitable periods.'
+puts ''
 
-puts "=" * 100
-puts "ANALYSIS COMPLETE"
-puts "=" * 100 + "\n"
-
+puts '=' * 100
+puts 'ANALYSIS COMPLETE'
+puts "#{'=' * 100}\n"

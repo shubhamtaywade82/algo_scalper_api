@@ -57,4 +57,3 @@ RSpec.describe TradingSystem::PositionHeartbeat do
     end
   end
 end
-

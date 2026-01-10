@@ -11,7 +11,7 @@ module Smc
       SWING_LOOKBACK = 5
 
       def initialize(series, lookback: SWING_LOOKBACK)
-        super(series, lookback: lookback)
+        super
       end
 
       def to_h
@@ -20,4 +20,3 @@ module Smc
     end
   end
 end
-
