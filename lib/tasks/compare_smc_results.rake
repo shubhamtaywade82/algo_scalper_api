@@ -109,8 +109,8 @@ namespace :compare do
 
         ai_analyzer = Smc::AiAnalyzer.new(instrument1, initial_data: initial_data)
 
-        # Test get_option_chain directly
-        result = ai_analyzer.send(:get_option_chain, expiry_date: nil)
+        # Test option chain fetching (now private method fetch_option_chain_data)
+        result = ai_analyzer.send(:fetch_option_chain_data)
 
         if result[:error]
           puts "   ❌ Error: #{result[:error]}"

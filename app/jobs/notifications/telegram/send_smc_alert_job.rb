@@ -88,7 +88,7 @@ module Notifications
 
           Rails.logger.debug { "[SendSmcAlertJob] Fetching AI analysis for #{instrument.symbol_name}..." }
 
-          # Use new AiAnalyzer with chat completion, history, and tool calling
+          # Use AiAnalyzer with pre-fetched data and single-pass analysis
           analyzer = Smc::AiAnalyzer.new(instrument, initial_data: details_data)
           result = analyzer.analyze
 
