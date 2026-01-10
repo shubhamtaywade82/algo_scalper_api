@@ -6,7 +6,8 @@ module Notifications
       queue_as :background
 
       # Retry with exponential backoff for transient failures
-      retry_on StandardError, wait: :exponentially_longer, attempts: 3
+      # Use proc for exponential backoff: 2^attempt seconds
+      retry_on StandardError, wait: ->(executions) { 2**executions }, attempts: 3
 
       def perform(instrument_id:, decision:, contexts:, price:)
         instrument = Instrument.find_by(id: instrument_id)
@@ -18,11 +19,24 @@ module Notifications
         Rails.logger.info("[SendSmcAlertJob] Processing alert for #{instrument.symbol_name} - #{decision}")
 
         # Fetch AI analysis asynchronously (this is the slow part)
-        ai_analysis = fetch_ai_analysis(instrument, decision, contexts)
+        # Skip AI analysis for 'no_trade' decisions to avoid validation errors
+        ai_analysis = if decision.to_s == 'no_trade'
+                        nil
+                      else
+                        fetch_ai_analysis(instrument, decision, contexts)
+                      end
 
         # Enforce permission-based AI output constraints (no discretionary overrides)
-        permission = decision.to_s == 'no_trade' ? :blocked : :scale_ready
-        Trading::AiOutputSanitizer.validate!(permission: permission, output: ai_analysis) if ai_analysis.present?
+        # Only validate if we have AI analysis and it's not a no_trade decision
+        if ai_analysis.present?
+          permission = decision.to_s == 'no_trade' ? :blocked : :scale_ready
+          begin
+            Trading::AiOutputSanitizer.validate!(permission: permission, output: ai_analysis)
+          rescue Trading::AiOutputSanitizer::ViolatingAiOutputError => e
+            Rails.logger.warn("[SendSmcAlertJob] AI output validation failed: #{e.message}. Skipping AI analysis.")
+            ai_analysis = nil # Remove invalid AI analysis
+          end
+        end
 
         log_ai_analysis_status(instrument: instrument, ai_analysis: ai_analysis)
 

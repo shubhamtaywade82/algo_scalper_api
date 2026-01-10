@@ -5,7 +5,8 @@ class SmcScannerJob < ApplicationJob
   queue_as :default
 
   # Retry with exponential backoff for transient failures
-  retry_on StandardError, wait: :exponentially_longer, attempts: 3
+  # Use proc for exponential backoff: 2^attempt seconds
+  retry_on StandardError, wait: ->(executions) { 2**executions }, attempts: 3
 
   def perform
     Rails.logger.info('[SmcScannerJob] Starting SMC scan...')
