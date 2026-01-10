@@ -5,7 +5,7 @@ require_relative '../concerns/broker_fee_calculator'
 module Entries
   class EntryGuard
     class << self
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil)
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         # Time regime validation (session-aware entry rules)
         unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
           Rails.logger.info("[EntryGuard] Entry blocked by time regime rules for #{index_cfg[:key]}")
@@ -71,14 +71,50 @@ module Entries
           return false
         end
 
-        quantity = Capital::Allocator.qty_for(
+        # ===== Unified instrument profile + capital cap sizing (hard rules) =====
+        symbol = index_cfg[:key].to_s.upcase
+        permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
+
+        profile = Trading::InstrumentExecutionProfile.for(symbol)
+
+        if permission_sym == :execution_only && profile[:allow_execution_only] == false
+          Rails.logger.info("[EntryGuard] Execution-only blocked for #{symbol} by profile")
+          return false
+        end
+
+        permission_cap = profile[:max_lots_by_permission][permission_sym].to_i
+        lot_size = Trading::LotCalculator.lot_size_for(symbol)
+
+        cap_lots = Trading::CapitalAllocator.max_lots(
+          premium: ltp.to_f,
+          lot_size: lot_size,
+          permission_cap: permission_cap
+        )
+
+        if cap_lots <= 0
+          Rails.logger.info(
+            "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, " \
+            "permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
+          )
+          return false
+        end
+
+        quantity_by_existing_allocator = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
           entry_price: ltp.to_f,
-          derivative_lot_size: pick[:lot_size],
+          derivative_lot_size: lot_size,
           scale_multiplier: multiplier
         )
-        if quantity <= 0
-          Rails.logger.warn("[EntryGuard] Invalid quantity for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, ltp: #{ltp}, lot_size: #{pick[:lot_size]})")
+
+        quantity_by_cap = cap_lots * lot_size
+        quantity = [quantity_by_existing_allocator.to_i, quantity_by_cap.to_i].min
+        quantity = (quantity / lot_size) * lot_size # ensure lot-aligned
+
+        if quantity <= 0 || quantity < lot_size
+          Rails.logger.warn(
+            "[EntryGuard] Quantity blocked for #{index_cfg[:key]}: #{pick[:symbol]} " \
+            "(qty=#{quantity}, cap_qty=#{quantity_by_cap}, alloc_qty=#{quantity_by_existing_allocator}, lot_size=#{lot_size}, ltp=#{ltp})"
+          )
           return false
         end
 
