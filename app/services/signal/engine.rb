@@ -258,7 +258,34 @@ module Signal
 
         # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
 
-        picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: final_direction)
+        # ===== STRIKE QUALIFICATION LAYER (HARD GATE) =====
+        # First point where we have:
+        # - symbol (index_cfg[:key])
+        # - side (from final_direction)
+        # - permission (from PermissionResolver)
+        # - option chain (fetched inside ChainAnalyzer)
+        # - expected spot move (ATR-derived from series)
+        expected_spot_move =
+          begin
+            atr = primary_series.atr(14)
+            atr&.to_f
+          rescue StandardError
+            nil
+          end
+
+        unless expected_spot_move&.positive?
+          Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
+        picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
+          index_cfg: index_cfg,
+          direction: final_direction,
+          permission: permission,
+          expected_spot_move: expected_spot_move
+        )
+        # ===== END STRIKE QUALIFICATION LAYER =====
 
         if picks.blank?
           Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
