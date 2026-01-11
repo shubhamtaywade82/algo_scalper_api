@@ -2,43 +2,9 @@
 
 require 'rails_helper'
 
-# Define the classes locally for testing since they're defined in the initializer
-module TradingSystem
-  class Supervisor
-    def initialize
-      @services = {}
-      @running = false
-    end
-
-    def register(name, instance)
-      @services[name] = instance
-    end
-
-    delegate :[], to: :@services
-
-    def start_all
-      return if @running
-
-      @services.each_value(&:start)
-
-      @running = true
-    end
-
-    def stop_all
-      return unless @running
-
-      @services.reverse_each do |_name, service|
-        service.stop
-      end
-
-      @running = false
-    end
-  end
-end
-
-RSpec.describe 'TradingSystem::Supervisor Market Close Behavior' do
+RSpec.describe TradingSystem::Daemon do
   let(:supervisor) { TradingSystem::Supervisor.new }
-  let(:market_feed) { instance_double(MarketFeedHubService, start: true, stop: true) }
+  let(:market_feed) { instance_double(Live::MarketFeedHubService, start: true, stop: true, subscribe_many: true) }
   let(:signal_scheduler) { instance_double(Signal::Scheduler, start: true, stop: true) }
   let(:risk_manager) { instance_double(Live::RiskManagerService, start: true, stop: true) }
   let(:heartbeat) { instance_double(TradingSystem::PositionHeartbeat, start: true, stop: true) }
@@ -49,7 +15,6 @@ RSpec.describe 'TradingSystem::Supervisor Market Close Behavior' do
   let(:reconciliation) { instance_double(Live::ReconciliationService, start: true, stop: true) }
 
   before do
-    # Register all services with the supervisor
     supervisor.register(:market_feed, market_feed)
     supervisor.register(:signal_scheduler, signal_scheduler)
     supervisor.register(:risk_manager, risk_manager)
@@ -61,14 +26,21 @@ RSpec.describe 'TradingSystem::Supervisor Market Close Behavior' do
     supervisor.register(:reconciliation, reconciliation)
   end
 
+  before do
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with('ENABLE_TRADING_SERVICES').and_return('true')
+    allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return(nil)
+    allow(ENV).to receive(:[]).with('BACKTEST_MODE').and_return(nil)
+    allow(ENV).to receive(:[]).with('SCRIPT_MODE').and_return(nil)
+  end
+
   describe 'when market is closed' do
     before do
       allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
     end
 
-    it 'only starts MarketFeedHub (simulating initializer behavior)' do
-      # Simulate the initializer logic when market is closed
-      supervisor[:market_feed]&.start if TradingSession::Service.market_closed?
+    it 'only starts WebSocket service' do
+      described_class.new(supervisor: supervisor).start(keep_alive: false, allow_in_test: true)
 
       expect(market_feed).to have_received(:start)
       expect(signal_scheduler).not_to have_received(:start)
@@ -85,11 +57,11 @@ RSpec.describe 'TradingSystem::Supervisor Market Close Behavior' do
   describe 'when market is open' do
     before do
       allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
+      allow(Live::PositionIndex).to receive_message_chain(:instance, :all_keys).and_return([])
     end
 
-    it 'starts all services (simulating initializer behavior)' do
-      # Simulate the initializer logic when market is open
-      supervisor.start_all unless TradingSession::Service.market_closed?
+    it 'starts all services' do
+      described_class.new(supervisor: supervisor).start(keep_alive: false, allow_in_test: true)
 
       expect(market_feed).to have_received(:start)
       expect(signal_scheduler).to have_received(:start)

@@ -4,43 +4,42 @@
 require_relative 'base'
 ServiceTestHelper.setup_rails
 
-ServiceTestHelper.print_header('TradingSupervisor Integration Test')
+ServiceTestHelper.print_header('Trading Supervisor Integration Test')
 
-# This test verifies that TradingSupervisor can start/stop all registered services
-# Note: This only works when running in a web server context (puma/rails server)
+# This test verifies that TradingSystem::Supervisor can start/stop all registered services.
+#
+# NOTE: Trading services are intended to run in a separate daemon process:
+#   ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 
-# Check if we're in the right environment
 ServiceTestHelper.print_section('0. Environment Check')
 is_web_process = $PROGRAM_NAME.include?('puma') ||
                  $PROGRAM_NAME.include?('rails') ||
                  ENV['WEB_CONCURRENCY'].present?
 
 if Rails.env.test?
-  ServiceTestHelper.print_warning('Running in test environment - TradingSupervisor is disabled')
-  ServiceTestHelper.print_info('TradingSupervisor only runs in development/production web processes')
+  ServiceTestHelper.print_warning('Running in test environment - trading daemon is disabled')
+  ServiceTestHelper.print_info('Use non-test env for daemon-style service runs')
   exit 0
 end
 
 unless is_web_process
-  ServiceTestHelper.print_warning('Not running in web process - TradingSupervisor may not be initialized')
-  ServiceTestHelper.print_info('TradingSupervisor requires: puma, rails server, or WEB_CONCURRENCY env var')
+  ServiceTestHelper.print_warning('Not running in web process - supervisor may not be initialized')
+  ServiceTestHelper.print_info('This is OK; the daemon is the intended runtime process')
 end
 
-# Check if supervisor is available
 ServiceTestHelper.print_section('1. Supervisor Availability')
 config_supervisor = Rails.application.config.x.trading_supervisor
 
 # Check if it's actually a Supervisor instance (not just OrderedOptions)
-# TradingSystem::Supervisor is defined in config/initializers/trading_supervisor.rb
 if config_supervisor.is_a?(TradingSystem::Supervisor)
   supervisor = config_supervisor
-  ServiceTestHelper.print_success('TradingSupervisor found (from initializer)')
+  ServiceTestHelper.print_success('Supervisor found (from initializer)')
 else
   # Create supervisor for testing if it doesn't exist or is not initialized
-  ServiceTestHelper.print_info('TradingSupervisor not initialized - creating for testing')
+  ServiceTestHelper.print_info('Supervisor not initialized - creating for testing')
   supervisor = TradingSystem::Supervisor.new
   Rails.application.config.x.trading_supervisor = supervisor
-  ServiceTestHelper.print_success('TradingSupervisor created for testing')
+  ServiceTestHelper.print_success('Supervisor created for testing')
 end
 
 # List registered services
@@ -53,12 +52,11 @@ if services.empty?
   ServiceTestHelper.print_section('2a. Registering Services for Testing')
   ServiceTestHelper.print_info('No services registered - registering for testing...')
 
-  # Service adapters are defined in config/initializers/trading_supervisor.rb
-  # MarketFeedHubService and ActiveCacheService are already available
+  # Live::MarketFeedHubService and ActiveCacheService are adapters.
 
   # Register services (same as initializer)
   begin
-    feed = MarketFeedHubService.new
+    feed = Live::MarketFeedHubService.new
     router = TradingSystem::OrderRouter.new
 
     supervisor.register(:market_feed, feed)
@@ -197,12 +195,12 @@ if services[:signal_scheduler]
 end
 
 ServiceTestHelper.print_section('6. Recommendations')
-ServiceTestHelper.print_info('To fully test TradingSupervisor:')
-ServiceTestHelper.print_info('  1. Start Rails server: bin/dev or rails s')
+ServiceTestHelper.print_info('To fully test trading services:')
+ServiceTestHelper.print_info('  1. Start trading daemon: ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon')
 ServiceTestHelper.print_info('  2. Check logs for service startup messages')
 ServiceTestHelper.print_info('  3. Verify services are running:')
 ServiceTestHelper.print_info('     - MarketFeedHub should show WebSocket connection')
 ServiceTestHelper.print_info('     - Signal::Scheduler should process watchlist items')
 ServiceTestHelper.print_info('     - ActiveCache should subscribe to MarketFeedHub')
 
-ServiceTestHelper.print_success('TradingSupervisor test completed')
+ServiceTestHelper.print_success('Trading supervisor test completed')

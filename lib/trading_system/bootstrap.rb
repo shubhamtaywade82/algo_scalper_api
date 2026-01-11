@@ -1,0 +1,34 @@
+# frozen_string_literal: true
+
+module TradingSystem
+  # Centralized wiring for trading services.
+  #
+  # Used by:
+  # - the register-only Rails initializer (web process)
+  # - the trading daemon (separate long-running process)
+  module Bootstrap
+    module_function
+
+    def build_supervisor
+      supervisor = TradingSystem::Supervisor.new
+
+      feed = Live::MarketFeedHubService.new
+      router = TradingSystem::OrderRouter.new
+      exit_engine = Live::ExitEngine.new(order_router: router)
+
+      supervisor.register(:market_feed, feed)
+      supervisor.register(:signal_scheduler, Signal::Scheduler.new)
+      supervisor.register(:risk_manager, Live::RiskManagerService.new(exit_engine: exit_engine))
+      supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
+      supervisor.register(:order_router, router)
+      supervisor.register(:paper_pnl_refresher, Live::PaperPnlRefresher.new)
+      supervisor.register(:exit_manager, exit_engine)
+      supervisor.register(:active_cache, ActiveCacheService.new)
+      supervisor.register(:reconciliation, Live::ReconciliationService.instance)
+      supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
+
+      supervisor
+    end
+  end
+end
+
