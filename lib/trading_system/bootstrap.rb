@@ -23,7 +23,19 @@ module TradingSystem
       supervisor.register(:order_router, router)
       supervisor.register(:paper_pnl_refresher, Live::PaperPnlRefresher.new)
       supervisor.register(:exit_manager, exit_engine)
-      supervisor.register(:active_cache, ActiveCacheService.new)
+      # ActiveCacheService is defined at top level in app/services/positions/active_cache_service.rb
+      # Explicitly load it since Zeitwerk won't autoload top-level constants from nested paths
+      unless defined?(::ActiveCacheService)
+        file_path = if defined?(Rails)
+                      Rails.root.join('app/services/positions/active_cache_service.rb')
+                    else
+                      File.join(
+                        __dir__, '../../app/services/positions/active_cache_service.rb'
+                      )
+                    end
+        load file_path.to_s if File.exist?(file_path.to_s)
+      end
+      supervisor.register(:active_cache, ::ActiveCacheService.new)
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
 
@@ -31,4 +43,3 @@ module TradingSystem
     end
   end
 end
-
