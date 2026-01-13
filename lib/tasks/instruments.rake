@@ -49,7 +49,7 @@ namespace :instruments do
     pp ''
 
     # Check for active position trackers that reference instruments
-    active_trackers = PositionTracker.where(status: PositionTracker::STATUSES[:active])
+    active_trackers = PositionTracker.active
     if active_trackers.any?
       pp "ERROR: Found #{active_trackers.count} active position tracker(s) that reference instruments."
       pp 'Active trackers:'
@@ -59,14 +59,14 @@ namespace :instruments do
 
       pp ''
       if args[:force] == 'true'
-        pp "FORCE mode enabled: Marking active position trackers as 'closed'..."
+        pp "FORCE mode enabled: Marking active position trackers as 'exited'..."
         active_trackers.update_all(
-          status: PositionTracker::STATUSES[:closed],
+          status: :exited,
           updated_at: Time.current
         )
-        pp "Marked #{active_trackers.count} active tracker(s) as closed."
+        pp "Marked #{active_trackers.count} active tracker(s) as exited."
       else
-        pp 'To force clear (will mark active positions as closed), run:'
+        pp 'To force clear (will mark active positions as exited), run:'
         pp '  bin/rails instruments:clear[true]'
         pp 'Or manually close/exit positions first.'
         pp ''
@@ -77,7 +77,7 @@ namespace :instruments do
     end
 
     # Delete inactive/closed trackers that reference instruments (to avoid FK constraint issues)
-    inactive_trackers = PositionTracker.where.not(status: PositionTracker::STATUSES[:active])
+    inactive_trackers = PositionTracker.where.not(status: :active)
     if inactive_trackers.any?
       pp "Found #{inactive_trackers.count} inactive/closed position tracker(s)."
       if args[:force] == 'true'

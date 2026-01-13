@@ -1,2 +1,3 @@
 #!/usr/bin/env ruby
-exec "./bin/rails", "server", *ARGV
+# Use foreman to run Procfile.dev (starts both web server and trading daemon)
+exec "foreman", "start", "-f", "Procfile.dev", *ARGV

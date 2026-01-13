@@ -38,6 +38,7 @@ module TradingSystem
       supervisor.register(:active_cache, ::ActiveCacheService.new)
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
+      supervisor.register(:smc_scanner, Smc::Scanner.new)
 
       supervisor
     end

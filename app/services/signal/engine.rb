@@ -171,16 +171,24 @@ module Signal
         # ===== DIRECTION GATE (HARD FILTER) =====
         # MUST run BEFORE SMC, AVRZ, Permission resolution, or any entry logic.
         # Blocks impossible trades based on market regime.
-        trade_side = final_direction == :bullish ? :CE : :PE
-        candles_15m = instrument.candle_series(interval: '15')&.candles || []
-        regime = Market::MarketRegimeResolver.resolve(candles_15m: candles_15m)
+        # Can be disabled via config: signals.enable_direction_gate = false
+        enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, true)
 
-        unless Trading::DirectionGate.allow?(regime: regime, side: trade_side)
-          Rails.logger.info(
-            "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: #{trade_side} trade in #{regime} regime"
-          )
-          Signal::StateTracker.reset(index_cfg[:key])
-          return
+        if enable_direction_gate
+          trade_side = final_direction == :bullish ? :CE : :PE
+          candles_15m = instrument.candle_series(interval: '15')&.candles || []
+          regime = Market::MarketRegimeResolver.resolve(candles_15m: candles_15m)
+
+          unless Trading::DirectionGate.allow?(regime: regime, side: trade_side)
+            Rails.logger.info(
+              "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: #{trade_side} trade in #{regime} regime"
+            )
+            Signal::StateTracker.reset(index_cfg[:key])
+            return
+          end
+          Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} trade in #{regime} regime" }
+        else
+          Rails.logger.debug { "[Signal] DirectionGate DISABLED for #{index_cfg[:key]} - skipping regime check" }
         end
         # ===== END DIRECTION GATE =====
 
@@ -204,6 +212,29 @@ module Signal
           return
         end
         # ===== END PERMISSION RESOLUTION =====
+
+        # ===== SMC DECISION ALIGNMENT (HARD FILTER) =====
+        # Check if SMC decision (call/put/no_trade) aligns with signal direction
+        # This provides additional confirmation beyond permission levels
+        # Skip this check if SMC+AVRZ permission system is disabled
+        enable_smc_permission = signals_cfg.fetch(:enable_smc_avrz_permission, true)
+        enable_smc_alignment = signals_cfg.fetch(:enable_smc_decision_alignment, true)
+
+        if enable_smc_permission && enable_smc_alignment
+          smc_decision = get_smc_decision(index_cfg, instrument, signals_cfg, final_direction)
+          unless smc_decision_aligned?(smc_decision, final_direction)
+            Rails.logger.info(
+              "[Signal] SMC Decision BLOCKED #{index_cfg[:key]}: " \
+              "signal=#{final_direction}, smc=#{smc_decision} (misaligned or no_trade)"
+            )
+            Signal::StateTracker.reset(index_cfg[:key])
+            return
+          end
+          Rails.logger.info("[Signal] SMC Decision CONFIRMED #{index_cfg[:key]}: #{smc_decision} aligns with #{final_direction}")
+        else
+          Rails.logger.debug { "[Signal] SMC Decision alignment check SKIPPED for #{index_cfg[:key]} (SMC+AVRZ disabled)" }
+        end
+        # ===== END SMC DECISION ALIGNMENT =====
 
         # Get state snapshot first for signal persistence
         state_snapshot = Signal::StateTracker.record(
@@ -252,7 +283,10 @@ module Signal
             validation_passed: validation_result[:valid],
             state_count: state_snapshot[:count],
             state_multiplier: state_snapshot[:multiplier],
-            original_timeframe: primary_tf
+            original_timeframe: primary_tf,
+            # SMC integration
+            smc_decision: smc_decision.to_s,
+            smc_permission: permission.to_s
           }
         )
 
@@ -526,7 +560,8 @@ module Signal
           { valid: true, reason: 'All checks passed' }
         else
           failed_reasons = failed_checks.pluck(:name).join(', ')
-          { valid: false, reason: "Failed checks: #{failed_reasons}" }
+          failed_messages = failed_checks.map { |check| "#{check[:name]}: #{check[:message]}" }.join('; ')
+          { valid: false, reason: "Failed checks: #{failed_reasons} (#{failed_messages})" }
         end
       end
 
@@ -845,6 +880,53 @@ module Signal
         else
           # Rails.logger.info("[Signal] Neutral/unknown trend on #{timeframe_label}: #{trend}")
           :avoid
+        end
+      end
+
+      # Get SMC decision (call/put/no_trade) for signal alignment check
+      def get_smc_decision(index_cfg, instrument, signals_cfg, signal_direction)
+        # Check if SMC decision alignment is enabled
+        enable_smc_alignment = signals_cfg.fetch(:enable_smc_decision_alignment, true)
+        # Return permissive default based on signal direction when disabled
+        unless enable_smc_alignment
+          return signal_direction == :bullish ? :call : :put
+        end
+
+        begin
+          # Use BiasEngine to get SMC decision
+          # Note: We use delay_seconds: 0 since we're already in a signal generation context
+          # and don't want to add unnecessary delays
+          engine = Smc::BiasEngine.new(instrument, delay_seconds: 0)
+          decision = engine.decision
+
+          # If BiasEngine returns :no_trade, be permissive and align with signal direction
+          if decision == :no_trade
+            Rails.logger.debug { "[Signal] SMC decision returned :no_trade for #{index_cfg[:key]}, defaulting to signal direction" }
+            return signal_direction == :bullish ? :call : :put
+          end
+
+          decision
+        rescue StandardError => e
+          Rails.logger.warn("[Signal] SMC decision check failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+          # Default to signal direction on error (allows trades instead of blocking)
+          # :call for bullish signals, :put for bearish signals
+          signal_direction == :bullish ? :call : :put
+        end
+      end
+
+      # Check if SMC decision aligns with signal direction
+      # call = bullish, put = bearish, no_trade = blocks all
+      def smc_decision_aligned?(smc_decision, signal_direction)
+        return false if smc_decision.nil?
+        return false if smc_decision == :no_trade
+
+        case signal_direction
+        when :bullish
+          smc_decision == :call
+        when :bearish
+          smc_decision == :put
+        else
+          false
         end
       end
     end

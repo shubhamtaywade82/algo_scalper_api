@@ -513,7 +513,7 @@ position_sizing:
 
     # Session-Based Pause (especially S3 - chop/decay zone)
     # In dangerous sessions, disable entries after consecutive SLs
-    session_based_pause: true # Enable session-aware pause logic
+    session_based_pause: false # Enable session-aware pause logic
     s3_max_consecutive_sls: 2 # In S3 (11:30-13:45), pause after N consecutive SLs
     s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
 
@@ -542,11 +542,40 @@ signals:
   # Useful for testing the trading system without NoTradeEngine restrictions
   enable_no_trade_engine: false # Enable NoTradeEngine validation (default: true)
 
+  # SMC + AVRZ Permission System Configuration
+  # Set enable_smc_avrz_permission: false to completely disable SMC+AVRZ permission checks
+  # When disabled, system uses only Supertrend + ADX for signal generation (traditional approach)
+  # Permission will always return :scale_ready (allows trading) when disabled
+  # This also disables SMC decision alignment checks
+  enable_smc_avrz_permission: false # Set to false to disable SMC+AVRZ checks (default: true)
+
+  # SMC Decision Alignment (only used if enable_smc_avrz_permission is true)
+  # When enabled, requires SMC decision (call/put) to align with signal direction
+  # Set to false to disable SMC decision alignment check (but keep permission checks)
+  enable_smc_decision_alignment: true # Set to false to disable SMC decision alignment (default: true)
+
+  # DirectionGate Configuration
+  # DirectionGate blocks trades that go against the market regime:
+  # - Blocks PE trades in bullish regime
+  # - Blocks CE trades in bearish regime
+  # - Blocks all trades in neutral regime
+  # Set to false to disable DirectionGate and allow all signal directions
+  enable_direction_gate: false # Set to false to disable DirectionGate (default: true)
+
+  # Permission mode (only used if enable_smc_avrz_permission is true)
+  # Controls how strict the permission resolver is for allowing trades
+  # Options:
+  #   - strict: Full validation (default) - maximum capital protection
+  #   - lenient: Relaxed validation - allows trades in range markets without displacement, trend markets without BOS
+  #   - bypass: Completely bypasses SMC+AVRZ checks - always returns execution_only (testing only!)
+  # See docs/PERMISSION_SYSTEM_CONFIGURATION.md for details
+  permission_mode: lenient # Options: strict, lenient, bypass (default: strict)
+
   # Supertrend+ADX Strategy Configuration
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
-  enable_adx_filter: true # Enable ADX strength filter (default: false)
+  enable_adx_filter: false # Enable ADX strength filter (default: false)
   enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
 
   # Optimized Parameters Configuration

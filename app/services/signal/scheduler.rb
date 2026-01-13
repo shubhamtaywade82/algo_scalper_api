@@ -48,12 +48,13 @@ module Signal
           begin
             # Early exit if market is closed - avoid unnecessary processing
             if TradingSession::Service.market_closed?
-              Rails.logger.debug('[SignalScheduler] Market closed - skipping cycle')
+              Rails.logger.debug('[SignalScheduler] Market closed - skipping cycle (no index loading)')
               sleep @period
               next
             end
 
             # Reorder indices by expiry proximity (closer expiry = higher priority)
+            # Only do this expensive operation when market is open
             ordered_indices = reorder_indices_by_expiry(indices)
 
             ordered_indices.each_with_index do |idx_cfg, idx|
