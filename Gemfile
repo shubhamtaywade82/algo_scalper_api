@@ -61,7 +61,7 @@ group :development, :test do
 
   # Code quality and style enforcement
   gem 'rubocop', '~> 1.71', require: false
-  gem 'rubocop-factory_bot', '~> 2.25', require: false
+  gem 'rubocop-factory_bot', '~> 2.28', require: false
   gem 'rubocop-performance', '~> 1.21', require: false
   gem 'rubocop-rails', '~> 2.23', require: false
   gem 'rubocop-rspec', '~> 3.8', require: false
