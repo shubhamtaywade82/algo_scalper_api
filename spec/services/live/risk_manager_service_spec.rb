@@ -955,7 +955,7 @@ RSpec.describe Live::RiskManagerService do
           allow(Live::RedisPnlCache.instance).to receive(:clear_tracker)
           allow(tracker).to receive(:mark_exited!)
           allow(tracker).to receive(:with_lock).and_yield
-          allow(tracker).to receive_messages(status: PositionTracker::STATUSES[:active], security_id: '50074',
+          allow(tracker).to receive_messages(status: PositionTracker.statuses[:active], security_id: '50074',
                                              order_no: 'ORD123456', last_pnl_rupees: BigDecimal(0))
 
           service.start

@@ -23,20 +23,7 @@ module Live
       @running = false
       @thread = nil
       @market_closed_checked = false # Track if we've already checked after market closed
-
-      # Watchdog ensures service thread is restarted if it dies (lightweight)
-      @watchdog_thread = Thread.new do
-        Thread.current.name = 'risk-manager-watchdog'
-        loop do
-          unless @thread&.alive?
-            Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
-            # Reset running flag if thread is dead or nil
-            @running = false
-            start
-          end
-          sleep 10
-        end
-      end
+      @watchdog_thread = nil # Initialize as nil, start watchdog only when service starts
     end
 
     # Start monitoring loop (non-blocking)
@@ -45,6 +32,9 @@ module Live
       return if @running && @thread&.alive?
 
       @running = true
+
+      # Start watchdog only when service is explicitly started
+      start_watchdog unless @watchdog_thread&.alive?
 
       @thread = Thread.new do
         Thread.current.name = 'risk-manager'
@@ -69,6 +59,8 @@ module Live
       @running = false
       @thread&.kill
       @thread = nil
+      @watchdog_thread&.kill
+      @watchdog_thread = nil
     end
 
     def running?
@@ -102,6 +94,24 @@ module Live
 
     private
 
+    # Start watchdog thread to ensure service thread is restarted if it dies
+    def start_watchdog
+      @watchdog_thread = Thread.new do
+        Thread.current.name = 'risk-manager-watchdog'
+        loop do
+          break unless @running # Exit if service is stopped
+
+          unless @thread&.alive?
+            Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
+            # Reset running flag if thread is dead or nil
+            @running = false
+            start
+          end
+          sleep 10
+        end
+      end
+    end
+
     # Central monitoring loop: keep PnL and caches fresh.
     # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
     def monitor_loop(last_paper_pnl_update)
@@ -129,21 +139,52 @@ module Live
         @market_closed_checked = false
       end
 
-      # Keep Redis/DB PnL fresh
+      # Keep Redis/DB PnL fresh (only if market open or positions exist)
       update_paper_positions_pnl_if_due(last_paper_pnl_update)
       ensure_all_positions_in_redis
 
-      # Always run enforcement methods - ExitEngine is only for executing exits, not triggering them
-      # Use external ExitEngine if provided, otherwise use self (backwards compatibility)
+      # Skip enforcement methods if market closed and no positions (avoid DB queries)
+      return if skip_enforcement_due_to_market_closed?
+
+      # ============================================================
+      # NEW 5-LAYER EXIT SYSTEM (optimized for intraday options buying)
+      # ============================================================
+      # Priority order: first-match-wins, evaluation stops on exit
+      # This replaces the previous over-engineered system with a clean,
+      # options-aligned exit mechanism.
+      # ============================================================
       exit_engine = @exit_engine || self
 
-      # Early Trend Failure checks (before other enforcement)
-      enforce_early_trend_failure(exit_engine: exit_engine)
-      enforce_global_time_overrides(exit_engine: exit_engine)
-      enforce_hard_limits(exit_engine: exit_engine)
-      enforce_post_profit_zone(exit_engine: exit_engine)
-      enforce_trailing_stops(exit_engine: exit_engine)
+      # LAYER 1: HARD RISK CIRCUIT BREAKER (Account protection - highest priority)
+      # Purpose: Account protection ONLY - no trade logic
+      enforce_hard_rupee_stop_loss(exit_engine: exit_engine)
+
+      # LAYER 2: STRUCTURE INVALIDATION (Primary exit - structure breaks against position)
+      # Purpose: Exit when trade thesis is broken - structure-first, not PnL-first
+      enforce_structure_invalidation(exit_engine: exit_engine)
+
+      # LAYER 3: PREMIUM MOMENTUM FAILURE (Kill dead option trades before theta eats them)
+      # Purpose: Exit when premium stops making progress - aligns with gamma/theta behavior
+      enforce_premium_momentum_failure(exit_engine: exit_engine)
+
+      # LAYER 4: TIME STOP (Early, contextual - prevent holding dead trades)
+      # Purpose: Exit regardless of PnL when time limit exceeded
+      enforce_time_stop(exit_engine: exit_engine)
+
+      # LAYER 5: END-OF-DAY FLATTEN (Operational safety - 3:20 PM exit)
+      # Purpose: Operational safety - always exit before market close
       enforce_time_based_exit(exit_engine: exit_engine)
+
+      # ============================================================
+      # LEGACY RULES DISABLED (kept for reference, not called)
+      # ============================================================
+      # These are replaced by the new 5-layer system:
+      # - enforce_early_trend_failure → replaced by premium_momentum_failure
+      # - enforce_global_time_overrides → replaced by structure_invalidation + premium_momentum_failure
+      # - enforce_hard_limits (rupee TP) → removed (not aligned with options)
+      # - enforce_post_profit_zone → removed (not aligned with options)
+      # - enforce_trailing_stops → replaced by premium_momentum_failure
+      # ============================================================
     end
 
     # Called by external ExitEngine or internally (when used standalone).
@@ -695,6 +736,159 @@ module Live
       end
     end
 
+    # ============================================================
+    # NEW 5-LAYER EXIT SYSTEM ENFORCEMENT METHODS
+    # ============================================================
+
+    # LAYER 1: HARD RISK CIRCUIT BREAKER
+    # Purpose: Account protection ONLY - no trade logic
+    def enforce_hard_rupee_stop_loss(exit_engine:)
+      return unless hard_rupee_sl_enabled?
+
+      exited = false
+      PositionTracker.active.find_each do |tracker|
+        break if exited
+
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        net_pnl_rupees = snapshot[:pnl]
+        next if net_pnl_rupees.nil?
+
+        exit_fee = BrokerFeeCalculator.fee_per_order # Additional fee on exit (₹20)
+
+        # Hard rupee stop loss (highest priority exit)
+        base_max_loss_rupees = BigDecimal((hard_rupee_sl_config[:max_loss_rupees] || 1000).to_s)
+        # Apply time regime multiplier
+        sl_multiplier = Live::TimeRegimeService.instance.sl_multiplier
+        max_loss_rupees = base_max_loss_rupees * BigDecimal(sl_multiplier.to_s)
+        net_threshold = -max_loss_rupees + exit_fee
+
+        if net_pnl_rupees <= net_threshold
+          final_net_pnl = net_pnl_rupees - exit_fee
+          reason = "HARD_RUPEE_SL (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, limit: -₹#{max_loss_rupees})"
+          exit_path = 'hard_rupee_stop_loss'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          exited = true # Exit immediately on first match
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_hard_rupee_stop_loss error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
+    # LAYER 2: STRUCTURE INVALIDATION
+    # Purpose: Exit when trade thesis is broken by market structure failure
+    def enforce_structure_invalidation(exit_engine:)
+      return unless structure_invalidation_enabled?
+
+      exited = false
+      PositionTracker.active.find_each do |tracker|
+        break if exited
+
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        # Build rule context
+        position_data = build_position_data_for_rule_engine(tracker, snapshot)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: risk_config
+        )
+
+        # Evaluate StructureInvalidationRule
+        rule = Risk::Rules::StructureInvalidationRule.new(config: { enabled: true })
+        result = rule.evaluate(context)
+
+        if result.exit?
+          reason = result.reason || 'STRUCTURE_INVALIDATION'
+          exit_path = 'structure_invalidation'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          exited = true # Exit immediately on first match
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_structure_invalidation error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
+    # LAYER 3: PREMIUM MOMENTUM FAILURE
+    # Purpose: Kill dead option trades before theta eats them
+    def enforce_premium_momentum_failure(exit_engine:)
+      return unless premium_momentum_failure_enabled?
+
+      exited = false
+      PositionTracker.active.find_each do |tracker|
+        break if exited
+
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        # Build rule context
+        position_data = build_position_data_for_rule_engine(tracker, snapshot)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: risk_config
+        )
+
+        # Evaluate PremiumMomentumFailureRule
+        rule = Risk::Rules::PremiumMomentumFailureRule.new(config: { enabled: true })
+        result = rule.evaluate(context)
+
+        if result.exit?
+          reason = result.reason || 'PREMIUM_MOMENTUM_FAILURE'
+          exit_path = 'premium_momentum_failure'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          exited = true # Exit immediately on first match
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_premium_momentum_failure error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
+    # LAYER 4: TIME STOP
+    # Purpose: Prevent holding dead trades - exit regardless of PnL when time limit exceeded
+    def enforce_time_stop(exit_engine:)
+      return unless time_stop_enabled?
+
+      exited = false
+      PositionTracker.active.find_each do |tracker|
+        break if exited
+
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        # Build rule context
+        position_data = build_position_data_for_rule_engine(tracker, snapshot)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: risk_config
+        )
+
+        # Evaluate TimeStopRule
+        rule = Risk::Rules::TimeStopRule.new(config: { enabled: true })
+        result = rule.evaluate(context)
+
+        if result.exit?
+          reason = result.reason || 'TIME_STOP'
+          exit_path = 'time_stop'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          exited = true # Exit immediately on first match
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_time_stop error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
     private
 
     # Helper that centralizes exit dispatching logic.
@@ -714,6 +908,11 @@ module Live
     end
 
     # --- Position/market helpers ---
+
+    # Check if enforcement should be skipped (market closed and no positions)
+    def skip_enforcement_due_to_market_closed?
+      TradingSession::Service.market_closed? && Positions::ActivePositionsCache.instance.active_trackers.empty?
+    end
 
     # Fetch live broker positions keyed by security_id (string). Returns {} on paper mode or failure.
     def fetch_positions_indexed
@@ -805,6 +1004,12 @@ module Live
     # Ensure every active PositionTracker has an entry in Redis PnL cache (best-effort)
     # Throttled to avoid excessive queries - only runs every 5 seconds
     def ensure_all_positions_in_redis
+      # Skip if market closed and no active positions (avoid unnecessary DB queries)
+      if TradingSession::Service.market_closed?
+        active_count = Positions::ActivePositionsCache.instance.active_trackers.size
+        return if active_count.zero?
+      end
+
       @last_ensure_all ||= Time.zone.at(0)
       return if Time.current - @last_ensure_all < 5.seconds
 
@@ -1430,6 +1635,29 @@ module Live
       {}
     end
 
+    # Configuration helpers for new 5-layer exit system
+
+    def structure_invalidation_enabled?
+      config = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+      config.fetch(:enabled, true) # Default: enabled
+    rescue StandardError
+      true
+    end
+
+    def premium_momentum_failure_enabled?
+      config = AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}
+      config.fetch(:enabled, true) # Default: enabled
+    rescue StandardError
+      true
+    end
+
+    def time_stop_enabled?
+      config = AlgoConfig.fetch.dig(:risk, :exits, :time_stop) || {}
+      config.fetch(:enabled, true) # Default: enabled
+    rescue StandardError
+      true
+    end
+
     # Record trade result in EdgeFailureDetector
     def record_trade_result_for_edge_detector(tracker, final_pnl, exit_reason)
       return unless tracker && final_pnl && exit_reason
@@ -1512,37 +1740,6 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.error("[RiskManager] Failed to track exit path for #{tracker.order_no}: #{e.message}")
-    end
-
-    # Send Telegram exit notification
-    # @param tracker [PositionTracker] Position tracker
-    # @param reason [String] Exit reason
-    # @param exit_price [BigDecimal, Float, nil] Exit price
-    def notify_telegram_exit(tracker, reason, exit_price)
-      return unless telegram_enabled?
-
-      # Reload tracker to get final PnL
-      tracker.reload if tracker.respond_to?(:reload)
-      pnl = tracker.last_pnl_rupees
-
-      Notifications::TelegramNotifier.instance.notify_exit(
-        tracker,
-        exit_reason: reason,
-        exit_price: exit_price,
-        pnl: pnl
-      )
-    rescue StandardError => e
-      Rails.logger.error("[RiskManager] Telegram notification failed: #{e.class} - #{e.message}")
-    end
-
-    # Check if Telegram notifications are enabled
-    # @return [Boolean]
-    def telegram_enabled?
-      config = AlgoConfig.fetch[:telegram] || {}
-      enabled = config[:enabled] != false && config[:notify_exit] != false
-      enabled && Notifications::TelegramNotifier.instance.enabled?
-    rescue StandardError
-      false
     end
   end
 end

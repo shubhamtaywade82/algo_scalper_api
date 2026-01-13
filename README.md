@@ -103,8 +103,11 @@ PAPER_MODE=false  # Set to 'true' for paper trading, 'false' for live trading
 ### Start the Application
 
 ```bash
-# Development server with live trading
+# Web API server (does not start trading services)
 bin/dev
+
+# Trading services (separate long-running process)
+ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 
 # Or just the Rails server
 bin/rails server

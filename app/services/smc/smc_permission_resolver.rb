@@ -16,19 +16,42 @@ module Smc
       #
       # @param smc_result [Hash, #to_h] existing SMC output (unchanged)
       # @param avrz_result [Hash, #to_h] existing AVRZ output (unchanged)
+      # @param mode [String] Permission mode: 'strict', 'lenient', or 'bypass'
       # @return [Symbol] one of: :blocked, :execution_only, :scale_ready, :full_deploy
-      def resolve(smc_result:, avrz_result:)
+      def resolve(smc_result:, avrz_result:, mode: 'strict')
         smc = NormalizedSmc.new(smc_result)
         avrz = NormalizedAvrz.new(avrz_result)
 
         # ---------------- HARD BLOCK (:blocked) ----------------
         # STRICT:
-        # - SMC structure state is :range OR :neutral
-        # - OR no BOS detected recently
-        # - OR AVRZ state == :dead
-        return :blocked if avrz.state == :dead
-        return :blocked if smc.structure_state.in?(%i[range neutral])
-        return :blocked unless smc.bos_recent?
+        # - SMC structure state is :neutral (always block - no direction)
+        # - AVRZ state == :dead only blocks if we have very few candles (< 5)
+        #   (With our lenient AVRZ detection, :dead should be rare)
+        return :blocked if smc.structure_state == :neutral
+
+        # Range markets: Allow execution_only if displacement is present
+        # In lenient mode: Allow range markets even without displacement
+        if smc.structure_state == :range
+          if smc.displacement?
+            Rails.logger.debug('[SmcPermissionResolver] Range market with displacement - allowing execution_only')
+            return :execution_only
+          elsif mode == 'lenient'
+            Rails.logger.debug('[SmcPermissionResolver] Lenient mode - allowing range market without displacement')
+            return :execution_only
+          end
+          Rails.logger.debug('[SmcPermissionResolver] Range market blocked - no displacement')
+          return :blocked
+        end
+
+        # Trend markets: Require BOS for any permission
+        # In lenient mode: Allow trend markets even without BOS (if displacement present)
+        unless smc.bos_recent?
+          if mode == 'lenient' && smc.displacement?
+            Rails.logger.debug('[SmcPermissionResolver] Lenient mode - allowing trend market without BOS (has displacement)')
+            return :execution_only
+          end
+          return :blocked
+        end
 
         # ---------------- FULL DEPLOY (:full_deploy) ----------------
         # STRICT:
@@ -67,6 +90,13 @@ module Smc
         if avrz.state == :compressed &&
            smc.trend_valid? &&
            (!smc.displacement? || !smc.liquidity_event_resolved?)
+          return :execution_only
+        end
+
+        # Lenient mode fallback: If we have a trend market with BOS but don't meet other criteria,
+        # still allow execution_only
+        if mode == 'lenient' && smc.structure_state == :trend && smc.bos_recent?
+          Rails.logger.debug('[SmcPermissionResolver] Lenient mode - allowing trend market with BOS as execution_only')
           return :execution_only
         end
 
