@@ -35,57 +35,77 @@ module Live
     end
 
     def sync_live_positions
-      # Rails.logger.info('[PositionSync] Starting live position synchronization')
+      Rails.logger.info('[PositionSync] Starting live position synchronization')
 
       # Fetch all active positions from DhanHQ
       dhan_positions = DhanHQ::Models::Position.active
-      # Rails.logger.info("[PositionSync] Found #{dhan_positions.size} active positions in DhanHQ")
+      Rails.logger.info("[PositionSync] Found #{dhan_positions.size} active positions in DhanHQ")
 
-      # Get all tracked positions from database with proper preloading
-      tracked_positions = PositionTracker.active.eager_load(:instrument).to_a
+      # Use cached active positions to avoid redundant query
+      tracked_positions = Positions::ActivePositionsCache.instance.active_trackers
       tracked_security_ids = tracked_positions.map { |p| p.security_id.to_s }
 
-      # Rails.logger.info("[PositionSync] Found #{tracked_positions.size} tracked positions in database")
+      Rails.logger.info("[PositionSync] Found #{tracked_positions.size} tracked positions in database")
 
       # Find positions that exist in DhanHQ but not in our database
       untracked_positions = find_untracked_positions(dhan_positions, tracked_security_ids)
 
       # Create PositionTracker records for untracked positions
+      untracked_count = 0
       untracked_positions.each do |dhan_pos|
-        create_tracker_for_position(dhan_pos)
+        untracked_count += 1 if create_tracker_for_position(dhan_pos)
       end
 
       # Check for live positions that exist in database but not in DhanHQ (should be marked as exited)
-      mark_orphaned_live_positions(tracked_positions, dhan_positions)
+      orphaned_count = mark_orphaned_live_positions(tracked_positions, dhan_positions)
 
       @last_sync = Time.current
-      # Rails.logger.info("[PositionSync] Synchronization completed - created #{untracked_positions.size} trackers, marked #{orphaned_trackers.size} as exited")
-    rescue StandardError
-      # Rails.logger.error("[PositionSync] Failed to sync positions: #{e.class} - #{e.message}")
-      # Rails.logger.error("[PositionSync] Backtrace: #{e.backtrace.first(5).join(', ')}")
+      Rails.logger.info("[PositionSync] Synchronization completed - created #{untracked_count} trackers, marked #{orphaned_count} as exited")
+    rescue StandardError => e
+      Rails.logger.error("[PositionSync] Failed to sync positions: #{e.class} - #{e.message}")
+      Rails.logger.error("[PositionSync] Backtrace: #{e.backtrace.first(5).join(', ')}")
     end
 
     def sync_paper_positions
-      # Rails.logger.info('[PositionSync] Starting paper position synchronization')
+      Rails.logger.info('[PositionSync] Starting paper position synchronization')
 
       # In paper mode, we only work with PositionTracker records
       # No need to fetch from DhanHQ - paper positions don't exist there
-      tracked_positions = PositionTracker.active.eager_load(:instrument).to_a
+      # Use cached active positions to avoid redundant query
+      tracked_positions = Positions::ActivePositionsCache.instance.active_trackers
       paper_positions = tracked_positions.select(&:paper?)
 
-      # Rails.logger.info("[PositionSync] Found #{paper_positions.size} paper positions in database")
+      Rails.logger.info("[PositionSync] Found #{paper_positions.size} paper positions in database")
 
       # Paper positions are managed entirely by our system
       # No sync needed - they're already tracked in PositionTracker
-      # Just ensure they're subscribed to market feed
+      # Just ensure they're subscribed to market feed (only if not already subscribed)
+      hub = Live::MarketFeedHub.instance
+      subscribed_count = 0
+      skipped_count = 0
+
       paper_positions.each do |tracker|
-        tracker.subscribe unless tracker.watchable.nil?
+        next if tracker.watchable.nil?
+
+        segment_key = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
+        next unless segment_key && tracker.security_id
+
+        # Check if already subscribed before calling subscribe
+        if hub.subscribed?(segment: segment_key, security_id: tracker.security_id)
+          skipped_count += 1
+          next
+        end
+
+        result = tracker.subscribe
+        subscribed_count += 1 if result && !result[:already_subscribed]
       rescue StandardError => e
         Rails.logger.warn("[PositionSync] Failed to subscribe paper position #{tracker.order_no}: #{e.message}")
       end
 
+      Rails.logger.debug { "[PositionSync] Paper sync: #{subscribed_count} new subscriptions, #{skipped_count} already subscribed" } if subscribed_count.positive? || skipped_count.positive?
+
       @last_sync = Time.current
-      # Rails.logger.info("[PositionSync] Paper position sync completed - ensured #{paper_positions.size} positions are subscribed")
+      Rails.logger.info("[PositionSync] Paper position sync completed - ensured #{paper_positions.size} positions are subscribed")
     rescue StandardError => e
       Rails.logger.error("[PositionSync] Failed to sync paper positions: #{e.class} - #{e.message}")
     end
@@ -98,7 +118,7 @@ module Live
 
         unless tracked_security_ids.include?(security_id.to_s)
           untracked << dhan_pos
-          # Rails.logger.warn("[PositionSync] Found untracked position: #{security_id} - #{extract_symbol(dhan_pos)}")
+          Rails.logger.warn("[PositionSync] Found untracked position: #{security_id} - #{extract_symbol(dhan_pos)}")
         end
       end
       untracked
@@ -112,9 +132,11 @@ module Live
       end
 
       orphaned_trackers.each do |tracker|
-        # Rails.logger.warn("[PositionSync] Found orphaned tracker: #{tracker.order_no} - marking as exited")
+        Rails.logger.warn("[PositionSync] Found orphaned tracker: #{tracker.order_no} - marking as exited")
         tracker.mark_exited!
       end
+
+      orphaned_trackers.size
     end
 
     def paper_trading_enabled?
@@ -185,8 +207,8 @@ module Live
         )
 
         unless derivative
-          # Rails.logger.error("[PositionSync] Could not find derivative for #{security_id} (#{exchange_segment})")
-          return
+          Rails.logger.error("[PositionSync] Could not find derivative for #{security_id} (#{exchange_segment})")
+          return false
         end
 
         instrument = derivative.instrument
@@ -199,8 +221,8 @@ module Live
         )
 
         unless instrument
-          # Rails.logger.error("[PositionSync] Could not find instrument for #{security_id} (#{exchange_segment})")
-          return
+          Rails.logger.error("[PositionSync] Could not find instrument for #{security_id} (#{exchange_segment})")
+          return false
         end
       end
 
@@ -241,9 +263,11 @@ module Live
       # Subscribe to market feed
       tracker.subscribe
 
-      # Rails.logger.info("[PositionSync] Created tracker #{tracker.id} for untracked position #{security_id}")
-    rescue StandardError
-      # Rails.logger.error("[PositionSync] Failed to create tracker for position #{security_id}: #{e.class} - #{e.message}")
+      Rails.logger.info("[PositionSync] Created tracker #{tracker.id} for untracked position #{security_id}")
+      true
+    rescue StandardError => e
+      Rails.logger.error("[PositionSync] Failed to create tracker for position #{security_id}: #{e.class} - #{e.message}")
+      false
     end
 
     def calculate_paper_pnl_before_exit(tracker)
@@ -256,15 +280,20 @@ module Live
       exit_price = BigDecimal(ltp.to_s)
       entry = BigDecimal(tracker.entry_price.to_s)
       qty = tracker.quantity.to_i
-      pnl = (exit_price - entry) * qty
-      pnl_pct = ((exit_price - entry) / entry * 100).round(2)
+      gross_pnl = (exit_price - entry) * qty
+
+      # Deduct broker fees (₹20 per order, ₹40 per trade - position is being exited)
+      pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: true)
+
+      # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
+      pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
 
       hwm = tracker.high_water_mark_pnl || BigDecimal(0)
       hwm = [hwm, pnl].max
 
       tracker.update!(
         last_pnl_rupees: pnl,
-        last_pnl_pct: pnl_pct,
+        last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
         high_water_mark_pnl: hwm,
         avg_price: exit_price,
         meta: (tracker.meta || {}).merge(

@@ -10,8 +10,8 @@ require "action_controller/railtie"
 # require "action_mailer/railtie"
 # require "action_mailbox/engine"
 # require "action_text/engine"
-# require "action_view/railtie"
-# require "action_cable/engine"
+require "action_view/railtie" if Rails.env.development?
+require "action_cable/engine"
 # require "rails/test_unit/railtie"
 
 # Require the gems listed in Gemfile, including any gems
@@ -41,6 +41,6 @@ module AlgoScalperApi
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
 
-    config.active_job.queue_adapter = :sidekiq
+    config.active_job.queue_adapter = :solid_queue
   end
 end

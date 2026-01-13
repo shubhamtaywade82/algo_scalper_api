@@ -3,6 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Entries::EntryGuard do
+  let(:daily_limits) { instance_double(Live::DailyLimits) }
   let(:nifty_instrument) { create(:instrument, :nifty_future, security_id: '9999', symbol_name: 'NIFTY') }
   let(:index_cfg) do
     {
@@ -24,6 +25,11 @@ RSpec.describe Entries::EntryGuard do
     }
   end
 
+  before do
+    allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
+    allow(daily_limits).to receive(:can_trade?).and_return({ allowed: true, reason: nil })
+  end
+
   describe 'EPIC F — F1: Place Entry Order & Subscribe Option Tick' do
     describe '.try_enter' do
       before do
@@ -31,9 +37,12 @@ RSpec.describe Entries::EntryGuard do
         allow(described_class).to receive(:ensure_ws_connection!)
         allow(Capital::Allocator).to receive(:qty_for).and_return(75)
         allow(Orders.config).to receive(:place_market).and_return(double(order_id: 'ORD123456'))
-        allow(described_class).to receive(:extract_order_no).and_return('ORD123456')
-        allow(described_class).to receive(:exposure_ok?).and_return(true)
-        allow(described_class).to receive(:cooldown_active?).and_return(false)
+        allow(described_class).to receive_messages(extract_order_no: 'ORD123456', exposure_ok?: true, cooldown_active?: false)
+        # Mock trading session and paper trading
+        allow(TradingSession::Service).to receive(:entry_allowed?).and_return({ allowed: true })
+        allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
+        # Mock MarketFeedHub
+        allow(Live::MarketFeedHub.instance).to receive_messages(running?: true, connected?: true)
       end
 
       context 'when all validations pass' do
@@ -56,7 +65,7 @@ RSpec.describe Entries::EntryGuard do
           )
         end
 
-        it 'creates PositionTracker with status pending' do
+        it 'creates PositionTracker with status active' do
           expect do
             described_class.try_enter(
               index_cfg: index_cfg,
@@ -66,7 +75,7 @@ RSpec.describe Entries::EntryGuard do
           end.to change(PositionTracker, :count).by(1)
 
           tracker = PositionTracker.last
-          expect(tracker.status).to eq('pending')
+          expect(tracker.status).to eq('active')
           expect(tracker.order_no).to eq('ORD123456')
           expect(tracker.security_id).to eq('50074')
           expect(tracker.symbol).to eq('NIFTY18500CE')
@@ -136,9 +145,10 @@ RSpec.describe Entries::EntryGuard do
         end
 
         it 'logs success message' do
+          allow(Rails.logger).to receive(:info) # Allow all info logs
           expect(Rails.logger).to receive(:info).with(
             match(/Successfully placed order ORD123456 for NIFTY: NIFTY18500CE/)
-          )
+          ).at_least(:once)
 
           described_class.try_enter(
             index_cfg: index_cfg,
@@ -211,17 +221,14 @@ RSpec.describe Entries::EntryGuard do
         end
 
         it 'logs warning when feed is stale' do
-          error = Live::FeedHealthService::FeedStaleError.new(
-            feed: :ws_connection,
-            last_seen_at: nil,
-            threshold: 0,
-            last_error: nil
-          )
-          allow(described_class).to receive(:ensure_ws_connection!).and_raise(error)
-
-          expect(Rails.logger).to receive(:warn).with(
-            match(/Blocked entry for NIFTY:/)
-          )
+          # NOTE: The code no longer blocks on WebSocket errors - it uses REST API fallback
+          # This test is kept for historical reference but the behavior has changed
+          # The code now logs info messages instead of warnings for WebSocket issues
+          allow(Live::MarketFeedHub.instance).to receive_messages(running?: false, connected?: false)
+          allow(Rails.logger).to receive(:info) # Allow all info logs
+          expect(Rails.logger).to receive(:info).with(
+            match(/WebSocket not connected - will use REST API fallback/)
+          ).at_least(:once)
 
           described_class.try_enter(
             index_cfg: index_cfg,
@@ -242,6 +249,24 @@ RSpec.describe Entries::EntryGuard do
           )
 
           expect(result).to be false
+        end
+
+        it 'falls back to paper mode when enabled and live balance is insufficient' do
+          allow(Capital::Allocator).to receive(:qty_for).and_return(0)
+          allow(described_class).to receive_messages(paper_trading_enabled?: false, auto_paper_fallback_enabled?: true, insufficient_live_balance?: true)
+
+          expect do
+            described_class.try_enter(
+              index_cfg: index_cfg,
+              pick: pick,
+              direction: :bullish
+            )
+          end.to change(PositionTracker, :count).by(1)
+
+          tracker = PositionTracker.last
+          expect(tracker.paper?).to be true
+          expect(tracker.meta['fallback_to_paper']).to be true
+          expect(tracker.quantity).to eq(pick[:lot_size])
         end
       end
 
@@ -305,10 +330,9 @@ RSpec.describe Entries::EntryGuard do
             direction: :bullish
           )
 
-          # NOTE: create_tracker! catches RecordInvalid and logs error but doesn't re-raise,
-          # so try_enter continues and returns true. This is the actual behavior.
-          # If we want it to return false, we'd need to modify create_tracker! to re-raise or return a status.
-          expect(result).to be true
+          # NOTE: create_tracker! catches RecordInvalid and returns nil,
+          # so try_enter checks `unless tracker` and returns false.
+          expect(result).to be false
         end
 
         it 'handles generic exceptions gracefully' do

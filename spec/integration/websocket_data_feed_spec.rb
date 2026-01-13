@@ -103,7 +103,7 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
         expect(cached_tick[:ltp]).to eq(101.5)
         expect(cached_tick[:segment]).to eq('NSE_FNO')
-        expect(cached_tick[:security_id]).to eq('12345')
+        expect(cached_tick[:security_id]).to eq(12_345.0)
       end
 
       it 'retrieves LTP from cache' do
@@ -147,6 +147,8 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         test_mock_service.start!
         test_mock_service.inject_tick(sample_tick)
         TickCache.instance.clear
+        # Also clear Redis since fetch falls back to Redis
+        Live::RedisTickCache.instance.clear
 
         expect(tick_cache.fetch('NSE_FNO', '12345')).to be_nil
       end
@@ -171,7 +173,7 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
         expect(cached_tick[:ltp]).to eq(101.5)
         expect(cached_tick[:segment]).to eq('NSE_FNO')
-        expect(cached_tick[:security_id]).to eq('12345')
+        expect(cached_tick[:security_id]).to eq(12_345.0)
       end
 
       it 'retrieves LTP from cache' do
@@ -207,6 +209,8 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
       it 'clears all cached ticks' do
         tick_cache.put(sample_tick)
         TickCache.instance.clear
+        # Also clear Redis since fetch falls back to Redis
+        Live::RedisTickCache.instance.clear
 
         expect(tick_cache.fetch('NSE_FNO', '12345')).to be_nil
       end
@@ -225,7 +229,7 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         tick_cache.put(ticker_tick)
 
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
-        expect(cached_tick[:kind]).to eq(:ticker)
+        expect(cached_tick[:kind]).to eq('ticker')
         expect(cached_tick[:ltp]).to eq(101.5)
       end
 
@@ -241,7 +245,7 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         tick_cache.put(quote_tick)
 
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
-        expect(cached_tick[:kind]).to eq(:quote)
+        expect(cached_tick[:kind]).to eq('quote')
         expect(cached_tick[:ltp]).to eq(101.5)
       end
     end
@@ -267,6 +271,14 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         allow(mock_order_ws_client).to receive(:start)
         allow(mock_order_ws_client).to receive(:stop)
         allow(mock_order_ws_client).to receive(:disconnect!)
+
+        # Mock enabled? to return true (disable paper trading and ensure credentials are available)
+        allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return('test_client_id')
+        allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('test_client_id')
+        allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return('test_access_token')
+        allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return('test_access_token')
 
         order_update_hub.start!
         expect(order_update_hub.running?).to be true
@@ -339,7 +351,7 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         # Verify the tick is cached
         cached_tick = tick_cache.fetch('NSE_FNO', '12345')
         expect(cached_tick).to be_present
-        expect(cached_tick[:security_id]).to eq('12345')
+        expect(cached_tick[:security_id]).to eq(12_345.0)
       end
     end
   end

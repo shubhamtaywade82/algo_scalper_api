@@ -1,0 +1,185 @@
+# Organized Configuration - KISS Principle with All Features
+# Keep bidirectional trailing and multiple strategies, but organized clearly
+
+trading:
+  mode: "paper"  # "paper" or "live"
+  preset: "balanced"  # "conservative", "balanced", "aggressive" (optional preset)
+
+# Entry Configuration (Multiple Strategies Supported)
+entry:
+  # Strategy Selection Mode
+  strategy_mode: "supertrend_adx"  # "recommended" (use StrategyRecommender) or "supertrend_adx" (fixed)
+  
+  # Strategy Configurations
+  strategies:
+    # Supertrend+ADX Strategy
+    supertrend_adx:
+      timeframe: "1m"              # Primary timeframe
+      confirmation_timeframe: "5m"  # Confirmation timeframe (optional)
+      confirmation_enabled: false   # Enable/disable confirmation
+      adx_min: 18                   # Minimum ADX strength
+      adx_filter_enabled: false    # Enable/disable ADX filter
+      supertrend:
+        period: 10
+        base_multiplier: 2.0
+        training_period: 50
+        num_clusters: 3
+        performance_alpha: 0.1
+        multiplier_candidates: [1.5, 2.0, 2.5, 3.0, 3.5]
+    
+    # Strategy Recommendations (uses StrategyRecommender)
+    recommended:
+      enabled: false  # Enable to use backtest-based strategy selection
+  
+  # Validation (Simple Preset)
+  validation:
+    mode: "aggressive"  # "conservative", "balanced", "aggressive"
+    # Preset validation configs (see validation_modes below)
+
+# Exit Configuration (Bidirectional Trailing Supported)
+exit:
+  # Stop Loss (Bidirectional: Adaptive Reverse SL)
+  stop_loss:
+    type: "adaptive"     # "adaptive" (bidirectional) or "static"
+    static_value: 3.0    # Static SL % (if type: static)
+    # Adaptive config (below entry - reverse SL)
+    adaptive:
+      enabled: true
+      max_loss_pct: 20.0
+      min_loss_pct: 5.0
+      loss_span_pct: 30.0
+      time_tighten_per_min: 2.0
+      atr_penalty_thresholds:
+        - { threshold: 0.75, penalty_pct: 3.0 }
+        - { threshold: 0.60, penalty_pct: 5.0 }
+  
+  # Take Profit
+  take_profit: 5.0  # TP %
+  
+  # Trailing Stop (Bidirectional: Upward Adaptive + Downward Reverse)
+  trailing:
+    enabled: true
+    type: "adaptive"  # "adaptive" (bidirectional) or "fixed"
+    
+    # Upward Trailing (Profit Protection)
+    upward:
+      enabled: true
+      activation_profit: 3.0  # Start trailing at this profit %
+      type: "adaptive"         # Uses drawdown schedule
+      # Adaptive drawdown schedule config
+      drawdown:
+        profit_min: 3.0
+        profit_max: 30.0
+        dd_start_pct: 15.0
+        dd_end_pct: 1.0
+        exponential_k: 3.0
+        index_floors:
+          NIFTY: 1.0
+          BANKNIFTY: 1.2
+          SENSEX: 1.5
+      # Fixed fallback
+      fixed_drop_threshold: 3.0  # Fixed drop % (if adaptive unavailable)
+    
+    # Downward Trailing (Loss Limitation - uses reverse SL from stop_loss.adaptive)
+    downward:
+      enabled: true
+      type: "adaptive"  # Uses reverse dynamic SL (same as stop_loss.adaptive)
+    
+    # Breakeven Locking
+    breakeven:
+      enabled: true
+      activation_profit: 5.0  # Lock breakeven at this profit %
+  
+  # Early Trend Failure Exit
+  early_exit:
+    enabled: true
+    profit_threshold: 7.0  # Only check when profit < this %
+    trend_score_drop_pct: 30.0
+    adx_collapse_threshold: 10
+    atr_ratio_threshold: 0.55
+  
+  # Time-Based Exit
+  time_based:
+    enabled: false
+    exit_time: "15:20"  # Exit all positions at this time
+
+# Validation Modes (Presets)
+validation_modes:
+  conservative:
+    adx_min_strength: 25
+    adx_confirmation_min_strength: 30
+    iv_rank_max: 0.6
+    iv_rank_min: 0.15
+    theta_risk_cutoff_hour: 14
+    theta_risk_cutoff_minute: 0
+    require_trend_confirmation: true
+    require_iv_rank_check: true
+    require_theta_risk_check: true
+  
+  balanced:
+    adx_min_strength: 18
+    adx_confirmation_min_strength: 20
+    iv_rank_max: 0.8
+    iv_rank_min: 0.1
+    theta_risk_cutoff_hour: 14
+    theta_risk_cutoff_minute: 30
+    require_trend_confirmation: true
+    require_iv_rank_check: true
+    require_theta_risk_check: true
+  
+  aggressive:
+    adx_min_strength: 15
+    adx_confirmation_min_strength: 18
+    iv_rank_max: 0.9
+    iv_rank_min: 0.05
+    theta_risk_cutoff_hour: 15
+    theta_risk_cutoff_minute: 0
+    require_trend_confirmation: false
+    require_iv_rank_check: true
+    require_theta_risk_check: false
+
+# Indices (unchanged)
+indices:
+  - {
+      key: NIFTY,
+      segment: IDX_I,
+      sid: "13",
+      capital_alloc_pct: 0.30,
+      max_same_side: 1,
+      cooldown_sec: 180,
+    }
+  - {
+      key: BANKNIFTY,
+      segment: IDX_I,
+      sid: "25",
+      capital_alloc_pct: 0.30,
+      max_same_side: 1,
+      cooldown_sec: 180,
+    }
+  - {
+      key: SENSEX,
+      segment: IDX_I,
+      sid: "51",
+      capital_alloc_pct: 0.30,
+      max_same_side: 1,
+      cooldown_sec: 180,
+    }
+
+# Paper Trading (unchanged)
+paper_trading:
+  enabled: true
+  balance: 100000
+
+# Option Chain (unchanged)
+option_chain:
+  min_iv: 10
+  max_iv: 60
+  min_oi: 50000
+  max_spread_pct: 3.0
+
+# Data Freshness (unchanged)
+data_freshness:
+  disable_ohlc_caching: false
+  disable_option_chain_caching: false
+  ohlc_cache_duration_minutes: 5
+  option_chain_cache_duration_minutes: 2

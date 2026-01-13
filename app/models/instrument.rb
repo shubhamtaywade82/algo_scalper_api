@@ -61,15 +61,16 @@ class Instrument < ApplicationRecord
   include InstrumentHelpers
 
   has_many :derivatives, dependent: :destroy
-  has_many :position_trackers, as: :watchable, dependent: :destroy
+  has_many :position_trackers, dependent: :restrict_with_error
   accepts_nested_attributes_for :derivatives, allow_destroy: true
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
-  has_one  :watchlist_item,  -> { where(active: true) }, as: :watchable, class_name: 'WatchlistItem'
-  has_many :position_trackers, dependent: :restrict_with_error
+  has_one  :watchlist_item,  lambda {
+    where(active: true)
+  }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
 
   scope :enabled, -> { where(enabled: true) }
 
-  validates :security_id, presence: true, uniqueness: true
+  validates :security_id, presence: true, uniqueness: true # rubocop:disable Rails/UniqueValidationWithoutIndex
   validates :symbol_name, presence: true
   validates :exchange_segment, presence: true, unless: -> { exchange.present? && segment.present? }
 
@@ -145,7 +146,7 @@ class Instrument < ApplicationRecord
         product_type: product_type
       }
     )
-    return nil unless order&.respond_to?(:order_id) && order.order_id.present?
+    return nil unless order.respond_to?(:order_id) && order.order_id.present?
 
     after_order_track!(
       instrument: self,
@@ -237,6 +238,10 @@ class Instrument < ApplicationRecord
 
     { last_price: data['last_price'], oc: filtered_data }
   rescue StandardError => e
+    DhanhqErrorHandler.handle_dhanhq_error(
+      e,
+      context: "fetch_option_chain(Instrument #{security_id}, expiry: #{expiry})"
+    )
     Rails.logger.error("Failed to fetch Option Chain for Instrument #{security_id}: #{e.message}")
     nil
   end
@@ -278,5 +283,19 @@ class Instrument < ApplicationRecord
 
   def option_chain(expiry: nil)
     fetch_option_chain(expiry)
+  end
+
+  # Get lot size from the nearest future expiry derivative
+  # Returns the lot_size of the first derivative with expiry_date >= today
+  # @return [Integer, nil] Lot size from nearest future expiry derivative, or nil if not found
+  def lot_size_from_derivatives
+    today = Time.zone.today
+    nearest_derivative = derivatives
+                         .where(expiry_date: today..)
+                         .where.not(lot_size: nil)
+                         .order(expiry_date: :asc)
+                         .first
+
+    nearest_derivative&.lot_size&.to_i
   end
 end

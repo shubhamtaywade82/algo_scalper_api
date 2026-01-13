@@ -67,8 +67,7 @@ RSpec.describe Trading::AdminActions do
       banknifty_cfg = { key: 'BANKNIFTY', segment: 'IDX_I' }
       allow(AlgoConfig).to receive(:fetch).and_return({ indices: [banknifty_cfg] })
       allow(Derivative).to receive(:find).with(456).and_return(alt_derivative)
-      allow(alt_derivative).to receive(:underlying_symbol).and_return(nil)
-      allow(alt_derivative).to receive(:symbol_name).and_return('BANKNIFTY')
+      allow(alt_derivative).to receive_messages(underlying_symbol: nil, symbol_name: 'BANKNIFTY')
 
       expect(alt_derivative).to receive(:buy_option!).with(
         qty: nil,
@@ -150,4 +149,3 @@ RSpec.describe Trading::AdminActions do
     end
   end
 end
-

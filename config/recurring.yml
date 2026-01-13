@@ -9,7 +9,54 @@
 #     priority: 2
 #     schedule: at 5am every day
 
+development:
+  smc_scanner:
+    class: SmcScannerJob
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 10
+    description: "SMC + AVRZ scanner for all configured indices - runs every 15 minutes (aligns with 15m MTF candles)"
+
+  ai_technical_analysis_nifty:
+    class: AiTechnicalAnalysisJob
+    args: ["NIFTY"]
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 5
+    description: "AI technical analysis for NIFTY options buying intraday - runs every 15 minutes (aligns with SMC scanner)"
+
+  ai_technical_analysis_sensex:
+    class: AiTechnicalAnalysisJob
+    args: ["SENSEX"]
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 5
+    description: "AI technical analysis for SENSEX options buying intraday - runs every 15 minutes (aligns with SMC scanner)"
+
 production:
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
+
+  smc_scanner:
+    class: SmcScannerJob
+    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    queue_name: background
+    priority: 10
+    description: "SMC + AVRZ scanner - market hours only, runs every 15 minutes (aligns with 15m MTF candles)"
+
+  ai_technical_analysis_nifty:
+    class: AiTechnicalAnalysisJob
+    args: ["NIFTY"]
+    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    queue_name: background
+    priority: 5
+    description: "AI technical analysis for NIFTY - market hours only, runs every 15 minutes (aligns with SMC scanner)"
+
+  ai_technical_analysis_sensex:
+    class: AiTechnicalAnalysisJob
+    args: ["SENSEX"]
+    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    queue_name: background
+    priority: 5
+    description: "AI technical analysis for SENSEX - market hours only, runs every 15 minutes (aligns with SMC scanner)"

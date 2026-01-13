@@ -582,7 +582,7 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
     end
 
     context 'when integrating with risk management' do
-      let(:risk_manager) { Live::RiskManagerService.instance }
+      let(:risk_manager) { Live::RiskManagerService.new }
 
       it 'considers signals in risk calculations' do
         signal_data = {

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'bigdecimal'
+require_relative '../concerns/broker_fee_calculator'
 
 module Capital
   class Allocator
@@ -19,6 +20,16 @@ module Capital
         capital_available = available_cash
 
         return 0 unless valid_for_allocation?(index_cfg, entry_price, derivative_lot_size, capital_available)
+
+        # Check if rupee-based position sizing is enabled
+        if rupee_based_sizing_enabled?
+          return calculate_rupee_based_quantity(
+            entry_price: entry_price,
+            derivative_lot_size: derivative_lot_size,
+            capital_available: capital_available,
+            multiplier: multiplier
+          )
+        end
 
         calculate_and_apply_quantity(
           index_cfg: index_cfg,
@@ -95,6 +106,7 @@ module Capital
       end
 
       def calculate_and_apply_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+        @index_key = index_cfg[:key] || 'UNKNOWN'
         capital_available_f = capital_available.to_f
         entry_price_f = entry_price.to_f
         lot_size = derivative_lot_size.to_i
@@ -197,15 +209,18 @@ module Capital
       end
 
       def allocation_percentage_with_override(band)
-        ENV['ALLOC_PCT']&.to_f || band[:alloc_pct]
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:alloc_pct] || ENV['ALLOC_PCT']&.to_f
       end
 
       def risk_per_trade_with_override(band)
-        ENV['RISK_PER_TRADE_PCT']&.to_f || band[:risk_per_trade_pct]
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:risk_per_trade_pct] || ENV['RISK_PER_TRADE_PCT']&.to_f
       end
 
       def daily_max_loss_with_override(band)
-        ENV['DAILY_MAX_LOSS_PCT']&.to_f || band[:daily_max_loss_pct]
+        # Prefer algo.yml config, ENV as fallback for testing
+        band[:daily_max_loss_pct] || ENV['DAILY_MAX_LOSS_PCT']&.to_f
       end
 
       def fetch_live_trading_balance
@@ -238,54 +253,99 @@ module Capital
         Rails.logger.error("[Capital] Backtrace: #{error.backtrace.first(3).join(', ')}")
       end
 
-      def log_allocation_breakdown(capital_available:, policy:, effective_alloc_pct:, effective_risk_pct:, multiplier:,
-                                   entry_price_f:, lot_size:, final_quantity:)
+      def log_allocation_breakdown(capital_available:, entry_price_f:, lot_size:, final_quantity:, policy: nil,
+                                   effective_alloc_pct: nil, effective_risk_pct: nil, multiplier: nil)
         capital_available_f = capital_available.to_f
-        allocation = capital_available_f * effective_alloc_pct
-        risk_capital = capital_available_f * effective_risk_pct
-        scaled_allocation = [allocation * multiplier, capital_available_f].min
-        risk_capital_scaled = [risk_capital * multiplier, capital_available_f].min
         cost_per_lot = entry_price_f * lot_size
-        max_by_allocation = (scaled_allocation / cost_per_lot).floor * lot_size
-        max_by_risk = (risk_capital_scaled / (entry_price_f * 0.30)).floor * lot_size
+        index_key = @index_key || 'UNKNOWN'
 
-        log_capital_info(capital_available, policy)
-        log_allocation_info(effective_alloc_pct, allocation, effective_risk_pct, risk_capital)
-        log_scaling_info(multiplier, scaled_allocation, risk_capital_scaled)
-        log_pricing_info(entry_price_f, lot_size)
-        log_quantity_calculations(max_by_allocation, max_by_risk, final_quantity, entry_price_f)
+        reason = if final_quantity.zero?
+                   'insufficient_capital'
+                 elsif final_quantity < lot_size
+                   'below_minimum_lot'
+                 else
+                   'allocated'
+                 end
+
+        Rails.logger.info(
+          "[Allocator] index:#{index_key} lot_cost:₹#{cost_per_lot.round(2)} " \
+          "capital:₹#{capital_available_f.round(2)} qty:#{final_quantity} reason:#{reason}"
+        )
       end
 
-      def log_capital_info(capital_available, policy)
-        Rails.logger.info('[Capital] Calculation breakdown:')
-        Rails.logger.info("  - Available capital: ₹#{capital_available}")
-        band_label = policy[:upto] == Float::INFINITY ? 'Large' : "Up to ₹#{policy[:upto]}"
-        Rails.logger.info("  - Capital band: #{band_label}")
+      # Rupee-based position sizing: derive quantity from fixed ₹ risk
+      # Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
+      def calculate_rupee_based_quantity(entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+        sizing_cfg = position_sizing_config
+        return 0 unless sizing_cfg && sizing_cfg[:enabled]
+
+        risk_rupees = BigDecimal((sizing_cfg[:risk_rupees] || 1000).to_s)
+        index_key = @index_key || 'UNKNOWN'
+
+        # Deduct broker fees from risk capital (₹40 per trade: entry + exit)
+        # This ensures net risk after fees matches the target risk
+        broker_fees = BrokerFeeCalculator.fee_per_trade
+        net_risk_rupees = risk_rupees - broker_fees
+
+        # Get index-specific stop distance or fallback to global
+        index_stop_distances = sizing_cfg[:index_stop_distances] || {}
+        stop_distance_rupees = if index_stop_distances[index_key.to_sym] || index_stop_distances[index_key.to_s]
+                                 BigDecimal((index_stop_distances[index_key.to_sym] || index_stop_distances[index_key.to_s]).to_s)
+                               else
+                                 BigDecimal((sizing_cfg[:stop_distance_rupees] || 8).to_s)
+                               end
+        lot_size = derivative_lot_size.to_i
+
+        return 0 if stop_distance_rupees.zero? || lot_size.zero?
+        return 0 if net_risk_rupees <= 0 # Not enough risk capital after fees
+
+        # Calculate risk per lot
+        risk_per_lot = stop_distance_rupees * lot_size
+
+        # Calculate max lots based on net risk (after fees)
+        max_lots_by_risk = (net_risk_rupees / risk_per_lot).floor
+
+        # Apply multiplier
+        max_lots = max_lots_by_risk * multiplier
+
+        # Calculate quantity (must be lot-aligned)
+        quantity = max_lots * lot_size
+
+        # Ensure minimum 1 lot
+        quantity = [quantity, lot_size].max
+
+        # Check capital constraint
+        cost_per_lot = BigDecimal(entry_price.to_s) * lot_size
+        max_affordable_lots = (capital_available / cost_per_lot).floor
+        max_affordable_quantity = max_affordable_lots * lot_size
+
+        # Take minimum of risk-based and capital-based quantity
+        final_quantity = [quantity, max_affordable_quantity].min
+
+        # Ensure at least 1 lot
+        final_quantity = [final_quantity, lot_size].max
+
+        # Log breakdown
+        Rails.logger.info(
+          "[Allocator] RUPEES_BASED index:#{index_key} risk:₹#{risk_rupees} " \
+          "fees:₹#{broker_fees} net_risk:₹#{net_risk_rupees} " \
+          "stop_dist:₹#{stop_distance_rupees} risk_per_lot:₹#{risk_per_lot} " \
+          "max_lots:#{max_lots_by_risk} qty:#{final_quantity} " \
+          "buy_value:₹#{(entry_price.to_f * final_quantity).round(2)}"
+        )
+
+        final_quantity
       end
 
-      def log_allocation_info(effective_alloc_pct, allocation, effective_risk_pct, risk_capital)
-        Rails.logger.info("  - Effective allocation %: #{effective_alloc_pct * 100}%")
-        Rails.logger.info("  - Allocation amount (per unit): ₹#{allocation}")
-        Rails.logger.info("  - Effective risk %: #{effective_risk_pct * 100}%")
-        Rails.logger.info("  - Risk capital amount (per unit): ₹#{risk_capital}")
+      def rupee_based_sizing_enabled?
+        sizing_cfg = position_sizing_config
+        sizing_cfg && sizing_cfg[:enabled] == true
       end
 
-      def log_scaling_info(multiplier, scaled_allocation, risk_capital_scaled)
-        Rails.logger.info("  - Scale multiplier: x#{multiplier}")
-        Rails.logger.info("  - Scaled allocation: ₹#{scaled_allocation}")
-        Rails.logger.info("  - Scaled risk capital: ₹#{risk_capital_scaled}")
-      end
-
-      def log_pricing_info(entry_price_f, lot_size)
-        Rails.logger.info("  - Entry price: ₹#{entry_price_f}")
-        Rails.logger.info("  - Lot size: #{lot_size}")
-      end
-
-      def log_quantity_calculations(max_by_allocation, max_by_risk, final_quantity, entry_price_f)
-        Rails.logger.info("  - Max by allocation: #{max_by_allocation}")
-        Rails.logger.info("  - Max by risk: #{max_by_risk}")
-        Rails.logger.info("  - Final quantity: #{final_quantity}")
-        Rails.logger.info("  - Total buy value: ₹#{entry_price_f * final_quantity}")
+      def position_sizing_config
+        AlgoConfig.fetch[:position_sizing]
+      rescue StandardError
+        nil
       end
     end
   end

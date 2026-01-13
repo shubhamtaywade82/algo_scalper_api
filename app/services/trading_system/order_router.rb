@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module TradingSystem
   class OrderRouter < BaseService
     RETRY_COUNT = 3
@@ -7,17 +9,16 @@ module TradingSystem
       @gateway = gateway
     end
 
-     # Required by BaseService (Supervisor calls start/stop)
-     def start
-      Rails.logger.info("[OrderRouter] ready (no-op)")
+    # Required by BaseService (Supervisor calls start/stop)
+    def start
+      Rails.logger.info('[OrderRouter] ready (no-op)')
       true
     end
 
     def stop
-      Rails.logger.info("[OrderRouter] stopped (no-op)")
+      Rails.logger.info('[OrderRouter] stopped (no-op)')
       true
     end
-
 
     def exit_market(tracker)
       with_retries do
@@ -35,7 +36,7 @@ module TradingSystem
       begin
         attempts += 1
         yield
-      rescue StandardError => e
+      rescue StandardError
         raise if attempts >= RETRY_COUNT
 
         sleep RETRY_BASE_SLEEP * attempts

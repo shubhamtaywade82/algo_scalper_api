@@ -11,8 +11,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
   let(:redis_cache) { Live::RedisPnlCache.instance }
 
   before do
-    allow(ws_hub).to receive(:running?).and_return(true)
-    allow(ws_hub).to receive(:subscribe).and_return(true)
+    allow(ws_hub).to receive_messages(running?: true, subscribe: true)
     allow(redis_cache).to receive(:fetch_tick).and_return(nil)
     allow(redis_cache).to receive(:clear_tick)
   end
@@ -37,8 +36,16 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
 
     it 'falls back to Redis tick cache when meta ltp missing' do
-      allow(redis_cache).to receive(:fetch_tick).with(segment: 'NSE_FNO', security_id: '12345')
-                                                .and_return({ ltp: 199.55 })
+      # Mock hub to not be running so it doesn't use Live::TickCache.get
+      allow(Live::MarketFeedHub.instance).to receive_messages(running?: false, connected?: false)
+
+      # Mock TickCache.get to return nil (so it falls back to API)
+      allow(Live::TickCache).to receive(:get).and_return(nil)
+
+      # Mock the API call to return the expected value
+      allow(instrument).to receive(:fetch_ltp_from_api_for_segment)
+        .with(segment: 'NSE_FNO', security_id: '12345')
+        .and_return(199.55)
 
       result = instrument.resolve_ltp(segment: 'NSE_FNO', security_id: '12345')
       expect(result).to eq(BigDecimal('199.55'))
@@ -52,7 +59,16 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
 
     it 'handles Redis tick with string ltp' do
-      allow(redis_cache).to receive(:fetch_tick).and_return({ ltp: '200.75' })
+      # Mock hub to not be running so it doesn't use Live::TickCache.get
+      allow(Live::MarketFeedHub.instance).to receive_messages(running?: false, connected?: false)
+
+      # Mock TickCache.get to return nil (so it falls back to API)
+      allow(Live::TickCache).to receive(:get).and_return(nil)
+
+      # Mock the API call to return the expected value
+      allow(instrument).to receive(:fetch_ltp_from_api_for_segment)
+        .with(segment: 'NSE_FNO', security_id: '12345')
+        .and_return('200.75')
 
       result = instrument.resolve_ltp(segment: 'NSE_FNO', security_id: '12345')
       expect(result).to eq(BigDecimal('200.75'))
@@ -119,10 +135,9 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
 
     it 'converts security_id to string' do
-      allow(ws_hub).to receive(:running?).and_return(true)
-      allow(ws_hub).to receive(:subscribe).and_return(true)
+      allow(ws_hub).to receive_messages(running?: true, subscribe: true)
 
-      instrument.ensure_ws_subscription!(segment: 'NSE_FNO', security_id: 12345)
+      instrument.ensure_ws_subscription!(segment: 'NSE_FNO', security_id: 12_345)
       expect(ws_hub).to have_received(:subscribe).with(seg: 'NSE_FNO', sid: '12345')
     end
   end
@@ -131,8 +146,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
     let(:order_response) { double('Order', order_id: 'ORD123456') }
 
     before do
-      allow(ws_hub).to receive(:running?).and_return(true)
-      allow(ws_hub).to receive(:subscribe).and_return(true)
+      allow(ws_hub).to receive_messages(running?: true, subscribe: true)
       allow(redis_cache).to receive(:clear_tick)
     end
 
@@ -151,7 +165,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
       end.to change(PositionTracker, :count).by(1)
 
       tracker = PositionTracker.last
-      expect(tracker.status).to eq(PositionTracker::STATUSES[:active])
+      expect(tracker.status).to eq('active')
       expect(tracker.side).to eq('LONG')
       expect(tracker.entry_price).to eq(BigDecimal('100.5'))
       expect(tracker.quantity).to eq(50)
@@ -213,7 +227,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
         instrument: instrument,
         order_no: 'ORD123456',
         segment: 'NSE_FNO',
-        security_id: 12345,
+        security_id: 12_345,
         side: 'LONG',
         qty: 50,
         entry_price: BigDecimal('100.5'),
@@ -225,4 +239,3 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
   end
 end
-

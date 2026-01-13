@@ -110,7 +110,7 @@ module InstrumentHelpers
   # @param segment [String] Exchange segment (e.g., "IDX_I", "NSE_FNO")
   # @param security_id [String, Integer] Security ID
   # @return [Numeric, nil]
-  def fetch_ltp_from_api_for_segment(segment:, security_id:)
+  def fetch_ltp_from_api_for_segment(segment:, security_id:, subscribe: false)
     hub = Live::MarketFeedHub.instance
 
     # Strategy 1: Check WebSocket TickCache first (fastest, no API rate limits)
@@ -121,20 +121,22 @@ module InstrumentHelpers
         return cached_ltp.to_f
       end
 
-      # If not in cache, try subscribing and waiting briefly for a tick
-      begin
-        hub.subscribe(segment: segment, security_id: security_id)
-        # Wait up to 200ms for tick to arrive
-        4.times do
-          sleep(0.05) # 50ms intervals
-          cached_ltp = Live::TickCache.ltp(segment, security_id)
-          if cached_ltp.present? && cached_ltp.to_f.positive?
-            Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_ltp}" }
-            return cached_ltp.to_f
+      if subscribe
+        # If not in cache, try subscribing and waiting briefly for a tick
+        begin
+          hub.subscribe(segment: segment, security_id: security_id)
+          # Wait up to 200ms for tick to arrive
+          4.times do
+            sleep(0.05) # 50ms intervals
+            cached_ltp = Live::TickCache.ltp(segment, security_id)
+            if cached_ltp.present? && cached_ltp.to_f.positive?
+              Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_ltp}" }
+              return cached_ltp.to_f
+            end
           end
+        rescue StandardError => e
+          Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API" }
         end
-      rescue StandardError => e
-        Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API" }
       end
     end
 
@@ -171,7 +173,7 @@ module InstrumentHelpers
   # @param segment [String]
   # @param security_id [String]
   # @return [true]
-  def ensure_ws_subscription!(segment:, security_id:)
+  def ensure_ws_subscription!(segment:, security_id:) # rubocop:disable Naming/PredicateMethod
     hub = Live::WsHub.instance
     unless hub.running?
       Rails.logger.error('[InstrumentHelpers] WebSocket hub is not running. Aborting subscription.')
@@ -193,7 +195,7 @@ module InstrumentHelpers
   # @param symbol [String]
   # @param index_key [String, nil]
   # @return [PositionTracker]
-  def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:,
+  def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:, # rubocop:disable Metrics/ParameterLists
                          index_key: nil)
     # Determine watchable: if self is a Derivative, use self; otherwise use instrument
     watchable = is_a?(Derivative) ? self : instrument
@@ -262,6 +264,10 @@ module InstrumentHelpers
     error_msg = e.message.to_s
     is_rate_limit = error_msg.include?('429') || error_msg.include?('rate limit') || error_msg.include?('Rate limit')
     unless is_rate_limit
+      DhanhqErrorHandler.handle_dhanhq_error(
+        e,
+        context: "fetch_ltp_from_api(#{self.class.name} #{security_id})"
+      )
       Rails.logger.error("Failed to fetch LTP from API for #{self.class.name} #{security_id}: #{error_msg}")
     end
     nil
@@ -283,11 +289,15 @@ module InstrumentHelpers
     response = DhanHQ::Models::MarketFeed.ohlc(exch_segment_enum)
     response['status'] == 'success' ? response.dig('data', exchange_segment, security_id.to_s) : nil
   rescue StandardError => e
+    DhanhqErrorHandler.handle_dhanhq_error(
+      e,
+      context: "ohlc(#{self.class.name} #{security_id})"
+    )
     Rails.logger.error("Failed to fetch OHLC for #{self.class.name} #{security_id}: #{e.message}")
     nil
   end
 
-  def historical_ohlc(from_date: nil, to_date: nil, oi: false)
+  def historical_ohlc(from_date: nil, to_date: nil, oi: false) # rubocop:disable Naming/MethodParameterName
     DhanHQ::Models::HistoricalData.daily(
       securityId: security_id,
       exchangeSegment: exchange_segment,
@@ -302,13 +312,23 @@ module InstrumentHelpers
     nil
   end
 
-  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2)
-    to_date ||= if defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+  def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2) # rubocop:disable Naming/MethodParameterName
+    to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
+                  Market::Calendar.today_or_last_trading_day.to_s
+                elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
                   MarketCalendar.today_or_last_trading_day.to_s
                 else
                   (Time.zone.today - 1).to_s
                 end
-    from_date ||= (Date.parse(to_date) - days).to_s
+
+    # Use trading days, not calendar days, to avoid weekends/holidays
+    from_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
+                    Market::Calendar.trading_days_ago(days).to_s
+                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
+                    MarketCalendar.trading_days_ago(days).to_s
+                  else
+                    (Date.parse(to_date) - days).to_s # Fallback to calendar days
+                  end
 
     instrument_code = resolve_instrument_code
     DhanHQ::Models::HistoricalData.intraday(
@@ -321,6 +341,10 @@ module InstrumentHelpers
       to_date: to_date || (Time.zone.today - 1).to_s
     )
   rescue StandardError => e
+    DhanhqErrorHandler.handle_dhanhq_error(
+      e,
+      context: "intraday_ohlc(#{self.class.name} #{security_id})"
+    )
     Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message}")
     nil
   end

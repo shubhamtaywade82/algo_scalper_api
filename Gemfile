@@ -46,6 +46,16 @@ gem 'thruster', require: false
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
 gem 'DhanHQ', git: 'https://github.com/shubhamtaywade82/dhanhq-client.git', branch: 'main'
 
+# Telegram bot for notifications
+gem 'telegram-bot-ruby', '~> 0.19'
+
+# OpenAI API clients
+# ruby-openai (alexrudall) - used in development/test
+gem 'ruby-openai', '~> 8.0', group: %i[development test]
+
+# openai-ruby (official) - used in production
+gem 'openai', '~> 0.41', group: :production
+
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
 
@@ -76,6 +86,7 @@ group :development, :test do
   gem 'faker'
   gem 'rspec-rails'
   gem 'shoulda-matchers'
+  gem 'simplecov', require: false
   gem 'vcr', require: false
   gem 'webmock', require: false
 

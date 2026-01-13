@@ -82,7 +82,6 @@ class IndexInstrumentCache
       security_id: index_cfg[:sid],
       symbol_name: index_cfg[:key],
       exchange: exchange,
-      exchange_segment: determine_exchange_segment(index_cfg, exchange),
       segment: segment_key,
       instrument_code: 'index',
       enabled: true

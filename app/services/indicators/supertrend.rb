@@ -36,7 +36,16 @@ module Indicators
       elsif series.respond_to?(:candles)
         # Extract from candles array
         candles = series.candles
-        return default_result if candles.nil? || candles.empty?
+        return default_result if candles.blank?
+
+        # CRITICAL: Ensure candles are sorted by timestamp before extracting values
+        # Indicators assume chronological order - unsorted candles will produce incorrect calculations
+        if series.respond_to?(:ensure_sorted!)
+          series.ensure_sorted!
+        elsif candles.first.respond_to?(:timestamp)
+          # Fallback: sort candles array directly if ensure_sorted! not available
+          candles.sort_by!(&:timestamp)
+        end
 
         highs = candles.map(&:high)
         lows = candles.map(&:low)

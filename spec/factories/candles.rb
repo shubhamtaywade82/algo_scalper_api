@@ -2,6 +2,9 @@
 
 FactoryBot.define do
   factory :candle do
+    skip_create # Candle is a PORO, not an ActiveRecord model
+    initialize_with { new(timestamp: timestamp, open: open, high: high, low: low, close: close, volume: volume) }
+
     timestamp { Time.current }
     open { 25_000.0 }
     high { 25_100.0 }

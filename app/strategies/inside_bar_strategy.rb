@@ -18,8 +18,8 @@ class InsideBarStrategy
     prev1 = series.candles[index - 1]
     prev2 = series.candles[index - 2]
 
-    # Check if prev1 was an inside bar
-    return nil unless inside_bar?(prev1, prev2)
+    # Check if prev1 was an inside bar using CandleSeries helper method
+    return nil unless series.inside_bar?(index - 1)
 
     # CE Signal: Breakout above inside bar high
     if candle.high > prev1.high && candle.close > prev1.high
@@ -50,10 +50,6 @@ class InsideBarStrategy
     true
   end
 
-  def inside_bar?(candle, parent)
-    candle.high <= parent.high && candle.low >= parent.low
-  end
-
   def calculate_confidence(candle, inside_bar, parent, _direction)
     confidence = 60 # Base for inside bar breakout
 
@@ -71,8 +67,8 @@ class InsideBarStrategy
     confidence += 10 if range_ratio < 0.5 # Inside bar is <50% of parent
 
     # Add confidence for volume expansion on breakout
-    if candle.volume > 0 && inside_bar.volume > 0
-      confidence += 10 if candle.volume > inside_bar.volume * 1.3
+    if candle.volume.positive? && inside_bar.volume.positive? && (candle.volume > inside_bar.volume * 1.3)
+      confidence += 10
     end
 
     [confidence, 100].min

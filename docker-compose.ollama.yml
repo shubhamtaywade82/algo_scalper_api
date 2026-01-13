@@ -1,0 +1,44 @@
+# Docker Compose configuration for Ollama
+# Usage: docker-compose -f docker-compose.ollama.yml up -d
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      # CPU-only mode: Set OLLAMA_NUM_GPU=0 to disable GPU offload
+      # Use this if GPU has < 4GB VRAM or models crash with "exit status 2"
+      # Models will run entirely in system RAM (slower but stable)
+      - OLLAMA_NUM_GPU=0 # Set to 0 for CPU-only, remove for GPU mode
+    volumes:
+      - ollama_data:/root/.ollama
+    # Uncomment below for GPU support (requires nvidia-docker2)
+    # Remove OLLAMA_NUM_GPU=0 above if using GPU
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    # Resource limits (adjust based on your system)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 8G
+    #       cpus: '4'
+    restart: unless-stopped
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  ollama_data:
+    driver: local

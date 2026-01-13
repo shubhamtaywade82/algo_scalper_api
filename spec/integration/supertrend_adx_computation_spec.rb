@@ -27,7 +27,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
 
     candles_data.each do |data|
       candle = Candle.new(
-        ts: data[:timestamp],
+        timestamp: data[:timestamp],
         open: data[:open],
         high: data[:high],
         low: data[:low],
@@ -115,7 +115,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
       let(:small_series) do
         series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
         series.add_candle(Candle.new(
-                            ts: Time.current.to_i,
+                            timestamp: Time.current.to_i,
                             open: 100.0,
                             high: 102.0,
                             low: 99.0,
@@ -215,7 +215,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
       let(:small_series) do
         series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
         series.add_candle(Candle.new(
-                            ts: Time.current.to_i,
+                            timestamp: Time.current.to_i,
                             open: 100.0,
                             high: 102.0,
                             low: 99.0,
@@ -228,8 +228,9 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
       it 'returns nil for insufficient data' do
         small_adx = Indicators::Calculator.new(small_series)
 
-        # ADX calculation with insufficient data should raise an exception
-        expect { small_adx.adx(14) }.to raise_error(TechnicalAnalysis::Validation::ValidationError, /Not enough data for that period/)
+        # ADX calculation with insufficient data returns nil (CandleSeries#adx returns nil, doesn't raise)
+        result = small_adx.adx(14)
+        expect(result).to be_nil
       end
     end
   end
@@ -338,7 +339,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
         # Create an inside bar scenario
         series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
         series.add_candle(Candle.new(
-                            ts: Time.current.to_i,
+                            timestamp: Time.current.to_i,
                             open: 100.0,
                             high: 102.0,
                             low: 99.0,
@@ -346,7 +347,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
                             volume: 1000
                           ))
         series.add_candle(Candle.new(
-                            ts: Time.current.to_i,
+                            timestamp: Time.current.to_i,
                             open: 100.5,
                             high: 101.5,
                             low: 99.5,
@@ -515,7 +516,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
       it 'handles invalid numeric values' do
         series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
         series.add_candle(Candle.new(
-                            ts: Time.current.to_i,
+                            timestamp: Time.current.to_i,
                             open: 'invalid',
                             high: 102.0,
                             low: 99.0,
@@ -535,7 +536,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
         15.times do |i|
           base_price = 1_000_000.0 + (i * 1000.0)
           series.add_candle(Candle.new(
-                              ts: Time.current.to_i + (i * 300),
+                              timestamp: Time.current.to_i + (i * 300),
                               open: base_price,
                               high: base_price + 2.0,
                               low: base_price - 1.0,
@@ -554,7 +555,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
         # Add multiple candles with very small price values
         10.times do |i|
           series.add_candle(Candle.new(
-                              ts: Time.current.to_i + (i * 300),
+                              timestamp: Time.current.to_i + (i * 300),
                               open: 0.001 + (i * 0.0001),
                               high: 0.002 + (i * 0.0001),
                               low: 0.0005 + (i * 0.0001),
@@ -593,7 +594,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
         1000.times do |i|
           base_price = 100.0 + (i * 0.1)
           series.add_candle(Candle.new(
-                              ts: (Time.current - (1000 - i).minutes).to_i,
+                              timestamp: (Time.current - (1000 - i).minutes).to_i,
                               open: base_price,
                               high: base_price + 1.0,
                               low: base_price - 1.0,

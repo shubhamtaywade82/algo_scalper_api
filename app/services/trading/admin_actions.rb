@@ -38,13 +38,12 @@ module Trading
         key = (override_key || derivative.underlying_symbol || derivative.symbol_name).to_s
         return nil if key.blank?
 
-        indices = Array(AlgoConfig.fetch[:indices])
+        indices = IndexConfigLoader.load_indices
         indices.find { |cfg| cfg[:key].to_s.casecmp?(key) }
-      rescue StandardError => e
+      rescue StandardError
         # Rails.logger.error("[AdminActions] Failed to resolve index config for #{key}: #{e.message}")
         nil
       end
     end
   end
 end
-

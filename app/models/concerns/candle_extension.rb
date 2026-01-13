@@ -23,7 +23,40 @@ module CandleExtension
     end
 
     def fetch_fresh_candles(interval)
-      raw_data = intraday_ohlc(interval: interval)
+      # For live trading, include today's data to get the most recent completed candles
+      # Check if we're in live mode (not backtest/script mode)
+      include_today = !Rails.env.test? &&
+                      ENV['BACKTEST_MODE'] != '1' &&
+                      ENV['SCRIPT_MODE'] != '1' &&
+                      !($PROGRAM_NAME.include?('runner') if defined?($PROGRAM_NAME))
+
+      if include_today
+        # Include today's date to get the most recent candles
+        # Use trading days, not calendar days, to avoid weekends/holidays
+        to_date = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
+                    Market::Calendar.today_or_last_trading_day.to_s
+                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
+                    MarketCalendar.today_or_last_trading_day.to_s
+                  else
+                    Time.zone.today.to_s
+                  end
+
+        # Get from_date as 2 trading days ago (not 2 calendar days)
+        from_date = if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
+                      Market::Calendar.trading_days_ago(2).to_s
+                    elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
+                      MarketCalendar.trading_days_ago(2).to_s
+                    else
+                      (Date.parse(to_date) - 2).to_s # Fallback to calendar days
+                    end
+
+        Rails.logger.debug { "[CandleExtension] Fetching OHLC for #{symbol_name} @ #{interval}m: from_date=#{from_date}, to_date=#{to_date} (including today, using trading days)" }
+        raw_data = intraday_ohlc(interval: interval, from_date: from_date, to_date: to_date, days: 2)
+      else
+        # For backtest/script mode, use default (excludes today)
+        raw_data = intraday_ohlc(interval: interval)
+      end
+
       return nil if raw_data.blank?
 
       @ohlc_cache[interval] = CandleSeries.new(symbol: symbol_name, interval: interval).tap do |series|
@@ -68,22 +101,7 @@ module CandleExtension
 
     def adx(period = 14, interval: '5')
       cs = candles(interval: interval)
-      closes = cs&.closes
-      highs  = cs&.highs
-      lows   = cs&.lows
-      return nil unless closes && highs && lows
-
-      hlc = cs.candles.each_with_index.map do |c, _i|
-        {
-          date_time: Time.zone.at(c.timestamp || 0),
-          high: c.high,
-          low: c.low,
-          close: c.close
-        }
-      end
-
-      ta_adx = TechnicalAnalysis::Adx.calculate(hlc, period: period).first
-      ta_adx&.adx
+      cs&.adx(period)
     end
 
     def supertrend_signal(interval: '5')
@@ -134,6 +152,12 @@ module CandleExtension
       end
 
       TechnicalAnalysis::Obv.calculate(dcv)
+    rescue NoMethodError => e
+      raise e
+    rescue StandardError => e
+      # OBV.calculate might have different signature - try alternative approach
+      Rails.logger.warn("[CandleExtension] OBV calculation failed: #{e.message}")
+      nil
     end
   end
 end

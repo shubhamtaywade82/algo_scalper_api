@@ -62,7 +62,7 @@ class BacktestService
   def summary
     return {} if @results.empty?
 
-    wins = @results.select { |r| r[:pnl_percent] > 0 }
+    wins = @results.select { |r| r[:pnl_percent].positive? }
     losses = @results.select { |r| r[:pnl_percent] <= 0 }
     trade_count = @results.size
     win_total_percent = wins.sum { |w| w[:pnl_percent] }
@@ -86,34 +86,34 @@ class BacktestService
 
   def print_summary
     s = summary
-    return puts 'No trades executed' if s.empty?
+    return Rails.logger.debug 'No trades executed' if s.empty?
 
     separator = '=' * 60
     divider = '-' * 60
 
-    puts "\n#{separator}"
-    puts "BACKTEST RESULTS: #{instrument.symbol_name}"
-    puts separator
-    puts "Period: Last #{days_back} days | Interval: #{interval} min"
-    puts divider
-    puts "Total Trades:      #{s[:total_trades]}"
-    puts "Winning Trades:    #{s[:winning_trades]} (#{s[:win_rate]}%)"
-    puts "Losing Trades:     #{s[:losing_trades]}"
-    puts divider
-    puts "Avg Win:           +#{s[:avg_win_percent]}%"
-    puts "Avg Loss:          #{s[:avg_loss_percent]}%"
-    puts "Max Win:           +#{s[:max_win]}%"
-    puts "Max Loss:          #{s[:max_loss]}%"
-    puts divider
-    puts "Total P&L:         #{'+' if s[:total_pnl_percent] > 0}#{s[:total_pnl_percent]}%"
-    puts "Expectancy:        #{'+' if s[:expectancy] > 0}#{s[:expectancy]}% per trade"
-    puts "#{separator}\n"
+    Rails.logger.debug { "\n#{separator}" }
+    Rails.logger.debug { "BACKTEST RESULTS: #{instrument.symbol_name}" }
+    Rails.logger.debug separator
+    Rails.logger.debug { "Period: Last #{days_back} days | Interval: #{interval} min" }
+    Rails.logger.debug divider
+    Rails.logger.debug { "Total Trades:      #{s[:total_trades]}" }
+    Rails.logger.debug { "Winning Trades:    #{s[:winning_trades]} (#{s[:win_rate]}%)" }
+    Rails.logger.debug { "Losing Trades:     #{s[:losing_trades]}" }
+    Rails.logger.debug divider
+    Rails.logger.debug { "Avg Win:           +#{s[:avg_win_percent]}%" }
+    Rails.logger.debug { "Avg Loss:          #{s[:avg_loss_percent]}%" }
+    Rails.logger.debug { "Max Win:           +#{s[:max_win]}%" }
+    Rails.logger.debug { "Max Loss:          #{s[:max_loss]}%" }
+    Rails.logger.debug divider
+    Rails.logger.debug { "Total P&L:         #{'+' if s[:total_pnl_percent].positive?}#{s[:total_pnl_percent]}%" }
+    Rails.logger.debug { "Expectancy:        #{'+' if s[:expectancy].positive?}#{s[:expectancy]}% per trade" }
+    Rails.logger.debug { "#{separator}\n" }
   end
 
   private
 
   def fetch_ohlc_data
-    to_date = Date.today - 1.day
+    to_date = Time.zone.today - 1.day
     from_date = to_date - @days_back.days
 
     @instrument.intraday_ohlc(
@@ -133,76 +133,77 @@ class BacktestService
     series
   end
 
-    # ----------------------------- UPDATED SECTION -----------------------------
-    def simulate_trading(series, strategy)
-      open_position = nil
-      i = 0
+  # ----------------------------- UPDATED SECTION -----------------------------
+  def simulate_trading(series, strategy)
+    open_position = nil
+    i = 0
 
-      while i < series.candles.size
-        candle = series.candles[i]
-
-        if open_position
-          exit_result = check_exit(open_position, candle, i, series)
-          if exit_result
-            @results << exit_result
-            open_position = nil
-            instrument_event('trade.exited', exit_result)
-          end
-        end
-
-        if open_position.nil?
-          signal = strategy.generate_signal(i)
-          open_position = enter_position(signal, candle, i) if signal
-        end
-
-        i += 1
-      end
+    while i < series.candles.size
+      candle = series.candles[i]
 
       if open_position
-        last_candle = series.candles.last
-        exit_result = force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
-        @results << exit_result
+        exit_result = check_exit(open_position, candle, i, series)
+        if exit_result
+          @results << exit_result
+          open_position = nil
+          instrument_event('trade.exited', exit_result)
+        end
       end
+
+      if open_position.nil?
+        signal = strategy.generate_signal(i)
+        open_position = enter_position(signal, candle, i) if signal
+      end
+
+      i += 1
     end
 
-    def enter_position(signal, candle, index)
-      option_data = fetch_option_series(signal[:type], candle.timestamp)
-      return unless option_data.present?
-      entry_premium = fetch_premium_price(option_data, candle.timestamp)
+    return unless open_position
 
-      position = {
-        signal_type: signal[:type],
-        entry_index: index,
-        entry_time: candle.timestamp,
-        entry_price: entry_premium,
-        option_data: option_data,
-        stop_loss: calculate_stop_loss(entry_premium, signal[:type]),
-        target: calculate_target(entry_premium, signal[:type])
-      }
+    last_candle = series.candles.last
+    exit_result = force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
+    @results << exit_result
+  end
 
-      instrument_event('trade.entered', position)
-      position
-    end
+  def enter_position(signal, candle, index)
+    option_data = fetch_option_series(signal[:type], candle.timestamp)
+    return if option_data.blank?
 
-    # removed duplicate check_exit (option-premium based) to avoid method redefinition
+    entry_premium = fetch_premium_price(option_data, candle.timestamp)
 
-    # ------------------------- NEW METHODS --------------------------
+    position = {
+      signal_type: signal[:type],
+      entry_index: index,
+      entry_time: candle.timestamp,
+      entry_price: entry_premium,
+      option_data: option_data,
+      stop_loss: calculate_stop_loss(entry_premium, signal[:type]),
+      target: calculate_target(entry_premium, signal[:type])
+    }
 
-    def fetch_option_series(type, date)
-      fetcher = Options::ExpiredFetcher.call(symbol: @instrument.symbol_name, expiry_flag: 'WEEK', date: date)
-      fetcher[type]
-    rescue StandardError => e
-      Rails.logger.error("[Backtest] fetch_option_series failed: #{e.message}")
-      []
-    end
+    instrument_event('trade.entered', position)
+    position
+  end
 
-    def fetch_premium_price(option_data, ts)
-      # get closest timestamp bar
-      return 0.0 if option_data.blank?
-      bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
-      bar[:close].to_f
-    end
+  # removed duplicate check_exit (option-premium based) to avoid method redefinition
 
+  # ------------------------- NEW METHODS --------------------------
+
+  def fetch_option_series(type, date)
+    fetcher = Options::ExpiredFetcher.call(symbol: @instrument.symbol_name, expiry_flag: 'WEEK', date: date)
+    fetcher[type]
+  rescue StandardError => e
+    Rails.logger.error("[Backtest] fetch_option_series failed: #{e.message}")
+    []
+  end
+
+  def fetch_premium_price(option_data, ts)
+    # get closest timestamp bar
+    return 0.0 if option_data.blank?
+
+    bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
+    bar[:close].to_f
+  end
 
   def calculate_stop_loss(entry_price, signal_type)
     if signal_type == :ce

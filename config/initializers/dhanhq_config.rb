@@ -36,11 +36,18 @@ rescue NameError
 end
 
 # Configure Rails app settings for DhanHQ integration
+# Disable WebSocket in test, backtest, or script mode
+skip_ws = Rails.env.test? ||
+          ENV['BACKTEST_MODE'] == '1' ||
+          ENV['SCRIPT_MODE'] == '1' ||
+          ENV['DISABLE_TRADING_SERVICES'] == '1' ||
+          ($PROGRAM_NAME.include?('runner') if defined?($PROGRAM_NAME))
+
 Rails.application.configure do
   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
-    enabled: !Rails.env.test?,  # Disable in test environment
-    ws_enabled: !Rails.env.test?,  # Disable WebSocket in test environment
-    order_ws_enabled: !Rails.env.test?,  # Disable order WebSocket in test environment
+    enabled: !Rails.env.test? && !skip_ws,  # Disable in test environment or script mode
+    ws_enabled: !skip_ws,  # Disable WebSocket in test environment or script mode
+    order_ws_enabled: !skip_ws,  # Disable order WebSocket in test environment or script mode
     enable_order_logging: ENV["ENABLE_ORDER"] == "true",  # Order payload logging
     ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
     ws_watchlist: ENV["DHANHQ_WS_WATCHLIST"],

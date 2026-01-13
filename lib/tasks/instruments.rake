@@ -49,7 +49,7 @@ namespace :instruments do
     pp ''
 
     # Check for active position trackers that reference instruments
-    active_trackers = PositionTracker.where(status: PositionTracker::STATUSES[:active])
+    active_trackers = PositionTracker.active
     if active_trackers.any?
       pp "ERROR: Found #{active_trackers.count} active position tracker(s) that reference instruments."
       pp 'Active trackers:'
@@ -57,17 +57,16 @@ namespace :instruments do
         pp "  - Order: #{tracker.order_no}, Instrument ID: #{tracker.instrument_id}, Status: #{tracker.status}, Symbol: #{tracker.symbol}"
       end
 
+      pp ''
       if args[:force] == 'true'
-        pp ''
-        pp "FORCE mode enabled: Marking active position trackers as 'closed'..."
+        pp "FORCE mode enabled: Marking active position trackers as 'exited'..."
         active_trackers.update_all(
-          status: PositionTracker::STATUSES[:closed],
+          status: :exited,
           updated_at: Time.current
         )
-        pp "Marked #{active_trackers.count} active tracker(s) as closed."
+        pp "Marked #{active_trackers.count} active tracker(s) as exited."
       else
-        pp ''
-        pp 'To force clear (will mark active positions as closed), run:'
+        pp 'To force clear (will mark active positions as exited), run:'
         pp '  bin/rails instruments:clear[true]'
         pp 'Or manually close/exit positions first.'
         pp ''
@@ -78,7 +77,7 @@ namespace :instruments do
     end
 
     # Delete inactive/closed trackers that reference instruments (to avoid FK constraint issues)
-    inactive_trackers = PositionTracker.where.not(status: PositionTracker::STATUSES[:active])
+    inactive_trackers = PositionTracker.where.not(status: :active)
     if inactive_trackers.any?
       pp "Found #{inactive_trackers.count} inactive/closed position tracker(s)."
       if args[:force] == 'true'
@@ -145,4 +144,142 @@ namespace :instrument do
 
   desc 'Alias for instruments:reimport'
   task reimport: 'instruments:reimport'
+end
+
+# Test environment specific tasks
+namespace :test do
+  namespace :instruments do
+    desc 'Import instruments for test environment (uses cached CSV if available)'
+    task import: :environment do
+      unless Rails.env.test?
+        puts 'This task is only for test environment. Use `bin/rails instruments:import` for other environments.'
+        exit 1
+      end
+
+      puts 'Importing instruments for test environment...'
+
+      # Use filtered CSV if available and FILTERED_CSV=true, otherwise use full CSV
+      csv_path = if ENV['FILTERED_CSV'] == 'true'
+                   filtered_path = Rails.root.join('tmp/dhan_scrip_master_filtered.csv')
+                   if filtered_path.exist?
+                     puts "Using filtered CSV: #{filtered_path}"
+                     filtered_path
+                   else
+                     puts '⚠️  Filtered CSV not found. Run `RAILS_ENV=test bin/rails test:instruments:filter_csv` first.'
+                     puts 'Falling back to full CSV...'
+                     Rails.root.join('tmp/dhan_scrip_master.csv')
+                   end
+                 else
+                   Rails.root.join('tmp/dhan_scrip_master.csv')
+                 end
+
+      if csv_path.exist?
+        csv_type = csv_path.basename.to_s.include?('filtered') ? 'filtered' : 'full'
+        puts "Using #{csv_type} CSV: #{csv_path}"
+        csv_content = csv_path.read
+      else
+        puts "CSV cache not found at #{csv_path}"
+        puts 'Downloading from DhanHQ...'
+        csv_content = InstrumentsImporter.fetch_csv_with_cache
+      end
+
+      result = InstrumentsImporter.import_from_csv(csv_content)
+      puts "\n✅ Import completed!"
+      puts "Instruments: #{result[:instrument_upserts]} upserted, #{result[:instrument_total]} total"
+      puts "Derivatives: #{result[:derivative_upserts]} upserted, #{result[:derivative_total]} total"
+    end
+
+    desc 'Check if instruments are imported in test environment'
+    task status: :environment do
+      unless Rails.env.test?
+        puts 'This task is only for test environment.'
+        exit 1
+      end
+
+      instrument_count = Instrument.count
+      derivative_count = Derivative.count
+      nifty = Instrument.segment_index.find_by(symbol_name: 'NIFTY')
+      banknifty = Instrument.segment_index.find_by(symbol_name: 'BANKNIFTY')
+
+      puts 'Test Environment Instrument Status:'
+      puts "  Instruments: #{instrument_count}"
+      puts "  Derivatives: #{derivative_count}"
+      puts "  NIFTY index: #{nifty ? "✅ (security_id: #{nifty.security_id})" : '❌ Not found'}"
+      puts "  BANKNIFTY index: #{banknifty ? "✅ (security_id: #{banknifty.security_id})" : '❌ Not found'}"
+
+      puts "\n⚠️  No instruments found. Run: RAILS_ENV=test bin/rails test:instruments:import" if instrument_count.zero?
+    end
+  end
+end
+
+# Filter CSV for test environment (index instruments and their derivatives only)
+namespace :test do
+  namespace :instruments do
+    desc 'Create filtered CSV with only NIFTY, BANKNIFTY, SENSEX indexes and their derivatives'
+    task filter_csv: :environment do
+      require 'csv'
+
+      unless Rails.env.test?
+        puts 'This task is only for test environment.'
+        exit 1
+      end
+
+      source_csv = Rails.root.join('tmp/dhan_scrip_master.csv')
+      filtered_csv = Rails.root.join('tmp/dhan_scrip_master_filtered.csv')
+
+      unless source_csv.exist?
+        puts "❌ Source CSV not found: #{source_csv}"
+        puts 'Run `bin/rails instruments:import` first to download the CSV.'
+        exit 1
+      end
+
+      puts "Reading source CSV: #{source_csv}"
+      puts "Writing filtered CSV: #{filtered_csv}"
+
+      target_symbols = %w[NIFTY BANKNIFTY SENSEX]
+      index_count = 0
+      derivative_count = 0
+      total_rows = 0
+
+      CSV.open(filtered_csv, 'w') do |out_csv|
+        CSV.foreach(source_csv, headers: true) do |row|
+          total_rows += 1
+
+          # Include row if:
+          # 1. Index instrument (SEGMENT='I') with SYMBOL_NAME in target symbols
+          # 2. Derivative (SEGMENT='D') with UNDERLYING_SYMBOL in target symbols
+          segment = row['SEGMENT']
+          symbol_name = row['SYMBOL_NAME']
+          underlying_symbol = row['UNDERLYING_SYMBOL']
+
+          is_index = segment == 'I' && target_symbols.include?(symbol_name)
+          is_derivative = segment == 'D' && target_symbols.include?(underlying_symbol)
+
+          if is_index || is_derivative
+            # Write header on first match
+            out_csv << row.headers if index_count.zero? && derivative_count.zero?
+
+            out_csv << row.fields
+            index_count += 1 if is_index
+            derivative_count += 1 if is_derivative
+          end
+
+          # Progress indicator every 50k rows
+          if (total_rows % 50_000).zero?
+            print '.'
+            $stdout.flush
+          end
+        end
+      end
+
+      puts "\n✅ Filtered CSV created successfully!"
+      puts "  Total rows processed: #{total_rows}"
+      puts "  Index instruments: #{index_count}"
+      puts "  Derivatives: #{derivative_count}"
+      puts "  Total rows in filtered CSV: #{index_count + derivative_count}"
+      puts "\n📁 Filtered CSV saved to: #{filtered_csv}"
+      puts "\n💡 Use this filtered CSV for faster test imports:"
+      puts '   Set FILTERED_CSV=true when importing in test environment'
+    end
+  end
 end

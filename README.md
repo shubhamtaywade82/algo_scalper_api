@@ -12,6 +12,7 @@ Rails 8 API backend for **autonomous algorithmic trading** powered by the DhanHQ
 - **🎯 Smart Strike Selection**: ATM-focused option chain analysis with liquidity scoring
 - **💰 Capital Management**: Dynamic allocation based on account size and risk parameters
 - **🔄 Background Processing**: Solid Queue integration for reliable job processing
+- **🤖 AI Integration**: OpenAI-powered trading analysis and strategy suggestions (optional)
 
 ---
 
@@ -102,8 +103,11 @@ PAPER_MODE=false  # Set to 'true' for paper trading, 'false' for live trading
 ### Start the Application
 
 ```bash
-# Development server with live trading
+# Web API server (does not start trading services)
 bin/dev
+
+# Trading services (separate long-running process)
+ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 
 # Or just the Rails server
 bin/rails server

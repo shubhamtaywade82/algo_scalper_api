@@ -10,9 +10,24 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_11_14_032025) do
+ActiveRecord::Schema[8.0].define(version: 2025_12_05_210000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "best_indicator_params", force: :cascade do |t|
+    t.bigint "instrument_id", null: false
+    t.string "interval", null: false
+    t.jsonb "params", default: {}, null: false
+    t.jsonb "metrics", default: {}, null: false
+    t.decimal "score", precision: 12, scale: 6, default: "0.0", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "indicator", null: false
+    t.index ["instrument_id", "interval", "indicator"], name: "idx_unique_best_params_per_instrument_interval_indicator", unique: true
+    t.index ["instrument_id"], name: "index_best_indicator_params_on_instrument_id"
+    t.index ["metrics"], name: "index_best_indicator_params_on_metrics", using: :gin
+    t.index ["params"], name: "index_best_indicator_params_on_params", using: :gin
+  end
 
   create_table "derivatives", force: :cascade do |t|
     t.bigint "instrument_id", null: false
@@ -293,6 +308,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_11_14_032025) do
     t.index ["watchable_type", "watchable_id"], name: "index_watchlist_items_on_watchable_type_and_watchable_id"
   end
 
+  add_foreign_key "best_indicator_params", "instruments"
   add_foreign_key "derivatives", "instruments"
   add_foreign_key "paper_orders", "instruments"
   add_foreign_key "paper_positions", "instruments"

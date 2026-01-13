@@ -128,7 +128,7 @@ module Live
 
         # check timestamp field if present
         data = redis.hgetall(key)
-        ts_str = data['timestamp'] || data[:timestamp]
+        ts_str = data['ts'] || data[:ts]
         if ts_str.nil? || ts_str.to_s.strip.empty?
           # no timestamp => treat as stale and remove
           Rails.logger.warn("[RedisTickCache] Pruning #{key} (missing timestamp)")

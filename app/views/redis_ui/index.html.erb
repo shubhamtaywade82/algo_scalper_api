@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Redis UI - Algo Scalper API</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    h1 { color: #4ec9b0; margin-bottom: 20px; }
+    .controls {
+      background: #252526;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    input[type="text"], select {
+      padding: 8px 12px;
+      background: #3c3c3c;
+      border: 1px solid #555;
+      color: #d4d4d4;
+      border-radius: 3px;
+      font-size: 14px;
+    }
+    input[type="text"] { flex: 1; min-width: 200px; }
+    button {
+      padding: 8px 16px;
+      background: #0e639c;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover { background: #1177bb; }
+    button.danger { background: #a1260d; }
+    button.danger:hover { background: #c42e11; }
+    .table-container {
+      background: #252526;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      background: #2d2d30;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #4ec9b0;
+      border-bottom: 2px solid #3c3c3c;
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #3c3c3c;
+    }
+    tr:hover { background: #2a2d2e; }
+    .key { color: #4ec9b0; font-family: 'Courier New', monospace; cursor: pointer; }
+    .key:hover { text-decoration: underline; }
+    .type { color: #ce9178; }
+    .ttl { color: #dcdcaa; }
+    .size { color: #569cd6; }
+    .error { color: #f48771; background: #3c1e1e; padding: 10px; border-radius: 3px; margin: 10px 0; }
+    .pagination {
+      padding: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+    }
+    .modal-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #252526;
+      padding: 20px;
+      border-radius: 5px;
+      max-width: 90%;
+      max-height: 90%;
+      overflow: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .close { font-size: 24px; cursor: pointer; color: #d4d4d4; }
+    .close:hover { color: #fff; }
+    pre {
+      background: #1e1e1e;
+      padding: 15px;
+      border-radius: 3px;
+      overflow-x: auto;
+      font-size: 12px;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .info-panel {
+      background: #252526;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    .info-panel h2 { color: #4ec9b0; margin-bottom: 10px; font-size: 18px; }
+    .info-item { margin: 5px 0; }
+    .info-label { color: #9cdcfe; display: inline-block; min-width: 150px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔴 Redis UI - Algo Scalper API</h1>
+
+    <div class="info-panel">
+      <h2>Connection Info</h2>
+      <div class="info-item">
+        <span class="info-label">Redis URL:</span>
+        <span id="redis-url"><%= ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0') %></span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Database:</span>
+        <select id="db-select">
+          <% (0..15).each do |db| %>
+            <option value="<%= db %>" <%= 'selected' if db == 0 %>><%= db %></option>
+          <% end %>
+        </select>
+      </div>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="pattern-input" placeholder="Key pattern (e.g., pnl:*, tick:*, *)" value="*">
+      <button onclick="loadKeys()">Search</button>
+      <button onclick="loadInfo()">Server Info</button>
+      <button onclick="location.reload()">Refresh</button>
+      <label style="display: flex; align-items: center; gap: 5px; color: #9cdcfe; cursor: pointer;">
+        <input type="checkbox" id="auto-refresh" checked style="width: auto; cursor: pointer;">
+        <span>Auto-refresh</span>
+      </label>
+      <select id="refresh-interval-select" style="padding: 8px 12px; background: #3c3c3c; border: 1px solid #555; color: #d4d4d4; border-radius: 3px; font-size: 14px; cursor: pointer;">
+        <option value="2">2s</option>
+        <option value="5" selected>5s</option>
+        <option value="10">10s</option>
+        <option value="30">30s</option>
+        <option value="60">60s</option>
+      </select>
+      <span id="last-updated" style="color: #858585; font-size: 12px; margin-left: 10px;"></span>
+    </div>
+
+    <div id="error-container"></div>
+
+    <!-- PnL Keys Table -->
+    <div class="table-container" style="margin-bottom: 20px;">
+      <h2 style="color: #4ec9b0; padding: 15px; margin: 0; background: #2d2d30; border-bottom: 2px solid #3c3c3c;">
+        💰 PnL Keys (Live - Auto-refreshing every 2s)
+        <span id="pnl-last-updated" style="color: #858585; font-size: 12px; margin-left: 10px;"></span>
+      </h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>PnL (₹)</th>
+            <th>PnL %</th>
+            <th>LTP</th>
+            <th>HWM (₹)</th>
+            <th>HWM %</th>
+            <th>Updated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="pnl-table-body">
+          <tr><td colspan="8" style="text-align: center; padding: 20px;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Tick Keys Table -->
+    <div class="table-container" style="margin-bottom: 20px;">
+      <h2 style="color: #4ec9b0; padding: 15px; margin: 0; background: #2d2d30; border-bottom: 2px solid #3c3c3c;">
+        📊 Tick Keys (Live - Auto-refreshing every 2s)
+        <span id="tick-last-updated" style="color: #858585; font-size: 12px; margin-left: 10px;"></span>
+      </h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>LTP</th>
+            <th>Volume</th>
+            <th>Timestamp</th>
+            <th>Updated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tick-table-body">
+          <tr><td colspan="6" style="text-align: center; padding: 20px;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- All Keys Table -->
+    <div class="table-container">
+      <h2 style="color: #4ec9b0; padding: 15px; margin: 0; background: #2d2d30; border-bottom: 2px solid #3c3c3c;">
+        🔍 All Keys
+      </h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Type</th>
+            <th>Size/Count</th>
+            <th>TTL (seconds)</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="keys-table-body">
+          <tr><td colspan="5" style="text-align: center; padding: 20px;">Loading...</td></tr>
+        </tbody>
+      </table>
+      <div class="pagination" id="pagination" style="display: none;">
+        <button onclick="loadPrevious()" id="prev-btn" disabled>Previous</button>
+        <span>Page <span id="page-num">1</span></span>
+        <button onclick="loadNext()" id="next-btn" disabled>Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for key details -->
+  <div id="key-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-key-name"></h2>
+        <span class="close" onclick="closeModal()">&times;</span>
+      </div>
+      <div id="modal-content-body"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentCursor = 0;
+    let currentPattern = '*';
+    let currentDb = '0';
+    let hasMore = false;
+    let autoRefreshInterval = null;
+    let refreshIntervalSeconds = 5;
+    let pnlRefreshInterval = null;
+    let tickRefreshInterval = null;
+
+    function loadKeys(cursor = 0) {
+      const pattern = document.getElementById('pattern-input').value || '*';
+      const db = document.getElementById('db-select').value;
+      currentPattern = pattern;
+      currentDb = db;
+      currentCursor = cursor;
+
+      const url = `/redis_ui?pattern=${encodeURIComponent(pattern)}&db=${db}&cursor=${cursor}`;
+
+      fetch(url, { headers: { 'Accept': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            showError(data.error);
+            return;
+          }
+          renderKeys(data.keys);
+          currentCursor = data.next_cursor;
+          hasMore = data.has_more;
+          updatePagination();
+          hideError();
+          updateLastUpdated();
+        })
+        .catch(e => showError('Failed to load keys: ' + e.message));
+    }
+
+    function renderKeys(keys) {
+      const tbody = document.getElementById('keys-table-body');
+      if (keys.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">No keys found</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = keys.map(k => `
+        <tr>
+          <td><span class="key" onclick="showKey('${k.key.replace(/'/g, "\\'")}')">${escapeHtml(k.key)}</span></td>
+          <td><span class="type">${k.type}</span></td>
+          <td><span class="size">${k.size}</span></td>
+          <td><span class="ttl">${k.ttl === -1 ? 'No expiry' : k.ttl === -2 ? 'Not found' : k.ttl}</span></td>
+          <td>
+            <button onclick="showKey('${k.key.replace(/'/g, "\\'")}')">View</button>
+            <button class="danger" onclick="deleteKey('${k.key.replace(/'/g, "\\'")}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function loadPnLKeys() {
+      const db = document.getElementById('db-select').value;
+      const url = `/redis_ui?pattern=pnl:*&db=${db}&cursor=0`;
+
+      fetch(url, { headers: { 'Accept': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            document.getElementById('pnl-table-body').innerHTML =
+              '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #f48771;">Error: ' + escapeHtml(data.error) + '</td></tr>';
+            return;
+          }
+          renderPnLKeys(data.keys);
+          updateLastUpdated('pnl-last-updated');
+        })
+        .catch(e => {
+          document.getElementById('pnl-table-body').innerHTML =
+            '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #f48771;">Error loading PnL keys</td></tr>';
+        });
+    }
+
+    function renderPnLKeys(keys) {
+      const tbody = document.getElementById('pnl-table-body');
+      if (keys.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No PnL keys found</td></tr>';
+        return;
+      }
+
+      // Fetch full details for each PnL key
+      const db = document.getElementById('db-select').value;
+      Promise.all(keys.map(k =>
+        fetch(`/redis_ui/${encodeURIComponent(k.key)}?db=${db}`, { headers: { 'Accept': 'application/json' } })
+          .then(r => r.json())
+          .then(data => ({ key: k.key, data: data }))
+          .catch(() => ({ key: k.key, data: null }))
+      )).then(results => {
+        tbody.innerHTML = results.map(({ key, data }) => {
+          if (!data || data.error) {
+            return `<tr><td>${escapeHtml(key)}</td><td colspan="8" style="color: #f48771;">Error loading data</td></tr>`;
+          }
+          const value = data.value || {};
+          const pnl = parseFloat(value.pnl || value['pnl'] || 0);
+          const pnlPct = parseFloat(value.pnl_pct || value['pnl_pct'] || 0);
+          const ltp = parseFloat(value.ltp || value['ltp'] || 0);
+          const hwm = parseFloat(value.hwm_pnl || value['hwm_pnl'] || 0);
+          const hwmPct = parseFloat(value.hwm_pnl_pct || value['hwm_pnl_pct'] || 0);
+          const updatedAt = value.updated_at || value['updated_at'] || value.timestamp || value['timestamp'];
+          const updatedTime = updatedAt ? new Date(updatedAt * 1000).toLocaleTimeString() : 'N/A';
+
+          return `
+            <tr>
+              <td><span class="key" onclick="showKey('${key.replace(/'/g, "\\'")}')">${escapeHtml(key)}</span></td>
+              <td style="color: ${pnl >= 0 ? '#4ec9b0' : '#f48771'}">₹${pnl.toFixed(2)}</td>
+              <td style="color: ${pnlPct >= 0 ? '#4ec9b0' : '#f48771'}">${pnlPct.toFixed(2)}%</td>
+              <td>₹${ltp.toFixed(2)}</td>
+              <td style="color: #dcdcaa">₹${hwm.toFixed(2)}</td>
+              <td style="color: #dcdcaa">${hwmPct.toFixed(2)}%</td>
+              <td style="color: #858585; font-size: 12px;">${updatedTime}</td>
+              <td>
+                <button onclick="showKey('${key.replace(/'/g, "\\'")}')">View</button>
+                <button class="danger" onclick="deleteKey('${key.replace(/'/g, "\\'")}')">Delete</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      });
+    }
+
+    function loadTickKeys() {
+      const db = document.getElementById('db-select').value;
+      const url = `/redis_ui?pattern=tick:*&db=${db}&cursor=0`;
+
+      fetch(url, { headers: { 'Accept': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            document.getElementById('tick-table-body').innerHTML =
+              '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #f48771;">Error: ' + escapeHtml(data.error) + '</td></tr>';
+            return;
+          }
+          renderTickKeys(data.keys);
+          updateLastUpdated('tick-last-updated');
+        })
+        .catch(e => {
+          document.getElementById('tick-table-body').innerHTML =
+            '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #f48771;">Error loading tick keys</td></tr>';
+        });
+    }
+
+    function renderTickKeys(keys) {
+      const tbody = document.getElementById('tick-table-body');
+      if (keys.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">No tick keys found</td></tr>';
+        return;
+      }
+
+      // Fetch full details for each tick key
+      const db = document.getElementById('db-select').value;
+      Promise.all(keys.map(k =>
+        fetch(`/redis_ui/${encodeURIComponent(k.key)}?db=${db}`, { headers: { 'Accept': 'application/json' } })
+          .then(r => r.json())
+          .then(data => ({ key: k.key, data: data }))
+          .catch(() => ({ key: k.key, data: null }))
+      )).then(results => {
+        tbody.innerHTML = results.map(({ key, data }) => {
+          if (!data || data.error) {
+            return `<tr><td>${escapeHtml(key)}</td><td colspan="5" style="color: #f48771;">Error loading data</td></tr>`;
+          }
+          const value = data.value || {};
+          const ltp = parseFloat(value.ltp || value['ltp'] || value.price || value['price'] || 0);
+          const volume = parseFloat(value.volume || value['volume'] || 0);
+          const timestamp = value.timestamp || value['timestamp'] || value.time || value['time'];
+          const timeStr = timestamp ? new Date(timestamp * 1000).toLocaleTimeString() : 'N/A';
+          const updatedAt = value.updated_at || value['updated_at'] || timestamp;
+          const updatedTime = updatedAt ? new Date(updatedAt * 1000).toLocaleTimeString() : 'N/A';
+
+          return `
+            <tr>
+              <td><span class="key" onclick="showKey('${key.replace(/'/g, "\\'")}')">${escapeHtml(key)}</span></td>
+              <td style="color: #569cd6">₹${ltp.toFixed(2)}</td>
+              <td>${volume.toLocaleString()}</td>
+              <td style="color: #858585; font-size: 12px;">${timeStr}</td>
+              <td style="color: #858585; font-size: 12px;">${updatedTime}</td>
+              <td>
+                <button onclick="showKey('${key.replace(/'/g, "\\'")}')">View</button>
+                <button class="danger" onclick="deleteKey('${key.replace(/'/g, "\\'")}')">Delete</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      });
+    }
+
+    function showKey(key) {
+      const db = document.getElementById('db-select').value;
+      fetch(`/redis_ui/${encodeURIComponent(key)}?db=${db}`, { headers: { 'Accept': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+          }
+          document.getElementById('modal-key-name').textContent = data.key;
+          const body = document.getElementById('modal-content-body');
+          body.innerHTML = `
+            <p><strong>Type:</strong> <span class="type">${data.type}</span></p>
+            <p><strong>TTL:</strong> <span class="ttl">${data.ttl === -1 ? 'No expiry' : data.ttl === -2 ? 'Not found' : data.ttl + ' seconds'}</span></p>
+            <p><strong>Size:</strong> <span class="size">${data.size}</span></p>
+            <h3 style="margin-top: 15px; color: #4ec9b0;">Value:</h3>
+            <pre>${escapeHtml(JSON.stringify(data.value, null, 2))}</pre>
+          `;
+          document.getElementById('key-modal').style.display = 'block';
+        })
+        .catch(e => alert('Error: ' + e.message));
+    }
+
+    function deleteKey(key) {
+      if (!confirm(`Are you sure you want to delete key "${key}"?`)) return;
+      const db = document.getElementById('db-select').value;
+      fetch(`/redis_ui/${encodeURIComponent(key)}?db=${db}`, {
+        method: 'DELETE',
+        headers: { 'Accept': 'application/json' }
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            alert('Error: ' + data.error);
+          } else {
+            alert('Key deleted successfully');
+            loadKeys(currentCursor);
+          }
+        })
+        .catch(e => alert('Error: ' + e.message));
+    }
+
+    function loadInfo() {
+      fetch('/redis_ui/info', { headers: { 'Accept': 'application/json' } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+          }
+          const body = document.getElementById('modal-content-body');
+          body.innerHTML = '<pre>' + escapeHtml(JSON.stringify(data.info, null, 2)) + '</pre>';
+          document.getElementById('modal-key-name').textContent = 'Redis Server Info';
+          document.getElementById('key-modal').style.display = 'block';
+        })
+        .catch(e => alert('Error: ' + e.message));
+    }
+
+    function loadNext() {
+      if (hasMore) loadKeys(currentCursor);
+    }
+
+    function loadPrevious() {
+      // Simple implementation - reload from start
+      loadKeys(0);
+    }
+
+    function updatePagination() {
+      const pagination = document.getElementById('pagination');
+      if (hasMore || currentCursor > 0) {
+        pagination.style.display = 'flex';
+        document.getElementById('prev-btn').disabled = currentCursor === 0;
+        document.getElementById('next-btn').disabled = !hasMore;
+      } else {
+        pagination.style.display = 'none';
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('key-modal').style.display = 'none';
+    }
+
+    function showError(msg) {
+      const container = document.getElementById('error-container');
+      container.innerHTML = `<div class="error">${escapeHtml(msg)}</div>`;
+    }
+
+    function hideError() {
+      document.getElementById('error-container').innerHTML = '';
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function updateLastUpdated(elementId = 'last-updated') {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString();
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.textContent = `Last updated: ${timeStr}`;
+      }
+    }
+
+    function startAutoRefresh() {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+      }
+      autoRefreshInterval = setInterval(() => {
+        loadKeys(0); // Always refresh from beginning
+      }, refreshIntervalSeconds * 1000);
+    }
+
+    function stopAutoRefresh() {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+      }
+    }
+
+    function startPnLRefresh() {
+      if (pnlRefreshInterval) {
+        clearInterval(pnlRefreshInterval);
+      }
+      loadPnLKeys(); // Load immediately
+      pnlRefreshInterval = setInterval(() => {
+        loadPnLKeys();
+      }, 2000); // Refresh every 2 seconds
+    }
+
+    function stopPnLRefresh() {
+      if (pnlRefreshInterval) {
+        clearInterval(pnlRefreshInterval);
+        pnlRefreshInterval = null;
+      }
+    }
+
+    function startTickRefresh() {
+      if (tickRefreshInterval) {
+        clearInterval(tickRefreshInterval);
+      }
+      loadTickKeys(); // Load immediately
+      tickRefreshInterval = setInterval(() => {
+        loadTickKeys();
+      }, 2000); // Refresh every 2 seconds
+    }
+
+    function stopTickRefresh() {
+      if (tickRefreshInterval) {
+        clearInterval(tickRefreshInterval);
+        tickRefreshInterval = null;
+      }
+    }
+
+    function toggleAutoRefresh() {
+      const checkbox = document.getElementById('auto-refresh');
+      if (checkbox.checked) {
+        startAutoRefresh();
+      } else {
+        stopAutoRefresh();
+      }
+    }
+
+    function updateRefreshInterval() {
+      const select = document.getElementById('refresh-interval-select');
+      refreshIntervalSeconds = parseInt(select.value, 10);
+
+      // Restart auto-refresh with new interval if enabled
+      if (document.getElementById('auto-refresh').checked) {
+        startAutoRefresh();
+      }
+    }
+
+    // Load keys on page load - wait for DOM to be ready
+    function initialize() {
+      const dbSelect = document.getElementById('db-select');
+      const patternInput = document.getElementById('pattern-input');
+      const autoRefresh = document.getElementById('auto-refresh');
+      const refreshIntervalSelect = document.getElementById('refresh-interval-select');
+
+      if (!dbSelect || !patternInput || !autoRefresh || !refreshIntervalSelect) {
+        console.error('Redis UI: Required elements not found');
+        return;
+      }
+
+      dbSelect.addEventListener('change', () => {
+        loadKeys(0);
+        // Restart auto-refresh if enabled
+        if (autoRefresh.checked) {
+          startAutoRefresh();
+        }
+        // Restart PnL and Tick refresh on database change
+        startPnLRefresh();
+        startTickRefresh();
+      });
+
+      patternInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          loadKeys(0);
+          // Restart auto-refresh if enabled
+          if (autoRefresh.checked) {
+            startAutoRefresh();
+          }
+        }
+      });
+
+      autoRefresh.addEventListener('change', toggleAutoRefresh);
+      refreshIntervalSelect.addEventListener('change', updateRefreshInterval);
+
+      // Initial load
+      loadKeys(0);
+
+      // Start auto-refresh if checkbox is checked (default)
+      if (autoRefresh.checked) {
+        startAutoRefresh();
+      }
+
+      // Always start PnL and Tick live refresh (they have their own intervals)
+      startPnLRefresh();
+      startTickRefresh();
+    }
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initialize);
+    } else {
+      initialize();
+    }
+  </script>
+</body>
+</html>
+

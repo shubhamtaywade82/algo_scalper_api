@@ -1,8 +1,11 @@
+# frozen_string_literal: true
+
 module PositionTrackerFactory
   extend ActiveSupport::Concern
 
   class_methods do
-    def build_or_average!(instrument:, security_id:, segment:, quantity:, entry_price:, side:, symbol:, order_no:, meta: {})
+    def build_or_average!(instrument:, security_id:, segment:, quantity:, entry_price:, side:, symbol:, order_no:,
+                          meta: {}, watchable: nil, status: 'active')
       sid = security_id.to_s
       seg = segment.to_s
 
@@ -10,23 +13,9 @@ module PositionTrackerFactory
       active = PositionTracker.active.find_by(segment: seg, security_id: sid)
 
       if active
-        Rails.logger.info("[TrackerFactory] Averaging -> #{seg}:#{sid} #{active.id}")
-
-        old_qty = active.quantity.to_i
-        new_qty = old_qty + quantity.to_i
-
-        new_avg = (
-          (active.entry_price.to_f * old_qty) +
-          (entry_price.to_f * quantity.to_i)
-        ) / new_qty
-
-        active.update!(
-          quantity: new_qty,
-          entry_price: new_avg.round(2),
-          avg_price: new_avg.round(2),
-          meta: (active.meta || {}).merge(meta)
-        )
-
+        # HARD RULE: No averaging down / no averaging up.
+        # If a tracker is already active for this derivative, return it unchanged.
+        Rails.logger.warn("[TrackerFactory] Averaging blocked (no-avg rule) -> #{seg}:#{sid} #{active.id}")
         return active
       end
 
@@ -34,8 +23,12 @@ module PositionTrackerFactory
       Rails.logger.info("[TrackerFactory] Creating NEW tracker for #{seg}:#{sid}")
 
       PositionTracker.create!(
-        watchable: instrument.is_a?(Derivative) ? instrument : instrument,
-        instrument: instrument.is_a?(Derivative) ? instrument.instrument : instrument,
+        watchable: watchable || (instrument.is_a?(Derivative) ? instrument : instrument),
+        instrument: if watchable
+                      watchable.is_a?(Derivative) ? watchable.instrument : watchable
+                    else
+                      (instrument.is_a?(Derivative) ? instrument.instrument : instrument)
+                    end,
         order_no: order_no,
         security_id: sid,
         symbol: symbol,
@@ -44,7 +37,7 @@ module PositionTrackerFactory
         quantity: quantity,
         entry_price: entry_price,
         avg_price: entry_price,
-        status: 'active',
+        status: status,
         meta: meta
       )
     end

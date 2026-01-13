@@ -1,0 +1,38 @@
+services:
+  # RedisInsight - Redis GUI Management Tool
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    container_name: redisinsight
+    ports:
+      - "8001:8001"
+    volumes:
+      - redisinsight-data:/db
+    networks:
+      - redis-network
+    restart: unless-stopped
+    # Note: RedisInsight will connect to your local Redis instance
+    # Use host.docker.internal (Mac/Windows) or host network (Linux)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Optional: Redis service (if you want to use Docker Redis instead of local)
+  # Uncomment if you want to use Docker Redis instead of local Redis
+  # redis:
+  #   image: redis:7.0-alpine
+  #   container_name: redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   networks:
+  #     - redis-network
+  #   restart: unless-stopped
+  #   command: redis-server --appendonly yes
+
+volumes:
+  redisinsight-data:
+  # redis-data:  # Uncomment if using Docker Redis
+
+networks:
+  redis-network:
+    driver: bridge

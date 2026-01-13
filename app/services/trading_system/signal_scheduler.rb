@@ -30,6 +30,12 @@ module TradingSystem
         break unless @running
 
         begin
+          # Skip signal generation if market is closed (after 3:30 PM IST)
+          if TradingSession::Service.market_closed?
+            sleep 60 # Check every minute when market is closed
+            next
+          end
+
           perform_signal_scan
         rescue StandardError => e
           Rails.logger.error("[SignalScheduler] error: #{e.class} - #{e.message}")
@@ -41,8 +47,21 @@ module TradingSystem
 
     # Real logic (your existing scheduler call)
     def perform_signal_scan
-      # This is equivalent to: Signal::Scheduler.instance.perform!
-      ::Signal::Scheduler.new.perform!
+      # Skip if market is closed
+      return if TradingSession::Service.market_closed?
+
+      # Signal::Scheduler processes indices in its start method's loop
+      # For this wrapper, we just trigger one cycle of processing
+      # by creating a temporary scheduler instance and processing indices
+      indices = IndexConfigLoader.load_indices
+      return if indices.empty?
+
+      scheduler = ::Signal::Scheduler.new(period: 1)
+      indices.each do |idx_cfg|
+        scheduler.send(:process_index, idx_cfg)
+      rescue StandardError => e
+        Rails.logger.error("[SignalScheduler] Error processing #{idx_cfg[:key]}: #{e.class} - #{e.message}")
+      end
     end
   end
 end
