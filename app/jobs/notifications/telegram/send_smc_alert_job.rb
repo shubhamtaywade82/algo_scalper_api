@@ -93,7 +93,7 @@ module Notifications
           if result.present?
             Rails.logger.info("[SendSmcAlertJob] AI analysis generated successfully (#{result.length} chars) for #{instrument.symbol_name}")
           else
-            Rails.logger.warn("[SendSmcAlertJob] AI analyzer returned empty result for #{instrument.symbol_name}")
+            Rails.logger.warn("[SendSmcAlertJob] AI bias validator returned empty result for #{instrument.symbol_name}")
           end
 
           result
