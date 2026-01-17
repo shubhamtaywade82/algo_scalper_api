@@ -282,16 +282,11 @@ engine.details
 #   }
 # }
 
-# Analyze with AI (Ollama or OpenAI)
+# Analyze with AI bias validator (JSON output)
 # Requires AI to be enabled in config/algo.yml (ai.enabled: true)
 # and OLLAMA_BASE_URL or OPENAI_API_KEY to be set
 engine.analyze_with_ai
-# => "Market Structure Analysis:\n\n1. Market Structure Summary: ..."
-
-# Stream AI analysis (for real-time output)
-engine.analyze_with_ai(stream: true) do |chunk|
-  print chunk
-end
+# => "{\"market_bias\":\"bullish\",...}"
 ```
 
 ## (Optional) Call The Controller Endpoint

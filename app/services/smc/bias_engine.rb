@@ -91,13 +91,12 @@ module Smc
     # Analyze SMC/AVRZ data with AI (Ollama or OpenAI)
     # Returns AI analysis of the market structure, liquidity, and trading bias
     # Uses AiAnalyzer with pre-fetched data and single-pass analysis
-    def analyze_with_ai(stream: false, &)
+    def analyze_with_ai
       return nil unless ai_enabled?
 
       details_data = details
 
-      analyzer = Smc::AiAnalyzer.new(@instrument, initial_data: details_data)
-      analyzer.analyze(stream: stream, &)
+      Smc::AiBiasValidator.call(initial_data: details_data)
     rescue StandardError => e
       Rails.logger.error("[Smc::BiasEngine] AI analysis error: #{e.class} - #{e.message}")
       nil
@@ -117,8 +116,7 @@ module Smc
       # Use details_without_recursion to avoid calling decision again
       details_data = details_without_recursion(decision_value)
 
-      analyzer = Smc::AiAnalyzer.new(@instrument, initial_data: details_data)
-      analyzer.analyze
+      Smc::AiBiasValidator.call(initial_data: details_data)
     rescue StandardError => e
       Rails.logger.error("[Smc::BiasEngine] AI analysis error: #{e.class} - #{e.message}")
       nil
