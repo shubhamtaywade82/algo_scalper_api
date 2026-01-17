@@ -88,14 +88,12 @@ module Notifications
 
           Rails.logger.debug { "[SendSmcAlertJob] Fetching AI analysis for #{instrument.symbol_name}..." }
 
-          # Use AiAnalyzer with pre-fetched data and single-pass analysis
-          analyzer = Smc::AiAnalyzer.new(instrument, initial_data: details_data)
-          result = analyzer.analyze
+          result = Smc::AiBiasValidator.call(initial_data: details_data)
 
           if result.present?
             Rails.logger.info("[SendSmcAlertJob] AI analysis generated successfully (#{result.length} chars) for #{instrument.symbol_name}")
           else
-            Rails.logger.warn("[SendSmcAlertJob] AI analyzer returned empty result for #{instrument.symbol_name}")
+            Rails.logger.warn("[SendSmcAlertJob] AI bias validator returned empty result for #{instrument.symbol_name}")
           end
 
           result

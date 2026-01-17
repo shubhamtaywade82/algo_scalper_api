@@ -68,7 +68,7 @@ namespace :compare do
       puts '❌ Instrument not found'
     end
 
-    # Method 2: Through DerivativeChainAnalyzer (like Smc::AiAnalyzer before fix)
+    # Method 2: Through DerivativeChainAnalyzer (legacy path)
     puts "\n#{'=' * 80}"
     puts 'METHOD 2: Through DerivativeChainAnalyzer (Old Method)'
     puts '=' * 80
@@ -89,42 +89,6 @@ namespace :compare do
       puts "   💰 Spot LTP: ₹#{spot2.round(2)}" if spot2&.positive?
     rescue StandardError => e
       puts "   ❌ Error: #{e.class} - #{e.message}"
-    end
-
-    # Method 3: Through Smc::AiAnalyzer (new fixed method)
-    puts "\n#{'=' * 80}"
-    puts 'METHOD 3: Through Smc::AiAnalyzer (New Fixed Method)'
-    puts '=' * 80
-    if instrument1
-      begin
-        # Create a minimal initial_data for testing
-        initial_data = {
-          decision: :no_trade,
-          timeframes: {
-            htf: { interval: '60', context: {} },
-            mtf: { interval: '15', context: {} },
-            ltf: { interval: '5', context: {} }
-          }
-        }
-
-        ai_analyzer = Smc::AiAnalyzer.new(instrument1, initial_data: initial_data)
-
-        # Test option chain fetching (now private method fetch_option_chain_data)
-        result = ai_analyzer.send(:fetch_option_chain_data)
-
-        if result[:error]
-          puts "   ❌ Error: #{result[:error]}"
-        else
-          puts '   ✅ Option chain fetched successfully'
-          puts "   📅 Expiry: #{result[:expiry]}"
-          puts "   💰 Spot: ₹#{result[:spot].round(2)}" if result[:spot]
-          puts "   📊 Options count: #{result[:options]&.size || 0}"
-          puts "   ℹ️  Note: #{result[:note]}" if result[:note]
-        end
-      rescue StandardError => e
-        puts "   ❌ Error: #{e.class} - #{e.message}"
-        puts "   #{e.backtrace.first(3).join("\n   ")}"
-      end
     end
 
     # Comparison Summary
