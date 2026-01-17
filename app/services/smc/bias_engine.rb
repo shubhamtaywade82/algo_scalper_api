@@ -88,9 +88,8 @@ module Smc
       }
     end
 
-    # Analyze SMC/AVRZ data with AI (Ollama or OpenAI)
-    # Returns AI analysis of the market structure, liquidity, and trading bias
-    # Uses AiAnalyzer with pre-fetched data and single-pass analysis
+    # Analyze SMC/AVRZ data with AI bias validator (Ollama or OpenAI)
+    # Returns JSON-only bias/regime validation output
     def analyze_with_ai
       return nil unless ai_enabled?
 
