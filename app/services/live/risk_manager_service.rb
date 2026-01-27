@@ -159,6 +159,10 @@ module Live
       # Purpose: Account protection ONLY - no trade logic
       enforce_hard_rupee_stop_loss(exit_engine: exit_engine)
 
+      # PROFIT FLOOR (Stateful guarantee - protect locked profits)
+      # Purpose: Once net PnL reaches lock_rupees, exit if it drops back to that floor
+      enforce_profit_floor(exit_engine: exit_engine)
+
       # LAYER 2: STRUCTURE INVALIDATION (Primary exit - structure breaks against position)
       # Purpose: Exit when trade thesis is broken - structure-first, not PnL-first
       enforce_structure_invalidation(exit_engine: exit_engine)
@@ -260,7 +264,7 @@ module Live
 
     def enforce_early_trend_failure(exit_engine:)
       etf_cfg = begin
-        (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:etf]) || {}
+        resolved_risk_config[:etf] || {}
       rescue StandardError
         {}
       end
@@ -889,6 +893,58 @@ module Live
       end
     end
 
+    # Profit-Floor enforcement (stateful guarantee).
+    #
+    # Guarantee (best-effort, subject to tick granularity + slippage):
+    # - Once net PnL reaches lock_rupees, we arm a floor.
+    # - If net PnL drops to floor + exit_fee, we immediately exit.
+    #
+    # This lives in the decision plane (RiskManagerService), not ExitEngine.
+    def enforce_profit_floor(exit_engine:)
+      cfg = profit_floor_config
+      return unless cfg[:enabled]
+
+      lock_rupees = cfg[:lock_rupees]
+      breakeven_at = cfg[:breakeven_at]
+      time_kill_minutes = cfg[:time_kill_minutes]
+      exit_fee = BrokerFeeCalculator.fee_per_order
+
+      PositionTracker.active.find_each do |tracker|
+        snapshot = pnl_snapshot(tracker)
+        next unless snapshot
+
+        net_pnl = safe_big_decimal(snapshot[:pnl])
+        next unless net_pnl
+
+        mark_breakeven_reached!(tracker, net_pnl, threshold_rupees: breakeven_at) if breakeven_at
+        arm_profit_floor!(tracker, net_pnl, lock_rupees: lock_rupees) if lock_rupees
+
+        floor = tracker.profit_floor_rupees
+        next unless floor
+
+        if profit_floor_time_kill?(tracker, time_kill_minutes: time_kill_minutes)
+          reason = "PROFIT_FLOOR_TIME_KILL (floor: ₹#{floor}, age_min: #{time_kill_minutes})"
+          exit_path = 'profit_floor_time_kill'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          next
+        end
+
+        threshold = BigDecimal(floor.to_s) + BigDecimal(exit_fee.to_s)
+        next unless net_pnl <= threshold
+
+        final_net_pnl = net_pnl - BigDecimal(exit_fee.to_s)
+        reason = "PROFIT_FLOOR_LOCK (Current net: ₹#{net_pnl.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, floor: ₹#{floor})"
+        exit_path = 'profit_floor_lock'
+        Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+        track_exit_path(tracker, exit_path, reason)
+        dispatch_exit(exit_engine, tracker, reason)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_profit_floor error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+    end
+
     private
 
     # Helper that centralizes exit dispatching logic.
@@ -1470,7 +1526,7 @@ module Live
 
     def risk_config
       raw = begin
-        AlgoConfig.fetch[:risk]
+        resolved_risk_config
       rescue StandardError
         {}
       end
@@ -1490,6 +1546,17 @@ module Live
       cfg
     rescue StandardError => e
       Rails.logger.error("[RiskManager] risk_config error: #{e.class} - #{e.message}")
+      {}
+    end
+
+    # Merge exit-related config from the legacy location (:position_sizing) and the canonical location (:risk).
+    # Canonical (:risk) wins on conflicts.
+    def resolved_risk_config
+      cfg = AlgoConfig.fetch
+      legacy = cfg[:position_sizing].is_a?(Hash) ? cfg[:position_sizing] : {}
+      risk = cfg[:risk].is_a?(Hash) ? cfg[:risk] : {}
+      legacy.merge(risk)
+    rescue StandardError
       {}
     end
 
@@ -1513,6 +1580,68 @@ module Live
       AlgoConfig.fetch.dig(:risk, :hard_rupee_tp)
     rescue StandardError
       nil
+    end
+
+    def profit_floor_config
+      raw = begin
+        AlgoConfig.fetch.dig(:risk, :profit_floor) || {}
+      rescue StandardError
+        {}
+      end
+
+      {
+        enabled: raw[:enabled] == true,
+        lock_rupees: integer_or_nil(raw[:lock_rupees]),
+        breakeven_at: integer_or_nil(raw[:breakeven_at]),
+        time_kill_minutes: integer_or_nil(raw[:time_kill_minutes])
+      }
+    end
+
+    def integer_or_nil(value)
+      return nil if value.nil?
+
+      Integer(value)
+    rescue StandardError
+      nil
+    end
+
+    def safe_big_decimal(value)
+      return nil if value.nil?
+
+      BigDecimal(value.to_s)
+    rescue StandardError
+      nil
+    end
+
+    def mark_breakeven_reached!(tracker, net_pnl, threshold_rupees:)
+      return if tracker.be_set?
+      return unless BigDecimal(threshold_rupees.to_s) <= net_pnl
+
+      tracker.update!(be_set: true)
+    rescue StandardError => e
+      Rails.logger.warn("[RiskManager] mark_breakeven_reached! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
+    end
+
+    def arm_profit_floor!(tracker, net_pnl, lock_rupees:)
+      return if tracker.profit_floor_rupees.present?
+      return unless BigDecimal(lock_rupees.to_s) <= net_pnl
+
+      tracker.update!(
+        profit_floor_rupees: Integer(lock_rupees),
+        profit_floor_set_at: Time.current
+      )
+      Rails.logger.info("[RiskManager] Profit floor armed for #{tracker.order_no}: ₹#{lock_rupees}")
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] arm_profit_floor! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
+    end
+
+    def profit_floor_time_kill?(tracker, time_kill_minutes:)
+      return false unless time_kill_minutes
+      return false unless tracker.profit_floor_set_at
+
+      (Time.current - tracker.profit_floor_set_at) >= time_kill_minutes.minutes
+    rescue StandardError
+      false
     end
 
     def post_profit_zone_enabled?

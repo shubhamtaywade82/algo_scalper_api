@@ -6,7 +6,10 @@ module Positions
 
     def cfg
       @cfg ||= begin
-        (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown]) || {}
+        cfg = AlgoConfig.fetch
+        risk = cfg[:risk].is_a?(Hash) ? cfg[:risk] : {}
+        legacy = cfg[:position_sizing].is_a?(Hash) ? cfg[:position_sizing] : {}
+        (risk[:drawdown].is_a?(Hash) ? risk[:drawdown] : legacy[:drawdown]) || {}
       rescue StandardError
         {}
       end
@@ -56,7 +59,10 @@ module Positions
       return nil if pnl_pct >= 0
 
       cfg2 = begin
-        (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:reverse_loss]) || {}
+        cfg = AlgoConfig.fetch
+        risk = cfg[:risk].is_a?(Hash) ? cfg[:risk] : {}
+        legacy = cfg[:position_sizing].is_a?(Hash) ? cfg[:position_sizing] : {}
+        (risk[:reverse_loss].is_a?(Hash) ? risk[:reverse_loss] : legacy[:reverse_loss]) || {}
       rescue StandardError
         {}
       end

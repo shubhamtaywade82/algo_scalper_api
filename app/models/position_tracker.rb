@@ -323,6 +323,10 @@ class PositionTracker < ApplicationRecord
     !paper?
   end
 
+  def be_set?
+    be_set == true
+  end
+
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
     # Persist final PnL from Redis cache to DB (force sync, no throttling)
     persist_final_pnl_from_cache
