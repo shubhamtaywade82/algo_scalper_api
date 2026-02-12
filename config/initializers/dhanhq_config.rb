@@ -60,3 +60,14 @@ Rails.application.configure do
     partner_secret: ENV["DHANHQ_PARTNER_SECRET"]
   )
 end
+
+# Prefer DHAN_CLIENT_ID; fall back to CLIENT_ID for compatibility.
+client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+DhanHQ.configuration.client_id = client_id if client_id
+
+# Inject access token from DB so the gem always uses the latest valid token.
+# No refresh API exists; token must be renewed via /auth/dhan/login when expired.
+DhanHQ.configuration.define_singleton_method(:access_token) do
+  record = DhanAccessToken.active
+  record ? record.token : instance_variable_get(:@token)
+end
