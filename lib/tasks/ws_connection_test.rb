@@ -44,12 +44,12 @@ module WsConnectionTest
 
         # Check if credentials are configured
         client_id = ENV['CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-        access_token = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+        access_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
 
         if client_id.blank? || access_token.blank?
           Rails.logger.debug '   ❌ DhanHQ credentials not configured'
           Rails.logger.debug '      Required: CLIENT_ID (or CLIENT_ID)'
-          Rails.logger.debug '      Required: DHANHQ_ACCESS_TOKEN (or ACCESS_TOKEN)'
+          Rails.logger.debug '      Required: DHAN_ACCESS_TOKEN (or ACCESS_TOKEN)'
           Rails.logger.debug "\n   To fix: Set credentials in environment variables or .env file"
           return { success: false, error: 'credentials_missing', message: 'DhanHQ credentials not configured' }
         else
@@ -268,7 +268,7 @@ module WsConnectionTest
         Rails.logger.debug '1. Ensure WebSocket hub is running: Live::MarketFeedHub.instance.start!' unless hub.running?
         if ticks_received.zero?
           Rails.logger.debug '2. Verify WebSocket connection is active and receiving ticks'
-          Rails.logger.debug '3. Check DhanHQ credentials: CLIENT_ID and DHANHQ_ACCESS_TOKEN'
+          Rails.logger.debug '3. Check DhanHQ credentials: CLIENT_ID and DHAN_ACCESS_TOKEN'
         end
         Rails.logger.debug '4. Review application logs for WebSocket errors'
         Rails.logger.debug '=' * 80

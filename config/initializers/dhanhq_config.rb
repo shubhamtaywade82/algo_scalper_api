@@ -2,13 +2,16 @@
 
 require "dhan_hq"
 
+# Ensure error constants are loaded before `DhanHQ::Constants` references them.
+require "DhanHQ/errors"
+
 # Normalize environment variables to support both naming conventions
 # The DhanHQ gem expects variables with DHAN_ prefix (or CLIENT_ID/ACCESS_TOKEN)
 # We support both DHANHQ_ and DHAN_ prefixes for flexibility
 
 # Required credentials - support both naming conventions
-ENV['CLIENT_ID'] ||= ENV['DHANHQ_CLIENT_ID'] if ENV['DHANHQ_CLIENT_ID'].present?
-ENV['ACCESS_TOKEN'] ||= ENV['DHANHQ_ACCESS_TOKEN'] if ENV['DHANHQ_ACCESS_TOKEN'].present?
+ENV['CLIENT_ID'] ||= ENV['DHAN_CLIENT_ID'] if ENV['DHAN_CLIENT_ID'].present?
+ENV['ACCESS_TOKEN'] ||= ENV['DHAN_ACCESS_TOKEN'] if ENV['DHAN_ACCESS_TOKEN'].present?
 
 # Optional gem configuration - normalize DHANHQ_ prefix to DHAN_ prefix for gem compatibility
 # The gem's configure_with_env reads directly from ENV with DHAN_ prefix

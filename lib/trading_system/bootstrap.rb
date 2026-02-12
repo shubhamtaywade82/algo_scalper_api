@@ -35,7 +35,7 @@ module TradingSystem
                     end
         load file_path.to_s if File.exist?(file_path.to_s)
       end
-      supervisor.register(:active_cache, ::ActiveCacheService.new)
+      supervisor.register(:active_cache, Positions::ActiveCacheService.new)
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
       supervisor.register(:smc_scanner, Smc::Scanner.new)

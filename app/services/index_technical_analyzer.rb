@@ -263,8 +263,8 @@ class IndexTechnicalAnalyzer < ApplicationService
   end
 
   def valid_credentials?
-    client_id = ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil)
-    access_token = ENV['DHANHQ_ACCESS_TOKEN'] || ENV.fetch('ACCESS_TOKEN', nil)
+    client_id = ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil)
+    access_token = ENV['DHAN_ACCESS_TOKEN'] || ENV.fetch('ACCESS_TOKEN', nil)
 
     unless client_id && access_token
       @error = 'DhanHQ credentials not configured'

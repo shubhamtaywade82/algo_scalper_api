@@ -14,7 +14,7 @@ A clean Ruby client for Dhan API v2 with ORM-style models (orders, positions, ho
 
 ### Environment flags
 - `DHANHQ_ENABLED` (default `false`) – master toggle; disables all configuration when unset.
-- `CLIENT_ID`, `DHANHQ_ACCESS_TOKEN` – required when the integration is enabled.
+- `CLIENT_ID`, `DHAN_ACCESS_TOKEN` – required when the integration is enabled.
 - `DHANHQ_BASE_URL`, `DHANHQ_WS_VERSION`, `DHANHQ_LOG_LEVEL` – optional overrides for non-production stacks.
 - `DHANHQ_WS_ENABLED`, `DHANHQ_WS_MODE` (`ticker`, `quote`, `full`), `DHANHQ_WS_WATCHLIST` (comma/semicolon separated `SEGMENT:SECURITY_ID`) – control the market feed.
 - `DHANHQ_ORDER_WS_ENABLED`, `DHANHQ_WS_ORDER_URL`, `DHANHQ_WS_USER_TYPE`, `DHANHQ_PARTNER_ID`, `DHANHQ_PARTNER_SECRET` – order update stream settings.

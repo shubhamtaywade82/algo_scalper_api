@@ -4,9 +4,9 @@
 
 This PR consolidates comprehensive code reviews and improvements for all stable services in the trading system, ensuring production readiness, proper paper mode handling, thread safety, and complete implementation verification.
 
-**Type**: Enhancement, Code Quality, Documentation  
-**Impact**: High - Affects core trading services  
-**Breaking Changes**: None  
+**Type**: Enhancement, Code Quality, Documentation
+**Impact**: High - Affects core trading services
+**Breaking Changes**: None
 **Backward Compatible**: ✅ Yes
 
 ---
@@ -393,16 +393,16 @@ This PR represents a comprehensive review and improvement of all stable services
 ```ruby
 # Before
 def enabled?
-  client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-  access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+  client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+  access    = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
   client_id.present? && access.present?
 end
 
 # After
 def enabled?
   return false if paper_trading_enabled?
-  client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-  access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+  client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+  access    = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
   client_id.present? && access.present?
 end
 ```
@@ -414,7 +414,7 @@ end
 def handle_update(payload)
   tracker = PositionTracker.find_by(order_no: order_no)
   return unless tracker
-  
+
   if FILL_STATUSES.include?(status)
     tracker.mark_exited!(exit_price: avg_price)
   end
@@ -424,9 +424,9 @@ end
 def handle_update(payload)
   tracker = PositionTracker.find_by(order_no: order_no)
   return unless tracker
-  
+
   return if tracker.paper?  # Skip paper trading trackers
-  
+
   if FILL_STATUSES.include?(status)
     tracker.with_lock do  # Prevent race conditions
       tracker.mark_exited!(exit_price: avg_price)

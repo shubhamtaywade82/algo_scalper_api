@@ -78,7 +78,7 @@ Minimal `.env` setup:
 ```dotenv
 # DhanHQ API Credentials (Required)
 CLIENT_ID=your_client_id
-DHANHQ_ACCESS_TOKEN=your_access_token
+DHAN_ACCESS_TOKEN=your_access_token
 
 # Application Settings
 RAILS_LOG_LEVEL=info
@@ -143,7 +143,7 @@ indices:
 | ------------------------- | ----------------------------------------- | -------------------------- |
 | `DHANHQ_ENABLED`          | Master toggle for DhanHQ integration      | `true`                     |
 | `CLIENT_ID`               | DhanHQ API client ID                      | Required                   |
-| `DHANHQ_ACCESS_TOKEN`     | DhanHQ API access token                   | Required                   |
+| `DHAN_ACCESS_TOKEN`     | DhanHQ API access token                   | Required                   |
 | `DHANHQ_WS_ENABLED`       | Enable WebSocket market feed              | `true`                     |
 | `DHANHQ_ORDER_WS_ENABLED` | Enable order update WebSocket             | `true`                     |
 | `DHANHQ_WS_MODE`          | WebSocket mode (`quote`/`ticker`/`full`)  | `quote`                    |
@@ -370,7 +370,7 @@ The application provides comprehensive logging:
 ```bash
 # Check credentials
 echo $CLIENT_ID
-echo $DHANHQ_ACCESS_TOKEN
+echo $DHAN_ACCESS_TOKEN
 
 # Verify environment
 bin/rails runner "puts Rails.application.config.x.dhanhq"

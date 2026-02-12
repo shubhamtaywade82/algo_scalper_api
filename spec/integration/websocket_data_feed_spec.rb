@@ -275,9 +275,9 @@ RSpec.describe 'WebSocket Data Feed Integration', :vcr, type: :integration do
         # Mock enabled? to return true (disable paper trading and ensure credentials are available)
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
         allow(ENV).to receive(:[]).and_call_original
-        allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return('test_client_id')
+        allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('test_client_id')
         allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('test_client_id')
-        allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return('test_access_token')
+        allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
         allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return('test_access_token')
 
         order_update_hub.start!

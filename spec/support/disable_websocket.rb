@@ -14,9 +14,9 @@ RSpec.configure do |config|
 
     # Remove credentials to prevent WebSocket initialization
     # (MarketFeedHub.enabled? checks for credentials)
-    ENV.delete('DHANHQ_CLIENT_ID')
+    ENV.delete('DHAN_CLIENT_ID')
     ENV.delete('CLIENT_ID')
-    ENV.delete('DHANHQ_ACCESS_TOKEN')
+    ENV.delete('DHAN_ACCESS_TOKEN')
     ENV.delete('ACCESS_TOKEN')
   end
 

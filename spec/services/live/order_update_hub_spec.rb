@@ -17,8 +17,8 @@ RSpec.describe Live::OrderUpdateHub do
 
     # Stub environment variables
     allow(ENV).to receive(:[]).and_call_original
-    allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return('test_client_id')
-    allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return('test_access_token')
+    allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('test_client_id')
+    allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
 
@@ -117,8 +117,8 @@ RSpec.describe Live::OrderUpdateHub do
 
     context 'when credentials are missing' do
       before do
-        allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return(nil)
-        allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return(nil)
         allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
         allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
       end
@@ -166,8 +166,8 @@ RSpec.describe Live::OrderUpdateHub do
 
     context 'with alternative credential names' do
       before do
-        allow(ENV).to receive(:[]).with('DHANHQ_CLIENT_ID').and_return(nil)
-        allow(ENV).to receive(:[]).with('DHANHQ_ACCESS_TOKEN').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return(nil)
         allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('alt_client_id')
         allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return('alt_access_token')
       end

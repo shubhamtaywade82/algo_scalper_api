@@ -277,8 +277,8 @@ ruby scripts/test_services/test_summary.rb
 export CLIENT_ID="your_client_id"
 export ACCESS_TOKEN="your_access_token"
 # OR
-export DHANHQ_CLIENT_ID="your_client_id"
-export DHANHQ_ACCESS_TOKEN="your_access_token"
+export DHAN_CLIENT_ID="your_client_id"
+export DHAN_ACCESS_TOKEN="your_access_token"
 ```
 
 ### Environment
