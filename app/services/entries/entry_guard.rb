@@ -866,10 +866,20 @@ module Entries
       def timeframe_to_interval(timeframe)
         return nil if timeframe.blank?
 
-        value = timeframe.to_s.gsub(/[^0-9]/, '')
-        return nil if value.blank?
+        str = timeframe.to_s.strip.downcase
+        return nil if str.empty?
 
-        value
+        if str.end_with?('h')
+          hours = str.gsub(/[^0-9]/, '').to_i
+          return nil if hours <= 0
+
+          (hours * 60).to_s
+        else
+          minutes = str.gsub(/[^0-9]/, '').to_i
+          return nil if minutes <= 0
+
+          minutes.to_s
+        end
       end
 
       def find_watchable_for_pick(pick:, instrument:)

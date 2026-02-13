@@ -399,23 +399,14 @@ module Signal
           permission: permission
         }
 
-        picks.each_with_index do |pick, _index|
-          # Rails.logger.info("[Signal] Attempting entry #{index + 1}/#{picks.size} for #{index_cfg[:key]}: #{pick[:symbol]} (scale x#{state_snapshot[:multiplier]})")
-          result = Entries::EntryGuard.try_enter(
-            index_cfg: index_cfg,
-            pick: pick,
-            direction: final_direction,
-            scale_multiplier: state_snapshot[:multiplier],
-            entry_metadata: entry_metadata,
-            permission: permission
-          )
-
-          if result
-            # Rails.logger.info("[Signal] Entry successful for #{index_cfg[:key]}: #{pick[:symbol]}")
-          else
-            Rails.logger.debug { "[Signal] Entry failed for #{index_cfg[:key]}: #{pick[:symbol]} #{result}" }
-          end
-        end
+        Entries::BosEntryEngine.run_for(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          direction: final_direction,
+          picks: picks,
+          entry_metadata: entry_metadata,
+          permission: permission
+        )
 
         # Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
       rescue StandardError => e

@@ -671,6 +671,7 @@ signals:
 # OPTION CHAIN SETTINGS
 # ============================================
 chain_analyzer:
+  use_option_chain_security_id: true
   max_candidates: 2
   strike_distance_pct: 0.02
   min_oi: 10000
