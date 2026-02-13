@@ -32,6 +32,11 @@ module Risk
         position_direction = determine_position_direction(tracker, instrument)
         return skip_result unless position_direction.in?(%i[bullish bearish])
 
+        if opposite_bos_confirmed?(tracker, instrument, position_direction)
+          reason = "STRUCTURE_INVALIDATION (opposite BOS confirmed)"
+          return exit_result(reason: reason, metadata: { direction: position_direction })
+        end
+
         # Check structure invalidation on 1m and 5m timeframes
         if structure_invalidated?(instrument, position_direction)
           reason = "STRUCTURE_INVALIDATION (#{position_direction} structure broken)"
@@ -84,6 +89,26 @@ module Risk
         false
       rescue StandardError => e
         Rails.logger.error("[StructureInvalidationRule] structure_invalidated? error: #{e.class} - #{e.message}")
+        false
+      end
+
+      def opposite_bos_confirmed?(tracker, instrument, position_direction)
+        timeframe = tracker.meta&.dig('bos_timeframe') || tracker.meta&.dig('entry_timeframe') || '5m'
+        interval = timeframe.to_s.gsub(/[^0-9]/, '')
+        return false if interval.blank?
+
+        series = instrument.candle_series(interval: interval)
+        bos = Entries::BosExtractor.last_confirmed_bos(series, lookback: 5)
+        return false unless bos
+
+        return false if bos[:direction] == position_direction
+
+        confirmed_at = bos[:confirmed_at]
+        return false unless confirmed_at && tracker.created_at
+
+        confirmed_at > tracker.created_at
+      rescue StandardError => e
+        Rails.logger.error("[StructureInvalidationRule] opposite_bos_confirmed? error: #{e.class} - #{e.message}")
         false
       end
 

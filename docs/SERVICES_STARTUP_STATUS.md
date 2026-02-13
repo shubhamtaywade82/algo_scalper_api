@@ -144,8 +144,8 @@ If services are not working:
    ```
 
 5. **Verify DhanHQ credentials**:
-   - Check `ENV['DHANHQ_CLIENT_ID']` or `ENV['CLIENT_ID']`
-   - Check `ENV['DHANHQ_ACCESS_TOKEN']` or `ENV['ACCESS_TOKEN']`
+   - Check `ENV['DHAN_CLIENT_ID']` or `ENV['CLIENT_ID']`
+   - Check `ENV['DHAN_ACCESS_TOKEN']` or `ENV['ACCESS_TOKEN']`
 
 ## Next Steps
 

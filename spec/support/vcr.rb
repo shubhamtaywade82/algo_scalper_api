@@ -9,7 +9,7 @@ VCR.configure do |config|
   config.configure_rspec_metadata!
 
   # Filter secrets from environment variables
-  %w[CLIENT_ID DHANHQ_ACCESS_TOKEN RAILS_MASTER_KEY CLIENT_ID ACCESS_TOKEN].each do |key|
+  %w[CLIENT_ID DHAN_ACCESS_TOKEN RAILS_MASTER_KEY CLIENT_ID ACCESS_TOKEN].each do |key|
     val = ENV.fetch(key, nil)
     config.filter_sensitive_data("<#{key}>") { val } if val
   end

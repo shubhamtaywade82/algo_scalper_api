@@ -44,7 +44,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ', git: 'https://github.com/shubhamtaywade82/dhanhq-client.git', branch: 'main'
+gem 'DhanHQ', git: 'https://github.com/shubhamtaywade82/dhanhq-client.git', branch: 'auth-totp-token-management'
 
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 0.19'

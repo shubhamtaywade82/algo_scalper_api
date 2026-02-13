@@ -119,6 +119,77 @@ RSpec.describe Signal::Engine, :vcr do
         end
       end
 
+      context 'when entry_strategy.primary is supertrend' do
+        let(:supertrend_signals_config) do
+          {
+            entry_strategy: { primary: 'supertrend' },
+            enable_smc_avrz_permission: false,
+            primary_timeframe: '1m',
+            confirmation_timeframe: '5m',
+            validation_mode: 'aggressive',
+            supertrend: {
+              period: 10,
+              base_multiplier: 2.0,
+              training_period: 50,
+              num_clusters: 3,
+              performance_alpha: 0.1,
+              multiplier_candidates: [1.5, 2.0, 2.5, 3.0, 3.5]
+            },
+            adx: { min_strength: 18.0, confirmation_min_strength: 20.0 },
+            validation_modes: {
+              aggressive: {
+                require_iv_rank_check: false,
+                require_theta_risk_check: false,
+                require_trend_confirmation: false,
+                theta_risk_cutoff_hour: 15,
+                theta_risk_cutoff_minute: 0
+              }
+            }
+          }
+        end
+
+        it 'does not call EntryGuard when SupertrendTrend returns :none' do
+          allow(AlgoConfig).to receive(:fetch).and_return({ signals: supertrend_signals_config })
+          allow(described_class).to receive(:analyze_timeframe).and_return(
+            status: :ok,
+            series: double('series', closes: [1, 2, 3], candles: []),
+            supertrend: { line: [1.0, 2.0, 3.0], last_value: 3.0 },
+            adx_value: 20,
+            direction: :bullish,
+            last_candle_timestamp: Time.current
+          )
+          allow(SupertrendTrend).to receive(:direction).and_return(:none)
+          allow(Entries::EntryGuard).to receive(:try_enter)
+
+          described_class.run_for(index_cfg)
+
+          expect(Entries::EntryGuard).not_to have_received(:try_enter)
+        end
+
+        it 'uses :bullish when SupertrendTrend returns :long' do
+          allow(AlgoConfig).to receive(:fetch).and_return({ signals: supertrend_signals_config })
+          primary_series = double('series', closes: [1, 2, 3], candles: [], atr: 10.0)
+          allow(described_class).to receive(:analyze_timeframe).and_return(
+            status: :ok,
+            series: primary_series,
+            supertrend: { line: [1.0, 2.0, 3.0], last_value: 3.0 },
+            adx_value: 20,
+            direction: :bullish,
+            last_candle_timestamp: Time.current
+          )
+          allow(SupertrendTrend).to receive(:direction).and_return(:long)
+          allow(Trading::PermissionResolver).to receive(:resolve).and_return(:scale_ready)
+          allow(Options::ChainAnalyzer).to receive(:pick_strikes_with_qualification).and_return(
+            [{ symbol: 'NIFTY-X-CE', security_id: '1', segment: 'IDX_I', derivative_id: 1 }]
+          )
+          allow(Entries::EntryGuard).to receive(:try_enter).and_return(false)
+
+          described_class.run_for(index_cfg)
+
+          expect(Entries::EntryGuard).to have_received(:try_enter).with(hash_including(direction: :bullish))
+        end
+      end
+
       context 'when primary timeframe analysis fails' do
         before do
           # Mock primary timeframe to fail, but don't call confirmation timeframe

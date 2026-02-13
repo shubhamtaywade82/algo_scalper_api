@@ -20,6 +20,21 @@ module Trading
         target_model: :absolute,
         scaling_style: :early
       }.freeze,
+      'BANKNIFTY' => {
+        allow_execution_only: true,
+        max_lots_by_permission: {
+          execution_only: 1,
+          scale_ready: 2,
+          full_deploy: 3
+        }.freeze,
+        holding_rules: {
+          scalp_seconds: (30..180),
+          trend_minutes: (10..45),
+          stall_candles_5m: (3..5)
+        }.freeze,
+        target_model: :absolute,
+        scaling_style: :early
+      }.freeze,
       'SENSEX' => {
         allow_execution_only: false,
         max_lots_by_permission: {

@@ -1,0 +1,15 @@
+---
+description: When user asks for best-in-class or to iterate until done, follow the iteration protocol and do not stop until all verifications pass twice.
+alwaysApply: false
+---
+
+# Best-in-Class Iteration
+
+When the user asks to make the system **best-in-class**, to **iterate until done**, or to **keep testing and improving until the system is best-in-class**:
+
+1. **Read and follow** `docs/BEST_IN_CLASS_ITERATION.md` as the single source of truth.
+2. **Each round:** Run the full verification suite (RuboCop, Brakeman, test suite). Fix any failure. Repeat.
+3. **Do not stop** after one successful run. Only stop after **two consecutive full passes** of the verification suite.
+4. **Exit** by reporting: "Best-in-class iteration complete." when the exit criteria in that doc are met.
+
+If the user says "continue" or "keep going" after you report completion, run the verification suite again and fix any new failures, then repeat the two-pass rule.

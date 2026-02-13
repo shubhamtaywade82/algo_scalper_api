@@ -4,12 +4,12 @@
 # Usage: Load this file in Rails console and use the helper methods
 #
 # Example:
-#   load 'lib/testing/service_test_runner.rb'
-#   test_market_feed_hub
-#   test_risk_manager_service
+#   Testing::ServiceTestRunner.test_market_feed_hub
+#   Testing::ServiceTestRunner.test_risk_manager_service
 
-module ServiceTestRunner
-  module_function
+module Testing
+  module ServiceTestRunner
+    module_function
 
   # Colors for console output
   COLORS = {
@@ -600,30 +600,5 @@ module ServiceTestRunner
     wait_for_logs(seconds)
     print_success('Log monitoring completed')
   end
+  end
 end
-
-# Make methods available in console
-include ServiceTestRunner
-
-Rails.logger.debug { "\n#{ServiceTestRunner.colorize('=' * 80, :bold)}" }
-Rails.logger.debug ServiceTestRunner.colorize('  Service Test Runner Loaded', :bold)
-Rails.logger.debug ServiceTestRunner.colorize('=' * 80, :reset)
-Rails.logger.debug "\nAvailable test methods:"
-Rails.logger.debug '  - test_market_feed_hub'
-Rails.logger.debug '  - test_risk_manager_service'
-Rails.logger.debug '  - test_pnl_updater_service'
-Rails.logger.debug '  - test_paper_pnl_refresher'
-Rails.logger.debug '  - test_exit_engine'
-Rails.logger.debug '  - test_trailing_engine'
-Rails.logger.debug '  - test_signal_scheduler'
-Rails.logger.debug '  - test_tick_cache'
-Rails.logger.debug '  - test_redis_pnl_cache'
-Rails.logger.debug '  - test_active_cache'
-Rails.logger.debug '  - test_underlying_monitor'
-Rails.logger.debug '  - test_order_router'
-Rails.logger.debug '  - test_all_services (runs all tests)'
-Rails.logger.debug "\nHelper methods:"
-Rails.logger.debug '  - show_service_status'
-Rails.logger.debug '  - show_active_positions'
-Rails.logger.debug '  - monitor_logs(seconds)'
-Rails.logger.debug "\n"

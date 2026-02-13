@@ -66,9 +66,9 @@ module Live
       return false if paper_trading_enabled?
 
       # Check for credentials
-      # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
-      client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-      access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      # Support both naming conventions: CLIENT_ID/DHAN_CLIENT_ID and ACCESS_TOKEN/DHAN_ACCESS_TOKEN
+      client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
     end
 

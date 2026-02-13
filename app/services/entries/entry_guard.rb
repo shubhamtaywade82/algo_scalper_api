@@ -1,9 +1,15 @@
 # frozen_string_literal: true
 
 require_relative '../concerns/broker_fee_calculator'
+require_relative 'bos_extractor'
 
 module Entries
   class EntryGuard
+    BOS_SWING_LOOKBACK = 5
+    BOS_MAX_AGE_CANDLES = 8
+    BOS_MAX_ENTRY_DELAY_CANDLES = 3
+    BOS_MAX_ENTRY_DISTANCE_R = 0.5
+
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         # Time regime validation (session-aware entry rules)
@@ -71,6 +77,15 @@ module Entries
           return false
         end
 
+        bos_context = enforce_structure_entry_gate(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          direction: direction,
+          entry_price: ltp.to_f,
+          entry_metadata: entry_metadata
+        )
+        return false unless bos_context
+
         # ===== Unified instrument profile + capital cap sizing (hard rules) =====
         symbol = index_cfg[:key].to_s.upcase
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
@@ -126,15 +141,18 @@ module Entries
 
         # Paper trading mode: Skip real order placement, create PositionTracker directly
         if paper_trading_enabled?
-          return create_paper_tracker!(
+          tracker = create_paper_tracker!(
             instrument: instrument,
             pick: pick,
             side: side,
             quantity: quantity,
             index_cfg: index_cfg,
             ltp: ltp,
-            entry_metadata: entry_metadata
+            entry_metadata: entry_metadata,
+            bos_context: bos_context
           )
+          mark_bos_consumed!(index_cfg: index_cfg, bos_context: bos_context) if tracker
+          return !!tracker
         end
 
         # Live trading: Place real order
@@ -155,7 +173,7 @@ module Entries
           return false
         end
 
-        create_tracker!(
+        tracker = create_tracker!(
           instrument: instrument,
           order_no: order_no,
           pick: pick,
@@ -163,8 +181,11 @@ module Entries
           quantity: quantity,
           index_cfg: index_cfg,
           ltp: ltp,
-          entry_metadata: entry_metadata
+          entry_metadata: entry_metadata,
+          bos_context: bos_context
         )
+
+        mark_bos_consumed!(index_cfg: index_cfg, bos_context: bos_context) if tracker
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
         true
@@ -608,7 +629,7 @@ module Entries
         AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
       end
 
-      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil)
+      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil, bos_context: nil)
         # Generate synthetic order number for paper trading
         order_no = "PAPER-#{index_cfg[:key]}-#{pick[:security_id]}-#{Time.current.to_i}"
 
@@ -636,6 +657,8 @@ module Entries
           meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
         end
 
+        apply_bos_metadata!(meta_hash, bos_context, entry_price: ltp, quantity: quantity)
+
         tracker = PositionTracker.create!(
           watchable: watchable,
           instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
@@ -649,7 +672,8 @@ module Entries
           avg_price: ltp,
           status: 'active',
           paper: true,
-          meta: meta_hash
+          meta: meta_hash,
+          trade_state: 'init'
         )
 
         # Subscription is handled automatically by after_create_commit :subscribe_to_feed callback
@@ -668,13 +692,13 @@ module Entries
         )
 
         Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")
-        true
+        tracker
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist paper tracker: #{e.record.errors.full_messages.to_sentence}")
         false
       end
 
-      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil)
+      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil, bos_context: nil)
         # Determine watchable: derivative for options, instrument for indices
         watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
 
@@ -698,6 +722,8 @@ module Entries
           meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
         end
 
+        apply_bos_metadata!(meta_hash, bos_context, entry_price: ltp, quantity: quantity)
+
         PositionTracker.build_or_average!(
           watchable: watchable,
           instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
@@ -708,10 +734,142 @@ module Entries
           side: side,
           quantity: quantity,
           entry_price: ltp,
-          meta: meta_hash
+          meta: meta_hash,
+          trade_state: 'init'
         )
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Failed to persist tracker for order #{order_no}: #{e.record.errors.full_messages.to_sentence}")
+      end
+
+      def enforce_structure_entry_gate(index_cfg:, instrument:, direction:, entry_price:, entry_metadata:)
+        timeframe = effective_timeframe(entry_metadata)
+        unless timeframe
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: missing effective_timeframe")
+          return nil
+        end
+
+        interval = timeframe_to_interval(timeframe)
+        unless interval
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: invalid timeframe #{timeframe}")
+          return nil
+        end
+
+        series = instrument.candle_series(interval: interval)
+        unless series&.candles&.any?
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: no candle series for #{timeframe}")
+          return nil
+        end
+
+        bos = Entries::BosExtractor.last_confirmed_bos(series, lookback: BOS_SWING_LOOKBACK)
+        unless bos
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: no confirmed BOS (#{timeframe})")
+          return nil
+        end
+
+        if bos[:direction] != direction
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: BOS direction #{bos[:direction]} != entry #{direction}")
+          return nil
+        end
+
+        last_idx = series.candles.size - 1
+        bos_age = last_idx - bos[:confirmed_index]
+        if bos_age > BOS_MAX_AGE_CANDLES
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: BOS stale (age=#{bos_age} candles)")
+          return nil
+        end
+
+        if bos_age > BOS_MAX_ENTRY_DELAY_CANDLES
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: entry delay too late (delay=#{bos_age} candles)")
+          return nil
+        end
+
+        origin_price = bos[:origin_swing][:price].to_f
+        broken_price = bos[:broken_swing][:price].to_f
+        risk_points = (broken_price - origin_price).abs
+        if risk_points <= 0
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: invalid BOS risk_points=#{risk_points}")
+          return nil
+        end
+
+        entry_distance_r = (entry_price.to_f - origin_price).abs / risk_points
+        if entry_distance_r > BOS_MAX_ENTRY_DISTANCE_R
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: entry_distance_r=#{entry_distance_r.round(2)} > #{BOS_MAX_ENTRY_DISTANCE_R}")
+          return nil
+        end
+
+        bos_id = Entries::BosExtractor.bos_id(timeframe: timeframe, confirmed_at: bos[:confirmed_at], direction: bos[:direction])
+        if bos_consumed?(index_cfg: index_cfg, bos_id: bos_id)
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: BOS already consumed (#{bos_id})")
+          return nil
+        end
+
+        bos.merge(
+          timeframe: timeframe,
+          bos_id: bos_id,
+          entry_distance_r: entry_distance_r,
+          risk_points: risk_points
+        )
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] BOS gate failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+        nil
+      end
+
+      def apply_bos_metadata!(meta_hash, bos_context, entry_price:, quantity:)
+        return unless bos_context
+
+        origin_price = bos_context[:origin_swing][:price].to_f
+        entry_risk_rupees = (entry_price.to_f - origin_price).abs * quantity.to_i
+        premium_r = entry_risk_rupees / quantity.to_f
+        premium_stop = entry_price.to_f - premium_r
+        premium_target = entry_price.to_f + premium_r
+
+        meta_hash[:structure_invalidation_price] = origin_price
+        meta_hash[:entry_premium] = entry_price.to_f
+        meta_hash[:entry_risk_rupees] = entry_risk_rupees
+        meta_hash[:premium_stop_price] = premium_stop
+        meta_hash[:premium_target_price] = premium_target
+        meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
+        meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
+        meta_hash[:bos_timeframe] = bos_context[:timeframe]
+        meta_hash[:bos_direction] = bos_context[:direction]
+        meta_hash[:bos_id] = bos_context[:bos_id]
+      end
+
+      def bos_consumed?(index_cfg:, bos_id:)
+        Rails.cache.read(bos_consumed_key(index_cfg: index_cfg, bos_id: bos_id)) == true
+      rescue StandardError
+        false
+      end
+
+      def mark_bos_consumed!(index_cfg:, bos_context:)
+        return unless bos_context
+
+        Rails.cache.write(
+          bos_consumed_key(index_cfg: index_cfg, bos_id: bos_context[:bos_id]),
+          true,
+          expires_in: 1.day
+        )
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] Failed to mark BOS consumed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+      end
+
+      def bos_consumed_key(index_cfg:, bos_id:)
+        "bos:consumed:#{index_cfg[:key]}:#{bos_id}"
+      end
+
+      def effective_timeframe(entry_metadata)
+        return nil unless entry_metadata.is_a?(Hash)
+
+        entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
+      end
+
+      def timeframe_to_interval(timeframe)
+        return nil if timeframe.blank?
+
+        value = timeframe.to_s.gsub(/[^0-9]/, '')
+        return nil if value.blank?
+
+        value
       end
 
       def find_watchable_for_pick(pick:, instrument:)

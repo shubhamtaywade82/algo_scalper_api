@@ -521,6 +521,11 @@ position_sizing:
 # SIGNAL SETTINGS
 # ============================================
 signals:
+  # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
+  # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path
+  entry_strategy:
+    primary: supertrend
+
   primary_timeframe: "1m"
   confirmation_timeframe: "5m"
 

@@ -70,7 +70,7 @@ When token expiry is detected, a Telegram message is sent:
 
 **Action Required:**
 1. Generate new access token from DhanHQ
-2. Update `DHANHQ_ACCESS_TOKEN` environment variable
+2. Update `DHAN_ACCESS_TOKEN` environment variable
 3. Restart services
 
 **Note:** This notification will be sent again after 1 hour if issue persists.
@@ -111,7 +111,7 @@ To test token expiry detection:
 
 1. **Set invalid token**:
    ```bash
-   export DHANHQ_ACCESS_TOKEN="invalid_token"
+   export DHAN_ACCESS_TOKEN="invalid_token"
    ```
 
 2. **Trigger API call**:

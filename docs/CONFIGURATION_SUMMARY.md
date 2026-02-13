@@ -8,7 +8,7 @@ All configuration values are now properly sourced from `config/algo.yml` with EN
 
 ```
 1. algo.yml (Primary) → Preferred source
-2. ENV variables (Fallback) → For testing/overrides  
+2. ENV variables (Fallback) → For testing/overrides
 3. Default values (Last resort) → Hardcoded defaults
 ```
 
@@ -64,8 +64,8 @@ watchlist: []  # Array of "SEGMENT:SECURITY_ID" strings
 ## ENV Variables (Security Only)
 
 ### Required (Security)
-- ✅ `CLIENT_ID` / `DHANHQ_CLIENT_ID` - API credentials
-- ✅ `ACCESS_TOKEN` / `DHANHQ_ACCESS_TOKEN` - API credentials
+- ✅ `CLIENT_ID` / `DHAN_CLIENT_ID` - API credentials
+- ✅ `ACCESS_TOKEN` / `DHAN_ACCESS_TOKEN` - API credentials
 
 ### Infrastructure (Acceptable)
 - `REDIS_URL` - Infrastructure

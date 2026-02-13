@@ -24,7 +24,7 @@ module Live
 
     def start!
       unless enabled?
-        Rails.logger.warn('[MarketFeedHub] Not enabled - missing credentials (DHANHQ_CLIENT_ID/CLIENT_ID or DHANHQ_ACCESS_TOKEN/ACCESS_TOKEN)')
+        Rails.logger.warn('[MarketFeedHub] Not enabled - missing credentials (DHAN_CLIENT_ID/CLIENT_ID or DHAN_ACCESS_TOKEN/ACCESS_TOKEN)')
         return false
       end
 
@@ -133,8 +133,8 @@ module Live
       result = {
         hub_status: status,
         credentials: {
-          client_id: ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence ? '✅ Set' : '❌ Missing',
-          access_token: ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence ? '✅ Set' : '❌ Missing'
+          client_id: ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence ? '✅ Set' : '❌ Missing',
+          access_token: ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence ? '✅ Set' : '❌ Missing'
         },
         mode: mode,
         enabled: enabled?
@@ -363,9 +363,9 @@ module Live
       return false if defined?($PROGRAM_NAME) && $PROGRAM_NAME.include?('runner')
 
       # Always enabled - just check for credentials
-      # Support both naming conventions: CLIENT_ID/DHANHQ_CLIENT_ID and ACCESS_TOKEN/DHANHQ_ACCESS_TOKEN
-      client_id = ENV['DHANHQ_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-      access    = ENV['DHANHQ_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      # Support both naming conventions: CLIENT_ID/DHAN_CLIENT_ID and ACCESS_TOKEN/DHAN_ACCESS_TOKEN
+      client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+      access    = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
       client_id.present? && access.present?
     end
 

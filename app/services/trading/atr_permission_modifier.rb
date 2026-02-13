@@ -7,7 +7,7 @@ module Trading
   # - This does NOT compute ATR. It only consumes ATR values supplied by the caller.
   # - This must NEVER upgrade permission, never change direction, never create trades.
   # - If inputs are ambiguous/missing, return :blocked (capital protection).
-  class AtrPermissionModifier
+  class ATRPermissionModifier
     PERMISSIONS = %i[blocked execution_only scale_ready full_deploy].freeze
 
     class << self
@@ -85,4 +85,6 @@ module Trading
       end
     end
   end
+
+  AtrPermissionModifier = ATRPermissionModifier unless const_defined?(:AtrPermissionModifier)
 end
