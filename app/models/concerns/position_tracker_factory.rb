@@ -5,7 +5,7 @@ module PositionTrackerFactory
 
   class_methods do
     def build_or_average!(instrument:, security_id:, segment:, quantity:, entry_price:, side:, symbol:, order_no:,
-                          meta: {}, watchable: nil, status: 'active')
+                          meta: {}, watchable: nil, status: 'active', trade_state: nil)
       sid = security_id.to_s
       seg = segment.to_s
 
@@ -38,7 +38,8 @@ module PositionTrackerFactory
         entry_price: entry_price,
         avg_price: entry_price,
         status: status,
-        meta: meta
+        meta: meta,
+        trade_state: trade_state
       )
     end
   end
