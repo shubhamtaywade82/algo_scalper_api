@@ -5,6 +5,7 @@ require_relative 'bos_extractor'
 
 module Entries
   class EntryGuard
+    ENTRY_CONTRACT = 'bos_machine_v1'
     BOS_SWING_LOOKBACK = 5
     BOS_MAX_AGE_CANDLES = 8
     BOS_MAX_ENTRY_DELAY_CANDLES = 3
@@ -12,6 +13,13 @@ module Entries
 
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
+        unless bos_contract_present?(entry_metadata)
+          Rails.logger.error(
+            "[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing"
+          )
+          return false
+        end
+
         # Time regime validation (session-aware entry rules)
         unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
           Rails.logger.info("[EntryGuard] Entry blocked by time regime rules for #{index_cfg[:key]}")
@@ -804,6 +812,18 @@ module Entries
         end
 
         bos_id = Entries::BosExtractor.bos_id(timeframe: timeframe, confirmed_at: bos[:confirmed_at], direction: bos[:direction])
+        metadata_bos_id = entry_metadata.is_a?(Hash) ? entry_metadata[:bos_id] : nil
+        if metadata_bos_id.present? && metadata_bos_id.to_s != bos_id.to_s
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: BOS id mismatch (meta=#{metadata_bos_id}, calc=#{bos_id})")
+          return nil
+        end
+
+        metadata_bos_tf = entry_metadata.is_a?(Hash) ? entry_metadata[:bos_timeframe] : nil
+        if metadata_bos_tf.present? && metadata_bos_tf.to_s != timeframe.to_s
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: BOS timeframe mismatch (meta=#{metadata_bos_tf}, calc=#{timeframe})")
+          return nil
+        end
+
         if bos_consumed?(index_cfg: index_cfg, bos_id: bos_id)
           Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: BOS already consumed (#{bos_id})")
           return nil
@@ -884,6 +904,17 @@ module Entries
         return nil unless entry_metadata.is_a?(Hash)
 
         entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
+      end
+
+      def bos_contract_present?(entry_metadata)
+        return false unless entry_metadata.is_a?(Hash)
+        return false unless entry_metadata[:entry_contract].to_s == ENTRY_CONTRACT
+        return false if entry_metadata[:bos_id].blank?
+        return false if entry_metadata[:bos_timeframe].blank?
+        return false if entry_metadata[:bos_origin_price].blank?
+        return false if entry_metadata[:bos_level].blank?
+
+        true
       end
 
       def timeframe_to_interval(timeframe)

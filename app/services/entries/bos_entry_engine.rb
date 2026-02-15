@@ -12,36 +12,62 @@ module Entries
 
     class << self
       def run_for(index_cfg:, instrument:, direction:, picks:, entry_metadata:, permission:)
+        index_key = index_cfg[:key]
         timeframe = effective_timeframe(entry_metadata)
-        return false unless timeframe
+        unless timeframe
+          Rails.logger.info("[BOS_ENGINE] blocked #{index_key}: missing effective timeframe")
+          return false
+        end
 
         interval = timeframe_to_interval(timeframe)
-        return false unless interval
+        unless interval
+          Rails.logger.info("[BOS_ENGINE] blocked #{index_key}: invalid timeframe #{timeframe}")
+          return false
+        end
+
+        Rails.logger.info("[BOS_ENGINE] run_for #{index_key} tf=#{timeframe} direction=#{direction}")
 
         series = instrument.candle_series(interval: interval)
-        return false unless series&.candles&.any?
+        unless series&.candles&.any?
+          Rails.logger.info("[BOS_ENGINE] blocked #{index_key}: no candles for tf=#{timeframe}")
+          return false
+        end
 
-        state = load_state(index_cfg[:key], timeframe)
+        state = load_state(index_key, timeframe)
 
         bos = Entries::BosExtractor.last_confirmed_bos(series, lookback: BOS_SWING_LOOKBACK)
-        return reset_state(index_cfg[:key], timeframe) unless bos
+        unless bos
+          Rails.logger.info("[BOS_ENGINE] blocked #{index_key}: no confirmed BOS tf=#{timeframe}")
+          return reset_state(index_key, timeframe)
+        end
 
         bos_id = Entries::BosExtractor.bos_id(timeframe: timeframe, confirmed_at: bos[:confirmed_at], direction: bos[:direction])
 
         if state.nil? || state[:bos_id] != bos_id
           state = init_bos_state(bos, bos_id)
-          store_state(index_cfg[:key], timeframe, state)
+          store_state(index_key, timeframe, state)
+          Rails.logger.info("[BOS_ENGINE] state #{index_key}: bos_confirmed bos_id=#{bos_id}")
         end
 
-        return reset_state(index_cfg[:key], timeframe) if bos_stale?(series, state)
-        return reset_state(index_cfg[:key], timeframe) if opposite_direction?(state, direction)
+        if bos_stale?(series, state)
+          Rails.logger.info("[BOS_ENGINE] reset #{index_key}: BOS stale bos_id=#{state[:bos_id]}")
+          return reset_state(index_key, timeframe)
+        end
+        if opposite_direction?(state, direction)
+          Rails.logger.info("[BOS_ENGINE] reset #{index_key}: direction mismatch state=#{state[:direction]} signal=#{direction}")
+          return reset_state(index_key, timeframe)
+        end
 
         case state[:state]
         when 'bos_confirmed'
           next_state = handle_pullback_detection(series, state)
-          store_state(index_cfg[:key], timeframe, next_state)
+          store_state(index_key, timeframe, next_state)
+          if next_state[:state] == 'pullback'
+            Rails.logger.info("[BOS_ENGINE] state #{index_key}: pullback bos_id=#{state[:bos_id]} retrace_pct=#{next_state[:pullback_retrace_pct]}")
+          end
         when 'pullback'
           outcome = handle_continuation(series, state, index_cfg, instrument, direction, picks, entry_metadata, permission, timeframe)
+          Rails.logger.info("[BOS_ENGINE] continuation #{index_key}: entered=#{outcome} bos_id=#{state[:bos_id]}") if outcome == true
           return outcome if outcome == true
         end
 
@@ -98,6 +124,7 @@ module Entries
         return reset_state(index_cfg[:key], timeframe) if pullback_started_at.nil?
 
         if (current_idx - pullback_started_at) > PULLBACK_MAX_CANDLES
+          Rails.logger.info("[BOS_ENGINE] reset #{index_cfg[:key]}: pullback expired bos_id=#{state[:bos_id]}")
           return reset_state(index_cfg[:key], timeframe)
         end
 
@@ -105,7 +132,10 @@ module Entries
         current_candle = candles.last
 
         origin_broken = origin_broken?(state[:direction], origin_price, current_candle.low, current_candle.high)
-        return reset_state(index_cfg[:key], timeframe) if origin_broken
+        if origin_broken
+          Rails.logger.info("[BOS_ENGINE] reset #{index_cfg[:key]}: origin broken during pullback bos_id=#{state[:bos_id]}")
+          return reset_state(index_cfg[:key], timeframe)
+        end
 
         pullback_level = state[:pullback_high].to_f
         body_position = candle_body_position(current_candle)
@@ -113,6 +143,7 @@ module Entries
         if continuation_triggered?(state[:direction], current_candle.close, pullback_level, body_position)
           bias_ok = htf_bias_allows?(instrument: instrument, entry_timeframe: timeframe, direction: direction)
           unless bias_ok
+            Rails.logger.info("[BOS_ENGINE] blocked #{index_cfg[:key]}: HTF bias mismatch bos_id=#{state[:bos_id]}")
             consume_bos(index_cfg[:key], state[:bos_id])
             reset_state(index_cfg[:key], timeframe)
             return false
@@ -219,6 +250,11 @@ module Entries
         data[:time_from_bos_to_entry] = time_from_bos
         data[:entry_tf] = timeframe
         data[:htf_tf] = htf_timeframe_for(timeframe)
+        data[:entry_contract] = 'bos_machine_v1'
+        data[:bos_id] = state[:bos_id]
+        data[:bos_timeframe] = timeframe
+        data[:bos_origin_price] = state[:origin_price]
+        data[:bos_level] = state[:bos_level]
 
         data
       end
