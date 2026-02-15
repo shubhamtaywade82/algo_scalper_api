@@ -101,6 +101,8 @@ module Live
 
             Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{reason}")
 
+            record_trade_telemetry(tracker, exit_price, reason)
+
             # Send Telegram notification
             notify_telegram_exit(tracker, reason, exit_price)
 
@@ -172,6 +174,45 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] Telegram notification failed: #{e.class} - #{e.message}")
+    end
+
+    def record_trade_telemetry(tracker, exit_price, reason)
+      return unless tracker&.exited?
+      return if TradeTelemetry.exists?(tracker_id: tracker.id)
+
+      entry_risk_rupees = tracker.meta&.dig('entry_risk_rupees')
+      return if entry_risk_rupees.nil?
+
+      entry_risk = BigDecimal(entry_risk_rupees.to_s)
+      return unless entry_risk.positive?
+
+      final_pnl = tracker.last_pnl_rupees
+      max_pnl = tracker.high_water_mark_pnl
+
+      exit_r = final_pnl ? (BigDecimal(final_pnl.to_s) / entry_risk) : nil
+      max_r = max_pnl ? (BigDecimal(max_pnl.to_s) / entry_risk) : nil
+
+      TradeTelemetry.create!(
+        tracker_id: tracker.id,
+        index_key: tracker.meta&.dig('index_key') || tracker.index_key,
+        entry_time: tracker.created_at,
+        exit_time: tracker.exited_at || Time.current,
+        entry_tf: tracker.meta&.dig('entry_tf'),
+        htf_tf: tracker.meta&.dig('htf_tf'),
+        bos_age_at_entry: tracker.meta&.dig('bos_age_at_entry'),
+        retrace_pct: tracker.meta&.dig('retrace_pct'),
+        pullback_candles: tracker.meta&.dig('pullback_candles'),
+        entry_distance_r: tracker.meta&.dig('entry_distance_r'),
+        continuation_body_position: tracker.meta&.dig('continuation_body_position'),
+        time_from_bos_to_entry: tracker.meta&.dig('time_from_bos_to_entry'),
+        max_r_reached: max_r&.round(3),
+        exit_r: exit_r&.round(3),
+        exit_path: tracker.meta&.dig('exit_path') || reason,
+        pnl_rupees: final_pnl,
+        trade_state_at_exit: tracker.trade_state
+      )
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] Failed to record trade telemetry for #{tracker&.order_no}: #{e.class} - #{e.message}")
     end
 
     # Check if Telegram notifications are enabled

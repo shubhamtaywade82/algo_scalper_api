@@ -118,6 +118,15 @@ module Entries
             return false
           end
 
+          entry_metadata = enrich_entry_metadata(
+            entry_metadata,
+            state,
+            series,
+            current_idx,
+            current_candle,
+            timeframe
+          )
+
           entered = attempt_entry(index_cfg, direction, picks, entry_metadata, permission)
           consume_bos(index_cfg[:key], state[:bos_id])
           reset_state(index_cfg[:key], timeframe)
@@ -155,7 +164,8 @@ module Entries
           confirmed_index: bos[:confirmed_index],
           confirmed_at: bos[:confirmed_at],
           pullback_started_at_index: nil,
-          pullback_high: nil
+          pullback_high: nil,
+          pullback_retrace_pct: nil
         }
       end
 
@@ -184,6 +194,33 @@ module Entries
         return 0 if leg <= 0
 
         retrace / leg
+      end
+
+      def enrich_entry_metadata(entry_metadata, state, series, current_idx, current_candle, timeframe)
+        data = entry_metadata.is_a?(Hash) ? entry_metadata.dup : {}
+
+        bos_age = current_idx - state[:confirmed_index].to_i
+        pullback_candles = current_idx - state[:pullback_started_at_index].to_i
+        bos_level = state[:bos_level].to_f
+        origin_price = state[:origin_price].to_f
+        leg = (bos_level - origin_price).abs
+        entry_distance_r = leg.positive? ? ((current_candle.close.to_f - origin_price).abs / leg) : nil
+
+        time_from_bos = nil
+        if state[:confirmed_at].respond_to?(:to_i) && current_candle.timestamp
+          time_from_bos = (current_candle.timestamp.to_i - state[:confirmed_at].to_i)
+        end
+
+        data[:bos_age_at_entry] = bos_age
+        data[:retrace_pct] = state[:pullback_retrace_pct]
+        data[:pullback_candles] = pullback_candles
+        data[:entry_distance_r] = entry_distance_r
+        data[:continuation_body_position] = candle_body_position(current_candle)
+        data[:time_from_bos_to_entry] = time_from_bos
+        data[:entry_tf] = timeframe
+        data[:htf_tf] = htf_timeframe_for(timeframe)
+
+        data
       end
 
       def opposite_close_found?(direction, candles)

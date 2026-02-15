@@ -657,7 +657,7 @@ module Entries
           meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
         end
 
-        apply_bos_metadata!(meta_hash, bos_context, entry_price: ltp, quantity: quantity)
+        apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
         tracker = PositionTracker.create!(
           watchable: watchable,
@@ -722,7 +722,7 @@ module Entries
           meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
         end
 
-        apply_bos_metadata!(meta_hash, bos_context, entry_price: ltp, quantity: quantity)
+        apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
         PositionTracker.build_or_average!(
           watchable: watchable,
@@ -791,7 +791,13 @@ module Entries
           return nil
         end
 
-        entry_distance_r = (entry_price.to_f - origin_price).abs / risk_points
+        entry_underlying_price = series.candles.last&.close
+        unless entry_underlying_price
+          Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: missing underlying close for entry")
+          return nil
+        end
+
+        entry_distance_r = (entry_underlying_price.to_f - origin_price).abs / risk_points
         if entry_distance_r > BOS_MAX_ENTRY_DISTANCE_R
           Rails.logger.info("[EntryGuard] BOS gate blocked #{index_cfg[:key]}: entry_distance_r=#{entry_distance_r.round(2)} > #{BOS_MAX_ENTRY_DISTANCE_R}")
           return nil
@@ -807,18 +813,21 @@ module Entries
           timeframe: timeframe,
           bos_id: bos_id,
           entry_distance_r: entry_distance_r,
-          risk_points: risk_points
+          risk_points: risk_points,
+          entry_underlying_price: entry_underlying_price
         )
       rescue StandardError => e
         Rails.logger.error("[EntryGuard] BOS gate failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
         nil
       end
 
-      def apply_bos_metadata!(meta_hash, bos_context, entry_price:, quantity:)
+      def apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)
         return unless bos_context
 
         origin_price = bos_context[:origin_swing][:price].to_f
-        entry_risk_rupees = (entry_price.to_f - origin_price).abs * quantity.to_i
+        entry_underlying_price = bos_context[:entry_underlying_price]
+        reference_price = entry_underlying_price || entry_price
+        entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
         premium_r = entry_risk_rupees / quantity.to_f
         premium_stop = entry_price.to_f - premium_r
         premium_target = entry_price.to_f + premium_r
@@ -828,11 +837,25 @@ module Entries
         meta_hash[:entry_risk_rupees] = entry_risk_rupees
         meta_hash[:premium_stop_price] = premium_stop
         meta_hash[:premium_target_price] = premium_target
+        meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
         meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
         meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
         meta_hash[:bos_timeframe] = bos_context[:timeframe]
         meta_hash[:bos_direction] = bos_context[:direction]
         meta_hash[:bos_id] = bos_context[:bos_id]
+
+        if entry_metadata.is_a?(Hash)
+          meta_hash[:bos_age_at_entry] = entry_metadata[:bos_age_at_entry] if entry_metadata.key?(:bos_age_at_entry)
+          meta_hash[:retrace_pct] = entry_metadata[:retrace_pct] if entry_metadata.key?(:retrace_pct)
+          meta_hash[:pullback_candles] = entry_metadata[:pullback_candles] if entry_metadata.key?(:pullback_candles)
+          meta_hash[:entry_distance_r] = entry_metadata[:entry_distance_r] if entry_metadata.key?(:entry_distance_r)
+          meta_hash[:continuation_body_position] =
+            entry_metadata[:continuation_body_position] if entry_metadata.key?(:continuation_body_position)
+          meta_hash[:time_from_bos_to_entry] =
+            entry_metadata[:time_from_bos_to_entry] if entry_metadata.key?(:time_from_bos_to_entry)
+          meta_hash[:entry_tf] = entry_metadata[:entry_tf] if entry_metadata.key?(:entry_tf)
+          meta_hash[:htf_tf] = entry_metadata[:htf_tf] if entry_metadata.key?(:htf_tf)
+        end
       end
 
       def bos_consumed?(index_cfg:, bos_id:)
