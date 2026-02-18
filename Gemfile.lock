@@ -1,9 +1,7 @@
-GIT
-  remote: https://github.com/shubhamtaywade82/dhanhq-client.git
-  revision: 7e2cb0ad1669bac09c49dea49754682cece3cc95
-  branch: auth-totp-token-management
+GEM
+  remote: https://rubygems.org/
   specs:
-    DhanHQ (2.3.0)
+    DhanHQ (2.4.0)
       activesupport
       base64
       bindata
@@ -16,10 +14,6 @@ GIT
       faye-websocket
       rotp
       zeitwerk
-
-GEM
-  remote: https://rubygems.org/
-  specs:
     actioncable (8.0.3)
       actionpack (= 8.0.3)
       activesupport (= 8.0.3)
@@ -188,7 +182,7 @@ GEM
       railties (>= 6.1.0)
     faker (3.5.3)
       i18n (>= 1.8.11, < 2)
-    faraday (1.10.4)
+    faraday (1.10.5)
       faraday-em_http (~> 1.0)
       faraday-em_synchrony (~> 1.0)
       faraday-excon (~> 1.1)
@@ -289,7 +283,7 @@ GEM
     pp (0.6.3)
       prettyprint
     prettyprint (0.2.0)
-    prism (1.6.0)
+    prism (1.9.0)
     psych (5.2.6)
       date
       stringio
@@ -490,7 +484,7 @@ PLATFORMS
   x86_64-linux-gnu
 
 DEPENDENCIES
-  DhanHQ!
+  DhanHQ
   activerecord-import
   annotate
   bootsnap
