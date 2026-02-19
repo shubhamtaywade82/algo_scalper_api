@@ -67,7 +67,13 @@ DhanHQ.configuration.client_id = client_id if client_id
 
 # Inject access token from DB so the gem always uses the latest valid token.
 # No refresh API exists; token must be renewed via /auth/dhan/login when expired.
-DhanHQ.configuration.define_singleton_method(:access_token) do
-  record = DhanAccessToken.active
-  record ? record.token : instance_variable_get(:@token)
+DhanHQ.configure do |config|
+  config.access_token_provider = lambda do
+    Dhan::TokenManager.current_token!
+  end
+
+  config.on_token_expired = lambda do |error|
+    Rails.logger.warn "[DHAN] Token expired detected: #{error.class}"
+    Dhan::TokenManager.refresh!
+  end
 end
