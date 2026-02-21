@@ -69,11 +69,31 @@ DhanHQ.configuration.client_id = client_id if client_id
 # No refresh API exists; token must be renewed via /auth/dhan/login when expired.
 DhanHQ.configure do |config|
   config.access_token_provider = lambda do
-    Dhan::TokenManager.current_token!
+    fetch_authority_token!
   end
 
-  config.on_token_expired = lambda do |error|
-    Rails.logger.warn "[DHAN] Token expired detected: #{error.class}"
-    Dhan::TokenManager.refresh!
+  config.on_token_expired = lambda do |_error|
+    Rails.logger.warn "[SCALPER] Token expired, clearing cache..."
+    Rails.cache.delete("scalper:dhan_token")
+  end
+end
+
+def fetch_authority_token!
+  Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
+    response = Faraday.get(
+      "#{ENV.fetch('TRADER_API_BASE_URL')}/auth/dhan/token"
+    ) do |req|
+      req.headers["Authorization"] = "Bearer #{ENV.fetch('DHAN_TOKEN_ACCESS_TOKEN')}"
+    end
+
+    unless response.success?
+      raise "Token authority unreachable: #{response.status}"
+    end
+
+    data = JSON.parse(response.body)
+
+    raise "Invalid authority response" if data["access_token"].blank?
+
+    data["access_token"]
   end
 end
