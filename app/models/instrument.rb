@@ -74,6 +74,14 @@ class Instrument < ApplicationRecord
   validates :symbol_name, presence: true
   validates :exchange_segment, presence: true, unless: -> { exchange.present? && segment.present? }
 
+  class << self
+    def option_chain_adapter
+      @option_chain_adapter ||= Adapters::OptionChain::DhanAdapter.new
+    end
+
+    attr_writer :option_chain_adapter
+  end
+
   SEGMENT_FROM_EXCHANGE = {
     'IDX_I' => 'index',
     'BSE_IDX' => 'index',
@@ -227,7 +235,7 @@ class Instrument < ApplicationRecord
   end
 
   def fetch_fresh_option_chain(expiry)
-    data = DhanHQ::Models::OptionChain.fetch(
+    data = self.class.option_chain_adapter.fetch_chain(
       underlying_scrip: security_id.to_i,
       underlying_seg: exchange_segment,
       expiry: expiry
@@ -275,7 +283,7 @@ class Instrument < ApplicationRecord
   end
 
   def expiry_list
-    DhanHQ::Models::OptionChain.fetch_expiry_list(
+    self.class.option_chain_adapter.fetch_expiry_list(
       underlying_scrip: security_id.to_i,
       underlying_seg: exchange_segment
     )

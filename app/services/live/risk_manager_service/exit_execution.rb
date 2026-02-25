@@ -86,13 +86,9 @@ module Live
       end
 
       def cancel_remote_order(order_id)
-        order = DhanHQ::Models::Order.find(order_id)
-        order.cancel
-      rescue DhanHQ::Error => e
-        Rails.logger.error("[RiskManager] cancel_remote_order DhanHQ error: #{e.message}")
-        raise
+        @orders_gateway.cancel_order(order_id)
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] cancel_remote_order unexpected error: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] cancel_remote_order failed for #{order_id}: #{e.class} - #{e.message}")
         raise
       end
 

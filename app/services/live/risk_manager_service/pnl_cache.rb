@@ -35,7 +35,9 @@ module Live
       end
 
       def paper_trading_enabled?
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+        return @paper_mode unless @paper_mode.nil?
+
+        algo_config.dig(:paper_trading, :enabled) == true
       rescue StandardError
         false
       end

@@ -17,6 +17,11 @@ module Orders
       raise NotImplementedError, "#{self.class} must implement wallet_snapshot"
     end
 
+    # ----------- ORDER MANAGEMENT --------------
+    def cancel_order(order_id)
+      raise NotImplementedError, "#{self.class} must implement cancel_order"
+    end
+
     # optional
     def on_tick(segment:, security_id:, ltp:)
       nil

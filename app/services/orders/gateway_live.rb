@@ -64,6 +64,16 @@ module Orders
       {}
     end
 
+    def cancel_order(order_id)
+      with_retries do
+        order = DhanHQ::Models::Order.find(order_id)
+        order.cancel
+      end
+    rescue StandardError => e
+      Rails.logger.error("[GatewayLive] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
+      raise
+    end
+
     private
 
     def validate_side!(side)
