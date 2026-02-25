@@ -21,6 +21,20 @@ RSpec.describe Orders::GatewayLive do
     )
   end
 
+  describe '#cancel_order' do
+    let(:order) { instance_double('DhanOrder', cancel: { status: 'success' }) }
+
+    it 'finds and cancels the order' do
+      allow(DhanHQ::Models::Order).to receive(:find).with('ORD-123').and_return(order)
+
+      result = gateway.cancel_order('ORD-123')
+
+      expect(result).to eq(status: 'success')
+      expect(DhanHQ::Models::Order).to have_received(:find).with('ORD-123')
+      expect(order).to have_received(:cancel)
+    end
+  end
+
   describe '#exit_market' do
     it 'uses provided client_order_id when passed' do
       gateway.exit_market(tracker, client_order_id: 'AS-EXIT-FIXED-001')

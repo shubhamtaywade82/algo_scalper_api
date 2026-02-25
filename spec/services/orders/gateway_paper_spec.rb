@@ -200,4 +200,17 @@ RSpec.describe Orders::GatewayPaper do
       gateway.wallet_snapshot
     end
   end
+
+  describe '#cancel_order' do
+    it 'returns a simulated cancel acknowledgement' do
+      result = gateway.cancel_order('PAPER-ORD-1')
+
+      expect(result).to eq(
+        success: true,
+        order_id: 'PAPER-ORD-1',
+        status: :canceled,
+        paper: true
+      )
+    end
+  end
 end

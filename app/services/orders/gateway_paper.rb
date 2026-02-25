@@ -37,5 +37,12 @@ module Orders
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
       { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0 } # Return default on error
     end
+
+    def cancel_order(order_id)
+      { success: true, order_id: order_id, status: :canceled, paper: true }
+    rescue StandardError => e
+      Rails.logger.error("[GatewayPaper] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
+      { success: false, order_id: order_id, status: :failed, error: e.message, paper: true }
+    end
   end
 end

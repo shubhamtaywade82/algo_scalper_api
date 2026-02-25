@@ -33,7 +33,7 @@ module Live
       # Merge exit-related config from the legacy location (:position_sizing) and the canonical location (:risk).
       # Canonical (:risk) wins on conflicts.
       def resolved_risk_config
-        cfg = AlgoConfig.fetch
+        cfg = algo_config
         legacy = cfg[:position_sizing].is_a?(Hash) ? cfg[:position_sizing] : {}
         risk = cfg[:risk].is_a?(Hash) ? cfg[:risk] : {}
         legacy.merge(risk)
@@ -52,20 +52,20 @@ module Live
       end
 
       def hard_rupee_sl_config
-        AlgoConfig.fetch.dig(:risk, :hard_rupee_sl)
+        algo_config.dig(:risk, :hard_rupee_sl)
       rescue StandardError
         nil
       end
 
       def hard_rupee_tp_config
-        AlgoConfig.fetch.dig(:risk, :hard_rupee_tp)
+        algo_config.dig(:risk, :hard_rupee_tp)
       rescue StandardError
         nil
       end
 
       def profit_floor_config
         raw = begin
-          AlgoConfig.fetch.dig(:risk, :profit_floor) || {}
+          algo_config.dig(:risk, :profit_floor) || {}
         rescue StandardError
           {}
         end
@@ -101,7 +101,7 @@ module Live
 
       def post_profit_zone_config
         raw = begin
-          AlgoConfig.fetch.dig(:risk, :post_profit_zone) || {}
+          algo_config.dig(:risk, :post_profit_zone) || {}
         rescue StandardError
           {}
         end
@@ -121,7 +121,7 @@ module Live
 
       def iv_collapse_detection_enabled?
         config = begin
-          AlgoConfig.fetch.dig(:risk, :time_overrides, :iv_collapse) || {}
+          algo_config.dig(:risk, :time_overrides, :iv_collapse) || {}
         rescue StandardError
           {}
         end
@@ -134,7 +134,7 @@ module Live
       end
 
       def stall_detection_config
-        AlgoConfig.fetch.dig(:risk, :time_overrides, :stall_detection) || {}
+        algo_config.dig(:risk, :time_overrides, :stall_detection) || {}
       rescue StandardError
         {}
       end
@@ -142,24 +142,32 @@ module Live
       # Configuration helpers for new 5-layer exit system
 
       def structure_invalidation_enabled?
-        config = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        config = algo_config.dig(:risk, :exits, :structure_invalidation) || {}
         config.fetch(:enabled, true) # Default: enabled
       rescue StandardError
         true
       end
 
       def premium_momentum_failure_enabled?
-        config = AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}
+        config = algo_config.dig(:risk, :exits, :premium_momentum_failure) || {}
         config.fetch(:enabled, true) # Default: enabled
       rescue StandardError
         true
       end
 
       def time_stop_enabled?
-        config = AlgoConfig.fetch.dig(:risk, :exits, :time_stop) || {}
+        config = algo_config.dig(:risk, :exits, :time_stop) || {}
         config.fetch(:enabled, true) # Default: enabled
       rescue StandardError
         true
+      end
+
+      def algo_config
+        @algo_config ||= begin
+          AlgoConfig.fetch
+        rescue StandardError
+          {}
+        end
       end
 
       def pct_value(value)

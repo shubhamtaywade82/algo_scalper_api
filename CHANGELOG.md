@@ -1,6 +1,10 @@
 # Changelog
 
 ## 2026-02-25
+- Route `Instrument` option-chain broker calls through injectable adapters and wire `NullAdapter` in paper mode.
+- Implement `cancel_order` in `Live::Gateway` to keep parity with the `Orders::Gateway` cancel contract used by risk-manager flows.
+- Route risk-manager order cancel operations through the `Orders::Gateway` port and add gateway cancel support for live/paper adapters.
+- Cache `RiskManagerService` config at initialization to avoid repeated `AlgoConfig.fetch` calls during risk checks.
 - Add startup broker reconciliation in trading daemon boot path via `Live::PositionSyncService` before service startup, with strict mode during market hours.
 - Add durable exit intent fields (`exit_requested_at`, `exit_sent_at`, `exit_coid`, `exit_order_id`) and deterministic exit correlation IDs to improve retry safety.
 - Update exit routing/gateway flow to pass client order IDs explicitly and normalize already-closed/duplicate exit responses as successful terminal outcomes.

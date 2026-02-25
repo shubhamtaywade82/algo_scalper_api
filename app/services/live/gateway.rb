@@ -21,9 +21,6 @@ module Live
           qty: qty,
           client_order_id: meta[:client_order_id] || generate_client_order_id(segment, security_id, side)
         )
-      else
-        # Rails.logger.error("[Live::Gateway] Invalid side: #{side}")
-        nil
       end
     end
 
@@ -62,6 +59,14 @@ module Live
     rescue StandardError
       # Rails.logger.error("[Live::Gateway] position failed: #{e.message}")
       nil
+    end
+
+    # Cancels an existing broker order by id.
+    # @param order_id [String]
+    # @return [Object] broker cancel response
+    def cancel_order(order_id)
+      order = DhanHQ::Models::Order.find(order_id)
+      order.cancel
     end
 
     def wallet_snapshot
