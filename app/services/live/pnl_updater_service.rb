@@ -188,9 +188,9 @@ module Live
         # 1) Try TickCache (memory)
         tick_ltp = nil
         begin
-          tick_ltp = Live::TickCache.ltp(seg, security_id)
+          tick_ltp = Live::TickQuery.for_security(segment: seg, security_id: security_id)&.ltp
         rescue StandardError => e
-          @logger.warn("[PnlUpdater] TickCache.ltp error for #{seg}:#{security_id} - #{e.message}")
+          @logger.warn("[PnlUpdater] tick query error for #{seg}:#{security_id} - #{e.message}")
           tick_ltp = nil
         end
 

@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-02-25
+- Add `MarketTick` + `Live::TickQuery` boundary and migrate key risk/entry/exit reads off direct `Live::TickCache` access.
+- Migrate remaining service/model `Live::TickCache.ltp` reads to `Live::TickQuery` so `TickQuery` is the sole LTP read boundary.
 - Route `Instrument` option-chain broker calls through injectable adapters and wire `NullAdapter` in paper mode.
 - Implement `cancel_order` in `Live::Gateway` to keep parity with the `Orders::Gateway` cancel contract used by risk-manager flows.
 - Route risk-manager order cancel operations through the `Orders::Gateway` port and add gateway cancel support for live/paper adapters.

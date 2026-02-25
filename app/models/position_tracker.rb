@@ -590,7 +590,7 @@ class PositionTracker < ApplicationRecord
 
   def fetch_ltp_from_cache
     seg = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    Live::TickCache.ltp(seg, security_id)
+    Live::TickQuery.for_security(segment: seg, security_id: security_id)&.ltp
   end
 
   def prepare_exit_metadata(exit_reason)

@@ -219,7 +219,7 @@ module Positions
       end
 
       # Try to get current LTP from cache
-      ltp = Live::TickCache.ltp(tracker.segment, tracker.security_id)
+      ltp = Live::TickQuery.ltp_for(tracker)
       position_data.update_ltp(ltp) if ltp&.positive?
 
       attach_underlying_metadata(position_data, tracker)
@@ -525,7 +525,7 @@ module Positions
       position_data.underlying_symbol = meta[:symbol]
       position_data.index_key ||= meta[:index_key]
       begin
-        ltp = Live::TickCache.ltp(meta[:segment], meta[:security_id])
+        ltp = Live::TickQuery.for_security(segment: meta[:segment], security_id: meta[:security_id])&.ltp
         position_data.underlying_ltp = ltp.to_f if ltp
       rescue StandardError
         nil

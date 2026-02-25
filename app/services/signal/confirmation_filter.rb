@@ -104,10 +104,10 @@ module Signal
           segment = instrument.exchange_segment
           security_id = instrument.security_id.to_s
 
-          cached_ltp = Live::TickCache.ltp(segment, security_id)
-          if cached_ltp.present? && cached_ltp.to_f.positive?
-            Rails.logger.debug { "[Signal::ConfirmationFilter] Got LTP from TickCache for #{index_key}: ₹#{cached_ltp}" }
-            return BigDecimal(cached_ltp.to_s)
+          cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+          if cached_tick&.ltp&.to_f&.positive?
+            Rails.logger.debug { "[Signal::ConfirmationFilter] Got LTP from TickCache for #{index_key}: ₹#{cached_tick.ltp}" }
+            return cached_tick.ltp
           end
 
           # Try subscribing and waiting briefly for a tick
@@ -116,10 +116,10 @@ module Signal
             # Wait up to 200ms for tick to arrive
             4.times do
               sleep(0.05) # 50ms intervals
-              cached_ltp = Live::TickCache.ltp(segment, security_id)
-              if cached_ltp.present? && cached_ltp.to_f.positive?
-                Rails.logger.debug { "[Signal::ConfirmationFilter] Got LTP from TickCache after subscription for #{index_key}: ₹#{cached_ltp}" }
-                return BigDecimal(cached_ltp.to_s)
+              cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+              if cached_tick&.ltp&.to_f&.positive?
+                Rails.logger.debug { "[Signal::ConfirmationFilter] Got LTP from TickCache after subscription for #{index_key}: ₹#{cached_tick.ltp}" }
+                return cached_tick.ltp
               end
             end
           rescue StandardError => e

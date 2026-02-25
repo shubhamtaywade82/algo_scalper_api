@@ -58,8 +58,8 @@ module Options
       sid = @index_cfg[:sid]
 
       # Try tick cache first
-      spot = Live::TickCache.ltp(seg, sid)
-      return spot if spot&.positive?
+      tick = Live::TickQuery.for_security(segment: seg, security_id: sid)
+      return tick.ltp.to_f if tick&.ltp&.positive?
 
       # Try Redis cache
       spot = Live::RedisTickCache.instance.fetch_tick(seg, sid)&.dig(:ltp)&.to_f
