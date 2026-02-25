@@ -10,10 +10,12 @@ module Orders
     API_TIMEOUT   = 8
 
     # ------------ EXIT -----------------
-    def exit_market(tracker)
-      # Generate unique client order ID with random component to prevent collisions
-      # Format: AS-EXIT-{security_id}-{timestamp}-{random}
-      coid = "AS-EXIT-#{tracker.security_id}-#{Time.now.to_i}-#{SecureRandom.hex(2)}"
+    # Places an exit market order for the tracker.
+    # @param tracker [PositionTracker]
+    # @param client_order_id [String, nil] deterministic idempotency key for retries
+    # @return [Hash] normalized result with :success and optional :order_id/:status
+    def exit_market(tracker, client_order_id: nil)
+      coid = client_order_id.presence || generate_client_order_id('EXIT', tracker.security_id)
 
       order = Orders::Placer.exit_position!(
         seg: tracker.segment,
@@ -21,9 +23,7 @@ module Orders
         client_order_id: coid
       )
 
-      return { success: true } if order
-
-      { success: false, error: 'exit failed' }
+      normalize_exit_response(order, client_order_id: coid)
     end
 
     # ------------ ENTRY (BUY/SELL) -----
@@ -53,26 +53,6 @@ module Orders
           )
         end
       end
-    end
-
-    # ------------ POSITION SNAPSHOT ----
-    def position(segment:, security_id:)
-      positions = fetch_positions
-      pos = positions.find do |p|
-        p.security_id.to_s == security_id.to_s &&
-          p.exchange_segment.to_s == segment.to_s
-      end
-
-      return nil unless pos
-
-      {
-        qty: pos.net_qty.to_i,
-        avg_price: BigDecimal(pos.cost_price.to_s),
-        product_type: pos.product_type,
-        exchange_segment: pos.exchange_segment,
-        position_type: pos.position_type,
-        trading_symbol: pos.trading_symbol
-      }
     end
 
     # ------------ WALLET ---------------
@@ -120,6 +100,42 @@ module Orders
       # Generate unique client order ID with random component to prevent collisions
       # Format: AS-{prefix}-{security_id}-{timestamp}-{random}
       "AS-#{prefix}-#{sid}-#{Time.now.to_i}-#{SecureRandom.hex(2)}"
+    end
+
+    def normalize_exit_response(order, client_order_id:)
+      if already_closed_or_duplicate?(order)
+        return {
+          success: true,
+          status: :already_closed,
+          order_id: extract_order_id(order),
+          client_order_id: client_order_id
+        }
+      end
+
+      return { success: true, status: :accepted, order_id: extract_order_id(order), client_order_id: client_order_id } if order.present?
+
+      { success: false, status: :failed, error: 'exit failed', client_order_id: client_order_id }
+    end
+
+    def already_closed_or_duplicate?(order)
+      # DhanHQ payloads observed in this codebase use error/message text like
+      # 'position not found' and 'duplicate'; re-verify these tokens on broker API changes.
+      return false unless order.is_a?(Hash)
+
+      code = (order[:error_code] || order['error_code']).to_s.downcase
+      message = (order[:message] || order['message'] || order[:error] || order['error']).to_s.downcase
+
+      [code, message].any? do |value|
+        value.include?('already') || value.include?('closed') ||
+          value.include?('position not found') || value.include?('duplicate')
+      end
+    end
+
+    def extract_order_id(order)
+      return order.order_id if order.respond_to?(:order_id)
+      return order[:order_id] || order['order_id'] if order.is_a?(Hash)
+
+      nil
     end
   end
 end

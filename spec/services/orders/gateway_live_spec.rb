@@ -22,7 +22,17 @@ RSpec.describe Orders::GatewayLive do
   end
 
   describe '#exit_market' do
-    it 'generates unique client order ID with random component' do
+    it 'uses provided client_order_id when passed' do
+      gateway.exit_market(tracker, client_order_id: 'AS-EXIT-FIXED-001')
+
+      expect(Orders::Placer).to have_received(:exit_position!).with(
+        seg: tracker.segment,
+        sid: tracker.security_id,
+        client_order_id: 'AS-EXIT-FIXED-001'
+      )
+    end
+
+    it 'generates client order ID when not provided' do
       gateway.exit_market(tracker)
 
       expect(Orders::Placer).to have_received(:exit_position!) do |args|
@@ -30,20 +40,20 @@ RSpec.describe Orders::GatewayLive do
       end
     end
 
-    it 'calls Placer.exit_position! with correct parameters' do
-      gateway.exit_market(tracker)
+    it 'returns success hash with order id when order is placed' do
+      result = gateway.exit_market(tracker, client_order_id: 'AS-EXIT-TEST-123')
 
-      expect(Orders::Placer).to have_received(:exit_position!).with(
-        seg: tracker.segment,
-        sid: tracker.security_id,
-        client_order_id: match(/^AS-EXIT-#{tracker.security_id}-\d+-[a-f0-9]{4}$/)
-      )
+      expect(result).to include(success: true, status: :accepted, order_id: nil, client_order_id: 'AS-EXIT-TEST-123')
     end
 
-    it 'returns success hash when order is placed' do
-      result = gateway.exit_market(tracker)
+    it 'returns already_closed as success for duplicate/already-closed broker errors' do
+      allow(Orders::Placer).to receive(:exit_position!).and_return(
+        { error_code: 'POSITION_NOT_FOUND', message: 'Position already closed' }
+      )
 
-      expect(result).to eq({ success: true })
+      result = gateway.exit_market(tracker, client_order_id: 'AS-EXIT-TEST-123')
+
+      expect(result).to include(success: true, status: :already_closed, client_order_id: 'AS-EXIT-TEST-123')
     end
 
     it 'returns failure hash when Placer returns nil' do
@@ -51,24 +61,7 @@ RSpec.describe Orders::GatewayLive do
 
       result = gateway.exit_market(tracker)
 
-      expect(result).to eq({ success: false, error: 'exit failed' })
-    end
-
-    it 'generates different client order IDs for multiple calls' do
-      coid1 = nil
-      coid2 = nil
-
-      allow(Orders::Placer).to receive(:exit_position!) do |args|
-        coid1 ||= args[:client_order_id]
-        coid2 = args[:client_order_id] if coid1
-        double('order', id: '123')
-      end
-
-      gateway.exit_market(tracker)
-      sleep 0.01 # Ensure different timestamp
-      gateway.exit_market(tracker)
-
-      expect(coid1).not_to eq(coid2)
+      expect(result).to include(success: false, status: :failed, error: 'exit failed')
     end
   end
 

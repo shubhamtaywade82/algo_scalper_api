@@ -9,6 +9,11 @@ module Live
     def initialize
       @last_sync = nil
       @sync_interval = 30.seconds
+      @paper_mode = begin
+        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      rescue StandardError
+        false
+      end
     end
 
     def sync_positions!
@@ -140,7 +145,7 @@ module Live
     end
 
     def paper_trading_enabled?
-      AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      @paper_mode
     end
 
     def extract_security_id(dhan_position)

@@ -147,23 +147,6 @@ module Entries
           return false
         end
 
-        # Paper trading mode: Skip real order placement, create PositionTracker directly
-        if paper_trading_enabled?
-          tracker = create_paper_tracker!(
-            instrument: instrument,
-            pick: pick,
-            side: side,
-            quantity: quantity,
-            index_cfg: index_cfg,
-            ltp: ltp,
-            entry_metadata: entry_metadata,
-            bos_context: bos_context
-          )
-          mark_bos_consumed!(index_cfg: index_cfg, bos_context: bos_context) if tracker
-          return !!tracker
-        end
-
-        # Live trading: Place real order
         response = Orders.config.place_market(
           side: 'buy',
           segment: pick[:segment] || index_cfg[:segment],
@@ -171,9 +154,16 @@ module Entries
           qty: quantity,
           meta: {
             client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
-            ltp: ltp # Pass resolved LTP (from WS or API)
+            ltp: ltp,
+            price: ltp,
+            symbol: pick[:symbol]
           }
         )
+
+        if response.is_a?(Hash) && response[:success] == false
+          Rails.logger.error("[EntryGuard] place_market failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+          return false
+        end
 
         order_no = extract_order_no(response)
         unless order_no
@@ -181,22 +171,36 @@ module Entries
           return false
         end
 
-        tracker = create_tracker!(
-          instrument: instrument,
-          order_no: order_no,
-          pick: pick,
-          side: side,
-          quantity: quantity,
-          index_cfg: index_cfg,
-          ltp: ltp,
-          entry_metadata: entry_metadata,
-          bos_context: bos_context
-        )
+        tracker = if response.is_a?(Hash) && response[:paper]
+                    create_paper_tracker!(
+                      instrument: instrument,
+                      pick: pick,
+                      side: side,
+                      quantity: quantity,
+                      index_cfg: index_cfg,
+                      ltp: ltp,
+                      order_no: order_no,
+                      entry_metadata: entry_metadata,
+                      bos_context: bos_context
+                    )
+                  else
+                    create_tracker!(
+                      instrument: instrument,
+                      order_no: order_no,
+                      pick: pick,
+                      side: side,
+                      quantity: quantity,
+                      index_cfg: index_cfg,
+                      ltp: ltp,
+                      entry_metadata: entry_metadata,
+                      bos_context: bos_context
+                    )
+                  end
 
         mark_bos_consumed!(index_cfg: index_cfg, bos_context: bos_context) if tracker
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
-        true
+        !!tracker
       rescue StandardError => e
         Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
         false
@@ -633,13 +637,7 @@ module Entries
         end
       end
 
-      def paper_trading_enabled?
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-      end
-
-      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil, bos_context: nil)
-        # Generate synthetic order number for paper trading
-        order_no = "PAPER-#{index_cfg[:key]}-#{pick[:security_id]}-#{Time.current.to_i}"
+      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata: nil, bos_context: nil)
 
         # Determine watchable: derivative for options, instrument for indices
         watchable = find_watchable_for_pick(pick: pick, instrument: instrument)

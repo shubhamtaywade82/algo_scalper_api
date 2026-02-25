@@ -34,6 +34,10 @@ RSpec.describe TradingSystem::Daemon do
     allow(ENV).to receive(:[]).with('SCRIPT_MODE').and_return(nil)
   end
 
+  before do
+    allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
+  end
+
   describe 'when market is closed' do
     before do
       allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
@@ -51,6 +55,7 @@ RSpec.describe TradingSystem::Daemon do
       expect(exit_engine).not_to have_received(:start)
       expect(active_cache).not_to have_received(:start)
       expect(reconciliation).not_to have_received(:start)
+      expect(TradingSystem::Bootstrap).to have_received(:boot_reconciliation!).with(strict: false)
     end
   end
 
@@ -72,6 +77,7 @@ RSpec.describe TradingSystem::Daemon do
       expect(exit_engine).to have_received(:start)
       expect(active_cache).to have_received(:start)
       expect(reconciliation).to have_received(:start)
+      expect(TradingSystem::Bootstrap).to have_received(:boot_reconciliation!).with(strict: true)
     end
   end
 end
