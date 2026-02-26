@@ -17,6 +17,12 @@ RSpec.describe Live::TickQuery do
       expect(tick.security_id).to eq('12345')
       expect(tick.ltp).to eq(BigDecimal('101.25'))
       expect(tick.timestamp).to eq(Time.zone.parse('2026-01-01 09:15:00'))
+      expect(tick.oi).to eq(0)
+      expect(tick.oi_change).to eq(0)
+      expect(tick.bid).to be_nil
+      expect(tick.ask).to be_nil
+      expect(tick.volume).to eq(0)
+      expect(tick.prev_close).to be_nil
     end
 
     it 'returns nil when no cache ltp is present' do

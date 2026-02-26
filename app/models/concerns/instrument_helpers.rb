@@ -89,8 +89,8 @@ module InstrumentHelpers
     # Try WebSocket cache if hub is connected and ticks are fresh
     hub = Live::MarketFeedHub.instance
     if hub.running? && hub.connected?
-      tick = Live::TickCache.get(segment: segment, security_id: security_id)
-      return BigDecimal(tick[:ltp].to_s) if tick&.dig(:ltp)
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+      return tick.ltp if tick&.ltp&.positive?
     end
 
     # Fallback to REST API when WebSocket unavailable or cache miss
@@ -278,11 +278,11 @@ module InstrumentHelpers
   end
 
   def ws_get
-    Live::TickCache.get(exchange_segment, security_id.to_s)
+    Live::TickQuery.for_security(segment: exchange_segment, security_id: security_id.to_s)
   end
 
   def ws_ltp
-    ws_get&.dig(:ltp)
+    ws_get&.ltp&.to_f
   end
 
   def ohlc

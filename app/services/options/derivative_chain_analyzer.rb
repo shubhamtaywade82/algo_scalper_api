@@ -57,13 +57,9 @@ module Options
       seg = @index_cfg[:segment]
       sid = @index_cfg[:sid]
 
-      # Try tick cache first
+      # Try tick cache facade
       tick = Live::TickQuery.for_security(segment: seg, security_id: sid)
       return tick.ltp.to_f if tick&.ltp&.positive?
-
-      # Try Redis cache
-      spot = Live::RedisTickCache.instance.fetch_tick(seg, sid)&.dig(:ltp)&.to_f
-      return spot if spot&.positive?
 
       # Fallback to API via Instrument.ltp()
       begin
@@ -255,14 +251,25 @@ module Options
 
         # Get live tick data - use exchange_segment (NSE_FNO) not segment (derivatives)
         exchange_seg = derivative.exchange_segment || 'NSE_FNO'
-        tick = Live::RedisTickCache.instance.fetch_tick(exchange_seg, derivative.security_id)
+        tick = Live::TickQuery.for_security(segment: exchange_seg, security_id: derivative.security_id)
 
         # If no tick data, check batch LTP results
-        if !tick || !tick[:ltp]&.positive?
+        if !tick || !tick.ltp&.positive?
           batch_ltp = batch_ltp_results[derivative.security_id.to_s]
           if batch_ltp&.positive?
-            tick = tick ? tick.dup : {}
-            tick[:ltp] = batch_ltp
+            # Create a MarketTick with LTP if tick is missing
+            tick = tick ? tick : MarketTick.new(
+              segment: exchange_seg,
+              security_id: derivative.security_id,
+              ltp: BigDecimal(batch_ltp.to_s),
+              timestamp: Time.current,
+              oi: 0,
+              oi_change: 0,
+              bid: nil,
+              ask: nil,
+              volume: 0,
+              prev_close: nil
+            )
           end
         end
 
@@ -294,8 +301,8 @@ module Options
 
         # Check if already in tick cache
         exchange_seg = derivative.exchange_segment || 'NSE_FNO'
-        tick = Live::RedisTickCache.instance.fetch_tick(exchange_seg, derivative.security_id)
-        next if tick && tick[:ltp]&.positive?
+        tick = Live::TickQuery.for_security(segment: exchange_seg, security_id: derivative.security_id)
+        next if tick && tick.ltp&.positive?
 
         # Only fetch for ATM candidates (within 2 strikes)
         if atm_strike_approx
@@ -380,8 +387,8 @@ module Options
       exchange_seg = derivative.exchange_segment || 'NSE_FNO'
 
       # Calculate OI change: prefer tick data, fallback to API data (current_oi - previous_oi)
-      current_oi = tick&.dig(:oi)&.to_i || api_data&.dig('oi')&.to_i || 0
-      oi_change_from_tick = tick&.dig(:oi_change)&.to_i
+      current_oi = tick&.oi&.to_i || api_data&.dig('oi')&.to_i || 0
+      oi_change_from_tick = tick&.oi_change&.to_i
       previous_oi = api_data&.dig('previous_oi').to_i
       oi_change = if oi_change_from_tick && oi_change_from_tick != 0
                     oi_change_from_tick
@@ -399,13 +406,13 @@ module Options
         segment: exchange_seg, # Use exchange_segment for consistency
         security_id: derivative.security_id,
         lot_size: derivative.lot_size.to_i,
-        ltp: tick&.dig(:ltp)&.to_f || api_data&.dig('last_price')&.to_f,
+        ltp: tick&.ltp&.to_f || api_data&.dig('last_price')&.to_f,
         oi: current_oi,
         oi_change: oi_change,
-        bid: tick&.dig(:bid)&.to_f || api_data&.dig('top_bid_price')&.to_f,
-        ask: tick&.dig(:ask)&.to_f || api_data&.dig('top_ask_price')&.to_f,
+        bid: tick&.bid&.to_f || api_data&.dig('top_bid_price')&.to_f,
+        ask: tick&.ask&.to_f || api_data&.dig('top_ask_price')&.to_f,
         iv: api_data&.dig('implied_volatility')&.to_f,
-        volume: tick&.dig(:volume)&.to_i || api_data&.dig('volume')&.to_i,
+        volume: tick&.volume&.to_i || api_data&.dig('volume')&.to_i,
         prev_close: api_data&.dig('previous_close_price')&.to_f,
         delta: api_data&.dig('greeks', 'delta')&.to_f,
         gamma: api_data&.dig('greeks', 'gamma')&.to_f,

@@ -185,24 +185,13 @@ module Live
           next
         end
 
-        # 1) Try TickCache (memory)
+        # 1) Try TickQuery facade (which handles memory + Redis fallback)
         tick_ltp = nil
         begin
           tick_ltp = Live::TickQuery.for_security(segment: seg, security_id: security_id)&.ltp
         rescue StandardError => e
           @logger.warn("[PnlUpdater] tick query error for #{seg}:#{security_id} - #{e.message}")
           tick_ltp = nil
-        end
-
-        # 2) RedisTickCache fallback
-        if tick_ltp.nil? || (tick_ltp.respond_to?(:to_f) && tick_ltp.to_f <= 0)
-          begin
-            redis_tick = Live::RedisTickCache.instance.fetch_tick(seg, security_id)
-            tick_ltp = redis_tick[:ltp] if redis_tick && redis_tick[:ltp].to_f.positive?
-          rescue StandardError => e
-            @logger.warn("[PnlUpdater] RedisTickCache.fetch_tick error for #{seg}:#{security_id} - #{e.message}")
-            tick_ltp = nil
-          end
         end
 
         # 3) Payload fallback

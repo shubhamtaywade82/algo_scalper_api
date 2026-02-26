@@ -21,7 +21,13 @@ module Live
           segment: segment,
           security_id: security_id,
           ltp: BigDecimal(raw_ltp.to_s),
-          timestamp: tick_data&.dig(:timestamp) || Time.current
+          timestamp: tick_data&.dig(:timestamp) || Time.current,
+          oi: tick_data&.dig(:oi)&.to_i || 0,
+          oi_change: tick_data&.dig(:oi_change)&.to_i || 0,
+          bid: tick_data&.dig(:bid)&.to_f,
+          ask: tick_data&.dig(:ask)&.to_f,
+          volume: tick_data&.dig(:volume)&.to_i || 0,
+          prev_close: tick_data&.dig(:prev_close)&.to_f
         )
       rescue StandardError
         nil
