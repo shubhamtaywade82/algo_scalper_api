@@ -388,6 +388,7 @@ module Signal
 
         # Prepare entry metadata to pass to EntryGuard
         entry_metadata = {
+          entry_contract: 'bos_machine_v1',
           entry_path: entry_path,
           strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
           strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',

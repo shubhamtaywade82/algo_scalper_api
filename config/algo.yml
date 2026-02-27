@@ -526,7 +526,7 @@ signals:
   entry_strategy:
     primary: supertrend
 
-  primary_timeframe: "5m"
+  primary_timeframe: "1m"
   confirmation_timeframe: "5m"
 
   # Expiry date filtering: Skip indices with expiry > max_expiry_days
