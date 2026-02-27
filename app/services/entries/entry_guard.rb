@@ -327,9 +327,9 @@ module Entries
         return unless segment.present? && security_id.present?
 
         # Try Redis tick cache
-        tick_data = Live::TickCache.fetch(segment, security_id)
-        if tick_data&.dig(:ltp)
-          ltp = BigDecimal(tick_data[:ltp].to_s)
+        tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+        if tick
+          ltp = tick.ltp
           entry = BigDecimal(tracker.entry_price.to_s)
           qty = tracker.quantity.to_i
           pnl = (ltp - entry) * qty
@@ -356,12 +356,8 @@ module Entries
         return nil unless segment.present? && security_id.present?
 
         # Try WebSocket cache first
-        cached = Live::TickCache.ltp(segment, security_id)
-        return BigDecimal(cached.to_s) if cached
-
-        # Try Redis PnL cache
-        tick_data = Live::TickCache.fetch(segment, security_id)
-        return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
+        tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+        return tick.ltp if tick
 
         # Try tradable's fetch method (derivative or instrument)
         tradable = tracker.tradable
@@ -450,10 +446,10 @@ module Entries
             attempts = (max_wait_ms / poll_interval_ms).to_i
 
             attempts.times do
-              cached_ltp = Live::TickCache.ltp(segment, security_id)
-              if cached_ltp.present? && cached_ltp.to_f.positive?
-                Rails.logger.debug { "[EntryGuard] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_ltp}" }
-                return BigDecimal(cached_ltp.to_s)
+              cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+              if cached_tick&.ltp&.to_f&.positive?
+                Rails.logger.debug { "[EntryGuard] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
+                return cached_tick.ltp
               end
               sleep(poll_interval_ms / 1000.0) # Convert ms to seconds
             end

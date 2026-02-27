@@ -218,9 +218,9 @@ module Positions
         Rails.logger.debug { "[ActiveCache] Applied pending peak for tracker #{tracker.id}: #{peak_value.round(2)}%" }
       end
 
-      # Try to get current LTP from cache
-      ltp = Live::TickCache.ltp(tracker.segment, tracker.security_id)
-      position_data.update_ltp(ltp) if ltp&.positive?
+      # Try to get current LTP from cache facade
+      tick = @tick_query.for_security(segment: tracker.segment, security_id: tracker.security_id)
+      position_data.update_ltp(tick.ltp.to_f) if tick&.ltp&.positive?
 
       attach_underlying_metadata(position_data, tracker)
 
@@ -525,8 +525,8 @@ module Positions
       position_data.underlying_symbol = meta[:symbol]
       position_data.index_key ||= meta[:index_key]
       begin
-        ltp = Live::TickCache.ltp(meta[:segment], meta[:security_id])
-        position_data.underlying_ltp = ltp.to_f if ltp
+        tick = Live::TickQuery.for_security(segment: meta[:segment], security_id: meta[:security_id])
+        position_data.underlying_ltp = tick.ltp.to_f if tick&.ltp&.positive?
       rescue StandardError
         nil
       end

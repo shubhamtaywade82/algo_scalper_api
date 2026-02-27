@@ -29,7 +29,7 @@ RSpec.describe Live::ExitEngine do
   let(:engine) { described_class.new(order_router: router) }
 
   before do
-    allow(Live::TickCache).to receive(:ltp).and_return(101.5)
+    allow(Live::TickQuery).to receive(:ltp_for).and_return(101.5)
     allow(router).to receive(:exit_market).and_return({ success: true })
   end
 

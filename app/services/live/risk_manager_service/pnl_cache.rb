@@ -172,8 +172,8 @@ module Live
         return tradable.ltp if tradable&.ltp
 
         segment = tracker.segment.presence || tracker.instrument&.exchange_segment
-        cached = Live::TickCache.ltp(segment, tracker.security_id)
-        return BigDecimal(cached.to_s) if cached
+        cached_tick = Live::TickQuery.for_security(segment: segment, security_id: tracker.security_id)
+        return cached_tick.ltp if cached_tick
 
         fetch_ltp(position, tracker)
       end
@@ -183,15 +183,8 @@ module Live
         security_id = tracker.security_id
         return nil unless segment.present? && security_id.present?
 
-        cached = Live::TickCache.ltp(segment, security_id)
-        return BigDecimal(cached.to_s) if cached
-
-        tick_data = begin
-          Live::TickCache.fetch(segment, security_id)
-        rescue StandardError
-          nil
-        end
-        return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
+        cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+        return cached_tick.ltp if cached_tick
 
         tradable = tracker.tradable
         if tradable
@@ -221,12 +214,8 @@ module Live
                   elsif position.is_a?(Hash) then position[:exchange_segment]
                   end
         segment ||= tracker.instrument&.exchange_segment
-        cached = begin
-          Live::TickCache.ltp(segment, tracker.security_id)
-        rescue StandardError
-          nil
-        end
-        return BigDecimal(cached.to_s) if cached
+        cached_tick = Live::TickQuery.for_security(segment: segment, security_id: tracker.security_id)
+        return cached_tick.ltp if cached_tick
 
         nil
       end

@@ -319,12 +319,8 @@ module Live
       return nil unless segment.present? && security_id.present?
 
       # Try WebSocket cache first
-      cached = Live::TickCache.ltp(segment, security_id)
-      return BigDecimal(cached.to_s) if cached
-
-      # Try Redis PnL cache
-      tick_data = Live::TickCache.fetch(segment, security_id)
-      return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+      return tick.ltp if tick
 
       # Try tradable's fetch method (derivative or instrument)
       tradable = tracker.tradable

@@ -184,11 +184,9 @@ module Live
       "AS-EXIT-#{Digest::SHA256.hexdigest(seed)[0, 20]}"
     end
 
-    # Get LTP from cache with error handling
-    # Since Live::TickCache.ltp always exists (delegates to ::TickCache.instance.ltp),
-    # we can simplify to a direct call
+    # Resolve LTP via the market-data query boundary
     def safe_ltp(tracker)
-      Live::TickCache.ltp(tracker.segment, tracker.security_id)
+      Live::TickQuery.ltp_for(tracker)
     rescue StandardError
       nil
     end

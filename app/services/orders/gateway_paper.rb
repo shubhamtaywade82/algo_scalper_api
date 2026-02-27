@@ -3,8 +3,7 @@
 module Orders
   class GatewayPaper < Orders::Gateway
     def exit_market(tracker, client_order_id: nil)
-      ltp = Live::TickCache.ltp(tracker.segment, tracker.security_id) ||
-            tracker.entry_price
+      ltp = Live::TickQuery.ltp_for(tracker) || tracker.entry_price
 
       exit_price = BigDecimal(ltp.to_s)
       coid = client_order_id || "PAPER-EXIT-#{tracker.id}"
