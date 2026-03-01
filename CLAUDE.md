@@ -66,10 +66,11 @@ Signal Scheduler
 ## Critical rules
 
 - **DhanHQ only** — no Delta Exchange code
-- `event_bus.rb` is the **only** communication channel between live subsystems — no direct cross-service calls
-- The kill switch in `risk_manager_service.rb` is sacred — never bypass it
+- Live subsystems communicate via **direct method calls** — `event_bus.rb` exists but has zero subscribers; do not treat it as the active communication layer (it is infrastructure for future use, not current behaviour)
+- The daily loss limits in `EntryGuard` + `RiskManagerService` are the active kill mechanism — there is no `Risk::CircuitBreaker` class yet (the health endpoint has it commented out); do not assume one exists
 - WebSocket event handlers must be **idempotent** — the feed can reconnect and replay
-- `exit_engine.rb` is the single source of truth for exit logic — no exit logic scattered in other services
+- `exit_engine.rb` is the single source of truth for exit placement — `RiskManagerService` and `TrailingEngine` detect exit conditions and call it directly
+- `TickQuery` returns `nil` on cache miss (silently) — callers that receive nil must treat it as stale data, not zero
 - Position sizing must go through `capital/` — never inline the math elsewhere
 - Solid Queue is the job runner (not Sidekiq) — use `ApplicationJob`, not `ApplicationWorker`
 - Redis tick cache is write-through — if Redis is down, fall back gracefully, don't crash

@@ -15,7 +15,10 @@ module Live
 
         tick_data = Live::TickCache.fetch(segment, security_id)
         raw_ltp = tick_data&.dig(:ltp) || Live::TickCache.ltp(segment, security_id)
-        return nil unless raw_ltp
+        unless raw_ltp
+          Rails.logger.warn("[TickQuery] no LTP in cache for #{segment}/#{security_id}")
+          return nil
+        end
 
         MarketTick.new(
           segment: segment,
@@ -29,7 +32,8 @@ module Live
           volume: tick_data&.dig(:volume)&.to_i || 0,
           prev_close: tick_data&.dig(:prev_close)&.to_f
         )
-      rescue StandardError
+      rescue StandardError => e
+        Rails.logger.warn("[TickQuery] cache miss for #{segment}/#{security_id}: #{e.message}")
         nil
       end
 
