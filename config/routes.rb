@@ -11,6 +11,15 @@ Rails.application.routes.draw do
   namespace :api do
     get :health, to: "health#show"
     post :test_broadcast, to: "test#broadcast"
+
+    # Circuit breaker — emergency halt
+    # GET    /api/circuit_breaker        → status (unauthenticated)
+    # POST   /api/circuit_breaker/trip   → trip   (requires X-Circuit-Breaker-Token)
+    # DELETE /api/circuit_breaker/trip   → reset  (requires X-Circuit-Breaker-Token)
+    resource :circuit_breaker, only: %i[show] do
+      post :trip, on: :member
+      delete :trip, on: :member
+    end
   end
 
   # Redis UI (development only)

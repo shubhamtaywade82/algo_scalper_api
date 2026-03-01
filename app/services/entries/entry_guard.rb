@@ -15,6 +15,14 @@ module Entries
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         Rails.logger.info(\"[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})\")
+
+        # Circuit breaker — highest priority, checked before everything else
+        if Risk::CircuitBreaker.instance.tripped?
+          cb = Risk::CircuitBreaker.instance.status
+          Rails.logger.error(\"[EntryGuard] Entry blocked — circuit breaker tripped: #{cb[:reason]} (at: #{cb[:at]})\")
+          return false
+        end
+
         unless bos_contract_present?(entry_metadata)
 Rails.logger.error(
             \"[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing. Metadata: #{entry_metadata.inspect}\"
