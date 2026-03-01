@@ -15,6 +15,10 @@ module Capital
     ].freeze
 
     class << self
+      def paper_trading_balance
+        AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000.0
+      end
+
       def qty_for(index_cfg:, entry_price:, derivative_lot_size:, scale_multiplier: 1)
         multiplier = normalize_multiplier(scale_multiplier)
         capital_available = available_cash

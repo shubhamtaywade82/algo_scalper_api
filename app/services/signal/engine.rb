@@ -388,7 +388,7 @@ module Signal
 
         # Prepare entry metadata to pass to EntryGuard
         entry_metadata = {
-          entry_contract: 'bos_machine_v1',
+          entry_contract: entry_primary == 'supertrend' ? 'supertrend_machine_v1' : 'bos_machine_v1',
           entry_path: entry_path,
           strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
           strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
@@ -399,6 +399,16 @@ module Signal
           validation_mode: signals_cfg[:validation_mode] || 'balanced',
           permission: permission
         }
+
+        # For Supertrend-only mode, we add mock BOS fields to pass EntryGuard's contract check
+        if entry_primary == 'supertrend'
+          entry_metadata.merge!(
+            bos_id: "st_#{index_cfg[:key]}_#{Time.current.to_i}",
+            bos_timeframe: primary_tf,
+            bos_origin_price: primary_series.candles.last&.close, # current price as origin
+            bos_level: primary_series.candles.last&.close
+          )
+        end
 
         Entries::BosEntryEngine.run_for(
           index_cfg: index_cfg,

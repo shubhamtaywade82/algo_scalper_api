@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-# Supertrend-only entry strategy: direction from flip on the current bar.
-# - flip_up (bearish → bullish) → :long (CE)
-# - flip_down (bullish → bearish) → :short (PE)
-# - no flip → :none (no trade)
+# Supertrend-only entry strategy: direction from status on the current bar.
+# - bullish trend → :long (CE)
+# - bearish trend → :short (PE)
+# - no data → :none (no trade)
 #
 # No capital, order, exit, or confirmation logic. Used only for entry direction.
 class SupertrendTrend
@@ -21,13 +21,12 @@ class SupertrendTrend
       return :none if closes.blank? || closes.size != line.size
 
       last_i = last_valid_index(line)
-      return :none if last_i.nil? || last_i < 1
+      return :none if last_i.nil?
 
-      prev_trend = trend_at(closes, line, last_i - 1)
       current_trend = trend_at(closes, line, last_i)
-      return :none if prev_trend.nil? || current_trend.nil?
+      return :none if current_trend.nil?
 
-      direction_from_flip(prev_trend, current_trend)
+      current_trend == :bullish ? :long : :short
     end
 
     private
@@ -51,13 +50,6 @@ class SupertrendTrend
         return i unless line[i].nil?
       end
       nil
-    end
-
-    def direction_from_flip(prev_trend, current_trend)
-      return :long if prev_trend == :bearish && current_trend == :bullish
-      return :short if prev_trend == :bullish && current_trend == :bearish
-
-      :none
     end
 
     def trend_at(closes, line, idx)

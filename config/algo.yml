@@ -527,7 +527,7 @@ signals:
     primary: supertrend
 
   primary_timeframe: "1m"
-  confirmation_timeframe: "5m"
+  confirmation_timeframe: null
 
   # Expiry date filtering: Skip indices with expiry > max_expiry_days
   # This prevents trading in indices where expiry is too far away (e.g., monthly BANKNIFTY when > 7 days)

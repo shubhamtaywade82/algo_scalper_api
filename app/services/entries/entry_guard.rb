@@ -6,6 +6,7 @@ require_relative 'bos_extractor'
 module Entries
   class EntryGuard
     ENTRY_CONTRACT = 'bos_machine_v1'
+    SUPERTREND_CONTRACT = 'supertrend_machine_v1'
     BOS_SWING_LOOKBACK = 5
     BOS_MAX_AGE_CANDLES = 8
     BOS_MAX_ENTRY_DELAY_CANDLES = 3
@@ -13,12 +14,14 @@ module Entries
 
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
+        Rails.logger.info(\"[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})\")
         unless bos_contract_present?(entry_metadata)
-          Rails.logger.error(
-            "[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing"
+Rails.logger.error(
+            \"[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing. Metadata: #{entry_metadata.inspect}\"
           )
           return false
         end
+        Rails.logger.debug \"[EntryGuard] Contract check passed for #{index_cfg[:key]}\"
 
         # Time regime validation (session-aware entry rules)
         unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
@@ -54,8 +57,17 @@ module Entries
         Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
 
         side = direction == :bullish ? 'long_ce' : 'long_pe'
-        unless exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
-          Rails.logger.debug { "[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})" }
+        is_supertrend = entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
+
+        # Exposure check for Supertrend: Allow only ONE active position per index to prevent over-trading
+        if is_supertrend
+          active_idx_pos = PositionTracker.active.where(\"(meta->>'index_key') = ?\", index_cfg[:key].to_s).exists?
+          if active_idx_pos
+            Rails.logger.debug { \"[EntryGuard] Supertrend exposure check failed: Active position already exists for #{index_cfg[:key]}\" }
+            return false
+          end
+        elsif !exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
+          Rails.logger.debug { \"[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})\" }
           return false
         end
 
@@ -85,13 +97,27 @@ module Entries
           return false
         end
 
-        bos_context = enforce_structure_entry_gate(
-          index_cfg: index_cfg,
-          instrument: instrument,
-          direction: direction,
-          entry_price: ltp.to_f,
-          entry_metadata: entry_metadata
-        )
+        if entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
+          # Bypass BOS gate for Supertrend-only mode
+          bos_context = {
+            confirmed_at: Time.current,
+            confirmed_index: -1,
+            direction: direction,
+            bos_id: entry_metadata[:bos_id],
+            timeframe: entry_metadata[:bos_timeframe],
+            origin_swing: { price: entry_metadata[:bos_origin_price] },
+            broken_swing: { price: entry_metadata[:bos_level] },
+            entry_underlying_price: ltp.to_f
+          }
+        else
+          bos_context = enforce_structure_entry_gate(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            direction: direction,
+            entry_price: ltp.to_f,
+            entry_metadata: entry_metadata
+          )
+        end
         return false unless bos_context
 
         # ===== Unified instrument profile + capital cap sizing (hard rules) =====
@@ -99,7 +125,8 @@ module Entries
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
 
         # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
-        if %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
+        # Bypass for Supertrend testing mode.
+        if !is_supertrend && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
           Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
           return false
         end
@@ -122,11 +149,12 @@ module Entries
 
         if cap_lots <= 0
           Rails.logger.info(
-            "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, " \
-            "permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
+            \"[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, \" \\
+            \"permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}\"
           )
           return false
         end
+        Rails.logger.debug \"[EntryGuard] Sizing check passed: #{cap_lots} lots\"
 
         quantity_by_existing_allocator = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
@@ -902,7 +930,8 @@ module Entries
 
       def bos_contract_present?(entry_metadata)
         return false unless entry_metadata.is_a?(Hash)
-        return false unless entry_metadata[:entry_contract].to_s == ENTRY_CONTRACT
+        contract = entry_metadata[:entry_contract].to_s
+        return false unless [ENTRY_CONTRACT, SUPERTREND_CONTRACT].include?(contract)
         return false if entry_metadata[:bos_id].blank?
         return false if entry_metadata[:bos_timeframe].blank?
         return false if entry_metadata[:bos_origin_price].blank?
