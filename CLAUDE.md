@@ -67,7 +67,7 @@ Signal Scheduler
 
 - **DhanHQ only** — no Delta Exchange code
 - Live subsystems communicate via **direct method calls** — `event_bus.rb` exists but has zero subscribers; do not treat it as the active communication layer (it is infrastructure for future use, not current behaviour)
-- The daily loss limits in `EntryGuard` + `RiskManagerService` are the active kill mechanism — there is no `Risk::CircuitBreaker` class yet (the health endpoint has it commented out); do not assume one exists
+- `Risk::CircuitBreaker` exists (`app/services/risk/circuit_breaker.rb`) — singleton backed by Rails.cache (Solid Cache); API at `GET/POST/DELETE /api/circuit_breaker/trip`; `EntryGuard` checks it before every entry, `RiskManagerService` force-closes all positions when tripped
 - WebSocket event handlers must be **idempotent** — the feed can reconnect and replay
 - `exit_engine.rb` is the single source of truth for exit placement — `RiskManagerService` and `TrailingEngine` detect exit conditions and call it directly
 - `TickQuery` returns `nil` on cache miss (silently) — callers that receive nil must treat it as stale data, not zero
