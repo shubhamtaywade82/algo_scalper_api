@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_02_13_000100) do
+ActiveRecord::Schema[8.0].define(version: 2026_02_25_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -270,6 +270,12 @@ ActiveRecord::Schema[8.0].define(version: 2026_02_13_000100) do
     t.string "trade_state"
     t.datetime "validated_at"
     t.datetime "expansion_at"
+    t.datetime "exit_requested_at"
+    t.datetime "exit_sent_at"
+    t.string "exit_coid"
+    t.string "exit_order_id"
+    t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
+    t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"

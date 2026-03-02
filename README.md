@@ -150,8 +150,18 @@ indices:
 | `PAPER_MODE`              | Trading mode (`true`=paper, `false`=live) | `false` (live)             |
 | `RAILS_LOG_LEVEL`         | Application log level                     | `info`                     |
 | `REDIS_URL`               | Redis connection URL                      | `redis://localhost:6379/0` |
+| `TRADING_BOOT_RECONCILIATION_STRICT` | Fail daemon start when startup reconciliation fails (`true`/`false`) | `true` when market open, else `false` |
 
 ---
+
+### Startup Reconciliation Safety
+
+Trading daemon startup performs a broker-vs-DB reconciliation pass before starting risk/signal loops. This is handled by `Live::PositionSyncService.instance.force_sync!` and prevents stale DB-only state after restarts.
+
+- During market hours, reconciliation failures are strict by default and block daemon startup.
+- Outside market hours, strict mode defaults to false.
+- Override with `TRADING_BOOT_RECONCILIATION_STRICT=true|false`.
+
 
 ## 📊 Trading System
 

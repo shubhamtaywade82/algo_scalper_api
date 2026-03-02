@@ -57,6 +57,14 @@ module Live
         # Skip enforcement methods if market closed and no positions (avoid DB queries)
         return if skip_enforcement_due_to_market_closed?
 
+        # Circuit breaker — force-close all positions if tripped, then stop enforcement
+        if Risk::CircuitBreaker.instance.tripped?
+          cb = Risk::CircuitBreaker.instance.status
+          Rails.logger.error("[RiskManager] Circuit breaker active (#{cb[:reason]}) — force-closing all positions")
+          Risk::CircuitBreaker.instance.force_close_all!(exit_engine: exit_engine, reason: "circuit_breaker: #{cb[:reason]}")
+          return
+        end
+
         advance_trade_states!
 
         # ============================================================

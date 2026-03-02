@@ -399,7 +399,7 @@ module Live
       # TickCache.put() handles merging of both types
       Live::TickCache.put(tick) if tick[:ltp].to_f.positive? || tick[:prev_close].to_f.positive?
 
-      # # puts Live::TickCache.ltp(tick[:segment], tick[:security_id])
+      # # puts Live::TickQuery.for_security(segment: tick[:segment], security_id: tick[:security_id])&.ltp
       # # Store in Redis for PnL tracking (secondary)
       # # Only store if we have valid segment, security_id, and LTP
       # if tick[:segment].present? && tick[:security_id].present? && tick[:ltp].present? && tick[:ltp].to_f.positive?

@@ -1599,32 +1599,31 @@ RSpec.describe Live::RiskManagerService do
           expect(exit_engine).to have_received(:execute_exit).with(tracker, reason)
         end
 
-        it 'handles external exit_engine errors gracefully' do
+        it 'raises external exit_engine errors' do
           allow(exit_engine).to receive(:execute_exit).and_raise(StandardError, 'Exit error')
-          allow(Rails.logger).to receive(:error)
 
-          expect { service.send(:dispatch_exit, exit_engine, tracker, reason) }.not_to raise_error
-          expect(Rails.logger).to have_received(:error).with(match(/external exit_engine failed/))
+          expect { service.send(:dispatch_exit, exit_engine, tracker, reason) }
+            .to raise_error(StandardError, 'Exit error')
         end
       end
 
       context 'when exit_engine is self' do
-        it 'calls internal execute_exit' do
-          allow(service).to receive(:execute_exit).and_return(true)
+        it 'raises fatal error because self-managed fallback is removed' do
+          allow(Rails.logger).to receive(:fatal)
 
-          service.send(:dispatch_exit, service, tracker, reason)
-
-          expect(service).to have_received(:execute_exit).with(tracker, reason)
+          expect { service.send(:dispatch_exit, service, tracker, reason) }
+            .to raise_error(RuntimeError, /ExitEngine unavailable/)
+          expect(Rails.logger).to have_received(:fatal).with(match(/CRITICAL: ExitEngine unavailable/))
         end
       end
 
       context 'when exit_engine is nil' do
-        it 'calls internal execute_exit' do
-          allow(service).to receive(:execute_exit).and_return(true)
+        it 'raises fatal error because self-managed fallback is removed' do
+          allow(Rails.logger).to receive(:fatal)
 
-          service.send(:dispatch_exit, nil, tracker, reason)
-
-          expect(service).to have_received(:execute_exit).with(tracker, reason)
+          expect { service.send(:dispatch_exit, nil, tracker, reason) }
+            .to raise_error(RuntimeError, /ExitEngine unavailable/)
+          expect(Rails.logger).to have_received(:fatal).with(match(/CRITICAL: ExitEngine unavailable/))
         end
       end
     end

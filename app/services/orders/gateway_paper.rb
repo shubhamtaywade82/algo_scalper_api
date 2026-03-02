@@ -2,51 +2,31 @@
 
 module Orders
   class GatewayPaper < Orders::Gateway
-    def exit_market(tracker)
-      ltp = Live::TickCache.ltp(tracker.segment, tracker.security_id) ||
-            tracker.entry_price
+    def exit_market(tracker, client_order_id: nil)
+      ltp = Live::TickQuery.ltp_for(tracker) || tracker.entry_price
 
       exit_price = BigDecimal(ltp.to_s)
+      coid = client_order_id || "PAPER-EXIT-#{tracker.id}"
 
-      # Return success with exit_price - let ExitEngine update tracker (consistent with live mode)
-      # This ensures single source of truth and prevents double updates
-      { success: true, exit_price: exit_price }
+      # Return normalized shape with exit_price - ExitEngine remains the single source of truth.
+      {
+        success: true,
+        exit_price: exit_price,
+        order_id: coid,
+        client_order_id: coid,
+        status: :accepted,
+        paper: true
+      }
     end
 
     def place_market(side:, segment:, security_id:, qty:, meta: {})
-      tracker = PositionTracker.active_for(segment, security_id)
-      tracker ||= PositionTracker.create!(
-        instrument_id: nil,
-        order_no: "PAPER-#{SecureRandom.hex(3)}",
-        security_id: security_id.to_s,
-        symbol: meta[:symbol] || security_id.to_s,
-        segment: segment,
-        side: side.to_s.upcase,
-        status: 'active',
-        quantity: qty,
-        avg_price: meta[:price] || 0
-      )
+      order_no = meta[:client_order_id] || "PAPER-#{SecureRandom.hex(3)}"
 
-      { success: true, paper: true, tracker_id: tracker.id }
+      # Simulate broker ack only; domain services own tracker persistence.
+      { success: true, order_id: order_no, paper: true }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] place_market failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
       { success: false, error: e.message, paper: true }
-    end
-
-    def position(segment:, security_id:)
-      tracker = PositionTracker.active_for(segment, security_id)
-      return nil unless tracker
-
-      # Return consistent format with GatewayLive for better compatibility
-      {
-        qty: tracker.quantity,
-        avg_price: tracker.avg_price,
-        product_type: nil, # Paper trading doesn't have product_type
-        exchange_segment: tracker.segment,
-        position_type: tracker.side == 'BUY' ? 'LONG' : 'SHORT',
-        trading_symbol: tracker.symbol,
-        status: tracker.status # Additional field for paper mode
-      }
     end
 
     def wallet_snapshot
@@ -55,6 +35,13 @@ module Orders
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
       { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0 } # Return default on error
+    end
+
+    def cancel_order(order_id)
+      { success: true, order_id: order_id, status: :canceled, paper: true }
+    rescue StandardError => e
+      Rails.logger.error("[GatewayPaper] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
+      { success: false, order_id: order_id, status: :failed, error: e.message, paper: true }
     end
   end
 end

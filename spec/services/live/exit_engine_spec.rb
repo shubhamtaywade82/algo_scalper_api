@@ -29,7 +29,7 @@ RSpec.describe Live::ExitEngine do
   let(:engine) { described_class.new(order_router: router) }
 
   before do
-    allow(Live::TickCache).to receive(:ltp).and_return(101.5)
+    allow(Live::TickQuery).to receive(:ltp_for).and_return(101.5)
     allow(router).to receive(:exit_market).and_return({ success: true })
   end
 
@@ -87,6 +87,9 @@ RSpec.describe Live::ExitEngine do
         expect(result[:success]).to be true
         expect(result[:exit_price]).to eq(101.5)
         expect(result[:reason]).to eq('stop_loss')
+        expect(result[:client_order_id]).to be_present
+        expect(tracker.reload.exit_requested_at).to be_present
+        expect(tracker.exit_sent_at).to be_present
       end
 
       it 'marks tracker as exited' do
@@ -100,7 +103,7 @@ RSpec.describe Live::ExitEngine do
       it 'calls router exit_market' do
         engine.execute_exit(tracker, 'test reason')
 
-        expect(router).to have_received(:exit_market).with(tracker)
+        expect(router).to have_received(:exit_market).with(tracker, client_order_id: tracker.reload.exit_coid)
       end
 
       it 'prevents double exit - marks tracker exited once even when called multiple times' do
@@ -123,6 +126,18 @@ RSpec.describe Live::ExitEngine do
         # execute_exit checks tracker.active? before checking if exited, so it returns not_active
         expect(result[:success]).to be false
         expect(result[:reason]).to eq('not_active')
+        expect(router).not_to have_received(:exit_market)
+      end
+    end
+
+
+    context 'when exit was already requested earlier' do
+      it 'returns exit_already_requested and does not place another broker order' do
+        tracker.update!(exit_requested_at: Time.current, exit_coid: 'AS-EXIT-EXISTING')
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result).to include(success: true, reason: 'exit_already_requested', client_order_id: 'AS-EXIT-EXISTING')
         expect(router).not_to have_received(:exit_market)
       end
     end

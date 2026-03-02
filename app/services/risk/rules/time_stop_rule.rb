@@ -12,7 +12,7 @@ module Risk
     # - Time stops prevent "hope trades"
     #
     # Rules:
-    # - Scalps: max 2-3 minutes OR 2 candles
+    # - Scalps: max 15 minutes OR 15 candles
     # - Trend trades:
     #   - NIFTY: max 45 minutes
     #   - SENSEX: max 90 minutes
@@ -26,8 +26,8 @@ module Risk
       # Time limits by trade type and index
       TIME_LIMITS = {
         scalp: {
-          max_minutes: 3,
-          max_candles: 2
+          max_minutes: 15,
+          max_candles: 15
         },
         trend: {
           'NIFTY' => 45,      # minutes

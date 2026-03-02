@@ -15,6 +15,10 @@ module Capital
     ].freeze
 
     class << self
+      def paper_trading_balance
+        AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000.0
+      end
+
       def qty_for(index_cfg:, entry_price:, derivative_lot_size:, scale_multiplier: 1)
         multiplier = normalize_multiplier(scale_multiplier)
         capital_available = available_cash
@@ -49,21 +53,11 @@ module Capital
       end
 
       def available_cash
-        return paper_trading_balance if paper_trading_enabled?
-
-        fetch_live_trading_balance
+        wallet = Orders.config.gateway.wallet_snapshot
+        convert_to_bigdecimal(wallet.fetch(:cash, 0))
       rescue StandardError => e
         log_balance_fetch_error(e)
         BigDecimal(0)
-      end
-
-      def paper_trading_enabled?
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-      end
-
-      def paper_trading_balance
-        balance = AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000
-        BigDecimal(balance.to_s)
       end
 
       private
@@ -221,20 +215,6 @@ module Capital
       def daily_max_loss_with_override(band)
         # Prefer algo.yml config, ENV as fallback for testing
         band[:daily_max_loss_pct] || ENV['DAILY_MAX_LOSS_PCT']&.to_f
-      end
-
-      def fetch_live_trading_balance
-        data = DhanHQ::Models::Funds.fetch
-        value = data.available_balance
-
-        return handle_missing_balance(data) if value.nil?
-
-        convert_to_bigdecimal(value)
-      end
-
-      def handle_missing_balance(data)
-        Rails.logger.warn("[Capital] Failed to extract available_balance from funds data: #{data.inspect}")
-        BigDecimal(0)
       end
 
       def convert_to_bigdecimal(value)

@@ -388,6 +388,7 @@ module Signal
 
         # Prepare entry metadata to pass to EntryGuard
         entry_metadata = {
+          entry_contract: entry_primary == 'supertrend' ? 'supertrend_machine_v1' : 'bos_machine_v1',
           entry_path: entry_path,
           strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
           strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
@@ -399,14 +400,36 @@ module Signal
           permission: permission
         }
 
-        Entries::BosEntryEngine.run_for(
-          index_cfg: index_cfg,
-          instrument: instrument,
-          direction: final_direction,
-          picks: picks,
-          entry_metadata: entry_metadata,
-          permission: permission
-        )
+        if entry_primary == 'supertrend'
+          # Supertrend-only mode: enter directly on signal without BOS pullback wait.
+          # Add stub BOS fields required by EntryGuard's contract check.
+          entry_metadata.merge!(
+            bos_id: "st_#{index_cfg[:key]}_#{Time.current.to_i}",
+            bos_timeframe: primary_tf,
+            bos_origin_price: primary_series.candles.last&.close,
+            bos_level: primary_series.candles.last&.close
+          )
+          picks.each do |pick|
+            entered = Entries::EntryGuard.try_enter(
+              index_cfg: index_cfg,
+              pick: pick,
+              direction: final_direction,
+              scale_multiplier: 1,
+              entry_metadata: entry_metadata,
+              permission: permission
+            )
+            break if entered
+          end
+        else
+          Entries::BosEntryEngine.run_for(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            direction: final_direction,
+            picks: picks,
+            entry_metadata: entry_metadata,
+            permission: permission
+          )
+        end
 
         # Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
       rescue StandardError => e

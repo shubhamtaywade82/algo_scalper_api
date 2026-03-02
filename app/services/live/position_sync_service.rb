@@ -9,6 +9,11 @@ module Live
     def initialize
       @last_sync = nil
       @sync_interval = 30.seconds
+      @paper_mode = begin
+        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      rescue StandardError
+        false
+      end
     end
 
     def sync_positions!
@@ -140,7 +145,7 @@ module Live
     end
 
     def paper_trading_enabled?
-      AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      @paper_mode
     end
 
     def extract_security_id(dhan_position)
@@ -314,12 +319,8 @@ module Live
       return nil unless segment.present? && security_id.present?
 
       # Try WebSocket cache first
-      cached = Live::TickCache.ltp(segment, security_id)
-      return BigDecimal(cached.to_s) if cached
-
-      # Try Redis PnL cache
-      tick_data = Live::TickCache.fetch(segment, security_id)
-      return BigDecimal(tick_data[:ltp].to_s) if tick_data&.dig(:ltp)
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+      return tick.ltp if tick
 
       # Try tradable's fetch method (derivative or instrument)
       tradable = tracker.tradable

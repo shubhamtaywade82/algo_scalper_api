@@ -80,20 +80,26 @@ end
 
 def fetch_authority_token!
   Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
-    response = Faraday.get(
-      "#{ENV.fetch('TRADER_API_BASE_URL')}/auth/dhan/token"
-    ) do |req|
-      req.headers["Authorization"] = "Bearer #{ENV.fetch('DHAN_TOKEN_ACCESS_TOKEN')}"
+    begin
+      response = Faraday.get(
+        "#{ENV.fetch('TRADER_API_BASE_URL')}/auth/dhan/token"
+      ) do |req|
+        req.headers["Authorization"] = "Bearer #{ENV.fetch('DHAN_TOKEN_ACCESS_TOKEN')}"
+      end
+
+      if response.success?
+        data = JSON.parse(response.body)
+        return data["access_token"] if data["access_token"].present?
+      end
+
+      Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), falling back to ENV['DHAN_ACCESS_TOKEN']"
+    rescue StandardError => e
+      Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, falling back to ENV['DHAN_ACCESS_TOKEN']"
     end
 
-    unless response.success?
-      raise "Token authority unreachable: #{response.status}"
-    end
+    env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+    raise "Token authority unreachable and no ENV['DHAN_ACCESS_TOKEN'] found" if env_token.blank?
 
-    data = JSON.parse(response.body)
-
-    raise "Invalid authority response" if data["access_token"].blank?
-
-    data["access_token"]
+    env_token
   end
 end

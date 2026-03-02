@@ -135,7 +135,7 @@ class Derivative < ApplicationRecord
                end
     return nil if quantity.to_i <= 0
 
-    order = Orders.config.place_market(
+    order = Orders.config.gateway.place_market(
       side: 'buy',
       segment: segment_code,
       security_id: security,
@@ -184,7 +184,7 @@ class Derivative < ApplicationRecord
                end
     return nil if quantity <= 0
 
-    Orders.config.place_market(
+    Orders.config.gateway.place_market(
       side: 'sell',
       segment: segment_code,
       security_id: security,

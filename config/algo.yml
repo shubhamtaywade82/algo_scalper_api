@@ -240,7 +240,7 @@ risk:
   #
   # Each regime gets different SL/TP/trailing rules based on Greek behavior
   time_regimes:
-    enabled: true # Set to true to enable time-regime based rules
+    enabled: false # Set to true to enable time-regime based rules
 
     # S1: OPEN EXPANSION (09:15 – 09:45)
     # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
@@ -526,8 +526,8 @@ signals:
   entry_strategy:
     primary: supertrend
 
-  primary_timeframe: "5m"
-  confirmation_timeframe: "5m"
+  primary_timeframe: "1m"
+  confirmation_timeframe: null
 
   # Expiry date filtering: Skip indices with expiry > max_expiry_days
   # This prevents trading in indices where expiry is too far away (e.g., monthly BANKNIFTY when > 7 days)
@@ -674,7 +674,7 @@ chain_analyzer:
   use_option_chain_security_id: true
   max_candidates: 2
   strike_distance_pct: 0.02
-  min_oi: 10000
+  min_oi: 0
   min_iv: 5.0
   max_iv: 60.0
   max_spread_pct: 0.03
