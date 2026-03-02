@@ -2,13 +2,16 @@
 
 require "dhan_hq"
 
+# Ensure error constants are loaded before `DhanHQ::Constants` references them.
+require "DhanHQ/errors"
+
 # Normalize environment variables to support both naming conventions
 # The DhanHQ gem expects variables with DHAN_ prefix (or CLIENT_ID/ACCESS_TOKEN)
 # We support both DHANHQ_ and DHAN_ prefixes for flexibility
 
 # Required credentials - support both naming conventions
-ENV['CLIENT_ID'] ||= ENV['DHANHQ_CLIENT_ID'] if ENV['DHANHQ_CLIENT_ID'].present?
-ENV['ACCESS_TOKEN'] ||= ENV['DHANHQ_ACCESS_TOKEN'] if ENV['DHANHQ_ACCESS_TOKEN'].present?
+ENV['CLIENT_ID'] ||= ENV['DHAN_CLIENT_ID'] if ENV['DHAN_CLIENT_ID'].present?
+ENV['ACCESS_TOKEN'] ||= ENV['DHAN_ACCESS_TOKEN'] if ENV['DHAN_ACCESS_TOKEN'].present?
 
 # Optional gem configuration - normalize DHANHQ_ prefix to DHAN_ prefix for gem compatibility
 # The gem's configure_with_env reads directly from ENV with DHAN_ prefix
@@ -56,4 +59,47 @@ Rails.application.configure do
     partner_id: ENV["DHANHQ_PARTNER_ID"],
     partner_secret: ENV["DHANHQ_PARTNER_SECRET"]
   )
+end
+
+# Prefer DHAN_CLIENT_ID; fall back to CLIENT_ID for compatibility.
+client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
+DhanHQ.configuration.client_id = client_id if client_id
+
+# Inject access token from DB so the gem always uses the latest valid token.
+# No refresh API exists; token must be renewed via /auth/dhan/login when expired.
+DhanHQ.configure do |config|
+  config.access_token_provider = lambda do
+    fetch_authority_token!
+  end
+
+  config.on_token_expired = lambda do |_error|
+    Rails.logger.warn "[SCALPER] Token expired, clearing cache..."
+    Rails.cache.delete("scalper:dhan_token")
+  end
+end
+
+def fetch_authority_token!
+  Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
+    begin
+      response = Faraday.get(
+        "#{ENV.fetch('TRADER_API_BASE_URL')}/auth/dhan/token"
+      ) do |req|
+        req.headers["Authorization"] = "Bearer #{ENV.fetch('DHAN_TOKEN_ACCESS_TOKEN')}"
+      end
+
+      if response.success?
+        data = JSON.parse(response.body)
+        return data["access_token"] if data["access_token"].present?
+      end
+
+      Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), falling back to ENV['DHAN_ACCESS_TOKEN']"
+    rescue StandardError => e
+      Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, falling back to ENV['DHAN_ACCESS_TOKEN']"
+    end
+
+    env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+    raise "Token authority unreachable and no ENV['DHAN_ACCESS_TOKEN'] found" if env_token.blank?
+
+    env_token
+  end
 end

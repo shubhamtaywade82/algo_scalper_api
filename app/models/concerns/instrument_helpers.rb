@@ -89,8 +89,8 @@ module InstrumentHelpers
     # Try WebSocket cache if hub is connected and ticks are fresh
     hub = Live::MarketFeedHub.instance
     if hub.running? && hub.connected?
-      tick = Live::TickCache.get(segment: segment, security_id: security_id)
-      return BigDecimal(tick[:ltp].to_s) if tick&.dig(:ltp)
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+      return tick.ltp if tick&.ltp&.positive?
     end
 
     # Fallback to REST API when WebSocket unavailable or cache miss
@@ -115,10 +115,10 @@ module InstrumentHelpers
 
     # Strategy 1: Check WebSocket TickCache first (fastest, no API rate limits)
     if hub.running? && hub.connected?
-      cached_ltp = Live::TickCache.ltp(segment, security_id)
-      if cached_ltp.present? && cached_ltp.to_f.positive?
-        Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_ltp}" }
-        return cached_ltp.to_f
+      cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+      if cached_tick&.ltp&.to_f&.positive?
+        Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
+        return cached_tick.ltp.to_f
       end
 
       if subscribe
@@ -128,10 +128,10 @@ module InstrumentHelpers
           # Wait up to 200ms for tick to arrive
           4.times do
             sleep(0.05) # 50ms intervals
-            cached_ltp = Live::TickCache.ltp(segment, security_id)
-            if cached_ltp.present? && cached_ltp.to_f.positive?
-              Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_ltp}" }
-              return cached_ltp.to_f
+            cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+            if cached_tick&.ltp&.to_f&.positive?
+              Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
+              return cached_tick.ltp.to_f
             end
           end
         rescue StandardError => e
@@ -278,11 +278,11 @@ module InstrumentHelpers
   end
 
   def ws_get
-    Live::TickCache.get(exchange_segment, security_id.to_s)
+    Live::TickQuery.for_security(segment: exchange_segment, security_id: security_id.to_s)
   end
 
   def ws_ltp
-    ws_get&.dig(:ltp)
+    ws_get&.ltp&.to_f
   end
 
   def ohlc

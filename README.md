@@ -78,7 +78,7 @@ Minimal `.env` setup:
 ```dotenv
 # DhanHQ API Credentials (Required)
 CLIENT_ID=your_client_id
-DHANHQ_ACCESS_TOKEN=your_access_token
+DHAN_ACCESS_TOKEN=your_access_token
 
 # Application Settings
 RAILS_LOG_LEVEL=info
@@ -143,15 +143,25 @@ indices:
 | ------------------------- | ----------------------------------------- | -------------------------- |
 | `DHANHQ_ENABLED`          | Master toggle for DhanHQ integration      | `true`                     |
 | `CLIENT_ID`               | DhanHQ API client ID                      | Required                   |
-| `DHANHQ_ACCESS_TOKEN`     | DhanHQ API access token                   | Required                   |
+| `DHAN_ACCESS_TOKEN`     | DhanHQ API access token                   | Required                   |
 | `DHANHQ_WS_ENABLED`       | Enable WebSocket market feed              | `true`                     |
 | `DHANHQ_ORDER_WS_ENABLED` | Enable order update WebSocket             | `true`                     |
 | `DHANHQ_WS_MODE`          | WebSocket mode (`quote`/`ticker`/`full`)  | `quote`                    |
 | `PAPER_MODE`              | Trading mode (`true`=paper, `false`=live) | `false` (live)             |
 | `RAILS_LOG_LEVEL`         | Application log level                     | `info`                     |
 | `REDIS_URL`               | Redis connection URL                      | `redis://localhost:6379/0` |
+| `TRADING_BOOT_RECONCILIATION_STRICT` | Fail daemon start when startup reconciliation fails (`true`/`false`) | `true` when market open, else `false` |
 
 ---
+
+### Startup Reconciliation Safety
+
+Trading daemon startup performs a broker-vs-DB reconciliation pass before starting risk/signal loops. This is handled by `Live::PositionSyncService.instance.force_sync!` and prevents stale DB-only state after restarts.
+
+- During market hours, reconciliation failures are strict by default and block daemon startup.
+- Outside market hours, strict mode defaults to false.
+- Override with `TRADING_BOOT_RECONCILIATION_STRICT=true|false`.
+
 
 ## 📊 Trading System
 
@@ -370,7 +380,7 @@ The application provides comprehensive logging:
 ```bash
 # Check credentials
 echo $CLIENT_ID
-echo $DHANHQ_ACCESS_TOKEN
+echo $DHAN_ACCESS_TOKEN
 
 # Verify environment
 bin/rails runner "puts Rails.application.config.x.dhanhq"

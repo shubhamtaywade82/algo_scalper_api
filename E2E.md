@@ -312,7 +312,7 @@ Authoritative LTP order: in-memory `TickCache` > `RedisTickCache` > API fallback
 | `AlgoConfig[:paper_trading]` | `enabled`, `balance` | EntryGuard, Capital Allocator, PaperPnlRefresher | Toggles entry path between paper/live; sets available capital for allocator; ensures `PaperPnlRefresher` updates only paper positions. |
 | `AlgoConfig[:risk]` | `sl_pct`, `tp_pct`, `exit_drop_pct`, `time_exit_hhmm`, `market_close_hhmm`, `max_daily_loss_pct`, `max_global_daily_loss_pct`, `max_daily_trades`, `max_global_daily_trades` | RiskManager, DailyLimits, Trailing Engine | Sets thresholds for exits, time-based exits, daily limit enforcement. |
 | `config.x.dhanhq` | `ws_mode` | MarketFeedHub | Chooses WS mode (ticker/quote/full). |
-| ENV variables | `DHANHQ_CLIENT_ID`, `DHANHQ_ACCESS_TOKEN`, `CLIENT_ID`, `ACCESS_TOKEN`, `DHANHQ_WS_WATCHLIST`, `REDIS_URL` | Feed connection, fallback watchlist, Redis clients | Without creds, feed disabled; watchlist env used when DB empty; Redis URL for caches. |
+| ENV variables | `DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN`, `CLIENT_ID`, `ACCESS_TOKEN`, `DHANHQ_WS_WATCHLIST`, `REDIS_URL` | Feed connection, fallback watchlist, Redis clients | Without creds, feed disabled; watchlist env used when DB empty; Redis URL for caches. |
 | ENV overrides | `ALLOC_PCT`, `RISK_PER_TRADE_PCT`, `DAILY_MAX_LOSS_PCT` | Capital Allocator | Override deployment policy parameters. |
 | Feature flags (proposed) | `NEMESIS_USE_V3_FLOW` (not yet implemented) | Scheduler | Would guard new flow adoption. |
 

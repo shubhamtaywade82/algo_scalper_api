@@ -20,9 +20,13 @@ module TradingSystem
       true
     end
 
-    def exit_market(tracker)
+    # Routes exit requests to the configured gateway with retry handling.
+    # @param tracker [PositionTracker]
+    # @param client_order_id [String, nil]
+    # @return [Hash]
+    def exit_market(tracker, client_order_id: nil)
       with_retries do
-        @gateway.exit_market(tracker)
+        @gateway.exit_market(tracker, client_order_id: client_order_id)
       end
     rescue StandardError => e
       Rails.logger.error("[OrderRouter] exit_market exception for #{tracker.order_no}: #{e.class} - #{e.message}")

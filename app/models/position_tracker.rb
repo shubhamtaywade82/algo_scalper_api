@@ -323,6 +323,10 @@ class PositionTracker < ApplicationRecord
     !paper?
   end
 
+  def be_set?
+    be_set == true
+  end
+
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
     # Persist final PnL from Redis cache to DB (force sync, no throttling)
     persist_final_pnl_from_cache
@@ -586,7 +590,8 @@ class PositionTracker < ApplicationRecord
 
   def fetch_ltp_from_cache
     seg = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    Live::TickCache.ltp(seg, security_id)
+    tick = Live::TickQuery.for_security(segment: seg, security_id: security_id)
+    tick&.ltp
   end
 
   def prepare_exit_metadata(exit_reason)

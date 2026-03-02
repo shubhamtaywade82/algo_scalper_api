@@ -174,7 +174,10 @@ module Live
     private
 
     def time_regime_config
-      AlgoConfig.fetch[:time_regimes] || {}
+      cfg = AlgoConfig.fetch
+      risk = cfg[:risk].is_a?(Hash) ? cfg[:risk] : {}
+      legacy = cfg[:time_regimes].is_a?(Hash) ? cfg[:time_regimes] : {}
+      (risk[:time_regimes].is_a?(Hash) ? risk[:time_regimes] : legacy) || {}
     rescue StandardError
       {}
     end

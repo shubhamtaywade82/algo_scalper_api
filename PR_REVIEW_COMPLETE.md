@@ -212,8 +212,8 @@ signals:
 ### ENV Variables ✅
 
 **Security (ENV only):**
-- ✅ `CLIENT_ID` / `DHANHQ_CLIENT_ID`
-- ✅ `ACCESS_TOKEN` / `DHANHQ_ACCESS_TOKEN`
+- ✅ `CLIENT_ID` / `DHAN_CLIENT_ID`
+- ✅ `ACCESS_TOKEN` / `DHAN_ACCESS_TOKEN`
 
 **Testing Fallback (algo.yml preferred):**
 - ✅ `INDICATOR_PRESET` - Fallback for testing

@@ -23,14 +23,14 @@ module ServiceTestHelper
   end
 
   def self.check_dhanhq_credentials
-    client_id = ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil)
-    access_token = ENV['DHANHQ_ACCESS_TOKEN'] || ENV.fetch('ACCESS_TOKEN', nil)
+    client_id = ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil)
+    access_token = ENV['DHAN_ACCESS_TOKEN'] || ENV.fetch('ACCESS_TOKEN', nil)
 
     if client_id.present? && access_token.present?
       print_info('DhanHQ credentials found - API calls will use actual DhanHQ endpoints')
     else
       print_warning('DhanHQ credentials not found in environment variables!')
-      print_info('  Required: CLIENT_ID (or DHANHQ_CLIENT_ID) and ACCESS_TOKEN (or DHANHQ_ACCESS_TOKEN)')
+      print_info('  Required: CLIENT_ID (or DHAN_CLIENT_ID) and ACCESS_TOKEN (or DHAN_ACCESS_TOKEN)')
       print_info('  Without credentials, API calls will fail.')
       print_info('  Set these in your environment or .env file to use actual DhanHQ API calls.')
     end

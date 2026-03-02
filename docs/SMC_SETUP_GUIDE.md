@@ -9,8 +9,8 @@ Complete guide to setting up and using the SMC + AVRZ trading signal system.
 Before setting up SMC, ensure you have:
 
 1. **DhanHQ API credentials** (for market data)
-   - `CLIENT_ID` or `DHANHQ_CLIENT_ID`
-   - `ACCESS_TOKEN` or `DHANHQ_ACCESS_TOKEN`
+   - `CLIENT_ID` or `DHAN_CLIENT_ID`
+   - `ACCESS_TOKEN` or `DHAN_ACCESS_TOKEN`
 
 2. **Redis** (for alert cooldown/session tracking)
    - Running Redis server

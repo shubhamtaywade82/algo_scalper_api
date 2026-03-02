@@ -6,6 +6,7 @@ module Trading
 
     LOT_SIZES = {
       'NIFTY' => 65,
+      'BANKNIFTY' => 15,
       'SENSEX' => 20
     }.freeze
 

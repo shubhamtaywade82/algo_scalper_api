@@ -903,6 +903,8 @@ module Options
         legs = []
         rejected_count = 0
 
+        use_option_chain_security_id = use_option_chain_security_id?
+
         option_chain_data.each do |strike_str, strike_data|
           strike = strike_str.to_f
 
@@ -1007,21 +1009,31 @@ module Options
             next
           end
 
-          # Find the derivative security ID using instrument.derivatives association
-          # Filter by strike, expiry date, and option type
+          # Resolve strike metadata from option chain first; enrich with Derivative when available.
+          # Derivative is optional when option-chain security IDs are enabled.
           expiry_date_obj = Date.parse(expiry_date)
           option_type = side.to_s.upcase # CE or PE
 
           # Use BigDecimal for accurate float comparison
           strike_bd = BigDecimal(strike.to_s)
 
+          derivatives_collection = instrument.respond_to?(:derivatives) ? instrument.derivatives : nil
+
           # Try to find derivative using instrument.derivatives association first
-          derivative = if instrument.respond_to?(:derivatives)
-                         instrument.derivatives.where(
+          derivative = if derivatives_collection.respond_to?(:where)
+                         derivatives_collection.where(
                            expiry_date: expiry_date_obj,
                            option_type: option_type
                          ).detect do |d|
                            BigDecimal(d.strike_price.to_s) == strike_bd
+                         end
+                       elsif derivatives_collection.present?
+                         Array(derivatives_collection).detect do |d|
+                           next false unless derivative_like?(d)
+
+                           d.expiry_date == expiry_date_obj &&
+                             d.option_type.to_s.upcase == option_type &&
+                             BigDecimal(d.strike_price.to_s) == strike_bd
                          end
                        end
 
@@ -1053,12 +1065,45 @@ module Options
             option_type: option_type
           )
 
-          if derivative.nil?
-            # Log available strikes for debugging
-            available_strikes = instrument.derivatives.where(
-              expiry_date: expiry_date_obj,
-              option_type: option_type
-            ).pluck(:strike_price).map(&:to_f).sort
+          security_id = nil
+          api_security_id = option_data['security_id']
+          if use_option_chain_security_id && valid_security_id?(api_security_id)
+            security_id = api_security_id.to_s
+          elsif derivative
+            security_id = derivative.security_id.to_s
+          end
+
+          unless valid_security_id?(security_id)
+            if derivative.nil? && use_option_chain_security_id
+              Rails.logger.debug do
+                "[Options::ChainAnalyzer] Missing usable security_id from option chain for #{index_cfg[:key]} " \
+                  "strike=#{strike} #{side}; skipping strike"
+              end
+            else
+              Rails.logger.debug do
+                "[Options::ChainAnalyzer] Invalid security_id for #{index_cfg[:key]} #{strike} #{side}: " \
+                  "#{security_id.inspect} (derivative_id=#{derivative&.id})"
+              end
+            end
+            rejected_count += 1
+            next
+          end
+
+          # In legacy mode, Derivative remains mandatory and must match strike metadata.
+          if !use_option_chain_security_id && derivative.nil?
+            available_strikes = if derivatives_collection.respond_to?(:where)
+                                  derivatives_collection.where(
+                                    expiry_date: expiry_date_obj,
+                                    option_type: option_type
+                                  ).pluck(:strike_price).map(&:to_f).sort
+                                else
+                                  Array(derivatives_collection).filter_map do |d|
+                                    next unless derivative_like?(d)
+                                    next unless d.expiry_date == expiry_date_obj && d.option_type.to_s.upcase == option_type
+
+                                    d.strike_price.to_f
+                                  end.sort
+                                end
 
             Rails.logger.debug do
               "[Options::ChainAnalyzer] Derivative not found for #{index_cfg[:key]} " \
@@ -1071,46 +1116,37 @@ module Options
             next
           end
 
-          security_id = derivative.security_id.to_s
-          unless valid_security_id?(security_id)
-            Rails.logger.debug do
-              "[Options::ChainAnalyzer] Invalid security_id for #{index_cfg[:key]} #{strike} #{side}: " \
-                "#{security_id.inspect} (derivative_id=#{derivative.id})"
+          if derivative
+            derivative_strike_bd = BigDecimal(derivative.strike_price.to_s)
+            unless derivative_strike_bd == strike_bd
+              Rails.logger.warn do
+                "[Options::ChainAnalyzer] Derivative strike mismatch for #{index_cfg[:key]}: " \
+                  "expected=#{strike_bd}, found=#{derivative_strike_bd} " \
+                  "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+              end
+              rejected_count += 1
+              next
             end
-            rejected_count += 1
-            next
-          end
 
-          # Verify the derivative matches the strike, expiry, and option type
-          derivative_strike_bd = BigDecimal(derivative.strike_price.to_s)
-          unless derivative_strike_bd == strike_bd
-            Rails.logger.warn do
-              "[Options::ChainAnalyzer] Derivative strike mismatch for #{index_cfg[:key]}: " \
-                "expected=#{strike_bd}, found=#{derivative_strike_bd} " \
-                "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+            unless derivative.expiry_date == expiry_date_obj
+              Rails.logger.warn do
+                "[Options::ChainAnalyzer] Derivative expiry mismatch for #{index_cfg[:key]}: " \
+                  "expected=#{expiry_date_obj}, found=#{derivative.expiry_date} " \
+                  "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+              end
+              rejected_count += 1
+              next
             end
-            rejected_count += 1
-            next
-          end
 
-          unless derivative.expiry_date == expiry_date_obj
-            Rails.logger.warn do
-              "[Options::ChainAnalyzer] Derivative expiry mismatch for #{index_cfg[:key]}: " \
-                "expected=#{expiry_date_obj}, found=#{derivative.expiry_date} " \
-                "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+            unless derivative.option_type == option_type
+              Rails.logger.warn do
+                "[Options::ChainAnalyzer] Derivative option_type mismatch for #{index_cfg[:key]}: " \
+                  "expected=#{option_type}, found=#{derivative.option_type} " \
+                  "(derivative_id=#{derivative.id}, security_id=#{security_id})"
+              end
+              rejected_count += 1
+              next
             end
-            rejected_count += 1
-            next
-          end
-
-          unless derivative.option_type == option_type
-            Rails.logger.warn do
-              "[Options::ChainAnalyzer] Derivative option_type mismatch for #{index_cfg[:key]}: " \
-                "expected=#{option_type}, found=#{derivative.option_type} " \
-                "(derivative_id=#{derivative.id}, security_id=#{security_id})"
-            end
-            rejected_count += 1
-            next
           end
 
           derivative_segment = if derivative.respond_to?(:exchange_segment) && derivative.exchange_segment.present?
@@ -1120,6 +1156,11 @@ module Options
                                end
           derivative_segment ||= instrument.exchange_segment if instrument.respond_to?(:exchange_segment)
           derivative_segment ||= index_cfg[:segment]
+
+          fallback_lot_size = index_cfg[:lot].to_i
+          fallback_lot_size = 50 if fallback_lot_size <= 0
+          derivative_lot_size = derivative&.lot_size.to_i
+          resolved_lot_size = derivative_lot_size.positive? ? derivative_lot_size : fallback_lot_size
 
           legs << {
             segment: derivative_segment,
@@ -1132,7 +1173,7 @@ module Options
             spread: spread_ratio,
             delta: delta,
             distance_from_atm: (strike - atm).abs,
-            lot_size: derivative&.lot_size || index_cfg[:lot].to_i,
+            lot_size: resolved_lot_size,
             derivative_id: derivative&.id
           }
 
@@ -1187,6 +1228,22 @@ module Options
         return false if id.blank?
         return false if id.start_with?('TEST_')
 
+        true
+      end
+
+      def derivative_like?(row)
+        row.respond_to?(:expiry_date) && row.respond_to?(:option_type) && row.respond_to?(:strike_price)
+      end
+
+      def use_option_chain_security_id?
+        cfg = AlgoConfig.fetch
+        return true unless cfg.is_a?(Hash)
+
+        value = cfg.dig(:chain_analyzer, :use_option_chain_security_id)
+        return true if value.nil?
+
+        value == true
+      rescue StandardError
         true
       end
 

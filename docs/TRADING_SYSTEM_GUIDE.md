@@ -132,14 +132,14 @@ meta: {
   entry_timeframe: "1m",                       # Timeframe used
   entry_confirmation_timeframe: nil,           # Confirmation timeframe (if any)
   entry_validation_mode: "aggressive",        # Validation mode
-  
+
   # Exit Information (set when position exits)
   exit_path: "trailing_stop_adaptive_upward",  # Exit path identifier
   exit_direction: "upward",                     # upward/downward
   exit_type: "adaptive",                        # adaptive/fixed
   exit_reason: "ADAPTIVE_TRAILING_STOP",       # Human-readable reason
   exit_triggered_at: "2024-01-15T10:30:00Z"    # Exit timestamp
-  
+
   # Other metadata
   index_key: "NIFTY",
   direction: "long_ce",
@@ -159,7 +159,7 @@ The system uses the existing `config/algo.yml` structure. Key sections:
 
 ```yaml
 signals:
-  primary_timeframe: "1m"
+  primary_timeframe: "5m"
   confirmation_timeframe: "5m"
   enable_confirmation_timeframe: false
   enable_adx_filter: false
@@ -190,7 +190,7 @@ risk:
   trail_step_pct: 0.03
   breakeven_after_gain: 0.05
   exit_drop_pct: 0.03  # Fixed trailing fallback
-  
+
   # Upward exponential drawdown (bidirectional trailing)
   drawdown:
     activation_profit_pct: 3.0
@@ -203,7 +203,7 @@ risk:
       NIFTY: 1.0
       BANKNIFTY: 1.2
       SENSEX: 1.5
-  
+
   # Reverse (below entry) dynamic loss tightening (bidirectional trailing)
   reverse_loss:
     enabled: true
@@ -214,7 +214,7 @@ risk:
     atr_penalty_thresholds:
       - { threshold: 0.75, penalty_pct: 3.0 }
       - { threshold: 0.60, penalty_pct: 5.0
-  
+
   # Early Trend Failure Exit
   etf:
     enabled: true
@@ -280,7 +280,7 @@ paths.each do |path|
   positions = PositionTracker.joins("INNER JOIN trading_signals ON ...")
     .where("trading_signals.metadata->>'entry_path' = ?", path)
     .exited
-  
+
   puts "#{path}:"
   puts "  Entries: #{signals.count}"
   puts "  Exits: #{positions.count}"
@@ -293,7 +293,7 @@ end
 ```ruby
 # Count exits by path
 PositionTracker.exited.group("meta->>'exit_path'").count
-# => { 
+# => {
 #   "trailing_stop_adaptive_upward" => 20,
 #   "stop_loss_adaptive_downward" => 10,
 #   "take_profit" => 15,
@@ -681,15 +681,15 @@ def build_entry_path_identifier(strategy_recommendation:, use_strategy_recommend
                   else
                     'supertrend_adx'
                   end
-  
+
   timeframe_part = effective_timeframe
-  
+
   confirmation_part = if enable_confirmation && confirmation_tf.present?
                       confirmation_tf
                     else
                       'none'
                     end
-  
+
   "#{strategy_part}_#{timeframe_part}_#{confirmation_part}"
 end
 ```
@@ -713,7 +713,7 @@ def track_exit_path(tracker, exit_path, reason)
   meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
   direction = exit_path.include?('upward') ? 'upward' : (exit_path.include?('downward') ? 'downward' : nil)
   type = exit_path.include?('adaptive') ? 'adaptive' : (exit_path.include?('fixed') ? 'fixed' : nil)
-  
+
   tracker.update!(meta: meta.merge(
     'exit_path' => exit_path,
     'exit_reason' => reason,
@@ -758,15 +758,15 @@ end
 ```ruby
 def enforce_early_trend_failure(exit_engine:)
   # ... config loading ...
-  
+
   PositionTracker.active.find_each do |tracker|
     snapshot = pnl_snapshot(tracker)
     pnl_pct_value = snapshot[:pnl_pct].to_f * 100.0
-    
+
     next unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_profit)
-    
+
     position_data = build_position_data_for_etf(tracker, snapshot, instrument)
-    
+
     if Live::EarlyTrendFailure.early_trend_failure?(position_data)
       track_exit_path(tracker, "early_trend_failure", reason)
       dispatch_exit(exit_engine, tracker, reason)
@@ -873,13 +873,13 @@ end
 if pnl_pct_value < 0
   seconds_below = seconds_below_entry(tracker)
   atr_ratio = calculate_atr_ratio(tracker)
-  
+
   allowed_loss_pct = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
     pnl_pct_value,
     seconds_below_entry: seconds_below,
     atr_ratio: atr_ratio
   )
-  
+
   if allowed_loss_pct && loss_pct > allowed_loss_pct
     track_exit_path(tracker, "stop_loss_adaptive_downward", reason)
     dispatch_exit(exit_engine, tracker, reason)

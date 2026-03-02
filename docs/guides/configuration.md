@@ -11,8 +11,8 @@ This document reviews the DhanHQ configuration setup and documents all available
 The initializer performs three key functions:
 
 1. **Environment Variable Normalization**: Supports both naming conventions
-   - `CLIENT_ID` or `DHANHQ_CLIENT_ID`
-   - `ACCESS_TOKEN` or `DHANHQ_ACCESS_TOKEN`
+   - `CLIENT_ID` or `DHAN_CLIENT_ID`
+   - `ACCESS_TOKEN` or `DHAN_ACCESS_TOKEN`
    - All gem options support both `DHAN_` and `DHANHQ_` prefixes
 
 2. **Gem Configuration**: Calls `DhanHQ.configure_with_env` which reads from ENV
@@ -66,7 +66,7 @@ These are application-specific settings, not passed to the gem:
 DhanHQ.configuration.client_id
 
 # Fallback: Direct ENV access (supports both naming conventions)
-ENV['DHANHQ_CLIENT_ID'] || ENV['CLIENT_ID']
+ENV['DHAN_CLIENT_ID'] || ENV['CLIENT_ID']
 ```
 
 **To check if order placement is enabled:**
@@ -114,7 +114,7 @@ dhanClientId: Rails.application.config.x.dhanhq&.client_id || AlgoConfig.fetch.d
 
 **After**:
 ```ruby
-dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV['CLIENT_ID']
+dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV['CLIENT_ID']
 ```
 
 ### 2. **Configuration Normalization** (Enhanced)
@@ -130,8 +130,8 @@ dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV['
 CLIENT_ID=your_client_id
 ACCESS_TOKEN=your_access_token
 # or
-DHANHQ_CLIENT_ID=your_client_id
-DHANHQ_ACCESS_TOKEN=your_access_token
+DHAN_CLIENT_ID=your_client_id
+DHAN_ACCESS_TOKEN=your_access_token
 ```
 
 ### Recommended for Production
@@ -185,8 +185,8 @@ Rails.application.config.x.dhanhq
 echo $CLIENT_ID
 echo $ACCESS_TOKEN
 # or
-echo $DHANHQ_CLIENT_ID
-echo $DHANHQ_ACCESS_TOKEN
+echo $DHAN_CLIENT_ID
+echo $DHAN_ACCESS_TOKEN
 ```
 
 ### Health Check Endpoint
@@ -201,13 +201,13 @@ The health endpoint will show credential status in the response.
 
 ### From Old Configuration
 
-If you were using `DHANHQ_CLIENT_ID` and `DHANHQ_ACCESS_TOKEN`, no changes needed - both naming conventions are now supported.
+If you were using `DHAN_CLIENT_ID` and `DHAN_ACCESS_TOKEN`, no changes needed - both naming conventions are now supported.
 
 ### To New Configuration
 
 You can now use either:
 - `CLIENT_ID` / `ACCESS_TOKEN` (gem's preferred)
-- `DHANHQ_CLIENT_ID` / `DHANHQ_ACCESS_TOKEN` (codebase convention)
+- `DHAN_CLIENT_ID` / `DHAN_ACCESS_TOKEN` (codebase convention)
 
 Both work identically.
 

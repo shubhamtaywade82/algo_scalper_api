@@ -3,7 +3,7 @@
 module Orders
   class Gateway
     # ----------- PRIMARY EXIT METHOD ----------
-    def exit_market(tracker)
+    def exit_market(tracker, client_order_id: nil)
       raise NotImplementedError, "#{self.class} must implement exit_market"
     end
 
@@ -12,14 +12,14 @@ module Orders
       raise NotImplementedError, "#{self.class} must implement place_market"
     end
 
-    # ----------- POSITION SNAPSHOT -------------
-    def position(segment:, security_id:)
-      raise NotImplementedError, "#{self.class} must implement position"
-    end
-
     # ----------- WALLET ------------------------
     def wallet_snapshot
       raise NotImplementedError, "#{self.class} must implement wallet_snapshot"
+    end
+
+    # ----------- ORDER MANAGEMENT --------------
+    def cancel_order(order_id)
+      raise NotImplementedError, "#{self.class} must implement cancel_order"
     end
 
     # optional

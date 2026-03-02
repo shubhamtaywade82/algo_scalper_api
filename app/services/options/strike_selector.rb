@@ -15,7 +15,7 @@ module Options
     TREND_THRESHOLD_2OTM = 18.0  # Allow 2OTM if trend_score >= 18
 
     def initialize(tick_cache: nil, premium_filter: nil)
-      @tick_cache = tick_cache || Live::TickCache
+      @tick_query = Live::TickQuery
       @premium_filter_class = premium_filter || PremiumFilter
     end
 
@@ -187,13 +187,9 @@ module Options
       segment = index_cfg[:segment]
       security_id = index_cfg[:sid]
 
-      # Try tick cache first (fastest, no API rate limits)
-      spot = @tick_cache.ltp(segment, security_id)
-      return spot if spot&.positive?
-
-      # Try Redis tick cache
-      spot = Live::RedisTickCache.instance.fetch_tick(segment, security_id)&.dig(:ltp)&.to_f
-      return spot if spot&.positive?
+      # Try tick cache facade (fastest, no API rate limits)
+      tick = @tick_query.for_security(segment: segment, security_id: security_id)
+      return tick.ltp.to_f if tick&.ltp&.positive?
 
       # Fallback to API via Instrument.ltp() (same pattern as InstrumentHelpers)
       # This ensures we can get spot price even when WebSocket is not running
@@ -232,8 +228,8 @@ module Options
       security_id = candidate[:security_id]
 
       if segment.present? && security_id.present?
-        cached_ltp = @tick_cache.ltp(segment, security_id)
-        return cached_ltp if cached_ltp&.positive?
+        tick = @tick_query.for_security(segment: segment, security_id: security_id)
+        return tick.ltp.to_f if tick&.ltp&.positive?
       end
 
       # Fallback to candidate LTP

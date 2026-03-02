@@ -370,9 +370,19 @@ module Signal
         { index_cfg: idx_cfg, days_to_expiry: 999, expiry_date: nil }
       end
 
-      # Filter out indices with expiry > max_expiry_days (default: 7 days)
+      # Filter out indices with expiry > max_expiry_days (default: 7 days).
+      # IMPORTANT: days_to_expiry=999 means expiry is unknown (API/auth/data issue),
+      # not truly far away. Keep unknowns so signal processing can continue.
       max_expiry_days = self.max_expiry_days
       filtered = indexed_with_expiry.reject do |item|
+        if item[:days_to_expiry] == 999
+          Rails.logger.warn(
+            "[SignalScheduler] Keeping #{item[:index_cfg][:key]} with unknown expiry " \
+            '(days_to_expiry=999) to avoid blocking signal processing'
+          )
+          next false
+        end
+
         next false if item[:days_to_expiry] <= max_expiry_days
 
         Rails.logger.info(
