@@ -14,22 +14,22 @@ module Entries
 
     class << self
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
-        Rails.logger.info(\"[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})\")
+        Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
 
         # Circuit breaker — highest priority, checked before everything else
         if Risk::CircuitBreaker.instance.tripped?
           cb = Risk::CircuitBreaker.instance.status
-          Rails.logger.error(\"[EntryGuard] Entry blocked — circuit breaker tripped: #{cb[:reason]} (at: #{cb[:at]})\")
+          Rails.logger.error("[EntryGuard] Entry blocked — circuit breaker tripped: #{cb[:reason]} (at: #{cb[:at]})")
           return false
         end
 
         unless bos_contract_present?(entry_metadata)
 Rails.logger.error(
-            \"[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing. Metadata: #{entry_metadata.inspect}\"
+            "[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing. Metadata: #{entry_metadata.inspect}"
           )
           return false
         end
-        Rails.logger.debug \"[EntryGuard] Contract check passed for #{index_cfg[:key]}\"
+        Rails.logger.debug "[EntryGuard] Contract check passed for #{index_cfg[:key]}"
 
         # Time regime validation (session-aware entry rules)
         unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
@@ -43,8 +43,7 @@ Rails.logger.error(
           resume_at = edge_check[:resume_at]
           resume_str = resume_at ? resume_at.strftime('%H:%M IST') : 'manual override'
           Rails.logger.info(
-            "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: " \
-            "#{edge_check[:reason]} (resume at: #{resume_str})"
+            "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: #{edge_check[:reason]} (resume at: #{resume_str})"
           )
           return false
         end
@@ -69,13 +68,13 @@ Rails.logger.error(
 
         # Exposure check for Supertrend: Allow only ONE active position per index to prevent over-trading
         if is_supertrend
-          active_idx_pos = PositionTracker.active.where(\"(meta->>'index_key') = ?\", index_cfg[:key].to_s).exists?
+          active_idx_pos = PositionTracker.active.where("(meta->>'index_key') = ?", index_cfg[:key].to_s).exists?
           if active_idx_pos
-            Rails.logger.debug { \"[EntryGuard] Supertrend exposure check failed: Active position already exists for #{index_cfg[:key]}\" }
+            Rails.logger.debug { "[EntryGuard] Supertrend exposure check failed: Active position already exists for #{index_cfg[:key]}" }
             return false
           end
         elsif !exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
-          Rails.logger.debug { \"[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})\" }
+          Rails.logger.debug { "[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})" }
           return false
         end
 
@@ -157,12 +156,11 @@ Rails.logger.error(
 
         if cap_lots <= 0
           Rails.logger.info(
-            \"[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, \" \\
-            \"permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}\"
+            "[EntryGuard] Trade blocked by sizing for #{symbol}: permission=#{permission_sym}, permission_cap=#{permission_cap}, lot_size=#{lot_size}, premium=#{ltp}"
           )
           return false
         end
-        Rails.logger.debug \"[EntryGuard] Sizing check passed: #{cap_lots} lots\"
+        Rails.logger.debug "[EntryGuard] Sizing check passed: #{cap_lots} lots"
 
         quantity_by_existing_allocator = Capital::Allocator.qty_for(
           index_cfg: index_cfg,
@@ -177,13 +175,12 @@ Rails.logger.error(
 
         if quantity <= 0 || quantity < lot_size
           Rails.logger.warn(
-            "[EntryGuard] Quantity blocked for #{index_cfg[:key]}: #{pick[:symbol]} " \
-            "(qty=#{quantity}, cap_qty=#{quantity_by_cap}, alloc_qty=#{quantity_by_existing_allocator}, lot_size=#{lot_size}, ltp=#{ltp})"
+            "[EntryGuard] Quantity blocked for #{index_cfg[:key]}: #{pick[:symbol]} (qty=#{quantity}, cap_qty=#{quantity_by_cap}, alloc_qty=#{quantity_by_existing_allocator}, lot_size=#{lot_size}, ltp=#{ltp})"
           )
           return false
         end
 
-        response = Orders.config.place_market(
+        response = Orders.config.gateway.place_market(
           side: 'buy',
           segment: pick[:segment] || index_cfg[:segment],
           security_id: pick[:security_id],
@@ -592,20 +589,17 @@ Rails.logger.error(
             return true
           when 'daily_loss_limit_exceeded'
             Rails.logger.warn(
-              "[EntryGuard] Daily loss limit exceeded for #{index_cfg[:key]}: " \
-              "₹#{result[:daily_loss].round(2)}/₹#{result[:max_daily_loss]}"
+              "[EntryGuard] Daily loss limit exceeded for #{index_cfg[:key]}: ₹#{result[:daily_loss].round(2)}/₹#{result[:max_daily_loss]}"
             )
             return false
           when 'global_daily_loss_limit_exceeded'
             Rails.logger.warn(
-              '[EntryGuard] Global daily loss limit exceeded: ' \
-              "₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
+              "[EntryGuard] Global daily loss limit exceeded: ₹#{result[:global_daily_loss].round(2)}/₹#{result[:max_global_loss]}"
             )
             return false
           when 'daily_profit_target_reached'
             Rails.logger.info(
-              '[EntryGuard] Daily profit target reached: ' \
-              "₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
+              "[EntryGuard] Daily profit target reached: ₹#{result[:global_daily_profit].round(2)}/₹#{result[:max_daily_profit]}"
             )
             return false
           end

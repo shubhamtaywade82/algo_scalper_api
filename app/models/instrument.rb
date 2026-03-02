@@ -143,7 +143,7 @@ class Instrument < ApplicationRecord
 
     quantity = qty.to_i.positive? ? qty.to_i : 1
 
-    order = Orders.config.place_market(
+    order = Orders.config.gateway.place_market(
       side: 'buy',
       segment: segment_code,
       security_id: security,
@@ -189,7 +189,7 @@ class Instrument < ApplicationRecord
                end
     return nil if quantity <= 0
 
-    Orders.config.place_market(
+    Orders.config.gateway.place_market(
       side: 'sell',
       segment: segment_code,
       security_id: security,

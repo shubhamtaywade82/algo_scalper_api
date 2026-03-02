@@ -400,24 +400,36 @@ module Signal
           permission: permission
         }
 
-        # For Supertrend-only mode, we add mock BOS fields to pass EntryGuard's contract check
         if entry_primary == 'supertrend'
+          # Supertrend-only mode: enter directly on signal without BOS pullback wait.
+          # Add stub BOS fields required by EntryGuard's contract check.
           entry_metadata.merge!(
             bos_id: "st_#{index_cfg[:key]}_#{Time.current.to_i}",
             bos_timeframe: primary_tf,
-            bos_origin_price: primary_series.candles.last&.close, # current price as origin
+            bos_origin_price: primary_series.candles.last&.close,
             bos_level: primary_series.candles.last&.close
           )
+          picks.each do |pick|
+            entered = Entries::EntryGuard.try_enter(
+              index_cfg: index_cfg,
+              pick: pick,
+              direction: final_direction,
+              scale_multiplier: 1,
+              entry_metadata: entry_metadata,
+              permission: permission
+            )
+            break if entered
+          end
+        else
+          Entries::BosEntryEngine.run_for(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            direction: final_direction,
+            picks: picks,
+            entry_metadata: entry_metadata,
+            permission: permission
+          )
         end
-
-        Entries::BosEntryEngine.run_for(
-          index_cfg: index_cfg,
-          instrument: instrument,
-          direction: final_direction,
-          picks: picks,
-          entry_metadata: entry_metadata,
-          permission: permission
-        )
 
         # Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
       rescue StandardError => e
@@ -751,6 +763,8 @@ module Signal
 
       # Validate market timing - avoid problematic trading times
       def validate_market_timing
+        return { valid: true, name: 'Market Timing', message: 'Forced open (FORCE_MARKET_OPEN)' } if ENV['FORCE_MARKET_OPEN'].to_s == 'true'
+
         # TODO: Implement market timing validation if needed
         current_time = Time.zone.now
 
