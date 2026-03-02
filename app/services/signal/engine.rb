@@ -763,8 +763,6 @@ module Signal
 
       # Validate market timing - avoid problematic trading times
       def validate_market_timing
-        return { valid: true, name: 'Market Timing', message: 'Forced open (FORCE_MARKET_OPEN)' } if ENV['FORCE_MARKET_OPEN'].to_s == 'true'
-
         # TODO: Implement market timing validation if needed
         current_time = Time.zone.now
 
