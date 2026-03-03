@@ -9,6 +9,20 @@ module TradingSystem
   module Bootstrap
     module_function
 
+    # Performs startup reconciliation so broker and DB position state are aligned
+    # before risk and signal services start.
+    # @param strict [Boolean] raise on reconciliation errors when true
+    # @return [Object] sync result from PositionSyncService
+    def boot_reconciliation!(strict: true)
+      Rails.logger.info('[Bootstrap] Running startup broker reconciliation...')
+      Live::PositionSyncService.instance.force_sync!
+    rescue StandardError => e
+      Rails.logger.fatal("[Bootstrap] Reconciliation failed: #{e.class} - #{e.message}")
+      raise if strict
+
+      false
+    end
+
     def build_supervisor
       supervisor = TradingSystem::Supervisor.new
 
@@ -35,7 +49,7 @@ module TradingSystem
                     end
         load file_path.to_s if File.exist?(file_path.to_s)
       end
-      supervisor.register(:active_cache, ::ActiveCacheService.new)
+      supervisor.register(:active_cache, Positions::ActiveCacheService.new)
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
       supervisor.register(:smc_scanner, Smc::Scanner.new)

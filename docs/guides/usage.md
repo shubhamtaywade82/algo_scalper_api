@@ -40,7 +40,7 @@ Populate `.env` (or your secret manager) with the required keys.
 | Variable              | Purpose                                   | Notes                                    |
 | --------------------- | ----------------------------------------- | ---------------------------------------- |
 | `CLIENT_ID`           | Identifies your Dhan trading account      | Must match live or sandbox tenant        |
-| `DHANHQ_ACCESS_TOKEN` | Authorizes REST and WebSocket calls       | Refresh via Dhan console when rotated    |
+| `DHAN_ACCESS_TOKEN` | Authorizes REST and WebSocket calls       | Refresh via Dhan console when rotated    |
 | `DATABASE_URL`        | Directs Rails to the PostgreSQL instance  | Include credentials and preferred schema |
 | `REDIS_URL`           | Points Solid Queue to Redis               | Use TLS in production                    |
 | `DHANHQ_WS_MODE`      | Chooses ticker-only or full depth streams | Optional; defaults to ticker feed        |

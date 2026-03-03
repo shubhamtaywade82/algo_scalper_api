@@ -367,7 +367,7 @@ Signal::Scheduler.process_index()
 ### **Signal Generation**
 ```yaml
 signals:
-  primary_timeframe: "1m"
+  primary_timeframe: "5m"
   confirmation_timeframe: "5m"
   enable_confirmation_timeframe: true  # ✅ ENABLED
   max_expiry_days: 7  # NEW

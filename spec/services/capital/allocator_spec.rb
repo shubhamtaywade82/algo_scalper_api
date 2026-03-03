@@ -480,7 +480,7 @@ RSpec.describe Capital::Allocator do
     describe '.available_cash' do
       it 'fetches available cash from DhanHQ Funds API' do
         # This should call the actual method - mock if needed for VCR
-        allow(DhanHQ::Models::Funds).to receive(:available_cash).and_return(100_000.0)
+        allow(Orders.config.gateway).to receive(:wallet_snapshot).and_return({ cash: 100_000.0 })
 
         cash = described_class.available_cash
 
@@ -490,8 +490,7 @@ RSpec.describe Capital::Allocator do
 
       it 'handles API errors gracefully' do
         # Disable paper trading so it tries to fetch from API
-        allow(described_class).to receive(:paper_trading_enabled?).and_return(false)
-        allow(DhanHQ::Models::Funds).to receive(:fetch).and_raise(StandardError, 'API error')
+        allow(Orders.config.gateway).to receive(:wallet_snapshot).and_raise(StandardError, 'API error')
         expect(Rails.logger).to receive(:error).with(match(/\[Capital\].*Failed to fetch available cash/)).at_least(:once)
         expect(Rails.logger).to receive(:error).with(match(/\[Capital\].*Backtrace/)).at_least(:once)
 

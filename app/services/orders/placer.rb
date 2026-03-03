@@ -36,7 +36,7 @@ module Orders
         end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: 'BUY',
           exchangeSegment: seg,
           securityId: sid.to_s,
@@ -54,13 +54,10 @@ module Orders
         Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          begin
-            order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}")
-          rescue StandardError => e
-            Rails.logger.error("[Orders::Placer] BUY failed: #{e.class} - #{e.message}")
-            order = nil
+          order = with_token_auto_heal(context: 'orders.buy_market') do
+            DhanHQ::Models::Order.create(payload)
           end
+          Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
         else
           Rails.logger.debug('[Orders::Placer] BUY dry-run disabled order placement')
           order = nil
@@ -94,7 +91,7 @@ module Orders
                      end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: 'SELL',
           exchangeSegment: position ? position[:exchange_segment] : seg,
           securityId: sid.to_s,
@@ -109,13 +106,10 @@ module Orders
         Rails.logger.info("[Orders::Placer] SELL payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          begin
-            order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}")
-          rescue StandardError => e
-            Rails.logger.error("[Orders::Placer] SELL failed: #{e.class} - #{e.message}")
-            order = nil
+          order = with_token_auto_heal(context: 'orders.sell_market') do
+            DhanHQ::Models::Order.create(payload)
           end
+          Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}") if order
         else
           Rails.logger.debug('[Orders::Placer] SELL dry-run disabled order placement')
           order = nil
@@ -158,7 +152,7 @@ module Orders
                            end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHANHQ_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
+          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
           transactionType: transaction_type,
           exchangeSegment: actual_segment,
           securityId: sid.to_s,
@@ -173,13 +167,10 @@ module Orders
         Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          begin
-            order = DhanHQ::Models::Order.create(payload)
-            Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}")
-          rescue StandardError => e
-            Rails.logger.error("[Orders::Placer] EXIT failed: #{e.class} - #{e.message}")
-            order = nil
+          order = with_token_auto_heal(context: 'orders.exit_position') do
+            DhanHQ::Models::Order.create(payload)
           end
+          Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
         else
           Rails.logger.debug('[Orders::Placer] EXIT dry-run disabled order placement')
           order = nil
@@ -206,6 +197,24 @@ module Orders
         }
       rescue StandardError => e
         Rails.logger.error("[Orders::Placer] fetch_position_details error: #{e.class} - #{e.message}")
+        nil
+      end
+
+      def with_token_auto_heal(context:)
+        yield
+      rescue StandardError => e
+        Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
+
+        unless DhanhqErrorHandler.token_expired?(e)
+          return nil
+        end
+
+        Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
+        Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
+
+        yield
+      rescue StandardError => e
+        Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
         nil
       end
 

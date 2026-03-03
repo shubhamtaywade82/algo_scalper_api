@@ -21,6 +21,7 @@ class TelegramNotifier
     return if chat_id.blank?
 
     chunks(text).each do |chunk|
+      chunk = Telegram::Formatter.to_html(chunk)
       post('sendMessage',
            chat_id: chat_id,
            text: chunk,

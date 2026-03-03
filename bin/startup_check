@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/bin/zsh
+
 # frozen_string_literal: true
 
 # Comprehensive startup script for Algo Scalper API
