@@ -1,6 +1,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import cable from '../cable'
 
+const POLL_INTERVAL_MS = 5000
+
 export function useDashboard(onPositionChange) {
   const mode = ref('paper')
   const connected = ref(false)
@@ -21,6 +23,7 @@ export function useDashboard(onPositionChange) {
   const lastUpdated = ref(null)
 
   let subscription = null
+  let pollTimer = null
 
   function applyData(data) {
     if (data.mode != null) mode.value = data.mode
@@ -45,6 +48,9 @@ export function useDashboard(onPositionChange) {
   onMounted(() => {
     fetchInitial()
 
+    // Polling — reliable baseline; ActionCable pushes faster when connected
+    pollTimer = setInterval(fetchInitial, POLL_INTERVAL_MS)
+
     subscription = cable.subscriptions.create('DashboardChannel', {
       connected() {
         connected.value = true
@@ -57,7 +63,7 @@ export function useDashboard(onPositionChange) {
           applyData(data)
         } else if (data.type === 'position_activated' || data.type === 'position_exited') {
           onPositionChange?.()
-          fetchInitial() // refresh stats totals
+          fetchInitial()
         }
       }
     })
@@ -65,6 +71,7 @@ export function useDashboard(onPositionChange) {
 
   onUnmounted(() => {
     subscription?.unsubscribe()
+    clearInterval(pollTimer)
   })
 
   return { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated }
