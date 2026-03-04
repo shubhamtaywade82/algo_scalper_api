@@ -692,7 +692,8 @@ module Live
         cfg = profit_floor_config
         return unless cfg[:enabled]
 
-        lock_rupees = cfg[:lock_rupees]
+        lock_pct = cfg[:lock_pct]
+        lock_rupees_static = cfg[:lock_rupees]  # fallback if lock_pct not set
         breakeven_at = cfg[:breakeven_at]
         time_kill_minutes = cfg[:time_kill_minutes]
         exit_fee = BrokerFeeCalculator.fee_per_order
@@ -704,8 +705,24 @@ module Live
           net_pnl = safe_big_decimal(snapshot[:pnl])
           next unless net_pnl
 
+          # Compute lock threshold: prefer lock_pct% of capital_deployed (position-size aware),
+          # fall back to static lock_rupees if lock_pct not configured.
+          lock_rupees = if lock_pct
+                          capital = safe_big_decimal(snapshot[:capital_deployed])
+                          capital&.positive? ? (capital * BigDecimal(lock_pct.to_s) / 100).ceil : lock_rupees_static
+                        else
+                          lock_rupees_static
+                        end
+
           mark_breakeven_reached!(tracker, net_pnl, threshold_rupees: breakeven_at) if breakeven_at
           arm_profit_floor!(tracker, net_pnl, lock_rupees: lock_rupees) if lock_rupees
+
+          # Ratchet the floor upward as HWM PnL grows (trailing floor).
+          trail_pct = cfg[:trail_pct]
+          if trail_pct && tracker.profit_floor_rupees.present?
+            hwm_pnl = safe_big_decimal(snapshot[:hwm_pnl])
+            update_trailing_floor!(tracker, hwm_pnl, trail_pct: trail_pct)
+          end
 
           floor = tracker.profit_floor_rupees
           next unless floor
@@ -734,6 +751,28 @@ module Live
       end
 
       private
+
+      # Ratchet the profit floor upward as HWM PnL grows.
+      # Monotonic — floor only moves up, never down.
+      # Called every monitor cycle once the floor is armed.
+      # @param tracker [PositionTracker]
+      # @param hwm_pnl [BigDecimal, nil] High water mark PnL from Redis snapshot
+      # @param trail_pct [Numeric] Floor as % of HWM (e.g., 70 = protect 70% of peak)
+      def update_trailing_floor!(tracker, hwm_pnl, trail_pct:)
+        return unless hwm_pnl&.positive?
+
+        dynamic_floor = (BigDecimal(hwm_pnl.to_s) * BigDecimal(trail_pct.to_s) / 100).ceil
+        current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
+        return if dynamic_floor <= current_floor
+
+        tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i)
+        Rails.logger.info(
+          "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \
+          "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{trail_pct}%)"
+        )
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] update_trailing_floor! failed for #{tracker.order_no}: #{e.message}")
+      end
 
       def price_stalled?(tracker, stall_candles)
         # Get recent LTP history

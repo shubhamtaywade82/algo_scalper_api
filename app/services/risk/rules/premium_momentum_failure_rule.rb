@@ -92,7 +92,12 @@ module Risk
       # Check if premium momentum has failed
       def momentum_failed?(instrument, position_direction, interval, max_candles)
         series = instrument.candle_series(interval: interval)
-        return false unless series&.candles&.any?
+        unless series&.candles&.any?
+          Rails.logger.debug do
+            "[PremiumMomentumFailureRule] No #{interval}m candle data for #{instrument.symbol_name} — skipping"
+          end
+          return false
+        end
 
         candles = series.candles
         return false if candles.size < max_candles + 1

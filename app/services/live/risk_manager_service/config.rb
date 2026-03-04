@@ -72,7 +72,9 @@ module Live
 
         {
           enabled: raw[:enabled] == true,
+          lock_pct: float_or_nil(raw[:lock_pct]),
           lock_rupees: integer_or_nil(raw[:lock_rupees]),
+          trail_pct: float_or_nil(raw[:trail_pct]),
           breakeven_at: integer_or_nil(raw[:breakeven_at]),
           time_kill_minutes: integer_or_nil(raw[:time_kill_minutes])
         }
@@ -82,6 +84,14 @@ module Live
         return nil if value.nil?
 
         Integer(value)
+      rescue StandardError
+        nil
+      end
+
+      def float_or_nil(value)
+        return nil if value.nil?
+
+        Float(value)
       rescue StandardError
         nil
       end
