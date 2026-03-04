@@ -30,6 +30,14 @@ ENV['DHAN_LOG_LEVEL'] ||= ENV['DHANHQ_LOG_LEVEL'] if ENV['DHANHQ_LOG_LEVEL'].pre
 # The gem reads: CLIENT_ID, ACCESS_TOKEN, and all DHAN_* variables
 DhanHQ.configure_with_env
 
+# The SDK maps DH-904/805 to rate-limit, but some endpoints return a plain "429" code.
+# Extend mapping at boot so these are treated as known rate-limit errors.
+if DhanHQ::Constants::DHAN_ERROR_MAPPING['429'].nil?
+  patched_mapping = DhanHQ::Constants::DHAN_ERROR_MAPPING.merge('429' => DhanHQ::RateLimitError).freeze
+  DhanHQ::Constants.send(:remove_const, :DHAN_ERROR_MAPPING)
+  DhanHQ::Constants.const_set(:DHAN_ERROR_MAPPING, patched_mapping)
+end
+
 # Set logger level (supports both DHAN_LOG_LEVEL and DHANHQ_LOG_LEVEL via normalization above)
 level_name = (ENV["DHAN_LOG_LEVEL"] || "INFO").upcase
 begin
@@ -37,6 +45,35 @@ begin
 rescue NameError
   DhanHQ.logger.level = Logger::INFO
 end
+
+# Suppress high-frequency 429 retry log spam while preserving all other SDK warnings/errors.
+class DhanhqFilteredLogger
+  SUPPRESSED_WARN_PATTERNS = [
+    '[DhanHQ] Unmapped error code: 429',
+    '[DhanHQ::Client] Transient error (DhanHQ::RateLimitError)'
+  ].freeze
+
+  def initialize(logger)
+    @logger = logger
+  end
+
+  def warn(progname = nil)
+    message = block_given? ? yield.to_s : progname.to_s
+    return if SUPPRESSED_WARN_PATTERNS.any? { |pattern| message.include?(pattern) }
+
+    block_given? ? @logger.warn { message } : @logger.warn(progname)
+  end
+
+  def method_missing(method_name, ...)
+    @logger.public_send(method_name, ...)
+  end
+
+  def respond_to_missing?(method_name, include_private = false)
+    @logger.respond_to?(method_name, include_private) || super
+  end
+end
+
+DhanHQ.logger = DhanhqFilteredLogger.new(DhanHQ.logger) unless DhanHQ.logger.is_a?(DhanhqFilteredLogger)
 
 # Configure Rails app settings for DhanHQ integration
 # Disable WebSocket in test, backtest, or script mode

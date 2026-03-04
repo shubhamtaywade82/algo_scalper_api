@@ -248,7 +248,7 @@ module Live
         index_key: tracker.meta&.dig('index_key') || tracker.index_key,
         entry_time: tracker.created_at,
         exit_time: tracker.exited_at || Time.current,
-        entry_tf: tracker.meta&.dig('entry_tf'),
+        entry_tf: resolved_entry_tf(tracker),
         htf_tf: tracker.meta&.dig('htf_tf'),
         bos_age_at_entry: tracker.meta&.dig('bos_age_at_entry'),
         retrace_pct: tracker.meta&.dig('retrace_pct'),
@@ -264,6 +264,13 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] Failed to record trade telemetry for #{tracker&.order_no}: #{e.class} - #{e.message}")
+    end
+
+    def resolved_entry_tf(tracker)
+      tf = tracker.meta&.dig('entry_tf') || tracker.meta&.dig('timeframe')
+      return tf if tf.present?
+
+      '1m'
     end
 
     # Check if Telegram notifications are enabled

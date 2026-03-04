@@ -3,6 +3,7 @@
 module Live
   class PaperPnlRefresher
     REFRESH_INTERVAL = (AlgoConfig.fetch.dig(:paper_trading, :realtime_interval_seconds) || 1).to_i # seconds
+    LTP_RATE_LIMIT_COOLDOWN = 20.seconds
 
     def initialize
       @thread = nil
@@ -85,6 +86,7 @@ module Live
       return if seg.blank? || sid.blank?
 
       ltp = Live::TickQuery.for_security(segment: seg, security_id: sid)&.ltp
+      ltp ||= fetch_and_cache_fallback_ltp(tracker, segment: seg, security_id: sid)
       return if ltp.blank?
 
       entry = BigDecimal(tracker.entry_price.to_s)
@@ -117,6 +119,72 @@ module Live
       )
     rescue StandardError => e
       Rails.logger.warn("[PaperPnlRefresher] Failed refresh for #{tracker.id}: #{e.class} - #{e.message}")
+    end
+
+    def fetch_and_cache_fallback_ltp(tracker, segment:, security_id:)
+      tradable = tracker.tradable
+      if tradable
+        ltp = tradable.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+        return cache_ltp_tick(segment: segment, security_id: security_id, ltp: ltp) if ltp.present?
+      end
+
+      return nil if ltp_api_rate_limited?(segment: segment, security_id: security_id)
+
+      response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
+      return nil unless response['status'] == 'success'
+
+      option_data = response.dig('data', segment, security_id.to_s)
+      return nil unless option_data && option_data['last_price']
+
+      cache_ltp_tick(segment: segment, security_id: security_id, ltp: option_data['last_price'])
+    rescue StandardError => e
+      if rate_limit_error?(e)
+        mark_ltp_api_rate_limited!(segment: segment, security_id: security_id)
+      else
+        Rails.logger.debug { "[PaperPnlRefresher] LTP fallback failed for #{segment}/#{security_id}: #{e.message}" }
+      end
+      nil
+    end
+
+    def cache_ltp_tick(segment:, security_id:, ltp:, timestamp: Time.current)
+      ltp_bd = BigDecimal(ltp.to_s)
+      return nil if ltp_bd <= 0
+
+      Live::TickCache.put(
+        segment: segment.to_s,
+        security_id: security_id.to_s,
+        ltp: ltp_bd.to_f,
+        timestamp: timestamp,
+        ts: timestamp.to_i
+      )
+      ltp_bd
+    rescue StandardError => e
+      Rails.logger.debug { "[PaperPnlRefresher] cache_ltp_tick failed for #{segment}/#{security_id}: #{e.message}" }
+      nil
+    end
+
+    def rate_limit_error?(error)
+      return false unless error
+
+      message = error.message.to_s
+      message.include?('429') || message.match?(/rate\s*limit/i) || error.class.name.include?('RateLimitError')
+    end
+
+    def ltp_api_rate_limited?(segment:, security_id:)
+      Rails.cache.read(ltp_rate_limit_key(segment: segment, security_id: security_id)).present?
+    rescue StandardError
+      false
+    end
+
+    def mark_ltp_api_rate_limited!(segment:, security_id:)
+      Rails.cache.write(ltp_rate_limit_key(segment: segment, security_id: security_id), true,
+                        expires_in: LTP_RATE_LIMIT_COOLDOWN)
+    rescue StandardError
+      nil
+    end
+
+    def ltp_rate_limit_key(segment:, security_id:)
+      "paper_pnl_refresher:ltp_rate_limit:#{segment}:#{security_id}"
     end
 
     def demand_driven_enabled?

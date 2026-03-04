@@ -103,10 +103,11 @@ module Live
     def prune_stale(max_age: 60)
       cutoff = Time.current.to_i - max_age
       protected = protected_keys_set
+      active_security_ids = active_position_security_ids
 
       redis.scan_each(match: "#{PREFIX}:*") do |key|
         _, seg, sid = key.split(':', 3)
-        composite = "#{seg}:#{sid}"
+        composite = normalize_composite_key(seg, sid)
 
         # never prune index feeds
         if seg == 'IDX_I'
@@ -119,6 +120,9 @@ module Live
           # Skip silently - tracked positions should not be pruned
           next
         end
+
+        # keep keys tied to any currently active position (cross-process/case-safety)
+        next if active_security_ids.include?(sid.to_s.strip)
 
         # keep protected keys (watchlist/active)
         if protected.include?(composite)
@@ -163,7 +167,7 @@ module Live
       # 1. Index feeds (existing tick keys per segment)
       redis.scan_each(match: 'tick:IDX_I:*') do |key|
         _, s, sid = key.split(':', 3)
-        set << "#{s}:#{sid}" if s && sid
+        set << normalize_composite_key(s, sid) if s && sid
       end
 
       # 2. Watchlist items (AlgoConfig may be nil or not an array)
@@ -172,7 +176,7 @@ module Live
         watchlist.each do |item|
           seg = item && (item[:segment] || item['segment'])
           sid = item && (item[:security_id] || item['security_id'])
-          set << "#{seg}:#{sid}" if seg && sid
+          set << normalize_composite_key(seg, sid) if seg && sid
         end
       rescue StandardError
         # ignore config errors
@@ -181,10 +185,24 @@ module Live
       # 3. Active positions (PositionIndex returns "SEG:SID" strings)
       begin
         Live::PositionIndex.instance.all_keys.each do |k|
-          set << k.to_s
+          seg, sid = k.to_s.split(':', 2)
+          set << normalize_composite_key(seg, sid)
         end
       rescue StandardError
         # if PositionIndex not available, ignore
+      end
+
+      # 4. Active positions from DB (cross-process safety when PositionIndex is empty)
+      begin
+        if defined?(PositionTracker)
+          PositionTracker.active.pluck(:segment, :security_id).each do |segment, security_id|
+            next if segment.blank? || security_id.blank?
+
+            set << normalize_composite_key(segment, security_id)
+          end
+        end
+      rescue StandardError
+        # if DB/model unavailable in this context, ignore
       end
 
       set
@@ -217,6 +235,18 @@ module Live
 
     def redis_key(segment, security_id)
       "#{PREFIX}:#{segment}:#{security_id}"
+    end
+
+    def normalize_composite_key(segment, security_id)
+      "#{segment.to_s.strip.upcase}:#{security_id.to_s.strip}"
+    end
+
+    def active_position_security_ids
+      return Set.new unless defined?(PositionTracker)
+
+      PositionTracker.active.pluck(:security_id).compact.map { |sid| sid.to_s.strip }.to_set
+    rescue StandardError
+      Set.new
     end
 
     def redis

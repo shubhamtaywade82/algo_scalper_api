@@ -401,15 +401,45 @@ Rails.logger.error(
 
         # Fallback: Direct API call
         begin
+          return nil if ltp_api_rate_limited?(segment: segment, security_id: security_id)
+
           response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
           if response['status'] == 'success'
             option_data = response.dig('data', segment, security_id.to_s)
             return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
           end
         rescue StandardError => e
-          Rails.logger.error("[EntryGuard] Failed to fetch LTP for #{tracker.order_no}: #{e.message}")
+          if rate_limit_error?(e)
+            mark_ltp_api_rate_limited!(segment: segment, security_id: security_id)
+            Rails.logger.debug { "[EntryGuard] LTP API rate limited for #{tracker.order_no}" }
+          else
+            Rails.logger.error("[EntryGuard] Failed to fetch LTP for #{tracker.order_no}: #{e.message}")
+          end
         end
         nil
+      end
+
+      def rate_limit_error?(error)
+        return false unless error
+
+        message = error.message.to_s
+        message.include?('429') || message.match?(/rate\s*limit/i) || error.class.name.include?('RateLimitError')
+      end
+
+      def ltp_api_rate_limited?(segment:, security_id:)
+        Rails.cache.read(ltp_rate_limit_key(segment: segment, security_id: security_id)).present?
+      rescue StandardError
+        false
+      end
+
+      def mark_ltp_api_rate_limited!(segment:, security_id:)
+        Rails.cache.write(ltp_rate_limit_key(segment: segment, security_id: security_id), true, expires_in: 20.seconds)
+      rescue StandardError
+        nil
+      end
+
+      def ltp_rate_limit_key(segment:, security_id:)
+        "entry_guard:ltp_rate_limit:#{segment}:#{security_id}"
       end
 
       def cooldown_active?(symbol, cooldown)

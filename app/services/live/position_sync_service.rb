@@ -326,20 +326,72 @@ module Live
       tradable = tracker.tradable
       if tradable
         ltp = tradable.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
-        return BigDecimal(ltp.to_s) if ltp
+        if ltp
+          ltp_bd = BigDecimal(ltp.to_s)
+          cache_ltp_tick(segment: segment, security_id: security_id, ltp: ltp_bd)
+          return ltp_bd
+        end
       end
 
       # Fallback: Direct API call
       begin
+        return nil if ltp_api_rate_limited?(segment: segment, security_id: security_id)
+
         response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
         if response['status'] == 'success'
           option_data = response.dig('data', segment, security_id.to_s)
-          return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
+          if option_data && option_data['last_price']
+            ltp = BigDecimal(option_data['last_price'].to_s)
+            cache_ltp_tick(segment: segment, security_id: security_id, ltp: ltp)
+            return ltp
+          end
         end
       rescue StandardError => e
-        Rails.logger.error("[PositionSync] Failed to fetch paper LTP for #{tracker.order_no}: #{e.message}")
+        if rate_limit_error?(e)
+          mark_ltp_api_rate_limited!(segment: segment, security_id: security_id)
+          Rails.logger.debug { "[PositionSync] LTP API rate limited for #{tracker.order_no}" }
+        else
+          Rails.logger.error("[PositionSync] Failed to fetch paper LTP for #{tracker.order_no}: #{e.message}")
+        end
       end
       nil
+    end
+
+    def rate_limit_error?(error)
+      return false unless error
+
+      message = error.message.to_s
+      message.include?('429') || message.match?(/rate\s*limit/i) || error.class.name.include?('RateLimitError')
+    end
+
+    def ltp_api_rate_limited?(segment:, security_id:)
+      Rails.cache.read(ltp_rate_limit_key(segment: segment, security_id: security_id)).present?
+    rescue StandardError
+      false
+    end
+
+    def mark_ltp_api_rate_limited!(segment:, security_id:)
+      Rails.cache.write(ltp_rate_limit_key(segment: segment, security_id: security_id), true, expires_in: 20.seconds)
+    rescue StandardError
+      nil
+    end
+
+    def ltp_rate_limit_key(segment:, security_id:)
+      "position_sync:ltp_rate_limit:#{segment}:#{security_id}"
+    end
+
+    def cache_ltp_tick(segment:, security_id:, ltp:, timestamp: Time.current)
+      return if segment.blank? || security_id.blank? || ltp.to_f <= 0
+
+      Live::TickCache.put(
+        segment: segment.to_s,
+        security_id: security_id.to_s,
+        ltp: ltp.to_f,
+        timestamp: timestamp,
+        ts: timestamp.to_i
+      )
+    rescue StandardError => e
+      Rails.logger.debug { "[PositionSync] cache_ltp_tick failed for #{segment}/#{security_id}: #{e.message}" }
     end
   end
 end

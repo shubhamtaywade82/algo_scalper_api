@@ -291,7 +291,7 @@ module Notifications
     end
 
     def format_trading_stats(stats)
-      stats[:total_pnl_rupees] >= 0 ? '📈' : '📉'
+      total_pnl_emoji = stats[:total_pnl_rupees] >= 0 ? '📈' : '📉'
       realized_pnl_emoji = stats[:realized_pnl_rupees] >= 0 ? '✅' : '❌'
 
       message = "📊 <b>Daily Trading Statistics</b>\n"

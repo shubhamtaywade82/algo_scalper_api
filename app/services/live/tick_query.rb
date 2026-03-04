@@ -2,6 +2,9 @@
 
 module Live
   class TickQuery
+    NO_LTP_LOG_COOLDOWN = 30.seconds
+    CACHE_ERROR_LOG_COOLDOWN = 30.seconds
+
     class << self
       def for(tracker)
         return nil unless tracker
@@ -16,7 +19,12 @@ module Live
         tick_data = Live::TickCache.fetch(segment, security_id)
         raw_ltp = tick_data&.dig(:ltp) || Live::TickCache.ltp(segment, security_id)
         unless raw_ltp
-          Rails.logger.warn("[TickQuery] no LTP in cache for #{segment}/#{security_id}")
+          log_once(
+            cache_key: "tick_query:no_ltp:#{segment}:#{security_id}",
+            cooldown: NO_LTP_LOG_COOLDOWN,
+            level: :warn,
+            message: "[TickQuery] no LTP in cache for #{segment}/#{security_id}"
+          )
           return nil
         end
 
@@ -33,12 +41,29 @@ module Live
           prev_close: tick_data&.dig(:prev_close)&.to_f
         )
       rescue StandardError => e
-        Rails.logger.warn("[TickQuery] cache miss for #{segment}/#{security_id}: #{e.message}")
+        log_once(
+          cache_key: "tick_query:cache_error:#{segment}:#{security_id}",
+          cooldown: CACHE_ERROR_LOG_COOLDOWN,
+          level: :warn,
+          message: "[TickQuery] cache miss for #{segment}/#{security_id}: #{e.message}"
+        )
         nil
       end
 
       def ltp_for(tracker)
         self.for(tracker)&.ltp
+      end
+
+      private
+
+      def log_once(cache_key:, cooldown:, level:, message:)
+        return unless Rails.cache
+        return if Rails.cache.read(cache_key)
+
+        Rails.logger.public_send(level, message)
+        Rails.cache.write(cache_key, true, expires_in: cooldown)
+      rescue StandardError
+        Rails.logger.public_send(level, message)
       end
     end
   end

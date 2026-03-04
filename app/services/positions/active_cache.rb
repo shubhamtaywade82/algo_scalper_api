@@ -114,6 +114,7 @@ module Positions
       @tracker_index = Concurrent::Map.new # tracker_id => composite_key
       @lock = Mutex.new
       @subscription_id = nil
+      @tick_query = Live::TickQuery
       @stats = {
         positions_tracked: 0,
         updates_processed: 0,

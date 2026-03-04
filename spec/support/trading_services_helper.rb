@@ -18,9 +18,6 @@ RSpec.configure do |config|
       atm_service = Live::AtmOptionsService.instance
       atm_service.stop! if atm_service.respond_to?(:running?) && atm_service.running?
     end
-    if Live::MockDataService.instance.respond_to?(:running?) && Live::MockDataService.instance.running?
-      Live::MockDataService.instance.stop!
-    end
     if defined?(Live::PnlUpdaterService) && Live::PnlUpdaterService.instance.respond_to?(:running?) && Live::PnlUpdaterService.instance.running?
       Live::PnlUpdaterService.instance.stop!
     end
@@ -43,9 +40,6 @@ RSpec.configure do |config|
     if defined?(Live::AtmOptionsService)
       atm_service = Live::AtmOptionsService.instance
       atm_service.stop! if atm_service.respond_to?(:running?) && atm_service.running?
-    end
-    if Live::MockDataService.instance.respond_to?(:running?) && Live::MockDataService.instance.running?
-      Live::MockDataService.instance.stop!
     end
     if defined?(Live::PnlUpdaterService) && Live::PnlUpdaterService.instance.respond_to?(:running?) && Live::PnlUpdaterService.instance.running?
       Live::PnlUpdaterService.instance.stop!

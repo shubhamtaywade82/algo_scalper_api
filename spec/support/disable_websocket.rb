@@ -7,9 +7,7 @@
 RSpec.configure do |config|
   # Disable WebSocket connections globally for all tests
   config.before(:suite) do
-    # Ensure WebSocket is disabled via environment variables
-    ENV['DHANHQ_WS_ENABLED'] = 'false'
-    ENV['DHANHQ_ORDER_WS_ENABLED'] = 'false'
+    # Ensure trading services are disabled
     ENV['DISABLE_TRADING_SERVICES'] = '1'
 
     # Remove credentials to prevent WebSocket initialization
