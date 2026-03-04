@@ -348,9 +348,9 @@ config/
 └── routes.rb                 # API routes
 
 docs/                         # Documentation
-├── dhanhq-client.md          # DhanHQ integration guide
-├── review.md                 # Implementation review
-└── requirements_gap_analysis.md
+├── index.md                  # Canonical docs index
+├── guides/                   # User/integration guides
+└── reports/                  # Consolidated review notes and analyses
 ```
 
 ---
@@ -407,9 +407,8 @@ bin/rails runner "puts Redis.current.ping"
 
 ## 📚 Documentation
 
-- **[DhanHQ Integration Guide](docs/dhanhq-client.md)**: Complete DhanHQ API reference
-- **[Implementation Review](docs/review.md)**: Current system status
-- **[Requirements Analysis](docs/requirements_gap_analysis.md)**: Gap analysis and implementation status
+- **[Documentation Index](docs/index.md)**: Canonical entrypoint for all docs, reports, runbooks, and guides
+- **[DhanHQ Integration Guide](docs/guides/dhanhq-client.md)**: Complete DhanHQ API reference
 - **[Repository Guidelines](AGENTS.md)**: Development guidelines and best practices
 
 ---

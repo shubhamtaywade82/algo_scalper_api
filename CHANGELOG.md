@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-03-04
+- Consolidate root-level ad-hoc markdown reports into `docs/reports/`.
+- Add canonical documentation entrypoint `docs/index.md` and simplify `docs/README.md` to point to it.
+- Move code-review backlog to `docs/reports/TODO.md`.
+- Update CI Brakeman step to use `--no-exit-on-warn` so advisory warnings are reported without failing the pipeline.
+
 ## 2026-02-25
 - Add `MarketTick` + `Live::TickQuery` boundary and migrate key risk/entry/exit reads off direct `Live::TickCache` access.
 - Migrate remaining service/model `Live::TickCache.ltp` reads to `Live::TickQuery` so `TickQuery` is the sole LTP read boundary.
