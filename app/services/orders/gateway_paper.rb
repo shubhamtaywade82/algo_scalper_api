@@ -30,11 +30,25 @@ module Orders
     end
 
     def wallet_snapshot
-      balance = AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000
-      { cash: balance, equity: balance, mtm: 0, exposure: 0 }
+      base = (AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000).to_f
+
+      # Realized P&L: today's closed paper positions only (daily paper session)
+      today = Time.zone.today
+      realized = PositionTracker.paper.exited
+                                .where(exited_at: today.beginning_of_day..today.end_of_day)
+                                .sum(:last_pnl_rupees).to_f
+
+      # Unrealized P&L: active positions read from Redis cache for live values
+      unrealized = PositionTracker.paper.active.sum { |t| t.current_pnl_rupees.to_f }
+
+      cash   = (base + realized).round(2)
+      mtm    = unrealized.round(2)
+      equity = (cash + mtm).round(2)
+
+      { cash: cash, equity: equity, mtm: mtm, exposure: 0 }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
-      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0 } # Return default on error
+      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0 }
     end
 
     def cancel_order(order_id)
