@@ -69,8 +69,8 @@ Rails.application.configure do
   # Annotate rendered view with file names (disabled - API only app).
   # config.action_view.annotate_rendered_view_with_filenames = true
 
-  # ActionCable disabled - API only app
-  # config.action_cable.disable_request_forgery_protection = true
+  # ActionCable — enable for dashboard
+  config.action_cable.disable_request_forgery_protection = true
   # config.action_cable.logger = Logger.new(STDOUT)
   # config.action_cable.logger.level = Logger::WARN
 

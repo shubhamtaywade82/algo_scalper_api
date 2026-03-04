@@ -23,6 +23,7 @@ module Live
       @logger = defined?(Rails) ? Rails.logger : Logger.new($stdout)
       @sleep_mutex = Mutex.new
       @sleep_cv = ConditionVariable.new
+      @last_heartbeat_at = nil
     end
 
     # Accept arbitrary payload fields; last-wins for a tracker id
@@ -120,6 +121,7 @@ module Live
         end
 
         processed = flush!
+        maybe_broadcast_heartbeat
         sleep_duration = next_interval(queue_empty: !processed && queue_empty?)
         wait_for_interval(sleep_duration)
       end
@@ -252,6 +254,8 @@ module Live
           tracker: tracker
         )
 
+        broadcast_pnl_update(tracker_id, ltp_bd, pnl_bd, pnl_pct_bd, hwm_bd)
+
         # Update in-memory tracker object (but don't persist DB here)
         begin
           tracker.cache_live_pnl(pnl_bd, pnl_pct: pnl_pct_bd)
@@ -367,6 +371,58 @@ module Live
       end
     rescue StandardError => e
       @logger.error("[PnlUpdater] check_and_notify_pnl_milestones failed: #{e.class} - #{e.message}")
+    end
+
+    # Broadcast live PnL for a single position to the "positions" ActionCable channel.
+    def broadcast_pnl_update(tracker_id, ltp, pnl, pnl_pct, hwm)
+      ActionCable.server.broadcast("positions", {
+        type: "pnl_update",
+        id: tracker_id,
+        ltp: ltp.to_f.round(2),
+        pnl: pnl.to_f.round(2),
+        pnl_pct: (pnl_pct.to_f * 100).round(2),
+        hwm_pnl: hwm.to_f.round(2)
+      })
+    rescue StandardError => e
+      @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
+    end
+
+    # Broadcast aggregate dashboard stats every 5 seconds to the "dashboard" channel.
+    def maybe_broadcast_heartbeat
+      return if @last_heartbeat_at && (Time.now.to_f - @last_heartbeat_at) < 5.0
+
+      @last_heartbeat_at = Time.now.to_f
+      ActionCable.server.broadcast("dashboard", build_dashboard_stats)
+    rescue StandardError => e
+      @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")
+    end
+
+    def build_dashboard_stats
+      {
+        type: "stats",
+        mode: AlgoConfig.mode,
+        balance: safe_wallet_snapshot,
+        today: PositionTracker.paper_trading_stats_with_pct,
+        indices: {
+          nifty: Live::TickCache.ltp('IDX_I', '13'),
+          banknifty: Live::TickCache.ltp('IDX_I', '25'),
+          sensex: Live::TickCache.ltp('IDX_I', '51')
+        },
+        circuit_breaker: Risk::CircuitBreaker.instance.status,
+        system: {
+          ws_market_feed: Live::MarketFeedHub.instance.running?,
+          scheduler: Thread.list.any? { |t| t.name == 'signal-scheduler' } ? 'running' : 'unknown'
+        },
+        timestamp: Time.current.iso8601
+      }
+    rescue StandardError
+      { type: "stats", error: true, timestamp: Time.current.iso8601 }
+    end
+
+    def safe_wallet_snapshot
+      Orders.config.gateway.wallet_snapshot
+    rescue StandardError
+      { cash: 0, equity: 0, mtm: 0, exposure: 0 }
     end
 
     # Check if Telegram milestone notifications are enabled

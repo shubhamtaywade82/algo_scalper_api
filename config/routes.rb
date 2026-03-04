@@ -5,12 +5,17 @@ Rails.application.routes.draw do
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # ActionCable WebSocket endpoint
+  mount ActionCable.server => '/cable'
+
   # Optional SMC decision endpoint (non-namespaced controller by design)
   get "smc/decision", to: "smc#decision"
 
   namespace :api do
     get :health, to: "health#show"
     post :test_broadcast, to: "test#broadcast"
+    get :dashboard, to: "dashboard#show"
+    get :positions, to: "positions#index"
 
     # Circuit breaker — emergency halt
     # GET    /api/circuit_breaker        → status (unauthenticated)

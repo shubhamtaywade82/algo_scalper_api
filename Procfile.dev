@@ -1,2 +1,3 @@
 web: bin/rails server -p 3001
 trading: ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
+dashboard: cd dashboard && npm run dev
