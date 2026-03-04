@@ -21,46 +21,49 @@ function formatLtp(val) {
 </script>
 
 <template>
-  <header class="bg-gray-900 border-b border-gray-800 px-4 py-3 sticky top-0 z-10">
+  <header class="glass !bg-gray-950/80 !border-b-white/5 border-b px-6 py-4 sticky top-0 z-50">
     <div class="flex items-center justify-between max-w-screen-2xl mx-auto">
       <!-- Left: logo + mode -->
-      <div class="flex items-center gap-3">
-        <span class="text-base font-bold tracking-widest text-blue-400">ALGO SCALPER</span>
-        <span :class="['text-xs font-bold px-2 py-0.5 rounded', modeBadgeClass]">
+      <div class="flex items-center gap-4">
+        <div class="flex flex-col">
+          <span class="text-sm font-black tracking-[0.2em] text-white">ALGO<span class="text-primary-400">SCALPER</span></span>
+          <span class="text-[8px] text-gray-500 uppercase tracking-widest font-bold -mt-1 text-center">v2.0 PRO</span>
+        </div>
+        <span :class="['text-[10px] font-black px-2.5 py-0.5 rounded-full tracking-wider shadow-sm', modeBadgeClass]">
           {{ mode?.toUpperCase() ?? '—' }}
         </span>
       </div>
 
       <!-- Center: index prices -->
-      <div class="flex items-center gap-6 text-sm">
-        <div>
-          <span class="text-gray-600 text-xs mr-1">NIFTY</span>
-          <span class="font-semibold text-gray-200">{{ formatLtp(indices?.nifty) }}</span>
+      <div class="hidden lg:flex items-center gap-10 text-xs">
+        <div class="flex flex-col items-center">
+          <span class="text-gray-500 text-[9px] uppercase tracking-widest mb-1">Nifty 50</span>
+          <span class="font-bold text-gray-200 text-data tracking-tight">{{ formatLtp(indices?.nifty) }}</span>
         </div>
-        <div>
-          <span class="text-gray-600 text-xs mr-1">BNKN</span>
-          <span class="font-semibold text-gray-200">{{ formatLtp(indices?.banknifty) }}</span>
+        <div class="flex flex-col items-center border-l border-white/5 pl-10">
+          <span class="text-gray-500 text-[9px] uppercase tracking-widest mb-1">Bank Nifty</span>
+          <span class="font-bold text-gray-200 text-data tracking-tight">{{ formatLtp(indices?.banknifty) }}</span>
         </div>
-        <div>
-          <span class="text-gray-600 text-xs mr-1">SENSEX</span>
-          <span class="font-semibold text-gray-200">{{ formatLtp(indices?.sensex) }}</span>
+        <div class="flex flex-col items-center border-l border-white/5 pl-10">
+          <span class="text-gray-500 text-[9px] uppercase tracking-widest mb-1">Sensex</span>
+          <span class="font-bold text-gray-200 text-data tracking-tight">{{ formatLtp(indices?.sensex) }}</span>
         </div>
       </div>
 
       <!-- Right: system status + connection -->
-      <div class="flex items-center gap-4 text-xs">
-        <div class="flex items-center gap-1.5">
-          <span :class="['w-1.5 h-1.5 rounded-full', system?.ws_market_feed ? 'bg-emerald-400' : 'bg-gray-600']"></span>
-          <span class="text-gray-500">WS</span>
+      <div class="flex items-center gap-6 text-[10px]">
+        <div class="flex items-center gap-2 group cursor-help">
+          <div :class="['w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors', system?.ws_market_feed ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-gray-700']"></div>
+          <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">MD FEED</span>
         </div>
-        <div class="flex items-center gap-1.5">
-          <span :class="['w-1.5 h-1.5 rounded-full', system?.scheduler === 'running' ? 'bg-emerald-400' : 'bg-yellow-400']"></span>
-          <span class="text-gray-500">SCHED</span>
+        <div class="flex items-center gap-2 group cursor-help">
+          <div :class="['w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors', system?.scheduler === 'running' ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-rose-500 shadow-rose-500/40']"></div>
+          <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">STG ENGINE</span>
         </div>
-        <div class="flex items-center gap-1.5 font-medium">
-          <span :class="['w-2 h-2 rounded-full', connected ? 'bg-emerald-400 animate-pulse' : 'bg-red-500']"></span>
-          <span :class="connected ? 'text-emerald-400' : 'text-red-400'">
-            {{ connected ? 'LIVE' : 'OFFLINE' }}
+        <div :class="['flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-500', connected ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400']">
+          <span :class="['w-2 h-2 rounded-full', connected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500']"></span>
+          <span class="font-black tracking-[0.1em]">
+            {{ connected ? 'CONNECTED' : 'DISCONNECTED' }}
           </span>
         </div>
       </div>

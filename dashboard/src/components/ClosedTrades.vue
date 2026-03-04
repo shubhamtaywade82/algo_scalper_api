@@ -48,64 +48,71 @@ function exitBadge(reason) {
 </script>
 
 <template>
-  <div class="bg-gray-900 rounded-lg border border-gray-800">
-    <div class="px-4 py-3 border-b border-gray-800">
-      <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-        Today's Trades
-        <span class="text-gray-600 ml-1">({{ positions.length }})</span>
-      </h2>
+  <div class="glass rounded-2xl overflow-hidden mt-8 opacity-90 transition-opacity hover:opacity-100">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-white/[0.01]">
+      <div class="flex items-center gap-3">
+        <div class="w-1.5 h-6 bg-gray-600 rounded-full"></div>
+        <h2 class="text-xs font-bold text-gray-400 uppercase tracking-[0.2em]">
+          Completed Trades
+          <span class="text-gray-600 ml-2 font-black text-data">[{{ positions.length }}]</span>
+        </h2>
+      </div>
     </div>
 
-    <div v-if="positions.length === 0" class="text-center py-10 text-gray-700">
-      No closed trades today
+    <div v-if="positions.length === 0" class="flex flex-col items-center justify-center py-16 text-gray-700">
+      <p class="text-[10px] uppercase tracking-widest font-bold">No closed trades recorded yet</p>
     </div>
 
-    <table v-else class="w-full">
-      <thead>
-        <tr class="text-xs text-gray-600 uppercase border-b border-gray-800">
-          <th class="text-left px-4 py-2 font-medium">Symbol</th>
-          <th class="text-center px-3 py-2 font-medium">Side</th>
-          <th class="text-right px-3 py-2 font-medium">Qty</th>
-          <th class="text-right px-3 py-2 font-medium">Entry</th>
-          <th class="text-right px-3 py-2 font-medium">Exit</th>
-          <th class="text-right px-3 py-2 font-medium">P&amp;L</th>
-          <th class="text-right px-3 py-2 font-medium">P&amp;L%</th>
-          <th class="text-center px-3 py-2 font-medium">Reason</th>
-          <th class="text-right px-4 py-2 font-medium">Time</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="pos in positions"
-          :key="pos.id"
-          class="border-b border-gray-800/60 hover:bg-gray-800/30 transition-colors opacity-80"
-        >
-          <td class="px-4 py-3 text-gray-400">{{ pos.symbol }}</td>
-          <td class="px-3 py-3 text-center">
-            <span
-              :class="[
-                'text-xs font-bold px-1.5 py-0.5 rounded',
-                pos.side === 'BUY' ? 'bg-blue-950/60 text-blue-500' : 'bg-orange-950/60 text-orange-500'
-              ]"
-            >{{ pos.side }}</span>
-          </td>
-          <td class="px-3 py-3 text-right text-gray-600 tabular-nums">{{ pos.quantity }}</td>
-          <td class="px-3 py-3 text-right text-gray-600 tabular-nums">{{ inr(pos.entry_price) }}</td>
-          <td class="px-3 py-3 text-right text-gray-500 tabular-nums">{{ inr(pos.exit_price) }}</td>
-          <td :class="['px-3 py-3 text-right font-semibold tabular-nums', pnlClass(pos.pnl)]">
-            {{ sign(pos.pnl) }}₹{{ inr(pos.pnl) }}
-          </td>
-          <td :class="['px-3 py-3 text-right tabular-nums', pnlClass(pos.pnl_pct)]">
-            {{ sign(pos.pnl_pct) }}{{ inr(pos.pnl_pct) }}%
-          </td>
-          <td class="px-3 py-3 text-center">
-            <span :class="['text-xs font-bold', exitBadge(pos.exit_reason).cls]">
-              {{ exitBadge(pos.exit_reason).label }}
-            </span>
-          </td>
-          <td class="px-4 py-3 text-right text-gray-600 text-xs">{{ formatTime(pos.exited_at) }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-else class="overflow-x-auto">
+      <table class="w-full border-collapse">
+        <thead>
+          <tr class="text-[9px] text-gray-600 uppercase tracking-widest border-b border-white/5 bg-white/[0.005]">
+            <th class="text-left px-6 py-3 font-bold">Asset</th>
+            <th class="text-center px-4 py-3 font-bold">Side</th>
+            <th class="text-right px-4 py-3 font-bold">Qty</th>
+            <th class="text-right px-4 py-3 font-bold">Entry</th>
+            <th class="text-right px-4 py-3 font-bold">Exit</th>
+            <th class="text-right px-4 py-3 font-bold">Net P&amp;L</th>
+            <th class="text-right px-4 py-3 font-bold">% P/L</th>
+            <th class="text-center px-4 py-3 font-bold">Source</th>
+            <th class="text-right px-6 py-3 font-bold">Time</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-white/5">
+          <tr
+            v-for="pos in positions"
+            :key="pos.id"
+            class="group hover:bg-white/[0.02] transition-colors"
+          >
+            <td class="px-6 py-4">
+              <span class="text-xs font-bold text-gray-500 uppercase tracking-tight group-hover:text-gray-300 transition-colors">{{ pos.symbol }}</span>
+            </td>
+            <td class="px-4 py-4 text-center">
+              <span
+                :class="[
+                  'text-[9px] font-black px-2 py-0.5 rounded tracking-tighter uppercase inline-block min-w-[40px] opacity-70 group-hover:opacity-100 transition-opacity',
+                  pos.side === 'BUY' ? 'bg-primary-900/30 text-primary-400 border border-primary-500/20' : 'bg-rose-900/30 text-rose-400 border border-rose-500/20'
+                ]"
+              >{{ pos.side }}</span>
+            </td>
+            <td class="px-4 py-4 text-right text-gray-600 text-data text-xs">{{ pos.quantity }}</td>
+            <td class="px-4 py-4 text-right text-gray-600 text-data text-xs">{{ inr(pos.entry_price) }}</td>
+            <td class="px-4 py-4 text-right text-gray-500 text-data text-xs">{{ inr(pos.exit_price) }}</td>
+            <td :class="['px-4 py-4 text-right font-bold text-data text-xs', pnlClass(pos.pnl)]">
+              {{ sign(pos.pnl) }}₹{{ inr(pos.pnl) }}
+            </td>
+            <td :class="['px-4 py-4 text-right text-data font-medium text-xs', pnlClass(pos.pnl_pct)]">
+              {{ sign(pos.pnl_pct) }}{{ inr(pos.pnl_pct) }}%
+            </td>
+            <td class="px-4 py-4 text-center">
+              <span :class="['text-[9px] font-black px-1.5 py-0.5 rounded border tracking-widest', exitBadge(pos.exit_reason).cls + '/20 border-' + exitBadge(pos.exit_reason).cls + '/10']">
+                {{ exitBadge(pos.exit_reason).label }}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-right text-gray-600 text-data text-[10px]">{{ formatTime(pos.exited_at) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
