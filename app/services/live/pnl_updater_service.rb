@@ -254,7 +254,7 @@ module Live
           tracker: tracker
         )
 
-        broadcast_pnl_update(tracker_id, ltp_bd, pnl_bd, pnl_pct_bd, hwm_bd)
+        broadcast_pnl_update(tracker_id, ltp_bd, pnl_bd, hwm_bd, entry_bd)
 
         # Update in-memory tracker object (but don't persist DB here)
         begin
@@ -374,13 +374,19 @@ module Live
     end
 
     # Broadcast live PnL for a single position to the "positions" ActionCable channel.
-    def broadcast_pnl_update(tracker_id, ltp, pnl, pnl_pct, hwm)
+    # pnl_pct is derived fresh from (ltp - entry) / entry * 100 to avoid ambiguity
+    # around how callers store pnl_pct (decimal fraction vs percentage).
+    def broadcast_pnl_update(tracker_id, ltp, pnl, hwm, entry)
+      ltp_f   = ltp.to_f
+      entry_f = entry.to_f
+      pnl_pct = entry_f.positive? ? (((ltp_f - entry_f) / entry_f) * 100).round(2) : 0.0
+
       ActionCable.server.broadcast("positions", {
         type: "pnl_update",
         id: tracker_id,
-        ltp: ltp.to_f.round(2),
+        ltp: ltp_f.round(2),
         pnl: pnl.to_f.round(2),
-        pnl_pct: (pnl_pct.to_f * 100).round(2),
+        pnl_pct: pnl_pct,
         hwm_pnl: hwm.to_f.round(2)
       })
     rescue StandardError => e

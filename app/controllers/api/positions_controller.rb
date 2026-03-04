@@ -26,16 +26,18 @@ module Api
 
     def serialize_open(t)
       cache = Live::RedisPnlCache.instance.fetch_pnl(t.id) || {}
+      ltp    = (cache[:ltp] || t.avg_price.to_f).to_f
+      entry  = t.entry_price.to_f
       {
         id: t.id,
         order_no: t.order_no,
         symbol: t.symbol,
         side: t.side,
         quantity: t.quantity.to_i,
-        entry_price: t.entry_price.to_f,
-        ltp: (cache[:ltp] || t.avg_price.to_f).round(2),
+        entry_price: entry.round(2),
+        ltp: ltp.round(2),
         pnl: (cache[:pnl] || t.last_pnl_rupees.to_f).round(2),
-        pnl_pct: ((cache[:pnl_pct] || t.last_pnl_pct.to_f) * 100).round(2),
+        pnl_pct: entry.positive? && ltp.positive? ? (((ltp - entry) / entry) * 100).round(2) : 0.0,
         hwm_pnl: (cache[:hwm_pnl] || t.high_water_mark_pnl.to_f).round(2),
         index_key: t.index_key || t.meta&.dig('index_key'),
         direction: t.direction || t.meta&.dig('direction'),
@@ -48,16 +50,18 @@ module Api
     end
 
     def serialize_closed(t)
+      entry = t.entry_price.to_f
+      exit  = t.exit_price.to_f
       {
         id: t.id,
         order_no: t.order_no,
         symbol: t.symbol,
         side: t.side,
         quantity: t.quantity.to_i,
-        entry_price: t.entry_price.to_f,
-        exit_price: t.exit_price.to_f,
+        entry_price: entry.round(2),
+        exit_price: exit.round(2),
         pnl: t.last_pnl_rupees.to_f.round(2),
-        pnl_pct: (t.last_pnl_pct.to_f * 100).round(2),
+        pnl_pct: entry.positive? && exit.positive? ? (((exit - entry) / entry) * 100).round(2) : 0.0,
         hwm_pnl: t.high_water_mark_pnl.to_f.round(2),
         exit_reason: t.exit_reason || t.meta&.dig('exit_reason'),
         index_key: t.index_key || t.meta&.dig('index_key'),
