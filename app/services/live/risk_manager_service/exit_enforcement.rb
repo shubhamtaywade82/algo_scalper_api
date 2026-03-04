@@ -513,6 +513,38 @@ module Live
         end
       end
 
+      # HARD RUPEE TAKE PROFIT
+      # Purpose: Exit immediately when net PnL reaches the target rupee amount.
+      # Mirrors enforce_hard_rupee_stop_loss — same pattern, opposite direction.
+      def enforce_hard_rupee_take_profit(exit_engine:)
+        return unless hard_rupee_tp_enabled?
+
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
+
+          net_pnl_rupees = snapshot[:pnl]
+          next if net_pnl_rupees.nil?
+
+          exit_fee = BrokerFeeCalculator.fee_per_order
+          base_target = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
+          tp_multiplier = Live::TimeRegimeService.instance.tp_multiplier
+          target_rupees = base_target * BigDecimal(tp_multiplier.to_s)
+          net_threshold = target_rupees + exit_fee
+
+          if net_pnl_rupees >= net_threshold
+            final_net_pnl = net_pnl_rupees - exit_fee
+            reason = "HARD_RUPEE_TP (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, target: ₹#{target_rupees})"
+            exit_path = 'hard_rupee_take_profit'
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_hard_rupee_take_profit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
       # LAYER 0: EXECUTABLE R STOP (premium hard stop)
       # Purpose: Enforce 1R loss cap in premium terms, independent of structure recalculation.
       def enforce_premium_r_stop(exit_engine:)

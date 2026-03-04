@@ -101,47 +101,27 @@ module Risk
         recent_candles = candles.last(max_candles + 1)
         return false if recent_candles.size < max_candles + 1
 
-        # Track premium high/low based on position direction
-        if position_direction == :bullish
-          # Bullish (CE): track premium high
-          current_premium = recent_candles.last&.close
-          previous_high = recent_candles.first(max_candles).map(&:high).max
+        # Both CE (bullish) and PE (bearish) buyers want the option premium to make new HIGHS.
+        # CE: premium rises as underlying rises. PE: premium rises as underlying falls.
+        # Momentum failed for either when the current close hasn't exceeded the recent high.
+        current_premium = recent_candles.last&.close
+        previous_high = recent_candles.first(max_candles).map(&:high).max
 
-          return false unless current_premium && previous_high
+        return false unless current_premium && previous_high
 
-          # Momentum failed if current premium hasn't exceeded previous high
-          # Allow small tolerance (0.1%) for noise
-          tolerance = previous_high * 0.001
-          momentum_failed = current_premium <= (previous_high + tolerance)
+        # Allow 0.1% tolerance for noise
+        tolerance = previous_high * 0.001
+        momentum_failed = current_premium <= (previous_high + tolerance)
 
-          if momentum_failed
-            Rails.logger.debug(
-              "[PremiumMomentumFailureRule] Bullish momentum failed on #{interval}m: " \
+        if momentum_failed
+          label = position_direction == :bullish ? 'Bullish' : 'Bearish'
+          Rails.logger.debug do
+            "[PremiumMomentumFailureRule] #{label} momentum failed on #{interval}m: " \
               "current=#{current_premium.round(2)}, previous_high=#{previous_high.round(2)}"
-            )
           end
-
-          momentum_failed
-        else
-          # Bearish (PE): track premium low
-          current_premium = recent_candles.last&.close
-          previous_low = recent_candles.first(max_candles).map(&:low).min
-
-          return false unless current_premium && previous_low
-
-          # Momentum failed if current premium hasn't dropped below previous low
-          tolerance = previous_low * 0.001
-          momentum_failed = current_premium >= (previous_low - tolerance)
-
-          if momentum_failed
-            Rails.logger.debug(
-              "[PremiumMomentumFailureRule] Bearish momentum failed on #{interval}m: " \
-              "current=#{current_premium.round(2)}, previous_low=#{previous_low.round(2)}"
-            )
-          end
-
-          momentum_failed
         end
+
+        momentum_failed
       rescue StandardError => e
         Rails.logger.error("[PremiumMomentumFailureRule] momentum_failed? error: #{e.class} - #{e.message}")
         false

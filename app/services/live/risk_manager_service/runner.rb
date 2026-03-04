@@ -83,6 +83,10 @@ module Live
         # Purpose: Account protection ONLY - no trade logic
         enforce_hard_rupee_stop_loss(exit_engine: exit_engine)
 
+        # LAYER 1b: HARD RUPEE TAKE PROFIT
+        # Purpose: Book profit immediately when target rupee amount is reached
+        enforce_hard_rupee_take_profit(exit_engine: exit_engine)
+
         # PROFIT FLOOR (Stateful guarantee - protect locked profits)
         # Purpose: Once net PnL reaches lock_rupees, exit if it drops back to that floor
         enforce_profit_floor(exit_engine: exit_engine)

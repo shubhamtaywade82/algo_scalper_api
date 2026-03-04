@@ -92,6 +92,10 @@ module Orders
         Rails.logger.warn("[Orders::EntryManager] Failed to add position to ActiveCache: #{tracker.id}")
       end
 
+      # Persist premium_stop_price to tracker.meta for LAYER 0 (enforce_premium_r_stop).
+      # Both CE and PE buyers exit if the option premium drops 30% from entry.
+      set_premium_stop_price!(tracker)
+
       # Place bracket orders via BracketPlacer
       bracket_result = if tp_price
                          bracket_placer = Orders::BracketPlacer.new
@@ -224,6 +228,20 @@ module Orders
       else
         (entry * 1.30).round(2)
       end
+    end
+
+    # Write premium_stop_price into tracker.meta so LAYER 0 (enforce_premium_r_stop) can fire.
+    # For options buyers (CE or PE): exit if option premium drops 30% below entry.
+    def set_premium_stop_price!(tracker)
+      entry = tracker.entry_price.to_f
+      return unless entry.positive?
+
+      premium_stop = (entry * 0.70).round(2) # 30% below entry premium
+      meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+      meta['premium_stop_price'] = premium_stop
+      tracker.update_column(:meta, meta)
+    rescue StandardError => e
+      Rails.logger.error("[Orders::EntryManager] set_premium_stop_price! failed for #{tracker.order_no}: #{e.message}")
     end
 
     def default_permission_for_entry(scale_multiplier)

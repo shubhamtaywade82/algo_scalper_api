@@ -129,14 +129,27 @@ def fetch_authority_token!
         return data["access_token"] if data["access_token"].present?
       end
 
-      Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), falling back to ENV['DHAN_ACCESS_TOKEN']"
+      Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
     rescue StandardError => e
-      Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, falling back to ENV['DHAN_ACCESS_TOKEN']"
+      Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
     end
 
-    env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
-    raise "Token authority unreachable and no ENV['DHAN_ACCESS_TOKEN'] found" if env_token.blank?
+    # Second fallback: TOTP auto-refresh via Dhan::TokenManager (requires DHAN_PIN + DHAN_TOTP_SECRET)
+    if defined?(Dhan::TokenManager)
+      totp_token = Dhan::TokenManager.current_token
+      if totp_token.present?
+        Rails.logger.info "[SCALPER] Token refreshed via TOTP auto-refresh"
+        return totp_token
+      end
+    end
 
-    env_token
+    # Final fallback: static ENV token
+    env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+    if env_token.present?
+      Rails.logger.warn "[SCALPER] Falling back to static ENV['DHAN_ACCESS_TOKEN'] (may be expired)"
+      return env_token
+    end
+
+    raise "Token authority unreachable, TOTP refresh failed, and no ENV['DHAN_ACCESS_TOKEN'] found"
   end
 end

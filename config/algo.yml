@@ -179,12 +179,19 @@ risk:
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
   hard_rupee_sl:
-    enabled: false # Set to true to enable hard ₹ stop loss
+    enabled: true # Hard ₹1000 stop loss per trade
     max_loss_rupees: 1000 # Maximum loss per trade in rupees
 
   hard_rupee_tp:
-    enabled: false # Set to true to enable hard ₹ take profit
+    enabled: true # Hard ₹2000 take profit per trade
     target_profit_rupees: 2000 # Target profit per trade in rupees
+
+  # Profit floor: once net PnL reaches lock_rupees, arms a floor to prevent giving it back
+  profit_floor:
+    enabled: true
+    lock_rupees: 500       # arm floor when net PnL reaches ₹500
+    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200
+    time_kill_minutes: 20  # kill position after 20 min even with active floor
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP
