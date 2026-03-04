@@ -21,6 +21,7 @@ export function useDashboard(onPositionChange) {
   const system = ref({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
   const circuitBreaker = ref({})
   const lastUpdated = ref(null)
+  const recentSignals = ref([])
 
   let subscription = null
   let pollTimer = null
@@ -32,6 +33,7 @@ export function useDashboard(onPositionChange) {
     if (data.indices) indices.value = data.indices
     if (data.system) system.value = data.system
     if (data.circuit_breaker) circuitBreaker.value = data.circuit_breaker
+    if (data.recent_signals) recentSignals.value = data.recent_signals
     if (data.timestamp) lastUpdated.value = data.timestamp
   }
 
@@ -74,5 +76,5 @@ export function useDashboard(onPositionChange) {
     clearInterval(pollTimer)
   })
 
-  return { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated }
+  return { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals }
 }

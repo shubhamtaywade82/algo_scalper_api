@@ -29,20 +29,14 @@ function inr(val) {
 <template>
   <header class="sticky top-0 z-50 glass border-b border-white/5 px-6 py-4 flex items-center justify-between">
     <div class="flex items-center gap-10">
-      <!-- Logo Section -->
-      <div class="flex items-center gap-3 group cursor-pointer">
-        <div class="relative w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20 group-hover:scale-110 transition-transform duration-500">
-          <span class="text-white font-black text-xl italic tracking-tighter">AG</span>
-          <div class="absolute inset-0 bg-white/20 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-        </div>
-        <div class="flex flex-col">
-          <h1 class="text-lg font-black text-white tracking-tighter leading-none">ANTIGRAVITY</h1>
-          <span class="text-[9px] font-bold text-primary-400 tracking-[0.3em] mt-1">{{ mode?.toUpperCase() }} ENGINE</span>
-        </div>
+      <!-- Engine Status Section -->
+      <div class="flex flex-col">
+        <span class="text-[10px] font-black text-primary-400 tracking-[0.3em] uppercase">{{ mode }} ENGINE</span>
+        <span class="text-[8px] font-bold text-gray-500 tracking-widest mt-0.5 uppercase">Active Terminal</span>
       </div>
 
       <!-- Indices Section -->
-      <div class="hidden lg:flex items-center gap-8 border-l border-white/10 pl-10">
+      <div class="hidden xl:flex items-center gap-8 border-l border-white/10 pl-10">
         <div class="flex flex-col">
           <span class="text-[9px] font-black text-gray-500 tracking-widest uppercase mb-1">Nifty 50</span>
           <span :class="['text-sm font-black text-white text-data transition-all duration-300 rounded px-1', niftyFlash]">{{ inr(indices?.nifty) }}</span>
@@ -57,6 +51,28 @@ function inr(val) {
         </div>
       </div>
     </div>
+
+    <!-- Navigation -->
+    <nav class="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/5 backdrop-blur-md">
+      <router-link to="/" class="px-5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white flex items-center gap-2 group"
+        active-class="bg-white/10 text-white shadow-[0_0_15px_rgba(255,255,255,0.05)] border border-white/10"
+      >
+        <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-[.router-link-active]:opacity-100 transition-opacity"></div>
+        Terminal
+      </router-link>
+      <router-link to="/strategies" class="px-5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white text-gray-500 flex items-center gap-2 group"
+        active-class="bg-white/10 text-white shadow-[0_0_15px_rgba(255,255,255,0.05)] border border-white/10"
+      >
+        <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-[.router-link-active]:opacity-100 transition-opacity"></div>
+        Strategies
+      </router-link>
+      <router-link to="/signals" class="px-5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white text-gray-500 flex items-center gap-2 group"
+        active-class="bg-white/10 text-white shadow-[0_0_15px_rgba(255,255,255,0.05)] border border-white/10"
+      >
+        <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-[.router-link-active]:opacity-100 transition-opacity"></div>
+        Signals
+      </router-link>
+    </nav>
 
     <!-- Right: system status + connection -->
     <div class="flex items-center gap-6 text-[10px]">

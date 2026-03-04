@@ -48,12 +48,12 @@ indices:
       weak_trend_pct: 0.005
 
     trade_limits:
-      max_trades_per_day: 3
+      max_trades_per_day: 2
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~20)
-      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~15.5)
+      primary_min_strength: 25 # 1m ADX threshold (strict filter for options buying)
+      confirmation_min_strength: 20 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -138,8 +138,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (70% of typical ~25.5)
-      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~13.5)
+      primary_min_strength: 28 # 1m ADX threshold (very strict filter for volatile Sensex)
+      confirmation_min_strength: 22 # 5m ADX threshold
 
     strategies:
       open_interest:
