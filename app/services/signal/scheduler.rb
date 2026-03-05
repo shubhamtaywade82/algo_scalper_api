@@ -68,6 +68,7 @@ module Signal
 
               sleep(idx.zero? ? 0 : INTER_INDEX_DELAY)
               process_index(idx_cfg)
+              Live::SystemStatusCache.instance.report_heartbeat(:scheduler)
             end
           rescue StandardError => e
             Rails.logger.error("[SignalScheduler] Cycle error: #{e.class} - #{e.message}")

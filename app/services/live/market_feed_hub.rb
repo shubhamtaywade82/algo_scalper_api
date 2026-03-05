@@ -386,6 +386,7 @@ module Live
       # Update FeedHealthService
       begin
         Live::FeedHealthService.instance.mark_success!(:ticks)
+        Live::SystemStatusCache.instance.report_heartbeat(:ws_market_feed)
       rescue StandardError
         nil
       end

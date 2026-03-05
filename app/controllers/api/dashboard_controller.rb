@@ -7,19 +7,26 @@ module Api
         mode: AlgoConfig.mode,
         balance: safe_wallet_snapshot,
         today: PositionTracker.paper_trading_stats_with_pct,
-        indices: sorted_indices_with_strategy,
+        indices: formatted_indices,
         recent_signals: TradingSignal.order(created_at: :desc).limit(10).as_json(methods: [:confidence_level]),
         circuit_breaker: Risk::CircuitBreaker.instance.status,
-        system: {
-          ws_market_feed: Live::MarketFeedHub.instance.running?,
-          ws_order_update: Live::OrderUpdateHub.instance.running?,
-          scheduler: Thread.list.any? { |t| t.name == 'signal-scheduler' } ? 'running' : 'unknown'
-        },
+        system: Live::SystemStatusCache.instance.all_statuses.merge(
+          ws_order_update: Live::OrderUpdateHub.instance.running?
+        ),
         timestamp: Time.current.iso8601
       }
     end
 
     private
+
+    def formatted_indices
+      load_indices = sorted_indices_with_strategy
+      {
+        nifty: load_indices.find { |i| i[:key] == 'NIFTY' }&.dig(:ltp),
+        banknifty: load_indices.find { |i| i[:key] == 'BANKNIFTY' }&.dig(:ltp),
+        sensex: load_indices.find { |i| i[:key] == 'SENSEX' }&.dig(:ltp)
+      }
+    end
 
     def sorted_indices_with_strategy
       signals_cfg = AlgoConfig.fetch[:signals] || {}
