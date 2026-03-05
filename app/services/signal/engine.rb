@@ -231,16 +231,36 @@ module Signal
 
           if enable_direction_gate
             trade_side = final_direction == :bullish ? :CE : :PE
-            candles_15m = instrument.candle_series(interval: '15')&.candles || []
-            regime = Market::MarketRegimeResolver.resolve(candles_15m: candles_15m)
+            primary_series = primary_analysis[:series]
 
-            unless Trading::DirectionGate.allow?(regime: regime, side: trade_side)
+            # Use the new MarketRegimeDetector with the primary timeframe series
+            regime_result = MarketRegimeDetector.new(primary_series).detect
+            regime = regime_result[:regime]
+
+            # Hard block for non-trending markets as per options buying requirements
+            if %w[RANGING CHOPPY INSUFFICIENT_DATA].include?(regime)
               Rails.logger.info(
-                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: #{trade_side} trade in #{regime} regime"
+                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: " \
+                "Market is #{regime} (Confidence: #{regime_result[:confidence]}%). " \
+                "Skipping options buying to avoid theta decay."
               )
               Signal::StateTracker.reset(index_cfg[:key])
               return
             end
+
+            # Verify alignment with expected trade direction
+            aligned = (regime == 'TRENDING_UP' && trade_side == :CE) ||
+                      (regime == 'TRENDING_DOWN' && trade_side == :PE)
+
+            unless aligned
+              Rails.logger.info(
+                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: " \
+                "Counter-trend trade. #{trade_side} requested but market is #{regime}."
+              )
+              Signal::StateTracker.reset(index_cfg[:key])
+              return
+            end
+
             Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} trade in #{regime} regime" }
           else
             Rails.logger.debug { "[Signal] DirectionGate DISABLED for #{index_cfg[:key]} - skipping regime check" }
@@ -432,7 +452,8 @@ module Signal
         end
 
         # Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
-      rescue StandardError => e
+      rescue Exception => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
         Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
@@ -480,7 +501,8 @@ module Signal
           direction: direction,
           last_candle_timestamp: series.candles.last&.timestamp
         }
-      rescue StandardError => e
+      rescue Exception => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
         Rails.logger.error("[Signal] Timeframe analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
         { status: :error, message: e.message }
       end
@@ -550,7 +572,8 @@ module Signal
             confirmation: confirmation_analysis
           }
         }
-      rescue StandardError => e
+      rescue Exception => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
         Rails.logger.error("[Signal] Multi-timeframe analysis failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
         { status: :error, message: e.message }
       end
@@ -898,7 +921,8 @@ module Signal
         else
           result
         end
-      rescue StandardError => e
+      rescue Exception => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
         Rails.logger.error("[Signal] Strategy-based analysis failed for #{index_cfg[:key]} @ #{timeframe}: #{e.class} - #{e.message}")
         { status: :error, message: e.message }
       end
@@ -981,7 +1005,8 @@ module Signal
           end
 
           decision
-        rescue StandardError => e
+        rescue Exception => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%Q{\n})}")
           Rails.logger.warn("[Signal] SMC decision check failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
           # Default to signal direction on error (allows trades instead of blocking)
           # :call for bullish signals, :put for bearish signals
