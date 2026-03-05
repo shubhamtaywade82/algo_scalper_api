@@ -130,9 +130,9 @@ indices:
       max_otm: 2
 
     risk_model:
-      base_risk_pct: 0.005 # 0.5% base
-      strong_trend_pct: 0.005
-      weak_trend_pct: 0.0025
+      base_risk_pct: 0.02 # 2% base risk (increased to match BankNifty and increase pos size)
+      strong_trend_pct: 0.02
+      weak_trend_pct: 0.01
 
     trade_limits:
       max_trades_per_day: 2
