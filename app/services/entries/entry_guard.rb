@@ -706,18 +706,8 @@ Rails.logger.error(
           paper_trading: true
         }
 
-        # Add entry strategy/path metadata if provided
-        if entry_metadata.is_a?(Hash)
-          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
-          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
-          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
-          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
-          if entry_metadata[:confirmation_timeframe]
-            meta_hash[:entry_confirmation_timeframe] =
-              entry_metadata[:confirmation_timeframe]
-          end
-          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
-        end
+        # Add diagnostic metadata if provided
+        merge_diagnostic_metadata!(meta_hash, entry_metadata) if entry_metadata.is_a?(Hash)
 
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
@@ -771,18 +761,8 @@ Rails.logger.error(
           placed_at: Time.current
         }
 
-        # Add entry strategy/path metadata if provided
-        if entry_metadata.is_a?(Hash)
-          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
-          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
-          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
-          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
-          if entry_metadata[:confirmation_timeframe]
-            meta_hash[:entry_confirmation_timeframe] =
-              entry_metadata[:confirmation_timeframe]
-          end
-          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
-        end
+        # Add diagnostic metadata if provided
+        merge_diagnostic_metadata!(meta_hash, entry_metadata) if entry_metadata.is_a?(Hash)
 
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
@@ -1011,6 +991,32 @@ Rails.logger.error(
 
         # Fallback to instrument (for index positions)
         instrument
+      end
+      def merge_diagnostic_metadata!(meta_hash, entry_metadata)
+        # Preserve all incoming diagnostic keys from Signal::Engine
+        diagnostic_keys = %i[
+          regime regime_confidence regime_metrics
+          ta_signal ta_confidence ta_bias
+          mtf_rsi mtf_macd mtf_atr
+          entry_path strategy strategy_mode
+          primary_timeframe effective_timeframe
+          confirmation_timeframe confirmation_enabled confirmation_direction
+          validation_mode validation_passed
+          state_count state_multiplier original_timeframe
+          smc_decision smc_permission
+        ]
+        diagnostic_keys.each do |key|
+          meta_hash[key] = entry_metadata[key] if entry_metadata.key?(key)
+        end
+
+        # Consistency aliases for existing dashboard displays
+        meta_hash[:entry_strategy] ||= entry_metadata[:strategy]
+        meta_hash[:entry_strategy_mode] ||= entry_metadata[:strategy_mode]
+        meta_hash[:entry_timeframe] ||= entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
+        if entry_metadata[:confirmation_timeframe]
+          meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe]
+        end
+        meta_hash[:entry_validation_mode] ||= entry_metadata[:validation_mode]
       end
     end
   end

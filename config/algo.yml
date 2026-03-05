@@ -7,8 +7,8 @@ paper_trading:
 # Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
 # Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
 trading_time_restrictions:
-  enabled: false # Set to true to enable time-based restrictions
-  avoid_periods: [] # Add time periods to avoid (e.g., ["10:30-11:30", "14:00-15:00"])
+  enabled: true # Set to true to enable time-based restrictions
+  avoid_periods: ["10:00-12:30"] # Block mid-morning churn session as per analysis
   # Example based on analysis results:
   # avoid_periods:
   #   - "10:30-11:30"  # Morning non-profitable period
@@ -578,7 +578,7 @@ signals:
   # - Blocks CE trades in bearish regime
   # - Blocks all trades in neutral regime
   # Set to false to disable DirectionGate and allow all signal directions
-  enable_direction_gate: false # Set to false to disable DirectionGate (default: true)
+  enable_direction_gate: true # Enabled to block trades in CHOPPY/RANGING markets
 
   # Permission mode (only used if enable_smc_avrz_permission is true)
   # Controls how strict the permission resolver is for allowing trades
@@ -593,7 +593,7 @@ signals:
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
-  enable_adx_filter: false # Enable ADX strength filter (default: false)
+  enable_adx_filter: true # Enabled to block weak trends (win rate 16.7% for ADX < 15)
   enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
 
   # Optimized Parameters Configuration
@@ -676,8 +676,8 @@ signals:
 
   adx:
     # Global ADX thresholds (used as fallback if per-index thresholds not specified)
-    min_strength: 18 # ADX threshold for 1m timeframe (when enabled)
-    confirmation_min_strength: 18 # ADX threshold for 5m confirmation (when enabled)
+    min_strength: 15 # ADX threshold for 1m timeframe (Loss Avoidance floor)
+    confirmation_min_strength: 15 # ADX threshold for 5m confirmation (Loss Avoidance floor)
     # Note: Per-index thresholds in indices[].adx_thresholds override these values
 
 # ============================================

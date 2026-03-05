@@ -29,6 +29,11 @@ module Signal
                             signals_cfg[:confirmation_timeframe].to_s
                           end
 
+        # Initialize diagnostic variables to prevent NoMethodError in cross-strategy metadata building
+        ta_result = nil
+        regime_result = { regime: 'UNKNOWN', confidence: 0, metrics: {} }
+        regime = 'UNKNOWN'
+
         if entry_primary == 'supertrend'
           # ===== SUPERTREND-ONLY ENTRY (entry_strategy.primary: supertrend) =====
           # Direction from SupertrendTrend (flip only). No Index TA, no strategy recs,
@@ -74,46 +79,44 @@ module Signal
             primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
             supertrend_only: true
           )
+
+          # Collect diagnostics for Supertrend mode
+          ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
+          ta_days_back = signals_cfg[:ta_days_back] || 30
+          index_symbol = index_cfg[:key].to_s.downcase.to_sym
+          ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
+          ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
+          ta_result = ta_analysis[:success] ? ta_analyzer.result : nil
+
+          regime_result = MarketRegimeDetector.new(primary_analysis[:series]).detect
+          regime = regime_result[:regime]
         else
-          # ===== INDEX TECHNICAL ANALYSIS STEP =====
-          # Perform multi-timeframe TA analysis before signal generation
-          # Can be disabled via config: signals.enable_index_ta = false
-          enable_index_ta = signals_cfg.fetch(:enable_index_ta, true)
-          ta_result = nil
+          # ===== INDEX TECHNICAL ANALYSIS STEP (DIAGNOSTICS & OPTIONAL FILTER) =====
+          # Always performed for diagnostics. Filter is optional via signals.enable_index_ta_filter.
+          enable_index_ta_filter = signals_cfg.fetch(:enable_index_ta_filter, false)
+          ta_min_confidence = signals_cfg[:ta_min_confidence] || 0.6
 
-          if enable_index_ta
-            ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
-            ta_days_back = signals_cfg[:ta_days_back] || 30
-            ta_min_confidence = signals_cfg[:ta_min_confidence] || 0.6
+          index_symbol = index_cfg[:key].to_s.downcase.to_sym
+          ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
+          ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
 
-            index_symbol = index_cfg[:key].to_s.downcase.to_sym
-            ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
-            ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
+          if ta_analysis[:success] && ta_analyzer.success?
+            ta_result = ta_analyzer.result
+            Rails.logger.info(
+              "[Signal] Index TA for #{index_cfg[:key]}: signal=#{ta_result[:signal]}, " \
+              "confidence=#{ta_result[:confidence].round(2)}, bias=#{ta_result.dig(:bias_summary, :summary, :bias)}"
+            )
 
-            if ta_analysis[:success] && ta_analyzer.success?
-              ta_result = ta_analyzer.result
-
-              # If TA suggests neutral or low confidence, consider skipping
-              if ta_result[:signal] == :neutral || ta_result[:confidence] < ta_min_confidence
-                Rails.logger.info(
-                  "[Signal] Skipping signal generation for #{index_cfg[:key]}: " \
-                  "TA signal=#{ta_result[:signal]}, confidence=#{ta_result[:confidence].round(2)} " \
-                  "(min required=#{ta_min_confidence})"
-                )
-                return
-              end
-
+            # Only block if filter is explicitly enabled (default is now false for diagnostics)
+            if enable_index_ta_filter && (ta_result[:signal] == :neutral || ta_result[:confidence] < ta_min_confidence)
               Rails.logger.info(
-                "[Signal] Index TA for #{index_cfg[:key]}: signal=#{ta_result[:signal]}, " \
-                "confidence=#{ta_result[:confidence].round(2)}, bias=#{ta_result.dig(:bias_summary, :summary, :bias)}"
+                "[Signal] Skipping signal generation for #{index_cfg[:key]} (TA Filter ACTIVE): " \
+                "TA signal=#{ta_result[:signal]}, confidence=#{ta_result[:confidence].round(2)}"
               )
-            else
-              Rails.logger.warn(
-                "[Signal] Index TA failed for #{index_cfg[:key]}: #{ta_analyzer.error} - continuing with signal generation"
-              )
+              return
             end
           else
-            Rails.logger.info("[Signal] Index TA DISABLED for #{index_cfg[:key]} - skipping TA step")
+            Rails.logger.warn("[Signal] Index TA failed for #{index_cfg[:key]}: #{ta_analyzer.error}")
           end
 
           primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
@@ -223,26 +226,20 @@ module Signal
             return
           end
 
-          # ===== DIRECTION GATE (HARD FILTER) =====
-          # MUST run BEFORE SMC, AVRZ, Permission resolution, or any entry logic.
-          # Blocks impossible trades based on market regime.
-          # Can be disabled via config: signals.enable_direction_gate = false
-          enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, true)
+          # ===== MARKET REGIME & DIRECTION GATE =====
+          # Always compute regime for diagnostics. Filter via signals.enable_direction_gate.
+          primary_series = primary_analysis[:series]
+          regime_result = MarketRegimeDetector.new(primary_series).detect
+          regime = regime_result[:regime]
+          enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, false)
 
           if enable_direction_gate
             trade_side = final_direction == :bullish ? :CE : :PE
-            primary_series = primary_analysis[:series]
-
-            # Use the new MarketRegimeDetector with the primary timeframe series
-            regime_result = MarketRegimeDetector.new(primary_series).detect
-            regime = regime_result[:regime]
 
             # Hard block for non-trending markets as per options buying requirements
             if %w[RANGING CHOPPY INSUFFICIENT_DATA].include?(regime)
               Rails.logger.info(
-                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: " \
-                "Market is #{regime} (Confidence: #{regime_result[:confidence]}%). " \
-                "Skipping options buying to avoid theta decay."
+                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Market is #{regime}. Skipping to avoid theta decay."
               )
               Signal::StateTracker.reset(index_cfg[:key])
               return
@@ -254,18 +251,13 @@ module Signal
 
             unless aligned
               Rails.logger.info(
-                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: " \
-                "Counter-trend trade. #{trade_side} requested but market is #{regime}."
+                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Counter-trend trade. #{trade_side} requested vs #{regime}."
               )
               Signal::StateTracker.reset(index_cfg[:key])
               return
             end
-
-            Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} trade in #{regime} regime" }
-          else
-            Rails.logger.debug { "[Signal] DirectionGate DISABLED for #{index_cfg[:key]} - skipping regime check" }
+            Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} in #{regime}" }
           end
-          # ===== END DIRECTION GATE =====
 
           primary_series = primary_analysis[:series]
           validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
@@ -339,6 +331,38 @@ module Signal
           enable_confirmation: enable_confirmation
         )
 
+        # Prepare enriched diagnostic diagnostic_metadata payload
+        diagnostic_metadata = {
+          # Market State Diagnostics
+          regime: regime,
+          regime_confidence: regime_result&.[](:confidence) || 0,
+          regime_metrics: regime_result&.[](:metrics) || {},
+          # Multi-Timeframe Diagnostics
+          ta_signal: ta_result&.dig(:signal),
+          ta_confidence: ta_result&.dig(:confidence),
+          ta_bias: ta_result&.dig(:bias_summary, :summary, :bias),
+          mtf_rsi: ta_result&.dig(:indicators)&.transform_values { |v| v[:rsi] },
+          mtf_macd: ta_result&.dig(:indicators)&.transform_values { |v| v[:macd] },
+          mtf_atr: ta_result&.dig(:indicators)&.transform_values { |v| v[:atr] },
+          # Execution Context
+          entry_path: entry_path,
+          strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
+          strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
+          primary_timeframe: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_timeframe: confirmation_tf,
+          confirmation_enabled: enable_confirmation,
+          confirmation_direction: confirmation_analysis&.dig(:direction),
+          validation_mode: signals_cfg[:validation_mode] || 'balanced',
+          validation_passed: validation_result[:valid],
+          state_count: state_snapshot[:count],
+          state_multiplier: state_snapshot[:multiplier],
+          original_timeframe: primary_tf,
+          # SMC/Permission integration
+          smc_decision: smc_decision.to_s,
+          smc_permission: permission.to_s
+        }
+
         TradingSignal.create_from_analysis(
           index_key: index_cfg[:key],
           direction: final_direction.to_s,
@@ -347,25 +371,7 @@ module Signal
           adx_value: primary_analysis[:adx_value],
           candle_timestamp: primary_analysis[:last_candle_timestamp],
           confidence_score: confidence_score,
-          metadata: {
-            # Clear path tracking for analysis
-            entry_path: entry_path,
-            strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
-            strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
-            primary_timeframe: primary_tf,
-            effective_timeframe: effective_timeframe,
-            confirmation_timeframe: confirmation_tf,
-            confirmation_enabled: enable_confirmation,
-            confirmation_direction: confirmation_analysis&.dig(:direction),
-            validation_mode: signals_cfg[:validation_mode] || 'balanced',
-            validation_passed: validation_result[:valid],
-            state_count: state_snapshot[:count],
-            state_multiplier: state_snapshot[:multiplier],
-            original_timeframe: primary_tf,
-            # SMC integration
-            smc_decision: smc_decision.to_s,
-            smc_permission: permission.to_s
-          }
+          metadata: diagnostic_metadata
         )
 
         # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
@@ -407,18 +413,10 @@ module Signal
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
         # Prepare entry metadata to pass to EntryGuard
-        entry_metadata = {
+        entry_metadata = diagnostic_metadata.merge(
           entry_contract: entry_primary == 'supertrend' ? 'supertrend_machine_v1' : 'bos_machine_v1',
-          entry_path: entry_path,
-          strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
-          strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
-          primary_timeframe: primary_tf,
-          effective_timeframe: effective_timeframe,
-          confirmation_timeframe: confirmation_tf,
-          confirmation_enabled: enable_confirmation,
-          validation_mode: signals_cfg[:validation_mode] || 'balanced',
           permission: permission
-        }
+        )
 
         if entry_primary == 'supertrend'
           # Supertrend-only mode: enter directly on signal without BOS pullback wait.
@@ -620,17 +618,17 @@ module Signal
           validation_checks << theta_risk_result
         end
 
-        # 3. Enhanced ADX Confirmation - Ensure strong trend (if enabled); skipped when supertrend_only
-        unless supertrend_only
-          signals_cfg = AlgoConfig.fetch[:signals] || {}
-          enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
-          if enable_adx_filter
-            adx_result = validate_adx_strength(adx, supertrend_result, mode_config)
-            validation_checks << adx_result
-          else
-            # Rails.logger.debug('[Signal] ADX validation skipped (filter disabled)')
-            validation_checks << { valid: true, name: 'ADX Strength', message: 'ADX filter disabled' }
-          end
+        # 3. Enhanced ADX Confirmation - Ensure strong trend (if enabled)
+        # Loss Avoidance: Enforce ADX even in supertrend_only mode if filter is enabled,
+        # as analysis shows ADX < 15 has 16.7% win rate across all strategies.
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+        if enable_adx_filter
+          adx_result = validate_adx_strength(index_cfg, adx, supertrend_result, mode_config)
+          validation_checks << adx_result
+        elsif !supertrend_only
+          # Rails.logger.debug('[Signal] ADX validation skipped (filter disabled)')
+          validation_checks << { valid: true, name: 'ADX Strength', message: 'ADX filter disabled' }
         end
 
         # 4. Trend Confirmation - Multiple signal validation (if enabled); skipped when supertrend_only
@@ -734,11 +732,17 @@ module Signal
       end
 
       # Enhanced ADX validation with trend strength assessment
-      def validate_adx_strength(adx, _supertrend_result, mode_config = nil)
+      def validate_adx_strength(index_cfg, adx, _supertrend_result, mode_config = nil)
         mode_config ||= get_validation_mode_config
 
         adx_value = adx[:value].to_f
-        min_strength = mode_config[:adx_min_strength] || AlgoConfig.fetch.dig(:signals, :adx, :min_strength).to_f
+        # 1. Check per-index override
+        # 2. Check mode config (e.g., balanced/strict)
+        # 3. Check global signals default
+        min_strength =
+          index_cfg.dig(:adx_thresholds, :primary_min_strength) ||
+          mode_config[:adx_min_strength] ||
+          AlgoConfig.fetch.dig(:signals, :adx, :min_strength).to_f
 
         if adx_value < min_strength
           { valid: false, name: 'ADX Strength', message: "Weak trend strength (#{adx_value.round(1)} < #{min_strength})" }
@@ -805,12 +809,26 @@ module Signal
           { valid: false, name: 'Market Timing', message: 'Market not yet open' }
         elsif market_close
           { valid: false, name: 'Market Timing', message: 'Market closed' }
-        elsif hour == 9 && minute < 30
-          { valid: true, name: 'Market Timing', message: 'Early market - high volatility period' }
-        elsif hour >= 14 && minute >= 30
-          { valid: true, name: 'Market Timing', message: 'Late market - theta decay risk' }
         else
-          { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
+          # Check for session blackouts (Loss Avoidance)
+          restrictions = AlgoConfig.fetch[:trading_time_restrictions]
+          if restrictions&.[](:enabled) && restrictions[:avoid_periods].present?
+            current_hm = current_time.strftime('%H:%M')
+            restrictions[:avoid_periods].each do |period|
+              start_time, end_time = period.split('-')
+              if current_hm >= start_time && current_hm < end_time
+                return { valid: false, name: 'Market Timing', message: "Loss Avoidance: Blocked during non-profitable session (#{period})" }
+              end
+            end
+          end
+
+          if hour == 9 && minute < 30
+            { valid: true, name: 'Market Timing', message: 'Early market - high volatility period' }
+          elsif hour >= 14 && minute >= 30
+            { valid: true, name: 'Market Timing', message: 'Late market - theta decay risk' }
+          else
+            { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
+          end
         end
       end
 
