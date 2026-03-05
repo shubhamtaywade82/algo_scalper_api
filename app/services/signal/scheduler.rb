@@ -46,6 +46,9 @@ module Signal
           break unless @running
 
           begin
+            # Report heartbeat even if market is closed to show service is alive
+            Live::SystemStatusCache.instance.report_heartbeat(:scheduler)
+
             # Early exit if market is closed - avoid unnecessary processing
             if TradingSession::Service.market_closed?
               Rails.logger.debug('[SignalScheduler] Market closed - skipping cycle (no index loading)')
