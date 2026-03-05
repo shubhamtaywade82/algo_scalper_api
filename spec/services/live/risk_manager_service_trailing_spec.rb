@@ -13,6 +13,7 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
   before do
     allow(service).to receive(:pnl_snapshot).and_return(pnl_data)
     allow(exit_engine).to receive(:execute_exit)
+    tracker.update!(trade_state: 'expansion')
   end
 
   describe 'with adaptive drawdown schedule enabled' do
@@ -39,7 +40,7 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
 
     before do
       allow(AlgoConfig).to receive(:fetch).and_return(config)
-      tracker.update(meta: { 'index_key' => 'NIFTY' })
+      tracker.update!(meta: tracker.meta.merge('index_key' => 'NIFTY'))
     end
 
     context 'when profit is below activation threshold' do

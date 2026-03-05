@@ -56,10 +56,14 @@ module Live
 
         risk = risk_config
         drop_threshold = begin
-          BigDecimal(risk[:exit_drop_pct].to_s)
+          val = risk[:exit_drop_pct]
+          (val.nil? || val.to_s.empty?) ? BigDecimal('999') : BigDecimal(val.to_s)
         rescue StandardError
-          BigDecimal(999) # Disabled by default
+          BigDecimal('999')
         end
+
+        puts "[DEBUG] risk: #{risk.inspect}"
+        puts "[DEBUG] drop_threshold: #{drop_threshold}"
 
         # Skip if trailing is disabled (threshold too high)
         return if drop_threshold >= 100
@@ -85,60 +89,64 @@ module Live
 
           # BIDIRECTIONAL TRAILING LOGIC
 
-          # 1. UPWARD TRAILING (when profitable): Use adaptive drawdown schedule
-          if pnl_pct_value.positive?
-            # Calculate peak profit percentage
-            peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
+        # 1. UPWARD TRAILING (when profitable)
+        if pnl_pct_value.positive?
+          # Calculate peak profit percentage
+          peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
 
-            # Only apply trailing if we've reached activation threshold
-            drawdown_cfg = begin
-              (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown]) || {}
-            rescue StandardError
-              {}
-            end
+          # Activation threshold for adaptive drawdown
+          drawdown_cfg = begin
+            (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown]) || {}
+          rescue StandardError
+            {}
+          end
+          activation_profit = drawdown_cfg[:activation_profit_pct].to_f.nonzero? || 3.0
 
-            activation_profit = drawdown_cfg[:activation_profit_pct].to_f.nonzero? || 3.0
+          if peak_profit_pct >= activation_profit
+            # ADAPTIVE ZONE: Use adaptive drawdown schedule
+            index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
+            allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
 
-            if peak_profit_pct >= activation_profit
-              # Use adaptive drawdown schedule instead of fixed threshold
-              index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
-              allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
+            if allowed_dd
+              allowed_drop_from_hwm = allowed_dd / peak_profit_pct
+              current_drop = (hwm - pnl) / hwm
 
-              if allowed_dd
-                # Convert to drop percentage from HWM
-                allowed_drop_from_hwm = allowed_dd / peak_profit_pct
-                current_drop = (hwm - pnl) / hwm
-
-                if current_drop >= allowed_drop_from_hwm
-                  reason = "ADAPTIVE_TRAILING_STOP (peak: #{peak_profit_pct.round(2)}%, drop: #{(current_drop * 100).round(2)}%, allowed: #{(allowed_drop_from_hwm * 100).round(2)}%)"
-                  exit_path = 'trailing_stop_adaptive_upward'
-                  Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-                  track_exit_path(tracker, exit_path, reason)
-                  dispatch_exit(exit_engine, tracker, reason)
-                  next
-                end
-              end
-            end
-
-            # Breakeven locking: Lock in breakeven when profit reaches threshold
-            if breakeven_gain < 100 && pnl_pct_value >= (breakeven_gain * 100) && !tracker.breakeven_locked?
-              tracker.lock_breakeven!
-              Rails.logger.info("[RiskManager] Breakeven locked for #{tracker.order_no} at #{pnl_pct_value.round(2)}% profit")
-            end
-
-            # Fallback to fixed threshold if adaptive schedule not available
-            if drop_threshold < 100
-              drop_pct = (hwm - pnl) / hwm
-              if drop_pct >= drop_threshold
-                reason = "TRAILING_STOP (fixed threshold: #{(drop_threshold * 100).round(2)}%, drop: #{(drop_pct * 100).round(2)}%)"
-                exit_path = 'trailing_stop_fixed_upward'
+              if current_drop >= allowed_drop_from_hwm
+                reason = "ADAPTIVE_TRAILING_STOP (peak: #{peak_profit_pct.round(2)}%, drop: #{(current_drop * 100).round(2)}%, allowed: #{(allowed_drop_from_hwm * 100).round(2)}%)"
+                exit_path = 'trailing_stop_adaptive_upward'
                 Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
                 track_exit_path(tracker, exit_path, reason)
                 dispatch_exit(exit_engine, tracker, reason)
                 next
               end
             end
+
+            # Breakeven locking (still applies in adaptive zone)
+            if breakeven_gain < 100 && pnl_pct_value >= (breakeven_gain * 100) && !tracker.breakeven_locked?
+              tracker.lock_breakeven!
+              Rails.logger.info("[RiskManager] Breakeven locked for #{tracker.order_no} at #{pnl_pct_value.round(2)}% profit")
+            end
+
+            # IMPORTANT: Since we are in the adaptive zone, we SKIP fixed fallback to let adaptive take precedence
+          elsif drop_threshold < 100
+            # FIXED ZONE: Fallback to fixed threshold (before adaptive activation)
+            drop_pct = (hwm - pnl) / hwm
+            if drop_pct >= drop_threshold
+              reason = "TRAILING_STOP (fixed threshold: #{(drop_threshold * 100).round(2)}%, drop: #{(drop_pct * 100).round(2)}%)"
+              exit_path = 'trailing_stop_fixed_upward'
+              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+              track_exit_path(tracker, exit_path, reason)
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+
+            # Breakeven locking (still applies in fixed zone)
+            if breakeven_gain < 100 && pnl_pct_value >= (breakeven_gain * 100) && !tracker.breakeven_locked?
+              tracker.lock_breakeven!
+              Rails.logger.info("[RiskManager] Breakeven locked for #{tracker.order_no} at #{pnl_pct_value.round(2)}% profit")
+            end
           end
+        end
 
           # 2. DOWNWARD TRAILING (when below entry): Use reverse dynamic SL
           # This is handled in enforce_hard_limits, but we can add additional trailing logic here
@@ -182,176 +190,6 @@ module Live
         end
       end
 
-      def enforce_hard_limits(exit_engine:)
-        risk = risk_config
-
-        # HIGHEST PRIORITY: Hard rupee-based stops (check FIRST before %-based)
-        if hard_rupee_sl_enabled? || hard_rupee_tp_enabled? || post_profit_zone_enabled?
-          PositionTracker.active.find_each do |tracker|
-            snapshot = pnl_snapshot(tracker)
-            next unless snapshot
-
-            net_pnl_rupees = snapshot[:pnl]
-            next if net_pnl_rupees.nil?
-
-            # For exit rule checks on active positions:
-            # - Current net PnL = gross_pnl - entry_fee (₹20)
-            # - After exit, final net PnL = gross_pnl - full_trade_fee (₹40)
-            # - So: final_net_pnl = (net_pnl + entry_fee) - (entry_fee + exit_fee) = net_pnl - exit_fee
-            # - We check if final_net_pnl will hit the target/stop after exit
-            exit_fee = BrokerFeeCalculator.fee_per_order # Additional fee on exit (₹20)
-
-            # Check secured profit zone SL (if in secured profit zone)
-            if post_profit_zone_enabled? && tracker.meta&.dig('profit_zone_state') == 'secured_profit_zone'
-              secured_sl_rupees = BigDecimal((tracker.meta&.dig('secured_sl_rupees') || post_profit_zone_config[:secured_sl_rupees] || 800).to_s)
-              net_threshold = secured_sl_rupees + exit_fee
-              if net_pnl_rupees < net_threshold
-                final_net_pnl = net_pnl_rupees - exit_fee
-                reason = "SECURED_PROFIT_SL (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, secured SL: ₹#{secured_sl_rupees})"
-                exit_path = 'secured_profit_sl'
-                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-                track_exit_path(tracker, exit_path, reason)
-                dispatch_exit(exit_engine, tracker, reason)
-                next
-              end
-            end
-
-            # Hard rupee stop loss (highest priority exit)
-            # Apply session-aware SL multiplier
-            if hard_rupee_sl_enabled?
-              base_max_loss_rupees = BigDecimal((hard_rupee_sl_config[:max_loss_rupees] || 1000).to_s)
-              # Apply time regime multiplier
-              sl_multiplier = Live::TimeRegimeService.instance.sl_multiplier
-              max_loss_rupees = base_max_loss_rupees * BigDecimal(sl_multiplier.to_s)
-              net_threshold = -max_loss_rupees + exit_fee
-              if net_pnl_rupees <= net_threshold
-                # Calculate what net PnL will be after exit
-                final_net_pnl = net_pnl_rupees - exit_fee
-                reason = "HARD_RUPEE_SL (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, limit: -₹#{max_loss_rupees})"
-                exit_path = 'hard_rupee_stop_loss'
-                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-                track_exit_path(tracker, exit_path, reason)
-                dispatch_exit(exit_engine, tracker, reason)
-                next
-              end
-            end
-
-            # Hard rupee take profit - TRANSITION TO SECURED PROFIT ZONE (not immediate exit)
-            # ₹2k TP is a minimum extraction, not a cap
-            # After ₹2k, we transition to secured profit zone with green SL
-            # PostProfitZoneRule will handle exits based on trend/momentum
-            if hard_rupee_tp_enabled?
-              base_target_profit_rupees = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
-              # Apply time regime multiplier
-              tp_multiplier = Live::TimeRegimeService.instance.tp_multiplier
-              target_profit_rupees = base_target_profit_rupees * BigDecimal(tp_multiplier.to_s)
-
-              # Check session-specific max TP limit
-              regime = Live::TimeRegimeService.instance.current_regime
-              max_tp = Live::TimeRegimeService.instance.max_tp_rupees(regime)
-              target_profit_rupees = [target_profit_rupees, BigDecimal((max_tp || 999_999).to_s)].min if max_tp
-
-              net_threshold = target_profit_rupees + exit_fee
-
-              if net_pnl_rupees >= net_threshold
-                # Check if runners are allowed in current regime
-                allow_runners = Live::TimeRegimeService.instance.allow_runners?(regime)
-
-                if allow_runners
-                  # Transition to secured profit zone: Move SL to green
-                  transition_to_secured_profit_zone(tracker, net_pnl_rupees, target_profit_rupees)
-                  # Don't exit here - let PostProfitZoneRule handle exits based on trend/momentum
-                else
-                  # No runners allowed - exit immediately
-                  final_net_pnl = net_pnl_rupees - exit_fee
-                  reason = "SESSION_TP_HIT (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, target: ₹#{target_profit_rupees}, regime: #{regime})"
-                  exit_path = 'session_take_profit'
-                  Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-                  track_exit_path(tracker, exit_path, reason)
-                  dispatch_exit(exit_engine, tracker, reason)
-                end
-                next
-              end
-            end
-          end
-        end
-
-        # Percentage-based stops (fallback/secondary)
-        sl_pct = begin
-          BigDecimal(risk[:sl_pct].to_s)
-        rescue StandardError
-          BigDecimal(0)
-        end
-        tp_pct = begin
-          BigDecimal(risk[:tp_pct].to_s)
-        rescue StandardError
-          BigDecimal(0)
-        end
-
-        PositionTracker.active.find_each do |tracker|
-          snapshot = pnl_snapshot(tracker)
-          next unless snapshot
-
-          pnl_pct = snapshot[:pnl_pct]
-          next if pnl_pct.nil?
-
-          # Convert pnl_pct from decimal (0.05) to percent (5.0) for DrawdownSchedule
-          pnl_pct_value = pnl_pct.to_f * 100.0
-
-          # Below-entry dynamic reverse SL (takes precedence over static sl_pct)
-          if pnl_pct_value.negative?
-            seconds_below = seconds_below_entry(tracker)
-            atr_ratio = calculate_atr_ratio(tracker)
-            tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
-
-            dyn_loss_pct = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
-              pnl_pct_value,
-              seconds_below_entry: seconds_below,
-              atr_ratio: atr_ratio
-            )
-
-            if dyn_loss_pct && pnl_pct_value <= -dyn_loss_pct
-              reason = "DYNAMIC_LOSS_HIT #{pnl_pct_value.round(2)}% (allowed: #{dyn_loss_pct.round(2)}%)"
-              exit_path = 'stop_loss_adaptive_downward'
-              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path} (below_entry: #{seconds_below}s, atr_ratio: #{atr_ratio.round(3)})")
-              track_exit_path(tracker, exit_path, reason)
-              dispatch_exit(exit_engine, tracker, reason)
-              next
-            end
-          end
-
-          # Fallback to static SL if dynamic reverse_loss is disabled or not applicable
-          # pnl_pct from Redis is a decimal (0.0193 = 1.93%), so multiply by 100 for display
-          if pnl_pct <= -sl_pct
-            pnl_pct_display = (pnl_pct * 100).round(2)
-            reason = "SL HIT #{pnl_pct_display}%"
-            exit_path = 'stop_loss_static_downward'
-            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-            track_exit_path(tracker, exit_path, reason)
-            dispatch_exit(exit_engine, tracker, reason)
-            next
-          end
-
-          # Take Profit check
-          # pnl_pct from Redis is a decimal (0.0573 = 5.73%), so multiply by 100 for display
-          if pnl_pct >= tp_pct
-            pnl_pct_display = (pnl_pct * 100).round(2)
-            reason = "TP HIT #{pnl_pct_display}%"
-            exit_path = 'take_profit'
-            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-            track_exit_path(tracker, exit_path, reason)
-            dispatch_exit(exit_engine, tracker, reason)
-            next
-          end
-
-          # Upward drawdown check is now handled in enforce_trailing_stops() with adaptive schedule
-          # Keeping this as fallback only if trailing is completely disabled
-          # (Peak drawdown logic moved to enforce_trailing_stops for better organization)
-        rescue StandardError => e
-          Rails.logger.error("[RiskManager] enforce_hard_limits error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
-          Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
-        end
-      end
 
       def enforce_global_time_overrides(exit_engine:)
         # Global override 1: IV collapse detection
@@ -402,39 +240,6 @@ module Live
         end
       end
 
-      def enforce_post_profit_zone(exit_engine:)
-        return unless post_profit_zone_enabled?
-
-        PositionTracker.active.find_each do |tracker|
-          snapshot = pnl_snapshot(tracker)
-          next unless snapshot
-
-          pnl_rupees = snapshot[:pnl]
-          next unless pnl_rupees&.positive?
-
-          # Build rule context
-          position_data = build_position_data_for_rule_engine(tracker, snapshot)
-          context = Risk::Rules::RuleContext.new(
-            position: position_data,
-            tracker: tracker,
-            risk_config: post_profit_zone_config
-          )
-
-          # Evaluate PostProfitZoneRule
-          rule = Risk::Rules::PostProfitZoneRule.new(config: post_profit_zone_config)
-          result = rule.evaluate(context)
-
-          if result.exit?
-            reason = result.reason || 'POST_PROFIT_ZONE_EXIT'
-            exit_path = 'post_profit_zone'
-            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-            track_exit_path(tracker, exit_path, reason)
-            dispatch_exit(exit_engine, tracker, reason)
-          end
-        rescue StandardError => e
-          Rails.logger.error("[RiskManager] enforce_post_profit_zone error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
-        end
-      end
 
       def enforce_time_based_exit(exit_engine:)
         risk = risk_config
@@ -477,73 +282,10 @@ module Live
 
       # LAYER 1: HARD RISK CIRCUIT BREAKER
       # Purpose: Account protection ONLY - no trade logic
-      def enforce_hard_rupee_stop_loss(exit_engine:)
-        return unless hard_rupee_sl_enabled?
-
-        exited = false
-        PositionTracker.active.find_each do |tracker|
-          break if exited
-
-          snapshot = pnl_snapshot(tracker)
-          next unless snapshot
-
-          net_pnl_rupees = snapshot[:pnl]
-          next if net_pnl_rupees.nil?
-
-          exit_fee = BrokerFeeCalculator.fee_per_order # Additional fee on exit (₹20)
-
-          # Hard rupee stop loss (highest priority exit)
-          base_max_loss_rupees = BigDecimal((hard_rupee_sl_config[:max_loss_rupees] || 1000).to_s)
-          # Apply time regime multiplier
-          sl_multiplier = Live::TimeRegimeService.instance.sl_multiplier
-          max_loss_rupees = base_max_loss_rupees * BigDecimal(sl_multiplier.to_s)
-          net_threshold = -max_loss_rupees + exit_fee
-
-          if net_pnl_rupees <= net_threshold
-            final_net_pnl = net_pnl_rupees - exit_fee
-            reason = "HARD_RUPEE_SL (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, limit: -₹#{max_loss_rupees})"
-            exit_path = 'hard_rupee_stop_loss'
-            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-            track_exit_path(tracker, exit_path, reason)
-            dispatch_exit(exit_engine, tracker, reason)
-            exited = true # Exit immediately on first match
-          end
-        rescue StandardError => e
-          Rails.logger.error("[RiskManager] enforce_hard_rupee_stop_loss error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
-        end
-      end
 
       # HARD RUPEE TAKE PROFIT
       # Purpose: Exit immediately when net PnL reaches the target rupee amount.
       # Mirrors enforce_hard_rupee_stop_loss — same pattern, opposite direction.
-      def enforce_hard_rupee_take_profit(exit_engine:)
-        return unless hard_rupee_tp_enabled?
-
-        PositionTracker.active.find_each do |tracker|
-          snapshot = pnl_snapshot(tracker)
-          next unless snapshot
-
-          net_pnl_rupees = snapshot[:pnl]
-          next if net_pnl_rupees.nil?
-
-          exit_fee = BrokerFeeCalculator.fee_per_order
-          base_target = BigDecimal((hard_rupee_tp_config[:target_profit_rupees] || 2000).to_s)
-          tp_multiplier = Live::TimeRegimeService.instance.tp_multiplier
-          target_rupees = base_target * BigDecimal(tp_multiplier.to_s)
-          net_threshold = target_rupees + exit_fee
-
-          if net_pnl_rupees >= net_threshold
-            final_net_pnl = net_pnl_rupees - exit_fee
-            reason = "HARD_RUPEE_TP (Current net: ₹#{net_pnl_rupees.round(2)}, Net after exit: ₹#{final_net_pnl.round(2)}, target: ₹#{target_rupees})"
-            exit_path = 'hard_rupee_take_profit'
-            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-            track_exit_path(tracker, exit_path, reason)
-            dispatch_exit(exit_engine, tracker, reason)
-          end
-        rescue StandardError => e
-          Rails.logger.error("[RiskManager] enforce_hard_rupee_take_profit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
-        end
-      end
 
       # LAYER 0: EXECUTABLE R STOP (premium hard stop)
       # Purpose: Enforce 1R loss cap in premium terms, independent of structure recalculation.
@@ -567,6 +309,27 @@ module Live
           end
         rescue StandardError => e
           Rails.logger.error("[RiskManager] enforce_premium_r_stop error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
+      # LAYER 1: DYNAMIC TRAILING SL
+      # Purpose: Move SL up-only to capture trend moves (direct trailing)
+      def enforce_dynamic_trailing_stops(exit_engine:)
+        engine = @trailing_engine ||= Live::TrailingEngine.new()
+
+        PositionTracker.active.find_each do |tracker|
+          # TrailingEngine expects PositionData from ActiveCache
+          position_data = @active_cache.get_position(tracker.id)
+          next unless position_data
+
+          # process_tick handles peak updates and SL adjustments
+          result = engine.process_tick(position_data, exit_engine: exit_engine)
+
+          if result[:exit_triggered]
+            Rails.logger.info("[RiskManager] TrailingEngine triggered exit for #{tracker.order_no}: #{result[:reason]}")
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_dynamic_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         end
       end
 
@@ -678,6 +441,87 @@ module Live
           end
         rescue StandardError => e
           Rails.logger.error("[RiskManager] enforce_time_stop error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
+      # LAYER 5: RR-BASED PROFIT BOOKING
+      # Purpose: Capture profits at pre-defined R multiples (e.g., 2R, 3R)
+      def enforce_rr_profit_booking(exit_engine:)
+        return unless rr_profit_booking_enabled?
+
+        cfg = rr_profit_booking_config
+        target_rr = (cfg[:target_rr] || 2.0).to_f
+
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
+
+          pnl_pct = snapshot[:pnl_pct]
+          next if pnl_pct.nil?
+
+          # Get initial risk (SL) from tracker meta or default
+          sl_pct = tracker.meta&.dig('initial_sl_pct')&.to_f
+
+          # Fallback: if premium_stop_price exists, calculate sl_pct from it
+          if sl_pct.nil? || sl_pct.zero?
+            premium_stop = tracker.meta&.dig('premium_stop_price')&.to_f
+            if premium_stop && premium_stop.positive?
+              entry = tracker.entry_price.to_f
+              sl_pct = ((entry - premium_stop) / entry).abs * 100.0
+            end
+          end
+
+          # Second fallback: use global default SL pct
+          sl_pct ||= pct_value(risk_config[:sl_pct] || 10).to_f
+
+          next if sl_pct.zero?
+
+          # RR = Profit% / SL%
+          current_rr = (pnl_pct.to_f * 100.0) / sl_pct
+
+          if current_rr >= target_rr
+            reason = "RR_PROFIT_BOOKING (RR: #{current_rr.round(2)}, Target: #{target_rr}, PnL: #{(pnl_pct.to_f * 100).round(2)}%, SL: #{sl_pct.round(2)}%)"
+            exit_path = 'rr_profit_booking'
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_rr_profit_booking error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
+      # LAYER 4.5: PERCENTAGE-BASED PNL EXIT
+      # Purpose: Full exit when target % PnL is reached (independent of initial risk)
+      def enforce_percentage_pnl_exit(exit_engine:)
+        cfg = (risk_config[:percentage_pnl_exit] || {})
+        return unless cfg[:enabled]
+
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
+
+          # Build rule context
+          position_data = build_position_data_for_rule_engine(tracker, snapshot)
+          context = Risk::Rules::RuleContext.new(
+            position: position_data,
+            tracker: tracker,
+            risk_config: risk_config
+          )
+
+          # Evaluate PercentagePnlRule
+          rule = Risk::Rules::PercentagePnlRule.new(config: risk_config)
+          result = rule.evaluate(context)
+
+          if result.exit?
+            reason = result.reason || 'PERCENTAGE_PNL_EXIT'
+            exit_path = 'percentage_pnl_exit'
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_percentage_pnl_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         end
       end
 

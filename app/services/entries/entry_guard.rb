@@ -890,6 +890,7 @@ Rails.logger.error(
         meta_hash[:entry_premium] = entry_price.to_f
         meta_hash[:entry_risk_rupees] = entry_risk_rupees
         meta_hash[:premium_stop_price] = premium_stop
+        meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
         meta_hash[:premium_target_price] = premium_target
         meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
         meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601

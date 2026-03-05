@@ -173,22 +173,17 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.03 # -3% STOP LOSS (fallback, dynamic reverse_loss takes precedence)
-  tp_pct: 0.05 # +5% TAKE PROFIT
+  sl_pct: 0.12 # -12% STOP LOSS
+  tp_pct: 0.25 # +25% TAKE PROFIT
   per_trade_risk_pct: 0.15
+
+  # --- New: Percentage-based PnL Exit ---
+  percentage_pnl_exit:
+    enabled: true
+    target_pct: 15.0 # Full exit when total PnL reaches 15%
 
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
-  hard_rupee_sl:
-    enabled: true # Hard ₹3000 stop loss per trade (relaxed significantly to avoid noise exits)
-    max_loss_rupees: 3000 # Maximum loss per trade in rupees
-
-  # Raised to ₹8k as an emergency safety net only.
-  # Primary exit for winners is now the trailing profit floor (trail_pct: 70).
-  # In chop/close sessions, time_regimes.max_tp_rupees caps this at ₹1,500–₹2,000.
-  hard_rupee_tp:
-    enabled: true
-    target_profit_rupees: 8000 # Emergency ceiling — trailing floor exits first
 
   # Profit floor: once net PnL reaches lock_pct% of capital deployed, arms a TRAILING floor.
   # trail_pct: on each monitor cycle, floor = max(current_floor, hwm_pnl * trail_pct / 100).
@@ -199,6 +194,25 @@ risk:
     trail_pct: 70          # ratchet floor to 70% of HWM each cycle
     breakeven_at: 200      # mark breakeven when net PnL reaches ₹200
     time_kill_minutes: 30  # give trailing more time to develop
+
+  # RR-Based Profit Booking (Dynamic Exit)
+  # Captures profits based on R multiples (Reward / Risk)
+  rr_profit_booking:
+    enabled: true
+    target_rr: 2.5        # Exit fully at 2.5R (e.g., if SL is 10%, TP at 25%)
+
+  # Dynamic Trailing stops
+  trailing:
+    enabled: true
+    activation_pct: 3.5    # Lower activation for more aggressive trailing
+    drawdown_pct: 2.5      # Tighter drawdown to capture move
+
+  trailing_mode: 'direct' # Moving up only to capture profits
+  direct_trailing:
+    enabled: true
+    distance_pct: 3.0 # Trail at 3% distance from peak
+    activation_profit_pct: 5.0 # Start direct trailing at 5% profit
+    min_sl_offset_pct: 0.0 # Never let SL go below breakeven once direct trailing starts
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP
@@ -336,13 +350,13 @@ risk:
 # Formula: quantity = floor(risk_rupees / (stop_distance_rupees × lot_size)) × lot_size
 # This ensures position size is calculated to match exact ₹ risk, not percentages
 position_sizing:
-  enabled: false # Set to true to enable rupee-based position sizing
+  enabled: true # Set to true to enable rupee-based position sizing
   mode: rupee_based # Options: 'rupee_based' or 'percentage_based' (legacy)
 
   # Rupee-based sizing parameters (used when enabled: true)
-  risk_rupees: 1000 # Fixed risk per trade in rupees
-  target_rupees: 2000 # Target profit per trade in rupees (for R:R calculation)
-  stop_distance_rupees: 8 # Stop distance in rupees (typical: NIFTY ₹6-10, SENSEX ₹12-20)
+  risk_rupees: 5000 # Fixed risk per trade in rupees
+  target_rupees: 15000 # Target profit per trade in rupees (for R:R calculation)
+  stop_distance_rupees: 50 # Stop distance in rupees (updated for increased sizing)
 
   # Index-specific stop distances (override global if specified)
   index_stop_distances:

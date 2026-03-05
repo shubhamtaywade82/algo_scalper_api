@@ -2,7 +2,7 @@
 
 module Trading
   class CapitalAllocator
-    MAX_CAPITAL_PER_TRADE = 30_000.0
+    MAX_CAPITAL_PER_TRADE = 200_000.0
 
     class << self
       # Pure function: computes max lots given premium, lot size and permission cap.

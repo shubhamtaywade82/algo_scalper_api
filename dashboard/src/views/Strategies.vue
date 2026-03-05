@@ -12,10 +12,6 @@ const riskParameters = computed(() => {
 
   return [
     {
-      label: 'Hard Rupee SL',
-      value: r.hard_rupee_sl?.enabled ? `₹${r.hard_rupee_sl.max_loss_rupees}` : 'OFF'
-    },
-    {
       label: 'Profit Floor',
       value: r.profit_floor?.enabled ? `${r.profit_floor.lock_pct}%` : 'OFF'
     },
