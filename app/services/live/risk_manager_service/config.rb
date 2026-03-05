@@ -173,11 +173,9 @@ module Live
       end
 
       def algo_config
-        @algo_config ||= begin
-          AlgoConfig.fetch
-        rescue StandardError
-          {}
-        end
+        AlgoConfig.fetch
+      rescue StandardError
+        {}
       end
 
       def pct_value(value)

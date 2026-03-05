@@ -180,8 +180,8 @@ risk:
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
   hard_rupee_sl:
-    enabled: true # Hard ₹1200 stop loss per trade (relaxed from ₹600 to let trades breathe)
-    max_loss_rupees: 1200 # Maximum loss per trade in rupees
+    enabled: true # Hard ₹3000 stop loss per trade (relaxed significantly to avoid noise exits)
+    max_loss_rupees: 3000 # Maximum loss per trade in rupees
 
   # Raised to ₹8k as an emergency safety net only.
   # Primary exit for winners is now the trailing profit floor (trail_pct: 70).
@@ -262,7 +262,7 @@ risk:
     open_expansion:
       start: "09:15"
       end: "09:45"
-      sl_multiplier: 1.3 # WIDE SL (SENSEX: ₹15-20, NIFTY: ₹8-12)
+      sl_multiplier: 1.0 # Standard SL (SENSEX: ₹15-20, NIFTY: ₹8-12)
       tp_multiplier: 1.0 # Fast TP (₹2k often hits in 1-3 candles)
       allow_trailing: false # No micro trailing (gets wicked out)
       allow_runners: false # No runners (enter fast, exit fast, no greed)
@@ -290,7 +290,7 @@ risk:
     chop_decay:
       start: "11:30"
       end: "13:45"
-      sl_multiplier: 0.8 # TIGHT SL
+      sl_multiplier: 1.0 # Restore room to breathe
       tp_multiplier: 0.8 # SMALL TP
       allow_trailing: false # Disable trailing
       allow_runners: false # No runners allowed
@@ -304,7 +304,7 @@ risk:
     close_gamma:
       start: "13:45"
       end: "15:15"
-      sl_multiplier: 0.7 # TIGHT SL (SENSEX: ₹8-10, NIFTY: ₹5-7)
+      sl_multiplier: 1.0 # Restore room to breathe
       tp_multiplier: 0.75 # FIXED TP (₹1.5k-₹2k)
       allow_trailing: false # No runners after 14:45
       allow_runners: false # Book profits aggressively
