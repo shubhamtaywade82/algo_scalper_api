@@ -1,7 +1,40 @@
 <script setup>
 import { inject, computed } from 'vue'
 
-const { indices } = inject('dashboardState')
+const { indices, config } = inject('dashboardState')
+
+const riskParameters = computed(() => {
+  const r = config.value?.risk || {}
+  const m = config.value?.market_session || {}
+
+  // Trailing is ACTIVE only if global enabled AND session allows it
+  const trailingStatus = (r.trailing?.enabled && m.config?.allow_trailing !== false) ? 'ACTIVE' : 'OFF'
+
+  return [
+    {
+      label: 'Hard Rupee SL',
+      value: r.hard_rupee_sl?.enabled ? `₹${r.hard_rupee_sl.max_loss_rupees}` : 'OFF'
+    },
+    {
+      label: 'Profit Floor',
+      value: r.profit_floor?.enabled ? `${r.profit_floor.lock_pct}%` : 'OFF'
+    },
+    { label: 'Trailing', value: trailingStatus }
+  ]
+})
+
+const signalFilters = computed(() => {
+  const s = config.value?.signals || {}
+  const t = config.value?.trading_time_restrictions || {}
+  const m = config.value?.market_session || {}
+
+  return [
+    { label: 'ADX Filter', value: s.enable_adx_filter ? `MIN ${s.adx_min_strength || 15}` : 'OFF' },
+    { label: 'Direction Gate', value: s.enable_direction_gate ? 'ACTIVE' : 'OFF' },
+    { label: 'Runners', value: m.config?.allow_runners ? 'ALLOWED' : 'OFF' },
+    { label: 'Session Blackout', value: t.enabled ? t.avoid_periods?.[0] || '10:00-12:30' : 'OFF' }
+  ]
+})
 
 const indicesList = computed(() => {
   if (Array.isArray(indices.value)) return indices.value
@@ -48,12 +81,12 @@ const indicesList = computed(() => {
     <!-- Strategy Description Card -->
     <div class="glass p-8 rounded-3xl mt-8">
       <h3 class="text-lg font-black text-white uppercase tracking-widest mb-4">Implementation Logic</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="space-y-6">
           <p class="text-xs text-gray-400 leading-relaxed font-medium">
             The execution engine utilizes a multi-layered validation system. Primary entries are dictated by Supertrend flips on the 1-minute interval, while ADX strength scores and 5-minute HTF alignment act as critical gateways.
           </p>
-          <div class="flex gap-4">
+          <div class="flex flex-wrap gap-4">
             <div class="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
               <span class="block text-[10px] font-black text-gray-600 uppercase mb-1">Entry Strategy</span>
               <span class="text-xs font-bold text-white uppercase">Supertrend Trend</span>
@@ -64,12 +97,25 @@ const indicesList = computed(() => {
             </div>
           </div>
         </div>
-        <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
-          <h4 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Risk Parameters</h4>
-          <div class="flex flex-col gap-3">
-            <div v-for="label in ['Hard Rupee SL', 'Profit Floor (10%)', 'Trailing Activation']" :key="label" class="flex items-center justify-between">
-              <span class="text-[11px] font-bold text-gray-400">{{ label }}</span>
-              <span class="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
+            <h4 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Risk Parameters</h4>
+            <div class="flex flex-col gap-3">
+              <div v-for="param in riskParameters" :key="param.label" class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-gray-400">{{ param.label }}</span>
+                <span class="text-[10px] font-black text-white uppercase tracking-tighter">{{ param.value }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white/5 rounded-2xl p-6 border border-white/10">
+            <h4 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Signal Filters</h4>
+            <div class="flex flex-col gap-3">
+              <div v-for="filter in signalFilters" :key="filter.label" class="flex items-center justify-between">
+                <span class="text-[11px] font-bold text-gray-400">{{ filter.label }}</span>
+                <span class="text-[10px] font-black text-white uppercase tracking-tighter">{{ filter.value }}</span>
+              </div>
             </div>
           </div>
         </div>

@@ -13,6 +13,15 @@ module Api
         system: Live::SystemStatusCache.instance.all_statuses.merge(
           ws_order_update: Live::OrderUpdateHub.instance.running?
         ),
+        config: {
+          risk: AlgoConfig.fetch[:risk].slice(:sl_pct, :tp_pct, :hard_rupee_sl, :profit_floor, :trailing),
+          signals: AlgoConfig.fetch[:signals].slice(:enable_adx_filter, :adx, :enable_direction_gate),
+          time_restrictions: AlgoConfig.fetch[:trading_time_restrictions],
+          market_session: {
+            current: Live::TimeRegimeService.instance.current_regime,
+            config: Live::TimeRegimeService.instance.regime_config
+          }
+        },
         timestamp: Time.current.iso8601
       }
     end

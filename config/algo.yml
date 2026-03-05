@@ -9,6 +9,7 @@ paper_trading:
 trading_time_restrictions:
   enabled: true # Set to true to enable time-based restrictions
   avoid_periods: ["10:00-12:30"] # Block mid-morning churn session as per analysis
+  block_exits: true # Set to true to block automated exits (SL/TP/Trailing) during blackout
   # Example based on analysis results:
   # avoid_periods:
   #   - "10:30-11:30"  # Morning non-profitable period
@@ -179,8 +180,8 @@ risk:
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
   hard_rupee_sl:
-    enabled: true # Hard ₹600 stop loss per trade (tightened from ₹1000)
-    max_loss_rupees: 600 # Maximum loss per trade in rupees
+    enabled: true # Hard ₹1200 stop loss per trade (relaxed from ₹600 to let trades breathe)
+    max_loss_rupees: 1200 # Maximum loss per trade in rupees
 
   # Raised to ₹8k as an emergency safety net only.
   # Primary exit for winners is now the trailing profit floor (trail_pct: 70).
@@ -472,6 +473,7 @@ position_sizing:
   # Based on buy value (premium × lot_size × lots), works across any capital/allocation/lot size
   # Examples: 6.0, 6.66, 9.99, 10.0, 13.32, 15.0, 20.0
   trailing:
+    enabled: true # Global trailing toggle (used by dashboard)
     activation_pct: 10.0 # Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
     drawdown_pct: 3.0 # Exit if price drops this % from peak (used by trailing rules)
 

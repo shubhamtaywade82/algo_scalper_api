@@ -71,10 +71,14 @@ module Live
         # NEW 5-LAYER EXIT SYSTEM (optimized for intraday options buying)
         # ============================================================
         # Priority order: first-match-wins, evaluation stops on exit
-        # This replaces the previous over-engineered system with a clean,
-        # options-aligned exit mechanism.
         # ============================================================
         exit_engine = @exit_engine || self
+
+        # Check if exits are blocked by global time restrictions (Loss Avoidance)
+        if exits_blocked_by_time?
+          Rails.logger.debug { "[RiskManager] Automated exits BLOCKED by time restriction (Loss Avoidance)" }
+          return
+        end
 
         # LAYER 0: EXECUTABLE R STOP (Premium-based hard stop)
         enforce_premium_r_stop(exit_engine: exit_engine)
@@ -117,6 +121,20 @@ module Live
         # - enforce_post_profit_zone → removed (not aligned with options)
         # - enforce_trailing_stops → replaced by premium_momentum_failure
         # ============================================================
+      end
+      def exits_blocked_by_time?
+        restrictions = AlgoConfig.fetch[:trading_time_restrictions]
+        return false unless restrictions&.[](:enabled) && restrictions[:block_exits]
+        return false if restrictions[:avoid_periods].blank?
+
+        current_hm = Time.zone.now.strftime('%H:%M')
+        restrictions[:avoid_periods].any? do |period|
+          start_time, end_time = period.split('-')
+          current_hm >= start_time && current_hm < end_time
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] exits_blocked_by_time? error: #{e.message}")
+        false
       end
     end
   end

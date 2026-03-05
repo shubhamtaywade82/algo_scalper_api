@@ -6,7 +6,7 @@ import { useDashboard } from './composables/useDashboard'
 import { usePositions } from './composables/usePositions'
 
 const { open, closed, fetchPositions } = usePositions()
-const { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals } =
+const { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals, config } =
   useDashboard(() => fetchPositions())
 
 // Provide state to all view components
@@ -22,7 +22,8 @@ provide('dashboardState', {
   recentSignals,
   open,
   closed,
-  fetchPositions
+  fetchPositions,
+  config
 })
 </script>
 

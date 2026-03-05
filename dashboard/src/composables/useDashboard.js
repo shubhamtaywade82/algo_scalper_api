@@ -22,6 +22,7 @@ export function useDashboard(onPositionChange) {
   const circuitBreaker = ref({})
   const lastUpdated = ref(null)
   const recentSignals = ref([])
+  const config = ref({ risk: {}, signals: {}, time_restrictions: {} })
 
   let subscription = null
   let pollTimer = null
@@ -34,6 +35,7 @@ export function useDashboard(onPositionChange) {
     if (data.system) system.value = data.system
     if (data.circuit_breaker) circuitBreaker.value = data.circuit_breaker
     if (data.recent_signals) recentSignals.value = data.recent_signals
+    if (data.config) config.value = data.config
     if (data.timestamp) lastUpdated.value = data.timestamp
   }
 
@@ -76,5 +78,5 @@ export function useDashboard(onPositionChange) {
     clearInterval(pollTimer)
   })
 
-  return { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals }
+  return { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals, config }
 }
