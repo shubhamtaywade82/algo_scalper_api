@@ -116,6 +116,24 @@ class CandleSeries
     end
   end
 
+  def vwap
+    return [] if candles.empty?
+
+    cum_pv = 0.0
+    cum_v = 0.0
+
+    candles.map do |c|
+      typical_price = (c.high + c.low + c.close) / 3.0
+      cum_pv += typical_price * c.volume
+      cum_v += c.volume
+      cum_v.positive? ? (cum_pv / cum_v).round(2) : typical_price.round(2)
+    end
+  end
+
+  def current_vwap
+    vwap.last
+  end
+
   def atr(period = 14)
     return nil if candles.size < period + 1
 

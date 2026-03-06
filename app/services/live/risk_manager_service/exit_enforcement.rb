@@ -47,114 +47,33 @@ module Live
       end
 
       def enforce_trailing_stops(exit_engine:)
-        # Check if trailing is allowed in current time regime
-        regime = Live::TimeRegimeService.instance.current_regime
-        unless Live::TimeRegimeService.instance.allow_trailing?(regime)
-          Rails.logger.debug { "[RiskManager] Trailing disabled for regime: #{regime}" }
-          return
-        end
-
-        risk = risk_config
-        drop_threshold = begin
-          val = risk[:exit_drop_pct]
-          (val.nil? || val.to_s.empty?) ? BigDecimal('999') : BigDecimal(val.to_s)
-        rescue StandardError
-          BigDecimal('999')
-        end
-
-        puts "[DEBUG] risk: #{risk.inspect}"
-        puts "[DEBUG] drop_threshold: #{drop_threshold}"
-
-        # Skip if trailing is disabled (threshold too high)
-        return if drop_threshold >= 100
-
-        breakeven_gain = begin
-          BigDecimal(risk[:breakeven_after_gain].to_s)
-        rescue StandardError
-          BigDecimal(999) # Disabled by default
-        end
-
         PositionTracker.active.find_each do |tracker|
           next unless tracker.trade_state == 'expansion'
 
-          snap = pnl_snapshot(tracker)
-          next unless snap
+          # Fetch current LTP (from cache or live feed)
+          ltp = Live::TickQuery.ltp_for(tracker)
+          next unless ltp && ltp.to_f.positive?
 
-          pnl = snap[:pnl]
-          pnl_pct = snap[:pnl_pct]
-          hwm = snap[:hwm_pnl]
-          next if hwm.nil? || hwm.zero?
+          # PHASE-BASED INSTITUTIONAL TRAILING
+          engine = Trading::TrailingEngine.new(tracker: tracker, ltp: ltp)
+          trailing_sl = engine.call
+          next unless trailing_sl
 
-          pnl_pct_value = pnl_pct.to_f * 100.0
+          # Enforce the calculated SL
+          if ltp.to_f <= trailing_sl
+            reason = "INSTITUTIONAL_TRAILING_STOP (SL: #{trailing_sl.round(2)}, LTP: #{ltp.to_f})"
+            exit_path = 'trailing_stop_institutional'
 
-          # BIDIRECTIONAL TRAILING LOGIC
-
-        # 1. UPWARD TRAILING (when profitable)
-        if pnl_pct_value.positive?
-          # Calculate peak profit percentage
-          peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
-
-          # Activation threshold for adaptive drawdown
-          drawdown_cfg = begin
-            (AlgoConfig.fetch[:risk] && AlgoConfig.fetch[:risk][:drawdown]) || {}
-          rescue StandardError
-            {}
+            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+            track_exit_path(tracker, exit_path, reason)
+            dispatch_exit(exit_engine, tracker, reason)
           end
-          activation_profit = drawdown_cfg[:activation_profit_pct].to_f.nonzero? || 3.0
-
-          if peak_profit_pct >= activation_profit
-            # ADAPTIVE ZONE: Use adaptive drawdown schedule
-            index_key = tracker.meta&.dig('index_key') || tracker.instrument&.symbol_name
-            allowed_dd = Positions::DrawdownSchedule.allowed_upward_drawdown_pct(peak_profit_pct, index_key: index_key)
-
-            if allowed_dd
-              allowed_drop_from_hwm = allowed_dd / peak_profit_pct
-              current_drop = (hwm - pnl) / hwm
-
-              if current_drop >= allowed_drop_from_hwm
-                reason = "ADAPTIVE_TRAILING_STOP (peak: #{peak_profit_pct.round(2)}%, drop: #{(current_drop * 100).round(2)}%, allowed: #{(allowed_drop_from_hwm * 100).round(2)}%)"
-                exit_path = 'trailing_stop_adaptive_upward'
-                Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-                track_exit_path(tracker, exit_path, reason)
-                dispatch_exit(exit_engine, tracker, reason)
-                next
-              end
-            end
-
-            # Breakeven locking (still applies in adaptive zone)
-            if breakeven_gain < 100 && pnl_pct_value >= (breakeven_gain * 100) && !tracker.breakeven_locked?
-              tracker.lock_breakeven!
-              Rails.logger.info("[RiskManager] Breakeven locked for #{tracker.order_no} at #{pnl_pct_value.round(2)}% profit")
-            end
-
-            # IMPORTANT: Since we are in the adaptive zone, we SKIP fixed fallback to let adaptive take precedence
-          elsif drop_threshold < 100
-            # FIXED ZONE: Fallback to fixed threshold (before adaptive activation)
-            drop_pct = (hwm - pnl) / hwm
-            if drop_pct >= drop_threshold
-              reason = "TRAILING_STOP (fixed threshold: #{(drop_threshold * 100).round(2)}%, drop: #{(drop_pct * 100).round(2)}%)"
-              exit_path = 'trailing_stop_fixed_upward'
-              Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-              track_exit_path(tracker, exit_path, reason)
-              dispatch_exit(exit_engine, tracker, reason)
-              next
-            end
-
-            # Breakeven locking (still applies in fixed zone)
-            if breakeven_gain < 100 && pnl_pct_value >= (breakeven_gain * 100) && !tracker.breakeven_locked?
-              tracker.lock_breakeven!
-              Rails.logger.info("[RiskManager] Breakeven locked for #{tracker.order_no} at #{pnl_pct_value.round(2)}% profit")
-            end
-          end
-        end
-
-          # 2. DOWNWARD TRAILING (when below entry): Use reverse dynamic SL
-          # This is handled in enforce_hard_limits, but we can add additional trailing logic here
-          # For now, reverse SL is handled in enforce_hard_limits via dynamic reverse SL
         rescue StandardError => e
           Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
-          Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
         end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_trailing_stops method error: #{e.class} - #{e.message}")
+        Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
       end
 
       def advance_trade_states!

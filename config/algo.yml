@@ -201,6 +201,34 @@ risk:
     enabled: true
     target_rr: 2.5        # Exit fully at 2.5R (e.g., if SL is 10%, TP at 25%)
 
+  # Institutional Trailing System (3-Phase)
+  # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
+  # Parameters derived from avg max gain, avg post-peak retracement, and session stats
+  institutional_trailing:
+    enabled: true
+    session_aware: true           # Tighten trail distance in afternoon (0.75x after 13:00)
+    expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
+
+    nifty:
+      early_trigger: 0.05         # Phase 1: Survival (+5% profit → -12% SL)
+      early_sl_offset: -0.12
+      breakeven_trigger: 0.157    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
+      activation_trigger: 0.20    # Phase 3: HWM Trailing at +20%
+      trailing_distance: 0.386    # 38.6% from HWM (80% of avg 48.3% retrace)
+    sensex:
+      early_trigger: 0.06         # Phase 1: Survival (+6% profit → -10% SL)
+      early_sl_offset: -0.10
+      breakeven_trigger: 0.12     # Phase 2: Breakeven at +12%
+      activation_trigger: 0.18    # Phase 3: HWM Trailing at +18%
+      trailing_distance: 0.413    # 41.3% from HWM (80% of avg 51.65% retrace)
+    banknifty:
+      early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
+      early_sl_offset: -0.15      # Wider SL — BN is more volatile
+      breakeven_trigger: 0.18     # Phase 2: Breakeven at +18%
+      activation_trigger: 0.25    # Phase 3: HWM Trailing at +25%
+      trailing_distance: 0.35     # 35% from HWM (conservative — last-week-only trades)
+
+
   # Dynamic Trailing stops
   trailing:
     enabled: true
