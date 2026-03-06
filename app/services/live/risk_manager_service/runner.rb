@@ -74,11 +74,7 @@ module Live
         # ============================================================
         exit_engine = @exit_engine || self
 
-        # Check if exits are blocked by global time restrictions (Loss Avoidance)
-        if exits_blocked_by_time?
-          Rails.logger.debug { "[RiskManager] Automated exits BLOCKED by time restriction (Loss Avoidance)" }
-          return
-        end
+
 
         # LAYER 0: EXECUTABLE R STOP (Premium-based hard stop)
         enforce_premium_r_stop(exit_engine: exit_engine)

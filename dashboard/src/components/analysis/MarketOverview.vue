@@ -20,13 +20,46 @@ function inr(val) {
   if (val == null) return '—'
   return Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
+function validityLabel(v) {
+  if (!v) return null
+  if (v.cached && v.age_seconds != null) {
+    const age = v.age_seconds
+    if (age < 60) return `${age}s ago`
+    return `${Math.round(age / 60)}m ago`
+  }
+  return 'just now'
+}
+
+function validityDot(v) {
+  if (!v) return 'bg-gray-600'
+  return v.fresh ? 'bg-emerald-400' : 'bg-amber-400'
+}
+
+const validities = computed(() => {
+  if (!props.data) return []
+  return [
+    { label: 'SMC', v: props.data.smc_validity },
+    { label: 'Regime', v: props.data.regime_validity },
+    { label: 'AI', v: props.data.ai_validity }
+  ].filter(x => x.v)
+})
 </script>
 
 <template>
   <div class="glass rounded-2xl p-6 glass-hover">
-    <div class="flex items-center gap-3 mb-5">
-      <span class="text-[10px] font-black text-gray-500 tracking-[0.2em] uppercase">📊 Market Overview</span>
-      <span class="text-xs font-bold text-primary-400">{{ data?.index_key }}</span>
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <span class="text-[10px] font-black text-gray-500 tracking-[0.2em] uppercase">📊 Market Overview</span>
+        <span class="text-xs font-bold text-primary-400">{{ data?.index_key }}</span>
+      </div>
+      <!-- Validity badges -->
+      <div v-if="validities.length" class="flex items-center gap-3">
+        <div v-for="item in validities" :key="item.label" class="flex items-center gap-1.5" :title="`${item.label}: cached ${validityLabel(item.v)}, TTL ${item.v.ttl_seconds}s`">
+          <span :class="['w-1.5 h-1.5 rounded-full', validityDot(item.v)]"></span>
+          <span class="text-[8px] font-bold text-gray-600 tracking-wider">{{ item.label }}: {{ validityLabel(item.v) }}</span>
+        </div>
+      </div>
     </div>
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
