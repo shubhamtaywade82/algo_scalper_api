@@ -28,7 +28,7 @@ module Live
 
     # Global override times (IST)
     # These are parsed in IST timezone via Time.zone.parse
-    NO_NEW_TRADES_AFTER = '14:50' # IST
+    NO_NEW_TRADES_AFTER = '15:05' # IST
     MARKET_OPEN = '09:15' # IST
     MARKET_CLOSE = '15:15' # IST
 
@@ -128,8 +128,9 @@ module Live
       time ||= current_ist_time
       time_str = time.strftime('%H:%M')
 
-      # No new trades after 14:50 IST (unless exceptional conditions)
-      return false if time_str >= NO_NEW_TRADES_AFTER
+      cfg_no_new_trades_after = AlgoConfig.fetch.dig(:risk, :time_overrides, :no_new_trades_after) || NO_NEW_TRADES_AFTER
+      # No new trades after the config time IST (unless exceptional conditions)
+      return false if time_str >= cfg_no_new_trades_after
 
       # Check regime-specific entry rules
       allow_entries?

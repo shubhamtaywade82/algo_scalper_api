@@ -53,8 +53,14 @@ module Risk
 
         return skip_result unless time_limit
 
-        # Bypass time stop if the trade is in profit (let winners run)
         pnl = context.position.pnl.to_f
+
+        # Dynamic time stop tightening if position is negative
+        if pnl < 0.0 && time_limit > 8
+          time_limit = 8 # Reduce time limit to 8 minutes if negative PnL
+        end
+
+        # Bypass time stop if the trade is in profit (let winners run)
         if pnl > 0.0
           Rails.logger.debug { "[TimeStopRule] Bypassing time stop for #{tracker.order_no} as it is in profit (₹#{pnl.round(2)})" }
           return skip_result

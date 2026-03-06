@@ -369,8 +369,8 @@ risk:
   # Global Time-Based Overrides (CRITICAL - override everything)
   # All times are in IST (Indian Standard Time, UTC+5:30)
   time_overrides:
-    # Override 1: No new trades after 14:50 IST (unless exceptional conditions)
-    no_new_trades_after: "14:50" # No new trades after this time IST (unless ADX ≥ 25, massive expansion)
+    # Override 1: No new trades after 15:05 IST (unless exceptional conditions)
+    no_new_trades_after: "15:05" # No new trades after this time IST (unless ADX ≥ 25, massive expansion)
 
     # Override 2: IV collapse detection
     iv_collapse:
