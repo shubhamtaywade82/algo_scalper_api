@@ -7,6 +7,6 @@
 #   { type: "position_exited",    position: { ... } }
 class DashboardChannel < ApplicationCable::Channel
   def subscribed
-    stream_from "dashboard"
+    stream_from 'dashboard'
   end
 end

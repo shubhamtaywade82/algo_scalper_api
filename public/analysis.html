@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Market Analysis — NIFTY | SENSEX | BANKNIFTY</title>
+  <meta name="description" content="Live AI-powered market analysis dashboard for Indian index options trading">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.8);
+      --bg-card-hover: rgba(30, 41, 59, 0.9);
+      --border: rgba(99, 102, 241, 0.15);
+      --border-glow: rgba(99, 102, 241, 0.3);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.4);
+      --green: #10b981;
+      --green-bg: rgba(16, 185, 129, 0.12);
+      --red: #ef4444;
+      --red-bg: rgba(239, 68, 68, 0.12);
+      --yellow: #f59e0b;
+      --yellow-bg: rgba(245, 158, 11, 0.12);
+      --blue: #3b82f6;
+      --blue-bg: rgba(59, 130, 246, 0.12);
+      --purple: #a855f7;
+      --cyan: #06b6d4;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Background gradient orbs */
+    body::before, body::after {
+      content: '';
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::before {
+      width: 600px; height: 600px;
+      background: var(--accent);
+      top: -200px; right: -100px;
+    }
+    body::after {
+      width: 500px; height: 500px;
+      background: var(--purple);
+      bottom: -150px; left: -100px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header h1 {
+      font-size: 1.75rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--purple), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      display: inline-block;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 6px transparent; }
+    }
+
+    /* Tab navigation */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+      width: fit-content;
+    }
+    .tab {
+      padding: 10px 28px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      transition: all 0.25s ease;
+      border: none;
+      background: transparent;
+      letter-spacing: 0.5px;
+    }
+    .tab:hover { color: var(--text-primary); background: rgba(99,102,241,0.08); }
+    .tab.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 12px var(--accent-glow);
+    }
+
+    /* Card */
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      transition: all 0.3s ease;
+    }
+    .card:hover {
+      border-color: var(--border-glow);
+      box-shadow: 0 0 30px rgba(99,102,241,0.06);
+    }
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title .icon { font-size: 1rem; }
+
+    /* Grid layouts */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+    @media (max-width: 900px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    }
+
+    /* Metric card */
+    .metric {
+      text-align: center;
+      padding: 16px;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .metric-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 4px;
+    }
+    .metric-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
+    .badge-red { background: var(--red-bg); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+    .badge-yellow { background: var(--yellow-bg); color: var(--yellow); border: 1px solid rgba(245,158,11,0.2); }
+    .badge-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(59,130,246,0.2); }
+    .badge-purple { background: rgba(168,85,247,0.12); color: var(--purple); border: 1px solid rgba(168,85,247,0.2); }
+
+    /* SMC timeframe row */
+    .tf-row {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      border-left: 3px solid var(--accent);
+      gap: 16px;
+    }
+    .tf-label {
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: var(--cyan);
+      min-width: 50px;
+    }
+    .tf-detail {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      flex: 1;
+    }
+
+    /* AI analysis section */
+    .ai-content {
+      font-size: 0.85rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      font-family: 'Inter', sans-serif;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .ai-content strong, .ai-content h1, .ai-content h2, .ai-content h3 {
+      color: var(--text-primary);
+    }
+
+    /* Tables */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    .data-table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 10px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      border-bottom: 1px solid rgba(99,102,241,0.06);
+    }
+    .data-table tr:hover td {
+      background: rgba(99,102,241,0.04);
+    }
+
+    /* Session heatmap bar */
+    .session-bar {
+      display: flex;
+      gap: 4px;
+      height: 32px;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .session-segment {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #fff;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+    }
+    .session-segment:hover {
+      transform: scaleY(1.15);
+    }
+
+    /* Loading & empty states */
+    .loading {
+      text-align: center;
+      padding: 48px;
+      color: var(--text-muted);
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+
+    /* Calibration insight box */
+    .insight-box {
+      padding: 16px 20px;
+      background: rgba(99,102,241,0.06);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 10px 10px 0;
+      margin-bottom: 12px;
+    }
+    .insight-box .insight-title {
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: var(--cyan);
+      margin-bottom: 6px;
+    }
+    .insight-box .insight-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+
+    /* Refresh button */
+    .btn-refresh {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+    }
+    .btn-refresh:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+    .btn-refresh.loading-btn {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    /* Decision badge large */
+    .decision-badge {
+      font-size: 1.1rem;
+      font-weight: 700;
+      padding: 8px 20px;
+      border-radius: 8px;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>🤖 AI Market Analysis</h1>
+      <div class="header-meta" style="margin-top:4px;">
+        <span><span class="status-dot"></span> Live</span>
+        <span id="lastUpdated">—</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-refresh" onclick="refreshLive()" id="btnRefreshLive">↻ Refresh Live</button>
+      <button class="btn-refresh" onclick="loadHistorical()" id="btnRefreshHist">📊 Load Historical</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="indexTabs">
+    <button class="tab active" data-index="NIFTY" onclick="switchIndex('NIFTY',this)">NIFTY</button>
+    <button class="tab" data-index="SENSEX" onclick="switchIndex('SENSEX',this)">SENSEX</button>
+    <button class="tab" data-index="BANKNIFTY" onclick="switchIndex('BANKNIFTY',this)">BANKNIFTY</button>
+  </div>
+
+  <!-- Content -->
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      Loading analysis...
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.skypack.dev/@rails/actioncable@7.0.0"></script>
+<script>
+  // State
+  let currentIndex = 'NIFTY';
+  let liveData = {};
+  let historicalData = {};
+  let refreshTimer = null;
+  let cable = null;
+
+  // ─── Tab switching ───
+  function switchIndex(key, el) {
+    currentIndex = key;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    renderAll();
+    refreshLive();
+  }
+
+  // ─── API calls ───
+  async function fetchLive(index) {
+    try {
+      const res = await fetch(`/api/analysis/${index}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error(`Live fetch failed for ${index}:`, e);
+      return null;
+    }
+  }
+
+  async function fetchHistorical(index, weeks = 8) {
+    try {
+      const res = await fetch(`/api/analysis/${index}/historical?weeks=${weeks}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error(`Historical fetch failed for ${index}:`, e);
+      return null;
+    }
+  }
+
+  async function refreshLive() {
+    const btn = document.getElementById('btnRefreshLive');
+    btn.classList.add('loading-btn');
+    btn.textContent = '↻ Loading...';
+
+    const data = await fetchLive(currentIndex);
+    if (data) {
+      liveData[currentIndex] = data;
+      document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+    }
+    renderAll();
+
+    btn.classList.remove('loading-btn');
+    btn.textContent = '↻ Refresh Live';
+  }
+
+  async function loadHistorical() {
+    const btn = document.getElementById('btnRefreshHist');
+    btn.classList.add('loading-btn');
+    btn.textContent = '📊 Loading...';
+
+    const data = await fetchHistorical(currentIndex, 8);
+    if (data) {
+      historicalData[currentIndex] = data;
+    }
+    renderAll();
+
+    btn.classList.remove('loading-btn');
+    btn.textContent = '📊 Load Historical';
+  }
+
+  // ─── Helpers ───
+  function clr(v) { return v >= 0 ? 'positive' : 'negative'; }
+  function fmt(v, dec = 2) { return v != null ? Number(v).toFixed(dec) : '—'; }
+  function fmtPct(v) { return v != null ? `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%` : '—'; }
+
+  function regimeBadge(regime) {
+    if (!regime) return '<span class="badge badge-yellow">NO DATA</span>';
+    const r = regime.regime || regime;
+    const map = {
+      'TRENDING_UP': 'badge-green', 'TRENDING_DOWN': 'badge-red',
+      'RANGING': 'badge-blue', 'CHOPPY': 'badge-yellow',
+      'NO_DATA': 'badge-yellow', 'INSUFFICIENT_DATA': 'badge-yellow', 'ERROR': 'badge-red'
+    };
+    return `<span class="badge ${map[r] || 'badge-yellow'}">${r}</span>`;
+  }
+
+  function decisionBadge(d) {
+    if (!d) return '<span class="badge badge-yellow">—</span>';
+    const map = { call: 'badge-green', put: 'badge-red', no_trade: 'badge-yellow' };
+    return `<span class="decision-badge badge ${map[d] || 'badge-yellow'}">${d.toUpperCase()}</span>`;
+  }
+
+  function sessionColor(pct) {
+    if (pct == null) return 'var(--text-muted)';
+    return pct >= 2 ? 'var(--green)' : pct <= -2 ? 'var(--red)' : 'var(--yellow)';
+  }
+
+  // ─── Rendering ───
+  function renderAll() {
+    const live = liveData[currentIndex];
+    const hist = historicalData[currentIndex];
+
+    if (!live && !hist) {
+      document.getElementById('content').innerHTML = `
+        <div class="loading"><div class="spinner"></div>Loading ${currentIndex} analysis...</div>`;
+      return;
+    }
+
+    let html = '';
+
+    // 1. Market Overview
+    html += renderOverview(live);
+
+    // 2. SMC Analysis
+    html += renderSMC(live);
+
+    // 3. AI Insights
+    html += renderAI(live);
+
+    // 4. Historical Options Behavior
+    html += renderHistorical(hist);
+
+    // 5. Trailing Calibration
+    html += renderCalibration(hist);
+
+    document.getElementById('content').innerHTML = html;
+  }
+
+  function renderOverview(data) {
+    if (!data) return '';
+    const ltp = data.ltp;
+    const regime = data.market_regime;
+    const session = data.time_regime;
+    const positions = data.active_positions || 0;
+    const config = data.config || {};
+    const direction = config.direction || '—';
+
+    return `
+      <div class="card">
+        <div class="card-title"><span class="icon">📊</span> Market Overview — ${data.index_key}</div>
+        <div class="grid-4">
+          <div class="metric">
+            <div class="metric-value" style="color:var(--cyan)">${ltp ? fmt(ltp, 2) : '—'}</div>
+            <div class="metric-label">LTP</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">${regimeBadge(regime)}</div>
+            <div class="metric-label">Market Regime</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value"><span class="badge badge-purple">${session || '—'}</span></div>
+            <div class="metric-label">Time Session</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value" style="color:var(--accent)">${positions}</div>
+            <div class="metric-label">Active Positions</div>
+          </div>
+        </div>
+        ${regime && regime.metrics ? `
+        <div style="margin-top:16px;" class="grid-3">
+          <div class="metric">
+            <div class="metric-value" style="font-size:1.1rem">${fmt(regime.metrics.adx_value, 1)}</div>
+            <div class="metric-label">ADX</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value" style="font-size:1.1rem">${(regime.metrics.atr_percent * 100).toFixed(2)}%</div>
+            <div class="metric-label">ATR %</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value" style="font-size:1.1rem">${regime.metrics.volatility_regime || '—'}</div>
+            <div class="metric-label">Vol Regime</div>
+          </div>
+        </div>` : ''}
+      </div>`;
+  }
+
+  function renderSMC(data) {
+    if (!data || !data.smc) return '';
+    const smc = data.smc;
+    const decision = smc.decision;
+    const tfs = smc.timeframes || {};
+
+    function tfRow(label, interval, ctx) {
+      if (!ctx || !ctx.context) return '';
+      const c = ctx.context;
+      const structure = c.structure || {};
+      const liquidity = c.liquidity || {};
+      const pd = c.premium_discount || {};
+      return `
+        <div class="tf-row">
+          <span class="tf-label">${label} (${interval}m)</span>
+          <div class="tf-detail">
+            <span class="badge badge-blue">${structure.trend || '—'}</span>
+            ${structure.choch ? '<span class="badge badge-purple">CHoCH</span>' : ''}
+            ${structure.bos ? '<span class="badge badge-green">BOS</span>' : ''}
+            ${pd.discount ? '<span class="badge badge-green">DISCOUNT</span>' : ''}
+            ${pd.premium ? '<span class="badge badge-red">PREMIUM</span>' : ''}
+            ${liquidity.sell_side_taken ? '<span class="badge badge-yellow">SSL Taken</span>' : ''}
+            ${liquidity.buy_side_taken ? '<span class="badge badge-yellow">BSL Taken</span>' : ''}
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="card">
+        <div class="card-title"><span class="icon">🏗️</span> SMC Analysis</div>
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+          <span style="color:var(--text-muted);font-size:0.8rem;">Decision:</span>
+          ${decisionBadge(decision)}
+        </div>
+        ${tfRow('HTF', tfs.htf?.interval, tfs.htf)}
+        ${tfRow('MTF', tfs.mtf?.interval, tfs.mtf)}
+        ${tfRow('LTF', tfs.ltf?.interval, tfs.ltf)}
+        ${tfs.ltf?.avrz ? `
+          <div class="tf-row" style="border-left-color:var(--purple);">
+            <span class="tf-label" style="color:var(--purple);">AVRZ</span>
+            <div class="tf-detail">
+              ${tfs.ltf.avrz.rejection ? '<span class="badge badge-green">Rejection ✓</span>' : '<span class="badge badge-yellow">No Rejection</span>'}
+              ${tfs.ltf.avrz.zone ? `<span class="badge badge-blue">${tfs.ltf.avrz.zone}</span>` : ''}
+            </div>
+          </div>` : ''}
+      </div>`;
+  }
+
+  function renderAI(data) {
+    if (!data) return '';
+    const ai = data.ai_analysis;
+    return `
+      <div class="card">
+        <div class="card-title"><span class="icon">🤖</span> AI Analysis</div>
+        <div class="ai-content">${ai ? formatAI(ai) : '<span style="color:var(--text-muted)">AI analysis unavailable. Configure OLLAMA_BASE_URL to enable.</span>'}</div>
+      </div>`;
+  }
+
+  function formatAI(text) {
+    if (typeof text !== 'string') text = JSON.stringify(text, null, 2);
+    // Basic markdown-like formatting
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>')
+      .replace(/#{1,3}\s(.*?)(<br>|$)/g, '<strong style="color:var(--cyan)">$1</strong><br>');
+  }
+
+  function renderHistorical(data) {
+    if (!data) return `
+      <div class="card">
+        <div class="card-title"><span class="icon">📈</span> Historical Options Behavior</div>
+        <div style="text-align:center;padding:32px;color:var(--text-muted);">
+          Click "📊 Load Historical" to fetch ATM options behavior data from DhanHQ.<br>
+          <span style="font-size:0.75rem;margin-top:8px;display:block;">This may take 10-30 seconds for the first load.</span>
+        </div>
+      </div>`;
+
+    if (data.error) return `
+      <div class="card">
+        <div class="card-title"><span class="icon">📈</span> Historical Options Behavior</div>
+        <div style="color:var(--red);padding:16px;">${data.error}</div>
+      </div>`;
+
+    const ce = data.ce_aggregate;
+    const pe = data.pe_aggregate;
+
+    let sessHtml = '';
+    if (data.cycles && data.cycles.length > 0) {
+      const lastCycle = data.cycles[data.cycles.length - 1];
+      if (lastCycle.ce_sessions) {
+        sessHtml += renderSessionHeatmap('CE Sessions (Latest Cycle)', lastCycle.ce_sessions);
+      }
+      if (lastCycle.pe_sessions) {
+        sessHtml += renderSessionHeatmap('PE Sessions (Latest Cycle)', lastCycle.pe_sessions);
+      }
+    }
+
+    return `
+      <div class="card">
+        <div class="card-title"><span class="icon">📈</span> Historical Options Behavior — ${data.weeks} Weeks (${ce?.n || 0} cycles)</div>
+        <div class="grid-2">
+          ${ce ? renderAggregateTable('CE (Call) Aggregate', ce) : ''}
+          ${pe ? renderAggregateTable('PE (Put) Aggregate', pe) : ''}
+        </div>
+        ${sessHtml}
+        ${data.cycles && data.cycles.length > 0 ? renderCycleTable(data.cycles) : ''}
+      </div>`;
+  }
+
+  function renderAggregateTable(title, agg) {
+    if (!agg) return '';
+    const a = agg.avg;
+    return `
+      <div>
+        <div style="font-weight:600;font-size:0.8rem;color:var(--cyan);margin-bottom:12px;">${title}</div>
+        <table class="data-table">
+          <tr><th>Metric</th><th>Avg</th><th>Best</th><th>Worst</th></tr>
+          <tr>
+            <td>Max Gain</td>
+            <td class="positive">${fmtPct(a.max_gain_pct)}</td>
+            <td class="positive">${fmtPct(agg.max.max_gain_pct)}</td>
+            <td>${fmtPct(agg.min.max_gain_pct)}</td>
+          </tr>
+          <tr>
+            <td>Max Loss</td>
+            <td class="negative">${fmtPct(a.max_loss_pct)}</td>
+            <td>${fmtPct(agg.max.max_loss_pct)}</td>
+            <td class="negative">${fmtPct(agg.min.max_loss_pct)}</td>
+          </tr>
+          <tr>
+            <td>Open→Close</td>
+            <td class="${clr(a.open_to_close_pct)}">${fmtPct(a.open_to_close_pct)}</td>
+            <td>${fmtPct(agg.max.open_to_close_pct)}</td>
+            <td>${fmtPct(agg.min.open_to_close_pct)}</td>
+          </tr>
+          <tr>
+            <td>Peak Retrace</td>
+            <td style="color:var(--yellow)">${fmtPct(a.post_peak_retrace)}</td>
+            <td>${fmtPct(agg.max.post_peak_retrace)}</td>
+            <td>${fmtPct(agg.min.post_peak_retrace)}</td>
+          </tr>
+          <tr>
+            <td>OI Change</td>
+            <td class="${clr(a.oi_change_pct)}">${fmtPct(a.oi_change_pct)}</td>
+            <td>${fmtPct(agg.max.oi_change_pct)}</td>
+            <td>${fmtPct(agg.min.oi_change_pct)}</td>
+          </tr>
+          <tr>
+            <td>Spot Change</td>
+            <td class="${clr(a.spot_change_pct)}">${fmtPct(a.spot_change_pct)}</td>
+            <td>${fmtPct(agg.max.spot_change_pct)}</td>
+            <td>${fmtPct(agg.min.spot_change_pct)}</td>
+          </tr>
+        </table>
+      </div>`;
+  }
+
+  function renderSessionHeatmap(title, sessions) {
+    const segments = Object.entries(sessions)
+      .filter(([, v]) => v != null)
+      .map(([name, s]) => {
+        const pct = s.oc_pct;
+        const bg = pct >= 1 ? 'var(--green)' : pct <= -1 ? 'var(--red)' : 'var(--yellow)';
+        const opacity = Math.min(Math.abs(pct) / 5 + 0.4, 1);
+        return `<div class="session-segment" style="background:${bg};opacity:${opacity};" title="${name}: ${fmtPct(pct)}">
+          ${name.substring(0,4)} ${fmtPct(pct)}
+        </div>`;
+      }).join('');
+
+    return `
+      <div style="margin-top:16px;">
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">${title}</div>
+        <div class="session-bar">${segments}</div>
+      </div>`;
+  }
+
+  function renderCycleTable(cycles) {
+    const recent = cycles.slice(-6);
+    const rows = recent.map(c => `
+      <tr>
+        <td>${c.expiry}</td>
+        <td class="${clr(c.ce?.max_gain_pct)}">${fmtPct(c.ce?.max_gain_pct)}</td>
+        <td class="${clr(c.ce?.post_peak_retrace)}">${fmtPct(c.ce?.post_peak_retrace)}</td>
+        <td class="${clr(c.pe?.max_gain_pct)}">${fmtPct(c.pe?.max_gain_pct)}</td>
+        <td class="${clr(c.pe?.post_peak_retrace)}">${fmtPct(c.pe?.post_peak_retrace)}</td>
+        <td class="${clr(c.ce?.spot_change_pct)}">${fmtPct(c.ce?.spot_change_pct)}</td>
+      </tr>`).join('');
+
+    return `
+      <div style="margin-top:20px;">
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Recent Expiry Cycles</div>
+        <table class="data-table">
+          <tr><th>Expiry</th><th>CE Gain</th><th>CE Retrace</th><th>PE Gain</th><th>PE Retrace</th><th>Spot Δ</th></tr>
+          ${rows}
+        </table>
+      </div>`;
+  }
+
+  function renderCalibration(data) {
+    if (!data || !data.calibration) return '';
+    const cal = data.calibration;
+
+    function insightBox(label, cal_data) {
+      if (!cal_data) return '';
+      return `
+        <div class="insight-box">
+          <div class="insight-title">${label} ATM Calibration</div>
+          <div class="insight-value">
+            Avg Max Gain: <span class="positive">${fmtPct(cal_data.avg_max_gain_pct)}</span> ·
+            Avg Retrace: <span style="color:var(--yellow)">${fmt(cal_data.avg_retrace_pct, 1)}%</span><br>
+            <strong>→ Suggested Trail:</strong> <span style="color:var(--cyan)">${fmt(cal_data.suggested_trail_pct, 1)}% from HWM</span> ·
+            <strong>Breakeven at:</strong> <span style="color:var(--cyan)">${fmt(cal_data.breakeven_trigger_pct, 1)}% gain</span>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="card">
+        <div class="card-title"><span class="icon">🎯</span> Trailing Stop Calibration</div>
+        ${insightBox('CE (Call)', cal.ce)}
+        ${insightBox('PE (Put)', cal.pe)}
+      </div>`;
+  }
+
+  // ─── ActionCable for live LTP ───
+  function setupCable() {
+    try {
+      cable = ActionCable.createConsumer('/cable');
+      cable.subscriptions.create({ channel: 'DashboardChannel' }, {
+        received(data) {
+          if (data.type === 'stats' && data.indices) {
+            // Update LTP from broadcast
+            ['NIFTY', 'BANKNIFTY', 'SENSEX'].forEach(key => {
+              if (liveData[key] && data.indices[key.toLowerCase()]) {
+                liveData[key].ltp = data.indices[key.toLowerCase()];
+              }
+            });
+            if (liveData[currentIndex]) renderAll();
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('ActionCable not available:', e);
+    }
+  }
+
+  // ─── Init ───
+  (async function init() {
+    setupCable();
+    await refreshLive();
+    // Auto-refresh every 30s
+    refreshTimer = setInterval(refreshLive, 30000);
+  })();
+</script>
+</body>
+</html>

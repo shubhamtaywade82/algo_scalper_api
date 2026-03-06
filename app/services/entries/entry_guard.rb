@@ -37,6 +37,13 @@ Rails.logger.error(
           return false
         end
 
+        # BANKNIFTY: Only allow entries in the last week before monthly expiry
+        # (BANKNIFTY weekly options carry excessive theta decay outside the final week)
+        if index_cfg[:key].to_s == 'BANKNIFTY' && !banknifty_last_week?
+          Rails.logger.info('[EntryGuard] BANKNIFTY entry blocked — not last week before monthly expiry')
+          return false
+        end
+
         # Edge failure detector (rolling PnL window, consecutive SLs, session-based)
         edge_check = Live::EdgeFailureDetector.instance.entries_paused?(index_key: index_cfg[:key])
         if edge_check[:paused]
@@ -132,8 +139,9 @@ Rails.logger.error(
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
 
         # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
-        # Bypass for Supertrend testing mode.
-        if !is_supertrend && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
+        # Bypass for Supertrend testing mode or Paper trading (simulated contracts may be monthly)
+        is_paper = entry_metadata&.dig(:paper) || Rails.env.development? || Rails.env.test?
+        if !is_supertrend && !is_paper && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
           Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
           return false
         end
@@ -449,6 +457,23 @@ Rails.logger.error(
         last.present? && (Time.current - last) < cooldown
       end
 
+      # BANKNIFTY trades only in the last week before monthly expiry (last Thursday of month).
+      # Returns true if today is within 7 calendar days of the last Thursday.
+      def banknifty_last_week?
+        today    = Time.zone.today
+        last_day = today.end_of_month
+        last_thu = last_day - ((last_day.wday - 4) % 7).days
+        # If last_thu falls before today (we've passed expiry this month), check next month
+        if last_thu < today
+          last_day = (today + 1.month).end_of_month
+          last_thu = last_day - ((last_day.wday - 4) % 7).days
+        end
+        (last_thu - today).to_i.between?(0, 6)
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] banknifty_last_week? error: #{e.message}")
+        false
+      end
+
       def weekly_contract?(pick:, index_cfg:)
         # Prefer derivative_id if present
         derivative =
@@ -706,18 +731,8 @@ Rails.logger.error(
           paper_trading: true
         }
 
-        # Add entry strategy/path metadata if provided
-        if entry_metadata.is_a?(Hash)
-          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
-          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
-          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
-          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
-          if entry_metadata[:confirmation_timeframe]
-            meta_hash[:entry_confirmation_timeframe] =
-              entry_metadata[:confirmation_timeframe]
-          end
-          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
-        end
+        # Add diagnostic metadata if provided
+        merge_diagnostic_metadata!(meta_hash, entry_metadata) if entry_metadata.is_a?(Hash)
 
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
@@ -771,18 +786,8 @@ Rails.logger.error(
           placed_at: Time.current
         }
 
-        # Add entry strategy/path metadata if provided
-        if entry_metadata.is_a?(Hash)
-          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
-          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
-          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
-          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
-          if entry_metadata[:confirmation_timeframe]
-            meta_hash[:entry_confirmation_timeframe] =
-              entry_metadata[:confirmation_timeframe]
-          end
-          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
-        end
+        # Add diagnostic metadata if provided
+        merge_diagnostic_metadata!(meta_hash, entry_metadata) if entry_metadata.is_a?(Hash)
 
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
@@ -910,6 +915,7 @@ Rails.logger.error(
         meta_hash[:entry_premium] = entry_price.to_f
         meta_hash[:entry_risk_rupees] = entry_risk_rupees
         meta_hash[:premium_stop_price] = premium_stop
+        meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
         meta_hash[:premium_target_price] = premium_target
         meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
         meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
@@ -1011,6 +1017,32 @@ Rails.logger.error(
 
         # Fallback to instrument (for index positions)
         instrument
+      end
+      def merge_diagnostic_metadata!(meta_hash, entry_metadata)
+        # Preserve all incoming diagnostic keys from Signal::Engine
+        diagnostic_keys = %i[
+          regime regime_confidence regime_metrics
+          ta_signal ta_confidence ta_bias
+          mtf_rsi mtf_macd mtf_atr
+          entry_path strategy strategy_mode
+          primary_timeframe effective_timeframe
+          confirmation_timeframe confirmation_enabled confirmation_direction
+          validation_mode validation_passed
+          state_count state_multiplier original_timeframe
+          smc_decision smc_permission
+        ]
+        diagnostic_keys.each do |key|
+          meta_hash[key] = entry_metadata[key] if entry_metadata.key?(key)
+        end
+
+        # Consistency aliases for existing dashboard displays
+        meta_hash[:entry_strategy] ||= entry_metadata[:strategy]
+        meta_hash[:entry_strategy_mode] ||= entry_metadata[:strategy_mode]
+        meta_hash[:entry_timeframe] ||= entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
+        if entry_metadata[:confirmation_timeframe]
+          meta_hash[:entry_confirmation_timeframe] = entry_metadata[:confirmation_timeframe]
+        end
+        meta_hash[:entry_validation_mode] ||= entry_metadata[:validation_mode]
       end
     end
   end

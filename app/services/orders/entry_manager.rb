@@ -236,7 +236,7 @@ module Orders
       entry = tracker.entry_price.to_f
       return unless entry.positive?
 
-      premium_stop = (entry * 0.70).round(2) # 30% below entry premium
+      premium_stop = (entry * 0.80).round(2) # 20% below entry premium (tightened from 30%)
       meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
       meta['premium_stop_price'] = premium_stop
       tracker.update_column(:meta, meta)

@@ -17,6 +17,14 @@ Rails.application.routes.draw do
     get :dashboard, to: "dashboard#show"
     get :positions, to: "positions#index"
 
+    # Live AI analysis dashboard
+    get 'analysis/:index_key', to: 'analysis#show', as: :analysis
+    get 'analysis/:index_key/historical', to: 'analysis#historical', as: :analysis_historical
+
+    # Algo Settings
+    get    'settings',      to: 'settings#index'
+    patch  'settings/bulk', to: 'settings#update_bulk'
+
     # Circuit breaker — emergency halt
     # GET    /api/circuit_breaker        → status (unauthenticated)
     # POST   /api/circuit_breaker/trip   → trip   (requires X-Circuit-Breaker-Token)

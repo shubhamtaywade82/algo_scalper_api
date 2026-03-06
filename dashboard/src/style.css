@@ -1,1 +1,77 @@
 @import "tailwindcss";
+
+@theme {
+  --color-primary-50: oklch(0.97 0.01 240);
+  --color-primary-100: oklch(0.93 0.02 240);
+  --color-primary-200: oklch(0.87 0.04 240);
+  --color-primary-300: oklch(0.79 0.07 240);
+  --color-primary-400: oklch(0.68 0.11 240);
+  --color-primary-500: oklch(0.57 0.15 240);
+  --color-primary-600: oklch(0.48 0.15 240);
+  --color-primary-700: oklch(0.41 0.14 240);
+  --color-primary-800: oklch(0.35 0.11 240);
+  --color-primary-900: oklch(0.28 0.08 240);
+  --color-primary-950: oklch(0.2 0.05 240);
+
+  --color-emerald-500: oklch(0.64 0.17 145);
+  --color-rose-500: oklch(0.62 0.18 20);
+}
+
+:root {
+  --bg-main: oklch(0.12 0.02 240);
+  --bg-card: oklch(0.16 0.03 240 / 0.7);
+  --border-card: oklch(0.25 0.04 240 / 0.5);
+
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--bg-main);
+  background-image:
+    radial-gradient(at 0% 0%, oklch(0.2 0.05 240 / 0.3) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, oklch(0.25 0.1 280 / 0.2) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-card);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.glass-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-hover:hover {
+  background: oklch(0.18 0.04 240 / 0.8);
+  border-color: oklch(0.35 0.06 240 / 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+}
+
+.text-data {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-up {
+  animation: flash-green 1s ease-out;
+}
+
+.price-down {
+  animation: flash-red 1s ease-out;
+}
+
+@keyframes flash-green {
+  0% { background-color: oklch(0.64 0.17 145 / 0.3); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-red {
+  0% { background-color: oklch(0.62 0.18 20 / 0.3); }
+  100% { background-color: transparent; }
+}

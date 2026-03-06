@@ -415,10 +415,7 @@ module Live
           sensex: Live::TickCache.ltp('IDX_I', '51')
         },
         circuit_breaker: Risk::CircuitBreaker.instance.status,
-        system: {
-          ws_market_feed: Live::MarketFeedHub.instance.running?,
-          scheduler: Thread.list.any? { |t| t.name == 'signal-scheduler' } ? 'running' : 'unknown'
-        },
+        system: Live::SystemStatusCache.instance.all_statuses,
         timestamp: Time.current.iso8601
       }
     rescue StandardError

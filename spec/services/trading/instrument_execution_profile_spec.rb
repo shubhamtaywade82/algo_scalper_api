@@ -10,9 +10,9 @@ RSpec.describe Trading::InstrumentExecutionProfile do
 
         expect(profile[:allow_execution_only]).to be(true)
         expect(profile[:max_lots_by_permission]).to eq(
-          execution_only: 1,
-          scale_ready: 2,
-          full_deploy: 4
+          execution_only: 5,
+          scale_ready: 15,
+          full_deploy: 50
         )
         expect(profile[:target_model]).to eq(:absolute)
         expect(profile[:scaling_style]).to eq(:early)
@@ -27,8 +27,8 @@ RSpec.describe Trading::InstrumentExecutionProfile do
         expect(profile[:allow_execution_only]).to be(false)
         expect(profile[:max_lots_by_permission]).to eq(
           execution_only: 0,
-          scale_ready: 1,
-          full_deploy: 3
+          scale_ready: 5,
+          full_deploy: 20
         )
         expect(profile[:target_model]).to eq(:convexity)
         expect(profile[:scaling_style]).to eq(:late)
@@ -36,9 +36,22 @@ RSpec.describe Trading::InstrumentExecutionProfile do
       end
     end
 
+    context 'when symbol is BANKNIFTY' do
+      it 'returns the expected profile' do
+        profile = described_class.for('BANKNIFTY')
+
+        expect(profile[:allow_execution_only]).to be(true)
+        expect(profile[:max_lots_by_permission]).to eq(
+          execution_only: 5,
+          scale_ready: 15,
+          full_deploy: 40
+        )
+      end
+    end
+
     context 'when symbol is unsupported' do
       it 'raises' do
-        expect { described_class.for('BANKNIFTY') }.to raise_error(
+        expect { described_class.for('RELIANCE') }.to raise_error(
           Trading::InstrumentExecutionProfile::UnsupportedInstrumentError
         )
       end

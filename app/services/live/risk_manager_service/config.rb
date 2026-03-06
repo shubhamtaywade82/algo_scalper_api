@@ -41,27 +41,6 @@ module Live
         {}
       end
 
-      def hard_rupee_sl_enabled?
-        cfg = hard_rupee_sl_config
-        cfg && cfg[:enabled] == true
-      end
-
-      def hard_rupee_tp_enabled?
-        cfg = hard_rupee_tp_config
-        cfg && cfg[:enabled] == true
-      end
-
-      def hard_rupee_sl_config
-        algo_config.dig(:risk, :hard_rupee_sl)
-      rescue StandardError
-        nil
-      end
-
-      def hard_rupee_tp_config
-        algo_config.dig(:risk, :hard_rupee_tp)
-      rescue StandardError
-        nil
-      end
 
       def profit_floor_config
         raw = begin
@@ -72,7 +51,9 @@ module Live
 
         {
           enabled: raw[:enabled] == true,
+          lock_pct: float_or_nil(raw[:lock_pct]),
           lock_rupees: integer_or_nil(raw[:lock_rupees]),
+          trail_pct: float_or_nil(raw[:trail_pct]),
           breakeven_at: integer_or_nil(raw[:breakeven_at]),
           time_kill_minutes: integer_or_nil(raw[:time_kill_minutes])
         }
@@ -86,6 +67,14 @@ module Live
         nil
       end
 
+      def float_or_nil(value)
+        return nil if value.nil?
+
+        Float(value)
+      rescue StandardError
+        nil
+      end
+
       def safe_big_decimal(value)
         return nil if value.nil?
 
@@ -94,30 +83,6 @@ module Live
         nil
       end
 
-      def post_profit_zone_enabled?
-        cfg = post_profit_zone_config
-        cfg && cfg[:enabled] != false
-      end
-
-      def post_profit_zone_config
-        raw = begin
-          algo_config.dig(:risk, :post_profit_zone) || {}
-        rescue StandardError
-          {}
-        end
-
-        # Defaults
-        {
-          enabled: true,
-          secured_profit_threshold_rupees: raw[:secured_profit_threshold_rupees] || 2000,
-          runner_zone_threshold_rupees: raw[:runner_zone_threshold_rupees] || 4000,
-          secured_sl_rupees: raw[:secured_sl_rupees] || 800,
-          underlying_adx_min: raw[:underlying_adx_min] || 18.0,
-          option_pullback_max_pct: raw[:option_pullback_max_pct] || 35.0,
-          underlying_atr_collapse_threshold: raw[:underlying_atr_collapse_threshold] || 0.65,
-          runner_zone_momentum_check: raw[:runner_zone_momentum_check] || false
-        }.merge(raw)
-      end
 
       def iv_collapse_detection_enabled?
         config = begin
@@ -162,12 +127,23 @@ module Live
         true
       end
 
+      def rr_profit_booking_enabled?
+        config = algo_config.dig(:risk, :rr_profit_booking) || {}
+        config[:enabled] == true
+      rescue StandardError
+        false
+      end
+
+      def rr_profit_booking_config
+        algo_config.dig(:risk, :rr_profit_booking) || {}
+      rescue StandardError
+        {}
+      end
+
       def algo_config
-        @algo_config ||= begin
-          AlgoConfig.fetch
-        rescue StandardError
-          {}
-        end
+        AlgoConfig.fetch
+      rescue StandardError
+        {}
       end
 
       def pct_value(value)

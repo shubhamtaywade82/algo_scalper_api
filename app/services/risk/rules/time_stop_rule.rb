@@ -11,11 +11,15 @@ module Risk
     # - Dead premiums don't recover
     # - Time stops prevent "hope trades"
     #
-    # Rules:
-    # - Scalps: max 15 minutes OR 15 candles
-    # - Trend trades:
-    #   - NIFTY: max 45 minutes
-    #   - SENSEX: max 90 minutes
+    # Time limits are configurable in config/algo.yml under risk.time_stop:
+    #   time_stop:
+    #     scalp:
+    #       max_minutes: 15
+    #       max_candles: 15
+    #     trend:
+    #       NIFTY: 45
+    #       BANKNIFTY: 45
+    #       SENSEX: 90
     #
     # Exit regardless of PnL when time exceeded.
     #
@@ -23,8 +27,8 @@ module Risk
     class TimeStopRule < BaseRule
       PRIORITY = 40
 
-      # Time limits by trade type and index
-      TIME_LIMITS = {
+      # Default time limits (used as fallback if config is missing)
+      DEFAULT_TIME_LIMITS = {
         scalp: {
           max_minutes: 15,
           max_candles: 15
@@ -49,6 +53,13 @@ module Risk
 
         return skip_result unless time_limit
 
+        # Bypass time stop if the trade is in profit (let winners run)
+        pnl = context.position.pnl.to_f
+        if pnl > 0.0
+          Rails.logger.debug { "[TimeStopRule] Bypassing time stop for #{tracker.order_no} as it is in profit (₹#{pnl.round(2)})" }
+          return skip_result
+        end
+
         # Check if time limit exceeded
         entry_time = tracker.created_at
         elapsed_minutes = ((Time.current - entry_time) / 60.0).round(2)
@@ -64,7 +75,7 @@ module Risk
 
         # For scalps, also check candle count
         if trade_type == :scalp
-          candle_limit = TIME_LIMITS[:scalp][:max_candles]
+          candle_limit = time_limits[:scalp][:max_candles] || DEFAULT_TIME_LIMITS[:scalp][:max_candles]
           if candle_count_exceeded?(tracker, candle_limit)
             reason = "TIME_STOP (scalp exceeded #{candle_limit} candles)"
             return exit_result(reason: reason, metadata: {
@@ -81,6 +92,20 @@ module Risk
       end
 
       private
+
+      # Load time limits from config, falling back to defaults
+      def time_limits
+        @time_limits ||= begin
+          cfg = AlgoConfig.fetch.dig(:risk, :time_stop) || {}
+          {
+            scalp: {
+              max_minutes: cfg.dig(:scalp, :max_minutes) || DEFAULT_TIME_LIMITS[:scalp][:max_minutes],
+              max_candles: cfg.dig(:scalp, :max_candles) || DEFAULT_TIME_LIMITS[:scalp][:max_candles]
+            },
+            trend: cfg[:trend]&.transform_keys(&:to_s) || DEFAULT_TIME_LIMITS[:trend]
+          }
+        end
+      end
 
       # Determine trade type from tracker metadata or entry path
       def determine_trade_type(tracker)
@@ -99,13 +124,15 @@ module Risk
 
       # Get time limit for this trade
       def get_time_limit(tracker, trade_type)
+        limits = time_limits
+
         if trade_type == :scalp
-          return TIME_LIMITS[:scalp][:max_minutes]
+          return limits[:scalp][:max_minutes]
         end
 
         # Trend trade: get index-specific limit
         index_key = tracker.meta&.dig('index_key') || 'NIFTY'
-        TIME_LIMITS[:trend][index_key] || TIME_LIMITS[:trend]['NIFTY']
+        limits[:trend][index_key] || limits[:trend]['NIFTY']
       end
 
       # Check if candle count exceeded (for scalps)

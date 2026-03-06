@@ -5,6 +5,6 @@
 #   { type: "pnl_update", id:, ltp:, pnl:, pnl_pct:, hwm_pnl: }
 class PositionsChannel < ApplicationCable::Channel
   def subscribed
-    stream_from "positions"
+    stream_from 'positions'
   end
 end

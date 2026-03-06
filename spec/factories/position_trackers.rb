@@ -3,6 +3,7 @@
 FactoryBot.define do
   factory :position_tracker do
     instrument
+    association :watchable, factory: :instrument
     sequence(:order_no) { |n| "ORD#{n.to_s.rjust(6, '0')}" }
     security_id { instrument.security_id }
     symbol { instrument.symbol_name }

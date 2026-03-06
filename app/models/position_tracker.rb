@@ -39,7 +39,7 @@ class PositionTracker < ApplicationRecord
 
   # Attribute accessors
   store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
-                 :exit_path, :exit_reason
+                 :exit_path, :exit_reason, :highest_price
 
   # Enums
   enum :status, {
