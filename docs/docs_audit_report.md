@@ -1,63 +1,63 @@
-# Documentation Audit Report
+# Documentation Audit Report (Mandate v2)
 
-This report evaluates the existing documentation in the `docs/` directory against the current codebase implementation (Source of Truth).
+This report provides the final audit and classification of the documentation in `docs/` against the codebase (Source of Truth).
 
 ## Classification Summary
 
-| File | Status | Action | Notes |
+| Component | Document | Status | Action |
 | :--- | :--- | :--- | :--- |
-| `COMPLETE_SYSTEM_FLOW.md` | VALID | CONSOLIDATE | Highly accurate. Should be the base for Architecture documentation. |
-| `SIGNAL_GENERATION_FLOW.md` | VALID | UPDATE | Accurate flow, but needs updates on specific validator names and config keys. |
-| `EXIT_MECHANISM_AND_RULES.md` | VALID | UPDATE | Excellent detail. Needs alignment with latest `RiskManagerService` refactors. |
-| `TRADING_SYSTEM_GUIDE.md` | VALID | CONSOLIDATE | Good high-level overview. Merge into Guides. |
-| `ALGO_CONFIG_USAGE.md` | VALID | MOVE | Useful for developers. Move to Infrastructure. |
-| `DhanHQ_API_Integration.md` | VALID | MOVE | Core integration detail. Move to Infrastructure. |
-| `SUPER_TREND_INDICATOR.rb.md` | VALID | MOVE | Technical detail on indicator. Move to Trading. |
-| `TESTING_GUIDE.md` | VALID | UPDATE | Essential for dev. Update with latest test suites. |
-| `README.md` (root) | OUTDATED | REWRITE | Too sparse. Needs to reflect the reconstructed architecture. |
+| High-level | `README.md` | VALID | Polish (Completed Phase 8) |
+| Architecture | `docs/architecture/system-overview.md` | VALID | Keep |
+| Architecture | `docs/architecture/execution-flow.md` | VALID | Rename to `trade-execution-flow.md` |
+| Architecture | `docs/architecture/components.md` | VALID | Rename to `component-map.md` |
+| Logic | `docs/trading/signal_engine.md` | VALID | Split into `strategy-engine.md` and `signal-generation.md` |
+| Risk | `docs/trading/risk_management.md` | VALID | Rename to `risk-management.md` |
+| Risk | `docs/trading/safety_mechanisms.md` | VALID | Consolidate into `risk-management.md` or `exit-management.md` |
+| Integration | `docs/integrations/dhanhq-api.md` | VALID | Move to `market-data/dhanhq-integration.md` |
+| Integration | `docs/integrations/websocket-integration.md` | VALID | Move to `market-data/websocket-feed.md` |
+| Infrastructure | `docs/architecture/websocket-feed.md` | VALID | Move to `market-data/websocket-feed.md` |
+| Management | `docs/trading/position-management.md` | NEW | Create (from `ActiveCacheService` analysis) |
+| Management | `docs/trading/exit-management.md` | NEW | Create (from `ExitEngine` and `UnifiedExitChecker` analysis) |
+| Dev | `docs/development/local-setup.md` | VALID | Keep |
+| Dev | `docs/development/testing.md` | VALID | Keep |
+| Dev | `docs/development/deployment.md` | VALID | Keep |
 
-## Detailed Audit Findings
+---
 
-### 1. System Architecture
-The `COMPLETE_SYSTEM_FLOW.md` correctly identifies the `Trading::Supervisor` as the orchestrator. The service list and their dependencies are verified against `config/initializers/trading_supervisor.rb`.
-
-### 2. Trading Lifecycle
-The `SIGNAL_GENERATION_FLOW.md` and `EXIT_MECHANISM_AND_RULES.md` provide a 90% accurate representation of the code. Minor discrepancies exist in naming conventions (e.g., `Indicators::Supertrend` vs `Indicator::Supertrend`) and some deeply nested risk rules.
-
-### 3. Missing Documentation
-- **Circuit Breaker & Edge Failure**: While mentioned in passing, there is no dedicated doc for the emergency halt mechanisms.
-- **WebSocket Data Hub**: Deep technical detail on the hub's resilience and fallback logic is thin.
-- **SMC Alignment Logic**: The integration with Smart Money Concepts (SMC) via `SmcController` and `SmcScannerJob` is not fully documented.
-
-## Proposed New Structure
+## Proposed New Structure (Phase 6 Alignment)
 
 ```text
 docs/
-├── architecture/           # High-level system design
-│   ├── system_overview.md  (from COMPLETE_SYSTEM_FLOW)
-│   ├── components_map.md   (NEW - Phase 3)
-│   └── data_flow.md        (NEW - Phase 3)
-├── trading/                # Strategy and execution logic
-│   ├── signal_engine.md    (from SIGNAL_GENERATION_FLOW)
-│   ├── entries_gate.md     (from EntryGuard implementation)
-│   └── order_execution.md  (from Placer/Router implementation)
-├── risk/                   # Risk management and survival
-│   ├── risk_manager.md     (from EXIT_MECHANISM_AND_RULES)
-│   ├── circuit_breaker.md  (NEW)
-│   └── dynamic_sizing.rb   (from CapitalAllocator implementation)
-├── infrastructure/         # External integrations and DevOps
-│   ├── dhan_integration.md (from DhanHQ_API_Integration)
-│   ├── websocket_hub.md    (NEW)
-│   └── redis_cache.md      (NEW)
-├── guides/                 # Developer and operator guides
-│   ├── setup_guide.md
-│   ├── testing_guide.md    (from TESTING_GUIDE)
-│   └── troubleshooting.md
-└── archive/                # Deprecated or redundant docs
+├── architecture/
+│   ├── system-overview.md
+│   ├── trade-execution-flow.md
+│   └── component-map.md
+├── trading/
+│   ├── strategy-engine.md
+│   ├── signal-generation.md
+│   ├── risk-management.md
+│   ├── position-management.md
+│   └── exit-management.md
+├── market-data/
+│   ├── dhanhq-integration.md
+│   └── websocket-feed.md
+├── development/
+│   ├── local-setup.md
+│   ├── testing.md
+│   └── deployment.md
+└── archive/
+    └── needs-review/
 ```
 
-## Next Actions
-1. **Archive Redundant Files**: Move all current `docs/*.md` to `docs/archive/` after extracting content.
-2. **Implement New Structure**: Create directories and populate with cleaned, verified markdown files.
-3. **Generate Diagrams**: Use Mermaid to visualize the discovered flows.
-4. **Rewrite Root README**: Point to the new documentation structure.
+## Discovered Architecture Summary
+
+- **Entrypoint**: `Signal::Scheduler` triggers intervals for indices.
+- **Brain**: `Signal::Engine` performs multi-timeframe TA (Supertrend/ADX) or uses `StrategyRecommender`.
+- **Validation**: `Entries::EntryGuard` enforces circuit breakers, exposure limits, and daily PnL caps.
+- **Execution**: `Orders::EntryManager` resolves strikes via `Options::ChainAnalyzer` and routes to `Orders::Placer`.
+- **Active State**: `Positions::ActiveCacheService` maintains real-time tracking in Redis.
+- **Safety**: `Live::RiskManagerService` monitors PnL and triggers `Live::ExitEngine` via `UnifiedExitChecker`.
+- **Data Backbone**: `Live::MarketFeedHub` manages high-performance WebSocket ticks from DhanHQ.
+
+## Decision
+I am ready to proceed with the final folder/file renames and the creation of the missing `position-management.md` and `exit-management.md` documents.

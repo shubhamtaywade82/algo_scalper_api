@@ -1,0 +1,15 @@
+---
+description: Documentation Standards
+globs: docs/**/*.md, README.md
+---
+
+# Documentation Standards
+
+1. **Code is Truth:** Documentation must be derived from real code.
+2. **No Hypotheticals:** Never document hypothetical or planned features as if they exist.
+3. **Explicit References:** Documentation must reference actual implementation files.
+   *Example:*
+   Exit Management
+   Implementation: `app/services/orders/executor.rb`
+4. **Archiving:** Move outdated implementation logs and design docs to `docs/archive/`.
+5. **Brevity:** Prefer short technical docs over long speculative ones.
