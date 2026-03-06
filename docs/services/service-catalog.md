@@ -1,6 +1,6 @@
 # Service Catalog
 
-Comprehensive list of major service classes in the ARES Trading System.
+Comprehensive list of major service classes in the Algo Scalper API Trading System.
 
 ## Trading Services
 

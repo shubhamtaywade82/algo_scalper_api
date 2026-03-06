@@ -1,10 +1,10 @@
-# Algorithmic Scalper API (ARES)
+# Algorithmic Scalper API (Algo Scalper API)
 
 A production-grade algorithmic trading system built with Ruby on Rails, designed for high-frequency scalping on Indian Indices (Nifty, BankNifty) via the DhanHQ API.
 
 ## 🚀 System Overview
 
-ARES is an institutional-grade trading bot that automates the entire trade lifecycle—from signal identification using technical analysis (Supertrend, ADX, SMC) to dynamic risk-managed exits. It features a unique **Process-Isolated Execution Engine** that ensures low-latency market data processing and order execution separate from the web/dashboard overhead.
+Algo Scalper API is an institutional-grade trading bot that automates the entire trade lifecycle—from signal identification using technical analysis (Supertrend, ADX, SMC) to dynamic risk-managed exits. It features a unique **Process-Isolated Execution Engine** that ensures low-latency market data processing and order execution separate from the web/dashboard overhead.
 
 ### Key Features
 - **Multi-Strategy Engine**: Dynamic switching between Supertrend-based trend following and Advanced Strategy Recommendations.

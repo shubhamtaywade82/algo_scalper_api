@@ -1,14 +1,14 @@
 # C1: System Context Diagram
 
-This document describes the high-level relationship between ARES and its environment.
+This document describes the high-level relationship between Algo Scalper API and its environment.
 
 ## Overview
-ARES is an automated trading system that acts as a bridge between Strategy logic and Broker execution.
+Algo Scalper API is an automated trading system that acts as a bridge between Strategy logic and Broker execution.
 
 ```mermaid
 flowchart TD
     Trader((Trader))
-    ares[ARES Trading System]
+    ares[Algo Scalper API Trading System]
     dhan[DhanHQ API]
     telegram[Telegram]
 

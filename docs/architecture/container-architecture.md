@@ -1,13 +1,13 @@
 # C2: Container Architecture
 
-Detailed look at the technical containers that make up the ARES system.
+Detailed look at the technical containers that make up the Algo Scalper API system.
 
 ## Overview
-ARES is built on a distributed boundary but typically runs as a single logical unit. It separates concern between the **Web Interface**, the **Trading Daemon**, and the **State Cache**.
+Algo Scalper API is built on a distributed boundary but typically runs as a single logical unit. It separates concern between the **Web Interface**, the **Trading Daemon**, and the **State Cache**.
 
 ```mermaid
 C4Container
-    title Container Diagram for ARES Trading System
+    title Container Diagram for Algo Scalper API Trading System
 
     Container(web, "Web Dashboard", "Rails / Vue3", "Provides UI for monitoring and control.")
     Container(daemon, "Trading Daemon", "Ruby / BaseService", "Orchestrates signal generation and risk management.")

@@ -1,15 +1,15 @@
 # System Architecture Report (Mandate v3)
 
-This report provides a comprehensive reverse-engineered view of the ARES Trading System architecture, documented directly from the codebase.
+This report provides a comprehensive reverse-engineered view of the Algo Scalper API Trading System architecture, documented directly from the codebase.
 
 ## 1. System Context (C1)
 
-The ARES Trading System is an automated platform that interacts with external broker APIs and market data providers to execute algorithmic strategies.
+The Algo Scalper API Trading System is an automated platform that interacts with external broker APIs and market data providers to execute algorithmic strategies.
 
 ```mermaid
 flowchart TD
     Trader((Trader))
-    ares[ARES Trading System]
+    ares[Algo Scalper API Trading System]
     dhan[DhanHQ API]
     telegram[Telegram]
 
@@ -20,7 +20,7 @@ flowchart TD
 
 ## 2. Container Architecture (C2)
 
-ARES is structured as a Ruby on Rails application with process-isolated components for trading and data handling.
+Algo Scalper API is structured as a Ruby on Rails application with process-isolated components for trading and data handling.
 
 ```mermaid
 flowchart TD
