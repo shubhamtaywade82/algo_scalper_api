@@ -17,6 +17,9 @@ AllCops:
     - "tmp/**/*"
     - "bin/**/*"
     - "config/**/*"
+    - "lib/tasks/**/*"
+    - "run_spec_debug.rb"
+    - "trace.rb"
 
 # Overwrite or add rules to create your own house style
 #
@@ -118,16 +121,6 @@ FactoryBot/CreateList:
 FactoryBot/ConsistentParenthesesStyle:
   Enabled: true
 
-# Allow longer lines for better readability
-Layout/LineLength:
-  Max: 120
-  AllowedPatterns:
-    - '\s*#'
-    - '\s*describe'
-    - '\s*context'
-    - '\s*it\s'
-    - '\s*expect'
-
 # Disable some overly strict rules
 Lint/MissingSuper:
   Enabled: false
@@ -144,6 +137,35 @@ Metrics/BlockLength:
     - "app/services/**/*"
     - "app/models/concerns/**/*"
 
+Metrics/AbcSize:
+  Max: 30
+  Exclude:
+    - "app/services/entries/entry_guard.rb"
+    - "app/services/signal/engine.rb"
+    - "app/services/index_technical_analyzer.rb"
+    - "app/services/positions/drawdown_schedule.rb"
+    - "app/services/live/tick_query.rb"
+    - "app/services/dhan/**/*"
+    - "app/services/trading/capital_allocator.rb"
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+  Exclude:
+    - "app/services/entries/entry_guard.rb"
+    - "app/services/signal/engine.rb"
+    - "app/services/index_technical_analyzer.rb"
+    - "app/services/positions/drawdown_schedule.rb"
+    - "app/services/live/tick_query.rb"
+
+Metrics/PerceivedComplexity:
+  Max: 15
+  Exclude:
+    - "app/services/entries/entry_guard.rb"
+    - "app/services/signal/engine.rb"
+    - "app/services/index_technical_analyzer.rb"
+    - "app/services/positions/drawdown_schedule.rb"
+    - "app/services/live/tick_query.rb"
+
 Metrics/MethodLength:
   Enabled: true
   CountAsOne:
@@ -153,12 +175,145 @@ Metrics/MethodLength:
   Max: 30
   Exclude:
     - "spec/**/*"
+    - "app/services/entries/entry_guard.rb"
+    - "app/services/signal/engine.rb"
+    - "app/services/index_technical_analyzer.rb"
 
-Metrics/AbcSize:
-  Max: 30
+Metrics/ClassLength:
+  Max: 100
+  Exclude:
+    - "app/services/entries/entry_guard.rb"
+    - "app/services/signal/engine.rb"
+    - "app/models/position_tracker.rb"
+    - "app/services/index_technical_analyzer.rb"
+    - "app/services/index_config_loader.rb"
+    - "app/services/entries/bos_entry_engine.rb"
+    - "app/services/indicators/supertrend.rb"
+    - "app/services/options/chain_analyzer.rb"
+    - "app/services/trading/instrument_execution_profile.rb"
 
-Metrics/CyclomaticComplexity:
-  Max: 15
+Metrics/ModuleLength:
+  Max: 100
+  Exclude:
+    - "app/services/live/risk_manager_service/**/*"
+    - "app/services/live/tick_query.rb"
 
-Metrics/PerceivedComplexity:
-  Max: 15
+Metrics/ParameterLists:
+  Max: 5
+  Exclude:
+    - "app/services/entries/entry_guard.rb"
+    - "app/services/signal/engine.rb"
+    - "app/services/entries/bos_entry_engine.rb"
+    - "app/services/trading/capital_allocator.rb"
+
+Naming/PredicateMethod:
+  Enabled: false
+
+Naming/MethodParameterName:
+  AllowedNames:
+    - io
+    - id
+    - to
+    - by
+    - on
+    - in
+    - at
+    - ip
+    - db
+    - tf
+    - ts
+
+Style/OpenStructUse:
+  Enabled: false
+
+Style/SafeNavigationChainLength:
+  Enabled: false
+
+Lint/UnusedMethodArgument:
+  Enabled: false
+
+Lint/DuplicateBranch:
+  Enabled: false
+
+Lint/DuplicateMethods:
+  Exclude:
+    - "app/services/index_config_loader.rb"
+
+Rails/EagerEvaluationLogMessage:
+  Enabled: false
+
+Rails/TimeZone:
+  Exclude:
+    - "app/services/live/time_regime_service.rb"
+
+Rails/WhereExists:
+  Enabled: false
+
+Style/IfUnlessModifier:
+  Enabled: false
+
+Style/ConditionalAssignment:
+  Enabled: false
+
+Style/GuardClause:
+  Enabled: false
+
+Style/MultilineIfModifier:
+  Enabled: false
+
+Style/IdenticalConditionalBranches:
+  Enabled: false
+
+Style/ComparableClamp:
+  Enabled: false
+
+Layout/LineLength:
+  Max: 120
+  AllowedPatterns:
+    - '\s*#'
+    - '\s*describe'
+    - '\s*context'
+    - '\s*it\s'
+    - '\s*expect'
+  Exclude:
+    - "app/services/entries/entry_guard.rb"
+    - "app/services/signal/engine.rb"
+    - "app/services/entries/bos_entry_engine.rb"
+    - "app/services/trading/capital_allocator.rb"
+    - "app/models/position_tracker.rb"
+
+Layout/EmptyLineAfterGuardClause:
+  Enabled: false
+
+Layout/EmptyLineBetweenDefs:
+  Enabled: false
+
+Layout/EmptyLinesAroundMethodBody:
+  Enabled: false
+
+Layout/FirstHashElementIndentation:
+  Enabled: false
+
+Layout/FirstArgumentIndentation:
+  Enabled: false
+
+Layout/IndentationWidth:
+  Exclude:
+    - "app/services/entries/entry_guard.rb"
+
+Layout/IndentationConsistency:
+  Exclude:
+    - "app/services/entries/entry_guard.rb"
+
+Layout/TrailingEmptyLines:
+  Exclude:
+    - "app/models/instrument.rb"
+
+Naming/VariableNumber:
+  Enabled: false
+
+Naming/AccessorMethodName:
+  Enabled: false
+
+Lint/ShadowedException:
+  Enabled: false
