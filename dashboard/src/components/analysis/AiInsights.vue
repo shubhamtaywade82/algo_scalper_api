@@ -35,7 +35,7 @@ function formatMarkdown(raw) {
         AI insights unavailable
       </div>
       <div class="text-gray-700 text-[9px] mt-2 tracking-wider">
-        Configure OLLAMA_BASE_URL or OPENAI_API_KEY to enable
+        The AI model is either processing data or timed out. Please wait or check model performance.
       </div>
     </div>
   </div>
