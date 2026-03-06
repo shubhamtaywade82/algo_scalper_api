@@ -16,7 +16,7 @@ class AnalysisJob < ApplicationJob
 
   retry_on StandardError, wait: -> (executions) { 2**executions }, attempts: 2
 
-  AI_TIMEOUT = 45 # seconds
+  AI_TIMEOUT = 120 # seconds
 
   def perform(index_key = nil, force: false)
     indices = index_key ? [index_key.upcase] : all_index_keys
