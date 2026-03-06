@@ -11,6 +11,7 @@
 #   AnalysisJob.perform_later('NIFTY', force: true) # Single index, force refresh
 #
 class AnalysisJob < ApplicationJob
+  self.queue_adapter = :async
   queue_as :background
 
   retry_on StandardError, wait: -> (executions) { 2**executions }, attempts: 2

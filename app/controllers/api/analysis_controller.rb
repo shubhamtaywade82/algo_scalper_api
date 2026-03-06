@@ -15,7 +15,11 @@ module Api
       # Trigger background refresh for stale components
       stale = AnalysisStore.stale_components(index_key)
       if stale.any?
-        AnalysisJob.perform_later(index_key, force: params[:force] == 'true')
+        Thread.new do
+          Rails.application.executor.wrap do
+            AnalysisJob.perform_now(index_key, force: params[:force] == 'true')
+          end
+        end
       end
 
       # Fast lookups (no cache needed — instant)

@@ -7,9 +7,9 @@ paper_trading:
 # Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
 # Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
 trading_time_restrictions:
-  enabled: true # Set to true to enable time-based restrictions
+  enabled: false # Set to true to enable time-based restrictions
   avoid_periods: ["10:00-12:30"] # Block mid-morning churn session as per analysis
-  block_exits: true # Set to true to block automated exits (SL/TP/Trailing) during blackout
+  block_exits: false # Set to true to block automated exits (SL/TP/Trailing) during blackout
   # Example based on analysis results:
   # avoid_periods:
   #   - "10:30-11:30"  # Morning non-profitable period
@@ -53,8 +53,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 25 # 1m ADX threshold (strict filter for options buying)
-      confirmation_min_strength: 20 # 5m ADX threshold
+      primary_min_strength: 8 # 1m ADX threshold (strict filter for options buying)
+      confirmation_min_strength: 8 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -96,8 +96,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (use global default)
-      confirmation_min_strength: 18 # 5m ADX threshold (70% of typical ~44)
+      primary_min_strength: 8 # 1m ADX threshold (use global default)
+      confirmation_min_strength: 8 # 5m ADX threshold (70% of typical ~44)
 
     strategies:
       open_interest:
@@ -139,8 +139,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 28 # 1m ADX threshold (very strict filter for volatile Sensex)
-      confirmation_min_strength: 22 # 5m ADX threshold
+      primary_min_strength: 8 # 1m ADX threshold (very strict filter for volatile Sensex)
+      confirmation_min_strength: 8 # 5m ADX threshold
 
     strategies:
       open_interest:
