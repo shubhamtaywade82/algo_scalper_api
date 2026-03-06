@@ -78,6 +78,12 @@ function inr(val) {
         <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 group-[.router-link-active]:opacity-100 transition-opacity"></div>
         Analysis
       </router-link>
+      <router-link to="/settings" class="px-5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white text-gray-500 flex items-center gap-2 group"
+        active-class="bg-cyan-500/20 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.15)] border border-cyan-500/30"
+      >
+        <div class="w-1 h-1 rounded-full bg-cyan-400 opacity-0 group-[.router-link-active]:opacity-100 transition-opacity"></div>
+        Settings
+      </router-link>
     </nav>
 
     <!-- Right: system status + connection -->
