@@ -3,6 +3,13 @@
 module Live
   class RiskManagerService
     module ExitEnforcement
+      # Lightweight struct for ETF position data (replaces OpenStruct for performance)
+      EtfPositionData = Struct.new(
+        :trend_score, :peak_trend_score, :adx, :atr_ratio,
+        :underlying_price, :vwap, :is_long?,
+        keyword_init: true
+      )
+
       # Enforcement methods always accept an exit_engine keyword. They do not fetch positions from caller.
       # If exit_engine is provided, they will delegate the actual exit to it. Otherwise they call internal execute_exit.
 
@@ -699,7 +706,7 @@ module Live
         # VWAP (simplified: use recent average price)
         vwap = candles.any? ? candles.last(20).sum(&:close) / candles.last(20).size : underlying_price
 
-        OpenStruct.new(
+        EtfPositionData.new(
           trend_score: trend_score,
           peak_trend_score: peak_trend_score,
           adx: adx_hash[:value],
@@ -710,7 +717,7 @@ module Live
         )
       rescue StandardError => e
         Rails.logger.error("[RiskManager] build_position_data_for_etf error: #{e.class} - #{e.message}")
-        OpenStruct.new(
+        EtfPositionData.new(
           trend_score: 0,
           peak_trend_score: 0,
           adx: nil,

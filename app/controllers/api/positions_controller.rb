@@ -12,65 +12,71 @@ module Api
     private
 
     def open_positions
-      PositionTracker.active.includes(:watchable, :instrument).map { |t| serialize_open(t) }
+      PositionTracker.active.includes(:watchable, :instrument).map { |tracker| serialize_open(tracker) }
     end
 
     def closed_positions
       today = Time.zone.today
       PositionTracker.exited
-                     .where(exited_at: today.beginning_of_day..today.end_of_day)
+                     .where(exited_at: today.all_day)
                      .includes(:watchable, :instrument)
                      .order(exited_at: :desc)
-                     .map { |t| serialize_closed(t) }
+                     .map { |tracker| serialize_closed(tracker) }
     end
 
-    def serialize_open(t)
-      cache = Live::RedisPnlCache.instance.fetch_pnl(t.id) || {}
-      ltp    = (cache[:ltp] || t.avg_price.to_f).to_f
-      entry  = t.entry_price.to_f
+    def serialize_open(tracker)
+      cache = Live::RedisPnlCache.instance.fetch_pnl(tracker.id) || {}
+      ltp    = (cache[:ltp] || tracker.avg_price.to_f).to_f
+      entry  = tracker.entry_price.to_f
       {
-        id: t.id,
-        order_no: t.order_no,
-        symbol: t.symbol,
-        side: t.side,
-        quantity: t.quantity.to_i,
+        id: tracker.id,
+        order_no: tracker.order_no,
+        symbol: tracker.symbol,
+        side: tracker.side,
+        quantity: tracker.quantity.to_i,
         entry_price: entry.round(2),
         ltp: ltp.round(2),
-        pnl: (cache[:pnl] || t.last_pnl_rupees.to_f).round(2),
-        pnl_pct: entry.positive? && ltp.positive? ? (((ltp - entry) / entry) * 100).round(2) : 0.0,
-        hwm_pnl: (cache[:hwm_pnl] || t.high_water_mark_pnl.to_f).round(2),
-        index_key: t.index_key || t.meta&.dig('index_key'),
-        direction: t.direction || t.meta&.dig('direction'),
-        entry_strategy: t.entry_strategy,
-        segment: t.segment,
-        paper: t.paper?,
+        pnl: (cache[:pnl] || tracker.last_pnl_rupees.to_f).round(2),
+        pnl_pct: pnl_pct(entry, ltp),
+        hwm_pnl: (cache[:hwm_pnl] || tracker.high_water_mark_pnl.to_f).round(2),
+        index_key: tracker.index_key || tracker.meta&.dig('index_key'),
+        direction: tracker.direction || tracker.meta&.dig('direction'),
+        entry_strategy: tracker.entry_strategy,
+        segment: tracker.segment,
+        paper: tracker.paper?,
         time_in_position_sec: cache[:time_in_position_sec],
-        created_at: t.created_at.iso8601
+        created_at: tracker.created_at.iso8601
       }
     end
 
-    def serialize_closed(t)
-      entry = t.entry_price.to_f
-      exit  = t.exit_price.to_f
+    def serialize_closed(tracker)
+      entry = tracker.entry_price.to_f
+      exit_p = tracker.exit_price.to_f
       {
-        id: t.id,
-        order_no: t.order_no,
-        symbol: t.symbol,
-        side: t.side,
-        quantity: t.quantity.to_i,
+        id: tracker.id,
+        order_no: tracker.order_no,
+        symbol: tracker.symbol,
+        side: tracker.side,
+        quantity: tracker.quantity.to_i,
         entry_price: entry.round(2),
-        exit_price: exit.round(2),
-        pnl: t.last_pnl_rupees.to_f.round(2),
-        pnl_pct: entry.positive? && exit.positive? ? (((exit - entry) / entry) * 100).round(2) : 0.0,
-        hwm_pnl: t.high_water_mark_pnl.to_f.round(2),
-        exit_reason: t.exit_reason || t.meta&.dig('exit_reason'),
-        index_key: t.index_key || t.meta&.dig('index_key'),
-        direction: t.direction || t.meta&.dig('direction'),
-        segment: t.segment,
-        paper: t.paper?,
-        exited_at: t.exited_at&.iso8601,
-        created_at: t.created_at.iso8601
+        exit_price: exit_p.round(2),
+        pnl: tracker.last_pnl_rupees.to_f.round(2),
+        pnl_pct: pnl_pct(entry, exit_p),
+        hwm_pnl: tracker.high_water_mark_pnl.to_f.round(2),
+        exit_reason: tracker.exit_reason || tracker.meta&.dig('exit_reason'),
+        index_key: tracker.index_key || tracker.meta&.dig('index_key'),
+        direction: tracker.direction || tracker.meta&.dig('direction'),
+        segment: tracker.segment,
+        paper: tracker.paper?,
+        exited_at: tracker.exited_at&.iso8601,
+        created_at: tracker.created_at.iso8601
       }
+    end
+
+    def pnl_pct(entry, current)
+      return 0.0 unless entry.positive? && current.positive?
+
+      (((current - entry) / entry) * 100).round(2)
     end
   end
 end

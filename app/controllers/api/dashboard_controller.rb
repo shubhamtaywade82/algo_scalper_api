@@ -40,17 +40,7 @@ module Api
     def sorted_indices_with_strategy
       signals_cfg = AlgoConfig.fetch[:signals] || {}
       IndexConfigLoader.load_indices.map do |idx|
-        # Determine strategy from config (mimicking Signal::Engine logic)
-        entry_primary = (signals_cfg.dig(:entry_strategy, :primary) || signals_cfg[:entry_strategy].to_s).to_s.strip.downcase
-
-        strategy_name = if entry_primary == 'supertrend'
-                          'supertrend_trend'
-                        elsif signals_cfg[:use_strategy_recommendations]
-                          rec = StrategyRecommender.best_for_index(symbol: idx[:key])
-                          rec ? "#{rec[:strategy_name]} (#{rec[:interval]}m)" : 'supertrend_adx'
-                        else
-                          'supertrend_adx'
-                        end
+        strategy_name = resolve_strategy_name(signals_cfg, idx[:key])
 
         idx.merge(
           ltp: Live::TickCache.ltp(idx[:segment], idx[:sid]),
@@ -59,6 +49,21 @@ module Api
         )
       end
     end
+
+    def resolve_strategy_name(signals_cfg, index_key)
+      entry_cfg = signals_cfg[:entry_strategy]
+      entry_primary = (entry_cfg.is_a?(Hash) ? entry_cfg[:primary] : entry_cfg).to_s.strip.downcase
+
+      if entry_primary == 'supertrend'
+        'supertrend_trend'
+      elsif signals_cfg[:use_strategy_recommendations]
+        rec = StrategyRecommender.best_for_index(symbol: index_key)
+        rec ? "#{rec[:strategy_name]} (#{rec[:interval]}m)" : 'supertrend_adx'
+      else
+        'supertrend_adx'
+      end
+    end
+
     def safe_wallet_snapshot
       Orders.config.gateway.wallet_snapshot
     rescue StandardError

@@ -201,6 +201,18 @@ risk:
     enabled: true
     target_rr: 2.5        # Exit fully at 2.5R (e.g., if SL is 10%, TP at 25%)
 
+  # Time Stop: Prevents holding dead trades beyond time limits
+  # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
+  time_stop:
+    enabled: true
+    scalp:
+      max_minutes: 15
+      max_candles: 15
+    trend:
+      NIFTY: 45       # minutes
+      BANKNIFTY: 45    # minutes
+      SENSEX: 90       # minutes
+
   # Institutional Trailing System (3-Phase)
   # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
   # Parameters derived from avg max gain, avg post-peak retracement, and session stats
