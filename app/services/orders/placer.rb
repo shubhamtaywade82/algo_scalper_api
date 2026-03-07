@@ -36,20 +36,19 @@ module Orders
         end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
-          transactionType: 'BUY',
-          exchangeSegment: seg,
-          securityId: sid.to_s,
+          transaction_type: DhanHQ::Constants::TransactionType::BUY,
+          exchange_segment: seg,
+          security_id: sid.to_s,
           quantity: qty.to_i,
-          orderType: 'MARKET',
-          productType: product_type,
-          validity: 'DAY',
-          correlationId: normalized_id,
-          disclosedQuantity: 0
+          order_type: DhanHQ::Constants::OrderType::MARKET,
+          product_type: product_type,
+          validity: DhanHQ::Constants::Validity::DAY,
+          correlation_id: normalized_id,
+          disclosed_quantity: 0
         }
         payload[:price] = price if price.present?
-        payload[:boProfitValue] = target_price if target_price.present?
-        payload[:boStopLossValue] = stop_loss_price if stop_loss_price.present?
+        payload[:bo_profit_value] = target_price if target_price.present?
+        payload[:bo_stop_loss_value] = stop_loss_price if stop_loss_price.present?
 
         Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
 
@@ -91,16 +90,15 @@ module Orders
                      end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
-          transactionType: 'SELL',
-          exchangeSegment: position ? position[:exchange_segment] : seg,
-          securityId: sid.to_s,
+          transaction_type: DhanHQ::Constants::TransactionType::SELL,
+          exchange_segment: position ? position[:exchange_segment] : seg,
+          security_id: sid.to_s,
           quantity: actual_qty.to_i,
-          orderType: 'MARKET',
-          productType: position ? position[:product_type] : product_type,
-          validity: 'DAY',
-          disclosedQuantity: 0,
-          correlationId: normalized_id
+          order_type: DhanHQ::Constants::OrderType::MARKET,
+          product_type: position ? position[:product_type] : product_type,
+          validity: DhanHQ::Constants::Validity::DAY,
+          disclosed_quantity: 0,
+          correlation_id: normalized_id
         }
 
         Rails.logger.info("[Orders::Placer] SELL payload: #{payload.inspect}")
@@ -152,16 +150,15 @@ module Orders
                            end
 
         payload = {
-          dhanClientId: DhanHQ.configuration.client_id || ENV['DHAN_CLIENT_ID'] || ENV.fetch('CLIENT_ID', nil),
-          transactionType: transaction_type,
-          exchangeSegment: actual_segment,
-          securityId: sid.to_s,
+          transaction_type: transaction_type,
+          exchange_segment: actual_segment,
+          security_id: sid.to_s,
           quantity: actual_qty.to_i,
-          orderType: 'MARKET',
-          productType: position_details[:product_type],
-          validity: 'DAY',
-          disclosedQuantity: 0,
-          correlationId: normalized_id
+          order_type: DhanHQ::Constants::OrderType::MARKET,
+          product_type: position_details[:product_type],
+          validity: DhanHQ::Constants::Validity::DAY,
+          disclosed_quantity: 0,
+          correlation_id: normalized_id
         }
 
         Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")

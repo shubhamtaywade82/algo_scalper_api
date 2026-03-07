@@ -44,7 +44,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ'
+gem 'DhanHQ', path: '/home/nemesis/project/trading-workspace/dhanhq-client'
 
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 0.19'
