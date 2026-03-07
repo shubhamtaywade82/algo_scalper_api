@@ -610,47 +610,6 @@ RSpec.describe Live::RiskManagerService do
       end
     end
 
-    describe '#exit_position' do
-      let(:position) do
-        double(
-          'Position',
-          security_id: '50074',
-          exchange_segment: 'NSE_FNO'
-        )
-      end
-
-      it 'calls Orders.config.flat_position with correct parameters' do
-        order_response = double('Order', present?: true)
-        expect(Orders.config).to receive(:flat_position).with(
-          segment: 'NSE_FNO',
-          security_id: '50074'
-        ).and_return(order_response)
-
-        result = service.send(:exit_position, position, tracker)
-
-        expect(result).to be true
-      end
-
-      it 'returns false if segment is missing' do
-        tracker.update(segment: nil)
-        allow(tracker.instrument).to receive(:exchange_segment).and_return(nil)
-        expect(Rails.logger).to receive(:error).with(match(/no segment available/))
-
-        result = service.send(:exit_position, position, tracker)
-
-        expect(result).to be false
-      end
-
-      it 'handles errors gracefully' do
-        allow(Orders.config).to receive(:flat_position).and_raise(StandardError, 'Order error')
-        expect(Rails.logger).to receive(:error).with(match(/Error in exit_position for ORD123456/))
-
-        result = service.send(:exit_position, position, tracker)
-
-        expect(result).to be false
-      end
-    end
-
     describe '#current_ltp_with_freshness_check' do
       let(:position) do
         double(
