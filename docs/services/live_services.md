@@ -18,7 +18,7 @@ The primary WebSocket gateway. It manages real-time socket connections to DhanHQ
 - Feed health status updates.
 
 **Dependencies:**
-- `DhanHQ::WebSocket`
+- `DhanHQ::WS::Client` (market feed)
 - `Live::MarketFeedHub::Parser`
 
 **Used by:**

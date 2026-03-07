@@ -16,6 +16,7 @@ ENV['ACCESS_TOKEN'] ||= ENV['DHAN_ACCESS_TOKEN'] if ENV['DHAN_ACCESS_TOKEN'].pre
 # Optional gem configuration - normalize DHANHQ_ prefix to DHAN_ prefix for gem compatibility
 # The gem's configure_with_env reads directly from ENV with DHAN_ prefix
 ENV['DHAN_BASE_URL'] ||= ENV['DHANHQ_BASE_URL'] if ENV['DHANHQ_BASE_URL'].present?
+ENV['DHAN_SANDBOX'] ||= ENV['DHANHQ_SANDBOX'] if ENV['DHANHQ_SANDBOX'].present?
 ENV['DHAN_WS_VERSION'] ||= ENV['DHANHQ_WS_VERSION'] if ENV['DHANHQ_WS_VERSION'].present?
 ENV['DHAN_WS_ORDER_URL'] ||= ENV['DHANHQ_WS_ORDER_URL'] if ENV['DHANHQ_WS_ORDER_URL'].present?
 ENV['DHAN_WS_MARKET_FEED_URL'] ||= ENV['DHANHQ_WS_MARKET_FEED_URL'] if ENV['DHANHQ_WS_MARKET_FEED_URL'].present?
@@ -29,6 +30,8 @@ ENV['DHAN_LOG_LEVEL'] ||= ENV['DHANHQ_LOG_LEVEL'] if ENV['DHANHQ_LOG_LEVEL'].pre
 # Bootstrap DhanHQ from ENV only
 # The gem reads: CLIENT_ID, ACCESS_TOKEN, and all DHAN_* variables
 DhanHQ.configure_with_env
+# v2.6.x: ensure configuration exists for code paths that use config before Client is built
+DhanHQ.ensure_configuration! if DhanHQ.respond_to?(:ensure_configuration!)
 
 # The SDK maps DH-904/805 to rate-limit, but some endpoints return a plain "429" code.
 # Extend mapping at boot so these are treated as known rate-limit errors.

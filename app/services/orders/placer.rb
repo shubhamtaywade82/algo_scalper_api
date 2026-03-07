@@ -46,7 +46,7 @@ module Orders
           correlation_id: normalized_id,
           disclosed_quantity: 0
         }
-        payload[:price] = price if price.present?
+        # DhanHQ 2.6.x PlaceOrderContract: MARKET orders must not send price
         payload[:bo_profit_value] = target_price if target_price.present?
         payload[:bo_stop_loss_value] = stop_loss_price if stop_loss_price.present?
 
@@ -198,6 +198,7 @@ module Orders
       end
 
       def with_token_auto_heal(context:)
+        retried = false
         yield
       rescue StandardError => e
         Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
@@ -206,13 +207,15 @@ module Orders
           return nil
         end
 
+        if retried
+          Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
+          return nil
+        end
+
         Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
         Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
-
-        yield
-      rescue StandardError => e
-        Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
-        nil
+        retried = true
+        retry
       end
 
       def order_placement_enabled?

@@ -411,10 +411,15 @@ Rails.logger.error(
         begin
           return nil if ltp_api_rate_limited?(segment: segment, security_id: security_id)
 
-          response = DhanHQ::Models::MarketFeed.ltp({ segment => [security_id.to_i] })
-          if response['status'] == 'success'
-            option_data = response.dig('data', segment, security_id.to_s)
-            return BigDecimal(option_data['last_price'].to_s) if option_data && option_data['last_price']
+          # DhanHQ 2.6.x DATA_API: LTP payload is Hash{String => Array<Integer>}
+          segment_key = segment.to_s
+          sid_int = security_id.to_i
+          response = DhanHQ::Models::MarketFeed.ltp({ segment_key => [sid_int] })
+          if response['status'] == 'success' || response[:status] == 'success'
+            data = response['data'] || response[:data]
+            option_data = data&.dig(segment_key, sid_int.to_s) || data&.dig(segment_key, sid_int)
+            return BigDecimal(option_data['last_price'].to_s) if option_data&.dig('last_price')
+            return BigDecimal(option_data[:last_price].to_s) if option_data&.dig(:last_price)
           end
         rescue StandardError => e
           if rate_limit_error?(e)
@@ -699,7 +704,7 @@ Rails.logger.error(
       end
 
       def build_client_order_id(index_cfg:, pick:)
-        # DhanHQ correlation_id limit is 25 characters
+        # DhanHQ PlaceOrderContract (v2.6.x) correlation_id max 30 characters
         # Format: AS-{KEY}-{SID}-{TIMESTAMP}
         # Keep it under 25 chars by using shorter timestamp
         timestamp = Time.current.to_i.to_s[-6..] # Last 6 digits of timestamp

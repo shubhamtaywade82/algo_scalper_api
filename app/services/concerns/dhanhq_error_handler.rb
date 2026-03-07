@@ -23,9 +23,16 @@ module DhanhqErrorHandler
   module_function
 
   # Check if error indicates token expiry
+  # Aligns with DhanHQ v2.6.x: gem raises TokenExpiredError, InvalidTokenError, AuthenticationFailedError
   # @param error [StandardError, String] Error object or message
   # @return [Boolean]
   def token_expired?(error)
+    if error.is_a?(StandardError)
+      return true if defined?(DhanHQ::TokenExpiredError) && error.is_a?(DhanHQ::TokenExpiredError)
+      return true if defined?(DhanHQ::InvalidTokenError) && error.is_a?(DhanHQ::InvalidTokenError)
+      return true if defined?(DhanHQ::AuthenticationFailedError) && error.is_a?(DhanHQ::AuthenticationFailedError)
+    end
+
     error_msg = error.is_a?(String) ? error : error.message.to_s
     return false if error_msg.blank?
 

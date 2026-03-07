@@ -133,8 +133,9 @@ RSpec.describe Orders::Placer do
           price: price
         )
 
-        expected_with_price = expected_payload.merge(price: price)
-        expect(captured_attrs.last).to eq(expected_with_price)
+        # DhanHQ 2.6.x PlaceOrderContract: MARKET orders must not send price; we omit it
+        expect(captured_attrs.last).to eq(expected_payload)
+        expect(captured_attrs.last).not_to have_key(:price)
       end
 
       it 'handles different product types' do
@@ -284,8 +285,6 @@ RSpec.describe Orders::Placer do
       expect(normalized_id.length).to be <= 30
       expect(normalized_id).to match(/\A.{23}-[a-f0-9]{6}\z/)
     end
-
-      # No expectations on logger yet, but we can add them if needed
   end
 
   describe 'duplicate prevention' do
@@ -442,7 +441,6 @@ RSpec.describe Orders::Placer do
         expect(captured_attrs.last).to match(hash_including(expected_sell_payload))
       end
     end
-
 
     describe 'exchange segment validation' do
       it 'validates that derivative.exchange_segment is used correctly' do

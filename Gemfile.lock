@@ -1,7 +1,7 @@
-PATH
-  remote: /home/nemesis/project/trading-workspace/dhanhq-client
+GEM
+  remote: https://rubygems.org/
   specs:
-    DhanHQ (2.6.0)
+    DhanHQ (2.6.2)
       activesupport
       base64
       bindata
@@ -14,10 +14,6 @@ PATH
       faye-websocket
       rotp
       zeitwerk
-
-GEM
-  remote: https://rubygems.org/
-  specs:
     actioncable (8.0.3)
       actionpack (= 8.0.3)
       activesupport (= 8.0.3)
@@ -489,7 +485,7 @@ PLATFORMS
   x86_64-linux-gnu
 
 DEPENDENCIES
-  DhanHQ!
+  DhanHQ (= 2.6.2)
   activerecord-import
   annotate
   bootsnap
