@@ -8,6 +8,8 @@ require 'uri'
 class TelegramNotifier
   TELEGRAM_API = 'https://api.telegram.org'
   MAX_LEN      = 4000 # keep margin below Telegram's 4096 limit
+  OPEN_TIMEOUT = 2
+  READ_TIMEOUT = 5
 
   # Send a message to Telegram
   # @param text [String] Message text
@@ -59,8 +61,8 @@ class TelegramNotifier
     uri = URI("#{TELEGRAM_API}/bot#{bot_token}/#{method}")
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = (uri.scheme == 'https')
-    http.open_timeout = 2
-    http.read_timeout = 5
+    http.open_timeout = OPEN_TIMEOUT
+    http.read_timeout = READ_TIMEOUT
     request = Net::HTTP::Post.new(uri)
     request.set_form_data(params)
     res = http.request(request)

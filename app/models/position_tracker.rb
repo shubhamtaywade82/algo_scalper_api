@@ -140,7 +140,7 @@ class PositionTracker < ApplicationRecord
         realized_pnl_pct: realized_pnl_pct.round(2),
         unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
         unrealized_pnl_pct: unrealized_pnl_pct.round(2),
-        win_rate: paper_win_rate(date: date),
+        win_rate: paper_win_rate(date: date, exited: exited),
         avg_realized_pnl_pct: avg_realized_pnl_pct,
         avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
@@ -203,7 +203,15 @@ class PositionTracker < ApplicationRecord
       paper.active.count
     end
 
-    def paper_win_rate(date: nil)
+    def paper_win_rate(date: nil, exited: nil)
+      # Use preloaded collection when provided to avoid duplicate query
+      if !exited.nil? && exited.respond_to?(:size) && exited.respond_to?(:count)
+        return 0.0 if exited.empty?
+
+        winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
+        return (winners.to_f / exited.size * 100).round(2)
+      end
+
       # Filter by date if provided, otherwise use today's exited positions
       if date
         date_start = date.beginning_of_day

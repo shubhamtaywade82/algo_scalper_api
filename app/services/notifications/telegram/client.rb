@@ -14,6 +14,8 @@ module Notifications
       end
 
       TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+      OPEN_TIMEOUT = 2
+      READ_TIMEOUT = 10
 
       def send_message(text)
         # Split message into chunks if it exceeds Telegram's limit
@@ -60,8 +62,8 @@ module Notifications
 
         http = Net::HTTP.new(uri.host, uri.port)
         http.use_ssl = true
-        http.open_timeout = 2
-        http.read_timeout = 10
+        http.open_timeout = OPEN_TIMEOUT
+        http.read_timeout = READ_TIMEOUT
         request = Net::HTTP::Post.new(uri.path)
         request['Content-Type'] = 'application/json'
         request.body = payload.to_json
