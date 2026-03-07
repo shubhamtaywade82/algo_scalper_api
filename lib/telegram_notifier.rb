@@ -57,7 +57,13 @@ class TelegramNotifier
     return if bot_token.blank?
 
     uri = URI("#{TELEGRAM_API}/bot#{bot_token}/#{method}")
-    res = Net::HTTP.post_form(uri, params)
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = (uri.scheme == 'https')
+    http.open_timeout = 2
+    http.read_timeout = 5
+    request = Net::HTTP::Post.new(uri)
+    request.set_form_data(params)
+    res = http.request(request)
 
     unless res.is_a?(Net::HTTPSuccess)
       Rails.logger.error("[TelegramNotifier] #{method} failed: #{res.body}") if defined?(Rails)

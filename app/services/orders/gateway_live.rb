@@ -109,7 +109,7 @@ module Orders
     def generate_client_order_id(prefix, sid)
       # Generate unique client order ID with random component to prevent collisions
       # Format: AS-{prefix}-{security_id}-{timestamp}-{random}
-      "AS-#{prefix}-#{sid}-#{Time.now.to_i}-#{SecureRandom.hex(2)}"
+      "AS-#{prefix}-#{sid}-#{Time.current.to_i}-#{SecureRandom.hex(2)}"
     end
 
     def normalize_exit_response(order, client_order_id:)

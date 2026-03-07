@@ -36,7 +36,7 @@ module Live
           ltp: safe_decimal(ltp),
           hwm: safe_decimal(hwm),
           hwm_pnl_pct: safe_decimal(hwm_pnl_pct),
-          updated_at: Time.now.to_i
+          updated_at: Time.current.to_i
         }
       end
 
@@ -395,9 +395,9 @@ module Live
 
     # Broadcast aggregate dashboard stats every 5 seconds to the "dashboard" channel.
     def maybe_broadcast_heartbeat
-      return if @last_heartbeat_at && (Time.now.to_f - @last_heartbeat_at) < 5.0
+      return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 5.0
 
-      @last_heartbeat_at = Time.now.to_f
+      @last_heartbeat_at = Time.current.to_f
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")

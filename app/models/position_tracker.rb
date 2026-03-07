@@ -96,8 +96,11 @@ class PositionTracker < ApplicationRecord
         exited = exited_paper.where(exited_at: today_start..today_end)
       end
       active = paper.active
+      # Load once to avoid multiple queries (any? + count + iteration)
+      exited = exited.load
+      active = active.load
 
-      active_count = active.count
+      active_count = active.size
       realized_pnl_rupees = exited.sum { |t| t.last_pnl_rupees.to_f }
       # Use current_pnl_rupees for active positions (reads from Redis cache for live values)
       unrealized_pnl_rupees = active.sum { |t| t.current_pnl_rupees.to_f }
@@ -115,7 +118,7 @@ class PositionTracker < ApplicationRecord
       avg_realized_pnl_pct = if exited.any?
                                (exited.filter_map do |t|
                                  t.last_pnl_pct.to_f * 100.0
-                               end.sum / exited.count.to_f).round(2)
+                               end.sum / exited.size.to_f).round(2)
                              else
                                0.0
                              end
@@ -123,13 +126,13 @@ class PositionTracker < ApplicationRecord
       avg_unrealized_pnl_pct = if active.any?
                                  (active.filter_map do |t|
                                    (t.current_pnl_pct || 0).to_f * 100.0
-                                 end.sum / active.count.to_f).round(2)
+                                 end.sum / active.size.to_f).round(2)
                                else
                                  0.0
                                end
 
       {
-        total_trades: exited.count,
+        total_trades: exited.size,
         active_positions: active_count,
         total_pnl_rupees: total_pnl_rupees.round(2),
         total_pnl_pct: total_pnl_pct.round(2),
@@ -212,16 +215,17 @@ class PositionTracker < ApplicationRecord
         today_end = Time.zone.today.end_of_day
         exited = exited_paper.where(exited_at: today_start..today_end)
       end
+      exited = exited.load
       return 0.0 if exited.empty?
 
       winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
-      (winners.to_f / exited.count * 100).round(2)
+      (winners.to_f / exited.size * 100).round(2)
     end
 
     def paper_trading_stats
-      exited = exited_paper
-      active = paper.active
-      active_count = active.count
+      exited = exited_paper.load
+      active = paper.active.load
+      active_count = active.size
 
       # Calculate realized PnL from exited positions
       realized_pnl = total_paper_pnl.to_f
@@ -235,13 +239,13 @@ class PositionTracker < ApplicationRecord
       total_pnl = realized_pnl + unrealized_pnl
 
       {
-        total_trades: exited.count,
+        total_trades: exited.size,
         active_positions: active_count,
         total_pnl: total_pnl,
         realized_pnl: realized_pnl,
         unrealized_pnl: unrealized_pnl,
         win_rate: paper_win_rate,
-        average_pnl: exited.empty? ? 0.0 : (realized_pnl / exited.count).to_f,
+        average_pnl: exited.empty? ? 0.0 : (realized_pnl / exited.size).to_f,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
         losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
       }
