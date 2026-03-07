@@ -59,7 +59,7 @@ module Live
 
           # Fetch current LTP (from cache or live feed)
           ltp = Live::TickQuery.ltp_for(tracker)
-          next unless ltp && ltp.to_f.positive?
+          next unless ltp&.to_f&.positive?
 
           # PHASE-BASED INSTITUTIONAL TRAILING
           engine = Trading::TrailingEngine.new(tracker: tracker, ltp: ltp)
@@ -116,7 +116,6 @@ module Live
         end
       end
 
-
       def enforce_global_time_overrides(exit_engine:)
         # Global override 1: IV collapse detection
         enforce_iv_collapse_exit(exit_engine: exit_engine)
@@ -165,7 +164,6 @@ module Live
           Rails.logger.error("[RiskManager] enforce_stall_detection_exit error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         end
       end
-
 
       def enforce_time_based_exit(exit_engine:)
         risk = risk_config
@@ -241,7 +239,7 @@ module Live
       # LAYER 1: DYNAMIC TRAILING SL
       # Purpose: Move SL up-only to capture trend moves (direct trailing)
       def enforce_dynamic_trailing_stops(exit_engine:)
-        engine = @trailing_engine ||= Live::TrailingEngine.new()
+        engine = @trailing_engine ||= Live::TrailingEngine.new
 
         PositionTracker.active.find_each do |tracker|
           # TrailingEngine expects PositionData from ActiveCache
@@ -391,7 +389,7 @@ module Live
           # Fallback: if premium_stop_price exists, calculate sl_pct from it
           if sl_pct.nil? || sl_pct.zero?
             premium_stop = tracker.meta&.dig('premium_stop_price')&.to_f
-            if premium_stop && premium_stop.positive?
+            if premium_stop&.positive?
               entry = tracker.entry_price.to_f
               sl_pct = ((entry - premium_stop) / entry).abs * 100.0
             end
@@ -420,7 +418,7 @@ module Live
       # LAYER 4.5: PERCENTAGE-BASED PNL EXIT
       # Purpose: Full exit when target % PnL is reached (independent of initial risk)
       def enforce_percentage_pnl_exit(exit_engine:)
-        cfg = (risk_config[:percentage_pnl_exit] || {})
+        cfg = risk_config[:percentage_pnl_exit] || {}
         return unless cfg[:enabled]
 
         PositionTracker.active.find_each do |tracker|
@@ -463,7 +461,7 @@ module Live
         return unless cfg[:enabled]
 
         lock_pct = cfg[:lock_pct]
-        lock_rupees_static = cfg[:lock_rupees]  # fallback if lock_pct not set
+        lock_rupees_static = cfg[:lock_rupees] # fallback if lock_pct not set
         breakeven_at = cfg[:breakeven_at]
         time_kill_minutes = cfg[:time_kill_minutes]
         exit_fee = BrokerFeeCalculator.fee_per_order

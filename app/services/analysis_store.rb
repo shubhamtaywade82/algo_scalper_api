@@ -13,8 +13,8 @@ class AnalysisStore
 
   # TTLs — how long each component stays valid
   TTLS = {
-    smc:    3.minutes,
-    ai:     10.minutes,
+    smc: 3.minutes,
+    ai: 10.minutes,
     regime: 2.minutes
   }.freeze
 
@@ -68,7 +68,7 @@ class AnalysisStore
 
     # Read all components for an index (used by the API)
     def read_all(index_key)
-      COMPONENTS.to_h { |c| [c, read(index_key, c)] }
+      COMPONENTS.index_with { |c| read(index_key, c) }
     end
 
     # Check if a component needs refresh

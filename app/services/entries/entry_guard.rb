@@ -140,7 +140,7 @@ Rails.logger.error(
 
         # Weekly expiry only (hard rule) - block monthly contracts for NIFTY/SENSEX.
         # Bypass for Supertrend testing mode or Paper trading (simulated contracts may be monthly)
-        is_paper = entry_metadata&.dig(:paper) || Rails.env.development? || Rails.env.test?
+        is_paper = entry_metadata&.dig(:paper) || Rails.env.local?
         if !is_supertrend && !is_paper && %w[NIFTY SENSEX].include?(symbol) && !weekly_contract?(pick: pick, index_cfg: index_cfg)
           Rails.logger.info("[EntryGuard] Weekly-only expiry rule blocked #{symbol} entry for #{pick[:symbol]}")
           return false

@@ -14,10 +14,10 @@ RSpec.describe Live::PaperPnlRefresher do
         id: 101,
         segment: 'NSE_FNO',
         security_id: '45526',
-        entry_price: BigDecimal('100'),
+        entry_price: BigDecimal(100),
         quantity: 10,
         exited?: false,
-        high_water_mark_pnl: BigDecimal('0'),
+        high_water_mark_pnl: BigDecimal(0),
         tradable: tradable
       )
 

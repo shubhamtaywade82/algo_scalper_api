@@ -76,7 +76,7 @@ class MarketRegimeDetector
     current_price = series.candles.last.close.to_f
 
     # Guard against zero price division
-    atr_percent = current_price > 0 ? (atr_val / current_price) : 0.0
+    atr_percent = current_price.positive? ? (atr_val / current_price) : 0.0
 
     {
       current_price: current_price,

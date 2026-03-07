@@ -41,7 +41,6 @@ module Live
         {}
       end
 
-
       def profit_floor_config
         raw = begin
           algo_config.dig(:risk, :profit_floor) || {}
@@ -82,7 +81,6 @@ module Live
       rescue StandardError
         nil
       end
-
 
       def iv_collapse_detection_enabled?
         config = begin

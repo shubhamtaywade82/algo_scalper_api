@@ -8,13 +8,12 @@ RSpec.describe Live::RiskManagerService, '#enforce_trailing_stops' do
   let(:instrument) { create(:instrument, symbol_name: 'NIFTY') }
   let(:tracker) do
     create(:position_tracker,
-      instrument: instrument,
-      entry_price: 100.0,
-      quantity: 50,
-      symbol: 'NIFTY24MAR22000CE',
-      segment: 'NSE_FNO',
-      trade_state: 'expansion'
-    )
+           instrument: instrument,
+           entry_price: 100.0,
+           quantity: 50,
+           symbol: 'NIFTY24MAR22000CE',
+           segment: 'NSE_FNO',
+           trade_state: 'expansion')
   end
 
   before do

@@ -35,7 +35,7 @@ module Orders
       # Realized P&L: today's closed paper positions only (daily paper session)
       today = Time.zone.today
       realized = PositionTracker.paper.exited
-                                .where(exited_at: today.beginning_of_day..today.end_of_day)
+                                .where(exited_at: today.all_day)
                                 .sum(:last_pnl_rupees).to_f
 
       # Unrealized P&L: active positions read from Redis cache for live values

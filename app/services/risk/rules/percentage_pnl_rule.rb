@@ -14,7 +14,7 @@ module Risk
         return skip_result if pnl_pct.nil?
 
         # Get target from config (passed to rule on init)
-        cfg = (config[:percentage_pnl_exit] || {})
+        cfg = config[:percentage_pnl_exit] || {}
         target_pct = cfg[:target_pct]
         target_pct ||= config[:tp_pct] # Fallback to global TP if not specialized
 

@@ -256,9 +256,9 @@ module Options
         # If no tick data, check batch LTP results
         if !tick || !tick.ltp&.positive?
           batch_ltp = batch_ltp_results[derivative.security_id.to_s]
-          if batch_ltp&.positive?
+          if batch_ltp&.positive? && !tick
             # Create a MarketTick with LTP if tick is missing
-            tick = tick ? tick : MarketTick.new(
+            tick ||= MarketTick.new(
               segment: exchange_seg,
               security_id: derivative.security_id,
               ltp: BigDecimal(batch_ltp.to_s),
@@ -302,7 +302,7 @@ module Options
         # Check if already in tick cache
         exchange_seg = derivative.exchange_segment || 'NSE_FNO'
         tick = Live::TickQuery.for_security(segment: exchange_seg, security_id: derivative.security_id)
-        next if tick && tick.ltp&.positive?
+        next if tick&.ltp&.positive?
 
         # Only fetch for ATM candidates (within 2 strikes)
         if atm_strike_approx

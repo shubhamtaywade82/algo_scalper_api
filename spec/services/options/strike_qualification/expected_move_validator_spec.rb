@@ -15,7 +15,7 @@ RSpec.describe Options::StrikeQualification::ExpectedMoveValidator do
         option_ltp: 120.0
       )
 
-      expect(result[:ok]).to eq(false)
+      expect(result[:ok]).to be(false)
       expect(result[:reason]).to eq('expected_premium_below_threshold')
     end
 
@@ -28,7 +28,7 @@ RSpec.describe Options::StrikeQualification::ExpectedMoveValidator do
         option_ltp: 120.0
       )
 
-      expect(result[:ok]).to eq(true)
+      expect(result[:ok]).to be(true)
       expect(result[:expected_premium]).to be >= result[:threshold]
     end
 
@@ -42,7 +42,7 @@ RSpec.describe Options::StrikeQualification::ExpectedMoveValidator do
       )
 
       # 20 * 0.40 = 8 < 12
-      expect(result[:ok]).to eq(false)
+      expect(result[:ok]).to be(false)
       expect(result[:reason]).to eq('expected_premium_below_threshold')
     end
 
@@ -55,7 +55,7 @@ RSpec.describe Options::StrikeQualification::ExpectedMoveValidator do
         option_ltp: 200.0
       )
 
-      expect(result[:ok]).to eq(false)
+      expect(result[:ok]).to be(false)
       expect(result[:reason]).to eq('sensex_execution_only_blocked')
     end
   end

@@ -27,18 +27,18 @@ module Options
         return blocked('invalid_permission') unless VALID_PERMISSIONS.include?(perm)
         return blocked('invalid_spot') unless spot.to_f.positive?
         return blocked('invalid_chain') unless option_chain.is_a?(Hash)
-        return blocked('invalid_trend') if trend_sym && !VALID_TRENDS.include?(trend_sym)
+        return blocked('invalid_trend') if trend_sym && VALID_TRENDS.exclude?(trend_sym)
 
         step = strike_step_for(index)
         atm_strike = round_to_step(spot.to_f, step)
 
         # Get available strikes from the filtered chain (only strikes that exist)
         # Handle different key formats in option chain
-        available_strikes = option_chain.keys.map do |k|
+        available_strikes = option_chain.keys.filter_map do |k|
           k.to_f
         rescue StandardError
           nil
-        end.compact.to_set
+        end.to_set
 
         desired = desired_strike(
           index: index,
@@ -51,18 +51,14 @@ module Options
 
         # Check if desired strike exists in chain before checking liquidity
         desired_strike_float = desired[:strike].to_f
-        if available_strikes.include?(desired_strike_float)
-          if liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
+        if available_strikes.include?(desired_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
             return ok(desired.merge(atm_strike: atm_strike))
-          end
         end
 
         # Fallback to ATM if it exists in chain
         atm_strike_float = atm_strike.to_f
-        if available_strikes.include?(atm_strike_float)
-          if liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
+        if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
             return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
-          end
         end
 
         # Enhanced error reporting
@@ -213,7 +209,7 @@ module Options
         # If exact match not found, try fuzzy matching (find closest key)
         unless strike_data.is_a?(Hash)
           # Try to find key that matches when converted to float
-          option_chain.keys.each do |key|
+          option_chain.each_key do |key|
             key_float = key.to_f
             next unless (key_float - strike_float).abs < 0.01 # Within 0.01 tolerance
 

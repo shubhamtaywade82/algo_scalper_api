@@ -705,7 +705,7 @@ module Options
         available_strikes_bd = instrument.derivatives.where(
           expiry_date: expiry_date_obj,
           option_type: option_type
-        ).pluck(:strike_price).map { |sp| BigDecimal(sp.to_s) }.to_set
+        ).pluck(:strike_price).to_set { |sp| BigDecimal(sp.to_s) }
 
         # Filter option chain to only include strikes that exist in database
         filtered_chain = chain_data[:oc].select do |strike_key, _strike_data|
@@ -724,11 +724,11 @@ module Options
           return []
         end
 
-        if filtered_chain.size < chain_data[:oc].size
+        if (filtered_chain.size < chain_data[:oc].size) && defined?(Rails)
           Rails.logger.debug(
             "[Options] Filtered option chain: #{chain_data[:oc].size} -> #{filtered_chain.size} strikes " \
             "(only strikes with DB derivatives) for #{index_cfg[:key]}"
-          ) if defined?(Rails)
+          )
         end
 
         selector = Options::StrikeQualification::StrikeSelector.new

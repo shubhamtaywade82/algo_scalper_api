@@ -14,7 +14,7 @@ module Live
         else
           Rails.logger.fatal(
             "[RiskManager] CRITICAL: ExitEngine unavailable for #{tracker.order_no} " \
-              "(reason=#{reason}) — position NOT exited"
+            "(reason=#{reason}) — position NOT exited"
           )
           raise "ExitEngine unavailable for #{tracker.order_no}"
         end

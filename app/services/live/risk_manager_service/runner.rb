@@ -74,8 +74,6 @@ module Live
         # ============================================================
         exit_engine = @exit_engine || self
 
-
-
         # LAYER 0: EXECUTABLE R STOP (Premium-based hard stop)
         enforce_premium_r_stop(exit_engine: exit_engine)
 

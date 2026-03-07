@@ -203,8 +203,7 @@ RSpec.describe Entries::EntryGuard do
       context 'when exposure validation fails' do
         it 'returns false if exposure limit reached' do
           # Use BOS contract (not Supertrend) so exposure_ok? is called
-          allow(described_class).to receive(:enforce_structure_entry_gate).and_return({ confirmed_at: Time.current })
-          allow(described_class).to receive(:exposure_ok?).and_return(false)
+          allow(described_class).to receive_messages(enforce_structure_entry_gate: { confirmed_at: Time.current }, exposure_ok?: false)
           bos_metadata = {
             entry_contract: 'bos_machine_v1',
             bos_id: 'b1',
