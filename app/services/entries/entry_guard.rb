@@ -13,103 +13,34 @@ module Entries
     BOS_MAX_ENTRY_DISTANCE_R = 0.5
 
     class << self
+      def entry_guard_pipeline
+        @entry_guard_pipeline ||= EntryGuardPipeline.new
+      end
+
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
 
-        # Circuit breaker — highest priority, checked before everything else
-        if Risk::CircuitBreaker.instance.tripped?
-          cb = Risk::CircuitBreaker.instance.status
-          Rails.logger.error("[EntryGuard] Entry blocked — circuit breaker tripped: #{cb[:reason]} (at: #{cb[:at]})")
+        context = {
+          index_cfg: index_cfg,
+          pick: pick,
+          direction: direction,
+          scale_multiplier: scale_multiplier,
+          entry_metadata: entry_metadata,
+          permission: permission
+        }
+        result = entry_guard_pipeline.run(context)
+        if result != EntryGuardPipeline::PASS
+          reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
+          Rails.logger.info("[EntryGuard] Entry blocked — #{reason}")
           return false
         end
 
-        unless bos_contract_present?(entry_metadata)
-Rails.logger.error(
-            "[EntryGuard] Direct entry blocked for #{index_cfg[:key]}: BOS contract missing. Metadata: #{entry_metadata.inspect}"
-          )
-          return false
-        end
-        Rails.logger.debug "[EntryGuard] Contract check passed for #{index_cfg[:key]}"
-
-        # Time regime validation (session-aware entry rules)
-        unless time_regime_allows_entry?(index_cfg: index_cfg, pick: pick, direction: direction)
-          Rails.logger.info("[EntryGuard] Entry blocked by time regime rules for #{index_cfg[:key]}")
-          return false
-        end
-
-        # BANKNIFTY: Only allow entries in the last week before monthly expiry
-        # (BANKNIFTY weekly options carry excessive theta decay outside the final week)
-        if index_cfg[:key].to_s == 'BANKNIFTY' && !banknifty_last_week?
-          Rails.logger.info('[EntryGuard] BANKNIFTY entry blocked — not last week before monthly expiry')
-          return false
-        end
-
-        # Edge failure detector (rolling PnL window, consecutive SLs, session-based)
-        edge_check = Live::EdgeFailureDetector.instance.entries_paused?(index_key: index_cfg[:key])
-        if edge_check[:paused]
-          resume_at = edge_check[:resume_at]
-          resume_str = resume_at ? resume_at.strftime('%H:%M IST') : 'manual override'
-          Rails.logger.info(
-            "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: #{edge_check[:reason]} (resume at: #{resume_str})"
-          )
-          return false
-        end
-
-        # Daily loss/profit limits check (NOT trade frequency - we don't cap trade count)
-        unless daily_limits_allow_entry?(index_cfg: index_cfg)
-          Rails.logger.info("[EntryGuard] Entry blocked by daily loss/profit limits for #{index_cfg[:key]}")
-          return false
-        end
-
-        instrument = find_instrument(index_cfg)
-        unless instrument
-          Rails.logger.warn("[EntryGuard] Instrument not found for #{index_cfg[:key]} (segment: #{index_cfg[:segment]}, sid: #{index_cfg[:sid]})")
-          return false
-        end
-
+        instrument = context[:instrument]
+        side = context[:side]
+        is_supertrend = context[:is_supertrend]
+        ltp = context[:ltp]
         multiplier = [scale_multiplier.to_i, 1].max
         Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
-
-        side = direction == :bullish ? 'long_ce' : 'long_pe'
-        is_supertrend = entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
-
-        # Exposure check for Supertrend: Allow only ONE active position per index to prevent over-trading
-        if is_supertrend
-          active_idx_pos = PositionTracker.active.where("(meta->>'index_key') = ?", index_cfg[:key].to_s).exists?
-          if active_idx_pos
-            Rails.logger.debug { "[EntryGuard] Supertrend exposure check failed: Active position already exists for #{index_cfg[:key]}" }
-            return false
-          end
-        elsif !exposure_ok?(instrument: instrument, side: side, max_same_side: index_cfg[:max_same_side])
-          Rails.logger.debug { "[EntryGuard] Exposure check failed for #{index_cfg[:key]}: #{pick[:symbol]} (side: #{side}, max_same_side: #{index_cfg[:max_same_side]})" }
-          return false
-        end
-
-        if cooldown_active?(pick[:symbol], index_cfg[:cooldown_sec].to_i)
-          Rails.logger.warn("[EntryGuard] Cooldown active for #{index_cfg[:key]}: #{pick[:symbol]}")
-          return false
-        end
-
-        # Never block due to WebSocket - always allow REST API fallback
-        # Log WebSocket status for monitoring but don't block
-        hub = Live::MarketFeedHub.instance
-        unless hub.running? && hub.connected?
-          Rails.logger.info('[EntryGuard] WebSocket not connected - will use REST API fallback for LTP')
-        end
-
-        # Rails.logger.debug { "[EntryGuard] Pick data: #{pick.inspect}" }
-        # Resolve LTP with REST API fallback if WebSocket unavailable
-        ltp = pick[:ltp]
-        if ltp.blank? || needs_api_ltp?(pick)
-          # Fetch fresh LTP from REST API when WS unavailable or pick LTP is stale
-          resolved_ltp = resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)
-          ltp = resolved_ltp if resolved_ltp.present?
-        end
-
-        unless ltp.present? && ltp.to_f.positive?
-          Rails.logger.warn("[EntryGuard] Invalid LTP for #{index_cfg[:key]}: #{pick[:symbol]} (ltp: #{ltp.inspect})")
-          return false
-        end
 
         if entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
           # Bypass BOS gate for Supertrend-only mode
@@ -1049,6 +980,8 @@ Rails.logger.error(
         end
         meta_hash[:entry_validation_mode] ||= entry_metadata[:validation_mode]
       end
+
+      public :find_instrument, :bos_contract_present?, :needs_api_ltp?, :resolve_entry_ltp
     end
   end
 end

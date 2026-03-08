@@ -7,18 +7,7 @@ Rails.application.config.to_prepare do
     end
   end
 
-  paper_enabled =
-    begin
-      AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-    rescue
-      true
-    end
-
-  gateway = if paper_enabled
-              Orders::GatewayPaper.new
-            else
-              Orders::GatewayLive.new
-            end
+  gateway = Orders::GatewayFactory.build
 
   # Set structured config, not raw gateway
   Orders.config = Orders::Config.new(gateway: gateway)

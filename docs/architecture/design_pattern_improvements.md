@@ -62,29 +62,15 @@ or feature flags.
 
 ## 3. Adapter / Unify Live Gateway Abstractions
 
-**Current:** Two live-related gateway implementations:
+**Status:** Implemented. Live orders use **Orders::GatewayLive** only.
 
-- `Orders::GatewayLive` — used by the initializer and RiskManagerService; implements
-  `place_market`, `exit_market`, `wallet_snapshot`, `cancel_order`; wraps
-  `Orders::Placer` and DhanHQ APIs.
-- `Live::Gateway` — also subclasses `Orders::Gateway`, wraps `Orders::Placer`, provides
-  `place_market`, `flat_position`, `position`, `cancel_order`, `wallet_snapshot`;
-  not used by the initializer (see CHANGELOG for cancel_order parity).
-
-**Pattern:** Adapter is already in use (both adapt DhanHQ/Placer to `Orders::Gateway`).
-The duplication is the issue: two adapters for the same "live" path.
-
-**Suggestion:**
-
-- Prefer one live gateway implementation. If `Orders::GatewayLive` is the one in use
-  (initializer + RiskManagerService), document or deprecate `Live::Gateway` and
-  migrate any remaining callers to `Orders::GatewayLive`, then remove or fold
-  `Live::Gateway` into it (e.g. move `position`/`flat_position` into GatewayLive if
-  still needed).
-- If both are intentionally different (e.g. one for risk-manager, one for another
-  subsystem), document the distinction and which to use where.
-
-**Benefit:** Single adapter for "live" orders; less confusion and duplicate code.
+- `Orders::GatewayLive` is the single live implementation: used by the initializer and
+  RiskManagerService; implements `place_market`, `exit_market`, `flat_position`,
+  `position`, `wallet_snapshot`, `cancel_order`; wraps `Orders::Placer` and DhanHQ APIs.
+- `Live::Gateway` is **deprecated**: it now delegates to `Orders::GatewayLive` and logs
+  a deprecation warning. It remains for backward compatibility only and will be removed
+  in a future release.
+- No app code referenced `Live::Gateway` for routing; only docs and CHANGELOG mentioned it.
 
 ---
 
@@ -126,46 +112,28 @@ to add new enforcement layers.
 
 ## 6. Singleton vs Dependency Injection
 
-**Current:** Many services use `include Singleton` and are accessed via `.instance`
-(e.g. `Live::MarketFeedHub.instance`, `Risk::CircuitBreaker.instance`,
-`Live::RedisPnlCache.instance`). Callers are tightly coupled to the concrete
-singleton.
+**Status:** Applied incrementally. No blanket refactor.
 
-**Pattern:** Prefer dependency injection for testability and explicit dependencies.
-Singleton is still valid for process-wide single instances (e.g. caches, feed hub).
-
-**Suggestion:**
-
-- For new code, prefer injecting dependencies (gateway, cache, event_bus) via
-  constructor or `build` methods so tests can inject doubles.
-- For existing singletons, consider optional constructor args that default to
-  `.instance`, e.g. `def initialize(gateway: Orders.config.gateway)` so production
-  stays unchanged but tests can pass a stub.
-- Document which singletons are "infrastructure" (Redis, feed hub) vs "domain"
-  (gateway, notifier) — inject the latter where practical.
-
-**Benefit:** Easier unit testing; dependencies are explicit; less hidden coupling.
+- **New code:** Prefer constructor injection (e.g. `Orders::EntryManager`, `Orders::BracketPlacer` inject
+  `event_bus:` and `active_cache:`; `RiskManagerService` uses `Orders.config.gateway` or
+  `Orders::GatewayFactory.build`).
+- **Existing singletons:** When touching a service, add optional constructor args that default to `.instance`
+  so tests can inject doubles without changing production call sites.
+- **Infrastructure vs domain:** Prefer injecting domain singletons (gateway, notifier, event_bus) over
+  infrastructure (MarketFeedHub, RedisPnlCache); document which is which when adding new code.
 
 ---
 
 ## 7. Observer — EventBus
 
-**Current:** `Core::EventBus` is a publish/subscribe observer. Per project docs it has
-zero subscribers and subsystems communicate via direct method calls.
+**Status:** In use incrementally. `Core::EventBus` has defined event types; `Orders::EntryManager` and
+`Orders::BracketPlacer` publish `entry_filled`, `bracket_placed`, `bracket_modified`; `Positions::ActiveCache`
+publishes `sl_hit`, `tp_hit`. Exit path: `Live::ExitEngine` publishes `exit_triggered` after an exit is
+executed; a logging subscriber is registered in `config/initializers/event_bus_subscribers.rb`.
 
-**Pattern:** Observer is already implemented; it is underused.
-
-**Suggestion:**
-
-- Where "broadcast then forget" or decoupling is useful (e.g. "position closed" or
-  "exit triggered"), consider publishing on EventBus and letting subscribers
-  (logging, metrics, notifications) react instead of the caller invoking them
-  directly.
-- Migrate incrementally: one event type and a few subscribers at a time; keep
-  direct calls where synchronous behavior is required.
-
-**Benefit:** Decoupling; easier to add new reactors (e.g. audit, analytics)
-without touching the core flow.
+- Prefer publishing for "broadcast then forget" (e.g. position closed, exit triggered) so subscribers
+  (logging, metrics, notifications) can react without the caller invoking them directly.
+- Add new event types and subscribers incrementally; keep direct calls where synchronous behavior is required.
 
 ---
 

@@ -68,56 +68,27 @@ module Live
         advance_trade_states!
 
         # ============================================================
-        # NEW 5-LAYER EXIT SYSTEM (optimized for intraday options buying)
-        # ============================================================
+        # 5-LAYER EXIT SYSTEM (Template Method: run_enforcement_cycle)
         # Priority order: first-match-wins, evaluation stops on exit
         # ============================================================
         exit_engine = @exit_engine || self
-
-        # LAYER 0: EXECUTABLE R STOP (Premium-based hard stop)
-        enforce_premium_r_stop(exit_engine: exit_engine)
-
-        # LAYER 1: DYNAMIC TRAILING SL (Lock in profits as price moves)
-        # Purpose: Move SL up-only to capture trend moves
-        enforce_dynamic_trailing_stops(exit_engine: exit_engine)
-
-        # PROFIT FLOOR (Stateful guarantee - protect locked profits)
-        # Purpose: Once net PnL reaches lock_rupees, exit if it drops back to that floor
-        enforce_profit_floor(exit_engine: exit_engine)
-
-        # LAYER 2: STRUCTURE INVALIDATION (Primary exit - structure breaks against position)
-        # Purpose: Exit when trade thesis is broken - structure-first, not PnL-first
-        enforce_structure_invalidation(exit_engine: exit_engine)
-
-        # LAYER 3: PREMIUM MOMENTUM FAILURE (Kill dead option trades before theta eats them)
-        # Purpose: Exit when premium stops making progress - aligns with gamma/theta behavior
-        enforce_premium_momentum_failure(exit_engine: exit_engine)
-
-        # LAYER 4: RR-BASED PROFIT BOOKING (Full exit on % based PnL targets)
-        # Purpose: Capture profits at pre-defined R multiples
-        enforce_rr_profit_booking(exit_engine: exit_engine)
-
-        # LAYER 4.5: PERCENTAGE-BASED PNL EXIT
-        # Purpose: Full exit when target % PnL is reached
-        enforce_percentage_pnl_exit(exit_engine: exit_engine)
-
-        # LAYER 5: TIME STOP (Early, contextual - prevent holding dead trades)
-        # Purpose: Exit regardless of PnL when time limit exceeded
-        enforce_time_stop(exit_engine: exit_engine)
-
-        # LAYER 6: END-OF-DAY FLATTEN (Operational safety - 3:20 PM exit)
-        # Purpose: Operational safety - always exit before market close
-        enforce_time_based_exit(exit_engine: exit_engine)
-
-        # ============================================================
-        # LEGACY RULES DISABLED (kept for reference, not called)
-        # ============================================================
-        # These are replaced by the new 5-layer system:
-        # - enforce_early_trend_failure → replaced by premium_momentum_failure
-        # - enforce_global_time_overrides → replaced by structure_invalidation + premium_momentum_failure
-        # - enforce_trailing_stops → replaced by premium_momentum_failure
-        # ============================================================
+        run_enforcement_cycle(exit_engine)
       end
+
+      # Template method: single algorithm skeleton for all exit enforcement layers.
+      # Add or reorder enforcement by editing this method.
+      def run_enforcement_cycle(exit_engine)
+        enforce_premium_r_stop(exit_engine: exit_engine)
+        enforce_dynamic_trailing_stops(exit_engine: exit_engine)
+        enforce_profit_floor(exit_engine: exit_engine)
+        enforce_structure_invalidation(exit_engine: exit_engine)
+        enforce_premium_momentum_failure(exit_engine: exit_engine)
+        enforce_rr_profit_booking(exit_engine: exit_engine)
+        enforce_percentage_pnl_exit(exit_engine: exit_engine)
+        enforce_time_stop(exit_engine: exit_engine)
+        enforce_time_based_exit(exit_engine: exit_engine)
+      end
+
       def exits_blocked_by_time?
         restrictions = AlgoConfig.fetch[:trading_time_restrictions]
         return false unless restrictions&.[](:enabled) && restrictions[:block_exits]

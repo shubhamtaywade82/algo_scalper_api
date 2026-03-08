@@ -36,7 +36,7 @@ module Live
         {}
       end
       @paper_mode = @algo_config.dig(:paper_trading, :enabled) == true
-      @orders_gateway = @paper_mode ? Orders::GatewayPaper.new : Orders::GatewayLive.new
+      @orders_gateway = Orders.config ? Orders.config.gateway : Orders::GatewayFactory.build(paper_mode: @paper_mode)
       @mutex = Mutex.new
       @running = false
       @thread = nil

@@ -57,5 +57,22 @@ module Orders
       Rails.logger.error("[GatewayPaper] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
       { success: false, order_id: order_id, status: :failed, error: e.message, paper: true }
     end
+
+    # Paper position by segment/security_id. Returns same shape as GatewayLive#position for compatibility.
+    def position(segment:, security_id:)
+      tracker = PositionTracker.paper.active.find_by(segment: segment, security_id: security_id.to_s)
+      return nil unless tracker
+
+      position_type = (tracker.side.to_s.upcase.start_with?('LONG') || tracker.side.to_s.upcase == 'BUY') ? 'LONG' : 'SHORT'
+      {
+        qty: tracker.quantity,
+        avg_price: tracker.avg_price.to_f,
+        product_type: nil,
+        exchange_segment: tracker.segment,
+        position_type: position_type,
+        trading_symbol: tracker.symbol,
+        status: tracker.status
+      }
+    end
   end
 end

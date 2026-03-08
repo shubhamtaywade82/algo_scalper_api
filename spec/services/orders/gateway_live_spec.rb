@@ -16,13 +16,13 @@ RSpec.describe Orders::GatewayLive do
     allow(Orders::Placer).to receive_messages(exit_position!: double('order', id: '123'),
                                               buy_market!: double('order', id: '456'), sell_market!: double('order', id: '789'))
     allow(DhanHQ::Models::Position).to receive(:active).and_return([])
-    allow(DhanHQ::Models::FundLimit).to receive(:fetch).and_return(
-      double('funds', available: 100_000, utilized: 50_000, margin: 25_000)
+    allow(DhanHQ::Models::Funds).to receive(:fetch).and_return(
+      double('funds', available_balance: 100_000, utilized_amount: 50_000, margin: 25_000)
     )
   end
 
   describe '#cancel_order' do
-    let(:order) { instance_double(DhanOrder, cancel: { status: 'success' }) }
+    let(:order) { instance_double(DhanHQ::Models::Order, cancel: { status: 'success' }) }
 
     it 'finds and cancels the order' do
       allow(DhanHQ::Models::Order).to receive(:find).with('ORD-123').and_return(order)
@@ -237,7 +237,7 @@ RSpec.describe Orders::GatewayLive do
              security_id: '55111',
              exchange_segment: 'NSE_FNO',
              net_qty: 50,
-             cost_price: 100.5,
+             buy_avg: 100.5,
              product_type: 'INTRADAY',
              position_type: 'LONG',
              trading_symbol: 'NIFTY24JAN20000CE')
@@ -245,16 +245,16 @@ RSpec.describe Orders::GatewayLive do
 
     it 'returns position hash when position exists' do
       allow(DhanHQ::Models::Position).to receive(:active).and_return([dhan_position])
+      allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: BigDecimal('105.0')))
 
       result = gateway.position(segment: 'NSE_FNO', security_id: '55111')
 
-      expect(result).to eq(
+      expect(result).to include(
         qty: 50,
         avg_price: BigDecimal('100.5'),
-        product_type: 'INTRADAY',
-        exchange_segment: 'NSE_FNO',
-        position_type: 'LONG',
-        trading_symbol: 'NIFTY24JAN20000CE'
+        upnl: BigDecimal('225.0'), # (105 - 100.5) * 50
+        rpnl: BigDecimal(0),
+        last_ltp: BigDecimal('105.0')
       )
     end
 
@@ -279,11 +279,9 @@ RSpec.describe Orders::GatewayLive do
                               security_id: '55112',
                               exchange_segment: 'NSE_FNO',
                               net_qty: 100,
-                              cost_price: 200.0,
-                              product_type: 'INTRADAY',
-                              position_type: 'LONG',
-                              trading_symbol: 'OTHER')
+                              buy_avg: 200.0)
       allow(DhanHQ::Models::Position).to receive(:active).and_return([other_position, dhan_position])
+      allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: BigDecimal('105.0')))
 
       result = gateway.position(segment: 'NSE_FNO', security_id: '55111')
 
@@ -303,7 +301,7 @@ RSpec.describe Orders::GatewayLive do
     end
 
     it 'handles errors gracefully and returns empty hash' do
-      allow(DhanHQ::Models::FundLimit).to receive(:fetch).and_raise(StandardError.new('API error'))
+      allow(DhanHQ::Models::Funds).to receive(:fetch).and_raise(StandardError.new('API error'))
 
       result = gateway.wallet_snapshot
 

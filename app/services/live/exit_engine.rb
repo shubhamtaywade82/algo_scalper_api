@@ -134,6 +134,14 @@ module Live
 
       Rails.logger.info("[ExitEngine] Exit executed #{tracker.order_no}: #{normalized_reason} (coid: #{tracker.exit_coid})")
 
+      Core::EventBus.instance.publish(Core::EventBus::EVENTS[:exit_triggered], {
+        tracker_id: tracker.id,
+        order_no: tracker.order_no,
+        reason: normalized_reason,
+        exit_price: exit_price,
+        index_key: tracker.meta&.dig('index_key') || tracker.index_key
+      })
+
       record_trade_telemetry(tracker, exit_price, normalized_reason)
       notify_telegram_exit(tracker, normalized_reason, exit_price)
 
