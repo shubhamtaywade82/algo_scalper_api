@@ -2,19 +2,19 @@
 
 module Positions
   module TrailingConfig
-    DEFAULT_PEAK_DRAWDOWN_PCT = 5.0
+    DEFAULT_PEAK_DRAWDOWN_PCT = 0.05 # 5% in DECIMAL format
     PEAK_DRAWDOWN_PCT = DEFAULT_PEAK_DRAWDOWN_PCT
-    DEFAULT_ACTIVATION_PROFIT_PCT = 25.0
-    DEFAULT_ACTIVATION_SL_OFFSET_PCT = 10.0
+    DEFAULT_ACTIVATION_PROFIT_PCT = 0.25 # 25% in DECIMAL format
+    DEFAULT_ACTIVATION_SL_OFFSET_PCT = 0.10 # 10% in DECIMAL format
     DEFAULT_TIERS = [
-      { threshold_pct: 5.0,   sl_offset_pct: -15.0 },
-      { threshold_pct: 10.0,  sl_offset_pct: -5.0  },
-      { threshold_pct: 15.0,  sl_offset_pct: 0.0   },
-      { threshold_pct: 25.0,  sl_offset_pct: 10.0  },
-      { threshold_pct: 40.0,  sl_offset_pct: 20.0  },
-      { threshold_pct: 60.0,  sl_offset_pct: 30.0  },
-      { threshold_pct: 80.0,  sl_offset_pct: 40.0  },
-      { threshold_pct: 120.0, sl_offset_pct: 60.0  }
+      { threshold_pct: 0.05,   sl_offset_pct: -0.15 },
+      { threshold_pct: 0.10,   sl_offset_pct: -0.05 },
+      { threshold_pct: 0.15,   sl_offset_pct: 0.0   },
+      { threshold_pct: 0.25,   sl_offset_pct: 0.10  },
+      { threshold_pct: 0.40,   sl_offset_pct: 0.20  },
+      { threshold_pct: 0.60,   sl_offset_pct: 0.30  },
+      { threshold_pct: 0.80,   sl_offset_pct: 0.40  },
+      { threshold_pct: 1.20,   sl_offset_pct: 0.60  }
     ].freeze
 
     module_function
@@ -28,15 +28,15 @@ module Positions
     end
 
     def direct_trailing_distance_pct
-      config[:direct_trailing]&.dig(:distance_pct) || 5.0
+      config[:direct_trailing]&.dig(:distance_pct) || 0.05 # 5% in DECIMAL
     end
 
     def direct_trailing_activation_profit_pct
-      config[:direct_trailing]&.dig(:activation_profit_pct) || 0.0
+      config[:direct_trailing]&.dig(:activation_profit_pct) || 0.0 # 0% in DECIMAL
     end
 
     def direct_trailing_min_sl_offset_pct
-      config[:direct_trailing]&.dig(:min_sl_offset_pct) || -30.0
+      config[:direct_trailing]&.dig(:min_sl_offset_pct) || -0.30 # -30% in DECIMAL
     end
 
     def tiers
@@ -65,13 +65,16 @@ module Positions
       # Check activation threshold
       return nil if current_profit_pct.to_f < direct_trailing_activation_profit_pct
 
-      # Calculate SL as: current_price * (1 - distance_pct / 100)
+      # Calculate SL as: current_price * (1 - distance_pct)
       # For CE calls: SL should be below current price
+      # distance_pct is DECIMAL format (e.g., 0.05 for 5%)
       distance_pct = direct_trailing_distance_pct
-      new_sl_price = current_price * (1.0 - (distance_pct / 100.0))
+      new_sl_price = current_price * (1.0 - distance_pct)
 
       # Ensure SL doesn't go below minimum offset from entry
-      min_sl_price = entry_price * (1.0 + (direct_trailing_min_sl_offset_pct / 100.0))
+      # min_sl_offset_pct is DECIMAL format (e.g., -0.30 for -30%)
+      min_sl_offset_pct = direct_trailing_min_sl_offset_pct
+      min_sl_price = entry_price * (1.0 + min_sl_offset_pct)
       new_sl_price = [new_sl_price, min_sl_price].max
 
       new_sl_price.round(2)
@@ -100,28 +103,29 @@ module Positions
 
       # Tiered protection: Higher peaks = tighter drawdown allowed
       # Use exclusive upper bounds to avoid overlap
+      # All values in DECIMAL format (e.g., 0.05 for 5%)
       case peak
-      when 0...5
+      when 0...0.05
         # Very low peaks: Use base threshold
         tiered_config[:very_low] || config[:peak_drawdown_pct] || DEFAULT_PEAK_DRAWDOWN_PCT
-      when 5...10
+      when 0.05...0.10
         # Low peaks: Slightly tighter
-        tiered_config[:low] || 2.5
-      when 10...15
+        tiered_config[:low] || 0.025
+      when 0.10...0.15
         # Medium peaks: Tighter protection
-        tiered_config[:medium] || 2.0
-      when 15...20
+        tiered_config[:medium] || 0.02
+      when 0.15...0.20
         # Medium-high peaks: Even tighter
-        tiered_config[:medium_high] || 1.5
-      when 20...25
+        tiered_config[:medium_high] || 0.015
+      when 0.20...0.25
         # High peaks: Very tight protection
-        tiered_config[:high] || 1.2
-      when 25...30
+        tiered_config[:high] || 0.012
+      when 0.25...0.30
         # Very high peaks: Extremely tight
-        tiered_config[:very_high] || 1.0
+        tiered_config[:very_high] || 0.01
       else
         # Ultra high peaks (>=30%): Maximum protection (0.8% drawdown)
-        tiered_config[:ultra_high] || 0.8
+        tiered_config[:ultra_high] || 0.008
       end
     end
 
@@ -133,7 +137,8 @@ module Positions
     def sl_price_from_entry(entry_price, sl_offset_pct)
       raise ArgumentError, 'entry_price required' if entry_price.nil?
 
-      entry_price.to_f * (1.0 + (sl_offset_pct.to_f / 100.0))
+      # sl_offset_pct is DECIMAL format (e.g., -0.15 for -15%)
+      entry_price.to_f * (1.0 + sl_offset_pct.to_f)
     end
 
     def calculate_sl_price(entry_price, profit_pct)
@@ -167,12 +172,12 @@ module Positions
 
       {
         enabled: direct_trailing[:enabled] == true || direct_trailing['enabled'] == true,
-        distance_pct: numeric_or_default(direct_trailing[:distance_pct] || direct_trailing['distance_pct'], 5.0),
+        distance_pct: numeric_or_default(direct_trailing[:distance_pct] || direct_trailing['distance_pct'], 0.05), # 5% DECIMAL
         activation_profit_pct: numeric_or_default(
-          direct_trailing[:activation_profit_pct] || direct_trailing['activation_profit_pct'], 0.0
+          direct_trailing[:activation_profit_pct] || direct_trailing['activation_profit_pct'], 0.0 # 0% DECIMAL
         ),
         min_sl_offset_pct: numeric_or_default(
-          direct_trailing[:min_sl_offset_pct] || direct_trailing['min_sl_offset_pct'], -30.0
+          direct_trailing[:min_sl_offset_pct] || direct_trailing['min_sl_offset_pct'], -0.30 # -30% DECIMAL
         )
       }
     rescue StandardError

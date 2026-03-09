@@ -10,7 +10,7 @@ module Risk
       def evaluate(context)
         return skip_result unless context.active?
 
-        pnl_pct = context.pnl_pct
+        pnl_pct = context.pnl_pct  # DECIMAL format (e.g., 0.30 for 30%)
         return skip_result if pnl_pct.nil?
 
         # Get target from config (passed to rule on init)
@@ -21,19 +21,15 @@ module Risk
         target_val = BigDecimal(target_pct.to_s)
         return skip_result if target_val.zero?
 
-        # target_pct from config is expected to be a percentage (e.g. 15.0 for 15%)
-        # Convert to decimal threshold (e.g. 0.15)
-        # Handle cases where it might already be decimal or very small percentage
-        threshold = if target_val > 1.0
-                      target_val / 100.0
-                    elsif target_val > 0.0 && target_val < 0.1 # likely a decimal like 0.05
-                      target_val
-                    else
-                      target_val / 100.0 # assume percentage for everything else (e.g. 0.5%)
-                    end
+        # target_pct from config is now DECIMAL (e.g. 0.30 for 30%)
+        # No conversion needed - use directly as threshold
+        threshold = target_val
 
         # Hard minimum threshold to prevent tick-noise exits (e.g. must be at least 1% if target is 15%)
         return no_action_result if pnl_pct < 0.01 && threshold >= 0.05
+
+        # CRITICAL: Only exit if target threshold is reached - this check ensures we don't exit prematurely
+        return no_action_result unless pnl_pct >= threshold
 
         pnl_pct_display = (pnl_pct.to_f * 100.0).round(2)
         exit_result(

@@ -477,7 +477,8 @@ module Live
         end
 
         # Second fallback: use global default SL pct
-        sl_pct ||= pct_value(risk_config[:sl_pct] || 10).to_f
+        # risk_config[:sl_pct] is DECIMAL (e.g. 0.12 for 12%) - convert to PERCENTAGE for RR formula
+        sl_pct ||= (pct_value(risk_config[:sl_pct] || 0.10).to_f * 100.0)
 
         return if sl_pct.zero?
 
@@ -561,10 +562,10 @@ module Live
         time_kill_minutes = cfg[:time_kill_minutes]
         exit_fee = BrokerFeeCalculator.fee_per_order
 
-        # Compute lock threshold
+        # Compute lock threshold (lock_pct is DECIMAL, e.g. 0.10 for 10%)
         lock_rupees = if lock_pct
                         capital = safe_big_decimal(snapshot[:capital_deployed])
-                        capital&.positive? ? (capital * BigDecimal(lock_pct.to_s) / 100).ceil : lock_rupees_static
+                        capital&.positive? ? (capital * BigDecimal(lock_pct.to_s)).ceil : lock_rupees_static
                       else
                         lock_rupees_static
                       end
@@ -611,18 +612,19 @@ module Live
       # Called every monitor cycle once the floor is armed.
       # @param tracker [PositionTracker]
       # @param hwm_pnl [BigDecimal, nil] High water mark PnL from Redis snapshot
-      # @param trail_pct [Numeric] Floor as % of HWM (e.g., 70 = protect 70% of peak)
+      # @param trail_pct [Numeric] Floor as DECIMAL fraction of HWM (e.g., 0.70 = protect 70% of peak)
       def update_trailing_floor!(tracker, hwm_pnl, trail_pct:)
         return unless hwm_pnl&.positive?
 
-        dynamic_floor = (BigDecimal(hwm_pnl.to_s) * BigDecimal(trail_pct.to_s) / 100).ceil
+        # trail_pct is DECIMAL (0.70), so no division by 100 needed
+        dynamic_floor = (BigDecimal(hwm_pnl.to_s) * BigDecimal(trail_pct.to_s)).ceil
         current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
         return if dynamic_floor <= current_floor
 
         tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i)
         Rails.logger.info(
           "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \
-          "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{trail_pct}%)"
+          "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{(trail_pct * 100).round}%)"
         )
       rescue StandardError => e
         Rails.logger.error("[RiskManager] update_trailing_floor! failed for #{tracker.order_no}: #{e.message}")
