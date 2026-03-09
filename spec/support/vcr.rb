@@ -41,26 +41,21 @@ VCR.configure do |config|
   
   config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
     headers = interaction.request.headers
-    val = headers['Access-Token'] || headers['access-token'] || headers['ACCESS_TOKEN']
-    val = val.first if val.is_a?(Array)
-    val if val && val != '<ACCESS_TOKEN>' && val.length > 10
+    vals = Array(headers['Access-Token'] || headers['access-token'] || headers['ACCESS_TOKEN'])
+    # We want to filter ANY value that looks like a token
+    vals.find { |v| v.to_s.length > 10 && v.to_s != '<ACCESS_TOKEN>' }
   end
 
   config.filter_sensitive_data('<CLIENT_ID>') do |interaction|
     headers = interaction.request.headers
-    val = headers['Client-Id'] || headers['client-id'] || headers['CLIENT_ID']
-    val = val.first if val.is_a?(Array)
-    val if val && val != '<CLIENT_ID>' && val.length > 3
+    vals = Array(headers['Client-Id'] || headers['client-id'] || headers['CLIENT_ID'])
+    vals.find { |v| v.to_s.length > 3 && v.to_s != '<CLIENT_ID>' }
   end
 
   config.filter_sensitive_data('<AUTHORIZATION>') do |interaction|
     headers = interaction.request.headers
-    val = headers['Authorization'] || headers['authorization'] || headers['AUTHORIZATION']
-    val = val.first if val.is_a?(Array)
-    # If it's a Bearer token, we might want to just filter the token part, 
-    # but filter_sensitive_data replaces the whole string. 
-    # Returning the whole "Bearer ..." string will replace it with <AUTHORIZATION>.
-    val if val && val != '<AUTHORIZATION>' && val.length > 10
+    vals = Array(headers['Authorization'] || headers['authorization'] || headers['AUTHORIZATION'])
+    vals.find { |v| v.to_s.length > 10 && v.to_s != '<AUTHORIZATION>' }
   end
 
   # Comprehensive sensitive data filtering for BOTH request and response bodies

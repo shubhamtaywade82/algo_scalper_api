@@ -2,7 +2,7 @@
 http_interactions:
 - request:
     method: get
-    uri: https://algo-trading-api.onrender.com/auth/dhan/token
+    uri: <SENSITIVE_SERVICE_URL>/auth/dhan/token
     body:
       encoding: US-ASCII
       string: ''
