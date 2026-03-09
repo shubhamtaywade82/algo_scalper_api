@@ -54,6 +54,11 @@ module Live
       # Start watchdog only when service is explicitly started
       start_watchdog unless @watchdog_thread&.alive?
 
+      # Subscribe to high-frequency LTP/PnL events for sub-second risk evaluation
+      @event_subscription = Core::EventBus.instance.subscribe(:ltp) do |event|
+        handle_pnl_event(event)
+      end
+
       @thread = Thread.new do
         Thread.current.name = 'risk-manager'
         last_paper_pnl_update = Time.current
@@ -79,6 +84,41 @@ module Live
       @thread = nil
       @watchdog_thread&.kill
       @watchdog_thread = nil
+      
+      if @event_subscription
+        Core::EventBus.instance.unsubscribe(@event_subscription)
+        @event_subscription = nil
+      end
+    end
+
+    private
+
+    # High-frequency risk evaluation (Event-driven)
+    # Reacts immediately to price changes without waiting for LOOP_INTERVAL
+    def handle_pnl_event(event)
+      return unless @running
+      
+      tracker_id = event[:tracker_id]
+      return unless tracker_id
+
+      # Use ActiveCache to avoid DB load in the high-frequency path
+      tracker = PositionTracker.find_by(id: tracker_id)
+      return unless tracker&.active?
+
+      # Evaluate immediate exits (Hard SL, TP, Trailing)
+      # We use UnifiedExitChecker for sub-second logic
+      exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
+      
+      if exit_decision && exit_decision[:exit]
+        reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
+        Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
+        
+        # Execute exit immediately
+        engine = @exit_engine || self
+        dispatch_exit(engine, tracker, reason)
+      end
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.message}")
     end
 
     def running?

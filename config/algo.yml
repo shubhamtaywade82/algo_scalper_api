@@ -174,13 +174,13 @@ broker_fees:
 # ============================================
 risk:
   sl_pct: 0.12 # -12% STOP LOSS
-  tp_pct: 0.25 # +25% TAKE PROFIT
+  tp_pct: 0.50 # +50% TAKE PROFIT
   per_trade_risk_pct: 0.15
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
     enabled: true
-    target_pct: 15.0 # Full exit when total PnL reaches 15%
+    target_pct: 30.0 # Increased from 15% to allow larger moves
 
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
@@ -443,7 +443,7 @@ position_sizing:
 
   # Reverse (below entry) dynamic loss tightening
   reverse_loss:
-    enabled: true
+    enabled: false
     max_loss_pct: 20.0 # starting allowed loss when position just turned red
     min_loss_pct: 5.0 # tightest allowed loss when pnl hits -30%
     loss_span_pct: 30.0 # map -0..-loss_span_pct to max_loss_pct..min_loss_pct

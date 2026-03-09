@@ -674,7 +674,18 @@ class PositionTracker < ApplicationRecord
       end
     end
 
-    self.last_pnl_pct = cache[:pnl_pct] ? BigDecimal(cache[:pnl_pct].to_s) : nil
+    # CRITICAL: Recalculate pnl_pct from final PnL + entry price, don't use Redis snapshot
+    # Redis pnl_pct is a snapshot from exit trigger time, not final realized PnL
+    # This ensures last_pnl_pct reflects actual P&L, not stale cache values
+    entry_price = BigDecimal((self.entry_price || 0).to_s)
+    quantity = (self.quantity || 0).to_i
+    pnl_value = BigDecimal((self.last_pnl_rupees || cache[:pnl] || 0).to_s)
+
+    if entry_price.positive? && quantity.positive? && pnl_value != 0
+      self.last_pnl_pct = pnl_value / (entry_price * quantity)
+    else
+      self.last_pnl_pct = nil
+    end
   end
 
   def meta_hash

@@ -95,23 +95,25 @@ module Live
 
       def loss_limit_hit?(tracker, snapshot)
         config = exit_config
-        pnl_pct = snapshot[:pnl_pct].to_f
+        pnl_pct = snapshot[:pnl_pct].to_f # e.g. -0.0396
 
         # Dynamic reverse SL (if enabled and below entry)
         if pnl_pct.negative? && config[:stop_loss][:type] == 'adaptive'
           seconds_below = seconds_below_entry(tracker)
           atr_ratio = calculate_atr_ratio(tracker)
 
+          # allowed_loss is a positive percentage from schedule (e.g. 10.0 for 10%)
           allowed_loss = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
-            pnl_pct * 100.0, # DrawdownSchedule expects percentage
+            pnl_pct * 100.0,
             seconds_below_entry: seconds_below,
             atr_ratio: atr_ratio
           )
 
+          # If pnl is -3.96% and allowed is 10%, comparison: -0.0396 <= -0.10 (False)
           return true if allowed_loss && pnl_pct <= -(allowed_loss / 100.0)
         end
 
-        # Static stop loss
+        # Static stop loss (config value is percentage, e.g. 10.0)
         static_sl = config[:stop_loss][:value].to_f / 100.0
         pnl_pct <= -static_sl
       end

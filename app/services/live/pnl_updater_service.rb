@@ -249,10 +249,21 @@ module Live
           pnl_pct: pnl_pct_bd.to_f,
           ltp: ltp_bd.to_f,
           hwm: hwm_bd.to_f,
-          hwm_pnl_pct: hwm_pnl_pct_bd&.to_f,
-          timestamp: Time.zone.now,
+          hwm_pnl_pct: hwm_pnl_pct_bd.to_f,
+          timestamp: Time.current,
           tracker: tracker
         )
+
+        # Publish event for high-frequency risk evaluation
+        Core::EventBus.instance.publish(:ltp, {
+          tracker_id: tracker_id,
+          ltp: ltp_bd.to_f,
+          pnl: pnl_bd.to_f,
+          pnl_pct: pnl_pct_bd.to_f,
+          hwm: hwm_bd.to_f,
+          timestamp: Time.current
+        })
+
 
         broadcast_pnl_update(tracker_id, ltp_bd, pnl_bd, hwm_bd, entry_bd)
 
