@@ -10,7 +10,7 @@ http_interactions:
       User-Agent:
       - Faraday v1.10.5
       Authorization:
-      - Bearer xCcrSGQb7HdduwboaSalgzCYm2cuyZoKhDsMlJdqE0KsoWwYmkyyh-AkoRD7UP_GTjO4S3UHhw0gdEhKdjA82Q
+      - Bearer <AUTHORIZATION>
       Accept-Encoding:
       - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
       Accept:
@@ -65,7 +65,7 @@ http_interactions:
       - h3=":443"; ma=86400
     body:
       encoding: ASCII-8BIT
-      string: '{"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczMTMwOTAzLCJpYXQiOjE3NzMwNDQ1MDMsInRva2VuQ29uc3VtZXJUeXBlIjoiQVBQIiwiZGhhbkNsaWVudElkIjoiMTEwNDIxNjMwOCJ9.VLue4xll4MsVJo9ky53mT3pkxOm1Od3ftlDRKjMjU53yw7ItxicCYDXpZ4hAVagbJxvVleSFjyLq6y0NYo_fIw","client_id":"<CLIENT_ID>","expires_at":"2026-03-10T13:51:43+05:30"}'
+      string: '{"access_token":"<ACCESS_TOKEN>","client_id":"<CLIENT_ID>","expires_at":"2026-03-10T13:51:43+05:30"}'
   recorded_at: Mon, 09 Mar 2026 13:23:24 GMT
 - request:
     method: post
@@ -81,7 +81,7 @@ http_interactions:
       Accept:
       - application/json
       Access-Token:
-      - eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzczMTMwOTAzLCJpYXQiOjE3NzMwNDQ1MDMsInRva2VuQ29uc3VtZXJUeXBlIjoiQVBQIiwiZGhhbkNsaWVudElkIjoiMTEwNDIxNjMwOCJ9.VLue4xll4MsVJo9ky53mT3pkxOm1Od3ftlDRKjMjU53yw7ItxicCYDXpZ4hAVagbJxvVleSFjyLq6y0NYo_fIw
+      - <ACCESS_TOKEN>
       Client-Id:
       - "<CLIENT_ID>"
       Accept-Encoding:

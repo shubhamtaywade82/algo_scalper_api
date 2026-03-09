@@ -116,11 +116,11 @@ RSpec.describe Entries::StructureDetector do
       it 'detects when price is inside opposite Order Block' do
         # Recent bullish move (within last 5), but current price is in bearish OB (from before the move)
         bars = [
-          build(:candle, :bearish, high: 25_000, low: 24_900, close: 24_950), # The Bearish OB
-          build(:candle, :bearish, high: 24_950, low: 24_850, close: 24_900),
-          build(:candle, :bullish, high: 25_200, low: 24_900, close: 25_150), # Start of move
+          build(:candle, :bearish, high: 25_000, low: 24_800, close: 24_800), # The Bearish OB
+          build(:candle, :bullish, high: 25_200, low: 24_800, close: 25_150), # Start of move
           build(:candle, :bullish, high: 25_600, low: 25_100, close: 25_550), # End of move
-          build(:candle, high: 24_950, low: 24_900, close: 24_920) # Back inside bearish OB
+          build(:candle, :bearish, high: 25_550, low: 24_900, close: 24_950), # Retreat
+          build(:candle, high: 24_950, low: 24_900, close: 24_920) # Current price, inside index 0 OB
         ]
 
         result = described_class.inside_opposite_ob?(bars)
@@ -158,12 +158,12 @@ RSpec.describe Entries::StructureDetector do
   describe '.inside_fvg?' do
     context 'with valid data' do
       it 'detects when price is inside opposing Fair Value Gap' do
-        # Creates bullish FVG, but price is in bearish FVG
+        # Creates bullish FVG: index 2 low (25200) > index 0 high (25000). Gap: 25000..25200
         bars = [
           build(:candle, high: 25_000, low: 24_900, close: 24_950),
           build(:candle, high: 25_200, low: 25_100, close: 25_150), # Gap up
           build(:candle, high: 25_300, low: 25_200, close: 25_250),
-          build(:candle, high: 24_950, low: 24_850, close: 24_900) # Inside FVG
+          build(:candle, high: 25_150, low: 25_050, close: 25_100) # Current price inside gap (25000..25200)
         ]
 
         result = described_class.inside_fvg?(bars)
