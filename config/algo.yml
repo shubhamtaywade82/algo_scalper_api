@@ -394,8 +394,8 @@ position_sizing:
   mode: rupee_based # Options: 'rupee_based' or 'percentage_based' (legacy)
 
   # Rupee-based sizing parameters (used when enabled: true)
-  risk_rupees: 5000 # Fixed risk per trade in rupees
-  target_rupees: 15000 # Target profit per trade in rupees (for R:R calculation)
+  risk_rupees: 10000 # Fixed risk per trade in rupees (increased for larger sizing)
+  target_rupees: 30000 # Target profit per trade in rupees (scaled with risk)
   stop_distance_rupees: 50 # Stop distance in rupees (updated for increased sizing)
 
   # Index-specific stop distances (override global if specified)
