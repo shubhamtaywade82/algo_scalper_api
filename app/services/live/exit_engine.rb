@@ -177,9 +177,12 @@ module Live
       return reason if reason == updated_reason
 
       Rails.logger.info("[ExitEngine] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-      meta['exit_reason'] = updated_reason
-      tracker.update_column(:meta, meta)
+      tracker.transaction do
+        tracker.lock!
+        meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+        meta['exit_reason'] = updated_reason
+        tracker.update!(meta: meta)
+      end
       updated_reason
     end
 
