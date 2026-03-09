@@ -231,6 +231,13 @@ module Signal
           primary_series = primary_analysis[:series]
           regime_result = MarketRegimeDetector.new(primary_series).detect
           regime = regime_result[:regime]
+
+          # DYNAMIC VALIDATION MODE: Use conservative mode in ranging/choppy markets
+          if %w[RANGING CHOPPY].include?(regime)
+            signals_cfg[:validation_mode] = 'conservative'
+            Rails.logger.info("[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} due to #{regime} regime")
+          end
+
           enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, false)
 
           if enable_direction_gate
@@ -296,6 +303,7 @@ module Signal
               "[Signal] SMC Decision BLOCKED #{index_cfg[:key]}: " \
               "signal=#{final_direction}, smc=#{smc_decision} (misaligned or no_trade)"
             )
+            # HARD BLOCK: If TA is neutral or SMC is neutral/misaligned, we do not trade
             Signal::StateTracker.reset(index_cfg[:key])
             return
           end

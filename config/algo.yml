@@ -53,8 +53,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 8 # 1m ADX threshold (strict filter for options buying)
-      confirmation_min_strength: 8 # 5m ADX threshold
+      primary_min_strength: 15 # 1m ADX threshold (momentum floor)
+      confirmation_min_strength: 15 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -96,8 +96,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 8 # 1m ADX threshold (use global default)
-      confirmation_min_strength: 8 # 5m ADX threshold (70% of typical ~44)
+      primary_min_strength: 15 # 1m ADX threshold (momentum floor)
+      confirmation_min_strength: 15 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -139,8 +139,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 8 # 1m ADX threshold (very strict filter for volatile Sensex)
-      confirmation_min_strength: 8 # 5m ADX threshold
+      primary_min_strength: 18 # 1m ADX threshold (strict filter for volatile Sensex)
+      confirmation_min_strength: 18 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -206,12 +206,12 @@ risk:
   time_stop:
     enabled: true
     scalp:
-      max_minutes: 15
-      max_candles: 15
+      max_minutes: 8 # 8 mins max for scalps
+      max_candles: 8
     trend:
-      NIFTY: 45       # minutes
-      BANKNIFTY: 45    # minutes
-      SENSEX: 90       # minutes
+      NIFTY: 20       # minutes (tightened from 45)
+      BANKNIFTY: 15    # minutes (tightened from 45)
+      SENSEX: 10       # minutes (tightened from 90 - critical for SENSEX)
 
   # Institutional Trailing System (3-Phase)
   # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
@@ -232,7 +232,7 @@ risk:
       early_sl_offset: -0.10
       breakeven_trigger: 0.12     # Phase 2: Breakeven at +12%
       activation_trigger: 0.18    # Phase 3: HWM Trailing at +18%
-      trailing_distance: 0.413    # 41.3% from HWM (80% of avg 51.65% retrace)
+      trailing_distance: 0.80     # 80% from HWM (Based on 5-week avg 99.8% retrace)
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
