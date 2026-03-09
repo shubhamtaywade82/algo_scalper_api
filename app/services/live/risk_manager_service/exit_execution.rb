@@ -5,18 +5,21 @@ module Live
     module ExitExecution
       private
 
+      # RiskManagerService no longer supports self-managed fallback execution directly.
+      # We provide execute_exit for backward compatibility by delegating to a transient ExitEngine.
+      def execute_exit(tracker, reason)
+        engine = @exit_engine || Live::ExitEngine.new(order_router: @orders_gateway)
+        engine.start unless engine.running?
+        engine.execute_exit(tracker, reason)
+      end
+
       # Helper that centralizes exit dispatching logic.
-      # If exit_engine is an object responding to execute_exit, delegate to it.
-      # RiskManagerService no longer supports self-managed fallback execution.
       def dispatch_exit(exit_engine, tracker, reason)
-        if exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
+        if exit_engine.respond_to?(:execute_exit)
           exit_engine.execute_exit(tracker, reason)
         else
-          Rails.logger.fatal(
-            "[RiskManager] CRITICAL: ExitEngine unavailable for #{tracker.order_no} " \
-            "(reason=#{reason}) — position NOT exited"
-          )
-          raise "ExitEngine unavailable for #{tracker.order_no}"
+          # Fallback to internal execute_exit if engine is invalid
+          execute_exit(tracker, reason)
         end
       end
 

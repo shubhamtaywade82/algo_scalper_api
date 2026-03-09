@@ -46,7 +46,7 @@ VCR.configure do |config|
     # Only filter if body contains sensitive data, otherwise preserve as-is
     if body.is_a?(String)
       # Only filter if access_token or client_id are present in the body
-      if body.include?('access_token') || body.include?('client_id')
+      if body.include?('access_token') || body.include?('client_id') || body.include?('dhanClientId')
         filtered_body = body.dup
         # Replace access_token value while preserving the JSON structure
         if body.include?('access_token')
@@ -57,12 +57,16 @@ VCR.configure do |config|
           filtered_body = filtered_body.gsub(/"client_id"\s*:\s*"[^"]*"/,
                                              '"client_id":"<CLIENT_ID>"')
         end
+        if body.include?('dhanClientId')
+          filtered_body = filtered_body.gsub(/"dhanClientId"\s*:\s*"[^"]*"/,
+                                             '"dhanClientId":"<CLIENT_ID>"')
+        end
         interaction.request.body = filtered_body
       end
       # If no sensitive data, body is preserved as-is (no modification)
     elsif body.is_a?(Hash)
       # Filter hash body only if it contains sensitive keys
-      if body.key?('access_token') || body.key?(:access_token) || body.key?('client_id') || body.key?(:client_id)
+      if body.key?('access_token') || body.key?(:access_token) || body.key?('client_id') || body.key?(:client_id) || body.key?('dhanClientId') || body.key?(:dhanClientId)
         filtered_body = body.dup
         if filtered_body['access_token'] || filtered_body[:access_token]
           filtered_body['access_token'] =
@@ -71,6 +75,8 @@ VCR.configure do |config|
         filtered_body[:access_token] = '<ACCESS_TOKEN>' if filtered_body[:access_token]
         filtered_body['client_id'] = '<CLIENT_ID>' if filtered_body['client_id'] || filtered_body[:client_id]
         filtered_body[:client_id] = '<CLIENT_ID>' if filtered_body[:client_id]
+        filtered_body['dhanClientId'] = '<CLIENT_ID>' if filtered_body['dhanClientId'] || filtered_body[:dhanClientId]
+        filtered_body[:dhanClientId] = '<CLIENT_ID>' if filtered_body[:dhanClientId]
         interaction.request.body = filtered_body.to_json if filtered_body.respond_to?(:to_json)
       end
       # If no sensitive data, body is preserved as-is (no modification)

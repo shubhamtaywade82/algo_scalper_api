@@ -80,7 +80,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
 
       result = instrument.resolve_ltp(segment: 'NSE_FNO', security_id: '12345')
       expect(result).to be_nil
-      expect(Rails.logger).to have_received(:error)
+      expect(Rails.logger).to have_received(:error).at_least(:once)
     end
   end
 

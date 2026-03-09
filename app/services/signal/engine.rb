@@ -34,6 +34,10 @@ module Signal
         regime_result = { regime: 'UNKNOWN', confidence: 0, metrics: {} }
         regime = 'UNKNOWN'
 
+        # Default TA settings
+        ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
+        ta_days_back = signals_cfg[:ta_days_back] || 30
+
         if entry_primary == 'supertrend'
           # ===== SUPERTREND-ONLY ENTRY (entry_strategy.primary: supertrend) =====
           # Direction from SupertrendTrend (flip only). No Index TA, no strategy recs,
@@ -81,8 +85,6 @@ module Signal
           )
 
           # Collect diagnostics for Supertrend mode
-          ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
-          ta_days_back = signals_cfg[:ta_days_back] || 30
           index_symbol = index_cfg[:key].to_s.downcase.to_sym
           ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
           ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
@@ -982,7 +984,7 @@ module Signal
 
         # Only apply ADX filter if min_required is positive (i.e., ADX filter is enabled)
         if min_required.positive? && adx_numeric < min_required
-          # Rails.logger.info("[Signal] ADX too weak on #{timeframe_label}: #{adx_numeric} < #{min_required}")
+          Rails.logger.info("[Signal] ADX too weak on #{timeframe_label}: #{adx_numeric} < #{min_required}")
           return :avoid
         end
 

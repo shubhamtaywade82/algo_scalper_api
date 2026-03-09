@@ -11,17 +11,14 @@ require_relative 'risk_manager_service/pnl_cache'
 require_relative 'risk_manager_service/config'
 
 module Live
-  # Responsible for monitoring active PositionTracker entries, keeping PnL up-to-date in Redis,
-  # and enforcing exits according to configured risk rules.
-  #
-  # Behaviour:
-  # - If an external ExitEngine is provided (recommended), RiskManagerService will NOT place exits itself.
-  #   Instead ExitEngine calls the enforcement methods and RiskManagerService supplies helper functions.
-  # - If no external ExitEngine is provided, RiskManagerService will execute exits itself (backwards compatibility).
+  # RiskManagerService for NEMESIS V3
+  # 5-layer risk enforcement system:
+  # 1. Hard Stops (SL/TP)
+  # 2. Dynamic Trailing (Tiered/Direct)
+  # 3. Market Structure (BOS invalidation)
+  # 4. Premium Momentum (Option decay/stagnation)
+  # 5. Global/Time Limits (IV collapse, Stall detection, Daily limits)
   class RiskManagerService
-    LOOP_INTERVAL = 5
-    API_CALL_STAGGER_SECONDS = 1.0
-
     include Runner
     include ExitEnforcement
     include ExitExecution
@@ -30,65 +27,65 @@ module Live
 
     def initialize(exit_engine: nil)
       @exit_engine = exit_engine
+      @active_cache = Positions::ActiveCache.instance
       @algo_config = begin
         AlgoConfig.fetch
       rescue StandardError
         {}
       end
-      @paper_mode = @algo_config.dig(:paper_trading, :enabled) == true
-      @orders_gateway = Orders.config ? Orders.config.gateway : Orders::GatewayFactory.build(paper_mode: @paper_mode)
-      @mutex = Mutex.new
       @running = false
-      @thread = nil
-      @market_closed_checked = false # Track if we've already checked after market closed
-      @watchdog_thread = nil # Initialize as nil, start watchdog only when service starts
+      @orders_gateway = Orders.config.gateway
     end
 
-    # Start monitoring loop (non-blocking)
     def start
-      # Check if thread is actually alive, not just if @running is true
-      return if @running && @thread&.alive?
+      return if @running
 
       @running = true
-
-      # Start watchdog only when service is explicitly started
-      start_watchdog unless @watchdog_thread&.alive?
-
-      # Subscribe to high-frequency LTP/PnL events for sub-second risk evaluation
-      @event_subscription = Core::EventBus.instance.subscribe(:ltp) do |event|
+      start_watchdog
+      
+      # Subscribe to PnL updates from EventBus for high-frequency evaluation
+      @event_subscription = Core::EventBus.instance.subscribe(Core::EventBus::EVENTS[:pnl_update]) do |event|
         handle_pnl_event(event)
       end
-
-      @thread = Thread.new do
-        Thread.current.name = 'risk-manager'
-        last_paper_pnl_update = Time.current
-
-        loop do
-          break unless @running
-
-          begin
-            monitor_loop(last_paper_pnl_update)
-            # update timestamp after paper update occurred inside monitor_loop
-            last_paper_pnl_update = Time.current
-          rescue StandardError => e
-            Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
-          end
-          sleep LOOP_INTERVAL
-        end
-      end
+      
+      Rails.logger.info '[RiskManager] Service started'
     end
 
     def stop
       @running = false
-      @thread&.kill
-      @thread = nil
-      @watchdog_thread&.kill
-      @watchdog_thread = nil
-      
       if @event_subscription
         Core::EventBus.instance.unsubscribe(@event_subscription)
         @event_subscription = nil
       end
+    end
+
+    def running?
+      @running
+    end
+
+    # Lightweight risk evaluation helper (unchanged semantics)
+    def evaluate_signal_risk(signal_data)
+      confidence = signal_data[:confidence] || 0.0
+      entry_price = signal_data[:entry_price]
+      stop_loss = signal_data[:stop_loss]
+
+      risk_level =
+        case confidence
+        when 0.8..1.0 then :low
+        when 0.6...0.8 then :medium
+        else :high
+        end
+
+      max_position_size =
+        case risk_level
+        when :low then 100
+        when :medium then 50
+        else 25
+        end
+
+      recommended_stop_loss = stop_loss || (entry_price * 0.98)
+
+      { risk_level: risk_level, max_position_size: max_position_size, recommended_stop_loss: recommended_stop_loss }
     end
 
     private
@@ -119,35 +116,6 @@ module Live
       end
     rescue StandardError => e
       Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.message}")
-    end
-
-    def running?
-      @running
-    end
-
-    # Lightweight risk evaluation helper (unchanged semantics)
-    def evaluate_signal_risk(signal_data)
-      confidence = signal_data[:confidence] || 0.0
-      entry_price = signal_data[:entry_price]
-      stop_loss = signal_data[:stop_loss]
-
-      risk_level =
-        case confidence
-        when 0.8..1.0 then :low
-        when 0.6...0.8 then :medium
-        else :high
-        end
-
-      max_position_size =
-        case risk_level
-        when :low then 100
-        when :medium then 50
-        else 25
-        end
-
-      recommended_stop_loss = stop_loss || (entry_price * 0.98)
-
-      { risk_level: risk_level, max_position_size: max_position_size, recommended_stop_loss: recommended_stop_loss }
     end
   end
 end

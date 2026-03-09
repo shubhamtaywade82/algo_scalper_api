@@ -13,6 +13,27 @@ module Live
       # Enforcement methods always accept an exit_engine keyword. They do not fetch positions from caller.
       # If exit_engine is provided, they will delegate the actual exit to it. Otherwise they call internal execute_exit.
 
+      def enforce_hard_limits(exit_engine:)
+        PositionTracker.active.find_each do |tracker|
+          enforce_hard_limits_for(tracker, exit_engine: exit_engine)
+        end
+      end
+
+      def enforce_hard_limits_for(tracker, exit_engine:)
+        # UnifiedExitChecker handles Hard SL, TP, and Adaptive Trailing
+        exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
+
+        if exit_decision && exit_decision[:exit]
+          reason = "#{exit_decision[:reason]} (Hard Limit)"
+          exit_path = exit_decision[:path] || 'hard_limit'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_hard_limits_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
       def enforce_early_trend_failure(exit_engine:)
         etf_cfg = begin
           resolved_risk_config[:etf] || {}
@@ -103,7 +124,7 @@ module Live
         return unless tracker.trade_state == 'expansion' || tracker.be_set?
 
         # TrailingEngine expects PositionData from ActiveCache
-        position_data = @active_cache.get_position(tracker.id)
+        position_data = @active_cache.get_by_tracker_id(tracker.id)
         return unless position_data
 
         # engine = @trailing_engine ||= Live::TrailingEngine.new
@@ -319,7 +340,7 @@ module Live
 
         PositionTracker.active.find_each do |tracker|
           # TrailingEngine expects PositionData from ActiveCache
-          position_data = @active_cache.get_position(tracker.id)
+          position_data = @active_cache.get_by_tracker_id(tracker.id)
           next unless position_data
 
           # process_tick handles peak updates and SL adjustments

@@ -118,6 +118,9 @@ RSpec.describe PositionTracker do
           allow(instrument).to receive(:exchange_segment).and_return('NSE_FNO')
 
           market_feed_hub = Live::MarketFeedHub.instance
+          # Clear subscriptions to ensure the next call is not skipped
+          market_feed_hub.instance_variable_set(:@subscribed_keys, Concurrent::Set.new)
+          
           expect(market_feed_hub).to receive(:subscribe).with(
             segment: 'NSE_FNO',
             security_id: '50074'

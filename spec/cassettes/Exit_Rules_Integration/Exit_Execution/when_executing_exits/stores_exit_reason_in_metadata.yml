@@ -1,0 +1,52 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://api.telegram.org/bot7590450232:AAGlCiXOU_D4yeifZUP4M_SLi_-6UkrdkXA/sendMessage
+    body:
+      encoding: US-ASCII
+      string: chat_id=5862585229&text=%E2%9C%85+%26lt%3Bb%26gt%3BEXIT%26lt%3B%2Fb%26gt%3B%0A%0A%F0%9F%93%8A+%26lt%3Bb%26gt%3BSymbol%3A%26lt%3B%2Fb%26gt%3B+NIFTY%0A%F0%9F%92%B0+%26lt%3Bb%26gt%3BEntry%3A%26lt%3B%2Fb%26gt%3B+%E2%82%B9100.0%0A%F0%9F%92%B5+%26lt%3Bb%26gt%3BExit%3A%26lt%3B%2Fb%26gt%3B+%E2%82%B9100.0%0A%F0%9F%93%A6+%26lt%3Bb%26gt%3BQuantity%3A%26lt%3B%2Fb%26gt%3B+50%0A%F0%9F%92%B8+%26lt%3Bb%26gt%3BPnL%3A%26lt%3B%2Fb%26gt%3B+%E2%82%B92500.0+%28%F0%9F%93%88+50.0%25%29%0A%F0%9F%93%9D+%26lt%3Bb%26gt%3BReason%3A%26lt%3B%2Fb%26gt%3B+take-profit+%2850.0%25%29+%28Actual%3A+50.0%25%29%0A%F0%9F%86%94+%26lt%3Bb%26gt%3BOrder+No%3A%26lt%3B%2Fb%26gt%3B+ORD123456%0A%E2%8F%B0+%26lt%3Bb%26gt%3BTime%3A%26lt%3B%2Fb%26gt%3B+17%3A41%3A21&parse_mode=HTML
+    headers:
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+      User-Agent:
+      - Ruby
+      Host:
+      - api.telegram.org
+      Content-Type:
+      - application/x-www-form-urlencoded
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx/1.18.0
+      Date:
+      - Mon, 09 Mar 2026 12:11:22 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '608'
+      Connection:
+      - keep-alive
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Allow-Methods:
+      - GET, POST, OPTIONS
+      Access-Control-Expose-Headers:
+      - Content-Length,Content-Type,Date,Server,Connection
+    body:
+      encoding: UTF-8
+      string: '{"ok":true,"result":{"message_id":20794,"from":{"id":7590450232,"is_bot":true,"first_name":"MyTradingBot","username":"my_alert_system_bot"},"chat":{"id":5862585229,"first_name":"S","last_name":"T","type":"private"},"date":1773058281,"text":"\u2705
+        <b>EXIT</b>\n\n\ud83d\udcca <b>Symbol:</b> NIFTY\n\ud83d\udcb0 <b>Entry:</b>
+        \u20b9100.0\n\ud83d\udcb5 <b>Exit:</b> \u20b9100.0\n\ud83d\udce6 <b>Quantity:</b>
+        50\n\ud83d\udcb8 <b>PnL:</b> \u20b92500.0 (\ud83d\udcc8 50.0%)\n\ud83d\udcdd
+        <b>Reason:</b> take-profit (50.0%) (Actual: 50.0%)\n\ud83c\udd94 <b>Order
+        No:</b> ORD123456\n\u23f0 <b>Time:</b> 17:41:21"}}'
+  recorded_at: Mon, 09 Mar 2026 12:11:21 GMT
+recorded_with: VCR 6.3.1

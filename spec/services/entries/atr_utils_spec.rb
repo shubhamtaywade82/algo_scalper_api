@@ -58,8 +58,14 @@ RSpec.describe Entries::ATRUtils do
     it 'detects ATR downtrend when last 3 windows show decreasing ATR' do
       bars = series.candles
 
-      # Mock CandleSeries to return decreasing ATR values
-      allow_any_instance_of(CandleSeries).to receive(:atr).and_return(100.0, 90.0, 80.0, 70.0)
+      # Use a counter to return different values for each window series instance
+      atr_values = [100.0, 95.0, 90.0, 85.0, 80.0, 75.0]
+      atr_index = 0
+      allow_any_instance_of(CandleSeries).to receive(:atr) do
+        val = atr_values[atr_index] || 70.0
+        atr_index += 1
+        val
+      end
 
       result = described_class.atr_downtrend?(bars, period: 14)
 
@@ -69,8 +75,14 @@ RSpec.describe Entries::ATRUtils do
     it 'returns false when ATR is not trending down' do
       bars = series.candles
 
-      # Mock CandleSeries to return increasing ATR values
-      allow_any_instance_of(CandleSeries).to receive(:atr).and_return(70.0, 80.0, 90.0, 100.0)
+      # Use a counter to return different values for each window series instance
+      atr_values = [70.0, 75.0, 80.0, 85.0, 90.0, 95.0]
+      atr_index = 0
+      allow_any_instance_of(CandleSeries).to receive(:atr) do
+        val = atr_values[atr_index] || 100.0
+        atr_index += 1
+        val
+      end
 
       result = described_class.atr_downtrend?(bars, period: 14)
 

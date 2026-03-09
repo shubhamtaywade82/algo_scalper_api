@@ -151,14 +151,16 @@ module Positions
     def config
       @config ||= begin
         risk = fetch_risk_config
+        dd = risk[:drawdown].is_a?(Hash) ? risk[:drawdown] : {}
+
         {
           trailing_mode: (risk[:trailing_mode] || 'tiered').to_s,
           direct_trailing: parse_direct_trailing(risk[:direct_trailing]),
           tiers: parse_tiers(risk[:trailing_tiers]) || DEFAULT_TIERS,
-          peak_drawdown_pct: numeric_or_default(risk[:peak_drawdown_exit_pct], DEFAULT_PEAK_DRAWDOWN_PCT),
+          peak_drawdown_pct: dd[:dd_end_pct] || numeric_or_default(risk[:peak_drawdown_exit_pct], DEFAULT_PEAK_DRAWDOWN_PCT),
           dynamic_drawdown_thresholds: parse_dynamic_drawdown_thresholds(risk[:dynamic_drawdown_thresholds]),
           capital_based_thresholds: parse_capital_based_thresholds(risk[:capital_based_thresholds]),
-          activation_profit_pct: numeric_or_default(risk[:peak_drawdown_activation_profit_pct],
+          activation_profit_pct: dd[:activation_profit_pct] || numeric_or_default(risk[:peak_drawdown_activation_profit_pct],
                                                     DEFAULT_ACTIVATION_PROFIT_PCT),
           activation_sl_offset_pct: numeric_or_default(risk[:peak_drawdown_activation_sl_offset_pct],
                                                        DEFAULT_ACTIVATION_SL_OFFSET_PCT),

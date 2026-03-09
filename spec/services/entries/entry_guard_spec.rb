@@ -40,6 +40,12 @@ RSpec.describe Entries::EntryGuard do
   before do
     allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
     allow(daily_limits).to receive(:can_trade?).and_return({ allowed: true, reason: nil })
+    
+    # Allow all logs by default
+    allow(Rails.logger).to receive(:info)
+    allow(Rails.logger).to receive(:warn)
+    allow(Rails.logger).to receive(:error)
+    allow(Rails.logger).to receive(:debug)
   end
 
   describe 'EPIC F — F1: Place Entry Order & Subscribe Option Tick' do
@@ -56,16 +62,40 @@ RSpec.describe Entries::EntryGuard do
         allow(Trading::CapitalAllocator).to receive(:max_lots).and_return(2)
         gateway = instance_double(Orders::Gateway, place_market: double(order_id: 'ORD123456'))
         allow(Orders.config).to receive(:gateway).and_return(gateway)
-        allow(described_class).to receive_messages(extract_order_no: 'ORD123456', exposure_ok?: true, cooldown_active?: false)
+        allow(described_class).to receive_messages(
+          extract_order_no: 'ORD123456',
+          exposure_ok?: true,
+          cooldown_active?: false,
+          enforce_structure_entry_gate: { confirmed_at: Time.current }
+        )
         allow(TradingSession::Service).to receive(:entry_allowed?).and_return({ allowed: true })
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
         allow(Live::MarketFeedHub.instance).to receive_messages(running?: true, connected?: true)
+        allow(described_class).to receive(:entry_guard_pipeline).and_return(
+          double('Pipeline').tap do |p|
+            allow(p).to receive(:run) do |ctx|
+              ctx[:instrument] = nifty_instrument
+              ctx[:ltp] = 100.0
+              ctx[:side] = 'long_ce'
+              Entries::EntryGuardPipeline::PASS
+            end
+          end
+        )
       end
 
       context 'when all validations pass' do
         it 'places INTRADAY | MARKET | BUY order via gateway with correct parameters' do
           gateway = Orders.config.gateway
-          expect(gateway).to receive(:place_market).with(
+          allow(gateway).to receive(:place_market).and_return(double(order_id: 'ORD123456'))
+
+          described_class.try_enter(
+            index_cfg: index_cfg,
+            pick: pick,
+            direction: :bullish,
+            entry_metadata: entry_metadata
+          )
+
+          expect(gateway).to have_received(:place_market).with(
             side: 'buy',
             segment: 'NSE_FNO',
             security_id: '50074',
@@ -75,13 +105,6 @@ RSpec.describe Entries::EntryGuard do
               ltp: 100.0,
               symbol: 'NIFTY18500CE'
             )
-          )
-
-          described_class.try_enter(
-            index_cfg: index_cfg,
-            pick: pick,
-            direction: :bullish,
-            entry_metadata: entry_metadata
           )
         end
 

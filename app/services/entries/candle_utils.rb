@@ -19,11 +19,12 @@ module Entries
       # @return [Float] Wick ratio
       def wick_ratio(candle)
         body = (candle.close - candle.open).abs
-        return 0.0 if body.zero?
-
         upper_wick = candle.high - [candle.open, candle.close].max
         lower_wick = [candle.open, candle.close].min - candle.low
         total_wick = upper_wick + lower_wick
+
+        return 0.0 if body.zero? && total_wick.zero?
+        return 100.0 if body.zero? # Cap at 100x for Doji with wicks
 
         total_wick / body
       end
@@ -41,12 +42,12 @@ module Entries
         c2 = recent[1]
         c3 = recent[2]
 
-        # Check for alternating patterns
-        engulfing_12 = engulfing?(c1, c2)
-        engulfing_23 = engulfing?(c2, c3)
+        # Check for alternating patterns (later engulfs earlier)
+        engulfing_21 = engulfing?(c2, c1)
+        engulfing_32 = engulfing?(c3, c2)
 
-        # If both are engulfing but in opposite directions
-        engulfing_12 && engulfing_23 && c1.bullish? != c3.bullish?
+        # If both are engulfing and they alternate directions (Bull -> Bear -> Bull or vice versa)
+        engulfing_21 && engulfing_32 && c1.bullish? != c2.bullish? && c2.bullish? != c3.bullish?
       end
 
       # Check if candle1 engulfs candle2

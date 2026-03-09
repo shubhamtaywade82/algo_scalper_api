@@ -3,6 +3,18 @@
 require 'rails_helper'
 
 RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
+  before do
+    # Reset singletons to avoid state leakage
+    if defined?(Live::MarketFeedHub)
+      hub = Live::MarketFeedHub.instance
+      hub.instance_variable_set(:@ws_client, nil)
+      hub.instance_variable_set(:@running, false)
+      hub.instance_variable_set(:@subscribed_keys, Concurrent::Set.new)
+      allow(hub).to receive(:subscribe).and_return({ success: true })
+      allow(hub).to receive(:unsubscribe).and_return({ success: true })
+    end
+  end
+
   # Use real index instruments (NIFTY-13, BANKNIFTY-25, SENSEX-51) if available
   # Otherwise fall back to factory-created instruments
   let(:instrument) do
@@ -123,11 +135,14 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
         allow(position_tracker).to receive(:unsubscribe)
         redis_cache = Live::RedisPnlCache.instance
         allow(redis_cache).to receive(:clear_tracker)
+        
+        # Allow other cache writes (e.g. from TickQuery)
+        allow(Rails.cache).to receive(:write).and_call_original
         expect(Rails.cache).to receive(:write).with(
           "reentry:#{position_tracker.symbol}",
           anything,
           expires_in: 8.hours
-        )
+        ).at_least(:once)
 
         position_tracker.mark_exited!
 

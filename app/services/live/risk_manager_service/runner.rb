@@ -83,6 +83,8 @@ module Live
           # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
           advance_trade_state_for(tracker)
 
+          enforce_hard_limits_for(tracker, exit_engine: exit_engine)
+          enforce_early_trend_failure_for(tracker, exit_engine: exit_engine)
           enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
           enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
           enforce_profit_floor_for(tracker, exit_engine: exit_engine)

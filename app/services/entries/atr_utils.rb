@@ -10,7 +10,8 @@ module Entries
       # @param min_downtrend_bars [Integer] Minimum bars in downtrend (default: 3)
       # @return [Boolean]
       def atr_downtrend?(bars, period: 14, min_downtrend_bars: 3)
-        return false if bars.blank? || bars.size < period * 2
+        # Needs at least period + min_downtrend_bars + 1 candles to have enough ATR values
+        return false if bars.blank? || bars.size < period + min_downtrend_bars + 1
 
         # Build CandleSeries for efficient ATR calculations
         return false unless bars.first.is_a?(Candle)
@@ -20,10 +21,10 @@ module Entries
 
         # Calculate ATR for recent periods using sliding windows
         recent_atrs = []
-        (period..(series.candles.size - 1)).each do |i|
-          # Create a sub-series for this window
+        ( (period + 1)..(series.candles.size - 1) ).each do |i|
+          # Create a sub-series for this window (needs period + 1 candles)
           window_series = CandleSeries.new(symbol: 'temp', interval: '1')
-          series.candles[(i - period + 1)..i].each { |c| window_series.add_candle(c) }
+          series.candles[(i - period)..i].each { |c| window_series.add_candle(c) }
           atr = window_series.atr(period)
           recent_atrs << atr if atr
         end

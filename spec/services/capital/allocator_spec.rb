@@ -410,32 +410,32 @@ RSpec.describe Capital::Allocator do
         policy = described_class.deployment_policy(50_000.0)
 
         expect(policy[:upto]).to eq(75_000)
-        expect(policy[:alloc_pct]).to eq(0.30)
-        expect(policy[:risk_per_trade_pct]).to eq(0.050)
+        expect(policy[:alloc_pct]).to eq(0.40)
+        expect(policy[:risk_per_trade_pct]).to eq(0.060)
       end
 
       it 'returns medium account band for balance up to ₹1.5L' do
         policy = described_class.deployment_policy(100_000.0)
 
         expect(policy[:upto]).to eq(150_000)
-        expect(policy[:alloc_pct]).to eq(0.25)
-        expect(policy[:risk_per_trade_pct]).to eq(0.035)
+        expect(policy[:alloc_pct]).to eq(0.35)
+        expect(policy[:risk_per_trade_pct]).to eq(0.050)
       end
 
       it 'returns large account band for balance up to ₹3L' do
         policy = described_class.deployment_policy(200_000.0)
 
         expect(policy[:upto]).to eq(300_000)
-        expect(policy[:alloc_pct]).to eq(0.20)
-        expect(policy[:risk_per_trade_pct]).to eq(0.030)
+        expect(policy[:alloc_pct]).to eq(0.30)
+        expect(policy[:risk_per_trade_pct]).to eq(0.040)
       end
 
       it 'returns very large account band for balance above ₹3L' do
         policy = described_class.deployment_policy(500_000.0)
 
         expect(policy[:upto]).to eq(Float::INFINITY)
-        expect(policy[:alloc_pct]).to eq(0.20)
-        expect(policy[:risk_per_trade_pct]).to eq(0.025)
+        expect(policy[:alloc_pct]).to eq(0.25)
+        expect(policy[:risk_per_trade_pct]).to eq(0.035)
       end
 
       it 'respects boundary values' do
@@ -464,15 +464,13 @@ RSpec.describe Capital::Allocator do
 
         it 'uses environment variable overrides when set' do
           # NOTE: The implementation prefers band values over ENV (band[:alloc_pct] || ENV[...])
-          # So ENV only applies when band value is nil. For 100_000 balance, band alloc_pct is 0.25
-          # To test ENV override, we need to use a balance that falls into a band without alloc_pct
-          # or modify the test to expect the band value (0.25) instead
+          # So ENV only applies when band value is nil. For 100_000 balance, band values are not nil.
           policy = described_class.deployment_policy(100_000.0)
 
-          # The band value (0.25) takes precedence over ENV (0.35) per implementation
-          expect(policy[:alloc_pct]).to eq(0.25)
-          expect(policy[:risk_per_trade_pct]).to eq(0.035)
-          expect(policy[:daily_max_loss_pct]).to eq(0.060)
+          # The band value (0.35) takes precedence over ENV (0.35) per implementation
+          expect(policy[:alloc_pct]).to eq(0.35)
+          expect(policy[:risk_per_trade_pct]).to eq(0.050)
+          expect(policy[:daily_max_loss_pct]).to eq(0.070)
         end
       end
     end

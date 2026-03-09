@@ -11,7 +11,7 @@ RSpec.describe TradingSystem::Daemon do
   let(:router) { instance_double(TradingSystem::OrderRouter, start: true, stop: true) }
   let(:pnl_refresher) { instance_double(Live::PaperPnlRefresher, start: true, stop: true) }
   let(:exit_engine) { instance_double(Live::ExitEngine, start: true, stop: true) }
-  let(:active_cache) { instance_double(ActiveCacheService, start: true, stop: true) }
+  let(:active_cache) { instance_double(Positions::ActiveCacheService, start: true, stop: true) }
   let(:reconciliation) { instance_double(Live::ReconciliationService, start: true, stop: true) }
 
   before do

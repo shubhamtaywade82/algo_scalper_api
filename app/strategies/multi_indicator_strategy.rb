@@ -17,7 +17,7 @@ class MultiIndicatorStrategy
     @indicators = build_indicators(indicators, config)
 
     # Allow threshold config to override confirmation_mode and min_confidence
-    threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:multi_indicator, config)
+    threshold_config = Indicators::ThresholdConfig.merge_with_thresholds(:multi_indicator, config, config[:indicator_preset])
     effective_confirmation_mode = threshold_config[:confirmation_mode] || confirmation_mode
     effective_min_confidence = min_confidence || threshold_config[:min_confidence] || 60
 

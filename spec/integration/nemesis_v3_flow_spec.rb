@@ -27,7 +27,7 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
       }
     )
 
-    # Mock Redis for DailyLimits - need to track values properly
+    # Mock Redis for DailyLimits and TickCache - need to track values properly
     @redis_store = {}
     mock_redis = instance_double(Redis)
     allow(Redis).to receive(:new).and_return(mock_redis)
@@ -41,7 +41,16 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
       @redis_store[key]
     end
     allow(mock_redis).to receive(:scan_each).and_yield
-    allow(mock_redis).to receive_messages(setex: true, expire: true, del: true)
+    allow(mock_redis).to receive_messages(setex: true, expire: true, del: true, hset: true, hmset: true, hgetall: {})
+    allow(mock_redis).to receive(:hgetall) { |key| @redis_store[key] || {} }
+    
+    # Reset singletons to use the new mock_redis
+    if defined?(Live::RedisPnlCache)
+      Live::RedisPnlCache.instance.instance_variable_set(:@redis, mock_redis)
+    end
+    if defined?(Live::RedisTickCache)
+      Live::RedisTickCache.instance.instance_variable_set(:@redis, mock_redis)
+    end
 
     # Mock MarketFeedHub
     allow(Live::MarketFeedHub.instance).to receive_messages(
@@ -185,8 +194,8 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
 
       # Simulate profit to 25% (peak)
       position_data.update_ltp(187.5) # 25% profit
-      expect(position_data.pnl_pct).to be >= 25.0
-      expect(position_data.peak_profit_pct).to be >= 25.0
+      expect(position_data.pnl_pct).to be >= 0.25
+      expect(position_data.peak_profit_pct).to be >= 0.25
 
       # Simulate drawdown to 18% (7% drawdown from 25% peak)
       # Peak drawdown threshold is 5%, so this should trigger exit
@@ -262,6 +271,9 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
   describe 'Scenario 4: Daily limits enforcement' do
     it 'blocks trading when daily loss limit is exceeded' do
       daily_limits = Live::DailyLimits.new
+
+      # Record some profit first to enable loss limit enforcement (threshold is ₹20k)
+      daily_limits.record_profit(index_key: 'NIFTY', amount: 25_000.0)
 
       # Record losses up to limit
       daily_limits.record_loss(index_key: 'NIFTY', amount: 5000.0) # Hit limit

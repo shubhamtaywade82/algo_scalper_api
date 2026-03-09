@@ -18,6 +18,7 @@ module Entries
       end
 
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
+        puts "DEBUG: try_enter for #{index_cfg[:key]}"
         Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
 
         context = {
@@ -40,20 +41,10 @@ module Entries
         is_supertrend = context[:is_supertrend]
         ltp = context[:ltp]
         multiplier = [scale_multiplier.to_i, 1].max
-        Rails.logger.info("[EntryGuard] Scale multiplier for #{index_cfg[:key]}: x#{multiplier}") if multiplier > 1
+        
 
         if entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
-          # Bypass BOS gate for Supertrend-only mode
-          bos_context = {
-            confirmed_at: Time.current,
-            confirmed_index: -1,
-            direction: direction,
-            bos_id: entry_metadata[:bos_id],
-            timeframe: entry_metadata[:bos_timeframe],
-            origin_swing: { price: entry_metadata[:bos_origin_price] },
-            broken_swing: { price: entry_metadata[:bos_level] },
-            entry_underlying_price: ltp.to_f
-          }
+          # ...
         else
           bos_context = enforce_structure_entry_gate(
             index_cfg: index_cfg,

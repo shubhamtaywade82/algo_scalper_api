@@ -72,8 +72,29 @@ module Live
         end
       end
 
-      # Trade frequency limits are NOT enforced (no cap on trade count)
-      # Trade counts are still tracked for monitoring/analytics but don't block entries
+      # Trade frequency limits
+      max_trades = risk_config[:max_daily_trades] || 10
+      current_trades = get_daily_trades(index_key)
+      if max_trades && current_trades >= max_trades.to_i
+        return {
+          allowed: false,
+          reason: 'trade_frequency_limit_exceeded',
+          current_trades: current_trades,
+          max_trades: max_trades.to_i,
+          index_key: index_key
+        }
+      end
+
+      max_global_trades = risk_config[:max_global_daily_trades] || 20
+      global_trades = get_global_daily_trades
+      if max_global_trades && global_trades >= max_global_trades.to_i
+        return {
+          allowed: false,
+          reason: 'global_trade_frequency_limit_exceeded',
+          global_trades: global_trades,
+          max_global_trades: max_global_trades.to_i
+        }
+      end
 
       { allowed: true, reason: nil }
     rescue StandardError => e
