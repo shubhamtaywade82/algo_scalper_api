@@ -32,6 +32,7 @@ module Live
           next if pnl_pct.nil?
 
           # ETF only applies before trailing activation (when profit < activation threshold)
+          # pnl_pct is decimal (e.g. 0.05 for 5%), convert to percentage for EarlyTrendFailure.applicable?
           pnl_pct_value = pnl_pct.to_f * 100.0
           next unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_profit)
 
@@ -401,7 +402,9 @@ module Live
           next if sl_pct.zero?
 
           # RR = Profit% / SL%
-          current_rr = (pnl_pct.to_f * 100.0) / sl_pct
+          # pnl_pct is decimal (e.g. 0.05 for 5%), convert to percentage for RR calculation
+          pnl_pct_value = pnl_pct.to_f * 100.0
+          current_rr = pnl_pct_value / sl_pct
 
           if current_rr >= target_rr
             reason = "RR_PROFIT_BOOKING (RR: #{current_rr.round(2)}, Target: #{target_rr}, PnL: #{(pnl_pct.to_f * 100).round(2)}%, SL: #{sl_pct.round(2)}%)"

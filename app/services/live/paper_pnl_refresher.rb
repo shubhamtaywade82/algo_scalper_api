@@ -96,24 +96,25 @@ module Live
       # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
       pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
 
-      pct   = entry.positive? ? ((ltp.to_d - entry) / entry * 100) : 0
+      # Calculate decimal (e.g. 0.05 for 5%)
+      pct = entry.positive? ? ((ltp.to_d - entry) / entry) : 0
 
       hwm_pnl = [tracker.high_water_mark_pnl.to_d, pnl].max
-      hwm_pnl_pct = entry.positive? ? ((hwm_pnl / (entry * qty)) * 100) : 0
+      hwm_pnl_pct = entry.positive? ? (hwm_pnl / (entry * qty)) : 0
 
       tracker.update!(
         last_pnl_rupees: pnl,
-        last_pnl_pct: pct.round(2),
+        last_pnl_pct: pct ? BigDecimal(pct.to_s) : nil,
         high_water_mark_pnl: hwm_pnl
       )
 
       Live::RedisPnlCache.instance.store_pnl(
         tracker_id: tracker.id,
         pnl: pnl,
-        pnl_pct: pct,
+        pnl_pct: pct.to_f,
         ltp: ltp,
         hwm: hwm_pnl,
-        hwm_pnl_pct: hwm_pnl_pct.round(2),
+        hwm_pnl_pct: hwm_pnl_pct.to_f,
         timestamp: Time.current,
         tracker: tracker
       )

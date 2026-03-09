@@ -65,6 +65,13 @@ module Entries
         end
         return false unless bos_context
 
+        # ===== Cooldown check (prevent overtrading) =====
+        symbol_name = pick[:symbol]
+        if cooldown_active?(symbol_name, 5.minutes)
+          Rails.logger.info("[EntryGuard] Entry blocked for #{symbol_name}: Reentry cooldown active (5 mins)")
+          return false
+        end
+
         # ===== Unified instrument profile + capital cap sizing (hard rules) =====
         symbol = index_cfg[:key].to_s.upcase
         permission_sym = (permission || entry_metadata&.dig(:permission) || :scale_ready).to_s.downcase.to_sym
@@ -263,19 +270,24 @@ module Entries
 
           # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
           pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
-          pnl_pct = ((exit_price - entry) / entry * 100).round(2)
+          # Store as decimal (e.g. 0.05 for 5%)
+          pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : 0
 
           hwm = tracker.high_water_mark_pnl || BigDecimal(0)
           hwm = [hwm, pnl].max
 
           tracker.update!(
             last_pnl_rupees: pnl,
-            last_pnl_pct: pnl_pct,
+            last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
             high_water_mark_pnl: hwm,
             avg_price: exit_price
           )
 
-          Rails.logger.debug { "[EntryGuard] Calculated PnL for paper position #{tracker.order_no}: PnL=₹#{pnl.round(2)}" }
+          if pnl_pct
+            Rails.logger.debug { "[EntryGuard] Calculated PnL for paper position #{tracker.order_no}: PnL=₹#{pnl.round(2)} (#{(pnl_pct.to_f * 100).round(2)}%)" }
+          else
+            Rails.logger.debug { "[EntryGuard] Calculated PnL for paper position #{tracker.order_no}: PnL=₹#{pnl.round(2)}" }
+          end
           return
         end
 

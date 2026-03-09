@@ -21,10 +21,9 @@ module Risk
         target_val = BigDecimal(target_pct.to_s)
         return skip_result if target_val.zero?
 
-        # pnl_pct is stored as decimal (e.g. 0.05), target_val may be percentage (e.g. 5.0) or decimal
-        # We assume config values are decimal if < 1.0, else percentage
-        # normalize_pct helper handles this in some contexts, but let's be explicit here
-        threshold = target_val > 1.0 ? (target_val / 100.0) : target_val
+        # target_pct from config is expected to be a percentage (e.g. 15.0 for 15%)
+        # Convert to decimal threshold (e.g. 0.15)
+        threshold = target_val / 100.0
 
         return no_action_result unless pnl_pct >= threshold
 

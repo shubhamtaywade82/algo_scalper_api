@@ -397,6 +397,7 @@ class PositionTracker < ApplicationRecord
   end
 
   # Get current PnL percentage from Redis cache (preferred) or fallback to DB
+  # Returns decimal (e.g. 0.05 for 5%)
   def current_pnl_pct
     return last_pnl_pct if exited? # Exited positions: use DB (final value)
 

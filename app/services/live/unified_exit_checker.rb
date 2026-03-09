@@ -11,7 +11,8 @@ module Live
         snapshot = pnl_snapshot(tracker)
         return nil unless snapshot
 
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        # snapshot[:pnl_pct] is decimal (e.g. 0.05 for 5%)
+        pnl_pct = snapshot[:pnl_pct].to_f
 
         # Priority order (first match wins)
 
@@ -21,7 +22,7 @@ module Live
             exit: true,
             reason: 'EARLY_TREND_FAILURE',
             path: 'early_trend_failure',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -31,7 +32,7 @@ module Live
             exit: true,
             reason: 'STOP_LOSS',
             path: 'stop_loss',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -41,7 +42,7 @@ module Live
             exit: true,
             reason: 'TAKE_PROFIT',
             path: 'take_profit',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -51,7 +52,7 @@ module Live
             exit: true,
             reason: 'TRAILING_STOP',
             path: 'trailing_stop',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -61,7 +62,7 @@ module Live
             exit: true,
             reason: 'TIME_BASED',
             path: 'time_based',
-            pnl_pct: pnl_pct
+            pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
 
@@ -80,8 +81,8 @@ module Live
         config = exit_config
         return false unless config[:early_exit][:enabled]
 
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
-        threshold = config[:early_exit][:profit_threshold].to_f
+        pnl_pct = snapshot[:pnl_pct].to_f
+        threshold = config[:early_exit][:profit_threshold].to_f / 100.0
         return false if pnl_pct >= threshold
 
         # Check ETF conditions
@@ -94,7 +95,7 @@ module Live
 
       def loss_limit_hit?(tracker, snapshot)
         config = exit_config
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        pnl_pct = snapshot[:pnl_pct].to_f
 
         # Dynamic reverse SL (if enabled and below entry)
         if pnl_pct.negative? && config[:stop_loss][:type] == 'adaptive'
@@ -102,23 +103,23 @@ module Live
           atr_ratio = calculate_atr_ratio(tracker)
 
           allowed_loss = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
-            pnl_pct,
+            pnl_pct * 100.0, # DrawdownSchedule expects percentage
             seconds_below_entry: seconds_below,
             atr_ratio: atr_ratio
           )
 
-          return true if allowed_loss && pnl_pct <= -allowed_loss
+          return true if allowed_loss && pnl_pct <= -(allowed_loss / 100.0)
         end
 
         # Static stop loss
-        static_sl = config[:stop_loss][:value].to_f
+        static_sl = config[:stop_loss][:value].to_f / 100.0
         pnl_pct <= -static_sl
       end
 
       def profit_target_hit?(_tracker, snapshot)
         config = exit_config
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
-        tp = config[:take_profit].to_f
+        pnl_pct = snapshot[:pnl_pct].to_f
+        tp = config[:take_profit].to_f / 100.0
 
         pnl_pct >= tp
       end
@@ -131,7 +132,7 @@ module Live
         hwm = snapshot[:hwm_pnl]
         return false if hwm.nil? || hwm.zero?
 
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
+        pnl_pct = snapshot[:pnl_pct].to_f
         return false if pnl_pct <= 0
 
         # Adaptive trailing (if enabled)
@@ -152,7 +153,7 @@ module Live
         end
 
         # Fixed trailing
-        drop_threshold = config[:trailing][:drop_threshold].to_f
+        drop_threshold = config[:trailing][:drop_threshold].to_f / 100.0
         drop_pct = (hwm - pnl) / hwm
         drop_pct >= drop_threshold
       end

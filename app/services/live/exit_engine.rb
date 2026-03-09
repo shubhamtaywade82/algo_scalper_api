@@ -173,8 +173,7 @@ module Live
       end
 
       pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
-      base_reason = reason.split(/\s+-?\d+\.?\d*%/).first&.strip || reason.split('%').first&.strip || reason
-      updated_reason = "#{base_reason} #{pnl_pct_display}%"
+      updated_reason = "#{reason} (Actual: #{pnl_pct_display}%)"
       return reason if reason == updated_reason
 
       Rails.logger.info("[ExitEngine] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")

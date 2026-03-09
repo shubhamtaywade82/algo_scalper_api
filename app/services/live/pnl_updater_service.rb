@@ -236,10 +236,10 @@ module Live
         hwm_bd = payload[:hwm] || (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
         hwm_bd = BigDecimal(0) if hwm_bd.nil?
 
-        # Calculate hwm_pnl_pct if not provided
+        # Calculate hwm_pnl_pct if not provided (Store as decimal, e.g. 0.05 for 5%)
         hwm_pnl_pct_bd = payload[:hwm_pnl_pct]
         if hwm_pnl_pct_bd.nil? && entry_bd.positive? && qty_bd.positive? && hwm_bd.positive?
-          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd)) * 100
+          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd))
         end
 
         # Persist to Redis (use floats for storage to remain compatible)
