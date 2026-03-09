@@ -60,7 +60,7 @@ require 'DhanHQ'
 
 DhanHQ.configure do |config|
   config.client_id    = ENV["CLIENT_ID"]    # e.g. "1001234567"
-  config.access_token = ENV["ACCESS_TOKEN"] # e.g. "eyJhbGciOi..."
+  config.access_token = ENV["ACCESS_TOKEN"] # e.g. "<ACCESS_TOKEN>"
   # Optional REST base
   config.base_url     = "https://api.dhan.co/v2"
   # Optional WS version (default: 2)
