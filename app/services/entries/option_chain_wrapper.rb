@@ -78,7 +78,7 @@ module Entries
       atm_ce = find_atm_option(:ce)
       atm_pe = find_atm_option(:pe)
 
-      return true unless atm_ce || atm_pe
+      return false unless atm_ce || atm_pe
 
       # Get threshold from parameter or use index-specific default
       max_spread = hard_reject_threshold || get_index_spread_threshold
