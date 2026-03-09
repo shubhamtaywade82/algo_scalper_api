@@ -80,13 +80,10 @@ module Trading
     end
 
     def symbol_key
-      if @symbol.include?('BANKNIFTY')
-        :banknifty
-      elsif @symbol.include?('SENSEX')
-        :sensex
-      else
-        :nifty
-      end
+      return :banknifty if @symbol.include?('BANKNIFTY')
+      return :sensex if @symbol.include?('SENSEX')
+
+      :nifty
     end
 
     # ── Phase 1: Survival ─────────────────────────────────────────────────────
@@ -133,11 +130,9 @@ module Trading
       return 1.0 unless expiry_day_tightening_enabled?
 
       today = Time.current.in_time_zone('Asia/Kolkata').to_date
-      if today.wday == 4 # Thursday
-        expiry_tightening_ratio
-      else
-        1.0
-      end
+      return expiry_tightening_ratio if today.wday == 4 # Thursday
+
+      1.0
     end
 
     def session_aware?
