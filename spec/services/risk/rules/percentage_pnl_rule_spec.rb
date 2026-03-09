@@ -7,7 +7,7 @@ RSpec.describe Risk::Rules::PercentagePnlRule do
     {
       percentage_pnl_exit: {
         enabled: true,
-        target_pct: 15.0
+        target_pct: 0.15  # DECIMAL format (15%)
       }
     }
   end
@@ -34,39 +34,24 @@ RSpec.describe Risk::Rules::PercentagePnlRule do
     end
 
     context 'when PnL reaches target' do
-      let(:pnl_pct) { BigDecimal('0.15') } # 15%
+      let(:pnl_pct) { BigDecimal('0.15') } # 15% as DECIMAL
 
-      it 'returns exit_result' do
+      it 'returns exit_result with percentage display in reason' do
         result = rule.evaluate(context)
         expect(result.exit?).to be true
         expect(result.reason).to include('PERCENTAGE_PNL_EXIT HIT 15.0%')
+        expect(result.reason).to include('Target: 15.0%')
       end
     end
 
     context 'when PnL exceeds target' do
-      let(:pnl_pct) { BigDecimal('0.20') } # 20%
+      let(:pnl_pct) { BigDecimal('0.20') } # 20% as DECIMAL
 
-      it 'returns exit_result' do
+      it 'returns exit_result showing actual pnl and target' do
         result = rule.evaluate(context)
         expect(result.exit?).to be true
         expect(result.reason).to include('PERCENTAGE_PNL_EXIT HIT 20.0%')
-      end
-    end
-
-    context 'with decimal target in config' do
-      let(:config) do
-        {
-          percentage_pnl_exit: {
-            enabled: true,
-            target_pct: 0.15 # 15% as decimal
-          }
-        }
-      end
-      let(:pnl_pct) { BigDecimal('0.16') }
-
-      it 'correctly identifies threshold and triggers exit' do
-        result = rule.evaluate(context)
-        expect(result.exit?).to be true
+        expect(result.reason).to include('Target: 15.0%')
       end
     end
 
