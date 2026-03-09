@@ -14,32 +14,52 @@ VCR.configure do |config|
     config.filter_sensitive_data("<#{key}>") { val } if val
   end
 
+  # Filter SENSITIVE_SERVICE_URL (onrender.com)
+  config.filter_sensitive_data('<SENSITIVE_SERVICE_URL>') do
+    'algo-trading-api.onrender.com'
+  end
+
   # Filter sensitive headers - more comprehensive approach
   config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
-    # Check various header formats
-    interaction.request.headers['Access-Token'] ||
+    # Check various header formats for access-token
+    (interaction.request.headers['Access-Token'] ||
       interaction.request.headers['access-token'] ||
-      interaction.request.headers['ACCESS_TOKEN'] ||
-      interaction.request.headers['access_token']
+      interaction.request.headers['ACCESS_TOKEN'])&.first
+  end
+
+  # Masking Bearer tokens (even if not JWT)
+  config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
+    auth_header = (interaction.request.headers['Authorization'] || interaction.request.headers['authorization'])&.first
+    if auth_header && (match = auth_header.match(/^Bearer\s+(.+)$/))
+      match[1]
+    end
+  end
+
+  # Masking JWT tokens (starting with eyJ) in headers and bodies
+  config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
+    jwt_regex = /eyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/
+    
+    # Check Authorization header for JWT
+    auth_header = (interaction.request.headers['Authorization'] || interaction.request.headers['authorization'])&.first
+    if auth_header && (match = auth_header.match(jwt_regex))
+      match[0]
+    # Check body for any JWT
+    elsif (match = interaction.request.body&.match(jwt_regex))
+      match[0]
+    elsif (match = interaction.response.body&.match(jwt_regex))
+      match[0]
+    end
   end
 
   config.filter_sensitive_data('<CLIENT_ID>') do |interaction|
-    # Check various header formats
-    interaction.request.headers['Client-Id'] ||
+    # Check various header formats for client-id
+    (interaction.request.headers['Client-Id'] ||
       interaction.request.headers['client-id'] ||
-      interaction.request.headers['CLIENT_ID'] ||
-      interaction.request.headers['client_id']
-  end
-
-  config.filter_sensitive_data('<AUTHORIZATION>') do |interaction|
-    interaction.request.headers['Authorization'] ||
-      interaction.request.headers['authorization'] ||
-      interaction.request.headers['AUTHORIZATION']
+      interaction.request.headers['CLIENT_ID'])&.first
   end
 
   # Filter sensitive data from request body ONLY when present
   # Preserve the entire request body structure for proper VCR matching
-  # This ensures request bodies without sensitive data are preserved exactly as-is
   config.before_record do |interaction|
     body = interaction.request.body
 
@@ -59,30 +79,25 @@ VCR.configure do |config|
         end
         interaction.request.body = filtered_body
       end
-      # If no sensitive data, body is preserved as-is (no modification)
     elsif body.is_a?(Hash)
       # Filter hash body only if it contains sensitive keys
       if body.key?('access_token') || body.key?(:access_token) || body.key?('client_id') || body.key?(:client_id)
         filtered_body = body.dup
         if filtered_body['access_token'] || filtered_body[:access_token]
-          filtered_body['access_token'] =
-            '<ACCESS_TOKEN>'
+          filtered_body['access_token'] = '<ACCESS_TOKEN>'
         end
         filtered_body[:access_token] = '<ACCESS_TOKEN>' if filtered_body[:access_token]
         filtered_body['client_id'] = '<CLIENT_ID>' if filtered_body['client_id'] || filtered_body[:client_id]
         filtered_body[:client_id] = '<CLIENT_ID>' if filtered_body[:client_id]
         interaction.request.body = filtered_body.to_json if filtered_body.respond_to?(:to_json)
       end
-      # If no sensitive data, body is preserved as-is (no modification)
     end
-    # If body is nil or other type, leave it unchanged
   end
 
   # Allow localhost connections (Capybara or Rails server)
   config.ignore_localhost = true
 
   # Default to :once mode (use cassette if exists, record if missing)
-  # Set ENV['VCR_MODE'] to 'all' to record all interactions, 'none' to disable recording
   config.default_cassette_options = {
     record: ENV.fetch('VCR_MODE', :once).to_sym,
     match_requests_on: %i[method uri body],
