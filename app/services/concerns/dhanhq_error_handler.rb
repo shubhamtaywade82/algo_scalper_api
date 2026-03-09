@@ -125,7 +125,7 @@ module DhanhqErrorHandler
     Rails.cache.write(cache_key, Time.current, expires_in: REFRESH_COOLDOWN)
 
     Rails.logger.warn("[DhanhqErrorHandler] Attempting token refresh (context=#{context})")
-    Dhan::TokenManager.refresh!
+    Dhan::TokenManager.refresh!(force: true)
     true
   rescue StandardError => e
     Rails.logger.error("[DhanhqErrorHandler] Refresh failed: #{e.class} - #{e.message}")

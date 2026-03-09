@@ -16,19 +16,21 @@ module Dhan
         if token_data.nil? || expiring?(token_data)
           refreshed_token = refresh!
           return refreshed_token if refreshed_token.present?
-          token_data = cached_token
+
+          # If refresh failed and we have no token at all, or the one we have is expired, return nil
+          return nil if token_data.nil? || token_data[:expiry_time] <= Time.current
         end
 
         token_data&.dig(:token)
       end
 
-      def refresh!
+      def refresh!(force: false)
         mutex.synchronize do
           token_data = cached_token
-          return token_data[:token] if token_data && !expiring?(token_data)
+          return token_data[:token] if token_data && !expiring?(token_data) && !force
           return nil unless credentials_available?
 
-          Rails.logger.info('[DHAN] Regenerating token via TOTP...')
+          Rails.logger.info("[DHAN] Regenerating token via TOTP... (force=#{force})")
 
           response = DhanHQ::Auth.generate_access_token(
             dhan_client_id: creds[:client_id],
@@ -36,8 +38,20 @@ module Dhan
             totp: generate_totp
           )
 
+          unless response.is_a?(Hash)
+            Rails.logger.error("[DHAN] Token refresh failed: response is not a Hash (#{response.inspect})")
+            return nil
+          end
+
           access_token = response['accessToken']
-          expiry_time = Time.parse(response['expiryTime'])
+          expiry_time_raw = response['expiryTime']
+
+          if access_token.blank? || expiry_time_raw.blank?
+            Rails.logger.error("[DHAN] Token refresh failed: missing accessToken or expiryTime in response (#{response.inspect})")
+            return nil
+          end
+
+          expiry_time = Time.parse(expiry_time_raw)
 
           persist_token(access_token, expiry_time)
           cache_token(access_token, expiry_time)
@@ -49,6 +63,14 @@ module Dhan
       rescue StandardError => e
         Rails.logger.error("[DHAN] Token refresh failed: #{e.class} - #{e.message}")
         nil
+      end
+
+      def clear_cache!
+        mutex.synchronize do
+          @cached_token = nil
+          DhanAccessToken.delete_all
+        end
+        true
       end
 
       private
@@ -89,7 +111,16 @@ module Dhan
       end
 
       def generate_totp
-        DhanHQ::Auth.generate_totp(creds[:totp_secret])
+        secret = creds[:totp_secret]
+        if secret.blank?
+          Rails.logger.error("[DHAN] TOTP Secret is blank")
+          return nil
+        end
+        unless secret.is_a?(String)
+          Rails.logger.error("[DHAN] TOTP Secret is not a String: #{secret.class}")
+          return nil
+        end
+        DhanHQ::Auth.generate_totp(secret)
       end
 
       def creds
