@@ -1,50 +1,112 @@
 # Setup & Installation Guide
 
-This guide walks you through the configuration and deployment of the Algorithmic Scalper API.
+This guide walks you through local setup and configuration of the Algo Scalper API in a way that matches the current Rails 8 trading daemon architecture.
 
 ## 1. Prerequisites
-- **Ruby**: 3.3.x (refer to `.ruby-version`)
-- **Rails**: 7.x
-- **Infrastructure**: Redis (6.0+) and PostgreSQL (13+)
-- **Broker**: A valid DhanHQ account with "Data API" and "Trading API" access enabled.
+
+- **Ruby**: 3.3.x (see `.ruby-version`)
+- **Rails**: 8.0.x (API-only)
+- **Infrastructure**:
+  - PostgreSQL 14+ (primary datastore + Solid Queue backend)
+  - Redis 6.0+ (tick cache, PnL cache, circuit breaker, position state)
+- **Broker**: DhanHQ account with v2 **Data API** and **Trading API** access enabled.
 
 ## 2. Environment Configuration
-Create a `.env` file in the root directory:
+
+Environment is managed via standard Rails credentials and `.env` (for local development). For local runs, create a `.env` file in the project root:
 
 ```bash
-# Broker Credentials
+# Broker Credentials (authority server or direct)
 DHAN_CLIENT_ID="your_client_id"
-DHAN_ACCESS_TOKEN="your_access_token"
+DHAN_ACCESS_TOKEN="your_static_access_token"   # used as final fallback
 
-# System Control
-ENABLE_TRADING_SERVICES=true
-# DISABLE_TRADING_SERVICES=false # Set to true to prevent all automated trades
+# Optional TOTP-based auto-refresh
+DHAN_PIN="1234"
+DHAN_TOTP_SECRET="base32-totp-secret"
 
-# Database
+# Trading Daemon Control
+ENABLE_TRADING_SERVICES=true                   # required for trading daemon
+# DISABLE_TRADING_SERVICES=1                   # force-disable trading services if set
+
+# Database / Redis
 DATABASE_URL="postgresql://user:pass@localhost:5432/algo_scalper"
 REDIS_URL="redis://localhost:6379/1"
 ```
 
-## 3. Trading Configuration (`config/algo.yml`)
-The `algo.yml` file is the central source of truth for trading logic.
+The DhanHQ initializer normalizes `DHAN_CLIENT_ID` / `CLIENT_ID` and `DHAN_ACCESS_TOKEN` / `ACCESS_TOKEN`, so either naming convention is accepted.
 
-- **Indices**: Define which indices to watch (NIFTY, BANKNIFTY).
-- **Signals**: Configure Supertrend parameters, Timeframes, and ADX thresholds.
-- **Exit Rules**: Settle SL, TP, and Trailing stop percentages.
-- **Risk**: Global daily loss limits and exposure caps.
+## 3. Trading Configuration (`config/algo.yml`)
+
+`config/algo.yml` is the primary source of truth for trading behaviour. At runtime it is merged with overrides from the `settings` table via `AlgoConfig.fetch` (30-second cache).
+
+Key sections:
+
+- **`indices`**: Per-index configuration for NIFTY, BANKNIFTY, SENSEX
+  - segment, security_id (SID)
+  - capital allocation / lot sizing
+  - ADX thresholds, time filters, entry windows
+- **`signals`**: Supertrend and ADX parameters, multi-timeframe settings, validation modes.
+- **`risk`**: Global drawdown caps, per-trade SL/TP, premium guards, and time-based exits.
+- **`position_sizing`**: Rupee-based or percentage-based sizing rules.
+- **`trade_limits`**: Daily trade count, exposure and loss limits.
+- **`chain_analyzer`**: Option chain scoring configuration used by `Options::ChainAnalyzer`.
+- **`paper_trading`**:
+  - `paper_trading.enabled: true` → paper mode (`Orders::GatewayPaper`)
+  - `paper_trading.enabled: false` → live mode (`Orders::GatewayLive`)
+- **`dhanhq`**:
+  - `dhanhq.enable_orders: true` must be set (or `ENABLE_ORDER=true`) before any real orders are sent.
+
+> All percentage values in `config/algo.yml` use **DECIMAL format** (`0.12` = 12%, not `12`).
 
 ## 4. Running the System
 
-### Standard Development
+### Standard Development (All Processes)
+
+For a development environment that matches production behaviour, run all four processes via `bin/dev`:
+
 ```bash
-bundle exec rails s
+./bin/dev
 ```
 
-### The Trading Daemon (Production/Live)
-The trading logic runs in a separate long-running process managed by the `Supervisor`.
+This uses `Procfile.dev` to start:
+
+- `web` — Rails API server on port 3001
+- `trading` — trading daemon (`ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon`)
+- `jobs` — Solid Queue worker
+- `dashboard` — Next.js dashboard (in `dashboard/`)
+
+### API-Only Development (No Trading Daemon)
+
+If you only need the Rails API (no trading threads), you can start the web server alone:
+
+```bash
+bin/rails server -p 3001
+```
+
+In this mode the trading daemon is not started; endpoints still function for health checks, settings, dashboard reads, etc.
+
+### Trading Daemon (Manual)
+
+The trading logic runs in a separate long-running process managed by `TradingSystem::Supervisor`. To start it manually (outside `bin/dev`):
+
 ```bash
 ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 ```
 
-### Paper Trading Mode
-To test strategies without financial risk, ensure the `paper: true` flag is set in the `config/algo.yml` or the environment.
+The daemon will:
+
+- Run only the WebSocket feed if the market is closed.
+- Start all 11 services when the market is open (see `lib/trading_system/bootstrap.rb`).
+
+## 5. Paper Trading Mode
+
+To validate strategies safely:
+
+- Ensure `paper_trading.enabled: true` in `config/algo.yml`.
+- Ensure `dhanhq.enable_orders: false` (or omit/leave `ENABLE_ORDER` unset) so that all orders are treated as dry-run in logs.
+
+In this configuration:
+
+- Market data and option chains are still fetched from live DhanHQ APIs.
+- Order placement goes through `Orders::GatewayPaper`.
+- PnL is computed from real ticks, but fills are simulated.
