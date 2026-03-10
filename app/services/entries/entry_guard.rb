@@ -580,11 +580,22 @@ module Entries
       end
 
       # Check if daily loss/profit limits allow entry (NOT trade frequency - we don't cap trade count)
+      # EXCEPT for institutional rule of max 3 trades per day for index options.
       def daily_limits_allow_entry?(index_cfg:)
         return true unless daily_limits_enabled?
 
         daily_limits = Live::DailyLimits.new
         result = daily_limits.can_trade?(index_key: index_cfg[:key])
+
+        # Institutional rule: max 3 trades per day for NIFTY/SENSEX/BANKNIFTY
+        symbol = index_cfg[:key].to_s.upcase
+        if %w[NIFTY SENSEX BANKNIFTY].include?(symbol)
+          trades_today = daily_limits.get_daily_trades(symbol)
+          if trades_today >= 3
+            Rails.logger.warn("[EntryGuard] Institutional trade limit reached for #{symbol}: #{trades_today} trades today")
+            return false
+          end
+        end
 
         unless result[:allowed]
           reason = result[:reason]

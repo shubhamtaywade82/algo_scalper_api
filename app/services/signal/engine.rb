@@ -277,6 +277,16 @@ module Signal
           return
         end
 
+        # ===== INSTITUTIONAL ENTRY FILTER (Structure + Liquidity + Volatility) =====
+        filter = Entries::EntryFilterEngine.new(series: primary_series, symbol: index_cfg[:key])
+        unless filter.valid_entry?(direction: final_direction)
+          Rails.logger.warn("[Signal] EntryFilterEngine BLOCKED #{index_cfg[:key]}: Missing Structure/Liquidity/Volatility alignment")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+        Rails.logger.info("[Signal] EntryFilterEngine PASSED for #{index_cfg[:key]}")
+        # ===== END INSTITUTIONAL ENTRY FILTER =====
+
         Rails.logger.info("[Signal] Proceeding with #{final_direction} signal for #{index_cfg[:key]}")
 
         # ===== PERMISSION RESOLUTION (HARD) =====
@@ -313,6 +323,16 @@ module Signal
           smc_decision = final_direction == :bullish ? :call : :put
         end
         # ===== END SMC DECISION ALIGNMENT =====
+
+        # ===== MOMENTUM VALIDATION =====
+        momentum_result = Signal::MomentumValidator.validate(
+          instrument: instrument,
+          series: primary_series,
+          direction: final_direction
+        )
+        momentum_score = momentum_result.score
+        Rails.logger.info("[Signal] Momentum Score for #{index_cfg[:key]}: #{momentum_score}/3")
+        # ===== END MOMENTUM VALIDATION =====
 
         # Get state snapshot first for signal persistence
         state_snapshot = Signal::StateTracker.record(
@@ -384,6 +404,35 @@ module Signal
 
         # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
 
+        # ===== EXPIRY DAY SESSION FILTER =====
+        # Avoid midday decay periods on expiry days for index options
+        if Strategies::ExpiryModel.trade_allowed?(symbol: index_cfg[:key]) == false
+          Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+        # ===== END EXPIRY DAY SESSION FILTER =====
+
+        # ===== GAMMA RAMP DETECTION =====
+        # Detect if price is approaching an OI cluster for explosive potential
+        expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
+        chain_data = instrument.fetch_option_chain(expiry_date)
+        
+        if chain_data
+          gamma_detector = Options::GammaRampDetector.new(
+            index_key: index_cfg[:key],
+            expiry_date: expiry_date,
+            chain_data: chain_data
+          )
+          gamma_ramp_strike = gamma_detector.ramp_strike(direction: final_direction)
+          if gamma_ramp_strike
+            Rails.logger.info("[Signal] GAMMA RAMP DETECTED for #{index_cfg[:key]} at strike #{gamma_ramp_strike[:strike]}")
+            diagnostic_metadata[:gamma_ramp_strike] = gamma_ramp_strike[:strike]
+            diagnostic_metadata[:gamma_pressure] = gamma_detector.gamma_pressure_score(direction: final_direction)
+          end
+        end
+        # ===== END GAMMA RAMP DETECTION =====
+
         # ===== STRIKE QUALIFICATION LAYER (HARD GATE) =====
         # First point where we have:
         # - symbol (index_cfg[:key])
@@ -409,7 +458,8 @@ module Signal
           index_cfg: index_cfg,
           direction: final_direction,
           permission: permission,
-          expected_spot_move: expected_spot_move
+          expected_spot_move: expected_spot_move,
+          momentum_score: momentum_score
         )
         # ===== END STRIKE QUALIFICATION LAYER =====
 

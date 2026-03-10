@@ -25,6 +25,7 @@ module Positions
       :pnl,
       :pnl_pct,
       :peak_profit_pct,
+      :min_profit_pct,
       :trend,
       :time_in_position,
       :breakeven_locked,
@@ -37,6 +38,7 @@ module Positions
       :underlying_symbol,
       :underlying_trend_score,
       :underlying_ltp,
+      :price_history,
       :last_updated_at,
       keyword_init: true
     ) do
@@ -85,6 +87,12 @@ module Positions
       def update_ltp(ltp, timestamp: Time.current)
         self.current_ltp = ltp.to_f
         self.last_updated_at = timestamp
+
+        # Maintain price history (last 10 ticks) for velocity/acceleration
+        self.price_history ||= []
+        self.price_history << ltp.to_f
+        self.price_history.shift if self.price_history.size > 10
+
         recalculate_pnl
       end
 
@@ -101,6 +109,9 @@ module Positions
 
         # Update peak profit percentage (highest profit % achieved)
         self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
+
+        # Update min profit percentage (lowest profit % achieved - MAE)
+        self.min_profit_pct = pnl_pct if min_profit_pct.nil? || pnl_pct < min_profit_pct
 
         # NEW (Step 12): Persist peak if it was updated
         # Note: Peak persistence is handled by ActiveCache.update_ltp, not here

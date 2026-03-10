@@ -250,9 +250,9 @@ risk:
   trailing_mode: 'direct' # Moving up only to capture profits
   direct_trailing:
     enabled: true
-    distance_pct: 0.03 # 3% - trail at 3% distance from peak
-    activation_profit_pct: 0.05 # 5% - start direct trailing at 5% profit
-    min_sl_offset_pct: 0.0 # 0% - never let SL go below breakeven once direct trailing starts
+    distance_pct: 0.05 # 5% - trail at 5% distance from peak
+    activation_profit_pct: 0.0 # 0% - start direct trailing at 0% profit
+    min_sl_offset_pct: -0.30 # -30% - never let SL go below -30% from entry
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP

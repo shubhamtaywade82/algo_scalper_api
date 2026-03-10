@@ -131,6 +131,44 @@ module Live
         config = exit_config
         return false unless config[:trailing][:enabled]
 
+        ltp = snapshot[:ltp].to_f
+        return false unless ltp.positive?
+
+        # Use advanced Gamma-Aware and MFE exits for NIFTY, BANKNIFTY, and SENSEX
+        symbol = tracker.symbol.to_s.upcase
+        if %w[NIFTY BANKNIFTY SENSEX].any? { |s| symbol.include?(s) }
+          # 1. Resolve price history from ActiveCache for Gamma detection
+          pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+          prices = pos_data&.price_history || [ltp]
+          
+          # 2. Use Orders::Analyzer for combined analysis
+          analyzer = Orders::Analyzer.new(
+            tracker: tracker,
+            ltp: ltp,
+            prices: prices,
+            peak_profit_pct: snapshot[:hwm_pnl].to_f / (tracker.entry_price.to_f * tracker.quantity.to_f)
+          )
+          sl_price = analyzer.recommended_sl
+          
+          if sl_price && ltp <= sl_price
+            # Identify which engine triggered the stop for logging
+            # Re-running analysis components to find the trigger (minor overhead for logging)
+            mfe_sl = Orders::MfeExitEngine.new(
+              position: tracker,
+              ltp: ltp,
+              entry_price: tracker.entry_price.to_f,
+              highest_price: (tracker.entry_price.to_f * (1.0 + (snapshot[:hwm_pnl].to_f / (tracker.entry_price.to_f * tracker.quantity.to_f))))
+            ).call
+
+            reason = (mfe_sl && sl_price == mfe_sl) ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
+            
+            Rails.logger.info("[UnifiedExitChecker] #{reason} hit for #{tracker.order_no}: ltp=#{ltp}, sl=#{sl_price}")
+            return true
+          end
+          return false
+        end
+
+        # Fallback to legacy trailing for other instruments
         pnl = snapshot[:pnl]
         hwm = snapshot[:hwm_pnl]
         return false if hwm.nil? || hwm.zero?

@@ -1,35 +1,3 @@
-# == Schema Information
-#
-# Table name: position_trackers
-#
-#  id                        :integer         not null, primary key
-#  instrument_id             :integer         not null
-#  order_no                  :string          not null
-#  security_id               :string          not null
-#  symbol                    :string
-#  segment                   :string
-#  side                      :string
-#  status                    :string          not null
-#  quantity                  :integer
-#  avg_price                 :decimal
-#  entry_price               :decimal
-#  last_pnl_rupees           :decimal
-#  last_pnl_pct              :decimal
-#  high_water_mark_pnl       :decimal
-#  meta                      :jsonb
-#  created_at                :datetime        not null
-#  updated_at                :datetime        not null
-#
-# Indexes
-#
-#  index_position_trackers_on_instrument_id  (instrument_id)
-#  index_position_trackers_on_order_no       (order_no) UNIQUE
-#
-# Foreign Keys
-#
-#  fk_rails_...  (instrument_id => instruments.id)
-#
-
 # frozen_string_literal: true
 
 require 'bigdecimal'
@@ -39,7 +7,9 @@ class PositionTracker < ApplicationRecord
 
   # Attribute accessors
   store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
-                 :exit_path, :exit_reason, :highest_price
+                 :exit_path, :exit_reason, :highest_price, :lowest_price, :be_set, :profit_floor_rupees,
+                 :profit_floor_set_at, :profit_zone_state, :secured_sl_price, :secured_sl_rupees,
+                 :profit_zone_transitioned_at
 
   # Enums
   enum :status, {
@@ -62,10 +32,12 @@ class PositionTracker < ApplicationRecord
   after_create_commit :subscribe_to_feed
   after_destroy_commit :clear_redis_pnl_cache
   after_update_commit :clear_redis_cache_if_exited
+  after_update_commit :analyze_trade_if_exited
 
   # Associations
   belongs_to :instrument # Kept for backward compatibility during transition
   belongs_to :watchable, polymorphic: true
+  has_one :trade_analytic, dependent: :destroy
 
   # Scopes
   # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled
@@ -337,7 +309,7 @@ class PositionTracker < ApplicationRecord
   end
 
   def be_set?
-    be_set == true
+    ActiveModel::Type::Boolean.new.cast(be_set)
   end
 
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
@@ -536,6 +508,12 @@ class PositionTracker < ApplicationRecord
   end
 
   private
+
+  def analyze_trade_if_exited
+    return unless saved_change_to_status? && exited?
+
+    Optimization::TradeAnalyzer.call(self)
+  end
 
   def register_in_index
     return unless active? && entry_price.present? && quantity.to_i.positive?

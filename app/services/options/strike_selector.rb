@@ -14,9 +14,25 @@ module Options
     TREND_THRESHOLD_1OTM = 12.0  # Allow 1OTM if trend_score >= 12
     TREND_THRESHOLD_2OTM = 18.0  # Allow 2OTM if trend_score >= 18
 
-    def initialize(tick_cache: nil, premium_filter: nil)
+    # institutional strike selection based on momentum
+    def self.strike_type_for_momentum(momentum_score)
+      # score is 0-3 from MomentumValidator
+      normalized = momentum_score.to_f / 3.0
+      new(momentum: normalized).strike_type
+    end
+
+    def initialize(tick_cache: nil, premium_filter: nil, momentum: nil)
       @tick_query = Live::TickQuery
       @premium_filter_class = premium_filter || PremiumFilter
+      @momentum = momentum
+    end
+
+    def strike_type
+      return :skip if @momentum.nil?
+      return :atm if @momentum > 0.7
+      return :itm if @momentum > 0.4
+
+      :skip
     end
 
     # Select best strike for given index & direction
