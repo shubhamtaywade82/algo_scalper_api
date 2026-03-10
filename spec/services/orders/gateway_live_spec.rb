@@ -243,7 +243,7 @@ RSpec.describe Orders::GatewayLive do
              trading_symbol: 'NIFTY24JAN20000CE')
     end
 
-    it 'returns position hash when position exists' do
+    it 'returns position hash with unified shape when position exists' do
       allow(DhanHQ::Models::Position).to receive(:active).and_return([dhan_position])
       allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: BigDecimal('105.0')))
 
@@ -254,7 +254,12 @@ RSpec.describe Orders::GatewayLive do
         avg_price: BigDecimal('100.5'),
         upnl: BigDecimal('225.0'), # (105 - 100.5) * 50
         rpnl: BigDecimal(0),
-        last_ltp: BigDecimal('105.0')
+        last_ltp: BigDecimal('105.0'),
+        product_type: 'INTRADAY',
+        exchange_segment: 'NSE_FNO',
+        position_type: 'LONG',
+        trading_symbol: 'NIFTY24JAN20000CE',
+        status: 'active'
       )
     end
 
@@ -290,22 +295,25 @@ RSpec.describe Orders::GatewayLive do
   end
 
   describe '#wallet_snapshot' do
-    it 'returns wallet hash with funds data' do
+    it 'returns wallet hash with unified shape' do
       result = gateway.wallet_snapshot
 
       expect(result).to eq(
         cash: 100_000,
+        equity: 150_000,
+        mtm: 0,
+        exposure: 50_000,
         utilized: 50_000,
         margin: 25_000
       )
     end
 
-    it 'handles errors gracefully and returns empty hash' do
+    it 'handles errors gracefully and returns zeroed unified shape' do
       allow(DhanHQ::Models::Funds).to receive(:fetch).and_raise(StandardError.new('API error'))
 
       result = gateway.wallet_snapshot
 
-      expect(result).to eq({})
+      expect(result).to eq(cash: 0, equity: 0, mtm: 0, exposure: 0, utilized: 0, margin: 0)
     end
   end
 

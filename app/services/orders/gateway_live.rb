@@ -56,16 +56,24 @@ module Orders
     end
 
     # ------------ WALLET ---------------
+    # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     def wallet_snapshot
       funds = DhanHQ::Models::Funds.fetch
+      cash = funds.available_balance.to_f
+      utilized = funds.utilized_amount.to_f
+      margin = funds.respond_to?(:margin) ? funds.margin.to_f : 0
+      equity = cash + utilized
       {
-        cash: funds.available_balance,
-        utilized: funds.utilized_amount,
-        margin: funds.respond_to?(:margin) ? funds.margin : 0
+        cash: cash,
+        equity: equity,
+        mtm: 0,
+        exposure: utilized,
+        utilized: utilized,
+        margin: margin
       }
     rescue StandardError => e
       Rails.logger.error("[GatewayLive] wallet snapshot failed: #{e.message}")
-      {}
+      { cash: 0, equity: 0, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
     end
 
     def cancel_order(order_id)
@@ -89,7 +97,8 @@ module Orders
     end
 
     # Fetch position summary for segment/security_id from DhanHQ Position API.
-    # @return [Hash, nil] { qty:, avg_price:, upnl:, rpnl:, last_ltp: } or nil on error
+    # Returns unified shape: { qty:, avg_price:, upnl:, rpnl:, last_ltp:, product_type:, exchange_segment:, position_type:, trading_symbol:, status: }
+    # @return [Hash, nil] unified position hash or nil on error
     def position(segment:, security_id:)
       positions = fetch_positions
       pos = positions.find { |p| p.security_id.to_s == security_id.to_s && p.exchange_segment.to_s == segment.to_s }
@@ -106,12 +115,21 @@ module Orders
                BigDecimal(0)
              end
 
+      product_type = pos.respond_to?(:product_type) ? pos.product_type : nil
+      position_type = pos.respond_to?(:position_type) ? pos.position_type : 'LONG'
+      trading_symbol = pos.respond_to?(:trading_symbol) ? pos.trading_symbol : nil
+
       {
         qty: qty,
         avg_price: entry_price || BigDecimal(0),
         upnl: upnl,
         rpnl: BigDecimal(0),
-        last_ltp: ltp ? BigDecimal(ltp.to_s) : (entry_price || BigDecimal(0))
+        last_ltp: ltp ? BigDecimal(ltp.to_s) : (entry_price || BigDecimal(0)),
+        product_type: product_type,
+        exchange_segment: segment.to_s,
+        position_type: position_type,
+        trading_symbol: trading_symbol,
+        status: 'active'
       }
     rescue StandardError => e
       Rails.logger.error("[GatewayLive] position failed: #{e.message}")

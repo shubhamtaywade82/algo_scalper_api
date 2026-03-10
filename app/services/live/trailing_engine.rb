@@ -78,26 +78,27 @@ module Live
       capital_deployed = calculate_capital_deployed(position_data)
 
       # Check if drawdown threshold is breached (with capital-aware thresholds)
-      # peak_drawdown_triggered? expects percentage (e.g. 5.0 for 5%)
+      # TrailingConfig expects decimal (e.g. 0.05 for 5%)
       return false unless Positions::TrailingConfig.peak_drawdown_triggered?(
-        peak * 100.0,
-        current * 100.0,
+        peak,
+        current,
         _capital_deployed: capital_deployed
       )
 
       # Apply peak-drawdown activation gating (if enabled)
       if peak_drawdown_activation_enabled?
         # Use peak profit % (not current) for activation check
+        # TrailingConfig expects decimal for both profit_pct and current_sl_offset_pct
         activation_ready = Positions::TrailingConfig.peak_drawdown_active?(
-          profit_pct: peak * 100.0, # Use peak, not current
-          current_sl_offset_pct: current_sl_offset_pct(position_data) # This returns percentage
+          profit_pct: peak,
+          current_sl_offset_pct: current_sl_offset_pct_decimal(position_data)
         )
         unless activation_ready
           capital_info = capital_deployed ? " capital=₹#{capital_deployed.round(0)}" : ''
           Rails.logger.debug do
             "[TrailingEngine] Peak drawdown gating: peak=#{(peak * 100).round(2)}% " \
               "sl_offset=#{current_sl_offset_pct(position_data)&.round(2)}% " \
-              "not activated (drawdown=#{(peak - current) * 100.0.round(2)}%#{capital_info})"
+              "not activated (drawdown=#{(peak - current) * 100.round(2)}%#{capital_info})"
           end
           return false
         end
@@ -109,10 +110,10 @@ module Live
         return false
       end
 
-      drawdown = (peak - current) * 100.0
-      threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak * 100.0)
+      drawdown_pct = (peak - current) * 100.0
+      threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak)
       capital_info = capital_deployed ? " (capital: ₹#{capital_deployed.round(0)})" : ''
-      reason = "peak_drawdown_exit (drawdown: #{drawdown.round(2)}%, threshold: #{threshold.round(2)}%, peak: #{(peak * 100).round(2)}%#{capital_info})"
+      reason = "peak_drawdown_exit (drawdown: #{drawdown_pct.round(2)}%, threshold: #{(threshold * 100).round(2)}%, peak: #{(peak * 100).round(2)}%#{capital_info})"
 
       # Wrap exit in tracker lock for idempotency
       tracker.with_lock do
@@ -167,11 +168,11 @@ module Live
       return { updated: false, new_sl_price: current_sl, reason: 'no_current_price' } unless current_price.positive?
 
       # Calculate new SL based on current price (maintains fixed distance below)
-      # calculate_direct_trailing_sl expects percentage (e.g. 5.0 for 5%)
+      # TrailingConfig expects decimal (e.g. 0.05 for 5%)
       new_sl_price = Positions::TrailingConfig.calculate_direct_trailing_sl(
         current_price: current_price,
         entry_price: entry_price,
-        current_profit_pct: current_profit_pct * 100.0
+        current_profit_pct: current_profit_pct
       )
 
       return { updated: false, new_sl_price: current_sl, reason: 'direct_trailing_not_applicable' } unless new_sl_price
@@ -224,11 +225,11 @@ module Live
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
-      current_profit_pct = position_data.pnl_pct.to_f # decimal
+      current_profit_pct = position_data.pnl_pct.to_f # decimal (e.g. 0.05 for 5%)
       current_sl = position_data.sl_price.to_f
 
-      # sl_offset_for expects percentage
-      sl_offset_pct = Positions::TrailingConfig.sl_offset_for(current_profit_pct * 100.0)
+      # TrailingConfig expects decimal
+      sl_offset_pct = Positions::TrailingConfig.sl_offset_for(current_profit_pct)
       return { updated: false, new_sl_price: current_sl, reason: 'tier_not_reached' } unless sl_offset_pct
 
       new_sl_price = Positions::TrailingConfig.sl_price_from_entry(entry_price, sl_offset_pct)
@@ -296,14 +297,23 @@ module Live
       end
     end
 
+    # Returns SL offset as percentage (e.g. 10.0 for 10%) for display/logging
+    # Always computed from prices for consistent format (sl_offset_pct storage is mixed decimal/percentage)
     def current_sl_offset_pct(position_data)
-      return position_data.sl_offset_pct if position_data.sl_offset_pct
-
       entry = position_data.entry_price.to_f
       sl_price = position_data.sl_price.to_f
       return nil unless entry.positive? && sl_price.positive?
 
       ((sl_price - entry) / entry) * 100.0
+    end
+
+    # Returns SL offset as decimal (e.g. 0.10 for 10%) for TrailingConfig.peak_drawdown_active?
+    def current_sl_offset_pct_decimal(position_data)
+      entry = position_data.entry_price.to_f
+      sl_price = position_data.sl_price.to_f
+      return nil unless entry.positive? && sl_price.positive?
+
+      (sl_price - entry) / entry
     end
 
     def increment_peak_drawdown_metric

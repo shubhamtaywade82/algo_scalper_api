@@ -29,6 +29,7 @@ module Orders
       { success: false, error: e.message, paper: true }
     end
 
+    # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     def wallet_snapshot
       base = (AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000).to_f
 
@@ -45,10 +46,10 @@ module Orders
       mtm    = unrealized.round(2)
       equity = (cash + mtm).round(2)
 
-      { cash: cash, equity: equity, mtm: mtm, exposure: 0 }
+      { cash: cash, equity: equity, mtm: mtm, exposure: 0, utilized: 0, margin: 0 }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
-      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0 }
+      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
     end
 
     def cancel_order(order_id)
@@ -58,15 +59,22 @@ module Orders
       { success: false, order_id: order_id, status: :failed, error: e.message, paper: true }
     end
 
-    # Paper position by segment/security_id. Returns same shape as GatewayLive#position for compatibility.
+    # Returns unified shape: { qty:, avg_price:, upnl:, rpnl:, last_ltp:, product_type:, exchange_segment:, position_type:, trading_symbol:, status: }
     def position(segment:, security_id:)
       tracker = PositionTracker.paper.active.find_by(segment: segment, security_id: security_id.to_s)
       return nil unless tracker
 
-      position_type = (tracker.side.to_s.upcase.start_with?('LONG') || tracker.side.to_s.upcase == 'BUY') ? 'LONG' : 'SHORT'
+      is_long = tracker.side.to_s.upcase.start_with?('LONG') || tracker.side.to_s.upcase == 'BUY'
+      position_type = is_long ? 'LONG' : 'SHORT'
+      ltp = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)&.ltp
+      upnl = BigDecimal((tracker.current_pnl_rupees || 0).to_s)
+
       {
         qty: tracker.quantity,
         avg_price: tracker.avg_price.to_f,
+        upnl: upnl,
+        rpnl: BigDecimal(0),
+        last_ltp: ltp ? BigDecimal(ltp.to_s) : BigDecimal((tracker.avg_price || 0).to_s),
         product_type: nil,
         exchange_segment: tracker.segment,
         position_type: position_type,

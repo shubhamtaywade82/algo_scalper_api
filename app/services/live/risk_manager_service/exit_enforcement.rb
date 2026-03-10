@@ -40,7 +40,9 @@ module Live
 
         # pnl_pct is decimal (e.g. 0.05 for 5%), convert to percentage for EarlyTrendFailure.applicable?
         pnl_pct_value = pnl_pct.to_f * 100.0
-        return unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_profit)
+        # Config stores activation_profit_pct as decimal (0.07 = 7%); applicable? expects percentage
+        activation_pct = activation_profit <= 1.0 ? activation_profit * 100.0 : activation_profit
+        return unless Live::EarlyTrendFailure.applicable?(pnl_pct_value, activation_profit_pct: activation_pct)
 
         # Build position_data struct for ETF check
         instrument = tracker.instrument || tracker.watchable&.instrument

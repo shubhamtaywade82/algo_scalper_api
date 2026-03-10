@@ -53,7 +53,7 @@ module Services
         @selected_model = nil
         @last_request_time = nil
         initialize_client if @enabled
-        fetch_and_select_model if @enabled && @provider == :ollama
+        # Defer Ollama model fetch to first chat use so boot (e.g. db:migrate) never blocks on Ollama
       end
 
       attr_reader :client, :provider, :selected_model, :available_models
@@ -97,9 +97,20 @@ module Services
           return cached
         end
 
-        # Cache miss or expired - fetch from API
+        # Cache miss or expired - fetch from API (with timeouts to avoid hanging boot)
         begin
-          response = Net::HTTP.get_response(URI("#{base_url}/api/tags"))
+          uri = URI("#{base_url}/api/tags")
+          open_timeout = ENV.fetch('OLLAMA_OPEN_TIMEOUT', '5').to_i
+          read_timeout = ENV.fetch('OLLAMA_MODELS_READ_TIMEOUT', '5').to_i
+          response = Net::HTTP.start(
+            uri.host, uri.port,
+            use_ssl: uri.scheme == 'https',
+            open_timeout: open_timeout,
+            read_timeout: read_timeout
+          ) do |http|
+            request = Net::HTTP::Get.new(uri)
+            http.request(request)
+          end
 
           if response.code == '200'
             data = JSON.parse(response.body)
@@ -217,12 +228,13 @@ module Services
       def chat(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, **)
         return nil unless enabled?
 
-        # Auto-select model for Ollama if not provided
-        model ||= if @provider == :ollama
-                    @selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3'
-                  else
-                    'gpt-4o'
-                  end
+        # Auto-select model for Ollama if not provided (lazy fetch so boot never blocks)
+        if @provider == :ollama && model.nil?
+          fetch_and_select_model if @selected_model.nil?
+          model = @selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3'
+        else
+          model ||= @provider == :ollama ? (@selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3') : 'gpt-4o'
+        end
 
         # Serialize Ollama requests to prevent parallel calls
         result = if @provider == :ollama
@@ -276,12 +288,13 @@ module Services
       def chat_stream(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, &block)
         return nil unless enabled?
 
-        # Auto-select model for Ollama if not provided
-        model ||= if @provider == :ollama
-                    @selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3'
-                  else
-                    'gpt-4o'
-                  end
+        # Auto-select model for Ollama if not provided (lazy fetch so boot never blocks)
+        if @provider == :ollama && model.nil?
+          fetch_and_select_model if @selected_model.nil?
+          model = @selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3'
+        else
+          model ||= @provider == :ollama ? (@selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3') : 'gpt-4o'
+        end
 
         # Serialize Ollama requests to prevent parallel calls
         if @provider == :ollama

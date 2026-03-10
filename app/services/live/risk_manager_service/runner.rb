@@ -75,24 +75,45 @@ module Live
 
       # Template method: single algorithm skeleton for all exit enforcement layers.
       # Add or reorder enforcement by editing this method.
+      # First-match-wins: after any layer triggers an exit, we skip remaining layers for that tracker.
       def run_enforcement_cycle(exit_engine)
         PositionTracker.active.find_each do |tracker|
-          # Skip if position is already being exited (prevents race conditions with high-frequency triggers)
           next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
           # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
           advance_trade_state_for(tracker)
 
           enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
+          next if exit_requested_or_sent?(tracker)
+
           enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
+          next if exit_requested_or_sent?(tracker)
+
           enforce_profit_floor_for(tracker, exit_engine: exit_engine)
+          next if exit_requested_or_sent?(tracker)
+
           enforce_structure_invalidation_for(tracker, exit_engine: exit_engine)
+          next if exit_requested_or_sent?(tracker)
+
           enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine)
+          next if exit_requested_or_sent?(tracker)
+
           enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine)
+          next if exit_requested_or_sent?(tracker)
+
           enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine)
+          next if exit_requested_or_sent?(tracker)
+
           enforce_time_stop_for(tracker, exit_engine: exit_engine)
+          next if exit_requested_or_sent?(tracker)
+
           enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
         end
+      end
+
+      def exit_requested_or_sent?(tracker)
+        tracker.reload
+        tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
       end
 
       def exits_blocked_by_time?

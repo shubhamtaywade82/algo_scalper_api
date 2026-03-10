@@ -67,8 +67,11 @@ module Entries
 
         # ===== Cooldown check (prevent overtrading) =====
         symbol_name = pick[:symbol]
-        if cooldown_active?(symbol_name, 5.minutes)
-          Rails.logger.info("[EntryGuard] Entry blocked for #{symbol_name}: Reentry cooldown active (5 mins)")
+        cooldown_sec = index_cfg[:cooldown_sec].to_i
+        if cooldown_sec.positive? && cooldown_active?(symbol_name, cooldown_sec)
+          Rails.logger.info(
+            "[EntryGuard] Entry blocked for #{symbol_name}: Reentry cooldown active (#{cooldown_sec}s)"
+          )
           return false
         end
 

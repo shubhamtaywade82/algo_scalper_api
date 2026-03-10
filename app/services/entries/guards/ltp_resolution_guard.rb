@@ -16,7 +16,10 @@ module Entries
           end
 
           ltp = pick[:ltp]
-          ltp = EntryGuard.resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg) if ltp.blank? || EntryGuard.needs_api_ltp?(pick)
+          if ltp.blank? || EntryGuard.needs_api_ltp?(pick)
+            resolved = EntryGuard.resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)
+            ltp = resolved if resolved.present?
+          end
 
           return { blocked: "invalid LTP for #{index_cfg[:key]}: #{pick[:symbol]} (ltp: #{ltp.inspect})" } unless ltp.present? && ltp.to_f.positive?
 
