@@ -8,12 +8,7 @@ module Backtest
     end
 
     def on_tick(tick)
-      @strategy.process(
-        index_price: tick[:index_price],
-        option_price: tick[:option_price],
-        volume: tick[:volume],
-        oi: tick[:oi]
-      )
+      @strategy.process(tick)
     end
   end
 
