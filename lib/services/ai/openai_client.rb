@@ -217,6 +217,73 @@ module Services
         selected
       end
 
+      # Direct Ollama generate interface (Ollama only)
+      # Uses /api/generate with support for JSON format/schema
+      def generate(prompt:, model: nil, schema: nil, stream: false, **)
+        return nil unless enabled? && @provider == :ollama
+
+        # Use passed model, otherwise fallback to auto-selected or env
+        selected_model = model || @selected_model
+        if selected_model.nil?
+          fetch_and_select_model
+          selected_model = @selected_model
+        end
+        selected_model ||= ENV['OLLAMA_MODEL'] || 'llama3'
+
+        retries = 2
+        begin
+          with_request_serialization do
+            uri = URI("#{ollama_base_url}/api/generate")
+            request = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
+            
+            payload = {
+              model: selected_model,
+              prompt: prompt,
+              stream: stream
+            }
+            
+            # Add JSON format support (Ollama native)
+            # Note: Ollama's 'format' can be "json" or a JSON schema object
+            payload[:format] = schema if schema
+
+            request.body = payload.to_json
+
+            # Use high timeout for generation
+            response = Net::HTTP.start(
+              uri.host, uri.port,
+              use_ssl: uri.scheme == 'https',
+              open_timeout: 5,
+              read_timeout: 300
+            ) do |http|
+              http.request(request)
+            end
+
+            if response.code == '200'
+              data = JSON.parse(response.body)
+              if schema
+                # If schema was provided, we expect JSON back in the 'response' field
+                # We return the parsed object
+                JSON.parse(data['response'])
+              else
+                data['response']
+              end
+            else
+              Rails.logger.error("[OpenAIClient] Generate failed: HTTP #{response.code} - #{response.body}")
+              nil
+            end
+          end
+        rescue StandardError => e
+          if retries.positive? && (e.is_a?(EOFError) || e.is_a?(Errno::ECONNRESET) || e.is_a?(Net::ReadTimeout))
+            retries -= 1
+            Rails.logger.warn("[OpenAIClient] Retrying generate after #{e.class} (retries left: #{retries})")
+            sleep(2) # Give more time for model loading
+            retry
+          end
+          Rails.logger.error("[OpenAIClient] Generate error: #{e.class} - #{e.message}")
+          nil
+        end
+      end
+
       def fetch_and_select_model
         fetch_available_models
         select_best_model
