@@ -2,6 +2,11 @@ paper_trading:
   enabled: true
   balance: 100000
 
+# Run mode: which profile to merge on top of base config (before DB overrides).
+# production = real flow (default). exit_testing = frequent entries to test exits. entry_testing = relaxed guards to test entries.
+# Override with ENV RUN_MODE=exit_testing (or entry_testing, production).
+run_mode: production
+
 # Trading time restrictions based on profitability analysis
 # Use analyze_positions_by_time_intervals.rb to identify non-profitable periods
 # Format: "HH:MM-HH:MM" (24-hour format, IST timezone)

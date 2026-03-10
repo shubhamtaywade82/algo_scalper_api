@@ -1,0 +1,44 @@
+# Entry-testing profile: relax entry guards so you can verify entries are firing.
+# Use when: you want to see if the signal → guard → order path works (more signals get through).
+# Merge order: algo.yml → this profile → DB overrides.
+# Set run_mode: entry_testing in algo.yml or ENV RUN_MODE=entry_testing
+
+# More entries per index and shorter cooldown
+indices:
+  - key: NIFTY
+    cooldown_sec: 60
+    trade_limits:
+      max_trades_per_day: 5
+    adx_thresholds:
+      primary_min_strength: 12
+      confirmation_min_strength: 12
+  - key: BANKNIFTY
+    cooldown_sec: 60
+    trade_limits:
+      max_trades_per_day: 4
+    adx_thresholds:
+      primary_min_strength: 12
+      confirmation_min_strength: 12
+  - key: SENSEX
+    cooldown_sec: 60
+    trade_limits:
+      max_trades_per_day: 5
+    adx_thresholds:
+      primary_min_strength: 14
+      confirmation_min_strength: 14
+
+# Allow entries in chop zone
+risk:
+  time_regimes:
+    chop_decay:
+      allow_entries: true
+      min_adx: 12.0
+
+# Softer validation so more signals pass
+signals:
+  validation_mode: balanced
+  enable_smc_avrz_permission: false
+  enable_smc_decision_alignment: false
+
+trade_limits:
+  global_max_trades_per_day: 14
