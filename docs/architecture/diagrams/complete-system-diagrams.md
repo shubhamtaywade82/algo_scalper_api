@@ -178,12 +178,13 @@ One code-level view: entry guard pipeline and its guard classes. Implementation:
 
 ```mermaid
 flowchart TB
-    subgraph Pipeline["EntryGuardPipeline"]
-        run[run(context)]
-        run --> h1[handlers.each]
+    subgraph Pipeline ["EntryGuardPipeline"]
+        run["run(context)"]
+        h1["handlers.each"]
+        run --> h1
     end
 
-    subgraph Handlers["Guards (order)"]
+    subgraph Guards ["Guards in order"]
         H1[CircuitBreakerGuard]
         H2[BosContractGuard]
         H3[TimeRegimeGuard]
@@ -196,9 +197,31 @@ flowchart TB
         H10[LtpResolutionGuard]
     end
 
-    h1 --> H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> H9 --> H10
-    H10 -->|PASS| Post[EntryGuard post-pipeline]
-    H1 & H2 & H3 & H4 & H5 & H6 & H7 & H8 & H9 & H10 -->|blocked: reason| Return[return blocked]
+    Post[EntryGuard post-pipeline]
+    Return[return blocked]
+
+    h1 --> H1
+    H1 --> H2
+    H2 --> H3
+    H3 --> H4
+    H4 --> H5
+    H5 --> H6
+    H6 --> H7
+    H7 --> H8
+    H8 --> H9
+    H9 --> H10
+    H10 -->|pass| Post
+
+    H1 --> Return
+    H2 --> Return
+    H3 --> Return
+    H4 --> Return
+    H5 --> Return
+    H6 --> Return
+    H7 --> Return
+    H8 --> Return
+    H9 --> Return
+    H10 --> Return
 ```
 
 **Key classes:**
