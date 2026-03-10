@@ -138,6 +138,82 @@ Exit reasons and paths logged include: `early_trend_failure`, `stop_loss`, `take
 
 ---
 
+## Entry Blockers and Tightness
+
+This section lists every condition that can block an entry (signal layer → guard pipeline → post-pipeline) and notes which are likely **tight** and where relaxation might increase trade count.
+
+### Blockers Before EntryGuard (Signal::Engine)
+
+| Blocker | When it blocks | Config / code | Tight? |
+|--------|-----------------|---------------|--------|
+| Market closed | After 3:30 PM IST | `TradingSession::Service.market_closed?` | No — intended. |
+| Instrument missing | Index instrument not in DB/cache | `IndexInstrumentCache` | No — data dependency. |
+| Supertrend config missing | `signals.supertrend` absent | `algo.yml` | No. |
+| Primary analysis fail | Candle/series or Supertrend fail | — | No. |
+| Supertrend :none | No trend direction | — | **Maybe** — single-TF flip only. |
+| Index TA filter | `enable_index_ta_filter: true` and (neutral or confidence &lt; min) | `signals.enable_index_ta_filter`, `signals.ta_min_confidence` | **Yes** — default off; enable only if you want fewer trades. |
+| Comprehensive validation | IV rank, theta risk, ADX strength, trend confirm | `signals.validation_mode`, ADX thresholds per index | **Yes** — balanced/conservative and per-index ADX (e.g. 15–18) can block often. |
+| EntryFilterEngine | Structure/liquidity/volatility alignment | `Entries::EntryFilterEngine` | **Yes** — institutional filter; relax only if you accept weaker structure. |
+| PermissionResolver | Returns `:blocked` | SMC/AVRZ permission | **Yes** — SMC gating can block many setups. |
+| SMC decision alignment | SMC call/put/no_trade not aligned with signal | `signals.enable_smc_decision_alignment` (default true) | **Yes** — double gate with permission; set false to skip alignment. |
+| ExpiryModel | Midday decay period on expiry day | `Strategies::ExpiryModel.trade_allowed?` | **Maybe** — avoids expiry midday; relax to allow. |
+| Missing ATR / expected_spot_move | No ATR for strike qualification | — | No — chain needs it. |
+| No strikes qualified | `ChainAnalyzer.pick_strikes_with_qualification` empty | Premium band, liquidity, OI, IV in `algo.yml` | **Yes** — premium band and scoring can be very strict. |
+
+### Blockers in Entry Guard Pipeline (Order)
+
+| # | Blocker | When it blocks | Config / default | Tight? |
+|---|---------|-----------------|------------------|--------|
+| 1 | Circuit breaker | Tripped (manual or auto) | API / Redis | No — safety. |
+| 2 | BOS contract | `entry_metadata` fails BOS check | Supertrend path bypasses with synthetic BOS | **Yes** for BOS path — requires valid BOS; use Supertrend-only to avoid. |
+| 3 | Time regime | Current regime has `allow_entries: false` | `risk.time_regimes.*.allow_entries`; **chop_decay (11:30–13:45) = false** | **Yes** — no entries for ~2h in lunch; intentional. |
+| 4 | BANKNIFTY last week | Not in last 7 days before monthly expiry | — | **Yes** — BANKNIFTY only in last week of month. |
+| 5 | Edge failure | Rolling PnL ≤ -₹3k (last 5 trades) or 2 consecutive SLs or S3 + 2 SLs | `risk.edge_failure_detector`; pause 60 min | **Yes** — 2 SLs → 1h pause; rolling -3k → 1h. |
+| 6 | Daily limits | Daily profit target hit; or (daily/global loss limit when profit ≥ ₹20k); or **≥ 3 trades today per index** | `risk.daily_limits`, **hard-coded 3 trades/index** in EntryGuard | **Yes** — 3 trades/index is hard cap (algo.yml has 2/1/2 per index but code uses 3). |
+| 7 | Instrument lookup | Index instrument not found | — | No. |
+| 8 | Exposure | Already 1 position same side (or Supertrend duplicate for index) | `indices[].max_same_side` (default 1) | **Yes** — max_same_side: 1 = no pyramiding. |
+| 9 | Cooldown | Same symbol traded within last N seconds | `indices[].cooldown_sec` (default **180**) | **Yes** — 3 min per symbol; reduce for more re-entries. |
+| 10 | LTP resolution | No valid LTP for pick | — | No — data. |
+
+### Post-Pipeline Blockers (EntryGuard)
+
+| Blocker | When it blocks | Tight? |
+|---------|----------------|--------|
+| BOS / structure gate | Non-Supertrend entry fails structure entry gate | **Yes** — BOS level/confirmation/distance. |
+| Cooldown (again) | Same symbol within cooldown (duplicate check) | Same as pipeline. |
+| Weekly-only (NIFTY/SENSEX) | Pick is monthly contract | **Yes** — only weekly allowed for NIFTY/SENSEX (non-paper). |
+| Execution profile | Permission `:execution_only` and profile disallows | Depends on profile. |
+| Sizing cap | `max_lots` ≤ 0 | Capital/config. |
+| Quantity | Allocator or cap gives &lt; 1 lot | **Maybe** — risk sizing can cap to 0. |
+| Order placement fail | Gateway/API error | No. |
+
+### Summary: Likely “Too Tight” Levers
+
+1. **Time regime** — `chop_decay.allow_entries: false` (11:30–13:45) blocks all entries in lunch.  
+2. **Cooldown** — 180 s per symbol; reducing (e.g. 60–120) allows more re-entries on same symbol.  
+3. **max_same_side: 1** — Only one position per side per index; increasing allows pyramiding.  
+4. **Institutional 3-trades-per-index cap** — Hard-coded in `EntryGuard.daily_limits_allow_entry?`; algo.yml per-index limits (2/1/2) are not used for this check.  
+5. **BANKNIFTY last week** — Only 7 days per month for BANKNIFTY; remove guard if you want all month.  
+6. **Edge failure** — 2 consecutive SLs or last-5 net ≤ -₹3k → 60 min pause; increase `max_consecutive_sls` or pause duration, or disable.  
+7. **SMC + Permission** — PermissionResolver + SMC alignment (both on by default) block when SMC is neutral or misaligned; set `enable_smc_avrz_permission` / `enable_smc_decision_alignment` false to relax.  
+8. **Comprehensive validation** — ADX/IV/theta checks; use less strict validation_mode or lower per-index ADX.  
+9. **EntryFilterEngine** — Structure/liquidity/volatility; relax only if you accept weaker setups.  
+10. **Strike qualification** — Premium band (min/max), liquidity, OI; widen band or relax scoring to get more strikes.  
+11. **Weekly-only NIFTY/SENSEX** — Code blocks monthly contracts; bypass only with Supertrend or paper.  
+12. **BOS contract** — Required for non-Supertrend; use Supertrend-only mode to avoid BOS requirement.
+
+### Quick Relaxation Checklist
+
+- **More trades per day:** Lower cooldown (e.g. 60–120 s), raise or remove the 3-trades-per-index cap (make it configurable from algo.yml).  
+- **More entries in lunch:** Set `chop_decay.allow_entries: true` (and optionally higher `min_adx`).  
+- **Less SMC gating:** Set `signals.enable_smc_avrz_permission: false` and/or `signals.enable_smc_decision_alignment: false`.  
+- **Softer validation:** Use `validation_mode: balanced` or lower ADX thresholds in indices.  
+- **More strikes:** Widen `indices[].premium_band` or relax chain_analyzer scoring.  
+- **BANKNIFTY all month:** Remove or bypass `BankniftyLastWeekGuard`.  
+- **Fewer edge-failure pauses:** Increase `edge_failure_detector.max_consecutive_sls` or `rolling_window_threshold_rupees`, or disable.
+
+---
+
 ## Related Files
 
 - **Entry:** `app/services/entries/entry_guard_pipeline.rb`, `app/services/entries/entry_guard.rb`, `app/services/entries/guards/*.rb`
