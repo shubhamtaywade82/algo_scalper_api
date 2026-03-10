@@ -171,7 +171,16 @@ module Dhan
       end
 
       def restart_websocket!
-        Dhan::Ws::FeedListener.restart! if defined?(Dhan::Ws::FeedListener)
+        return unless defined?(Live::MarketFeedHub)
+
+        hub = Live::MarketFeedHub.instance
+        return unless hub.running?
+
+        Rails.logger.info("[DHAN] Restarting MarketFeedHub after token refresh")
+        hub.stop!
+        hub.start!
+      rescue StandardError => e
+        Rails.logger.error("[DHAN] Failed to restart MarketFeedHub: #{e.class} - #{e.message}")
       end
 
       def mutex

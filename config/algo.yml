@@ -24,6 +24,10 @@ feature_flags:
   enable_peak_drawdown_activation: false
   auto_paper_on_insufficient_balance: false
 
+# DhanHQ broker settings
+dhanhq:
+  enable_orders: false # Set to true for live order submission (false = dry-run logging only)
+
 # ============================================
 # INDEX CONFIG (TREND-SCORE DRIVEN)
 # ============================================

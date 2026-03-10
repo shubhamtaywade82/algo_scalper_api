@@ -233,10 +233,13 @@ module Signal
           regime = regime_result[:regime]
 
           # DYNAMIC VALIDATION MODE: Use conservative mode in ranging/choppy markets
-          if %w[RANGING CHOPPY].include?(regime)
-            signals_cfg[:validation_mode] = 'conservative'
-            Rails.logger.info("[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} due to #{regime} regime")
-          end
+          # NOTE: Use local variable — do NOT mutate signals_cfg (it's a cached AlgoConfig reference)
+          effective_validation_mode = if %w[RANGING CHOPPY].include?(regime)
+                                        Rails.logger.info("[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} due to #{regime} regime")
+                                        'conservative'
+                                      else
+                                        signals_cfg[:validation_mode]
+                                      end
 
           enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, false)
 
@@ -268,7 +271,8 @@ module Signal
 
           primary_series = primary_analysis[:series]
           validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
-                                                       primary_analysis[:supertrend], { value: primary_analysis[:adx_value] })
+                                                       primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
+                                                       validation_mode: effective_validation_mode)
         end
 
         unless validation_result[:valid]
@@ -381,7 +385,7 @@ module Signal
           confirmation_timeframe: confirmation_tf,
           confirmation_enabled: enable_confirmation,
           confirmation_direction: confirmation_analysis&.dig(:direction),
-          validation_mode: signals_cfg[:validation_mode] || 'balanced',
+          validation_mode: effective_validation_mode || signals_cfg[:validation_mode] || 'balanced',
           validation_passed: validation_result[:valid],
           state_count: state_snapshot[:count],
           state_multiplier: state_snapshot[:multiplier],
@@ -417,7 +421,7 @@ module Signal
         # Detect if price is approaching an OI cluster for explosive potential
         expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
         chain_data = instrument.fetch_option_chain(expiry_date)
-        
+
         if chain_data
           gamma_detector = Options::GammaRampDetector.new(
             index_key: index_cfg[:key],
@@ -658,8 +662,8 @@ module Signal
 
       # Comprehensive validation checks before proceeding with trades
       # When supertrend_only: true, ADX and trend_confirmation are skipped (Supertrend-only entry).
-      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false)
-        mode_config = get_validation_mode_config
+      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false, validation_mode: nil)
+        mode_config = get_validation_mode_config(override_mode: validation_mode)
         # Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction} (mode: #{mode_config[:mode]})")
 
         validation_checks = []
@@ -720,9 +724,10 @@ module Signal
       end
 
       # Get validation mode configuration
-      def get_validation_mode_config
+      # @param override_mode [String, nil] Override the configured validation mode (e.g. 'conservative' for RANGING/CHOPPY regimes)
+      def get_validation_mode_config(override_mode: nil)
         signals_cfg = AlgoConfig.fetch[:signals] || {}
-        mode = signals_cfg[:validation_mode] || 'balanced'
+        mode = override_mode || signals_cfg[:validation_mode] || 'balanced'
         mode_config = signals_cfg.dig(:validation_modes, mode.to_sym) ||
                       signals_cfg.dig(:validation_modes, :balanced) || {}
 

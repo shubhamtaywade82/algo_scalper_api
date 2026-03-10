@@ -4,6 +4,8 @@
 # Single method that checks all exit conditions in priority order
 module Live
   class UnifiedExitChecker
+    EXIT_CONFIG_TTL = 30 # seconds — matches AlgoConfig.fetch TTL
+
     class << self
       # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
@@ -294,60 +296,69 @@ module Live
       end
 
       def exit_config
-        @exit_config ||= begin
-          algo_cfg = AlgoConfig.fetch
-          risk_cfg = algo_cfg[:risk] || {}
-          exit_cfg = algo_cfg[:exit] || {}
-
-          # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
-          sl_value = risk_cfg[:sl_pct]
-          if sl_value
-            sl_value_pct = sl_value.to_f  # Use DECIMAL directly (0.12)
-          else
-            sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12  # Default 12% as DECIMAL
-          end
-
-          # Read TP from config (can be in either location, stored as DECIMAL)
-          tp_value = exit_cfg[:take_profit]
-          unless tp_value
-            if risk_cfg[:tp_pct]
-              tp_value = risk_cfg[:tp_pct].to_f  # Use DECIMAL directly (0.50)
-            else
-              tp_value = 0.50  # Default 50% as DECIMAL
-            end
-          end
-
-          # Read trailing config (now using DECIMAL format from algo.yml)
-          trailing_activation = exit_cfg.dig(:trailing, :activation_profit)
-          trailing_activation ||= risk_cfg.dig(:trailing, :activation_pct) || 0.035
-
-          trailing_drop = exit_cfg.dig(:trailing, :drop_threshold)
-          trailing_drop ||= risk_cfg.dig(:trailing, :drawdown_pct) || 0.025
-
-          {
-            stop_loss: {
-              type: exit_cfg.dig(:stop_loss, :type) || 'static',
-              value: sl_value_pct
-            },
-            take_profit: tp_value,
-            trailing: {
-              enabled: exit_cfg.dig(:trailing, :enabled) != false,
-              type: exit_cfg.dig(:trailing, :type) || 'adaptive',
-              activation_profit: trailing_activation,
-              drop_threshold: trailing_drop
-            },
-            early_exit: {
-              enabled: exit_cfg.dig(:early_exit, :enabled) != false,
-              profit_threshold: exit_cfg.dig(:early_exit, :profit_threshold) || 0.07
-            },
-            time_based: {
-              enabled: exit_cfg.dig(:time_based, :enabled) == true,
-              exit_time: exit_cfg.dig(:time_based, :exit_time) || '15:20'
-            }
-          }
-        rescue StandardError
-          default_exit_config
+        now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        if @exit_config && @exit_config_expires_at && now < @exit_config_expires_at
+          return @exit_config
         end
+
+        @exit_config = build_exit_config
+        @exit_config_expires_at = now + EXIT_CONFIG_TTL
+        @exit_config
+      end
+
+      def build_exit_config
+        algo_cfg = AlgoConfig.fetch
+        risk_cfg = algo_cfg[:risk] || {}
+        exit_cfg = algo_cfg[:exit] || {}
+
+        # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
+        sl_value = risk_cfg[:sl_pct]
+        if sl_value
+          sl_value_pct = sl_value.to_f  # Use DECIMAL directly (0.12)
+        else
+          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12  # Default 12% as DECIMAL
+        end
+
+        # Read TP from config (can be in either location, stored as DECIMAL)
+        tp_value = exit_cfg[:take_profit]
+        unless tp_value
+          if risk_cfg[:tp_pct]
+            tp_value = risk_cfg[:tp_pct].to_f  # Use DECIMAL directly (0.50)
+          else
+            tp_value = 0.50  # Default 50% as DECIMAL
+          end
+        end
+
+        # Read trailing config (now using DECIMAL format from algo.yml)
+        trailing_activation = exit_cfg.dig(:trailing, :activation_profit)
+        trailing_activation ||= risk_cfg.dig(:trailing, :activation_pct) || 0.035
+
+        trailing_drop = exit_cfg.dig(:trailing, :drop_threshold)
+        trailing_drop ||= risk_cfg.dig(:trailing, :drawdown_pct) || 0.025
+
+        {
+          stop_loss: {
+            type: exit_cfg.dig(:stop_loss, :type) || 'static',
+            value: sl_value_pct
+          },
+          take_profit: tp_value,
+          trailing: {
+            enabled: exit_cfg.dig(:trailing, :enabled) != false,
+            type: exit_cfg.dig(:trailing, :type) || 'adaptive',
+            activation_profit: trailing_activation,
+            drop_threshold: trailing_drop
+          },
+          early_exit: {
+            enabled: exit_cfg.dig(:early_exit, :enabled) != false,
+            profit_threshold: exit_cfg.dig(:early_exit, :profit_threshold) || 0.07
+          },
+          time_based: {
+            enabled: exit_cfg.dig(:time_based, :enabled) == true,
+            exit_time: exit_cfg.dig(:time_based, :exit_time) || '15:20'
+          }
+        }
+      rescue StandardError
+        default_exit_config
       end
 
       def default_exit_config
