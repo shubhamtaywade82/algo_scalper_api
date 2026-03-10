@@ -40,8 +40,8 @@ module Backtest
 
   # Main backtest engine runner
   class Engine
-    def initialize(data_path:, strategy:)
-      @data = DataLoader.new(path: data_path).load
+    def initialize(data:, strategy:)
+      @data = data
       @replayer = MarketReplayer.new(data: @data)
       @strategy_adapter = StrategyAdapter.new(strategy: strategy)
       @sim = TradeSimulator.new

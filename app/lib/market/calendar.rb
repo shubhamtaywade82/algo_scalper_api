@@ -27,8 +27,8 @@ module Market
         current = Date.current
         trading_days_counted = 0
 
-        # Start from yesterday to avoid counting today if it's not a trading day
-        (1..30).each do |days_back|
+        # Look back up to 2x the count to find enough trading days
+        (1..(count * 2)).each do |days_back|
           candidate = current - days_back.days
           if trading_day?(candidate)
             trading_days_counted += 1
