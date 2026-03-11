@@ -8,7 +8,7 @@ module Live
 
     REDIS_KEY_PREFIX = 'pnl:tracker'
     TTL_SECONDS = 6.hours.to_i
-    SYNC_THROTTLE_SECONDS = 30 # Only sync to DB every 30 seconds per tracker
+    DEFAULT_SYNC_THROTTLE_SECONDS = 30 # Only sync to DB every 30 seconds per tracker (default)
 
     def initialize
       @redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
@@ -152,7 +152,7 @@ module Live
     end
 
     # Sync PnL from Redis to PositionTracker database (throttled)
-    # Only syncs every SYNC_THROTTLE_SECONDS (30s) per tracker to reduce DB hits
+    # Only syncs every sync_throttle_seconds per tracker to reduce DB hits
     def sync_pnl_to_database_throttled(tracker_id, pnl, pnl_pct, hwm, hwm_pnl_pct = nil)
       return unless tracker_id
 
@@ -161,7 +161,7 @@ module Live
         now = Time.current
 
         # Skip if synced recently (within throttle window)
-        return if last_sync && (now - last_sync) < SYNC_THROTTLE_SECONDS
+        return if last_sync && (now - last_sync) < sync_throttle_seconds
 
         # Update timestamp
         @sync_timestamps[tracker_id] = now
@@ -287,6 +287,21 @@ module Live
       end
 
       true
+    end
+
+    def sync_throttle_seconds
+      configured = begin
+        cfg = AlgoConfig.fetch
+        top_level = cfg.dig(:realtime, :db_sync_interval_seconds)
+        risk_level = cfg.dig(:risk, :realtime, :db_sync_interval_seconds)
+        (risk_level || top_level).to_f
+      rescue StandardError
+        0
+      end
+
+      return DEFAULT_SYNC_THROTTLE_SECONDS if configured <= 0
+
+      configured
     end
 
     private

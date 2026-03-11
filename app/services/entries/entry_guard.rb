@@ -44,15 +44,16 @@ module Entries
 
         if entry_metadata&.dig(:entry_contract).to_s == SUPERTREND_CONTRACT
           # Bypass BOS gate for Supertrend-only mode
+          # Use option premium domain values for synthetic BOS context.
           bos_context = {
             confirmed_at: Time.current,
             confirmed_index: -1,
             direction: direction,
             bos_id: entry_metadata[:bos_id],
             timeframe: entry_metadata[:bos_timeframe],
-            origin_swing: { price: entry_metadata[:bos_origin_price] },
-            broken_swing: { price: entry_metadata[:bos_level] },
-            entry_underlying_price: ltp.to_f
+            origin_swing: { price: ltp.to_f },
+            broken_swing: { price: ltp.to_f },
+            entry_underlying_price: entry_metadata[:entry_underlying_price]
           }
         else
           bos_context = enforce_structure_entry_gate(
@@ -865,11 +866,21 @@ module Entries
       def apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)
         return unless bos_context
 
-        origin_price = bos_context[:origin_swing][:price].to_f
-        entry_underlying_price = bos_context[:entry_underlying_price]
-        reference_price = entry_underlying_price || entry_price
-        entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
-        premium_r = entry_risk_rupees / quantity.to_f
+        contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
+        if contract == SUPERTREND_CONTRACT
+          # Supertrend direct entries do not have BOS structure risk; derive premium risk from configured SL %.
+          sl_decimal = supertrend_sl_decimal
+          premium_r = entry_price.to_f * sl_decimal
+          entry_risk_rupees = premium_r * quantity.to_i
+          origin_price = entry_price.to_f
+          entry_underlying_price = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_underlying_price] : nil
+        else
+          origin_price = bos_context[:origin_swing][:price].to_f
+          entry_underlying_price = bos_context[:entry_underlying_price]
+          reference_price = entry_underlying_price || entry_price
+          entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
+          premium_r = entry_risk_rupees / quantity.to_f
+        end
         premium_stop = entry_price.to_f - premium_r
         premium_target = entry_price.to_f + premium_r
 
@@ -898,6 +909,15 @@ module Entries
           meta_hash[:entry_tf] = entry_metadata[:entry_tf] if entry_metadata.key?(:entry_tf)
           meta_hash[:htf_tf] = entry_metadata[:htf_tf] if entry_metadata.key?(:htf_tf)
         end
+      end
+
+      def supertrend_sl_decimal
+        value = AlgoConfig.fetch.dig(:risk, :sl_pct).to_f
+        return 0.12 if value <= 0
+
+        value
+      rescue StandardError
+        0.12
       end
 
       def bos_consumed?(index_cfg:, bos_id:)

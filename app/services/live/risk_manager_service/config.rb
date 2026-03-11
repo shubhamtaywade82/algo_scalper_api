@@ -149,6 +149,53 @@ module Live
       rescue StandardError
         BigDecimal(0)
       end
+
+      def realtime_config
+        cfg = algo_config
+        top_level = cfg[:realtime].is_a?(Hash) ? cfg[:realtime] : {}
+        risk_level = cfg.dig(:risk, :realtime).is_a?(Hash) ? cfg.dig(:risk, :realtime) : {}
+        top_level.merge(risk_level)
+      rescue StandardError
+        {}
+      end
+
+      def realtime_tick_first_enabled?
+        cfg = realtime_config
+        return true unless cfg.key?(:tick_first_enabled)
+
+        cfg[:tick_first_enabled] == true
+      rescue StandardError
+        true
+      end
+
+      def realtime_fallback_enabled?
+        cfg = realtime_config
+        return true unless cfg.key?(:fallback_enabled)
+
+        cfg[:fallback_enabled] == true
+      rescue StandardError
+        true
+      end
+
+      def realtime_tick_stale_after_seconds
+        cfg = realtime_config
+        value = cfg[:tick_stale_after_seconds].to_f
+        return 3.0 if value <= 0
+
+        value
+      rescue StandardError
+        3.0
+      end
+
+      def realtime_min_enforcement_gap_seconds
+        cfg = realtime_config
+        ms = cfg[:min_enforcement_gap_ms].to_f
+        return 0.25 if ms <= 0
+
+        ms / 1000.0
+      rescue StandardError
+        0.25
+      end
     end
   end
 end

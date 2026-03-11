@@ -143,12 +143,16 @@ module Live
           entry_value = tracker.entry_price.to_f * tracker.quantity.to_f
           return false unless entry_value.positive?
 
+          # Do not arm gamma/MFE trailing before activation profit is reached.
+          activation = config[:trailing][:activation_profit].to_f
+          peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
+          return false if activation.positive? && peak_profit_pct < activation
+
           # 1. Resolve price history from ActiveCache for Gamma detection
           pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
           prices = pos_data&.price_history || [ltp]
 
           # 2. Use Orders::Analyzer for combined analysis
-          peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
           analyzer = Orders::Analyzer.new(
             tracker: tracker,
             ltp: ltp,
