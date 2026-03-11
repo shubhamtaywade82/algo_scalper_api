@@ -17,8 +17,8 @@ module Dhan
           refreshed_token = refresh!
           return refreshed_token if refreshed_token.present?
 
-          # If refresh failed and we have no token at all, or the one we have is expired, return nil
-          return nil if token_data.nil? || token_data[:expiry_time] <= Time.current
+          # If refresh failed and we have no token at all, or the one we have is expired/invalid, return nil
+          return nil if token_data.nil? || token_data[:expiry_time].nil? || token_data[:expiry_time] <= Time.current
         end
 
         token_data&.dig(:token)
