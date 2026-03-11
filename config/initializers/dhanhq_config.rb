@@ -121,21 +121,34 @@ end
 
 def fetch_authority_token!
   Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
-    begin
-      response = Faraday.get(
-        "#{ENV.fetch('TRADER_API_BASE_URL')}/auth/dhan/token"
-      ) do |req|
-        req.headers["Authorization"] = "Bearer #{ENV.fetch('DHAN_TOKEN_ACCESS_TOKEN')}"
-      end
+    token_url = token_authority_url
+    authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
 
-      if response.success?
-        data = JSON.parse(response.body)
-        return data["access_token"] if data["access_token"].present?
-      end
+    if token_url.present? && authority_token.present?
+      begin
+        response = Faraday.get(token_url) do |req|
+          req.headers["Authorization"] = "Bearer #{authority_token}"
+        end
 
-      Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
-    rescue StandardError => e
-      Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
+        if response.success?
+          data = JSON.parse(response.body)
+          return data["access_token"] if data["access_token"].present?
+        end
+
+        Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
+      rescue StandardError => e
+        Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
+      end
+    elsif token_url.present?
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_missing_bearer",
+        message: "[SCALPER] Token authority token missing (DHAN_TOKEN_ACCESS_TOKEN), trying TOTP refresh..."
+      )
+    else
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_invalid_url",
+        message: "[SCALPER] Token authority URL invalid/missing (TRADER_API_BASE_URL), trying TOTP refresh..."
+      )
     end
 
     # Second fallback: TOTP auto-refresh via Dhan::TokenManager (requires DHAN_PIN + DHAN_TOTP_SECRET)
@@ -156,4 +169,24 @@ def fetch_authority_token!
 
     raise "Token authority unreachable, TOTP refresh failed, and no ENV['DHAN_ACCESS_TOKEN'] found"
   end
+end
+
+def token_authority_url
+  raw_base = ENV["TRADER_API_BASE_URL"].to_s.strip
+  return nil if raw_base.blank?
+  return nil if raw_base.include?("<") || raw_base.include?(">")
+
+  uri = URI.parse(raw_base)
+  return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
+
+  "#{raw_base.chomp('/')}/auth/dhan/token"
+rescue URI::InvalidURIError
+  nil
+end
+
+def log_token_authority_fallback_once!(key:, message:)
+  return if Rails.cache.read(key)
+
+  Rails.logger.warn(message)
+  Rails.cache.write(key, true, expires_in: 10.minutes)
 end
