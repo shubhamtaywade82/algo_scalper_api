@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'timeout'
+
 module Services
   module Ai
     class TechnicalAnalysisAgent
@@ -86,7 +88,7 @@ module Services
 
           # Step 7: Final LLM reasoning (compact facts only)
           yield("📝 [Agent] Synthesizing final analysis...\n") if block_given?
-          final_analysis = synthesize_analysis(context, stream: stream, &)
+          final_analysis = synthesize_analysis(context, query: query, stream: stream, &)
 
           {
             analysis: final_analysis,
@@ -154,9 +156,14 @@ module Services
           strikes.first(5) # Max 5 strikes
         end
 
-        def synthesize_analysis(context, stream: false, &)
+        def synthesize_analysis(context, query:, stream: false, &)
+          if technical_query_without_options?(query)
+            return build_indicator_only_analysis(context, query)
+          end
+
           # Build compact prompt with facts only
           facts_prompt = build_facts_prompt(context)
+          synthesis_timeout = ENV.fetch('AI_AGENT_SYNTHESIS_TIMEOUT', '25').to_i
 
           model = if @client.provider == :ollama
                     if @client.respond_to?(:preferred_text_model)
@@ -169,21 +176,105 @@ module Services
                   end
 
           messages = [
-            { role: 'system', content: build_synthesis_system_prompt },
+            { role: 'system', content: build_synthesis_prompt_for_query(query, context) },
             { role: 'user', content: facts_prompt }
           ]
 
           if stream && block_given?
-            streamed = @client.chat_stream(messages: messages, model: model, temperature: 0.3, &)
+            streamed = Timeout.timeout(synthesis_timeout) do
+              @client.chat_stream(messages: messages, model: model, temperature: 0.2, &)
+            end
             return streamed if streamed.present?
 
             return build_fallback_analysis(context)
           end
 
-          response = @client.chat(messages: messages, model: model, temperature: 0.3)
+          response = Timeout.timeout(synthesis_timeout) do
+            @client.chat(messages: messages, model: model, temperature: 0.2)
+          end
           return response if response.present?
 
           build_fallback_analysis(context)
+        rescue Timeout::Error
+          Rails.logger.warn("[AgentRunner] Synthesis timed out after #{synthesis_timeout}s, returning fallback analysis")
+          build_fallback_analysis(context)
+        end
+
+        def build_synthesis_prompt_for_query(query, context)
+          if options_query?(query) || context.intent == :options_buying
+            return build_synthesis_system_prompt
+          end
+
+          return build_general_technical_system_prompt if context.intent == :intraday || technical_query_without_options?(query)
+
+          build_general_technical_system_prompt
+        end
+
+        def build_general_technical_system_prompt
+          <<~PROMPT
+            You are a concise intraday technical analyst for Indian indices.
+            Return a short, plain analysis focused on requested indicators only.
+            Do not generate options strike plans unless explicitly asked about options.
+            Format:
+            1) Indicator reading
+            2) Bias (bullish/bearish/neutral)
+            3) One-line actionable note
+          PROMPT
+        end
+
+        def technical_query_without_options?(query)
+          query_text = query.to_s.upcase
+          has_technical_terms = query_text.match?(/\b(RSI|MACD|ADX|SUPERTREND|ATR|BOLLINGER|TREND|MOMENTUM|BIAS|CONDITION)\b/)
+          has_technical_terms && !options_query?(query)
+        end
+
+        def options_query?(query)
+          query.to_s.upcase.match?(/\b(OPTION|CALL|PUT|STRIKE|PREMIUM|CE|PE)\b/)
+        end
+
+        def build_indicator_only_analysis(context, query)
+          instrument_name = context.resolved_instrument&.symbol_name || context.underlying_symbol || 'Unknown'
+          ltp = context.ltp&.to_f
+          tf = context.indicators['15m'] || context.indicators[:'15m'] || {}
+
+          rsi = tf['rsi'] || tf[:rsi]
+          adx = tf['adx'] || tf[:adx]
+          supertrend = tf['supertrend'] || tf[:supertrend]
+          macd = tf['macd'] || tf[:macd]
+          macd_hist = macd.is_a?(Array) ? macd[2] : nil
+
+          bias = if rsi && rsi.to_f < 35 && macd_hist.to_f.negative?
+                   'Bearish with possible short-cover bounce risk'
+                 elsif rsi && rsi.to_f > 65 && macd_hist.to_f.positive?
+                   'Bullish with pullback risk'
+                 elsif supertrend.to_s.downcase.include?('short')
+                   'Bearish'
+                 elsif supertrend.to_s.downcase.include?('long')
+                   'Bullish'
+                 else
+                   'Neutral'
+                 end
+
+          strength = adx && adx.to_f >= 25 ? 'strong' : 'weak'
+          query_text = query.to_s.upcase
+          requested = if query_text.include?('RSI')
+                        'RSI'
+                      elsif query_text.include?('TREND')
+                        'TREND'
+                      else
+                        'indicators'
+                      end
+
+          lines = []
+          lines << "Indicator Analysis (#{instrument_name})"
+          lines << "- LTP: #{ltp ? format('%.2f', ltp) : 'N/A'}"
+          lines << "- 15m RSI: #{rsi ? format('%.2f', rsi.to_f) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
+          lines << "- 15m ADX: #{adx ? format('%.2f', adx.to_f) : 'N/A'} (trend #{strength})"
+          lines << "- 15m Supertrend: #{supertrend || 'N/A'}"
+          lines << "- 15m MACD hist: #{macd_hist ? format('%.2f', macd_hist.to_f) : 'N/A'}"
+          lines << "- Bias: #{bias}"
+          lines << "- Action: use this as directional filter only; options strike planning requires an explicit options query."
+          lines.join("\n")
         end
 
         def build_fallback_analysis(context)

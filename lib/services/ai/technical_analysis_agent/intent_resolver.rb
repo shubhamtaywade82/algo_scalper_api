@@ -142,7 +142,7 @@ module Services
         def infer_intent_fallback(query)
           query_upper = query.to_s.upcase
           return :options_buying if query_upper.match?(/\b(OPTION|CALL|PUT|STRIKE|PREMIUM|CE|PE)\b/)
-          return :intraday if query_upper.match?(/\b(RSI|MACD|ADX|SUPERTREND|ATR|BOLLINGER|INDICATOR)\b/)
+          return :intraday if query_upper.match?(/\b(RSI|MACD|ADX|SUPERTREND|ATR|BOLLINGER|INDICATOR|TREND)\b/)
 
           :general
         end
