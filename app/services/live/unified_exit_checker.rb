@@ -139,31 +139,37 @@ module Live
         # Use advanced Gamma-Aware and MFE exits for NIFTY, BANKNIFTY, and SENSEX
         symbol = tracker.symbol.to_s.upcase
         if %w[NIFTY BANKNIFTY SENSEX].any? { |s| symbol.include?(s) }
+          # Guard against division by zero - skip if entry_price or quantity is invalid
+          entry_value = tracker.entry_price.to_f * tracker.quantity.to_f
+          return false unless entry_value.positive?
+
           # 1. Resolve price history from ActiveCache for Gamma detection
           pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
           prices = pos_data&.price_history || [ltp]
-          
+
           # 2. Use Orders::Analyzer for combined analysis
+          peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
           analyzer = Orders::Analyzer.new(
             tracker: tracker,
             ltp: ltp,
             prices: prices,
-            peak_profit_pct: snapshot[:hwm_pnl].to_f / (tracker.entry_price.to_f * tracker.quantity.to_f)
+            peak_profit_pct: peak_profit_pct
           )
           sl_price = analyzer.recommended_sl
-          
+
           if sl_price && ltp <= sl_price
             # Identify which engine triggered the stop for logging
             # Re-running analysis components to find the trigger (minor overhead for logging)
+            highest_price = tracker.entry_price.to_f * (1.0 + peak_profit_pct)
             mfe_sl = Orders::MfeExitEngine.new(
               position: tracker,
               ltp: ltp,
               entry_price: tracker.entry_price.to_f,
-              highest_price: (tracker.entry_price.to_f * (1.0 + (snapshot[:hwm_pnl].to_f / (tracker.entry_price.to_f * tracker.quantity.to_f))))
+              highest_price: highest_price
             ).call
 
             reason = (mfe_sl && sl_price == mfe_sl) ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
-            
+
             Rails.logger.info("[UnifiedExitChecker] #{reason} hit for #{tracker.order_no}: ltp=#{ltp}, sl=#{sl_price}")
             return true
           end
