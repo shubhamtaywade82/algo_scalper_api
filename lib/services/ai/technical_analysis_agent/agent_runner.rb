@@ -5,6 +5,8 @@ module Services
     class TechnicalAnalysisAgent
       # Agent Runner: Main orchestration loop for intent-aware, micro-step ReAct agent
       module AgentRunner
+        INDICATOR_VALUE_KEYS = %w[value signal direction].freeze
+
         def run_agent_loop(query:, stream: false, &)
           # Step 1: Resolve intent (LLM - small)
           intent_data = resolve_intent(query)
@@ -137,7 +139,7 @@ module Services
               end
 
               aggregated[timeframe][name] = if value.is_a?(Hash)
-                                              value.select { |k, _v| %w[value signal direction].include?(k.to_s) }
+                                              value.select { |k, _v| INDICATOR_VALUE_KEYS.include?(k.to_s) }
                                             else
                                               value
                                             end
@@ -157,7 +159,11 @@ module Services
           facts_prompt = build_facts_prompt(context)
 
           model = if @client.provider == :ollama
-                    ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                    if @client.respond_to?(:preferred_text_model)
+                      @client.preferred_text_model(default: 'llama3.1:8b')
+                    else
+                      ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                    end
                   else
                     'gpt-4o'
                   end
@@ -168,10 +174,44 @@ module Services
           ]
 
           if stream && block_given?
-            @client.chat_stream(messages: messages, model: model, temperature: 0.3, &)
-          else
-            @client.chat(messages: messages, model: model, temperature: 0.3)
+            streamed = @client.chat_stream(messages: messages, model: model, temperature: 0.3, &)
+            return streamed if streamed.present?
+
+            return build_fallback_analysis(context)
           end
+
+          response = @client.chat(messages: messages, model: model, temperature: 0.3)
+          return response if response.present?
+
+          build_fallback_analysis(context)
+        end
+
+        def build_fallback_analysis(context)
+          instrument_name = context.resolved_instrument&.symbol_name || context.underlying_symbol || 'Unknown'
+          ltp_text = context.ltp ? context.ltp.to_f.round(2) : 'N/A'
+
+          tf = context.indicators['15m'] || context.indicators[:'15m'] || {}
+          rsi = tf['rsi'] || tf[:rsi]
+          adx = tf['adx'] || tf[:adx]
+          supertrend = tf['supertrend'] || tf[:supertrend]
+
+          direction = if supertrend.to_s.downcase.include?('short') || (rsi && rsi.to_f < 45)
+                        'Bearish bias'
+                      elsif supertrend.to_s.downcase.include?('long') || (rsi && rsi.to_f > 55)
+                        'Bullish bias'
+                      else
+                        'Neutral bias'
+                      end
+
+          strength = adx && adx.to_f >= 25 ? 'trend strength is strong' : 'trend strength is weak or unclear'
+
+          <<~TEXT.strip
+            Fallback technical analysis (LLM synthesis unavailable):
+            - Instrument: #{instrument_name}, LTP: #{ltp_text}
+            - 15m RSI: #{rsi || 'N/A'}, ADX: #{adx || 'N/A'}, Supertrend: #{supertrend || 'N/A'}
+            - View: #{direction}; #{strength}.
+            - Action: use smaller size and wait for next confirmation candle before entry.
+          TEXT
         end
 
         def build_facts_prompt(context)

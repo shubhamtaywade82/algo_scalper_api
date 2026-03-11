@@ -6,6 +6,8 @@ module Services
       # Agent Context: Stores structured facts, not raw DhanHQ JSON
       # This is a class, not a module, so it can be instantiated
       class AgentContext
+        INDICATOR_VALUE_KEYS = %w[value signal direction].freeze
+
         attr_accessor :intent, :underlying_symbol, :resolved_instrument,
                       :ltp, :filtered_strikes, :indicators, :tool_history,
                       :confidence, :derivatives_needed, :timeframe_hint,
@@ -66,7 +68,7 @@ module Services
             tf_indicators.each do |name, value|
               # Store only the value, not raw arrays
               aggregated[timeframe][name] = if value.is_a?(Hash)
-                                              value.select { |k, _v| %w[value signal direction].include?(k.to_s) }
+                                              value.select { |k, _v| INDICATOR_VALUE_KEYS.include?(k.to_s) }
                                             else
                                               value
                                             end
@@ -86,13 +88,13 @@ module Services
           # Check if we have minimum required data
           case @intent
           when :swing_trading
-            @resolved_instrument && @ltp && @indicators.any?
+            @resolved_instrument && (@ltp || @indicators.any?)
           when :options_buying
             @resolved_instrument && @ltp && @filtered_strikes.any? && @indicators.any?
           when :intraday
-            @resolved_instrument && @ltp && @indicators.any?
+            @resolved_instrument && @indicators.any?
           else
-            @resolved_instrument && @ltp
+            @resolved_instrument && (@ltp || @indicators.any?)
           end
         end
 

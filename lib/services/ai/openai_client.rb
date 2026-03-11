@@ -172,9 +172,13 @@ module Services
         explicit_model = ENV.fetch('OLLAMA_MODEL', nil)
         if explicit_model.present?
           if @available_models&.include?(explicit_model)
-            @selected_model = explicit_model
-            Rails.logger.info("[OpenAIClient] Using explicitly set model: #{explicit_model}")
-            return explicit_model
+            if text_capable_ollama_model?(explicit_model)
+              @selected_model = explicit_model
+              Rails.logger.info("[OpenAIClient] Using explicitly set model: #{explicit_model}")
+              return explicit_model
+            else
+              Rails.logger.warn("[OpenAIClient] Explicit model '#{explicit_model}' looks non-text/vision-first; selecting text-capable model")
+            end
           else
             Rails.logger.warn("[OpenAIClient] Model '#{explicit_model}' not found, selecting from available models")
           end
@@ -209,12 +213,36 @@ module Services
         # Try priority models first
         selected = priority_models.find { |m| @available_models.include?(m) }
 
-        # If no priority model found, use first available
+        # If no priority model found, use first text-capable available
+        selected ||= @available_models.find { |m| text_capable_ollama_model?(m) }
+        # If still none, use first available as a final fallback
         selected ||= @available_models.first
 
         @selected_model = selected
         Rails.logger.info("[OpenAIClient] Auto-selected best model: #{selected}")
         selected
+      end
+
+      # Pick a text-capable model for tool-calling/analysis tasks.
+      # Avoid vision-first models which often fail or return non-JSON for intent/tool prompts.
+      def preferred_text_model(default: 'llama3.1:8b')
+        return default unless @provider == :ollama
+
+        fetch_and_select_model if @selected_model.nil? && @available_models.nil?
+
+        explicit_model = ENV.fetch('OLLAMA_MODEL', nil)
+        if explicit_model.present?
+          return explicit_model if text_capable_ollama_model?(explicit_model)
+
+          Rails.logger.warn("[OpenAIClient] Ignoring non-text explicit OLLAMA_MODEL=#{explicit_model} for analysis call")
+        end
+
+        return @selected_model if @selected_model.present? && text_capable_ollama_model?(@selected_model)
+
+        candidate = @available_models&.find { |m| text_capable_ollama_model?(m) }
+        return candidate if candidate.present?
+
+        default
       end
 
       # Direct Ollama generate interface (Ollama only)
@@ -235,13 +263,13 @@ module Services
           with_request_serialization do
             uri = URI("#{ollama_base_url}/api/generate")
             request = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
-            
+
             payload = {
               model: selected_model,
               prompt: prompt,
               stream: stream
             }
-            
+
             # Add JSON format support (Ollama native)
             # Note: Ollama's 'format' can be "json" or a JSON schema object
             payload[:format] = schema if schema
@@ -301,6 +329,12 @@ module Services
           model = @selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3'
         else
           model ||= @provider == :ollama ? (@selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3') : 'gpt-4o'
+        end
+
+        if @provider == :ollama && !text_capable_ollama_model?(model)
+          fallback_model = preferred_text_model(default: 'llama3.1:8b')
+          Rails.logger.warn("[OpenAIClient] Replacing non-text model '#{model}' with text model '#{fallback_model}' for chat")
+          model = fallback_model
         end
 
         # Serialize Ollama requests to prevent parallel calls
@@ -363,6 +397,12 @@ module Services
           model ||= @provider == :ollama ? (@selected_model || select_best_model || ENV['OLLAMA_MODEL'] || 'llama3') : 'gpt-4o'
         end
 
+        if @provider == :ollama && !text_capable_ollama_model?(model)
+          fallback_model = preferred_text_model(default: 'llama3.1:8b')
+          Rails.logger.warn("[OpenAIClient] Replacing non-text model '#{model}' with text model '#{fallback_model}' for chat_stream")
+          model = fallback_model
+        end
+
         # Serialize Ollama requests to prevent parallel calls
         if @provider == :ollama
           with_request_serialization do
@@ -408,6 +448,14 @@ module Services
       end
 
       private
+
+      def text_capable_ollama_model?(model_name)
+        return false if model_name.blank?
+
+        name = model_name.to_s.downcase
+        vision_markers = %w[vl vision llava minicpm-v qwen-vl]
+        vision_markers.none? { |marker| name.include?(marker) }
+      end
 
       def determine_provider
         # Check environment variable first, then fall back to Rails.env

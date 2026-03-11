@@ -9,6 +9,15 @@ module Services
           symbol = context.underlying_symbol
           return nil unless symbol
 
+          normalized_symbol = symbol.to_s.upcase
+
+          # For known indices, always prefer the canonical index instrument first.
+          if %w[NIFTY BANKNIFTY SENSEX].include?(normalized_symbol)
+            exact_index = Instrument.find_by(symbol_name: normalized_symbol, segment: 'index') ||
+                          Instrument.find_by(underlying_symbol: normalized_symbol, segment: 'index')
+            return exact_index if exact_index
+          end
+
           # Find all matching instruments
           candidates = Instrument.where(underlying_symbol: symbol.upcase)
 
@@ -92,7 +101,11 @@ module Services
           end
 
           # Step 2: Get LTP if not available
-          return { tool: 'get_ltp', args: { instrument_id: context.resolved_instrument.id } } unless context.ltp
+          unless context.ltp
+            ltp_attempts = context.tool_history.count { |obs| obs[:tool] == 'get_ltp' }
+            # Don't get stuck on repeated LTP failures; proceed with indicators after a few attempts.
+            return { tool: 'get_ltp', args: { instrument_id: context.resolved_instrument.id } } if ltp_attempts < 3
+          end
 
           # Step 3: Based on intent, fetch appropriate data
           case context.intent
