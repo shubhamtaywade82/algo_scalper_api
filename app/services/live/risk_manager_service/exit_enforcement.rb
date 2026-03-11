@@ -105,7 +105,10 @@ module Live
         return unless tracker.trade_state == 'expansion' || tracker.be_set?
 
         # TrailingEngine expects PositionData from ActiveCache
-        position_data = @active_cache.get_position(tracker.id)
+        cache = active_cache
+        return unless cache
+
+        position_data = cache.get_by_tracker_id(tracker.id)
         return unless position_data
 
         # engine = @trailing_engine ||= Live::TrailingEngine.new
@@ -318,10 +321,12 @@ module Live
       # Purpose: Move SL up-only to capture trend moves (direct trailing)
       def enforce_dynamic_trailing_stops(exit_engine:)
         engine = @trailing_engine ||= Live::TrailingEngine.new
+        cache = active_cache
+        return unless cache
 
         PositionTracker.active.find_each do |tracker|
           # TrailingEngine expects PositionData from ActiveCache
-          position_data = @active_cache.get_position(tracker.id)
+          position_data = cache.get_by_tracker_id(tracker.id)
           next unless position_data
 
           # process_tick handles peak updates and SL adjustments

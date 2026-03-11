@@ -14,6 +14,7 @@ realtime:
   tick_stale_after_seconds: 3      # Consider feed stale after this many seconds without tick-driven PnL event
   min_enforcement_gap_ms: 250      # Debounce full rule-chain evaluation per tracker in event-driven path
   db_sync_interval_seconds: 30      # Throttled DB sync cadence for active positions
+  entry_ltp_max_age_seconds: 2      # Entry/re-entry requires tick timestamp within this window
 
 # Trading time restrictions based on profitability analysis
 # Use analyze_positions_by_time_intervals.rb to identify non-profitable periods

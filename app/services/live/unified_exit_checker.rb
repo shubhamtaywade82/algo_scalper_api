@@ -48,7 +48,17 @@ module Live
           }
         end
 
-        # 4. Trailing Stop (if enabled)
+        # 4. Premium Momentum Failure (if enabled)
+        if premium_momentum_failure_hit?(tracker, snapshot)
+          return {
+            exit: true,
+            reason: 'PREMIUM_MOMENTUM_FAILURE',
+            path: 'premium_momentum_failure',
+            pnl_pct: (pnl_pct * 100.0).round(2)
+          }
+        end
+
+        # 5. Trailing Stop (if enabled)
         if trailing_stop_hit?(tracker, snapshot)
           return {
             exit: true,
@@ -362,6 +372,9 @@ module Live
             enabled: exit_cfg.dig(:early_exit, :enabled) != false,
             profit_threshold: exit_cfg.dig(:early_exit, :profit_threshold) || 0.07
           },
+          premium_momentum_failure: {
+            enabled: risk_cfg.dig(:exits, :premium_momentum_failure, :enabled) != false
+          },
           time_based: {
             enabled: exit_cfg.dig(:time_based, :enabled) == true,
             exit_time: exit_cfg.dig(:time_based, :exit_time) || '15:20'
@@ -377,8 +390,39 @@ module Live
           take_profit: 0.50,  # 50% take profit (DECIMAL)
           trailing: { enabled: true, type: 'adaptive', activation_profit: 0.035, drop_threshold: 0.025 },
           early_exit: { enabled: true, profit_threshold: 0.07 },
+          premium_momentum_failure: { enabled: true },
           time_based: { enabled: false, exit_time: '15:20' }
         }
+      end
+
+      private
+
+      def premium_momentum_failure_hit?(tracker, snapshot)
+        config = exit_config
+        return false unless config[:premium_momentum_failure][:enabled]
+
+        # Use PremiumMomentumFailureRule via RuleContext
+        # We need a position-like object that has current_ltp
+        ltp = snapshot[:ltp].to_f
+        return false unless ltp.positive?
+
+        position_data = OpenStruct.new(
+          current_ltp: ltp,
+          pnl_pct: snapshot[:pnl_pct].to_f
+        )
+
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: {} # Already handled in evaluate
+        )
+
+        rule = Risk::Rules::PremiumMomentumFailureRule.new(config: { enabled: true })
+        result = rule.evaluate(context)
+        result.exit?
+      rescue StandardError => e
+        Rails.logger.error("[UnifiedExitChecker] premium_momentum_failure_hit? error: #{e.message}")
+        false
       end
     end
   end

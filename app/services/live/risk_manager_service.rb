@@ -37,6 +37,12 @@ module Live
       end
       @paper_mode = @algo_config.dig(:paper_trading, :enabled) == true
       @orders_gateway = Orders.config ? Orders.config.gateway : Orders::GatewayFactory.build(paper_mode: @paper_mode)
+      @active_cache = begin
+        Positions::ActiveCache.instance
+      rescue StandardError => e
+        Rails.logger.error("[RiskManagerService] failed to initialize active_cache: #{e.class} - #{e.message}")
+        nil
+      end
       @mutex = Mutex.new
       @running = false
       @thread = nil
@@ -151,6 +157,13 @@ module Live
 
     def running?
       @running
+    end
+
+    def active_cache
+      @active_cache ||= Positions::ActiveCache.instance
+    rescue StandardError => e
+      Rails.logger.error("[RiskManagerService] active_cache unavailable: #{e.class} - #{e.message}")
+      nil
     end
 
     # Lightweight risk evaluation helper (unchanged semantics)

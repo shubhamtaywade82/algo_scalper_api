@@ -27,109 +27,56 @@ module Risk
     class PremiumMomentumFailureRule < BaseRule
       PRIORITY = 30
 
-      # Index-specific momentum failure thresholds
-      # Format: { index_key => { timeframe => max_candles_without_progress } }
-      MOMENTUM_THRESHOLDS = {
-        'NIFTY' => { '1' => 2, '5' => 1 },
-        'BANKNIFTY' => { '1' => 2, '5' => 1 },
-        'SENSEX' => { '1' => 3, '5' => 2 }
-      }.freeze
-
-      DEFAULT_THRESHOLDS = { '1' => 2, '5' => 1 }.freeze
+      # Default thresholds (number of minutes without a new peak)
+      DEFAULT_STALL_MINUTES = 3
 
       def evaluate(context)
         return skip_result unless enabled?
         return skip_result unless context.active?
 
         tracker = context.tracker
-        instrument = tracker.instrument || tracker.watchable&.instrument
-        return skip_result unless instrument
+        return skip_result unless tracker.created_at
 
-        # Get position direction
-        position_direction = determine_position_direction(tracker, instrument)
-        return skip_result unless position_direction.in?(%i[bullish bearish])
+        # Use the fresh LTP from context if available
+        current_ltp = context.position.respond_to?(:current_ltp) ? context.position.current_ltp.to_f : nil
+        current_ltp ||= tracker.entry_price.to_f # Fallback (should not happen in live)
 
-        # Get index key for threshold lookup
-        index_key = tracker.meta&.dig('index_key') || instrument&.symbol_name&.split('_')&.first&.upcase || 'NIFTY'
-        thresholds = MOMENTUM_THRESHOLDS[index_key] || DEFAULT_THRESHOLDS
+        # Initialize or update peak premium in meta
+        meta = tracker.meta || {}
+        peak = meta['peak_premium'].to_f
+        last_peak_at = meta['peak_premium_at'] ? Time.zone.parse(meta['peak_premium_at']) : tracker.created_at
 
-        # Check 1m momentum failure
-        if momentum_failed?(instrument, position_direction, '1', thresholds['1'])
-          reason = "PREMIUM_MOMENTUM_FAILURE (1m: no progress in #{thresholds['1']} candles)"
-          return exit_result(reason: reason, metadata: { timeframe: '1m', candles: thresholds['1'] })
+        # Update peak if current LTP is higher
+        if current_ltp > peak
+          meta['peak_premium'] = current_ltp
+          meta['peak_premium_at'] = Time.current.iso8601
+          tracker.update_column(:meta, meta)
+          return no_action_result
         end
 
-        # Check 5m momentum failure
-        if momentum_failed?(instrument, position_direction, '5', thresholds['5'])
-          reason = "PREMIUM_MOMENTUM_FAILURE (5m: no progress in #{thresholds['5']} candles)"
-          return exit_result(reason: reason, metadata: { timeframe: '5m', candles: thresholds['5'] })
+        # Check if stalled - ONLY for losing trades (Theta protection)
+        # Winners are handled by trailing stop/peak drawdown logic
+        return no_action_result if context.pnl_pct.to_f > 0
+
+        stall_minutes = DEFAULT_STALL_MINUTES
+        elapsed_since_peak = (Time.current - last_peak_at) / 60.0
+
+        if elapsed_since_peak >= stall_minutes
+          reason = "PREMIUM_MOMENTUM_FAILURE (No new peak in #{elapsed_since_peak.round(1)} mins, Peak: #{peak.round(2)})"
+          return exit_result(
+            reason: reason,
+            metadata: {
+              peak: peak,
+              current: current_ltp,
+              elapsed_since_peak: elapsed_since_peak
+            }
+          )
         end
 
         no_action_result
       rescue StandardError => e
         Rails.logger.error("[PremiumMomentumFailureRule] Error: #{e.class} - #{e.message}")
         skip_result
-      end
-
-      private
-
-      # Determine position direction
-      def determine_position_direction(tracker, instrument)
-        direction = tracker.meta&.dig('direction')&.to_sym
-        return direction if direction.in?(%i[bullish bearish])
-
-        symbol = instrument&.symbol_name&.to_s&.upcase
-        return :bullish if symbol&.include?('CE')
-        return :bearish if symbol&.include?('PE')
-
-        entry_metadata = tracker.meta&.dig('entry_metadata') || {}
-        direction = entry_metadata['direction']&.to_sym
-        return direction if direction.in?(%i[bullish bearish])
-
-        nil
-      end
-
-      # Check if premium momentum has failed
-      def momentum_failed?(instrument, position_direction, interval, max_candles)
-        series = instrument.candle_series(interval: interval)
-        unless series&.candles&.any?
-          Rails.logger.debug do
-            "[PremiumMomentumFailureRule] No #{interval}m candle data for #{instrument.symbol_name} — skipping"
-          end
-          return false
-        end
-
-        candles = series.candles
-        return false if candles.size < max_candles + 1
-
-        # Get recent candles (need at least max_candles + 1 to check progress)
-        recent_candles = candles.last(max_candles + 1)
-        return false if recent_candles.size < max_candles + 1
-
-        # Both CE (bullish) and PE (bearish) buyers want the option premium to make new HIGHS.
-        # CE: premium rises as underlying rises. PE: premium rises as underlying falls.
-        # Momentum failed for either when the current close hasn't exceeded the recent high.
-        current_premium = recent_candles.last&.close
-        previous_high = recent_candles.first(max_candles).map(&:high).max
-
-        return false unless current_premium && previous_high
-
-        # Allow 0.1% tolerance for noise
-        tolerance = previous_high * 0.001
-        momentum_failed = current_premium <= (previous_high + tolerance)
-
-        if momentum_failed
-          label = position_direction == :bullish ? 'Bullish' : 'Bearish'
-          Rails.logger.debug do
-            "[PremiumMomentumFailureRule] #{label} momentum failed on #{interval}m: " \
-              "current=#{current_premium.round(2)}, previous_high=#{previous_high.round(2)}"
-          end
-        end
-
-        momentum_failed
-      rescue StandardError => e
-        Rails.logger.error("[PremiumMomentumFailureRule] momentum_failed? error: #{e.class} - #{e.message}")
-        false
       end
     end
   end
