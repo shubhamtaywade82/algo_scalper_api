@@ -157,10 +157,6 @@ module Services
         end
 
         def synthesize_analysis(context, query:, stream: false, &)
-          if technical_query_without_options?(query)
-            return build_indicator_only_analysis(context, query)
-          end
-
           # Build compact prompt with facts only
           facts_prompt = build_facts_prompt(context)
           synthesis_timeout = ENV.fetch('AI_AGENT_SYNTHESIS_TIMEOUT', '25').to_i
@@ -184,7 +180,7 @@ module Services
             streamed = Timeout.timeout(synthesis_timeout) do
               @client.chat_stream(messages: messages, model: model, temperature: 0.2, &)
             end
-            return streamed if streamed.present?
+            return streamed if streamed.present? && !invalid_llm_output?(streamed)
 
             return build_fallback_analysis(context)
           end
@@ -192,7 +188,7 @@ module Services
           response = Timeout.timeout(synthesis_timeout) do
             @client.chat(messages: messages, model: model, temperature: 0.2)
           end
-          return response if response.present?
+          return response if response.present? && !invalid_llm_output?(response)
 
           build_fallback_analysis(context)
         rescue Timeout::Error
@@ -201,13 +197,8 @@ module Services
         end
 
         def build_synthesis_prompt_for_query(query, context)
-          if options_query?(query) || context.intent == :options_buying
-            return build_synthesis_system_prompt
-          end
-
-          return build_general_technical_system_prompt if context.intent == :intraday || technical_query_without_options?(query)
-
-          build_general_technical_system_prompt
+          # Application is options-buying focused: always use options synthesis prompt.
+          build_synthesis_system_prompt
         end
 
         def build_general_technical_system_prompt
@@ -230,6 +221,15 @@ module Services
 
         def options_query?(query)
           query.to_s.upcase.match?(/\b(OPTION|CALL|PUT|STRIKE|PREMIUM|CE|PE)\b/)
+        end
+
+        def invalid_llm_output?(text)
+          body = text.to_s
+          return true if body.length > 8000
+
+          # Guard against pathological repetitive arithmetic expansions seen in bad outputs.
+          repetitive_money_ops = body.scan(/₹\s*\d[\d,.]*\s*-\s*₹\s*\d[\d,.]*/).size
+          repetitive_money_ops > 8
         end
 
         def build_indicator_only_analysis(context, query)

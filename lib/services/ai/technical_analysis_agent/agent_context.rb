@@ -94,7 +94,8 @@ module Services
           when :intraday
             @resolved_instrument && @indicators.any?
           else
-            @resolved_instrument && (@ltp || @indicators.any?)
+            # This app is options-focused; require indicator context before synthesis.
+            @resolved_instrument && @indicators.any?
           end
         end
 
