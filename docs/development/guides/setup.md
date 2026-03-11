@@ -28,6 +28,10 @@ DHAN_TOTP_SECRET="base32-totp-secret"
 ENABLE_TRADING_SERVICES=true                   # required for trading daemon
 # DISABLE_TRADING_SERVICES=1                   # force-disable trading services if set
 
+# Jobs Control (Solid Queue worker)
+ENABLE_JOBS=true                              # controls the jobs process invoked via ./bin/dev
+# ENABLE_JOBS=false                            # disable the jobs process while keeping other services running
+
 # Database / Redis
 DATABASE_URL="postgresql://user:pass@localhost:5432/algo_scalper"
 REDIS_URL="redis://localhost:6379/1"
@@ -69,6 +73,8 @@ For a development environment that matches production behaviour, run all four pr
 ```bash
 ./bin/dev
 ```
+
+The jobs process can be skipped by setting `ENABLE_JOBS=false` in your environment before running `./bin/dev`; the proc entry will log that the worker is disabled and stay idle so Foreman keeps the other services running.
 
 This uses `Procfile.dev` to start:
 

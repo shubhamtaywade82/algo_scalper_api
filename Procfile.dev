@@ -1,4 +1,4 @@
 web: bin/rails server -p 3001
 trading: ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
-jobs: bin/jobs
+jobs: sh -c 'if [ "${ENABLE_JOBS:-true}" = "true" ]; then bin/jobs; else printf "jobs disabled (set ENABLE_JOBS=true to run)\n"; sleep infinity; fi'
 dashboard: cd dashboard && npm run dev
