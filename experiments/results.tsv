@@ -1,0 +1,12 @@
+commit	profit_factor	drawdown	win_rate	status	description	timestamp
+7290519	0.0	0.0	0.0	keep	A longer lookback period may capture more rising trends, but may also increase the risk of false signals. A balance must be struck.	2026-03-11 02:32:12
+7290519	4.98	9.5128	0.42310000000000003	keep	The current value is optimal based on the provided metrics, but adjusting it to 2.0 will maintain the same performance while allowing for slight adjustments in the range_expansion_threshold.	2026-03-11 02:34:26
+f66e984	4.98	9.5128	0.42310000000000003	discard	Increasing the ATR rising lookback period may help to capture more trend reversals, potentially improving the profit factor while avoiding increases in drawdown.	2026-03-11 02:35:13
+7290519	0.0	0.0	0.0	discard	No improvement was seen with increasing the lookback period, so keeping the default value.	2026-03-11 02:35:30
+b7780bd	0.0	0.0	0.0	keep	Increased atr_rising_lookback by 1 from 3 to 4 to potentially increase profit_factor while avoiding significant drawdown increases.	2026-03-11 02:39:10
+de36782	0.0	0.0	0.0	discard	Increasing lookback period may help smooth out ATR values and reduce the impact of noise, potentially leading to more consistent strategy performance.	2026-03-11 02:39:31
+85c86d8	0.0	0.0	0.0	discard	Increased atr_rising_lookback from 4.0 to 3.0 may help to reduce drawdowns by allowing for earlier exits, which can lead to improved overall profit_factor while avoiding significant drawdown increases.	2026-03-11 02:39:49
+0b2a0c5	0.0	0.0	0.0	discard	A higher atr lookback can capture more price movement but may lead to overtrading and increased drawdowns.	2026-03-11 02:40:08
+b7780bd	0.0	0.0	0.0	discard	Increasing the lookback period can improve the detection of trend reversals, thus increasing the profit factor. However, it may also lead to increased whipsaws, so it's essential to monitor the results.	2026-03-11 02:40:26
+9ab7c8a	0.0	0.0	0.0	discard	Rising look back value increased from 3 to 2.0 may help to increase profit_factor without increasing drawdown significantly.	2026-03-11 02:41:22
+a8433a0	0.0	0.0	0.0	discard	Increasing the ATR lookback period can improve the strategy's ability to capture price movements, which may lead to a higher profit factor.	2026-03-11 02:41:49
