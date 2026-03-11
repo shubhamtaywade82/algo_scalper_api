@@ -80,7 +80,7 @@ module Risk
 
         if elapsed_minutes >= time_limit
           status = pnl_pct.positive? ? 'laggard' : 'loss'
-          reason = "TIME_STOP (#{trade_type} #{status} trade exceeded #{time_limit} minutes, elapsed: #{elapsed_minutes} min, profit: #{(pnl_pct * 100).round(2)}%)"
+          reason = "TIME_STOP (#{trade_type} #{status} trade exceeded #{time_limit} minutes, elapsed: #{elapsed_minutes} min, pnl: #{(pnl_pct * 100).round(2)}%)"
           return exit_result(reason: reason, metadata: {
             trade_type: trade_type,
             time_limit: time_limit,
