@@ -142,39 +142,58 @@ module Live
       min_profit = position_data.min_profit_pct.to_f
 
       peak_updated = current > peak
+      min_updated = min_profit < peak
 
       if peak_updated
-        # Update peak in ActiveCache
+        # Update peak in ActiveCache (in-memory only)
         @active_cache.update_position(
           position_data.tracker_id,
           peak_profit_pct: current
         )
       end
 
-      # Also update lowest in ActiveCache if needed (though recalculated in PositionData)
-      # But we want to ensure it's persisted if it changes.
+      # Only persist to DB when extremes actually change
+      return peak_updated unless peak_updated || min_updated
 
-      # Persist extremes to tracker meta
-      tracker = PositionTracker.find_by(id: position_data.tracker_id)
-      if tracker
-        highest_price = position_data.entry_price.to_f * (1.0 + current)
-        lowest_price = position_data.entry_price.to_f * (1.0 + min_profit)
-        
-        meta = tracker.meta || {}
-        meta['highest_price'] = [meta['highest_price'].to_f, highest_price].max
-        meta['lowest_price'] = meta['lowest_price'].nil? ? lowest_price : [meta['lowest_price'].to_f, lowest_price].min
-        
-        tracker.update_column(:meta, meta)
-      end
+      entry_price = position_data.entry_price.to_f
+      return peak_updated unless entry_price.positive?
+
+      highest_price = entry_price * (1.0 + current)
+      lowest_price = entry_price * (1.0 + min_profit)
+
+      persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price)
 
       if peak_updated
-        Rails.logger.debug { "[TrailingEngine] Updated peak_profit_pct for #{position_data.tracker_id}: #{(peak * 100).round(2)}% → #{(current * 100).round(2)}% (Highest: ₹#{highest_price&.round(2)})" }
+        Rails.logger.debug { "[TrailingEngine] Updated peak_profit_pct for #{position_data.tracker_id}: #{(peak * 100).round(2)}% → #{(current * 100).round(2)}% (Highest: ₹#{highest_price.round(2)})" }
       end
-      
+
       peak_updated
     rescue StandardError => e
       Rails.logger.error("[TrailingEngine] Failed to update extremes: #{e.class} - #{e.message}")
       false
+    end
+
+    # Persist extremes to tracker meta only when values change
+    # @param tracker_id [Integer] Tracker ID
+    # @param highest_price [Float] New highest price
+    # @param lowest_price [Float] New lowest price
+    def persist_extremes_if_changed(tracker_id, highest_price, lowest_price)
+      tracker = PositionTracker.find_by(id: tracker_id)
+      return unless tracker
+
+      meta = tracker.meta || {}
+      old_highest = meta['highest_price'].to_f
+      old_lowest = meta['lowest_price']
+
+      new_highest = [old_highest, highest_price].max
+      new_lowest = old_lowest.nil? ? lowest_price : [old_lowest.to_f, lowest_price].min
+
+      # Only write to DB if values actually changed
+      return if new_highest == old_highest && new_lowest == old_lowest.to_f
+
+      meta['highest_price'] = new_highest
+      meta['lowest_price'] = new_lowest
+      tracker.update_column(:meta, meta)
     end
 
     # Apply direct trailing SL (follows price directly, only moves upward)

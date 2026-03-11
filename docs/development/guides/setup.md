@@ -37,7 +37,9 @@ The DhanHQ initializer normalizes `DHAN_CLIENT_ID` / `CLIENT_ID` and `DHAN_ACCES
 
 ## 3. Trading Configuration (`config/algo.yml`)
 
-`config/algo.yml` is the primary source of truth for trading behaviour. At runtime it is merged with overrides from the `settings` table via `AlgoConfig.fetch` (30-second cache).
+`config/algo.yml` is the primary source of truth for trading behaviour. At runtime it is merged with **run-mode profiles** and overrides from the `settings` table via `AlgoConfig.fetch` (30-second cache).
+
+- **Run mode**: Set `run_mode: production` (default), `exit_testing`, or `entry_testing` in `algo.yml`, or use `ENV RUN_MODE=...`. See [Testing profiles](../testing_profiles.md) for exit-testing (frequent entries) vs entry-testing (relaxed guards) vs production.
 
 Key sections:
 
