@@ -1,7 +1,7 @@
 GEM
   remote: https://rubygems.org/
   specs:
-    DhanHQ (2.5.0)
+    DhanHQ (2.6.2)
       activesupport
       base64
       bindata
@@ -207,7 +207,7 @@ GEM
     faraday-net_http_persistent (1.2.0)
     faraday-patron (1.0.0)
     faraday-rack (1.0.0)
-    faraday-retry (1.0.3)
+    faraday-retry (1.0.4)
     faraday_middleware (1.2.1)
       faraday (~> 1.0)
     faye-websocket (0.12.0)
