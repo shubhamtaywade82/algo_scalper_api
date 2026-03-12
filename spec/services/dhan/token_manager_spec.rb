@@ -6,6 +6,7 @@ RSpec.describe Dhan::TokenManager do
   before do
     described_class.instance_variable_set(:@cached_token, nil)
     described_class.instance_variable_set(:@creds, nil)
+    described_class.instance_variable_set(:@totp_refresh_cooldown_until, nil)
   end
 
   describe '.current_token!' do
@@ -35,12 +36,14 @@ RSpec.describe Dhan::TokenManager do
     end
 
     context 'when API returns error status' do
-      it 'returns nil and logs the message' do
+      it 'returns nil when no ENV token and logs the message' do
         allow(ENV).to receive(:[]).and_call_original
         allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('1000000001')
         allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
         allow(ENV).to receive(:[]).with('DHAN_PIN').and_return('123456')
         allow(ENV).to receive(:[]).with('DHAN_TOTP_SECRET').and_return('BASE32SECRET')
+        allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return(nil)
+        allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
         allow(DhanHQ::Auth).to receive(:generate_totp).with('BASE32SECRET').and_return('123456')
         allow(DhanHQ::Auth).to receive(:generate_access_token).and_return(
           { 'status' => 'error', 'message' => 'Too many attempts. Please try again after sometime.' }
@@ -49,6 +52,46 @@ RSpec.describe Dhan::TokenManager do
         token = described_class.refresh!(force: true)
 
         expect(token).to be_nil
+      end
+
+      it 'sets 12h cooldown and returns ENV token when Too many attempts and ENV token present' do
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('1000000001')
+        allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHAN_PIN').and_return('123456')
+        allow(ENV).to receive(:[]).with('DHAN_TOTP_SECRET').and_return('BASE32SECRET')
+        allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('env_fallback_token')
+        allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
+        allow(DhanHQ::Auth).to receive(:generate_totp).with('BASE32SECRET').and_return('123456')
+        allow(DhanHQ::Auth).to receive(:generate_access_token).and_return(
+          { 'status' => 'error', 'message' => 'Too many attempts. Please try again after sometime.' }
+        )
+
+        token = described_class.refresh!(force: true)
+
+        expect(token).to eq('env_fallback_token')
+        expect(described_class.send(:totp_cooldown_active?)).to be true
+      end
+
+      it 'does not call API again within cooldown when ENV token present' do
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('1000000001')
+        allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
+        allow(ENV).to receive(:[]).with('DHAN_PIN').and_return('123456')
+        allow(ENV).to receive(:[]).with('DHAN_TOTP_SECRET').and_return('BASE32SECRET')
+        allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('env_token')
+        allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
+        allow(DhanHQ::Auth).to receive(:generate_totp).with('BASE32SECRET').and_return('123456')
+        allow(DhanHQ::Auth).to receive(:generate_access_token).and_return(
+          { 'status' => 'error', 'message' => 'Too many attempts. Please try again after sometime.' }
+        )
+
+        described_class.refresh!(force: true)
+        expect(DhanHQ::Auth).to have_received(:generate_access_token).once
+
+        token = described_class.refresh!(force: true)
+        expect(token).to eq('env_token')
+        expect(DhanHQ::Auth).to have_received(:generate_access_token).once
       end
     end
 

@@ -4,6 +4,7 @@ module Dhan
   class TokenManager
     BUFFER_MINUTES = 30
     REQUIRED_ENV_KEYS = %w[DHAN_PIN DHAN_TOTP_SECRET].freeze
+    TOTP_COOLDOWN_HOURS = 12
 
     class << self
       def current_token
@@ -30,6 +31,13 @@ module Dhan
           return token_data[:token] if token_data && !expiring?(token_data) && !force
           return nil unless credentials_available?
 
+          env_token = static_env_token
+          if totp_cooldown_active?
+            Rails.logger.debug("[DHAN] TOTP cooldown until #{@totp_refresh_cooldown_until&.strftime('%H:%M %Z')}; using ENV token")
+            cache_token(env_token, @totp_refresh_cooldown_until) if env_token.present?
+            return env_token
+          end
+
           Rails.logger.info("[DHAN] Regenerating token via TOTP... (force=#{force})")
 
           response = DhanHQ::Auth.generate_access_token(
@@ -44,7 +52,16 @@ module Dhan
           end
 
           if response['status'] == 'error'
-            Rails.logger.error("[DHAN] Token refresh failed: #{response['message'] || response.inspect}")
+            msg = response['message'] || ''
+            if too_many_attempts?(msg) && env_token.present?
+              @totp_refresh_cooldown_until = TOTP_COOLDOWN_HOURS.hours.from_now
+              cache_token(env_token, @totp_refresh_cooldown_until)
+              Rails.logger.warn(
+                "[DHAN] TOTP rate-limited (Too many attempts); using ENV token for next #{TOTP_COOLDOWN_HOURS} hours"
+              )
+              return env_token
+            end
+            Rails.logger.error("[DHAN] Token refresh failed: #{msg.presence || response.inspect}")
             return nil
           end
 
@@ -73,6 +90,7 @@ module Dhan
       def clear_cache!
         mutex.synchronize do
           @cached_token = nil
+          @totp_refresh_cooldown_until = nil
           DhanAccessToken.delete_all
         end
         true
@@ -190,6 +208,20 @@ module Dhan
 
       def mutex
         @mutex ||= Mutex.new
+      end
+
+      def static_env_token
+        ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      end
+
+      def too_many_attempts?(message)
+        message.to_s.include?('Too many attempts')
+      end
+
+      def totp_cooldown_active?
+        return false unless @totp_refresh_cooldown_until
+
+        Time.current < @totp_refresh_cooldown_until
       end
     end
   end
