@@ -1,6 +1,70 @@
 # frozen_string_literal: true
 
 namespace :position do
+  desc 'Force-exit active position(s) by symbol. SYMBOL=NIFTY-Mar2026-23900-PE (exact) or SYMBOL=23900-PE (substring)'
+  task force_exit: :environment do
+    symbol_arg = ENV['SYMBOL'].to_s.strip
+    if symbol_arg.blank?
+      puts 'Usage: SYMBOL=NIFTY-Mar2026-23900-PE bundle exec rake position:force_exit'
+      next
+    end
+
+    trackers = if symbol_arg.include?('%') || symbol_arg.include?('*')
+                 PositionTracker.active.where('position_trackers.symbol LIKE ?', symbol_arg.tr('*', '%'))
+               else
+                 exact = PositionTracker.active.where(symbol: symbol_arg)
+                 if exact.any?
+                   exact
+                 else
+                   PositionTracker.active.where('position_trackers.symbol LIKE ?', "%#{symbol_arg}%")
+                 end
+               end
+
+    trackers = trackers.to_a
+    if trackers.empty?
+      by_instrument = PositionTracker.active.joins(:instrument).where(instruments: { symbol_name: symbol_arg })
+      trackers = by_instrument.to_a
+    end
+    if trackers.empty?
+      by_instrument_like = PositionTracker.active.joins(:instrument)
+                                          .where('instruments.symbol_name LIKE ?', "%#{symbol_arg}%")
+      trackers = by_instrument_like.to_a
+    end
+    if trackers.empty?
+      puts "No active position(s) found for SYMBOL=#{symbol_arg.inspect}."
+      puts "Active symbols: #{PositionTracker.active.pluck(:symbol).uniq.join(', ')}"
+      next
+    end
+
+    router = TradingSystem::OrderRouter.new
+    exit_engine = Live::ExitEngine.new(order_router: router)
+    exit_engine.start
+
+    reason = ENV['REASON'].presence || 'MANUAL_FORCE_EXIT (rake)'
+    trackers.each do |tracker|
+      puts "Exiting #{tracker.symbol} order_no=#{tracker.order_no} ..."
+      result = exit_engine.execute_exit(tracker, reason)
+
+      if result[:reason] == 'exit_already_requested'
+        tracker.reload
+        next unless tracker.active? && tracker.exit_requested_at.present?
+
+        puts "  -> Exit was already requested but position still active; clearing intent and retrying..."
+        tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current)
+        tracker.reload
+        result = exit_engine.execute_exit(tracker, reason)
+      end
+
+      if result[:success] && result[:reason] != 'exit_already_requested'
+        puts result[:reason] == 'already_exited' ? "  -> Already exited." : "  -> Exit sent (coid: #{tracker.reload.exit_coid})"
+      else
+        puts "  -> #{result[:reason]}: #{result[:error].inspect}"
+      end
+    end
+    exit_engine.stop
+    puts 'Done.'
+  end
+
   desc 'Fix incorrect last_pnl_rupees/last_pnl_pct for paper exited positions (e.g. NIFTY24MAR22000CE BUY 50 100→120)'
   task fix_pnl: :environment do
     require_relative '../../app/services/concerns/broker_fee_calculator'

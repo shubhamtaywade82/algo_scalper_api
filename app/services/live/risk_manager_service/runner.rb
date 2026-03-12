@@ -70,7 +70,15 @@ module Live
       end
 
       # Interval fallback enforcement when realtime tick-first path is stale/unavailable.
+      # EOD force-close runs every loop when at/past market close so it is never skipped by tick-first.
       def run_interval_enforcement_if_needed(exit_engine)
+        risk = risk_config
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        if market_close_time && Time.current >= market_close_time
+          enforce_eod_force_close(exit_engine: exit_engine)
+          return
+        end
+
         return run_enforcement_cycle(exit_engine) unless realtime_tick_first_enabled?
 
         if tick_stream_fresh?
