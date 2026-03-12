@@ -62,3 +62,4 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
       "[ClearCarriedOvernightPositionsJob] Error clearing #{tracker&.order_no}: #{e.class} - #{e.message}"
     )
   end
+end

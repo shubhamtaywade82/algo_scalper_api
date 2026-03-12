@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_03_10_074845) do
+ActiveRecord::Schema[8.0].define(version: 2026_03_12_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -275,6 +275,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_03_10_074845) do
     t.string "exit_coid"
     t.string "exit_order_id"
     t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
+    t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
     t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true

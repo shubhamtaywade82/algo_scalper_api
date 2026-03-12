@@ -44,6 +44,8 @@ class PositionTracker < ApplicationRecord
   scope :paper, -> { where(paper: true) }
   scope :live, -> { where(paper: false) }
   scope :exited_paper, -> { where(paper: true, status: :exited) }
+  # Active with exit requested but not yet exited (stuck if order failed or pending)
+  scope :active_with_exit_requested, -> { active.where.not(exit_requested_at: nil) }
 
   # Class Methods
   class << self
