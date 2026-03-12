@@ -90,7 +90,14 @@ module Live
       # Template method: single algorithm skeleton for all exit enforcement layers.
       # Add or reorder enforcement by editing this method.
       # First-match-wins: after any layer triggers an exit, we skip remaining layers for that tracker.
+      # EOD force-close runs first when at or past market close so intraday positions never carry overnight.
       def run_enforcement_cycle(exit_engine)
+        enforce_eod_force_close(exit_engine: exit_engine)
+
+        risk = risk_config
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        return if market_close_time && Time.current >= market_close_time
+
         PositionTracker.active.find_each do |tracker|
           run_enforcement_for_tracker(tracker, exit_engine)
         end
