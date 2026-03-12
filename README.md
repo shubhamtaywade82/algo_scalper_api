@@ -161,7 +161,7 @@ app/services/
     gateway_factory.rb                 # paper/live gateway selection
     gateway_live.rb                    # real DhanHQ execution with retry
     gateway_paper.rb                   # simulated fills
-    placer.rb                          # DhanHQ API calls, idempotency, dry-run gate
+    placer.rb                          # DhanHQ API calls, idempotency, PLACE_ORDER live-order gate
     bracket_placer.rb                  # SL/TP bracket placement
   options/                             # options analysis
     chain_analyzer.rb                  # strike selection with qualification scoring
@@ -254,7 +254,10 @@ paper_trading:
   balance: 100000  # simulated starting capital
 
 dhanhq:
-  enable_orders: false  # must be true for live order submission (safety gate)
+  enable_orders: false  # legacy broker toggle (keep false unless explicitly needed)
+
+# Runtime live-order gate:
+# PLACE_ORDER=true (environment variable)
 ```
 
 Both modes use **real DhanHQ WebSocket data** for market ticks. The difference is only in order execution:
@@ -277,7 +280,7 @@ Both modes use **real DhanHQ WebSocket data** for market ticks. The difference i
 | `DHAN_PIN` | Recommended | For TOTP auto-refresh |
 | `DHAN_TOTP_SECRET` | Recommended | For TOTP auto-refresh |
 | `ENABLE_TRADING_SERVICES` | Auto (Procfile) | Must be `"true"` for daemon |
-| `ENABLE_ORDER` | Live only | Set to `"true"` OR use `dhanhq.enable_orders: true` in algo.yml |
+| `PLACE_ORDER` | Live only | Must be `"true"` to allow live broker order placement |
 | `DHANHQ_WS_ENABLED` | Optional | Enable WebSocket (defaults based on env) |
 | `DISABLE_TRADING_SERVICES` | Optional | Set to `"1"` to disable |
 | `BACKTEST_MODE` | Optional | Set to `"1"` for backtesting |
@@ -288,7 +291,7 @@ Before switching `paper_trading.enabled: false`:
 
 - [ ] DhanHQ credentials set (`DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN`)
 - [ ] TOTP credentials set (`DHAN_PIN`, `DHAN_TOTP_SECRET`) for token auto-refresh
-- [ ] `dhanhq.enable_orders: true` in `config/algo.yml` (or `ENABLE_ORDER=true` env)
+- [ ] `PLACE_ORDER=true` in environment for intentional live broker order placement
 - [ ] `InstrumentsImporter` has run recently (`rails runner 'puts Derivative.count'`)
 - [ ] Database migrated (`rails db:migrate:status`)
 - [ ] Redis running (`redis-cli ping`)
