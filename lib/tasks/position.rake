@@ -218,6 +218,12 @@ namespace :position do
     puts "Done."
   end
 
+  desc 'Clear carried-overnight (BTST) positions — same as ClearCarriedOvernightPositionsJob (run on demand)'
+  task clear_carried_overnight: :environment do
+    ClearCarriedOvernightPositionsJob.perform_now
+    puts 'Done.'
+  end
+
   desc 'Sync positions between DhanHQ and PositionTracker database'
   task sync: :environment do
     puts 'Starting position synchronization...'

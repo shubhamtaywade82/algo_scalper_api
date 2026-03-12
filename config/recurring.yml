@@ -17,6 +17,13 @@ development:
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
 
+  clear_carried_overnight:
+    class: ClearCarriedOvernightPositionsJob
+    schedule: at 9:15am every day
+    queue_name: background
+    priority: 2
+    description: "Clear BTST/carried-overnight positions at start of trading day (9:15 AM)"
+
   smc_scanner:
     class: SmcScannerJob
     schedule: every 15 minutes
@@ -47,6 +54,13 @@ production:
     queue_name: background
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
+
+  clear_carried_overnight:
+    class: ClearCarriedOvernightPositionsJob
+    schedule: at 9:15am every weekday
+    queue_name: background
+    priority: 2
+    description: "Clear BTST/carried-overnight positions at start of trading day (9:15 AM)"
 
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
