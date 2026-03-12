@@ -43,11 +43,16 @@ module Dhan
             return nil
           end
 
-          access_token = response['accessToken']
-          expiry_time_raw = response['expiryTime']
+          if response['status'] == 'error'
+            Rails.logger.error("[DHAN] Token refresh failed: #{response['message'] || response.inspect}")
+            return nil
+          end
+
+          access_token = response['access_token'] || response['accessToken']
+          expiry_time_raw = response['expires_at'] || response['expiryTime']
 
           if access_token.blank? || expiry_time_raw.blank?
-            Rails.logger.error("[DHAN] Token refresh failed: missing accessToken or expiryTime in response (#{response.inspect})")
+            Rails.logger.error("[DHAN] Token refresh failed: missing access_token or expires_at in response (#{response.inspect})")
             return nil
           end
 
