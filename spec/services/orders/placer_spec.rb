@@ -465,4 +465,18 @@ RSpec.describe Orders::Placer do
       end
     end
   end
+
+  describe '.order_placement_enabled?' do
+    before do
+      allow(ENV).to receive(:[]).and_call_original
+    end
+
+    it 'returns true only when PLACE_ORDER is true' do
+      allow(ENV).to receive(:[]).with('PLACE_ORDER').and_return('true')
+      expect(described_class.send(:order_placement_enabled?)).to be(true)
+
+      allow(ENV).to receive(:[]).with('PLACE_ORDER').and_return('false')
+      expect(described_class.send(:order_placement_enabled?)).to be(false)
+    end
+  end
 end
