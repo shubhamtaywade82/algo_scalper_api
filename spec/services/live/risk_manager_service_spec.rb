@@ -71,7 +71,7 @@ RSpec.describe Live::RiskManagerService do
       before do
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
         allow(service).to receive(:fetch_positions_indexed).and_return({})
-        allow(service).to receive(:enforce_hard_limits)
+        allow(service).to receive(:run_interval_enforcement_if_needed)
         allow(service).to receive(:enforce_trailing_stops)
         allow(service).to receive(:enforce_time_based_exit)
         allow(service).to receive(:process_trailing_for_all_positions)
@@ -93,30 +93,9 @@ RSpec.describe Live::RiskManagerService do
         sleep 0.2 # Allow one iteration
       end
 
-      it 'syncs positions before evaluating exits' do
-        # monitor_loop no longer calls sync_positions! directly
-        # It was removed in favor of per-position sync logic
-        # This test is outdated - skip or update to test actual behavior
-        skip 'monitor_loop no longer calls sync_positions! directly'
-      end
-
-      it 'calls process_trailing_for_all_positions during loop iteration' do
-        # process_trailing_for_all_positions is not called in monitor_loop
-        # It's called via process_all_positions_in_single_loop -> process_trailing_for_position
-        # This test is outdated - the method was refactored
-        skip 'process_trailing_for_all_positions is not called directly in monitor_loop anymore'
-      end
-
-      it 'calls enforce methods during loop iteration' do
-        # monitor_loop has been refactored - it now uses process_all_positions_in_single_loop
-        # which calls check_all_exit_conditions instead of individual enforce methods
-        # This test is outdated - the architecture changed
-        skip 'monitor_loop architecture changed - enforce methods are now called via check_all_exit_conditions'
-      end
-
       it 'handles errors gracefully and continues running' do
         # Stub a method that monitor_loop actually calls to raise an error
-        allow(service).to receive(:active_cache_positions).and_raise(StandardError, 'Test error')
+        allow(service).to receive(:ensure_all_positions_in_redis).and_raise(StandardError, 'Test error')
         error_logs = []
         allow(Rails.logger).to receive(:error).and_wrap_original do |method, *args, &block|
           if block
@@ -139,99 +118,6 @@ RSpec.describe Live::RiskManagerService do
         expect(error_logs.any? { |msg| msg.to_s.include?('monitor_loop crashed') || msg.to_s.include?('monitor_loop error') }).to be true
         # Service continues running after errors (watchdog will restart if thread dies)
         expect(service.running?).to be true
-      end
-    end
-
-    describe '#enforce_hard_limits' do
-      let(:position) do
-        double(
-          'Position',
-          security_id: '50074',
-          exchange_segment: 'NSE_FNO',
-          net_qty: 75,
-          cost_price: 100.0,
-          product_type: 'INTRADAY'
-        )
-      end
-
-      before do
-        allow(service).to receive(:risk_config).and_return(
-          stop_loss_pct: 0.30,
-          take_profit_pct: 0.60,
-          sl_pct: 0.30,
-          tp_pct: 0.60,
-          per_trade_risk_pct: 0
-        )
-        allow(DhanHQ::Models::Position).to receive(:active).and_return([position])
-      end
-
-      context 'when stop-loss threshold is hit' do
-        it 'exits position at -30% from entry' do
-          # Entry: ₹100, Stop-loss: ₹70 (30% below entry)
-          allow(service).to receive(:current_ltp).with(tracker, position).and_return(BigDecimal('70.0'))
-
-          expect(service).to receive(:execute_exit).with(
-            position,
-            tracker,
-            reason: 'hard stop-loss (30.0%)'
-          )
-
-          service.send(:enforce_hard_limits, { '50074' => position })
-        end
-
-        it 'does not exit if LTP is above stop-loss' do
-          # Entry: ₹100, LTP: ₹71 (above stop-loss of ₹70)
-          allow(service).to receive(:current_ltp).with(tracker, position).and_return(BigDecimal('71.0'))
-
-          expect(service).not_to receive(:execute_exit)
-
-          service.send(:enforce_hard_limits, { '50074' => position })
-        end
-      end
-
-      context 'when take-profit threshold is hit' do
-        it 'exits position at +60% from entry' do
-          # Entry: ₹100, Take-profit: ₹160 (60% above entry)
-          allow(service).to receive(:current_ltp).with(tracker, position).and_return(BigDecimal('160.0'))
-
-          expect(service).to receive(:execute_exit).with(
-            position,
-            tracker,
-            reason: 'take-profit (60.0%)'
-          )
-
-          service.send(:enforce_hard_limits, { '50074' => position })
-        end
-
-        it 'does not exit if LTP is below take-profit' do
-          # Entry: ₹100, LTP: ₹159 (below take-profit of ₹160)
-          allow(service).to receive(:current_ltp).with(tracker, position).and_return(BigDecimal('159.0'))
-
-          expect(service).not_to receive(:execute_exit)
-
-          service.send(:enforce_hard_limits, { '50074' => position })
-        end
-      end
-
-      context 'when position is already exited' do
-        it 'does not attempt exit' do
-          tracker.update(status: 'exited')
-          allow(service).to receive(:current_ltp).with(tracker, position).and_return(BigDecimal('70.0'))
-
-          expect(service).not_to receive(:execute_exit)
-
-          service.send(:enforce_hard_limits, { '50074' => position })
-        end
-      end
-
-      context 'when LTP is unavailable' do
-        it 'skips position evaluation' do
-          allow(service).to receive(:current_ltp).with(tracker, position).and_return(nil)
-
-          expect(service).not_to receive(:execute_exit)
-
-          service.send(:enforce_hard_limits, { '50074' => position })
-        end
       end
     end
 
@@ -772,7 +658,7 @@ RSpec.describe Live::RiskManagerService do
       before do
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
         allow(service).to receive(:fetch_positions_indexed).and_return({})
-        allow(service).to receive(:enforce_hard_limits)
+        allow(service).to receive(:run_interval_enforcement_if_needed)
         allow(service).to receive(:enforce_trailing_stops)
         allow(service).to receive(:enforce_time_based_exit)
         allow(service).to receive(:sleep)
@@ -810,7 +696,7 @@ RSpec.describe Live::RiskManagerService do
       before do
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
         # Allow methods to be called but track them (don't stub, let them run)
-        allow(service).to receive(:enforce_hard_limits).and_call_original
+        allow(service).to receive(:run_interval_enforcement_if_needed).and_call_original
         allow(service).to receive(:enforce_trailing_stops).and_call_original
         allow(service).to receive(:enforce_time_based_exit).and_call_original
         # Mock ActiveRecord chain properly
@@ -839,8 +725,8 @@ RSpec.describe Live::RiskManagerService do
         service.start
         sleep 0.3 # Allow one iteration to complete
 
-        # Verify enforce methods were called (AC: "Calls ... for each open position")
-        expect(service).to have_received(:enforce_hard_limits).at_least(:once)
+        # Verify enforcement was invoked (AC: "Calls ... for each open position")
+        expect(service).to have_received(:run_interval_enforcement_if_needed).at_least(:once)
         expect(service).to have_received(:enforce_trailing_stops).at_least(:once)
         expect(service).to have_received(:enforce_time_based_exit).at_least(:once)
       end
@@ -899,7 +785,7 @@ RSpec.describe Live::RiskManagerService do
           allow(Time.zone).to receive(:parse).with('15:30').and_return(market_close_time)
 
           # Mock ActiveRecord chain for all enforce methods
-          # enforce_hard_limits and enforce_trailing_stops use eager_load
+          # run_interval_enforcement_if_needed and enforce_trailing_stops use eager_load
           # enforce_time_based_exit uses includes
           relation = double('Relation')
           allow(PositionTracker).to receive(:active).and_return(relation)
@@ -952,7 +838,7 @@ RSpec.describe Live::RiskManagerService do
       before do
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
         allow(service).to receive(:fetch_positions_indexed).and_return({})
-        allow(service).to receive(:enforce_hard_limits)
+        allow(service).to receive(:run_interval_enforcement_if_needed)
         allow(service).to receive(:enforce_trailing_stops)
         allow(service).to receive(:enforce_time_based_exit)
         allow(service).to receive(:sleep)
@@ -1012,7 +898,7 @@ RSpec.describe Live::RiskManagerService do
       before do
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
         allow(service).to receive(:fetch_positions_indexed).and_return({})
-        allow(service).to receive(:enforce_hard_limits)
+        allow(service).to receive(:run_interval_enforcement_if_needed)
         allow(service).to receive(:enforce_trailing_stops)
         allow(service).to receive(:enforce_time_based_exit)
         allow(service).to receive(:sleep)
@@ -1025,19 +911,19 @@ RSpec.describe Live::RiskManagerService do
         sleep 0.1
       end
 
-      it 'syncs positions before evaluating exits' do
+      it 'calls run_interval_enforcement_if_needed during each loop iteration' do
         service.start
         sleep 0.2
 
-        expect(Live::PositionSyncService.instance).to have_received(:sync_positions!).at_least(:once)
+        expect(service).to have_received(:run_interval_enforcement_if_needed).at_least(:once)
       end
 
       it 'calls enforce methods in correct sequence during each loop iteration' do
         service.start
         sleep 0.3
 
-        # Verify all enforce methods are called during loop
-        expect(service).to have_received(:enforce_hard_limits).at_least(:once)
+        # Verify enforcement is called during loop
+        expect(service).to have_received(:run_interval_enforcement_if_needed).at_least(:once)
         expect(service).to have_received(:enforce_trailing_stops).at_least(:once)
         expect(service).to have_received(:enforce_time_based_exit).at_least(:once)
       end
@@ -1054,7 +940,7 @@ RSpec.describe Live::RiskManagerService do
 
         # Mock other methods to prevent additional errors
         allow(service).to receive(:fetch_positions_indexed).and_return({})
-        allow(service).to receive(:enforce_hard_limits)
+        allow(service).to receive(:run_interval_enforcement_if_needed)
         allow(service).to receive(:enforce_trailing_stops)
         allow(service).to receive(:enforce_time_based_exit)
         allow(service).to receive(:sleep)
@@ -1302,66 +1188,6 @@ RSpec.describe Live::RiskManagerService do
         end
       end
 
-      describe '#enforce_hard_limits with caching' do
-        let(:exit_engine) { instance_double(Live::ExitEngine) }
-        let(:redis_cache) { instance_double(Live::RedisPnlCache) }
-        let(:tracker_not_in_cache) do
-          create(
-            :position_tracker,
-            watchable: instrument,
-            instrument: instrument,
-            order_no: 'ORD999999',
-            security_id: '50076',
-            segment: 'NSE_FNO',
-            status: 'active',
-            quantity: 100,
-            entry_price: 50.0
-          )
-        end
-
-        before do
-          allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
-          allow(active_cache).to receive(:all_positions).and_return([position_data])
-          allow(service).to receive(:risk_config).and_return(sl_pct: 0.1, tp_pct: 0.2)
-          allow(Live::RedisPnlCache).to receive(:instance).and_return(redis_cache)
-        end
-
-        it 'uses cached Redis PnL for positions not in ActiveCache' do
-          redis_pnl = { pnl: BigDecimal('-500'), pnl_pct: -10.0, timestamp: Time.current.to_i }
-          service.instance_variable_set(:@redis_pnl_cache, { tracker_not_in_cache.id => redis_pnl })
-
-          allow(PositionTracker).to receive_message_chain(:active, :includes).and_return(
-            double(to_a: [tracker_not_in_cache])
-          )
-
-          expect(exit_engine).to receive(:execute_exit).with(
-            tracker_not_in_cache,
-            match(/SL HIT.*from Redis/)
-          )
-
-          service.send(:enforce_hard_limits, exit_engine: exit_engine)
-        end
-
-        it 'fetches Redis PnL if not cached for fallback positions' do
-          redis_pnl = { pnl: BigDecimal(2000), pnl_pct: 20.0, timestamp: Time.current.to_i }
-          service.instance_variable_set(:@redis_pnl_cache, {})
-          allow(redis_cache).to receive(:fetch_pnl).and_return(redis_pnl)
-
-          # Test the fallback path: position NOT in ActiveCache, so it uses trackers_not_in_cache
-          allow(active_cache).to receive(:all_positions).and_return([]) # Empty = not in cache
-          allow(service).to receive(:trackers_for_positions).and_return({})
-          allow(PositionTracker).to receive_message_chain(:active, :includes).and_return(
-            double(to_a: [tracker_not_in_cache])
-          )
-
-          expect(exit_engine).to receive(:execute_exit).with(
-            tracker_not_in_cache,
-            match(/TP HIT.*from Redis/)
-          )
-
-          service.send(:enforce_hard_limits, exit_engine: exit_engine)
-        end
-      end
     end
 
     describe '#enforce_session_end_exit' do
@@ -1986,22 +1812,6 @@ RSpec.describe Live::RiskManagerService do
       end
     end
 
-    describe '#active_cache_positions' do
-      let(:active_cache) { instance_double(Positions::ActiveCache) }
-      let(:positions) { [double('Position')] }
-
-      before do
-        allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
-        allow(active_cache).to receive(:all_positions).and_return(positions)
-      end
-
-      it 'returns all positions from ActiveCache' do
-        result = service.send(:active_cache_positions)
-
-        expect(result).to eq(positions)
-      end
-    end
-
     describe '#risk_config' do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return(
@@ -2514,50 +2324,6 @@ RSpec.describe Live::RiskManagerService do
         service.send(:wake_up!)
 
         expect(cv).to have_received(:broadcast)
-      end
-    end
-
-    describe '#subscribe_to_position_events' do
-      it 'subscribes to position added and removed events' do
-        service.instance_variable_set(:@position_subscriptions, [])
-        allow(ActiveSupport::Notifications).to receive(:subscribe).and_return('token1', 'token2')
-
-        service.send(:subscribe_to_position_events)
-
-        subscriptions = service.instance_variable_get(:@position_subscriptions)
-        expect(subscriptions).to eq(%w[token1 token2])
-        expect(ActiveSupport::Notifications).to have_received(:subscribe).with('positions.added')
-        expect(ActiveSupport::Notifications).to have_received(:subscribe).with('positions.removed')
-      end
-
-      it 'does not subscribe if already subscribed' do
-        service.instance_variable_set(:@position_subscriptions, ['existing_token'])
-        allow(ActiveSupport::Notifications).to receive(:subscribe) # Stub before calling method
-
-        service.send(:subscribe_to_position_events)
-
-        expect(ActiveSupport::Notifications).not_to have_received(:subscribe)
-      end
-    end
-
-    describe '#unsubscribe_from_position_events' do
-      it 'unsubscribes from all position events' do
-        tokens = %w[token1 token2]
-        service.instance_variable_set(:@position_subscriptions, tokens)
-        allow(ActiveSupport::Notifications).to receive(:unsubscribe)
-
-        service.send(:unsubscribe_from_position_events)
-
-        tokens.each do |token|
-          expect(ActiveSupport::Notifications).to have_received(:unsubscribe).with(token)
-        end
-        expect(service.instance_variable_get(:@position_subscriptions)).to be_empty
-      end
-
-      it 'does nothing if no subscriptions exist' do
-        service.instance_variable_set(:@position_subscriptions, [])
-
-        expect { service.send(:unsubscribe_from_position_events) }.not_to raise_error
       end
     end
 

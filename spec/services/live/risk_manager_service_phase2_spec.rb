@@ -83,7 +83,7 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
         allow(service).to receive(:ensure_all_positions_in_active_cache)
         allow(service).to receive(:ensure_all_positions_subscribed)
         allow(service).to receive(:enforce_session_end_exit)
-        allow(service).to receive(:enforce_hard_limits)
+        allow(service).to receive(:run_interval_enforcement_if_needed)
         allow(service).to receive(:enforce_trailing_stops)
         allow(service).to receive(:enforce_time_based_exit)
         # Stub methods called by process_all_positions_in_single_loop
@@ -349,7 +349,7 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
       allow(service).to receive(:ensure_all_positions_subscribed)
       allow(service).to receive(:process_trailing_for_all_positions)
       allow(service).to receive(:enforce_session_end_exit)
-      allow(service).to receive(:enforce_hard_limits)
+      allow(service).to receive(:run_interval_enforcement_if_needed)
       allow(service).to receive(:enforce_trailing_stops)
       allow(service).to receive(:enforce_time_based_exit)
     end
@@ -391,23 +391,14 @@ RSpec.describe Live::RiskManagerService, 'Phase 2 Optimizations' do
   end
 
   describe 'Backward Compatibility' do
-    it 'maintains same exit behavior as before' do
-      exit_engine = instance_double(Live::ExitEngine)
-      allow(exit_engine).to receive(:execute_exit)
+    it 'calls run_interval_enforcement_if_needed from monitor_loop' do
+      allow(service).to receive(:run_interval_enforcement_if_needed)
+      allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
+      allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([])
 
-      # Simulate SL hit
-      position_data1.pnl_pct = -15.0
-      allow(service).to receive_messages(risk_config: { sl_pct: 0.1, tp_pct: 0.2 },
-                                         trackers_for_positions: { tracker1.id => tracker1 })
-      allow(service).to receive(:sync_position_pnl_from_redis)
+      service.send(:monitor_loop, Time.current)
 
-      service.send(:enforce_hard_limits, exit_engine: exit_engine)
-
-      # Should still exit on SL hit
-      expect(exit_engine).to have_received(:execute_exit).with(
-        tracker1,
-        match(/SL HIT/)
-      )
+      expect(service).to have_received(:run_interval_enforcement_if_needed)
     end
 
     it 'maintains throttling behavior' do

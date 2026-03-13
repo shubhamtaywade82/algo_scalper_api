@@ -98,7 +98,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
           # Current loss 4% < 13% → No exit expected
           # But let's test if it exceeds
           expect(exit_engine).not_to receive(:execute_exit)
-          service.enforce_hard_limits(exit_engine: exit_engine)
+          service.send(:run_interval_enforcement_if_needed, exit_engine)
         end
       end
     end
@@ -171,7 +171,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         it 'allows wider loss' do
           # With aggressive config, -6% loss should be within allowed range
           expect(exit_engine).not_to receive(:execute_exit)
-          service.enforce_hard_limits(exit_engine: exit_engine)
+          service.send(:run_interval_enforcement_if_needed, exit_engine)
         end
       end
     end
@@ -215,20 +215,14 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
         allow(AlgoConfig).to receive(:fetch).and_return(config)
       end
 
-      it 'executes all enforcement methods in order' do
-        pnl_data = {
-          pnl: BigDecimal('250.0'),
-          pnl_pct: BigDecimal('0.05'),
-          hwm_pnl: BigDecimal('250.0')
-        }
-        allow(service).to receive(:pnl_snapshot).and_return(pnl_data)
-
-        expect(service).to receive(:enforce_early_trend_failure).with(exit_engine: exit_engine)
-        expect(service).to receive(:enforce_hard_limits).with(exit_engine: exit_engine)
-        expect(service).to receive(:enforce_trailing_stops).with(exit_engine: exit_engine)
-        expect(service).to receive(:enforce_time_based_exit).with(exit_engine: exit_engine)
+      it 'invokes run_interval_enforcement_if_needed from monitor_loop' do
+        allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
+        allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([])
+        allow(service).to receive(:run_interval_enforcement_if_needed)
 
         service.send(:monitor_loop, Time.current)
+
+        expect(service).to have_received(:run_interval_enforcement_if_needed)
       end
     end
   end
@@ -262,7 +256,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       it 'falls back to static SL/TP only' do
         # Should only check static SL/TP
         expect(exit_engine).not_to receive(:execute_exit) # TP is +5%, we're at +5%, so no exit
-        service.enforce_hard_limits(exit_engine: exit_engine)
+        service.send(:run_interval_enforcement_if_needed, exit_engine)
         service.enforce_trailing_stops(exit_engine: exit_engine)
       end
     end
@@ -281,7 +275,8 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       end
 
       it 'handles gracefully without crashing' do
-        expect { service.enforce_hard_limits(exit_engine: exit_engine) }.not_to raise_error
+        allow(PositionTracker).to receive(:active).and_return(double(find_each: [].each))
+        expect { service.send(:run_interval_enforcement_if_needed, exit_engine) }.not_to raise_error
         expect { service.enforce_trailing_stops(exit_engine: exit_engine) }.not_to raise_error
         expect { service.enforce_early_trend_failure(exit_engine: exit_engine) }.not_to raise_error
       end
