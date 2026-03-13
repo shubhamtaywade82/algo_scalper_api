@@ -122,6 +122,10 @@ GEM
       database_cleaner-core (~> 2.0)
     database_cleaner-core (2.0.1)
     date (3.5.0)
+    debride (1.15.1)
+      path_expander (~> 2.0)
+      prism (~> 1.7)
+      sexp_processor (~> 4.17)
     debug (1.11.0)
       irb (~> 1.10)
       reline (>= 0.3.8)
@@ -280,6 +284,7 @@ GEM
     parser (3.3.10.0)
       ast (~> 2.4.1)
       racc
+    path_expander (2.0.1)
     pg (1.6.2)
     pg (1.6.2-x86_64-linux)
     pp (0.6.3)
@@ -409,6 +414,7 @@ GEM
     ruby-technical-analysis (1.0.4)
     ruby2_keywords (0.0.5)
     securerandom (0.4.1)
+    sexp_processor (4.17.5)
     shoulda-matchers (7.0.1)
       activesupport (>= 7.1)
     sidekiq (8.0.10)
@@ -496,6 +502,7 @@ DEPENDENCIES
   concurrent-ruby
   csv
   database_cleaner-active_record
+  debride
   debug
   dotenv-rails
   factory_bot_rails

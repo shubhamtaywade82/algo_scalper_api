@@ -94,4 +94,6 @@ group :development, :test do
 
   # Annotate models, routes, etc.
   gem 'annotate'
+
+  gem "debride"
 end
