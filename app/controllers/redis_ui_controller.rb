@@ -12,32 +12,23 @@ class RedisUiController < ActionController::Base
   def index
     @pattern = params[:pattern] || '*'
     @db = params[:db] || '0'
-    @keys = []
     @cursor = (params[:cursor] || 0).to_i
-    @page_size = 100
 
     begin
-      # Switch to selected database
-      @redis.select(@db.to_i)
+      result = redis_inspector.scan(
+        pattern: @pattern,
+        db: @db,
+        cursor: @cursor
+      )
 
-      # Scan keys with pattern
-      cursor, keys = @redis.scan(@cursor, match: @pattern, count: @page_size)
-      @keys = keys.map do |key|
-        {
-          key: key,
-          type: @redis.type(key),
-          ttl: @redis.ttl(key),
-          size: get_key_size(key)
-        }
-      end
-      @next_cursor = cursor.to_i
-      @has_more = @next_cursor != 0
+      @keys = result[:keys]
+      @next_cursor = result[:next_cursor]
+      @has_more = result[:has_more]
     rescue StandardError => e
       @error = e.message
       Rails.logger.error("[RedisUI] Error: #{e.class} - #{e.message}")
     end
 
-    # Return JSON if JSON format requested, otherwise render HTML view
     if request.format.json?
       render json: {
         pattern: @pattern,
@@ -59,19 +50,7 @@ class RedisUiController < ActionController::Base
     @db = params[:db] || '0'
 
     begin
-      @redis.select(@db.to_i)
-
-      key_type = @redis.type(@key)
-      value = get_key_value(@key, key_type)
-      ttl = @redis.ttl(@key)
-
-      render json: {
-        key: @key,
-        type: key_type,
-        ttl: ttl,
-        value: value,
-        size: get_key_size(@key)
-      }
+      render json: redis_inspector.fetch(key: @key, db: @db)
     rescue StandardError => e
       render json: { error: e.message }, status: :unprocessable_entity
     end
@@ -82,9 +61,7 @@ class RedisUiController < ActionController::Base
     @db = params[:db] || '0'
 
     begin
-      @redis.select(@db.to_i)
-
-      @redis.del(@key)
+      redis_inspector.delete(key: @key, db: @db)
       render json: { success: true, message: "Key '#{@key}' deleted" }
     rescue StandardError => e
       render json: { error: e.message }, status: :unprocessable_entity
@@ -92,8 +69,7 @@ class RedisUiController < ActionController::Base
   end
 
   def info
-    info_data = @redis.info
-    render json: { info: info_data }
+    render json: { info: redis_inspector.info }
   rescue StandardError => e
     render json: { error: e.message }, status: :unprocessable_entity
   end
@@ -113,39 +89,8 @@ class RedisUiController < ActionController::Base
     render json: { error: "Failed to connect to Redis: #{e.message}" }, status: :service_unavailable
   end
 
-  def get_key_value(key, type)
-    case type
-    when 'string'
-      @redis.get(key)
-    when 'hash'
-      @redis.hgetall(key)
-    when 'list'
-      @redis.lrange(key, 0, -1)
-    when 'set'
-      @redis.smembers(key)
-    when 'zset'
-      @redis.zrange(key, 0, -1, with_scores: true)
-    else
-      'Unknown type'
-    end
-  end
-
-  def get_key_size(key)
-    type = @redis.type(key)
-    case type
-    when 'string'
-      @redis.strlen(key)
-    when 'hash'
-      @redis.hlen(key)
-    when 'list'
-      @redis.llen(key)
-    when 'set'
-      @redis.scard(key)
-    when 'zset'
-      @redis.zcard(key)
-    else
-      0
-    end
+  def redis_inspector
+    @redis_inspector ||= ::Redis::Inspector.new(client: @redis)
   end
 end
 # rubocop:enable Rails/ApplicationController, Metrics/ClassLength
