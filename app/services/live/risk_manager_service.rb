@@ -90,7 +90,7 @@ module Live
       @thread = nil
       @watchdog_thread&.kill
       @watchdog_thread = nil
-      
+
       if @event_subscription
         Core::EventBus.instance.unsubscribe(@event_subscription)
         @event_subscription = nil
@@ -103,7 +103,7 @@ module Live
     # Reacts immediately to price changes without waiting for LOOP_INTERVAL
     def handle_pnl_event(event)
       return unless @running
-      
+
       tracker_id = event[:tracker_id]
       return unless tracker_id
 
@@ -116,11 +116,11 @@ module Live
       # Evaluate immediate exits (Hard SL, TP, Trailing)
       # We use UnifiedExitChecker for sub-second logic
       exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
-      
+
       if exit_decision && exit_decision[:exit]
         reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
         Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
-        
+
         # Execute exit immediately
         engine = @exit_engine || self
         dispatch_exit(engine, tracker, reason)

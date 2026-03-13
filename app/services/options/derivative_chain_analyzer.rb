@@ -53,7 +53,7 @@ module Options
       gamma_score = gamma_detector.gamma_pressure_score(direction: direction)
 
       atm = find_atm_strike(chain, spot)
-      
+
       # Pass flow and gamma context to scoring
       scored = score_chain(chain, atm, spot, direction, flow_results: flow_results, gamma_score: gamma_score)
       candidates = scored.sort_by { |c| -c[:score] }.first(limit)
@@ -454,7 +454,7 @@ module Options
       @direction = direction # Store for use in reason_for
       option_type_key = direction == :bullish ? 'CE' : 'PE'
       flow_side = direction == :bullish ? 'ce' : 'pe'
-      
+
       # Extract flow scores for lookup
       flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
         h[f[:strike].to_f] = f[:score]
@@ -576,18 +576,18 @@ module Options
       # 1. Delta Score (0.40–0.60 ideal)
       delta = option[:delta]&.to_f&.abs || 0.5
       delta_score = 1.0 - (delta - 0.5).abs
-      
+
       # 2. Liquidity Score (Spread < 1% preferred)
       spread = calc_spread(option[:bid], option[:ask], option[:ltp]) || 0.05
       liquidity_score = 1.0 - [spread * 10.0, 1.0].min # Aggressive spread penalty
-      
+
       # 3. Flow Score (Integrated from FlowAnalyzer)
       # Normalize flow score around 1.0
       normalized_flow = [flow_score / 2.0, 1.0].min
 
       # 4. Gamma Ramp Bonus (Proximity to OI clusters)
       # gamma_score is 0.0 to 1.0+
-      
+
       base_score = (delta_score * weights[:delta]) +
                    (liquidity_score * weights[:liquidity]) +
                    (normalized_flow * weights[:flow])

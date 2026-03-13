@@ -47,7 +47,7 @@ module Options
     def calculate_flow_score(strike, type, option)
       # Get historical context from cache
       history = get_strike_history(strike, type)
-      
+
       # Default scores if no history
       return 1.0 if history.blank?
 
@@ -61,10 +61,10 @@ module Options
 
       # 1. OI Change (50% weight)
       oi_change_pct = prev_oi.positive? ? (current_oi - prev_oi) / prev_oi : 0.0
-      
+
       # 2. Volume Spike (30% weight)
       vol_ratio = avg_volume.positive? ? current_volume / avg_volume : 1.0
-      
+
       # 3. Price Change (20% weight)
       price_change_pct = prev_price.positive? ? (current_price - prev_price) / prev_price : 0.0
 
@@ -95,18 +95,18 @@ module Options
 
       # Update rolling averages (simple 5-period for responsiveness)
       history = get_strike_history(strike, type) || {}
-      
+
       prev_volumes = history[:volume_history] || []
       prev_volumes << option['volume'].to_f
       prev_volumes = prev_volumes.last(5)
-      
+
       prev_ois = history[:oi_history] || []
       prev_ois << option['oi'].to_f
       prev_ois = prev_ois.last(5)
-      
+
       current_state[:volume_history] = prev_volumes
       current_state[:avg_volume] = prev_volumes.sum / prev_volumes.size.to_f
-      
+
       current_state[:oi_history] = prev_ois
       current_state[:avg_oi] = prev_ois.sum / prev_ois.size.to_f
 

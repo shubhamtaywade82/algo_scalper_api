@@ -63,7 +63,7 @@ module Optimization
       @analytics.each do |analytic|
         mfe_pct = analytic.mfe_pct
         mae_pct = analytic.mae_pct
-        
+
         # Determine exit based on params
         exit_pct = simulate_trade_simple(mfe_pct, mae_pct, params)
         total_profit_pct += exit_pct
@@ -90,14 +90,14 @@ module Optimization
 
       # Phase 1: Early slack
       # early_sl_offset is usually negative (e.g. -0.12)
-      early_sl_offset = -0.12 
-      
+      early_sl_offset = -0.12
+
       if mae_pct <= early_sl_offset
         return early_sl_offset
       end
 
       # Default to 0 profit if none triggered
-      0.0 
+      0.0
     end
   end
 end

@@ -18,7 +18,7 @@ module Options
       return nil unless @chain_data && @chain_data[:oc] && @spot_price.positive?
 
       type = direction == :bullish ? 'ce' : 'pe'
-      
+
       # 1. Find strike with Max OI (OI cluster)
       # Focus only on the requested side
       strikes_data = @chain_data[:oc].map do |strike, data|
@@ -35,13 +35,13 @@ module Options
 
       # 2. Distance check (Price approaching cluster)
       distance = (spot_price - oi_peak[:strike]).abs
-      
+
       # Institutional threshold: distance within 100 points for NIFTY/BANKNIFTY/SENSEX
       return nil if distance > 100
 
       # 3. Volume confirmation (Activity rising)
       # Check if current volume is significant compared to typical (handled by higher level logic or score)
-      
+
       oi_peak
     end
 
@@ -54,10 +54,10 @@ module Options
       # Higher score if price is closer to the OI cluster
       distance = (spot_price - strike[:strike]).abs
       proximity_score = [1.0 - (distance / 100.0), 0.0].max
-      
+
       # Higher score if OI is massive
       oi_intensity = [strike[:oi] / 1_000_000.0, 1.0].min # Scale relative to 1M OI
-      
+
       (proximity_score * 0.6) + (oi_intensity * 0.4)
     end
   end

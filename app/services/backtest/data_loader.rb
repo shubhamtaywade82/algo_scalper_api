@@ -11,7 +11,7 @@ module Backtest
 
     def load
       return [] unless File.exist?(@path)
-      
+
       rows = CSV.read(@path, headers: true)
       rows.map do |r|
         {

@@ -35,7 +35,7 @@ class InstitutionalOptionsStrategy
     else
       # 4. Institutional Exit (MFE-style underlying logic)
       profit_pct = (tick[:index_price] - @entry_price) / @entry_price
-      
+
       # Stop Loss: -0.3% index move | Take Profit: +0.8% index move
       if profit_pct < -0.003 || profit_pct > 0.008
         @in_position = false
@@ -50,10 +50,10 @@ end
 class NiftySensexBacktest
   def self.run(symbol:, days: 30, interval: '5')
     puts "\n=== INSTITUTIONAL BACKTEST: #{symbol} ==="
-    
+
     loader = Backtest::ApiLoader.new(symbol: symbol, days: days, interval: interval)
     data = loader.load
-    
+
     if data.empty?
       puts "❌ No data loaded."
       return

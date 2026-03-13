@@ -31,7 +31,7 @@ module Live
 
       def enforce_early_trend_failure_for(tracker, exit_engine:, activation_profit: nil)
         activation_profit ||= (resolved_risk_config[:etf] || {})[:activation_profit_pct].to_f
-        
+
         snapshot = pnl_snapshot(tracker)
         return unless snapshot
 
@@ -66,7 +66,7 @@ module Live
 
         trend_score = val.to_f + momentum_score(series.candles)
         peak_trend_score = tracker.meta&.dig('peak_trend_score') || trend_score
-        
+
         # VWAP (simplified: use recent average price)
         vwap = series.candles.last(20).sum(&:close) / [series.candles.last(20).size, 1].max
         underlying_price = current_ltp(tracker) || tracker.entry_price.to_f
@@ -134,7 +134,7 @@ module Live
 
         entry_risk_rupees = tracker.meta&.dig('entry_risk_rupees')
         risk_value = safe_big_decimal(entry_risk_rupees)
-        
+
         # Ensure we always update peak trend score if possible
         update_peak_trend_score(tracker, snapshot)
 
@@ -186,7 +186,7 @@ module Live
         return unless val
 
         trend_score = val.to_f + momentum_score(series.candles)
-        
+
         peak = tracker.meta&.dig('peak_trend_score') || 0
         if trend_score > peak
           meta = tracker.meta || {}

@@ -20,10 +20,10 @@ module AutoExp
 
     def run(iterations: 10)
       puts "Starting AutoExp Runner..."
-      
+
       iterations.times do |i|
         puts "\n--- Iteration #{i + 1}/#{iterations} ---"
-        
+
         begin
           # 1. Load context
           config = YAML.load_file(AutoExp::ConfigApplier::CONFIG_PATH)
@@ -32,7 +32,7 @@ module AutoExp
           # 2. Propose mutation
           puts "Asking LLM for next hypothesis..."
           decision = @planner.propose(results: results, config: config)
-          
+
           unless decision && decision["parameter"]
             puts "LLM failed to propose a valid decision."
             next
@@ -52,7 +52,7 @@ module AutoExp
           # 4. Execute backtest
           puts "Running backtest..."
           metrics = @executor.run
-          
+
           puts "Backtest Metrics:"
           puts " - Profit Factor: #{metrics[:profit_factor]}"
           puts " - Drawdown:      #{metrics[:drawdown]}"
@@ -85,7 +85,7 @@ module AutoExp
           revert rescue nil
         end
       end
-      
+
       puts "\nAutoExp completed."
       puts "Best metrics achieved: #{@best_metrics.inspect}" if @best_metrics
     end

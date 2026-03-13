@@ -8,11 +8,11 @@ module MarketState
 
       # Use the latest ATR value compared to the previous one
       current_atr = series.atr(14)
-      
+
       # We need history to check expansion
       # CandleSeries#atr returns a single value (latest)
       # We need to manually calculate or check if ATR is rising
-      
+
       hlc = series.hlc
       atr_series = TechnicalAnalysis::Atr.calculate(hlc, period: 14)
       return false if atr_series.size < 2

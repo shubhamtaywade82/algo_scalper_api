@@ -115,10 +115,10 @@ class BacktestService
   def fetch_ohlc_data
     # Use yesterday as the base end date
     to_date = Time.zone.today - 1.day
-    
+
     # Adjust to_date back if it's a weekend (Dhan API restriction)
     to_date -= 1.day while to_date.saturday? || to_date.sunday?
-    
+
     from_date = to_date - @days_back.days
     # Adjust from_date back if it's a weekend
     from_date -= 1.day while from_date.saturday? || from_date.sunday?

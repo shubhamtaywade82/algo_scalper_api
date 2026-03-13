@@ -7,7 +7,7 @@ RSpec.describe Options::DeltaAccelerationDetector do
   let(:option_prices) { [110.0, 150.0] }
   let(:volumes) { Array.new(20, 1000.0) + [2000.0] }
   let(:oi) { [500_000, 510_000] }
-  
+
   let(:detector) do
     described_class.new(
       index_prices: index_prices,

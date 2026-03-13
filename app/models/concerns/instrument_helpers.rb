@@ -378,7 +378,7 @@ module InstrumentHelpers
 
   def resolve_instrument_code
     code = instrument_code.presence || instrument_type.presence
-    
+
     # Map common verbose codes to DhanHQ-specific short codes if needed
     case code.to_s.downcase
     when 'options_index' then code = 'OPTIDX'

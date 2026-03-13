@@ -34,7 +34,7 @@ RSpec.describe Orders::TrailingEngine do
         }
       }
     })
-    
+
     # Mock update_column/update! for call tests
     allow(tracker).to receive(:update!)
     allow(tracker).to receive(:update_column)

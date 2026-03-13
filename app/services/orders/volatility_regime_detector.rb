@@ -23,7 +23,7 @@ module Orders
 
     def stddev(arr)
       return 0.0 if arr.empty?
-      
+
       mean = arr.sum / arr.size.to_f
       variance = arr.map { |x| (x - mean)**2 }.sum / arr.size.to_f
       Math.sqrt(variance)

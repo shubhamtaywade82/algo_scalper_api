@@ -404,11 +404,11 @@ module Live
       if tick[:ltp].to_f.positive?
         # Resolve symbol if possible, or use security_id
         symbol = tick[:symbol] || tick[:security_id]
-        
+
         # Check if it's an index or an option
         is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
         MarketData::MarketCache.update_ltp(symbol, tick[:ltp], is_index: is_index)
-        
+
         # If it's an option (OI/Volume present), update option data
         if tick[:oi].present? || tick[:volume].present?
           MarketData::MarketCache.update_option_data(symbol, {

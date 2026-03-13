@@ -38,7 +38,7 @@ VCR.configure do |config|
   # Masking JWT tokens (starting with eyJ) in headers and bodies
   config.filter_sensitive_data('<ACCESS_TOKEN>') do |interaction|
     jwt_regex = /eyJ[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+/
-    
+
     # Check Authorization header for JWT
     auth_header = (interaction.request.headers['Authorization'] || interaction.request.headers['authorization'])&.first
     if auth_header && (match = auth_header.match(jwt_regex))

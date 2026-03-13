@@ -17,7 +17,7 @@ module Backtest
       return 0.0 if @trades.empty?
       gains = @trades.select { |t| t[:pnl].positive? }.sum { |t| t[:pnl] }
       losses = @trades.select { |t| t[:pnl].negative? }.sum { |t| t[:pnl].abs }
-      
+
       return gains.to_f if losses.zero?
       gains / losses
     end

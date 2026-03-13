@@ -18,7 +18,7 @@ module AutoExp
 
       # Extract JSON from output (it might contain logs from Rails boot)
       json_match = output.match(/\{"profit_factor".*\}/m)
-      
+
       unless json_match
         Rails.logger.error("[AutoExp] No JSON found in backtest output: #{output}")
         raise "No JSON metrics found in backtest output"

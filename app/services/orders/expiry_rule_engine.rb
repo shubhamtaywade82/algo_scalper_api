@@ -31,9 +31,9 @@ module Orders
       # FINNIFTY: Tuesday
       # MIDCPNIFTY: Monday
       # SENSEX: Friday
-      
+
       today = Time.current.in_time_zone('Asia/Kolkata').wday
-      
+
       case
       when @symbol.include?('SENSEX') || @symbol.include?('BANKEX')
         today == 5 # Friday

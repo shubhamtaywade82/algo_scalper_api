@@ -58,7 +58,7 @@ module Entries
 
       last_candle = @series.candles[-1]
       last_range = last_candle.high - last_candle.low
-      
+
       # avg_range_20 (excluding the current candle)
       avg_range = @series.candles.last(21).first(20).map { |c| c.high - c.low }.sum / 20.0
       return false if avg_range.zero?

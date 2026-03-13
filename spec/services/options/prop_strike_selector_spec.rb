@@ -35,15 +35,15 @@ RSpec.describe Options::PropStrikeSelector do
 
     it 'uses ratios when history is provided' do
       history = { avg_volume: 100_000, avg_oi: 1_000_000 }
-      
+
       # Case 1: Volume spike (ratio 2.0)
       spike_option = option.merge(volume: 200_000, oi: 1_000_000)
       score_spike = selector.score(spike_option, history: history)
-      
+
       # Case 2: Normal volume (ratio 1.0)
       normal_option = option.merge(volume: 100_000, oi: 1_000_000)
       score_normal = selector.score(normal_option, history: history)
-      
+
       expect(score_spike).to be > score_normal
     end
 

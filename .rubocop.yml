@@ -236,6 +236,9 @@ Layout/IndentationConsistency:
 Layout/TrailingEmptyLines:
   Enabled: false
 
+Layout/TrailingWhitespace:
+  Enabled: true
+
 Naming/VariableNumber:
   Enabled: false
 

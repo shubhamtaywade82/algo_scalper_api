@@ -21,7 +21,7 @@ module Orchestration
       # 2. Entry Filter (Structure + Liquidity + Volatility)
       filter = Entries::EntryFilterEngine.new(series: series, symbol: @symbol)
       direction = state[:trend] == :bullish ? :bullish : :bearish
-      
+
       unless filter.valid_entry?(direction: direction)
         Rails.logger.debug("[StrategyRunner] #{@symbol} blocked by EntryFilterEngine")
         return
@@ -35,7 +35,7 @@ module Orchestration
         series: series,
         direction: direction
       )
-      
+
       picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
         index_cfg: @index_cfg,
         direction: direction,

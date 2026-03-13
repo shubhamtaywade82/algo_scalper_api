@@ -743,14 +743,14 @@ module Options
           chain_data: chain_data
         )
         flow_results = flow_analyzer.strong_flow_strikes
-        
+
         gamma_detector = Options::GammaRampDetector.new(
           index_key: index_cfg[:key],
           expiry_date: expiry_date,
           chain_data: chain_data
         )
         gamma_pressure = gamma_detector.gamma_pressure_score(direction: direction)
-        
+
         # Index prices for delta acceleration (last 2 close prices)
         # Fallback to current spot if series unavailable
         index_series = instrument.candle_series(interval: '1')
@@ -832,7 +832,7 @@ module Options
         end
 
         leg = legs.first
-        
+
         # Institutional Rule: If no good strike exists (score too low) -> skip trade
         # Threshold 140 (scaled score: institutional base + acceleration + ATM bonus)
         if leg[:score] < 140.0
@@ -909,7 +909,7 @@ module Options
                                                flow_analyzer: nil, index_prices: nil)
         # Force reload - debugging index_cfg scope issue
         return [] unless option_chain_data
-        
+
         # Extract flow scores for lookup
         flow_side = side.to_s.downcase # 'ce' or 'pe'
         flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
@@ -1255,7 +1255,7 @@ module Options
         # Apply sophisticated scoring system
         scored_legs = legs.map do |leg|
           flow_score = flow_scores[leg[:strike].to_f] || 1.0
-          
+
           # Get historical context for this specific strike
           strike_history = flow_analyzer&.get_history(leg[:strike], flow_side)
 
@@ -1279,7 +1279,7 @@ module Options
             acceleration_signal: acceleration_signal,
             history: strike_history
           )
-          
+
           leg.merge(score: score, acceleration_signal: acceleration_signal)
         end
 
@@ -1412,14 +1412,14 @@ module Options
         if prop_selector
           # Combine prop model with ATM bonus for legacy compatibility
           prop_score = prop_selector.score(leg, flow_score: flow_score, gamma_pressure: gamma_pressure, history: history)
-          
+
           # Boost score for delta acceleration (explosive premium potential)
           acceleration_boost = case acceleration_signal
                                when :strong then 0.3
                                when :moderate then 0.15
                                else 0.0
                                end
-          
+
           distance_from_atm = (leg[:strike] - atm_strike).abs
           atm_range_points = atm_strike * atm_range_percent
           atm_bonus = if distance_from_atm <= (atm_range_points * 0.1)
@@ -1429,7 +1429,7 @@ module Options
                       else
                         0.0
                       end
-          
+
           return (prop_score * 100.0) + (acceleration_boost * 50.0) + (atm_bonus * 10.0)
         end
 
@@ -1450,7 +1450,7 @@ module Options
 
         # 1. Delta Score (0.40–0.60 ideal) - 40% weight
         delta_score = (1.0 - (delta - 0.5).abs) * 40.0
-        
+
         # 2. Liquidity Score (Spread < 1% preferred) - 30% weight
         liquidity_base = if oi >= 1_000_000
                             30
