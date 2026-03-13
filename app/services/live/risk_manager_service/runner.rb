@@ -71,7 +71,14 @@ module Live
 
       # Interval fallback enforcement when realtime tick-first path is stale/unavailable.
       # EOD force-close runs every loop when at/past market close so it is never skipped by tick-first.
+      # When outside trading window (pre 9:20 or post 15:30): run EOD only in 15:30–16:00; skip all enforcement otherwise.
       def run_interval_enforcement_if_needed(exit_engine)
+        if outside_trading_window?
+          return unless in_eod_force_close_window?
+          enforce_eod_force_close(exit_engine: exit_engine)
+          return
+        end
+
         risk = risk_config
         market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
         if market_close_time && Time.current >= market_close_time
@@ -177,6 +184,27 @@ module Live
       rescue StandardError => e
         Rails.logger.error("[RiskManager] exits_blocked_by_time? error: #{e.message}")
         false
+      end
+
+      # True when current time is before 9:20 IST or after 15:30 IST (no per-tracker exits).
+      def outside_trading_window?
+        ist = TradingSession::Service.current_ist_time
+        return true if TradingSession::Service.market_closed?
+        return true if ist.hour < TradingSession::Service::ENTRY_START_HOUR
+        return true if ist.hour == TradingSession::Service::ENTRY_START_HOUR && ist.min < TradingSession::Service::ENTRY_START_MINUTE
+
+        false
+      end
+
+      # True only in 15:30–16:00 IST so EOD force-close runs once after close, not at 1 AM or weekend.
+      def in_eod_force_close_window?
+        ist = TradingSession::Service.current_ist_time
+        return false unless TradingSession::Service.market_closed?
+
+        close_min = (TradingSession::Service::MARKET_CLOSE_HOUR * 60) + TradingSession::Service::MARKET_CLOSE_MINUTE
+        end_min = (16 * 60) + 0
+        now_min = (ist.hour * 60) + ist.min
+        now_min >= close_min && now_min < end_min
       end
     end
   end
