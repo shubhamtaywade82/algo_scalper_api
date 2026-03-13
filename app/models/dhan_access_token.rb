@@ -43,7 +43,7 @@ class DhanAccessToken < ApplicationRecord
     end
   end
 
-  after_create :clear_active_cache
+  after_commit :clear_active_cache, on: :create
 
   private
 

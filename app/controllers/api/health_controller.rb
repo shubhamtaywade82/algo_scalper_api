@@ -3,6 +3,9 @@
 module Api
   class HealthController < ApplicationController
     def show
+      market_feed_status = Live::MarketFeedHub.instance.health_status
+      order_update_status = Live::OrderUpdateHub.instance.respond_to?(:health_status) ? Live::OrderUpdateHub.instance.health_status : {}
+
       render json: {
         mode: AlgoConfig.mode,
         watchlist: WatchlistItem.where(active: true).count,
@@ -10,9 +13,15 @@ module Api
         scheduler: scheduler_status,
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         websocket: {
-          market_feed_running: Live::MarketFeedHub.instance.running?,
-          # NOTE: Order updates use PositionSyncService polling (not WebSocket)
-          order_update_running: Live::OrderUpdateHub.instance.running?,
+          market_feed_running: market_feed_status[:running],
+          market_feed_connected: market_feed_status[:connected],
+          market_feed_state: market_feed_status[:connection_state],
+          market_feed_started_at: market_feed_status[:started_at],
+          market_feed_last_tick_at: market_feed_status[:last_tick_at],
+          order_update_running: order_update_status[:running],
+          order_update_state: order_update_status[:connection_state],
+          order_update_started_at: order_update_status[:started_at],
+          order_update_last_update_at: order_update_status[:last_update_at],
           tick_cache_size: Live::TickCache.all.size,
           sample_ltps: {
             nifty: Live::TickCache.ltp('IDX_I', '13'),

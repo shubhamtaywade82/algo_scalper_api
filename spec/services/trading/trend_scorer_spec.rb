@@ -42,21 +42,20 @@ RSpec.describe Trading::TrendScorer do
         # Start padding
         5.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (60 - i).minutes, open: 100, high: 100.1, low: 99.9, close: 100, volume: 1000)) }
         # Bullish Swing 1
-        10.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (50 - i).minutes, open: 100+i, high: 100+i+1, low: 100+i-1, close: 100+i, volume: 1000)) }
+        10.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (50 - i).minutes, open: 100 + i, high: 100 + i + 1, low: 100 + i - 1, close: 100 + i, volume: 1000)) }
         # Pullback 1 (Higher Low)
-        5.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (40 - i).minutes, open: 110-i, high: 110-i+1, low: 110-i-1, close: 110-i, volume: 1000)) }
+        5.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (40 - i).minutes, open: 110 - i, high: 110 - i + 1, low: 110 - i - 1, close: 110 - i, volume: 1000)) }
         # Bullish Swing 2 (Higher High)
-        10.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (30 - i).minutes, open: 105+i, high: 105+i+1, low: 105+i-1, close: 105+i, volume: 1000)) }
+        10.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (30 - i).minutes, open: 105 + i, high: 105 + i + 1, low: 105 + i - 1, close: 105 + i, volume: 1000)) }
         # Padding to confirm last swing (must be lower than peak)
         5.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (5 - i).minutes, open: 114, high: 114.1, low: 113.8, close: 113.9, volume: 1000)) }
 
         # Setup 15m as bullish
-        15.times { |i| series_15m.add_candle(Candle.new(timestamp: Time.current - (400 - i*15).minutes, open: 100+i, high: 100+i+1, low: 100+i-1, close: 100+i, volume: 1000)) }
+        15.times { |i| series_15m.add_candle(Candle.new(timestamp: Time.current - (400 - (i * 15)).minutes, open: 100 + i, high: 100 + i + 1, low: 100 + i - 1, close: 100 + i, volume: 1000)) }
 
         # Mock ADX to avoid insufficient data issues
-        allow(series_5m).to receive(:adx).and_return(30)
         # Mock Supertrend to bullish
-        allow(series_5m).to receive(:supertrend_signal).and_return(:bullish)
+        allow(series_5m).to receive_messages(adx: 30, supertrend_signal: :bullish)
       end
 
       it 'returns a high bullish score' do
@@ -71,17 +70,16 @@ RSpec.describe Trading::TrendScorer do
         # Start padding
         5.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (60 - i).minutes, open: 100, high: 100.1, low: 99.9, close: 100, volume: 1000)) }
         # Bearish Swings
-        10.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (50 - i).minutes, open: 100-i, high: 100-i+1, low: 100-i-1, close: 100-i, volume: 1000)) }
-        5.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (40 - i).minutes, open: 90+i, high: 90+i+1, low: 90+i-1, close: 90+i, volume: 1000)) }
-        10.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (30 - i).minutes, open: 95-i, high: 95-i+1, low: 95-i-1, close: 95-i, volume: 1000)) }
+        10.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (50 - i).minutes, open: 100 - i, high: 100 - i + 1, low: 100 - i - 1, close: 100 - i, volume: 1000)) }
+        5.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (40 - i).minutes, open: 90 + i, high: 90 + i + 1, low: 90 + i - 1, close: 90 + i, volume: 1000)) }
+        10.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (30 - i).minutes, open: 95 - i, high: 95 - i + 1, low: 95 - i - 1, close: 95 - i, volume: 1000)) }
         # Padding to confirm last swing (must be higher than previous low)
         5.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (5 - i).minutes, open: 86, high: 86.2, low: 85.8, close: 85.9, volume: 1000)) }
 
         # Setup 15m as bearish
-        15.times { |i| series_15m.add_candle(Candle.new(timestamp: Time.current - (400 - i*15).minutes, open: 100-i, high: 100-i+1, low: 100-i-1, close: 100-i, volume: 1000)) }
+        15.times { |i| series_15m.add_candle(Candle.new(timestamp: Time.current - (400 - (i * 15)).minutes, open: 100 - i, high: 100 - i + 1, low: 100 - i - 1, close: 100 - i, volume: 1000)) }
 
-        allow(series_5m).to receive(:adx).and_return(35)
-        allow(series_5m).to receive(:supertrend_signal).and_return(:bearish)
+        allow(series_5m).to receive_messages(adx: 35, supertrend_signal: :bearish)
       end
 
       it 'returns a high bearish score' do
@@ -94,7 +92,7 @@ RSpec.describe Trading::TrendScorer do
     context 'in a weak trend (ADX filter)' do
       before do
         # Trending candles but low ADX
-        30.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (50 - i).minutes, open: 100+i, high: 100+i+1, low: 100+i-1, close: 100+i, volume: 1000)) }
+        30.times { |i| series_5m.add_candle(Candle.new(timestamp: Time.current - (50 - i).minutes, open: 100 + i, high: 100 + i + 1, low: 100 + i - 1, close: 100 + i, volume: 1000)) }
         allow(series_5m).to receive(:adx).and_return(15)
       end
 

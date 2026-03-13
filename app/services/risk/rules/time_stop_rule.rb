@@ -54,15 +54,23 @@ module Risk
         return skip_result unless time_limit
 
         pnl = context.position.pnl.to_f
+        pnl_pct = context.pnl_pct.to_f
+        index_key = tracker.meta&.dig('index_key') || 'NIFTY'
 
         # Dynamic time stop tightening if position is negative
-        if pnl < 0.0 && time_limit > 8
-          time_limit = 8 # Reduce time limit to 8 minutes if negative PnL
+        if pnl < 0.0 && time_limit > 5
+          time_limit = 5 # Reduce time limit to 5 minutes if negative PnL (Theta protection)
         end
 
-        # Bypass time stop if the trade is in profit (let winners run)
-        if pnl > 0.0
-          Rails.logger.debug { "[TimeStopRule] Bypassing time stop for #{tracker.order_no} as it is in profit (₹#{pnl.round(2)})" }
+        # Determine time limit and profit threshold
+        # For trend trades, we allow longer if it's very profitable (e.g., > 5%)
+        # But if it's a laggard (< 5% profit) after the time limit, we exit.
+        laggard_threshold_pct = 0.05 # 5%
+
+        # Bypass time stop if the trade is strongly in profit (let winners run)
+        # EXCEPT for SENSEX where we are more aggressive with time stops
+        if pnl_pct >= laggard_threshold_pct && index_key != 'SENSEX'
+          # Rails.logger.debug { "[TimeStopRule] Bypassing time stop for #{tracker.order_no} as it is strongly in profit (#{(pnl_pct * 100).round(2)}%)" }
           return skip_result
         end
 
@@ -71,11 +79,13 @@ module Risk
         elapsed_minutes = ((Time.current - entry_time) / 60.0).round(2)
 
         if elapsed_minutes >= time_limit
-          reason = "TIME_STOP (#{trade_type} trade exceeded #{time_limit} minutes, elapsed: #{elapsed_minutes} min)"
+          status = pnl_pct.positive? ? 'laggard' : 'loss'
+          reason = "TIME_STOP (#{trade_type} #{status} trade exceeded #{time_limit} minutes, elapsed: #{elapsed_minutes} min, pnl: #{(pnl_pct * 100).round(2)}%)"
           return exit_result(reason: reason, metadata: {
             trade_type: trade_type,
             time_limit: time_limit,
-            elapsed_minutes: elapsed_minutes
+            elapsed_minutes: elapsed_minutes,
+            pnl_pct: pnl_pct
           })
         end
 

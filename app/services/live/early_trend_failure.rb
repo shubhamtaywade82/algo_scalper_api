@@ -82,6 +82,7 @@ module Live
     end
 
     # Check if ETF checks are applicable (before trailing activation)
+    # pnl_pct is percentage (e.g. 5.0 for 5%)
     def applicable?(pnl_pct, activation_profit_pct: nil)
       activation = activation_profit_pct || etf_cfg[:activation_profit_pct].to_f
       return false if activation.zero?

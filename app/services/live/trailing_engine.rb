@@ -33,7 +33,9 @@ module Live
       peak_updated = update_peak(position_data)
 
       # 3. Apply trailing SL (direct or tiered based on config)
-      sl_result = if Positions::TrailingConfig.direct_trailing_enabled?
+      sl_result = if tailored_trailing_applicable?(position_data)
+                    apply_tailored_sl(position_data)
+                  elsif Positions::TrailingConfig.direct_trailing_enabled?
                     apply_direct_trailing_sl(position_data)
                   else
                     apply_tiered_sl(position_data)
@@ -60,6 +62,7 @@ module Live
     def check_peak_drawdown(position_data, exit_engine)
       return false unless exit_engine && position_data.peak_profit_pct
 
+      # peak and current are decimal (e.g. 0.05 for 5%)
       peak = position_data.peak_profit_pct.to_f
       current = position_data.pnl_pct.to_f
 
@@ -67,7 +70,7 @@ module Live
       # Peak drawdown rule should only trigger when position had profit and is drawing down
       if peak <= 0
         Rails.logger.debug do
-          "[TrailingEngine] Skipping peak drawdown check: peak=#{peak.round(2)}% <= 0% " \
+          "[TrailingEngine] Skipping peak drawdown check: peak=#{(peak * 100).round(2)}% <= 0% " \
             '(position never profitable)'
         end
         return false
@@ -77,6 +80,7 @@ module Live
       capital_deployed = calculate_capital_deployed(position_data)
 
       # Check if drawdown threshold is breached (with capital-aware thresholds)
+      # TrailingConfig expects decimal (e.g. 0.05 for 5%)
       return false unless Positions::TrailingConfig.peak_drawdown_triggered?(
         peak,
         current,
@@ -86,16 +90,17 @@ module Live
       # Apply peak-drawdown activation gating (if enabled)
       if peak_drawdown_activation_enabled?
         # Use peak profit % (not current) for activation check
+        # TrailingConfig expects decimal for both profit_pct and current_sl_offset_pct
         activation_ready = Positions::TrailingConfig.peak_drawdown_active?(
-          profit_pct: peak, # Use peak, not current
-          current_sl_offset_pct: current_sl_offset_pct(position_data)
+          profit_pct: peak,
+          current_sl_offset_pct: current_sl_offset_pct_decimal(position_data)
         )
         unless activation_ready
           capital_info = capital_deployed ? " capital=₹#{capital_deployed.round(0)}" : ''
           Rails.logger.debug do
-            "[TrailingEngine] Peak drawdown gating: peak=#{peak.round(2)}% " \
+            "[TrailingEngine] Peak drawdown gating: peak=#{(peak * 100).round(2)}% " \
               "sl_offset=#{current_sl_offset_pct(position_data)&.round(2)}% " \
-              "not activated (drawdown=#{(peak - current).round(2)}%#{capital_info})"
+              "not activated (drawdown=#{(peak - current) * 100.round(2)}%#{capital_info})"
           end
           return false
         end
@@ -107,10 +112,10 @@ module Live
         return false
       end
 
-      drawdown = peak - current
+      drawdown_pct = (peak - current) * 100.0
       threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak)
       capital_info = capital_deployed ? " (capital: ₹#{capital_deployed.round(0)})" : ''
-      reason = "peak_drawdown_exit (drawdown: #{drawdown.round(2)}%, threshold: #{threshold.round(2)}%, peak: #{peak.round(2)}%#{capital_info})"
+      reason = "peak_drawdown_exit (drawdown: #{drawdown_pct.round(2)}%, threshold: #{(threshold * 100).round(2)}%, peak: #{(peak * 100).round(2)}%#{capital_info})"
 
       # Wrap exit in tracker lock for idempotency
       tracker.with_lock do
@@ -134,20 +139,61 @@ module Live
 
       current = position_data.pnl_pct.to_f
       peak = position_data.peak_profit_pct.to_f
+      min_profit = position_data.min_profit_pct.to_f
 
-      return false if current <= peak
+      peak_updated = current > peak
+      min_updated = min_profit < peak
 
-      # Update peak in ActiveCache
-      @active_cache.update_position(
-        position_data.tracker_id,
-        peak_profit_pct: current
-      )
+      if peak_updated
+        # Update peak in ActiveCache (in-memory only)
+        @active_cache.update_position(
+          position_data.tracker_id,
+          peak_profit_pct: current
+        )
+      end
 
-      Rails.logger.debug { "[TrailingEngine] Updated peak_profit_pct for #{position_data.tracker_id}: #{peak.round(2)}% → #{current.round(2)}%" }
-      true
+      # Only persist to DB when extremes actually change
+      return peak_updated unless peak_updated || min_updated
+
+      entry_price = position_data.entry_price.to_f
+      return peak_updated unless entry_price.positive?
+
+      highest_price = entry_price * (1.0 + current)
+      lowest_price = entry_price * (1.0 + min_profit)
+
+      persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price)
+
+      if peak_updated
+        Rails.logger.debug { "[TrailingEngine] Updated peak_profit_pct for #{position_data.tracker_id}: #{(peak * 100).round(2)}% → #{(current * 100).round(2)}% (Highest: ₹#{highest_price.round(2)})" }
+      end
+
+      peak_updated
     rescue StandardError => e
-      Rails.logger.error("[TrailingEngine] Failed to update peak: #{e.class} - #{e.message}")
+      Rails.logger.error("[TrailingEngine] Failed to update extremes: #{e.class} - #{e.message}")
       false
+    end
+
+    # Persist extremes to tracker meta only when values change
+    # @param tracker_id [Integer] Tracker ID
+    # @param highest_price [Float] New highest price
+    # @param lowest_price [Float] New lowest price
+    def persist_extremes_if_changed(tracker_id, highest_price, lowest_price)
+      tracker = PositionTracker.find_by(id: tracker_id)
+      return unless tracker
+
+      meta = tracker.meta || {}
+      old_highest = meta['highest_price'].to_f
+      old_lowest = meta['lowest_price']
+
+      new_highest = [old_highest, highest_price].max
+      new_lowest = old_lowest.nil? ? lowest_price : [old_lowest.to_f, lowest_price].min
+
+      # Only write to DB if values actually changed
+      return if new_highest == old_highest && new_lowest == old_lowest.to_f
+
+      meta['highest_price'] = new_highest
+      meta['lowest_price'] = new_lowest
+      tracker.update_column(:meta, meta)
     end
 
     # Apply direct trailing SL (follows price directly, only moves upward)
@@ -159,12 +205,13 @@ module Live
 
       entry_price = position_data.entry_price.to_f
       current_price = position_data.current_ltp.to_f
-      current_profit_pct = position_data.pnl_pct.to_f
+      current_profit_pct = position_data.pnl_pct.to_f # decimal
       current_sl = position_data.sl_price.to_f
 
       return { updated: false, new_sl_price: current_sl, reason: 'no_current_price' } unless current_price.positive?
 
       # Calculate new SL based on current price (maintains fixed distance below)
+      # TrailingConfig expects decimal (e.g. 0.05 for 5%)
       new_sl_price = Positions::TrailingConfig.calculate_direct_trailing_sl(
         current_price: current_price,
         entry_price: entry_price,
@@ -185,7 +232,7 @@ module Live
       bracket_result = @bracket_placer.update_bracket(
         tracker: tracker,
         sl_price: new_sl_price,
-        reason: "direct_trailing (price: ₹#{current_price.round(2)}, profit: #{current_profit_pct.round(2)}%)"
+        reason: "direct_trailing (price: ₹#{current_price.round(2)}, profit: #{(current_profit_pct * 100.0).round(2)}%)"
       )
 
       if bracket_result[:success]
@@ -200,7 +247,7 @@ module Live
         Rails.logger.info(
           "[TrailingEngine] Updated SL (direct trailing) for #{tracker.order_no}: " \
           "₹#{current_sl.round(2)} → ₹#{new_sl_price.round(2)} " \
-          "(price: ₹#{current_price.round(2)}, profit: #{current_profit_pct.round(2)}%)"
+          "(price: ₹#{current_price.round(2)}, profit: #{(current_profit_pct * 100.0).round(2)}%)"
         )
         { updated: true, new_sl_price: new_sl_price, reason: 'sl_updated' }
       else
@@ -221,9 +268,10 @@ module Live
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
-      current_profit_pct = position_data.pnl_pct.to_f
+      current_profit_pct = position_data.pnl_pct.to_f # decimal (e.g. 0.05 for 5%)
       current_sl = position_data.sl_price.to_f
 
+      # TrailingConfig expects decimal
       sl_offset_pct = Positions::TrailingConfig.sl_offset_for(current_profit_pct)
       return { updated: false, new_sl_price: current_sl, reason: 'tier_not_reached' } unless sl_offset_pct
 
@@ -238,7 +286,7 @@ module Live
       bracket_result = @bracket_placer.update_bracket(
         tracker: tracker,
         sl_price: new_sl_price,
-        reason: "tiered_trailing (profit: #{current_profit_pct.round(2)}%)"
+        reason: "tiered_trailing (profit: #{(current_profit_pct * 100.0).round(2)}%)"
       )
 
       if bracket_result[:success]
@@ -253,7 +301,7 @@ module Live
         Rails.logger.info(
           "[TrailingEngine] Updated SL for #{tracker.order_no}: " \
           "₹#{current_sl.round(2)} → ₹#{new_sl_price.round(2)} " \
-          "(profit: #{current_profit_pct.round(2)}%)"
+          "(profit: #{(current_profit_pct * 100.0).round(2)}%)"
         )
         { updated: true, new_sl_price: new_sl_price, reason: 'sl_updated' }
       else
@@ -267,6 +315,71 @@ module Live
     # rubocop:enable Metrics/AbcSize
 
     private
+
+    # Check if tailored trailing is applicable for this position
+    def tailored_trailing_applicable?(position_data)
+      return false unless position_data.index_key || position_data.security_id
+
+      # Get symbol or index key
+      key = position_data.index_key.to_s.upcase
+      symbol = position_data.security_id.to_s.upcase # security_id often contains the symbol in some contexts, but better check both
+
+      # Use index_key or underlying symbol
+      search_key = position_data.underlying_symbol.to_s.upcase.presence || key
+      %w[NIFTY BANKNIFTY SENSEX].any? { |s| search_key.include?(s) }
+    end
+
+    # Apply tailored trailing SL (Gamma-Aware + MFE approach for indices)
+    def apply_tailored_sl(position_data)
+      return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
+
+      current_price = position_data.current_ltp.to_f
+      current_sl = position_data.sl_price.to_f
+      peak_profit_pct = position_data.peak_profit_pct.to_f
+      prices = position_data.price_history || [current_price]
+
+      tracker = PositionTracker.find_by(id: position_data.tracker_id)
+      return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
+
+      # 1. Use Orders::Analyzer for combined analysis
+      analyzer = Orders::Analyzer.new(
+        tracker: tracker,
+        ltp: current_price,
+        prices: prices,
+        peak_profit_pct: peak_profit_pct
+      )
+      new_sl_price = analyzer.recommended_sl
+
+      # 2. Use Orders::Adjuster to decide and execute adjustment
+      # Identify reason for logging
+      mfe_sl = Orders::MfeExitEngine.new(
+        position: tracker,
+        ltp: current_price,
+        entry_price: position_data.entry_price.to_f,
+        highest_price: position_data.entry_price.to_f * (1.0 + peak_profit_pct)
+      ).call
+      reason_code = (mfe_sl && new_sl_price == mfe_sl) ? 'mfe_retrace' : 'gamma_aware'
+
+      adjusted = Orders::Adjuster.adjust_sl(
+        tracker: tracker,
+        recommended_sl: new_sl_price,
+        reason: "#{reason_code}_trailing (profit: #{(peak_profit_pct * 100).round(2)}%)"
+      )
+
+      if adjusted
+        # Update local position_data for the rest of the tick processing
+        sl_offset_pct = (new_sl_price - position_data.entry_price.to_f) / position_data.entry_price.to_f
+        position_data.sl_price = new_sl_price if position_data.respond_to?(:sl_price=)
+        position_data.sl_offset_pct = sl_offset_pct if position_data.respond_to?(:sl_offset_pct=)
+
+        { updated: true, new_sl_price: new_sl_price, reason: 'sl_updated' }
+      else
+        { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved_or_error' }
+      end
+    rescue StandardError => e
+      Rails.logger.error("[TrailingEngine] Failed to apply tailored SL: #{e.class} - #{e.message}")
+      { updated: false, new_sl_price: nil, reason: e.message }
+    end
 
     # Build failure result hash
     # @param error [String] Error message
@@ -292,14 +405,23 @@ module Live
       end
     end
 
+    # Returns SL offset as percentage (e.g. 10.0 for 10%) for display/logging
+    # Always computed from prices for consistent format (sl_offset_pct storage is mixed decimal/percentage)
     def current_sl_offset_pct(position_data)
-      return position_data.sl_offset_pct if position_data.sl_offset_pct
-
       entry = position_data.entry_price.to_f
       sl_price = position_data.sl_price.to_f
       return nil unless entry.positive? && sl_price.positive?
 
       ((sl_price - entry) / entry) * 100.0
+    end
+
+    # Returns SL offset as decimal (e.g. 0.10 for 10%) for TrailingConfig.peak_drawdown_active?
+    def current_sl_offset_pct_decimal(position_data)
+      entry = position_data.entry_price.to_f
+      sl_price = position_data.sl_price.to_f
+      return nil unless entry.positive? && sl_price.positive?
+
+      (sl_price - entry) / entry
     end
 
     def increment_peak_drawdown_metric

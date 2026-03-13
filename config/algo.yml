@@ -2,6 +2,20 @@ paper_trading:
   enabled: true
   balance: 100000
 
+# Run mode: which profile to merge on top of base config (before DB overrides).
+# production = real flow (default). exit_testing = frequent entries to test exits. entry_testing = relaxed guards to test entries.
+# Override with ENV RUN_MODE=exit_testing (or entry_testing, production).
+run_mode: exit_testing
+
+# Realtime execution controls (tick-first architecture)
+realtime:
+  tick_first_enabled: true         # Evaluate exits from tick-driven Redis state first
+  fallback_enabled: true           # Run interval scanners only when tick stream is stale
+  tick_stale_after_seconds: 3      # Consider feed stale after this many seconds without tick-driven PnL event
+  min_enforcement_gap_ms: 250      # Debounce full rule-chain evaluation per tracker in event-driven path
+  db_sync_interval_seconds: 30      # Throttled DB sync cadence for active positions
+  entry_ltp_max_age_seconds: 2      # Entry/re-entry requires tick timestamp within this window
+
 # Trading time restrictions based on profitability analysis
 # Use analyze_positions_by_time_intervals.rb to identify non-profitable periods
 # Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
@@ -23,6 +37,10 @@ feature_flags:
   enable_underlying_aware_exits: false
   enable_peak_drawdown_activation: false
   auto_paper_on_insufficient_balance: false
+
+# DhanHQ broker settings
+dhanhq:
+  enable_orders: false # Set to true for live order submission (false = dry-run logging only)
 
 # ============================================
 # INDEX CONFIG (TREND-SCORE DRIVEN)
@@ -53,8 +71,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 8 # 1m ADX threshold (strict filter for options buying)
-      confirmation_min_strength: 8 # 5m ADX threshold
+      primary_min_strength: 15 # 1m ADX threshold (momentum floor)
+      confirmation_min_strength: 15 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -96,8 +114,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 8 # 1m ADX threshold (use global default)
-      confirmation_min_strength: 8 # 5m ADX threshold (70% of typical ~44)
+      primary_min_strength: 15 # 1m ADX threshold (momentum floor)
+      confirmation_min_strength: 15 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -139,8 +157,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 8 # 1m ADX threshold (very strict filter for volatile Sensex)
-      confirmation_min_strength: 8 # 5m ADX threshold
+      primary_min_strength: 18 # 1m ADX threshold (strict filter for volatile Sensex)
+      confirmation_min_strength: 18 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -174,25 +192,25 @@ broker_fees:
 # ============================================
 risk:
   sl_pct: 0.12 # -12% STOP LOSS
-  tp_pct: 0.25 # +25% TAKE PROFIT
+  tp_pct: 0.50 # +50% TAKE PROFIT
   per_trade_risk_pct: 0.15
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
     enabled: true
-    target_pct: 15.0 # Full exit when total PnL reaches 15%
+    target_pct: 0.30 # 30% - increased from 15% to allow larger moves
 
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
 
   # Profit floor: once net PnL reaches lock_pct% of capital deployed, arms a TRAILING floor.
-  # trail_pct: on each monitor cycle, floor = max(current_floor, hwm_pnl * trail_pct / 100).
+  # trail_pct: on each monitor cycle, floor = max(current_floor, hwm_pnl * trail_pct).
   # lock_pct scales with position size — ₹2k on a ₹28k BN position is only 7%, vs 18% on a ₹11k SX position.
   profit_floor:
     enabled: true
-    lock_pct: 10           # arm floor when net PnL >= 10% of capital_deployed (scales per position)
-    trail_pct: 70          # ratchet floor to 70% of HWM each cycle
-    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200
+    lock_pct: 0.10         # 10% - arm floor when net PnL >= 10% of capital_deployed (scales per position)
+    trail_pct: 0.70        # 70% - ratchet floor to 70% of HWM each cycle
+    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200 (rupees, not percentage)
     time_kill_minutes: 30  # give trailing more time to develop
 
   # RR-Based Profit Booking (Dynamic Exit)
@@ -206,12 +224,12 @@ risk:
   time_stop:
     enabled: true
     scalp:
-      max_minutes: 15
-      max_candles: 15
+      max_minutes: 8 # 8 mins max for scalps
+      max_candles: 8
     trend:
-      NIFTY: 45       # minutes
-      BANKNIFTY: 45    # minutes
-      SENSEX: 90       # minutes
+      NIFTY: 20       # minutes (tightened from 45)
+      BANKNIFTY: 15    # minutes (tightened from 45)
+      SENSEX: 10       # minutes (tightened from 90 - critical for SENSEX)
 
   # Institutional Trailing System (3-Phase)
   # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
@@ -222,17 +240,17 @@ risk:
     expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
 
     nifty:
-      early_trigger: 0.05         # Phase 1: Survival (+5% profit → -12% SL)
+      early_trigger: 0.03         # Phase 1: Survival (+5% profit → -12% SL)
       early_sl_offset: -0.12
-      breakeven_trigger: 0.157    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
-      activation_trigger: 0.20    # Phase 3: HWM Trailing at +20%
-      trailing_distance: 0.386    # 38.6% from HWM (80% of avg 48.3% retrace)
+      breakeven_trigger: 0.08    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
+      activation_trigger: 0.15    # Phase 3: HWM Trailing at +20%
+      trailing_distance: 0.2    # 38.6% from HWM (80% of avg 48.3% retrace)
     sensex:
-      early_trigger: 0.06         # Phase 1: Survival (+6% profit → -10% SL)
+      early_trigger: 0.03         # Phase 1: Survival (+6% profit → -10% SL)
       early_sl_offset: -0.10
-      breakeven_trigger: 0.12     # Phase 2: Breakeven at +12%
-      activation_trigger: 0.18    # Phase 3: HWM Trailing at +18%
-      trailing_distance: 0.413    # 41.3% from HWM (80% of avg 51.65% retrace)
+      breakeven_trigger: 0.08     # Phase 2: Breakeven at +12%
+      activation_trigger: 0.15    # Phase 3: HWM Trailing at +18%
+      trailing_distance: 0.2     # 80% from HWM (Based on 5-week avg 99.8% retrace)
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
@@ -244,15 +262,15 @@ risk:
   # Dynamic Trailing stops
   trailing:
     enabled: true
-    activation_pct: 3.5    # Lower activation for more aggressive trailing
-    drawdown_pct: 2.5      # Tighter drawdown to capture move
+    activation_pct: 0.035    # 3.5% - lower activation for more aggressive trailing
+    drawdown_pct: 0.025      # 2.5% - tighter drawdown to capture move
 
   trailing_mode: 'direct' # Moving up only to capture profits
   direct_trailing:
     enabled: true
-    distance_pct: 3.0 # Trail at 3% distance from peak
-    activation_profit_pct: 5.0 # Start direct trailing at 5% profit
-    min_sl_offset_pct: 0.0 # Never let SL go below breakeven once direct trailing starts
+    distance_pct: 0.05 # 5% - trail at 5% distance from peak
+    activation_profit_pct: 0.0 # 0% - start direct trailing at 0% profit
+    min_sl_offset_pct: -0.30 # -30% - never let SL go below -30% from entry
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP
@@ -288,7 +306,7 @@ risk:
     runner_zone_threshold_rupees: 4000 # Transition to runner zone at ₹4k
     secured_sl_rupees: 800 # Move SL to +₹800 when entering secured profit zone (green SL)
     underlying_adx_min: 18.0 # Minimum ADX for underlying trend to be considered favorable
-    option_pullback_max_pct: 35.0 # Maximum pullback % from peak before considering momentum stalled
+    option_pullback_max_pct: 0.35 # 35% - maximum pullback % from peak before considering momentum stalled
     underlying_atr_collapse_threshold: 0.65 # ATR ratio threshold for collapse detection
     runner_zone_momentum_check: false # Enable additional momentum checks in runner zone (optional)
 
@@ -394,8 +412,8 @@ position_sizing:
   mode: rupee_based # Options: 'rupee_based' or 'percentage_based' (legacy)
 
   # Rupee-based sizing parameters (used when enabled: true)
-  risk_rupees: 5000 # Fixed risk per trade in rupees
-  target_rupees: 15000 # Target profit per trade in rupees (for R:R calculation)
+  risk_rupees: 10000 # Fixed risk per trade in rupees (increased for larger sizing)
+  target_rupees: 30000 # Target profit per trade in rupees (scaled with risk)
   stop_distance_rupees: 50 # Stop distance in rupees (updated for increased sizing)
 
   # Index-specific stop distances (override global if specified)
@@ -405,9 +423,9 @@ position_sizing:
     SENSEX: 15 # Typical stop distance for SENSEX options
 
   # Bidirectional trailing stops (enhanced with adaptive drawdown schedule)
-  trail_step_pct: 0.03 # 3% trailing step (for breakeven calculation)
-  breakeven_after_gain: 0.05 # Lock breakeven at +5% profit
-  exit_drop_pct: 0.03 # Fixed trailing threshold (fallback, adaptive schedule takes precedence)
+  trail_step_pct: 0.03 # 3% - trailing step (for breakeven calculation)
+  breakeven_after_gain: 0.05 # 5% - lock breakeven at 5% profit
+  exit_drop_pct: 0.03 # 3% - fixed trailing threshold (fallback, adaptive schedule takes precedence)
   min_profit_rupees: 0 # allow immediate TP exits
 
   # Trailing stop mode: 'tiered' (fixed tiers) or 'direct' (follows price directly)
@@ -418,122 +436,122 @@ position_sizing:
   # Only moves upward - never moves down
   direct_trailing:
     enabled: true # Enable direct trailing stop
-    distance_pct: 5.0 # Distance below current price (e.g., 5% = SL at 95% of current price)
-    activation_profit_pct: 0.0 # Minimum profit % before activating (0 = immediate activation)
-    min_sl_offset_pct: -30.0 # Minimum SL offset from entry (prevents SL from going below initial SL)
+    distance_pct: 0.05 # 5% - distance below current price (e.g., 0.05 = SL at 95% of current price)
+    activation_profit_pct: 0.0 # 0% - minimum profit before activating (0 = immediate activation)
+    min_sl_offset_pct: -0.30 # -30% - minimum SL offset from entry (prevents SL from going below initial SL)
 
   # Profit protection: Hard stop if HWM reaches threshold and drops by percentage
   profit_protection:
     hwm_threshold_rupees: 1040.0 # Exit if HWM reaches this amount
-    drop_pct_from_hwm: 1.0 # Exit if current PnL drops this % from HWM
+    drop_pct_from_hwm: 0.01 # 1% - exit if current PnL drops this % from HWM
     enabled: true
 
   # Upward exponential drawdown (activated when pnl >= activation_profit_pct)
   drawdown:
-    activation_profit_pct: 3.0
-    profit_min: 3.0
-    profit_max: 30.0
-    dd_start_pct: 15.0 # start allowed DD at this % when profit == profit_min
-    dd_end_pct: 1.0 # floor allowed DD at this % when profit >= profit_max
-    exponential_k: 3.0 # curve steepness
+    activation_profit_pct: 0.03 # 3%
+    profit_min: 0.03 # 3% minimum
+    profit_max: 0.30 # 30% maximum
+    dd_start_pct: 0.15 # 15% - start allowed DD at this % when profit == profit_min
+    dd_end_pct: 0.01 # 1% - floor allowed DD at this % when profit >= profit_max
+    exponential_k: 3.0 # curve steepness (pure number, not percentage)
     index_floors:
-      NIFTY: 1.0
-      BANKNIFTY: 1.2
-      SENSEX: 1.5
+      NIFTY: 0.01 # 1% floor
+      BANKNIFTY: 0.012 # 1.2% floor
+      SENSEX: 0.015 # 1.5% floor
 
   # Reverse (below entry) dynamic loss tightening
   reverse_loss:
-    enabled: true
-    max_loss_pct: 20.0 # starting allowed loss when position just turned red
-    min_loss_pct: 5.0 # tightest allowed loss when pnl hits -30%
-    loss_span_pct: 30.0 # map -0..-loss_span_pct to max_loss_pct..min_loss_pct
-    time_tighten_per_min: 2.0 # % tightening per minute spent below entry
+    enabled: false
+    max_loss_pct: 0.20 # 20% - starting allowed loss when position just turned red
+    min_loss_pct: 0.05 # 5% - tightest allowed loss when pnl hits -30%
+    loss_span_pct: 0.30 # 30% - map -0..-loss_span_pct to max_loss_pct..min_loss_pct
+    time_tighten_per_min: 0.02 # 2% - tightening per minute spent below entry
     atr_penalty_thresholds:
-      - { threshold: 0.75, penalty_pct: 3.0 }
-      - { threshold: 0.60, penalty_pct: 5.0 }
+      - { threshold: 0.75, penalty_pct: 0.03 } # 3%
+      - { threshold: 0.60, penalty_pct: 0.05 } # 5%
 
   # Early Trend Failure Exit (ETF)
   etf:
     enabled: true
-    activation_profit_pct: 7.0 # ETF checks apply until trailing activates
-    trend_score_drop_pct: 30.0 # drop from peak trend score to trigger ETF
-    adx_collapse_threshold: 10 # ADX under this triggers ETF
-    atr_ratio_threshold: 0.55 # collapse detection
-    confirmation_ticks: 2 # consecutive tick confirmations
+    activation_profit_pct: 0.07 # 7% - ETF checks apply until trailing activates
+    trend_score_drop_pct: 0.30 # 30% - drop from peak trend score to trigger ETF
+    adx_collapse_threshold: 10 # ADX value (not percentage, pure number)
+    atr_ratio_threshold: 0.55 # ratio (not percentage, pure number)
+    confirmation_ticks: 2 # consecutive tick confirmations (pure number)
 
   # Micro-Trailing model (tiered) - 3% INTERVALS with CONSERVATIVE SL offsets
   # More granular tiers with tighter protection to minimize losses
   # Used when trailing_mode: 'tiered'
   trailing_tiers:
-    - { trigger_pct: 3, sl_offset_pct: -15 } # 3%: -15% SL (wide stop, early stage)
-    - { trigger_pct: 6, sl_offset_pct: -10 } # 6%: -10% SL (gradual tightening)
-    - { trigger_pct: 9, sl_offset_pct: -5 } # 9%: -5% SL (approaching breakeven)
-    - { trigger_pct: 12, sl_offset_pct: -2 } # 12%: -2% SL (close to breakeven)
-    - { trigger_pct: 15, sl_offset_pct: 0 } # 15%: 0% SL (breakeven locked)
-    - { trigger_pct: 18, sl_offset_pct: 2 } # 18%: +2% SL (small profit protection)
-    - { trigger_pct: 21, sl_offset_pct: 3 } # 21%: +3% SL (tighter than old +5%)
-    - { trigger_pct: 24, sl_offset_pct: 4 } # 24%: +4% SL (gradual increase)
-    - { trigger_pct: 27, sl_offset_pct: 5 } # 27%: +5% SL (conservative)
-    - { trigger_pct: 30, sl_offset_pct: 6 } # 30%: +6% SL
-    - { trigger_pct: 33, sl_offset_pct: 8 } # 33%: +8% SL
-    - { trigger_pct: 36, sl_offset_pct: 10 } # 36%: +10% SL
-    - { trigger_pct: 39, sl_offset_pct: 12 } # 39%: +12% SL
-    - { trigger_pct: 42, sl_offset_pct: 15 } # 42%: +15% SL
-    - { trigger_pct: 45, sl_offset_pct: 18 } # 45%: +18% SL
-    - { trigger_pct: 48, sl_offset_pct: 20 } # 48%: +20% SL
-    - { trigger_pct: 51, sl_offset_pct: 22 } # 51%: +22% SL
-    - { trigger_pct: 54, sl_offset_pct: 25 } # 54%: +25% SL
-    - { trigger_pct: 57, sl_offset_pct: 28 } # 57%: +28% SL
-    - { trigger_pct: 60, sl_offset_pct: 30 } # 60%: +30% SL
-    - { trigger_pct: 63, sl_offset_pct: 32 } # 63%: +32% SL
-    - { trigger_pct: 66, sl_offset_pct: 35 } # 66%: +35% SL
-    - { trigger_pct: 69, sl_offset_pct: 38 } # 69%: +38% SL
-    - { trigger_pct: 72, sl_offset_pct: 40 } # 72%: +40% SL
-    - { trigger_pct: 75, sl_offset_pct: 42 } # 75%: +42% SL
-    - { trigger_pct: 78, sl_offset_pct: 45 } # 78%: +45% SL
-    - { trigger_pct: 81, sl_offset_pct: 48 } # 81%: +48% SL
-    - { trigger_pct: 84, sl_offset_pct: 50 } # 84%: +50% SL
-    - { trigger_pct: 87, sl_offset_pct: 52 } # 87%: +52% SL
-    - { trigger_pct: 90, sl_offset_pct: 55 } # 90%: +55% SL
-    - { trigger_pct: 93, sl_offset_pct: 58 } # 93%: +58% SL
-    - { trigger_pct: 96, sl_offset_pct: 60 } # 96%: +60% SL
-    - { trigger_pct: 99, sl_offset_pct: 62 } # 99%: +62% SL
-    - { trigger_pct: 102, sl_offset_pct: 65 } # 102%: +65% SL
-    - { trigger_pct: 105, sl_offset_pct: 68 } # 105%: +68% SL
-    - { trigger_pct: 108, sl_offset_pct: 70 } # 108%: +70% SL
-    - { trigger_pct: 111, sl_offset_pct: 72 } # 111%: +72% SL
-    - { trigger_pct: 114, sl_offset_pct: 75 } # 114%: +75% SL
-    - { trigger_pct: 117, sl_offset_pct: 78 } # 117%: +78% SL
-    - { trigger_pct: 120, sl_offset_pct: 80 } # 120%: +80% SL
+    - { trigger_pct: 0.03, sl_offset_pct: -0.15 } # 3%: -15% SL (wide stop, early stage)
+    - { trigger_pct: 0.06, sl_offset_pct: -0.10 } # 6%: -10% SL (gradual tightening)
+    - { trigger_pct: 0.09, sl_offset_pct: -0.05 } # 9%: -5% SL (approaching breakeven)
+    - { trigger_pct: 0.12, sl_offset_pct: -0.02 } # 12%: -2% SL (close to breakeven)
+    - { trigger_pct: 0.15, sl_offset_pct: 0.00 } # 15%: 0% SL (breakeven locked)
+    - { trigger_pct: 0.18, sl_offset_pct: 0.02 } # 18%: +2% SL (small profit protection)
+    - { trigger_pct: 0.21, sl_offset_pct: 0.03 } # 21%: +3% SL (tighter than old +5%)
+    - { trigger_pct: 0.24, sl_offset_pct: 0.04 } # 24%: +4% SL (gradual increase)
+    - { trigger_pct: 0.27, sl_offset_pct: 0.05 } # 27%: +5% SL (conservative)
+    - { trigger_pct: 0.30, sl_offset_pct: 0.06 } # 30%: +6% SL
+    - { trigger_pct: 0.33, sl_offset_pct: 0.08 } # 33%: +8% SL
+    - { trigger_pct: 0.36, sl_offset_pct: 0.10 } # 36%: +10% SL
+    - { trigger_pct: 0.39, sl_offset_pct: 0.12 } # 39%: +12% SL
+    - { trigger_pct: 0.42, sl_offset_pct: 0.15 } # 42%: +15% SL
+    - { trigger_pct: 0.45, sl_offset_pct: 0.18 } # 45%: +18% SL
+    - { trigger_pct: 0.48, sl_offset_pct: 0.20 } # 48%: +20% SL
+    - { trigger_pct: 0.51, sl_offset_pct: 0.22 } # 51%: +22% SL
+    - { trigger_pct: 0.54, sl_offset_pct: 0.25 } # 54%: +25% SL
+    - { trigger_pct: 0.57, sl_offset_pct: 0.28 } # 57%: +28% SL
+    - { trigger_pct: 0.60, sl_offset_pct: 0.30 } # 60%: +30% SL
+    - { trigger_pct: 0.63, sl_offset_pct: 0.32 } # 63%: +32% SL
+    - { trigger_pct: 0.66, sl_offset_pct: 0.35 } # 66%: +35% SL
+    - { trigger_pct: 0.69, sl_offset_pct: 0.38 } # 69%: +38% SL
+    - { trigger_pct: 0.72, sl_offset_pct: 0.40 } # 72%: +40% SL
+    - { trigger_pct: 0.75, sl_offset_pct: 0.42 } # 75%: +42% SL
+    - { trigger_pct: 0.78, sl_offset_pct: 0.45 } # 78%: +45% SL
+    - { trigger_pct: 0.81, sl_offset_pct: 0.48 } # 81%: +48% SL
+    - { trigger_pct: 0.84, sl_offset_pct: 0.50 } # 84%: +50% SL
+    - { trigger_pct: 0.87, sl_offset_pct: 0.52 } # 87%: +52% SL
+    - { trigger_pct: 0.90, sl_offset_pct: 0.55 } # 90%: +55% SL
+    - { trigger_pct: 0.93, sl_offset_pct: 0.58 } # 93%: +58% SL
+    - { trigger_pct: 0.96, sl_offset_pct: 0.60 } # 96%: +60% SL
+    - { trigger_pct: 0.99, sl_offset_pct: 0.62 } # 99%: +62% SL
+    - { trigger_pct: 1.02, sl_offset_pct: 0.65 } # 102%: +65% SL
+    - { trigger_pct: 1.05, sl_offset_pct: 0.68 } # 105%: +68% SL
+    - { trigger_pct: 1.08, sl_offset_pct: 0.70 } # 108%: +70% SL
+    - { trigger_pct: 1.11, sl_offset_pct: 0.72 } # 111%: +72% SL
+    - { trigger_pct: 1.14, sl_offset_pct: 0.75 } # 114%: +75% SL
+    - { trigger_pct: 1.17, sl_offset_pct: 0.78 } # 117%: +78% SL
+    - { trigger_pct: 1.20, sl_offset_pct: 0.80 } # 120%: +80% SL
 
   # Peak drawdown protection - AGGRESSIVE TIERED PROTECTION
   # Higher peaks get progressively tighter drawdown thresholds to preserve profits
-  peak_drawdown_exit_pct: 3 # Base threshold (fallback for very low peaks)
+  peak_drawdown_exit_pct: 0.03 # 3% - base threshold (fallback for very low peaks)
   # Tiered drawdown thresholds based on peak profit percentage
   # Higher peaks = tighter protection to prevent losing large profits
   tiered_drawdown_thresholds:
-    very_low: 3.0 # Peak 0-5%: 3% drawdown allowed
-    low: 2.5 # Peak 5-10%: 2.5% drawdown allowed
-    medium: 2.0 # Peak 10-15%: 2% drawdown allowed
-    medium_high: 1.5 # Peak 15-20%: 1.5% drawdown allowed
-    high: 1.2 # Peak 20-25%: 1.2% drawdown allowed
-    very_high: 1.0 # Peak 25-30%: 1% drawdown allowed
-    ultra_high: 0.8 # Peak >30%: 0.8% drawdown allowed (maximum protection)
-  peak_drawdown_activation_profit_pct: 10.0 # Reduced from 25.0 (activate earlier)
-  peak_drawdown_activation_sl_offset_pct: 5.0 # Reduced from 10.0 (activate with lower SL offset)
+    very_low: 0.03 # 3% - Peak 0-5%: 3% drawdown allowed
+    low: 0.025 # 2.5% - Peak 5-10%: 2.5% drawdown allowed
+    medium: 0.02 # 2% - Peak 10-15%: 2% drawdown allowed
+    medium_high: 0.015 # 1.5% - Peak 15-20%: 1.5% drawdown allowed
+    high: 0.012 # 1.2% - Peak 20-25%: 1.2% drawdown allowed
+    very_high: 0.01 # 1% - Peak 25-30%: 1% drawdown allowed
+    ultra_high: 0.008 # 0.8% - Peak >30%: 0.8% drawdown allowed (maximum protection)
+  peak_drawdown_activation_profit_pct: 0.10 # 10% - Reduced from 25.0 (activate earlier)
+  peak_drawdown_activation_sl_offset_pct: 0.05 # 5% - Reduced from 10.0 (activate with lower SL offset)
 
   # Trailing activation: Configurable percentage-based activation threshold
   # Trailing rules (TrailingStopRule, PeakDrawdownRule) only activate when pnl_pct >= this value
   # Based on buy value (premium × lot_size × lots), works across any capital/allocation/lot size
-  # Examples: 6.0, 6.66, 9.99, 10.0, 13.32, 15.0, 20.0
+  # Examples: 0.06, 0.0666, 0.0999, 0.10, 0.1332, 0.15, 0.20
   trailing:
     enabled: true # Global trailing toggle (used by dashboard)
-    activation_pct: 10.0 # Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
-    drawdown_pct: 3.0 # Exit if price drops this % from peak (used by trailing rules)
+    activation_pct: 0.10 # 10% - Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
+    drawdown_pct: 0.03 # 3% - Exit if price drops this % from peak (used by trailing rules)
 
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
   secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
-  secure_profit_drawdown_pct: 3.0 # Tighter drawdown threshold (3%) when profit is secured
+  secure_profit_drawdown_pct: 0.03 # 3% - Tighter drawdown threshold (3%) when profit is secured
 
   # Underlying-aware exit thresholds
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
@@ -542,10 +560,10 @@ position_sizing:
   daily_limits:
     enable: true
     per_index:
-      NIFTY: 0.02 # 2% max loss for NIFTY
-      BANKNIFTY: 0.04 # 4% max loss for BANKNIFTY
-      SENSEX: 0.01 # 1% max loss for SENSEX
-    global_limit_pct: 0.04
+      NIFTY: 0.02 # 2% max loss for NIFTY (already DECIMAL)
+      BANKNIFTY: 0.04 # 4% max loss for BANKNIFTY (already DECIMAL)
+      SENSEX: 0.01 # 1% max loss for SENSEX (already DECIMAL)
+    global_limit_pct: 0.04 # 4% (already DECIMAL)
 
   # Daily profit target: Stop trading when daily profit reaches this amount
   max_daily_profit: 20000 # ₹20,000 daily profit target (trading stops when reached)

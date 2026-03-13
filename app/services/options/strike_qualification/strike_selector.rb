@@ -17,7 +17,7 @@ module Options
       VALID_PERMISSIONS = %i[execution_only scale_ready full_deploy].freeze
       VALID_TRENDS = %i[bullish bearish chop neutral range].freeze
 
-      def call(index_key:, side:, permission:, spot:, option_chain:, trend: nil)
+      def call(index_key:, side:, permission:, spot:, option_chain:, trend: nil, momentum_score: nil)
         index = index_key.to_s.strip.upcase
         side_sym = side.to_s.strip.upcase.to_sym
         perm = permission.to_s.strip.downcase.to_sym
@@ -27,18 +27,30 @@ module Options
         return blocked('invalid_permission') unless VALID_PERMISSIONS.include?(perm)
         return blocked('invalid_spot') unless spot.to_f.positive?
         return blocked('invalid_chain') unless option_chain.is_a?(Hash)
-        return blocked('invalid_trend') if trend_sym && !VALID_TRENDS.include?(trend_sym)
+        return blocked('invalid_trend') if trend_sym && VALID_TRENDS.exclude?(trend_sym)
+
+        # Check for institutional strike selection based on momentum (if provided)
+        if momentum_score.present?
+          institutional_type = Options::StrikeSelector.strike_type_for_momentum(momentum_score)
+          if institutional_type == :skip
+            return blocked('weak_momentum_skip')
+          end
+          # ITM options usually preferred for moderate momentum
+          if institutional_type == :itm
+            Rails.logger.info("[StrikeSelector] Institutional rule selected ITM due to moderate momentum (#{momentum_score}/3)")
+          end
+        end
 
         step = strike_step_for(index)
         atm_strike = round_to_step(spot.to_f, step)
 
         # Get available strikes from the filtered chain (only strikes that exist)
         # Handle different key formats in option chain
-        available_strikes = option_chain.keys.map do |k|
+        available_strikes = option_chain.keys.filter_map do |k|
           k.to_f
         rescue StandardError
           nil
-        end.compact.to_set
+        end.to_set
 
         desired = desired_strike(
           index: index,
@@ -46,23 +58,20 @@ module Options
           permission: perm,
           trend: trend_sym,
           atm_strike: atm_strike,
-          step: step
+          step: step,
+          momentum_score: momentum_score
         )
 
         # Check if desired strike exists in chain before checking liquidity
         desired_strike_float = desired[:strike].to_f
-        if available_strikes.include?(desired_strike_float)
-          if liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
+        if available_strikes.include?(desired_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
             return ok(desired.merge(atm_strike: atm_strike))
-          end
         end
 
         # Fallback to ATM if it exists in chain
         atm_strike_float = atm_strike.to_f
-        if available_strikes.include?(atm_strike_float)
-          if liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
+        if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
             return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
-          end
         end
 
         # Enhanced error reporting
@@ -99,7 +108,17 @@ module Options
         ((value / step.to_f).round * step).to_i
       end
 
-      def desired_strike(index:, side:, permission:, trend:, atm_strike:, step:)
+      def desired_strike(index:, side:, permission:, trend:, atm_strike:, step:, momentum_score: nil)
+        # Institutional momentum-based selection
+        if momentum_score.present?
+          institutional_type = Options::StrikeSelector.strike_type_for_momentum(momentum_score)
+          if institutional_type == :itm
+            # Select ITM (strike lower than ATM for CE, higher than ATM for PE)
+            itm_strike = (side == :CE) ? atm_strike - step : atm_strike + step
+            return { strike: itm_strike, strike_type: :ITM }
+          end
+        end
+
         return { strike: atm_strike, strike_type: :ATM } if permission == :execution_only
         return { strike: atm_strike, strike_type: :ATM } if index == 'SENSEX' && permission != :full_deploy
         return { strike: atm_strike, strike_type: :ATM } if %i[chop neutral range].include?(trend)
@@ -213,7 +232,7 @@ module Options
         # If exact match not found, try fuzzy matching (find closest key)
         unless strike_data.is_a?(Hash)
           # Try to find key that matches when converted to float
-          option_chain.keys.each do |key|
+          option_chain.each_key do |key|
             key_float = key.to_f
             next unless (key_float - strike_float).abs < 0.01 # Within 0.01 tolerance
 

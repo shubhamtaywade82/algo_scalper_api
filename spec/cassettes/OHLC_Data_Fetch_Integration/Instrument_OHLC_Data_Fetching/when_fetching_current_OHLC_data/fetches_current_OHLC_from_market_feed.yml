@@ -2,7 +2,7 @@
 http_interactions:
 - request:
     method: get
-    uri: https://algo-trading-api.onrender.com/auth/dhan/token
+    uri: https://<SENSITIVE_SERVICE_URL>/auth/dhan/token
     body:
       encoding: US-ASCII
       string: ''
@@ -65,6 +65,6 @@ http_interactions:
       - h3=":443"; ma=86400
     body:
       encoding: ASCII-8BIT
-      string: '{"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzcyNjEwNjE3LCJpYXQiOjE3NzI1MjQyMTcsInRva2VuQ29uc3VtZXJUeXBlIjoiQVBQIiwiZGhhbkNsaWVudElkIjoiMTEwNDIxNjMwOCJ9.Om-6z9bhV5l-faLDSgxEFqT_YrAb1T6NpapQDktl2TawZW6iH4ccaxXKYklofn1Dx8pSb-MLqcZ74TtTJuM0Hg","client_id":"<CLIENT_ID>","expires_at":"2026-03-04T13:20:17+05:30"}'
+      string: '{"access_token":"<ACCESS_TOKEN>","client_id":"<CLIENT_ID>","expires_at":"2026-03-04T13:20:17+05:30"}'
   recorded_at: Tue, 03 Mar 2026 08:20:44 GMT
 recorded_with: VCR 6.3.1

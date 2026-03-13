@@ -1,10 +1,14 @@
 # frozen_string_literal: true
 
+require 'timeout'
+
 module Services
   module Ai
     class TechnicalAnalysisAgent
       # Agent Runner: Main orchestration loop for intent-aware, micro-step ReAct agent
       module AgentRunner
+        INDICATOR_VALUE_KEYS = %w[value signal direction].freeze
+
         def run_agent_loop(query:, stream: false, &)
           # Step 1: Resolve intent (LLM - small)
           intent_data = resolve_intent(query)
@@ -84,7 +88,7 @@ module Services
 
           # Step 7: Final LLM reasoning (compact facts only)
           yield("📝 [Agent] Synthesizing final analysis...\n") if block_given?
-          final_analysis = synthesize_analysis(context, stream: stream, &)
+          final_analysis = synthesize_analysis(context, query: query, stream: stream, &)
 
           {
             analysis: final_analysis,
@@ -137,7 +141,7 @@ module Services
               end
 
               aggregated[timeframe][name] = if value.is_a?(Hash)
-                                              value.select { |k, _v| %w[value signal direction].include?(k.to_s) }
+                                              value.select { |k, _v| INDICATOR_VALUE_KEYS.include?(k.to_s) }
                                             else
                                               value
                                             end
@@ -152,26 +156,153 @@ module Services
           strikes.first(5) # Max 5 strikes
         end
 
-        def synthesize_analysis(context, stream: false, &)
+        def synthesize_analysis(context, query:, stream: false, &)
           # Build compact prompt with facts only
           facts_prompt = build_facts_prompt(context)
+          synthesis_timeout = ENV.fetch('AI_AGENT_SYNTHESIS_TIMEOUT', '25').to_i
 
           model = if @client.provider == :ollama
-                    ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                    if @client.respond_to?(:preferred_text_model)
+                      @client.preferred_text_model(default: 'llama3.1:8b')
+                    else
+                      ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                    end
                   else
                     'gpt-4o'
                   end
 
           messages = [
-            { role: 'system', content: build_synthesis_system_prompt },
+            { role: 'system', content: build_synthesis_prompt_for_query(query, context) },
             { role: 'user', content: facts_prompt }
           ]
 
           if stream && block_given?
-            @client.chat_stream(messages: messages, model: model, temperature: 0.3, &)
-          else
-            @client.chat(messages: messages, model: model, temperature: 0.3)
+            streamed = Timeout.timeout(synthesis_timeout) do
+              @client.chat_stream(messages: messages, model: model, temperature: 0.2, &)
+            end
+            return streamed if streamed.present? && !invalid_llm_output?(streamed)
+
+            return build_fallback_analysis(context)
           end
+
+          response = Timeout.timeout(synthesis_timeout) do
+            @client.chat(messages: messages, model: model, temperature: 0.2)
+          end
+          return response if response.present? && !invalid_llm_output?(response)
+
+          build_fallback_analysis(context)
+        rescue Timeout::Error
+          Rails.logger.warn("[AgentRunner] Synthesis timed out after #{synthesis_timeout}s, returning fallback analysis")
+          build_fallback_analysis(context)
+        end
+
+        def build_synthesis_prompt_for_query(query, context)
+          # Application is options-buying focused: always use options synthesis prompt.
+          build_synthesis_system_prompt
+        end
+
+        def build_general_technical_system_prompt
+          <<~PROMPT
+            You are a concise intraday technical analyst for Indian indices.
+            Return a short, plain analysis focused on requested indicators only.
+            Do not generate options strike plans unless explicitly asked about options.
+            Format:
+            1) Indicator reading
+            2) Bias (bullish/bearish/neutral)
+            3) One-line actionable note
+          PROMPT
+        end
+
+        def technical_query_without_options?(query)
+          query_text = query.to_s.upcase
+          has_technical_terms = query_text.match?(/\b(RSI|MACD|ADX|SUPERTREND|ATR|BOLLINGER|TREND|MOMENTUM|BIAS|CONDITION)\b/)
+          has_technical_terms && !options_query?(query)
+        end
+
+        def options_query?(query)
+          query.to_s.upcase.match?(/\b(OPTION|CALL|PUT|STRIKE|PREMIUM|CE|PE)\b/)
+        end
+
+        def invalid_llm_output?(text)
+          body = text.to_s
+          return true if body.length > 8000
+
+          # Guard against pathological repetitive arithmetic expansions seen in bad outputs.
+          repetitive_money_ops = body.scan(/₹\s*\d[\d,.]*\s*-\s*₹\s*\d[\d,.]*/).size
+          repetitive_money_ops > 8
+        end
+
+        def build_indicator_only_analysis(context, query)
+          instrument_name = context.resolved_instrument&.symbol_name || context.underlying_symbol || 'Unknown'
+          ltp = context.ltp&.to_f
+          tf = context.indicators['15m'] || context.indicators[:'15m'] || {}
+
+          rsi = tf['rsi'] || tf[:rsi]
+          adx = tf['adx'] || tf[:adx]
+          supertrend = tf['supertrend'] || tf[:supertrend]
+          macd = tf['macd'] || tf[:macd]
+          macd_hist = macd.is_a?(Array) ? macd[2] : nil
+
+          bias = if rsi && rsi.to_f < 35 && macd_hist.to_f.negative?
+                   'Bearish with possible short-cover bounce risk'
+                 elsif rsi && rsi.to_f > 65 && macd_hist.to_f.positive?
+                   'Bullish with pullback risk'
+                 elsif supertrend.to_s.downcase.include?('short')
+                   'Bearish'
+                 elsif supertrend.to_s.downcase.include?('long')
+                   'Bullish'
+                 else
+                   'Neutral'
+                 end
+
+          strength = adx && adx.to_f >= 25 ? 'strong' : 'weak'
+          query_text = query.to_s.upcase
+          requested = if query_text.include?('RSI')
+                        'RSI'
+                      elsif query_text.include?('TREND')
+                        'TREND'
+                      else
+                        'indicators'
+                      end
+
+          lines = []
+          lines << "Indicator Analysis (#{instrument_name})"
+          lines << "- LTP: #{ltp ? format('%.2f', ltp) : 'N/A'}"
+          lines << "- 15m RSI: #{rsi ? format('%.2f', rsi.to_f) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
+          lines << "- 15m ADX: #{adx ? format('%.2f', adx.to_f) : 'N/A'} (trend #{strength})"
+          lines << "- 15m Supertrend: #{supertrend || 'N/A'}"
+          lines << "- 15m MACD hist: #{macd_hist ? format('%.2f', macd_hist.to_f) : 'N/A'}"
+          lines << "- Bias: #{bias}"
+          lines << "- Action: use this as directional filter only; options strike planning requires an explicit options query."
+          lines.join("\n")
+        end
+
+        def build_fallback_analysis(context)
+          instrument_name = context.resolved_instrument&.symbol_name || context.underlying_symbol || 'Unknown'
+          ltp_text = context.ltp ? context.ltp.to_f.round(2) : 'N/A'
+
+          tf = context.indicators['15m'] || context.indicators[:'15m'] || {}
+          rsi = tf['rsi'] || tf[:rsi]
+          adx = tf['adx'] || tf[:adx]
+          supertrend = tf['supertrend'] || tf[:supertrend]
+
+          direction = if supertrend.to_s.downcase.include?('short') || (rsi && rsi.to_f < 45)
+                        'Bearish bias'
+                      elsif supertrend.to_s.downcase.include?('long') || (rsi && rsi.to_f > 55)
+                        'Bullish bias'
+                      else
+                        'Neutral bias'
+                      end
+
+          strength = adx && adx.to_f >= 25 ? 'trend strength is strong' : 'trend strength is weak or unclear'
+
+          <<~TEXT.strip
+            Fallback technical analysis (LLM synthesis unavailable):
+            - Instrument: #{instrument_name}, LTP: #{ltp_text}
+            - 15m RSI: #{rsi || 'N/A'}, ADX: #{adx || 'N/A'}, Supertrend: #{supertrend || 'N/A'}
+            - View: #{direction}; #{strength}.
+            - Action: use smaller size and wait for next confirmation candle before entry.
+          TEXT
         end
 
         def build_facts_prompt(context)

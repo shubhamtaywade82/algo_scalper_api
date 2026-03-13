@@ -4,26 +4,32 @@ Detailed documentation for services within the `Live::` namespace.
 
 ## Live::MarketFeedHub
 
-**File:** `app/services/live/market_feed_hub.rb`
+**Files:**
+- `app/services/live/market_feed_hub.rb`
+- `app/services/live/market_feed_hub_service.rb`
 
 **Purpose:**
-The primary WebSocket gateway. It manages real-time socket connections to DhanHQ, handles binary packet decoding, and distributes ticks to internal caches.
+The primary WebSocket gateway and its supervisor adapter. `Live::MarketFeedHub` is a Singleton that manages the DhanHQ WebSocket connection, subscription lifecycle, and tick distribution. `Live::MarketFeedHubService` wraps the hub with a `start/stop` API so it can be managed by `TradingSystem::Supervisor`.
 
 **Inputs:**
-- `symbol_list`: Initial symbols to subscribe to.
-- WebSocket binary feed from DhanHQ.
+- WebSocket feed from DhanHQ (ticks for subscribed option and index instruments).
+- Watchlist configuration (symbols/security_ids to subscribe to).
 
 **Outputs:**
-- Parsed ticks sent to `Live::TickCache` and `RedisTickCache`.
-- Feed health status updates.
+- Parsed ticks written to:
+  - `Live::RedisTickCache` (Redis write-through store keyed by `segment:security_id`).
+  - In-memory tick cache (`TickCache`) used by `TickQuery`.
+- Per-position callbacks into the PnL pipeline (`Live::PnlUpdaterService`).
+- Feed health and connection status for monitoring.
 
 **Dependencies:**
-- `DhanHQ::WebSocket`
-- `Live::MarketFeedHub::Parser`
+- `DhanHQ` WebSocket client (v2 API).
+- `Live::RedisTickCache`
+- `TickCache` / `TickQuery`
 
 **Used by:**
-- `TradingSystem::Supervisor`
-- `Entries::EntryGuard` (for subscription)
+- `TradingSystem::Supervisor` (via `Live::MarketFeedHubService`).
+- `Entries::EntryGuard` and other services that subscribe instruments to the feed.
 
 ---
 
@@ -32,20 +38,22 @@ The primary WebSocket gateway. It manages real-time socket connections to DhanHQ
 **File:** `app/services/live/risk_manager_service.rb`
 
 **Purpose:**
-A continuous monitoring loop that iterates over all active `PositionTracker` records. It updates live PnL and evaluates if any exit rules (SL, TP, Trailing) are triggered.
+Central risk enforcement service. It subscribes to high-frequency LTP/PnL events from the EventBus and also runs a slower 5-second enforcement loop over all active positions. It evaluates configured exit rules (SL, TP, trailing, structure invalidation, time-based exits, premium guards) and triggers `Live::ExitEngine` when needed.
 
 **Inputs:**
-- Active positions from `PositionTracker.active`.
-- Live LTPs from `TickCache`.
+- `:ltp` events from `Core::EventBus` (emitted by `Live::PnlUpdaterService`).
+- Active positions from `PositionTracker.active` (for the 5-second loop).
+- PnL snapshots from `Live::RedisPnlCache`.
 
 **Outputs:**
-- Updated PnL and High Water Marks in Redis.
-- Calls `Live::ExitEngine` when an exit is triggered.
+- Exit decisions forwarded to `Live::ExitEngine`.
+- Enforcement logs for all applied rules (per tracker).
 
 **Dependencies:**
 - `Live::UnifiedExitChecker`
 - `Live::RedisPnlCache`
-- `Orders::Gateway`
+- `Live::ExitEngine`
+- `Orders::GatewayFactory` / `Orders.config.gateway`
 
 **Used by:**
 - `TradingSystem::Supervisor`
@@ -57,11 +65,12 @@ A continuous monitoring loop that iterates over all active `PositionTracker` rec
 **File:** `app/services/live/unified_exit_checker.rb`
 
 **Purpose:**
-The decision pivot for position closures. It evaluates a hierarchy of exit rules (Edge Failure, Stop Loss, Take Profit, Trailing Stop) and returns a recommended action.
+The decision pivot for position closures. It evaluates all configured exit rules in priority order (early trend failure, stop-loss, take-profit, trailing, premium guards, time-based exits, percentage PnL, R:R booking) and returns a recommended action.
 
 **Inputs:**
 - `tracker`: The `PositionTracker` record.
-- Historical price data/indicators.
+- Historical and live market data from `TickQuery` and Redis.
+- PnL snapshots from `Live::RedisPnlCache`.
 
 **Outputs:**
 - `exit_action`: Hash containing trigger reason and recommended price.
@@ -76,7 +85,8 @@ The decision pivot for position closures. It evaluates a hierarchy of exit rules
 **File:** `app/services/live/position_sync_service.rb`
 
 **Purpose:**
-Reconciles the internal database with the actual backlog at the broker. This prevents "ghost trades" or untracked active positions due to process crashes.
+Reconciles the internal database with the actual backlog at the broker. It is used during daemon startup and periodic reconciliation to make sure there are no "ghost trades" or untracked active positions after crashes or restarts.
 
 **Used by:**
-- Periodic background job / Supervisor.
+- `TradingSystem::Daemon` / `TradingSystem::Supervisor` during startup.
+- Periodic reconciliation via `Live::ReconciliationService`.

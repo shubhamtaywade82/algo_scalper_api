@@ -1,35 +1,3 @@
-# == Schema Information
-#
-# Table name: position_trackers
-#
-#  id                        :integer         not null, primary key
-#  instrument_id             :integer         not null
-#  order_no                  :string          not null
-#  security_id               :string          not null
-#  symbol                    :string
-#  segment                   :string
-#  side                      :string
-#  status                    :string          not null
-#  quantity                  :integer
-#  avg_price                 :decimal
-#  entry_price               :decimal
-#  last_pnl_rupees           :decimal
-#  last_pnl_pct              :decimal
-#  high_water_mark_pnl       :decimal
-#  meta                      :jsonb
-#  created_at                :datetime        not null
-#  updated_at                :datetime        not null
-#
-# Indexes
-#
-#  index_position_trackers_on_instrument_id  (instrument_id)
-#  index_position_trackers_on_order_no       (order_no) UNIQUE
-#
-# Foreign Keys
-#
-#  fk_rails_...  (instrument_id => instruments.id)
-#
-
 # frozen_string_literal: true
 
 require 'bigdecimal'
@@ -39,7 +7,9 @@ class PositionTracker < ApplicationRecord
 
   # Attribute accessors
   store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
-                 :exit_path, :exit_reason, :highest_price
+                 :exit_path, :exit_reason, :highest_price, :lowest_price, :be_set, :profit_floor_rupees,
+                 :profit_floor_set_at, :profit_zone_state, :secured_sl_price, :secured_sl_rupees,
+                 :profit_zone_transitioned_at
 
   # Enums
   enum :status, {
@@ -62,16 +32,20 @@ class PositionTracker < ApplicationRecord
   after_create_commit :subscribe_to_feed
   after_destroy_commit :clear_redis_pnl_cache
   after_update_commit :clear_redis_cache_if_exited
+  after_update_commit :analyze_trade_if_exited
 
   # Associations
   belongs_to :instrument # Kept for backward compatibility during transition
   belongs_to :watchable, polymorphic: true
+  has_one :trade_analytic, dependent: :destroy
 
   # Scopes
   # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled
   scope :paper, -> { where(paper: true) }
   scope :live, -> { where(paper: false) }
   scope :exited_paper, -> { where(paper: true, status: :exited) }
+  # Active with exit requested but not yet exited (stuck if order failed or pending)
+  scope :active_with_exit_requested, -> { active.where.not(exit_requested_at: nil) }
 
   # Class Methods
   class << self
@@ -96,8 +70,11 @@ class PositionTracker < ApplicationRecord
         exited = exited_paper.where(exited_at: today_start..today_end)
       end
       active = paper.active
+      # Load once to avoid multiple queries (any? + count + iteration)
+      exited = exited.load
+      active = active.load
 
-      active_count = active.count
+      active_count = active.size
       realized_pnl_rupees = exited.sum { |t| t.last_pnl_rupees.to_f }
       # Use current_pnl_rupees for active positions (reads from Redis cache for live values)
       unrealized_pnl_rupees = active.sum { |t| t.current_pnl_rupees.to_f }
@@ -115,7 +92,7 @@ class PositionTracker < ApplicationRecord
       avg_realized_pnl_pct = if exited.any?
                                (exited.filter_map do |t|
                                  t.last_pnl_pct.to_f * 100.0
-                               end.sum / exited.count.to_f).round(2)
+                               end.sum / exited.size.to_f).round(2)
                              else
                                0.0
                              end
@@ -123,13 +100,13 @@ class PositionTracker < ApplicationRecord
       avg_unrealized_pnl_pct = if active.any?
                                  (active.filter_map do |t|
                                    (t.current_pnl_pct || 0).to_f * 100.0
-                                 end.sum / active.count.to_f).round(2)
+                                 end.sum / active.size.to_f).round(2)
                                else
                                  0.0
                                end
 
       {
-        total_trades: exited.count,
+        total_trades: exited.size,
         active_positions: active_count,
         total_pnl_rupees: total_pnl_rupees.round(2),
         total_pnl_pct: total_pnl_pct.round(2),
@@ -137,7 +114,7 @@ class PositionTracker < ApplicationRecord
         realized_pnl_pct: realized_pnl_pct.round(2),
         unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
         unrealized_pnl_pct: unrealized_pnl_pct.round(2),
-        win_rate: paper_win_rate(date: date),
+        win_rate: paper_win_rate(date: date, exited: exited),
         avg_realized_pnl_pct: avg_realized_pnl_pct,
         avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
@@ -200,7 +177,15 @@ class PositionTracker < ApplicationRecord
       paper.active.count
     end
 
-    def paper_win_rate(date: nil)
+    def paper_win_rate(date: nil, exited: nil)
+      # Use preloaded collection when provided to avoid duplicate query
+      if !exited.nil? && exited.respond_to?(:size) && exited.respond_to?(:count)
+        return 0.0 if exited.empty?
+
+        winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
+        return (winners.to_f / exited.size * 100).round(2)
+      end
+
       # Filter by date if provided, otherwise use today's exited positions
       if date
         date_start = date.beginning_of_day
@@ -212,16 +197,17 @@ class PositionTracker < ApplicationRecord
         today_end = Time.zone.today.end_of_day
         exited = exited_paper.where(exited_at: today_start..today_end)
       end
+      exited = exited.load
       return 0.0 if exited.empty?
 
       winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
-      (winners.to_f / exited.count * 100).round(2)
+      (winners.to_f / exited.size * 100).round(2)
     end
 
     def paper_trading_stats
-      exited = exited_paper
-      active = paper.active
-      active_count = active.count
+      exited = exited_paper.load
+      active = paper.active.load
+      active_count = active.size
 
       # Calculate realized PnL from exited positions
       realized_pnl = total_paper_pnl.to_f
@@ -235,13 +221,13 @@ class PositionTracker < ApplicationRecord
       total_pnl = realized_pnl + unrealized_pnl
 
       {
-        total_trades: exited.count,
+        total_trades: exited.size,
         active_positions: active_count,
         total_pnl: total_pnl,
         realized_pnl: realized_pnl,
         unrealized_pnl: unrealized_pnl,
         win_rate: paper_win_rate,
-        average_pnl: exited.empty? ? 0.0 : (realized_pnl / exited.count).to_f,
+        average_pnl: exited.empty? ? 0.0 : (realized_pnl / exited.size).to_f,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
         losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
       }
@@ -293,6 +279,7 @@ class PositionTracker < ApplicationRecord
     }
 
     update!(attrs.compact)
+    initialize_extremes_in_meta
     subscribe
     broadcast_position_activated
 
@@ -325,7 +312,7 @@ class PositionTracker < ApplicationRecord
   end
 
   def be_set?
-    be_set == true
+    ActiveModel::Type::Boolean.new.cast(be_set)
   end
 
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
@@ -385,6 +372,7 @@ class PositionTracker < ApplicationRecord
   end
 
   # Get current PnL percentage from Redis cache (preferred) or fallback to DB
+  # Returns decimal (e.g. 0.05 for 5%)
   def current_pnl_pct
     return last_pnl_pct if exited? # Exited positions: use DB (final value)
 
@@ -524,6 +512,12 @@ class PositionTracker < ApplicationRecord
 
   private
 
+  def analyze_trade_if_exited
+    return unless saved_change_to_status? && exited?
+
+    Optimization::TradeAnalyzer.call(self)
+  end
+
   def register_in_index
     return unless active? && entry_price.present? && quantity.to_i.positive?
 
@@ -661,7 +655,18 @@ class PositionTracker < ApplicationRecord
       end
     end
 
-    self.last_pnl_pct = cache[:pnl_pct] ? BigDecimal(cache[:pnl_pct].to_s) : nil
+    # CRITICAL: Recalculate pnl_pct from final PnL + entry price, don't use Redis snapshot
+    # Redis pnl_pct is a snapshot from exit trigger time, not final realized PnL
+    # This ensures last_pnl_pct reflects actual P&L, not stale cache values
+    entry_price = BigDecimal((self.entry_price || 0).to_s)
+    quantity = (self.quantity || 0).to_i
+    pnl_value = BigDecimal((last_pnl_rupees || cache[:pnl] || 0).to_s)
+
+    if entry_price.positive? && quantity.positive? && pnl_value != 0
+      self.last_pnl_pct = pnl_value / (entry_price * quantity)
+    else
+      self.last_pnl_pct = nil
+    end
   end
 
   def meta_hash
@@ -702,6 +707,17 @@ class PositionTracker < ApplicationRecord
     })
   rescue StandardError => e
     Rails.logger.debug("[PositionTracker] broadcast_position_activated failed: #{e.message}")
+  end
+
+  def initialize_extremes_in_meta
+    return if entry_price.blank?
+
+    meta = meta_hash.dup
+    meta['highest_price'] ||= entry_price.to_f
+    meta['lowest_price'] ||= entry_price.to_f
+    update!(meta: meta) if meta != meta_hash
+  rescue StandardError => e
+    Rails.logger.debug("[PositionTracker] initialize_extremes_in_meta failed for #{order_no}: #{e.class} - #{e.message}")
   end
 
   def broadcast_position_exited

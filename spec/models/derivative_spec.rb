@@ -50,6 +50,7 @@
 #
 #  index_derivatives_on_instrument_code                    (instrument_code)
 #  index_derivatives_on_instrument_id                      (instrument_id)
+#  index_derivatives_on_instrument_id_and_instrument_type  (instrument_id,instrument_type)
 #  index_derivatives_on_symbol_name                        (symbol_name)
 #  index_derivatives_on_underlying_symbol_and_expiry_date  (underlying_symbol,expiry_date)
 #  index_derivatives_unique                                (security_id,symbol_name,exchange,segment) UNIQUE
@@ -82,7 +83,7 @@ RSpec.describe Derivative do
     allow(ws_hub).to receive_messages(running?: true, subscribe: true)
     allow(redis_cache).to receive(:clear_tick)
     allow(redis_cache).to receive(:fetch_tick).and_return(nil)
-    allow(Orders.config).to receive(:place_market).and_return(order_response)
+    allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
   end
 
   describe '#buy_option!' do
@@ -92,7 +93,7 @@ RSpec.describe Derivative do
 
     context 'when quantity is provided' do
       it 'uses provided quantity and places order' do
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           side: 'buy',
           segment: derivative.exchange_segment,
           security_id: derivative.security_id.to_s,
@@ -126,7 +127,7 @@ RSpec.describe Derivative do
         index_cfg = { key: 'NIFTY', segment: 'IDX_I' }
         allow(Capital::Allocator).to receive(:qty_for).and_return(75)
 
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           side: 'buy',
           segment: derivative.exchange_segment,
           security_id: derivative.security_id.to_s,
@@ -149,7 +150,7 @@ RSpec.describe Derivative do
       it 'includes index_key in tracker when index_cfg provided' do
         index_cfg = { key: 'NIFTY', segment: 'IDX_I' }
         allow(Capital::Allocator).to receive(:qty_for).and_return(75)
-        allow(Orders.config).to receive(:place_market).and_return(order_response)
+        allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
 
         expect(derivative).to receive(:after_order_track!).with(
           instrument: instrument,
@@ -171,7 +172,7 @@ RSpec.describe Derivative do
                                                                 lot_size: 25)
         allow(put_derivative).to receive(:resolve_ltp).and_return(BigDecimal('80.50'))
         allow(Capital::Allocator).to receive(:qty_for).and_return(50)
-        allow(Orders.config).to receive(:place_market).and_return(order_response)
+        allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
 
         expect(put_derivative).to receive(:after_order_track!).with(
           hash_including(side: 'long_pe')
@@ -213,7 +214,7 @@ RSpec.describe Derivative do
       it 'returns nil when calculated quantity is zero' do
         allow(Capital::Allocator).to receive(:qty_for).and_return(0)
 
-        expect(Orders.config).not_to receive(:place_market)
+        expect(Orders.config.gateway).not_to receive(:place_market)
 
         result = derivative.buy_option!
         expect(result).to be_nil
@@ -222,7 +223,7 @@ RSpec.describe Derivative do
       it 'returns nil when provided quantity is zero' do
         # Mock Capital::Allocator to return 0 so place_market is not called
         allow(Capital::Allocator).to receive(:qty_for).and_return(0)
-        expect(Orders.config).not_to receive(:place_market)
+        expect(Orders.config.gateway).not_to receive(:place_market)
 
         result = derivative.buy_option!(qty: 0)
         expect(result).to be_nil
@@ -232,7 +233,7 @@ RSpec.describe Derivative do
     context 'when order placement fails' do
       it 'returns nil when order response has no order_id' do
         bad_response = double('Order', order_id: nil)
-        allow(Orders.config).to receive(:place_market).and_return(bad_response)
+        allow(Orders.config.gateway).to receive(:place_market).and_return(bad_response)
 
         result = derivative.buy_option!(qty: 50)
         expect(result).to be_nil
@@ -240,7 +241,7 @@ RSpec.describe Derivative do
 
       it 'returns nil when order response does not respond to order_id' do
         bad_response = double('BadResponse')
-        allow(Orders.config).to receive(:place_market).and_return(bad_response)
+        allow(Orders.config.gateway).to receive(:place_market).and_return(bad_response)
 
         result = derivative.buy_option!(qty: 50)
         expect(result).to be_nil
@@ -249,10 +250,10 @@ RSpec.describe Derivative do
 
     context 'with custom product_type' do
       it 'uses provided product_type' do
-        allow(Orders.config).to receive(:place_market).and_return(order_response)
+        allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
         allow(derivative).to receive(:after_order_track!).and_return(instance_double(PositionTracker))
 
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           hash_including(meta: hash_including(product_type: 'CNC'))
         )
 
@@ -281,7 +282,7 @@ RSpec.describe Derivative do
 
     context 'when quantity is provided' do
       it 'uses provided quantity' do
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           side: 'sell',
           segment: derivative.exchange_segment,
           security_id: derivative.security_id.to_s,
@@ -307,7 +308,7 @@ RSpec.describe Derivative do
           status: 'active'
         )
 
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           side: 'sell',
           segment: derivative.exchange_segment,
           security_id: derivative.security_id.to_s,
@@ -323,7 +324,7 @@ RSpec.describe Derivative do
       it 'returns nil' do
         PositionTracker.where(instrument_id: instrument.id, security_id: derivative.security_id.to_s).delete_all
 
-        expect(Orders.config).not_to receive(:place_market)
+        expect(Orders.config.gateway).not_to receive(:place_market)
 
         result = derivative.sell_option!
         expect(result).to be_nil
@@ -352,7 +353,7 @@ RSpec.describe Derivative do
       it 'returns nil when provided quantity is zero' do
         # Clear existing trackers to ensure no active positions
         PositionTracker.where(instrument_id: instrument.id, security_id: derivative.security_id.to_s).delete_all
-        expect(Orders.config).not_to receive(:place_market)
+        expect(Orders.config.gateway).not_to receive(:place_market)
 
         result = derivative.sell_option!(qty: 0)
         expect(result).to be_nil

@@ -25,6 +25,18 @@ RSpec.describe Entries::EntryGuard do
     }
   end
 
+  # Minimal BOS contract so try_enter passes bos_contract_present? (required by EntryGuard)
+  let(:entry_metadata) do
+    {
+      entry_contract: 'supertrend_machine_v1',
+      bos_id: 'st1',
+      bos_timeframe: '5',
+      bos_origin_price: 100.0,
+      bos_level: 99.0,
+      paper: true
+    }
+  end
+
   before do
     allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
     allow(daily_limits).to receive(:can_trade?).and_return({ allowed: true, reason: nil })
@@ -35,33 +47,41 @@ RSpec.describe Entries::EntryGuard do
       before do
         allow(Instrument).to receive(:find_by_sid_and_segment).and_return(nifty_instrument)
         allow(described_class).to receive(:ensure_ws_connection!)
+        allow(described_class).to receive(:time_regime_allows_entry?).and_return(true)
         allow(Capital::Allocator).to receive(:qty_for).and_return(75)
-        allow(Orders.config).to receive(:place_market).and_return(double(order_id: 'ORD123456'))
+        allow(Trading::InstrumentExecutionProfile).to receive(:for).with('NIFTY').and_return(
+          { allow_execution_only: true, max_lots_by_permission: { scale_ready: 10 } }
+        )
+        allow(Trading::LotCalculator).to receive(:lot_size_for).with('NIFTY').and_return(75)
+        allow(Trading::CapitalAllocator).to receive(:max_lots).and_return(2)
+        gateway = instance_double(Orders::Gateway, place_market: double(order_id: 'ORD123456'))
+        allow(Orders.config).to receive(:gateway).and_return(gateway)
         allow(described_class).to receive_messages(extract_order_no: 'ORD123456', exposure_ok?: true, cooldown_active?: false)
-        # Mock trading session and paper trading
         allow(TradingSession::Service).to receive(:entry_allowed?).and_return({ allowed: true })
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
-        # Mock MarketFeedHub
         allow(Live::MarketFeedHub.instance).to receive_messages(running?: true, connected?: true)
       end
 
       context 'when all validations pass' do
-        it 'places INTRADAY | MARKET | BUY order with correct parameters' do
-          expect(Orders.config).to receive(:place_market).with(
+        it 'places INTRADAY | MARKET | BUY order via gateway with correct parameters' do
+          gateway = Orders.config.gateway
+          expect(gateway).to receive(:place_market).with(
             side: 'buy',
             segment: 'NSE_FNO',
             security_id: '50074',
             qty: 75,
             meta: hash_including(
               client_order_id: match(/^AS-NIFT-50074-/),
-              ltp: 100.0
+              ltp: 100.0,
+              symbol: 'NIFTY18500CE'
             )
           )
 
           described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
         end
 
@@ -70,7 +90,8 @@ RSpec.describe Entries::EntryGuard do
             described_class.try_enter(
               index_cfg: index_cfg,
               pick: pick,
-              direction: :bullish
+              direction: :bullish,
+              entry_metadata: entry_metadata
             )
           end.to change(PositionTracker, :count).by(1)
 
@@ -86,9 +107,10 @@ RSpec.describe Entries::EntryGuard do
 
         it 'builds client order ID in correct format' do
           allow(described_class).to receive(:build_client_order_id).and_call_original
+          gateway = Orders.config.gateway
           timestamp_match = /\d{6}$/
 
-          expect(Orders.config).to receive(:place_market) do |args|
+          expect(gateway).to receive(:place_market) do |args|
             coid = args[:meta][:client_order_id]
             expect(coid).to match(/^AS-NIFT-50074-/)
             expect(coid).to match(timestamp_match)
@@ -99,7 +121,8 @@ RSpec.describe Entries::EntryGuard do
           described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
         end
 
@@ -114,7 +137,8 @@ RSpec.describe Entries::EntryGuard do
           described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
         end
 
@@ -130,7 +154,8 @@ RSpec.describe Entries::EntryGuard do
             index_cfg: index_cfg,
             pick: pick,
             direction: :bullish,
-            scale_multiplier: 2
+            scale_multiplier: 2,
+            entry_metadata: entry_metadata
           )
         end
 
@@ -138,14 +163,15 @@ RSpec.describe Entries::EntryGuard do
           result = described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
 
           expect(result).to be true
         end
 
         it 'logs success message' do
-          allow(Rails.logger).to receive(:info) # Allow all info logs
+          allow(Rails.logger).to receive(:info)
           expect(Rails.logger).to receive(:info).with(
             match(/Successfully placed order ORD123456 for NIFTY: NIFTY18500CE/)
           ).at_least(:once)
@@ -153,7 +179,8 @@ RSpec.describe Entries::EntryGuard do
           described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
         end
       end
@@ -165,7 +192,8 @@ RSpec.describe Entries::EntryGuard do
           result = described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
 
           expect(result).to be false
@@ -174,12 +202,22 @@ RSpec.describe Entries::EntryGuard do
 
       context 'when exposure validation fails' do
         it 'returns false if exposure limit reached' do
-          allow(described_class).to receive(:exposure_ok?).and_return(false)
+          # Use BOS contract (not Supertrend) so exposure_ok? is called
+          allow(described_class).to receive_messages(enforce_structure_entry_gate: { confirmed_at: Time.current }, exposure_ok?: false)
+          bos_metadata = {
+            entry_contract: 'bos_machine_v1',
+            bos_id: 'b1',
+            bos_timeframe: '5',
+            bos_origin_price: 100.0,
+            bos_level: 99.0,
+            paper: true
+          }
 
           result = described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: bos_metadata
           )
 
           expect(result).to be false
@@ -193,7 +231,8 @@ RSpec.describe Entries::EntryGuard do
           result = described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
 
           expect(result).to be false
@@ -201,31 +240,9 @@ RSpec.describe Entries::EntryGuard do
       end
 
       context 'when WebSocket connection check fails' do
-        it 'returns false if WebSocket not running' do
-          allow(described_class).to receive(:ensure_ws_connection!).and_raise(
-            Live::FeedHealthService::FeedStaleError.new(
-              feed: :ws_connection,
-              last_seen_at: nil,
-              threshold: 0,
-              last_error: nil
-            )
-          )
-
-          result = described_class.try_enter(
-            index_cfg: index_cfg,
-            pick: pick,
-            direction: :bullish
-          )
-
-          expect(result).to be false
-        end
-
-        it 'logs warning when feed is stale' do
-          # NOTE: The code no longer blocks on WebSocket errors - it uses REST API fallback
-          # This test is kept for historical reference but the behavior has changed
-          # The code now logs info messages instead of warnings for WebSocket issues
+        it 'logs info when feed is stale and uses REST fallback' do
           allow(Live::MarketFeedHub.instance).to receive_messages(running?: false, connected?: false)
-          allow(Rails.logger).to receive(:info) # Allow all info logs
+          allow(Rails.logger).to receive(:info)
           expect(Rails.logger).to receive(:info).with(
             match(/WebSocket not connected - will use REST API fallback/)
           ).at_least(:once)
@@ -233,7 +250,8 @@ RSpec.describe Entries::EntryGuard do
           described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
         end
       end
@@ -246,7 +264,8 @@ RSpec.describe Entries::EntryGuard do
             result = described_class.try_enter(
               index_cfg: index_cfg,
               pick: pick,
-              direction: :bullish
+              direction: :bullish,
+              entry_metadata: entry_metadata
             )
 
             expect(result).to be false
@@ -261,25 +280,26 @@ RSpec.describe Entries::EntryGuard do
           result = described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
 
           expect(result).to be false
         end
 
-        it 'returns false if order placement returns nil' do
-          allow(Orders.config).to receive(:place_market).and_return(nil)
-          # Override the before block stub - when response is nil, extract_order_no should return nil
+        it 'returns false if gateway place_market returns nil' do
+          allow(Orders.config.gateway).to receive(:place_market).and_return(nil)
           allow(described_class).to receive(:extract_order_no).and_return(nil)
 
           result = described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
 
           expect(result).to be false
-          expect(PositionTracker.count).to eq(0) # No tracker created
+          expect(PositionTracker.count).to eq(0)
         end
       end
 
@@ -288,7 +308,8 @@ RSpec.describe Entries::EntryGuard do
           described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bearish
+            direction: :bearish,
+            entry_metadata: entry_metadata
           )
 
           tracker = PositionTracker.last
@@ -311,16 +332,15 @@ RSpec.describe Entries::EntryGuard do
           result = described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
 
-          # NOTE: create_tracker! catches RecordInvalid and returns nil,
-          # so try_enter checks `unless tracker` and returns false.
           expect(result).to be false
         end
 
         it 'handles generic exceptions gracefully' do
-          allow(Orders.config).to receive(:place_market).and_raise(StandardError, 'Unexpected error')
+          allow(Orders.config.gateway).to receive(:place_market).and_raise(StandardError, 'Unexpected error')
 
           expect(Rails.logger).to receive(:error).with(
             match(/EntryGuard failed for NIFTY: StandardError - Unexpected error/)
@@ -329,7 +349,8 @@ RSpec.describe Entries::EntryGuard do
           result = described_class.try_enter(
             index_cfg: index_cfg,
             pick: pick,
-            direction: :bullish
+            direction: :bullish,
+            entry_metadata: entry_metadata
           )
 
           expect(result).to be false

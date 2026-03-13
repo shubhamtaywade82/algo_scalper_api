@@ -1,0 +1,92 @@
+---
+http_interactions:
+- request:
+    method: post
+    uri: https://auth.dhan.co/app/generateAccessToken?dhanClientId=<CLIENT_ID>&pin=855179&totp=807416
+    body:
+      encoding: UTF-8
+      string: ''
+    headers:
+      User-Agent:
+      - Faraday v1.10.5
+      Accept:
+      - application/json
+      Content-Length:
+      - '0'
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 200
+      message: ''
+    headers:
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Date:
+      - Fri, 13 Mar 2026 08:25:16 GMT
+      Content-Security-Policy:
+      - frame-ancestors 'none'
+      X-Frame-Options:
+      - SAMEORIGIN
+      X-Cache:
+      - Miss from cloudfront
+      Via:
+      - 1.1 af86514a971710393281eb8dad1159c2.cloudfront.net (CloudFront)
+      X-Amz-Cf-Pop:
+      - BLR50-P1
+      X-Amz-Cf-Id:
+      - SqN65l9ww5kW_PPn_QtC_DTtY9Xp0P_M0BdbyhKVS2ntElRwYFLkQg==
+    body:
+      encoding: UTF-8
+      string: '{"message":"Invalid TOTP","status":"error"}'
+  recorded_at: Fri, 13 Mar 2026 08:25:06 GMT
+- request:
+    method: post
+    uri: https://api.dhan.co/v2/charts/intraday
+    body:
+      encoding: UTF-8
+      string: '{"securityId":"12345","exchangeSegment":"NSE_FNO","instrument":"FUTIDX","interval":"5","oi":false,"fromDate":"2026-03-11","toDate":"2026-03-13","dhanClientId":"<CLIENT_ID>"}'
+    headers:
+      User-Agent:
+      - Faraday v1.10.5
+      Content-Type:
+      - application/json
+      Accept:
+      - application/json
+      Access-Token:
+      - "<ACCESS_TOKEN>"
+      Client-Id:
+      - "<CLIENT_ID>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+  response:
+    status:
+      code: 400
+      message: ''
+    headers:
+      Date:
+      - Fri, 13 Mar 2026 08:25:16 GMT
+      Content-Type:
+      - application/json
+      Transfer-Encoding:
+      - chunked
+      Connection:
+      - keep-alive
+      Vary:
+      - Access-Control-Request-Headers
+      - Access-Control-Request-Method
+      - Origin
+      Content-Security-Policy:
+      - frame-ancestors 'none'
+      X-Frame-Options:
+      - SAMEORIGIN
+    body:
+      encoding: UTF-8
+      string: '{"errorType":"Input_Exception","errorCode":"DH-905","errorMessage":"System
+        is unable to fetch data due to incorrect parameters or no data present"}'
+  recorded_at: Fri, 13 Mar 2026 08:25:06 GMT
+recorded_with: VCR 6.3.1

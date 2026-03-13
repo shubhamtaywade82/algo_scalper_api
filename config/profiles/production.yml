@@ -1,0 +1,7 @@
+# Production / live profile: same as real-money behaviour.
+# Use when: paper or live trading where you want conservative entry and full exit logic.
+# Merge order: algo.yml → this profile → DB overrides.
+# Set run_mode: production in algo.yml or ENV RUN_MODE=production (default if unset).
+
+# No overrides — base algo.yml is production-safe.
+# Optionally tighten here (e.g. lower max_trades_per_day, longer cooldown).

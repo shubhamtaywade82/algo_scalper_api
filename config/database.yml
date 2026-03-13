@@ -87,6 +87,9 @@ production:
     database: algo_scalper_api_production
     username: algo_scalper_api
     password: <%= ENV["ALGO_SCALPER_API_DATABASE_PASSWORD"] %>
+    connect_timeout: 1
+    variables:
+      statement_timeout: 5000
   cache:
     <<: *primary_production
     database: algo_scalper_api_production_cache

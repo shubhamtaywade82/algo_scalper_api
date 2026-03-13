@@ -308,7 +308,9 @@ module Live
         )
       )
 
-      Rails.logger.info("[PositionSync] Paper exit PnL calculated for #{tracker.order_no}: exit_price=₹#{exit_price}, pnl=₹#{pnl}, pnl_pct=#{pnl_pct}%")
+      if pnl_pct
+        Rails.logger.info("[PositionSync] Paper exit PnL calculated for #{tracker.order_no}: exit_price=₹#{exit_price}, pnl=₹#{pnl}, pnl_pct=#{(pnl_pct.to_f * 100).round(2)}%")
+      end
     rescue StandardError => e
       Rails.logger.error("[PositionSync] Failed to calculate PnL for paper position #{tracker.order_no}: #{e.message}")
     end

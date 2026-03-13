@@ -16,6 +16,7 @@ ENV['ACCESS_TOKEN'] ||= ENV['DHAN_ACCESS_TOKEN'] if ENV['DHAN_ACCESS_TOKEN'].pre
 # Optional gem configuration - normalize DHANHQ_ prefix to DHAN_ prefix for gem compatibility
 # The gem's configure_with_env reads directly from ENV with DHAN_ prefix
 ENV['DHAN_BASE_URL'] ||= ENV['DHANHQ_BASE_URL'] if ENV['DHANHQ_BASE_URL'].present?
+ENV['DHAN_SANDBOX'] ||= ENV['DHANHQ_SANDBOX'] if ENV['DHANHQ_SANDBOX'].present?
 ENV['DHAN_WS_VERSION'] ||= ENV['DHANHQ_WS_VERSION'] if ENV['DHANHQ_WS_VERSION'].present?
 ENV['DHAN_WS_ORDER_URL'] ||= ENV['DHANHQ_WS_ORDER_URL'] if ENV['DHANHQ_WS_ORDER_URL'].present?
 ENV['DHAN_WS_MARKET_FEED_URL'] ||= ENV['DHANHQ_WS_MARKET_FEED_URL'] if ENV['DHANHQ_WS_MARKET_FEED_URL'].present?
@@ -29,6 +30,8 @@ ENV['DHAN_LOG_LEVEL'] ||= ENV['DHANHQ_LOG_LEVEL'] if ENV['DHANHQ_LOG_LEVEL'].pre
 # Bootstrap DhanHQ from ENV only
 # The gem reads: CLIENT_ID, ACCESS_TOKEN, and all DHAN_* variables
 DhanHQ.configure_with_env
+# v2.6.x: ensure configuration exists for code paths that use config before Client is built
+DhanHQ.ensure_configuration! if DhanHQ.respond_to?(:ensure_configuration!)
 
 # The SDK maps DH-904/805 to rate-limit, but some endpoints return a plain "429" code.
 # Extend mapping at boot so these are treated as known rate-limit errors.
@@ -112,26 +115,40 @@ DhanHQ.configure do |config|
   config.on_token_expired = lambda do |_error|
     Rails.logger.warn "[SCALPER] Token expired, clearing cache..."
     Rails.cache.delete("scalper:dhan_token")
+    Dhan::TokenManager.clear_cache! if defined?(Dhan::TokenManager)
   end
 end
 
 def fetch_authority_token!
   Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
-    begin
-      response = Faraday.get(
-        "#{ENV.fetch('TRADER_API_BASE_URL')}/auth/dhan/token"
-      ) do |req|
-        req.headers["Authorization"] = "Bearer #{ENV.fetch('DHAN_TOKEN_ACCESS_TOKEN')}"
-      end
+    token_url = token_authority_url
+    authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
 
-      if response.success?
-        data = JSON.parse(response.body)
-        return data["access_token"] if data["access_token"].present?
-      end
+    if token_url.present? && authority_token.present?
+      begin
+        response = Faraday.get(token_url) do |req|
+          req.headers["Authorization"] = "Bearer #{authority_token}"
+        end
 
-      Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
-    rescue StandardError => e
-      Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
+        if response.success?
+          data = JSON.parse(response.body)
+          return data["access_token"] if data["access_token"].present?
+        end
+
+        Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
+      rescue StandardError => e
+        Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
+      end
+    elsif token_url.present?
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_missing_bearer",
+        message: "[SCALPER] Token authority token missing (DHAN_TOKEN_ACCESS_TOKEN), trying TOTP refresh..."
+      )
+    else
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_invalid_url",
+        message: "[SCALPER] Token authority URL invalid/missing (TRADER_API_BASE_URL), trying TOTP refresh..."
+      )
     end
 
     # Second fallback: TOTP auto-refresh via Dhan::TokenManager (requires DHAN_PIN + DHAN_TOTP_SECRET)
@@ -152,4 +169,24 @@ def fetch_authority_token!
 
     raise "Token authority unreachable, TOTP refresh failed, and no ENV['DHAN_ACCESS_TOKEN'] found"
   end
+end
+
+def token_authority_url
+  raw_base = ENV["TRADER_API_BASE_URL"].to_s.strip
+  return nil if raw_base.blank?
+  return nil if raw_base.include?("<") || raw_base.include?(">")
+
+  uri = URI.parse(raw_base)
+  return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
+
+  "#{raw_base.chomp('/')}/auth/dhan/token"
+rescue URI::InvalidURIError
+  nil
+end
+
+def log_token_authority_fallback_once!(key:, message:)
+  return if Rails.cache.read(key)
+
+  Rails.logger.warn(message)
+  Rails.cache.write(key, true, expires_in: 10.minutes)
 end

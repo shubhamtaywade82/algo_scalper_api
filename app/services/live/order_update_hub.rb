@@ -10,6 +10,13 @@ module Live
     def initialize
       @callbacks = Concurrent::Array.new
       @lock = Mutex.new
+      @running = false
+      @last_update_at = nil
+      @connection_state = :disconnected
+      @last_error = nil
+      @watchdog_thread = nil
+      @restarting = false
+      @started_at = nil
     end
 
     def start!
@@ -23,12 +30,23 @@ module Live
         @ws_client.on(:update) { |payload| handle_update(payload) }
         @ws_client.start
         @running = true
+        @started_at = Time.current
+        @connection_state = :connecting
+        @last_error = nil
+
+        start_watchdog!
       end
 
       Rails.logger.info('[OrderUpdateHub] DhanHQ order update feed started (live mode only)')
       true
     rescue StandardError => e
+      @last_error = e
       Rails.logger.error("[OrderUpdateHub] Failed to start DhanHQ order update feed: #{e.class} - #{e.message}")
+      begin
+        Live::FeedHealthService.instance.mark_failure!(:order_updates, error: e)
+      rescue StandardError
+        nil
+      end
       stop!
       false
     end
@@ -36,6 +54,7 @@ module Live
     def stop!
       @lock.synchronize do
         @running = false
+        @connection_state = :disconnected
         return unless @ws_client
 
         begin
@@ -50,6 +69,16 @@ module Live
 
     def running?
       @running
+    end
+
+    def health_status
+      {
+        running: running?,
+        connection_state: @connection_state,
+        started_at: @started_at,
+        last_update_at: @last_update_at,
+        last_error: @last_error
+      }
     end
 
     def on_update(&block)
@@ -84,6 +113,15 @@ module Live
 
     def handle_update(payload)
       normalized = normalize(payload)
+      @last_update_at = Time.current
+      @connection_state = :connected
+
+      begin
+        Live::FeedHealthService.instance.mark_success!(:order_updates)
+      rescue StandardError
+        nil
+      end
+
       ActiveSupport::Notifications.instrument('dhanhq.order_update', normalized)
       @callbacks.each { |callback| safe_invoke(callback, normalized) }
     end
@@ -98,6 +136,58 @@ module Live
       callback.call(payload)
     rescue StandardError => e
       Rails.logger.error("[OrderUpdateHub] Order update callback failed: #{e.class} - #{e.message}")
+    end
+
+    def start_watchdog!
+      return if @watchdog_thread&.alive?
+
+      @watchdog_thread = Thread.new do
+        Thread.current.name = 'ws-order-update-watchdog' if Thread.current.respond_to?(:name=)
+
+        loop do
+          sleep 5
+          break unless running?
+
+          check_connection_health!
+        end
+      end
+    end
+
+    def check_connection_health!
+      return unless running?
+
+      last_seen = @last_update_at
+      return unless last_seen
+
+      threshold = Live::FeedHealthService.instance.threshold_for(:order_updates)
+      stale_for = Time.current - last_seen
+      return unless stale_for > threshold
+
+      Rails.logger.warn(
+        "[OrderUpdateHub] Order updates feed stale for #{stale_for.round(1)}s (> #{threshold}s); restarting WebSocket client"
+      )
+
+      begin
+        Live::FeedHealthService.instance.mark_failure!(:order_updates, error: RuntimeError.new('order_updates feed stale'))
+      rescue StandardError
+        nil
+      end
+
+      restart!
+    rescue StandardError => e
+      Rails.logger.error("[OrderUpdateHub] Failed to restart after stale order updates feed: #{e.class} - #{e.message}")
+    end
+
+    def restart!
+      return if @restarting
+      return unless running?
+
+      @restarting = true
+      stop!
+      sleep 1
+      start!
+    ensure
+      @restarting = false
     end
   end
 end

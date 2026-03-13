@@ -36,8 +36,26 @@ module Options
         return []
       end
 
+      # 1. Use FlowAnalyzer to identify institutional buildup
+      flow_analyzer = Options::FlowAnalyzer.new(
+        index_key: @index_key,
+        expiry_date: expiry_date,
+        chain_data: { last_price: spot, oc: transform_chain_for_flow(chain) }
+      )
+      flow_results = flow_analyzer.strong_flow_strikes
+
+      # 2. Use GammaRampDetector to identify explosive potential
+      gamma_detector = Options::GammaRampDetector.new(
+        index_key: @index_key,
+        expiry_date: expiry_date,
+        chain_data: { last_price: spot, oc: transform_chain_for_flow(chain) }
+      )
+      gamma_score = gamma_detector.gamma_pressure_score(direction: direction)
+
       atm = find_atm_strike(chain, spot)
-      scored = score_chain(chain, atm, spot, direction)
+
+      # Pass flow and gamma context to scoring
+      scored = score_chain(chain, atm, spot, direction, flow_results: flow_results, gamma_score: gamma_score)
       candidates = scored.sort_by { |c| -c[:score] }.first(limit)
 
       if candidates.empty?
@@ -256,9 +274,9 @@ module Options
         # If no tick data, check batch LTP results
         if !tick || !tick.ltp&.positive?
           batch_ltp = batch_ltp_results[derivative.security_id.to_s]
-          if batch_ltp&.positive?
+          if batch_ltp&.positive? && !tick
             # Create a MarketTick with LTP if tick is missing
-            tick = tick ? tick : MarketTick.new(
+            tick ||= MarketTick.new(
               segment: exchange_seg,
               security_id: derivative.security_id,
               ltp: BigDecimal(batch_ltp.to_s),
@@ -302,7 +320,7 @@ module Options
         # Check if already in tick cache
         exchange_seg = derivative.exchange_segment || 'NSE_FNO'
         tick = Live::TickQuery.for_security(segment: exchange_seg, security_id: derivative.security_id)
-        next if tick && tick.ltp&.positive?
+        next if tick&.ltp&.positive?
 
         # Only fetch for ATM candidates (within 2 strikes)
         if atm_strike_approx
@@ -432,9 +450,16 @@ module Options
 
     # Score chain options based on multiple factors
     # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-    def score_chain(chain, atm, spot, direction)
+    def score_chain(chain, atm, spot, direction, flow_results: nil, gamma_score: 0.0)
       @direction = direction # Store for use in reason_for
-      option_type = direction == :bullish ? 'CE' : 'PE'
+      option_type_key = direction == :bullish ? 'CE' : 'PE'
+      flow_side = direction == :bullish ? 'ce' : 'pe'
+
+      # Extract flow scores for lookup
+      flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
+        h[f[:strike].to_f] = f[:score]
+      end
+
       max_distance_pct = (@config[:strike_distance_pct] || 0.02).to_f
       max_distance = spot * max_distance_pct
 
@@ -455,7 +480,7 @@ module Options
 
       candidates_with_ltp = 0
       candidates_filtered = 0
-      result = chain.select { |o| o[:type] == option_type }.filter_map do |option|
+      result = chain.select { |o| o[:type] == option_type_key }.filter_map do |option|
         # Filter criteria
         strike_distance = (option[:strike] - spot).abs
         if strike_distance > max_distance * 2
@@ -483,8 +508,11 @@ module Options
         # Only filter by spread if we have bid/ask data
         next if spread && has_api_data && (spread > max_spread_pct)
 
-        # Calculate combined score
-        score = combined_score(option, atm, spot, direction)
+        # Get flow score for this specific strike
+        flow_score = flow_scores[option[:strike].to_f] || 1.0
+
+        # Calculate combined institutional score
+        score = combined_score(option, atm, spot, direction, flow_score: flow_score, gamma_score: gamma_score)
 
         # Skip if score is 0 or negative (invalid candidate)
         next unless score&.positive?
@@ -536,39 +564,36 @@ module Options
       end
     end
 
-    # Combined scoring function (heuristic - must be backtested)
+    # Combined institutional scoring function
     # rubocop:disable Metrics/AbcSize
-    def combined_score(option, atm, spot, _direction)
+    def combined_score(option, atm, spot, _direction, flow_score: 1.0, gamma_score: 0.0)
       weights = @config[:scoring_weights] || {
-        oi: 0.4,
-        spread: 0.25,
-        iv: 0.2,
-        volume: 0.15
+        delta: 0.4,
+        liquidity: 0.3,
+        flow: 0.3
       }
 
-      # Normalize OI (log scale, max ~1M = 6.0)
-      oi_norm = Math.log10([option[:oi].to_i, 1].max) / 6.0
-      oi_norm = [oi_norm, 1.0].min
+      # 1. Delta Score (0.40–0.60 ideal)
+      delta = option[:delta]&.to_f&.abs || 0.5
+      delta_score = 1.0 - (delta - 0.5).abs
 
-      # Normalize spread (lower is better, inverted)
+      # 2. Liquidity Score (Spread < 1% preferred)
       spread = calc_spread(option[:bid], option[:ask], option[:ltp]) || 0.05
-      spread_norm = 1.0 - [spread, 1.0].min
+      liquidity_score = 1.0 - [spread * 10.0, 1.0].min # Aggressive spread penalty
 
-      # Normalize IV (prefer moderate IV around 20-25%)
-      iv = option[:iv].to_f
-      iv_norm = if iv.between?(15, 25)
-                  1.0
-                elsif iv.between?(10, 30)
-                  0.8
-                elsif iv.between?(5, 40)
-                  0.6
-                else
-                  0.3
-                end
+      # 3. Flow Score (Integrated from FlowAnalyzer)
+      # Normalize flow score around 1.0
+      normalized_flow = [flow_score / 2.0, 1.0].min
 
-      # Normalize volume (log scale)
-      vol_norm = Math.log10([option[:volume].to_i, 1].max) / 6.0
-      vol_norm = [vol_norm, 1.0].min
+      # 4. Gamma Ramp Bonus (Proximity to OI clusters)
+      # gamma_score is 0.0 to 1.0+
+
+      base_score = (delta_score * weights[:delta]) +
+                   (liquidity_score * weights[:liquidity]) +
+                   (normalized_flow * weights[:flow])
+
+      # Add gamma pressure as a multiplier for explosive potential
+      final_score = base_score * (1.0 + (gamma_score * 0.5))
 
       # ATM preference bonus
       distance_from_atm = (option[:strike] - atm).abs
@@ -580,12 +605,7 @@ module Options
                     0.0
                   end
 
-      base_score = (oi_norm * weights[:oi]) +
-                   (spread_norm * weights[:spread]) +
-                   (iv_norm * weights[:iv]) +
-                   (vol_norm * weights[:volume])
-
-      base_score + atm_bonus
+      final_score + atm_bonus
     end
     # rubocop:enable Metrics/AbcSize
 
@@ -615,6 +635,23 @@ module Options
 
       "Score:#{score.round(3)} IV:#{option[:iv]&.round(2)}% OI:#{option[:oi]} " \
         "Spread:#{spread_str} Strike:#{option[:strike]} (#{strike_type}, #{distance_pct}% from spot)"
+    end
+
+    private
+
+    def transform_chain_for_flow(chain)
+      oc = {}
+      chain.each do |option|
+        strike = option[:strike].to_s
+        oc[strike] ||= {}
+        type = option[:type].to_s.downcase # 'CE' or 'PE'
+        oc[strike][type] = {
+          'oi' => option[:oi],
+          'volume' => option[:volume],
+          'last_price' => option[:ltp]
+        }
+      end
+      oc
     end
   end
   # rubocop:enable Metrics/ClassLength

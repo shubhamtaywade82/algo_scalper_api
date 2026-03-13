@@ -6,25 +6,25 @@ module Trading
     # These are fallbacks — live values are read from algo.yml[:risk][:institutional_trailing].
     DEFAULTS = {
       nifty: {
-        early_trigger:      0.05,   # +5% → survival SL
-        early_sl_offset:    -0.12,  # SL at -12% from entry
-        breakeven_trigger:  0.157,  # +15.7% → breakeven (25% of avg max gain 62.88%)
-        activation_trigger: 0.20,   # +20% → HWM trailing active
-        trailing_distance:  0.386   # 38.6% from HWM (80% of avg retrace 48.3%)
+        early_trigger: 0.05, # +5% → survival SL
+        early_sl_offset: -0.12, # SL at -12% from entry
+        breakeven_trigger: 0.157, # +15.7% → breakeven (25% of avg max gain 62.88%)
+        activation_trigger: 0.20, # +20% → HWM trailing active
+        trailing_distance: 0.386 # 38.6% from HWM (80% of avg retrace 48.3%)
       }.freeze,
       sensex: {
-        early_trigger:      0.06,   # +6% → survival SL
-        early_sl_offset:    -0.10,  # SL at -10% from entry
-        breakeven_trigger:  0.12,   # +12% → breakeven
-        activation_trigger: 0.18,   # +18% → HWM trailing active
-        trailing_distance:  0.413   # 41.3% from HWM (80% of avg retrace 51.65%)
+        early_trigger: 0.06, # +6% → survival SL
+        early_sl_offset: -0.10, # SL at -10% from entry
+        breakeven_trigger: 0.12, # +12% → breakeven
+        activation_trigger: 0.18, # +18% → HWM trailing active
+        trailing_distance: 0.413 # 41.3% from HWM (80% of avg retrace 51.65%)
       }.freeze,
       banknifty: {
-        early_trigger:      0.06,   # +6% → survival SL
-        early_sl_offset:    -0.15,  # SL at -15% (wider — BN is volatile)
-        breakeven_trigger:  0.18,   # +18% → breakeven
-        activation_trigger: 0.25,   # +25% → HWM trailing active
-        trailing_distance:  0.35    # 35% from HWM
+        early_trigger: 0.06, # +6% → survival SL
+        early_sl_offset: -0.15, # SL at -15% (wider — BN is volatile)
+        breakeven_trigger: 0.18, # +18% → breakeven
+        activation_trigger: 0.25, # +25% → HWM trailing active
+        trailing_distance: 0.35 # 35% from HWM
       }.freeze
     }.freeze
 
@@ -80,13 +80,10 @@ module Trading
     end
 
     def symbol_key
-      if @symbol.include?('BANKNIFTY')
-        :banknifty
-      elsif @symbol.include?('SENSEX')
-        :sensex
-      else
-        :nifty
-      end
+      return :banknifty if @symbol.include?('BANKNIFTY')
+      return :sensex if @symbol.include?('SENSEX')
+
+      :nifty
     end
 
     # ── Phase 1: Survival ─────────────────────────────────────────────────────
@@ -119,11 +116,11 @@ module Trading
     def session_factor
       return 1.0 unless session_aware?
 
-      mins = Time.current.in_time_zone('Asia/Kolkata').then { |t| t.hour * 60 + t.min }
+      mins = Time.current.in_time_zone('Asia/Kolkata').then { |t| (t.hour * 60) + t.min }
       case mins
-      when (9 * 60 + 15)..(11 * 60) then 1.0
-      when (11 * 60 + 1)..(13 * 60) then 0.90
-      else                               0.75
+      when ((9 * 60) + 15)..(11 * 60) then 1.0
+      when ((11 * 60) + 1)..(13 * 60) then 0.90
+      else 0.75
       end
     end
 
@@ -133,11 +130,9 @@ module Trading
       return 1.0 unless expiry_day_tightening_enabled?
 
       today = Time.current.in_time_zone('Asia/Kolkata').to_date
-      if today.wday == 4 # Thursday
-        expiry_tightening_ratio
-      else
-        1.0
-      end
+      return expiry_tightening_ratio if today.wday == 4 # Thursday
+
+      1.0
     end
 
     def session_aware?

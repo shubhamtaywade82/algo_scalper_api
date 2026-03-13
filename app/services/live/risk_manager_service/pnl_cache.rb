@@ -262,18 +262,24 @@ module Live
       end
 
       def compute_pnl_pct(tracker, ltp, position = nil)
-        if position.respond_to?(:cost_price)
-          cost_price = position.cost_price.to_f
-          return nil if cost_price.zero?
+        entry_price = if position.respond_to?(:cost_price) && position.cost_price.to_f.positive?
+                        BigDecimal(position.cost_price.to_s)
+                      else
+                        BigDecimal((tracker.entry_price || tracker.avg_price).to_s)
+                      end
 
-          (ltp - BigDecimal(cost_price.to_s)) / BigDecimal(cost_price.to_s)
-        else
-          entry_price = tracker.entry_price || tracker.avg_price
-          return nil if entry_price.blank?
+        return nil if entry_price.nil? || entry_price.zero?
 
-          (ltp - BigDecimal(entry_price.to_s)) / BigDecimal(entry_price.to_s)
+        # Calculate decimal (e.g. 0.05 for 5%)
+        result = (BigDecimal(ltp.to_s) - entry_price) / entry_price
+
+        # Log if value is suspicious (e.g. > 500% move in one tick)
+        if result && result.abs > 5.0
+          Rails.logger.warn("[RiskManager] Suspiciously high pnl_pct for tracker=#{tracker.id}: #{(result.to_f * 100).round(2)}% (LTP: #{ltp.to_f}, Entry: #{entry_price.to_f})")
         end
-      rescue StandardError
+        result
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] compute_pnl_pct error for #{tracker.id}: #{e.message}")
         nil
       end
 

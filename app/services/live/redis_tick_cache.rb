@@ -244,7 +244,7 @@ module Live
     def active_position_security_ids
       return Set.new unless defined?(PositionTracker)
 
-      PositionTracker.active.pluck(:security_id).compact.map { |sid| sid.to_s.strip }.to_set
+      PositionTracker.active.pluck(:security_id).compact.to_set { |sid| sid.to_s.strip }
     rescue StandardError
       Set.new
     end

@@ -1,0 +1,37 @@
+# Exit-testing profile: frequent entries so you can test exit logic (SL, TP, trailing, etc.)
+# Use when: you want many positions to open so exit rules run often.
+# Merge order: algo.yml → this profile → DB overrides.
+# Set run_mode: exit_testing in algo.yml or ENV RUN_MODE=exit_testing
+
+# Shorter cooldown so same symbol can re-enter sooner
+indices:
+  - key: NIFTY
+    cooldown_sec: 45
+    trade_limits:
+      max_trades_per_day: 6
+  - key: BANKNIFTY
+    cooldown_sec: 45
+    trade_limits:
+      max_trades_per_day: 4
+  - key: SENSEX
+    cooldown_sec: 45
+    trade_limits:
+      max_trades_per_day: 6
+
+# Allow entries during lunch (chop_decay) so more entries throughout the day
+risk:
+  time_regimes:
+    chop_decay:
+      allow_entries: true
+      min_adx: 14.0
+
+# Relax edge-failure pause so a few SLs don't block entries for 60 min
+  edge_failure_detector:
+    max_consecutive_sls: 3
+    consecutive_sl_pause_minutes: 30
+    rolling_window_size: 6
+    rolling_window_threshold_rupees: -5000
+    pause_duration_minutes: 30
+
+trade_limits:
+  global_max_trades_per_day: 16

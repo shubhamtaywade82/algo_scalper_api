@@ -36,7 +36,7 @@ module Live
           ltp: safe_decimal(ltp),
           hwm: safe_decimal(hwm),
           hwm_pnl_pct: safe_decimal(hwm_pnl_pct),
-          updated_at: Time.now.to_i
+          updated_at: Time.current.to_i
         }
       end
 
@@ -233,13 +233,22 @@ module Live
           BigDecimal(0)
         end
 
-        hwm_bd = payload[:hwm] || (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
+        # HWM: prefer payload, then Redis (real-time), then DB (stale up to 30s)
+        hwm_bd = payload[:hwm]
+        if hwm_bd.nil?
+          redis_hwm = Live::RedisPnlCache.instance.fetch_pnl(tracker_id)&.dig(:hwm_pnl)
+          hwm_bd = safe_decimal(redis_hwm) if redis_hwm
+        end
+        hwm_bd ||= (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
         hwm_bd = BigDecimal(0) if hwm_bd.nil?
 
-        # Calculate hwm_pnl_pct if not provided
+        # Continuously update HWM from current PnL (don't wait for DB sync)
+        hwm_bd = [hwm_bd, pnl_bd].max if pnl_bd.positive?
+
+        # Calculate hwm_pnl_pct if not provided (Store as decimal, e.g. 0.05 for 5%)
         hwm_pnl_pct_bd = payload[:hwm_pnl_pct]
         if hwm_pnl_pct_bd.nil? && entry_bd.positive? && qty_bd.positive? && hwm_bd.positive?
-          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd)) * 100
+          hwm_pnl_pct_bd = (hwm_bd / (entry_bd * qty_bd))
         end
 
         # Persist to Redis (use floats for storage to remain compatible)
@@ -249,10 +258,20 @@ module Live
           pnl_pct: pnl_pct_bd.to_f,
           ltp: ltp_bd.to_f,
           hwm: hwm_bd.to_f,
-          hwm_pnl_pct: hwm_pnl_pct_bd&.to_f,
-          timestamp: Time.zone.now,
+          hwm_pnl_pct: hwm_pnl_pct_bd.to_f,
+          timestamp: Time.current,
           tracker: tracker
         )
+
+        # Publish event for high-frequency risk evaluation
+        Core::EventBus.instance.publish(:ltp, {
+          tracker_id: tracker_id,
+          ltp: ltp_bd.to_f,
+          pnl: pnl_bd.to_f,
+          pnl_pct: pnl_pct_bd.to_f,
+          hwm: hwm_bd.to_f,
+          timestamp: Time.current
+        })
 
         broadcast_pnl_update(tracker_id, ltp_bd, pnl_bd, hwm_bd, entry_bd)
 
@@ -321,33 +340,34 @@ module Live
 
     # Check for PnL milestones and send notifications
     # @param tracker [PositionTracker] Position tracker
-    # @param pnl_pct [BigDecimal] PnL percentage
+    # @param pnl_pct [BigDecimal] PnL as decimal (e.g. 0.05 for 5%)
     # @param pnl [BigDecimal] PnL value
     def check_and_notify_pnl_milestones(tracker, pnl_pct, pnl)
       return unless telegram_milestones_enabled?
 
       config = AlgoConfig.fetch[:telegram] || {}
       milestones = config[:pnl_milestones] || [10, 20, 30, 50, 100]
-      pnl_pct_value = pnl_pct.to_f
+      pnl_pct_decimal = pnl_pct.to_f
+      pnl_pct_as_percent = pnl_pct_decimal * 100.0
 
       # Get notified milestones from tracker meta
       meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
       notified_milestones = meta['telegram_notified_milestones'] || []
 
       milestones.each do |milestone_pct|
-        # Check if milestone reached (positive or negative)
-        milestone_reached = if pnl_pct_value.positive?
-                              pnl_pct_value >= milestone_pct && notified_milestones.exclude?(milestone_pct)
-                            elsif pnl_pct_value.negative?
-                              pnl_pct_value <= -milestone_pct && notified_milestones.exclude?(-milestone_pct)
+        # Check if milestone reached (positive or negative); compare percentage to percentage
+        milestone_reached = if pnl_pct_as_percent.positive?
+                              pnl_pct_as_percent >= milestone_pct && notified_milestones.exclude?(milestone_pct)
+                            elsif pnl_pct_as_percent.negative?
+                              pnl_pct_as_percent <= -milestone_pct && notified_milestones.exclude?(-milestone_pct)
                             else
                               false
                             end
 
         next unless milestone_reached
 
-        # Send notification
-        milestone_text = if pnl_pct_value.positive?
+        # Send notification (notifier expects pnl_pct in percentage, e.g. 5.0 for 5%)
+        milestone_text = if pnl_pct_as_percent.positive?
                            "#{milestone_pct}% profit"
                          else
                            "#{milestone_pct}% loss"
@@ -358,15 +378,15 @@ module Live
             tracker,
             milestone: milestone_text,
             pnl: pnl,
-            pnl_pct: pnl_pct_value
+            pnl_pct: pnl_pct_as_percent
           )
 
           # Mark milestone as notified
-          milestone_key = pnl_pct_value.positive? ? milestone_pct : -milestone_pct
+          milestone_key = pnl_pct_as_percent.positive? ? milestone_pct : -milestone_pct
           notified_milestones << milestone_key
           tracker.update!(meta: meta.merge('telegram_notified_milestones' => notified_milestones))
         rescue StandardError => e
-          @logger.error("[PnlUpdater] Failed to notify milestone for #{tracker_id}: #{e.class} - #{e.message}")
+          @logger.error("[PnlUpdater] Failed to notify milestone for #{tracker.id}: #{e.class} - #{e.message}")
         end
       end
     rescue StandardError => e
@@ -395,9 +415,9 @@ module Live
 
     # Broadcast aggregate dashboard stats every 5 seconds to the "dashboard" channel.
     def maybe_broadcast_heartbeat
-      return if @last_heartbeat_at && (Time.now.to_f - @last_heartbeat_at) < 5.0
+      return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 5.0
 
-      @last_heartbeat_at = Time.now.to_f
+      @last_heartbeat_at = Time.current.to_f
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")

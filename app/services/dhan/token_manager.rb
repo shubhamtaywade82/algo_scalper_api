@@ -4,6 +4,7 @@ module Dhan
   class TokenManager
     BUFFER_MINUTES = 30
     REQUIRED_ENV_KEYS = %w[DHAN_PIN DHAN_TOTP_SECRET].freeze
+    TOTP_COOLDOWN_HOURS = 12
 
     class << self
       def current_token
@@ -16,19 +17,28 @@ module Dhan
         if token_data.nil? || expiring?(token_data)
           refreshed_token = refresh!
           return refreshed_token if refreshed_token.present?
-          token_data = cached_token
+
+          # If refresh failed and we have no token at all, or the one we have is expired/invalid, return nil
+          return nil if token_data.nil? || token_data[:expiry_time].nil? || token_data[:expiry_time] <= Time.current
         end
 
         token_data&.dig(:token)
       end
 
-      def refresh!
+      def refresh!(force: false)
         mutex.synchronize do
           token_data = cached_token
-          return token_data[:token] if token_data && !expiring?(token_data)
+          return token_data[:token] if token_data && !expiring?(token_data) && !force
           return nil unless credentials_available?
 
-          Rails.logger.info('[DHAN] Regenerating token via TOTP...')
+          env_token = static_env_token
+          if totp_cooldown_active?
+            Rails.logger.debug("[DHAN] TOTP cooldown until #{@totp_refresh_cooldown_until&.strftime('%H:%M %Z')}; using ENV token")
+            cache_token(env_token, @totp_refresh_cooldown_until) if env_token.present?
+            return env_token
+          end
+
+          Rails.logger.info("[DHAN] Regenerating token via TOTP... (force=#{force})")
 
           response = DhanHQ::Auth.generate_access_token(
             dhan_client_id: creds[:client_id],
@@ -36,8 +46,34 @@ module Dhan
             totp: generate_totp
           )
 
-          access_token = response['accessToken']
-          expiry_time = Time.parse(response['expiryTime'])
+          unless response.is_a?(Hash)
+            Rails.logger.error("[DHAN] Token refresh failed: response is not a Hash (#{response.inspect})")
+            return nil
+          end
+
+          if response['status'] == 'error'
+            msg = response['message'] || ''
+            if too_many_attempts?(msg) && env_token.present?
+              @totp_refresh_cooldown_until = TOTP_COOLDOWN_HOURS.hours.from_now
+              cache_token(env_token, @totp_refresh_cooldown_until)
+              Rails.logger.warn(
+                "[DHAN] TOTP rate-limited (Too many attempts); using ENV token for next #{TOTP_COOLDOWN_HOURS} hours"
+              )
+              return env_token
+            end
+            Rails.logger.error("[DHAN] Token refresh failed: #{msg.presence || response.inspect}")
+            return nil
+          end
+
+          access_token = response['access_token'] || response['accessToken']
+          expiry_time_raw = response['expires_at'] || response['expiryTime']
+
+          if access_token.blank? || expiry_time_raw.blank?
+            Rails.logger.error("[DHAN] Token refresh failed: missing access_token or expires_at in response (#{response.inspect})")
+            return nil
+          end
+
+          expiry_time = Time.parse(expiry_time_raw)
 
           persist_token(access_token, expiry_time)
           cache_token(access_token, expiry_time)
@@ -49,6 +85,15 @@ module Dhan
       rescue StandardError => e
         Rails.logger.error("[DHAN] Token refresh failed: #{e.class} - #{e.message}")
         nil
+      end
+
+      def clear_cache!
+        mutex.synchronize do
+          @cached_token = nil
+          @totp_refresh_cooldown_until = nil
+          DhanAccessToken.delete_all
+        end
+        true
       end
 
       private
@@ -89,7 +134,16 @@ module Dhan
       end
 
       def generate_totp
-        DhanHQ::Auth.generate_totp(creds[:totp_secret])
+        secret = creds[:totp_secret]
+        if secret.blank?
+          Rails.logger.error("[DHAN] TOTP Secret is blank")
+          return nil
+        end
+        unless secret.is_a?(String)
+          Rails.logger.error("[DHAN] TOTP Secret is not a String: #{secret.class}")
+          return nil
+        end
+        DhanHQ::Auth.generate_totp(secret)
       end
 
       def creds
@@ -140,11 +194,34 @@ module Dhan
       end
 
       def restart_websocket!
-        Dhan::Ws::FeedListener.restart! if defined?(Dhan::Ws::FeedListener)
+        return unless defined?(Live::MarketFeedHub)
+
+        hub = Live::MarketFeedHub.instance
+        return unless hub.running?
+
+        Rails.logger.info("[DHAN] Restarting MarketFeedHub after token refresh")
+        hub.stop!
+        hub.start!
+      rescue StandardError => e
+        Rails.logger.error("[DHAN] Failed to restart MarketFeedHub: #{e.class} - #{e.message}")
       end
 
       def mutex
         @mutex ||= Mutex.new
+      end
+
+      def static_env_token
+        ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      end
+
+      def too_many_attempts?(message)
+        message.to_s.include?('Too many attempts')
+      end
+
+      def totp_cooldown_active?
+        return false unless @totp_refresh_cooldown_until
+
+        Time.current < @totp_refresh_cooldown_until
       end
     end
   end

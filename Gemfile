@@ -28,6 +28,8 @@ gem 'ruby-technical-analysis'
 gem 'sidekiq'
 gem 'technical-analysis'
 
+gem 'whenever', require: false
+
 # Bulk upserts for instruments/derivatives importer
 gem 'activerecord-import'
 
@@ -44,7 +46,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ'
+gem 'DhanHQ', '2.6.2'
 
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 0.19'
@@ -77,6 +79,10 @@ group :development, :test do
   gem 'rubocop-rspec', '~> 3.8', require: false
   gem 'rubocop-rspec_rails'
 
+  # Static analysis / code health
+  gem 'rubycritic', require: false
+  gem 'rails_best_practices', require: false
+
   # Load .env files in development/test before initializers
   gem 'dotenv-rails'
 
@@ -92,4 +98,6 @@ group :development, :test do
 
   # Annotate models, routes, etc.
   gem 'annotate'
+
+  gem "debride"
 end

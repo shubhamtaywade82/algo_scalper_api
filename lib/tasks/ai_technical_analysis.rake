@@ -223,11 +223,10 @@ namespace :ai do
       # Send typing indicator to Telegram if enabled
       TelegramNotifier.send_chat_action(action: 'typing') if telegram_enabled
 
-      # Accumulate chunks for Telegram (filtered - no verbose logs)
-      telegram_buffer = +'' # Create mutable string (frozen_string_literal is enabled)
-      # Escape HTML special characters in query
+      # Accumulate analysis-only chunks for Telegram (filtered - no verbose logs)
+      telegram_analysis_buffer = +'' # Create mutable string (frozen_string_literal is enabled)
+      # Escape HTML special characters in query only (keep header tags intact)
       escaped_query = query.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
-      telegram_buffer << "📊 <b>Technical Analysis: #{escaped_query}</b>\n\n"
 
       result = Services::Ai::TechnicalAnalysisAgent.analyze(query: query, stream: true) do |chunk|
         if chunk
@@ -243,7 +242,7 @@ namespace :ai do
             end
 
             # Only accumulate actual analysis content (not verbose logs)
-            telegram_buffer << chunk
+            telegram_analysis_buffer << chunk
           end
         end
       end
@@ -254,9 +253,9 @@ namespace :ai do
       puts "Generated at: #{result[:generated_at]}" if result
 
       # Send complete message to Telegram (cleaned)
-      if telegram_enabled && telegram_buffer.present?
+      if telegram_enabled && telegram_analysis_buffer.present?
         # Clean up the buffer - remove any remaining verbose logs
-        cleaned_buffer = telegram_buffer.dup
+        cleaned_buffer = telegram_analysis_buffer.dup
         # Remove all verbose log patterns (comprehensive cleanup)
         cleaned_buffer.gsub!(/🔍 \[Intent\][^\n]*\n?/, '')
         cleaned_buffer.gsub!(/📊 \[Symbol\][^\n]*\n?/, '')
@@ -275,21 +274,24 @@ namespace :ai do
         cleaned_buffer.gsub!(/\n{3,}/, "\n\n") # Remove excessive newlines
         cleaned_buffer.strip!
 
-        # Only send if there's actual content (not just headers)
-        if cleaned_buffer.strip.length > 50 # Minimum meaningful content
-          cleaned_buffer << "\n\n"
-          cleaned_buffer << "⏰ Generated at: #{result[:generated_at]}" if result&.dig(:generated_at)
-          cleaned_buffer << "\n🤖 Provider: #{result[:provider]}" if result&.dig(:provider)
+        # Only send if there's actual analysis content
+        if cleaned_buffer.strip.length > 20
+          telegram_message = +"📊 <b>Technical Analysis: \"#{escaped_query}\"</b>\n\n"
+          # Escape only analysis text (not HTML tags)
+          escaped_analysis = cleaned_buffer.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+          telegram_message << escaped_analysis
+          telegram_message << "\n\n⏰ Generated at: #{result[:generated_at]}" if result&.dig(:generated_at)
+          telegram_message << "\n🤖 Provider: #{result[:provider]}" if result&.dig(:provider)
 
           begin
-            # Escape HTML special characters in the analysis content
-            escaped_buffer = cleaned_buffer.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
-            TelegramNotifier.send_message(escaped_buffer, parse_mode: 'HTML')
+            TelegramNotifier.send_message(telegram_message, parse_mode: 'HTML')
             puts "\n✅ Analysis sent to Telegram"
           rescue StandardError => e
             Rails.logger.error("[AI Technical Analysis] Failed to send to Telegram: #{e.class} - #{e.message}")
             puts "\n⚠️  Failed to send to Telegram: #{e.message}"
           end
+        else
+          puts "\n⚠️  Skipped Telegram send: no meaningful analysis content generated"
         end
       end
     else

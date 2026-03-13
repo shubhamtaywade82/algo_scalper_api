@@ -67,8 +67,6 @@ module Options
           strike_type == :ATM ? 0.50 : 0.42
         when 'BANKNIFTY'
           strike_type == :ATM ? 0.45 : 0.38
-        else
-          nil
         end
       end
 
@@ -92,8 +90,6 @@ module Options
             scale_ready: 4.0,     # Lowered significantly
             full_deploy: 8.0      # Lowered significantly
           }[permission]
-        else
-          nil
         end
       end
 

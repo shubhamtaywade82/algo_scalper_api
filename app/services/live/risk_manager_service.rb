@@ -36,7 +36,13 @@ module Live
         {}
       end
       @paper_mode = @algo_config.dig(:paper_trading, :enabled) == true
-      @orders_gateway = @paper_mode ? Orders::GatewayPaper.new : Orders::GatewayLive.new
+      @orders_gateway = Orders.config ? Orders.config.gateway : Orders::GatewayFactory.build(paper_mode: @paper_mode)
+      @active_cache = begin
+        Positions::ActiveCache.instance
+      rescue StandardError => e
+        Rails.logger.error("[RiskManagerService] failed to initialize active_cache: #{e.class} - #{e.message}")
+        nil
+      end
       @mutex = Mutex.new
       @running = false
       @thread = nil
@@ -53,6 +59,11 @@ module Live
 
       # Start watchdog only when service is explicitly started
       start_watchdog unless @watchdog_thread&.alive?
+
+      # Subscribe to high-frequency LTP/PnL events for sub-second risk evaluation
+      @event_subscription = Core::EventBus.instance.subscribe(:ltp) do |event|
+        handle_pnl_event(event)
+      end
 
       @thread = Thread.new do
         Thread.current.name = 'risk-manager'
@@ -79,10 +90,80 @@ module Live
       @thread = nil
       @watchdog_thread&.kill
       @watchdog_thread = nil
+
+      if @event_subscription
+        Core::EventBus.instance.unsubscribe(@event_subscription)
+        @event_subscription = nil
+      end
+    end
+
+    private
+
+    # High-frequency risk evaluation (Event-driven)
+    # Reacts immediately to price changes without waiting for LOOP_INTERVAL
+    def handle_pnl_event(event)
+      return unless @running
+
+      tracker_id = event[:tracker_id]
+      return unless tracker_id
+
+      @last_realtime_tick_at = Time.current
+
+      # Use ActiveCache to avoid DB load in the high-frequency path
+      tracker = PositionTracker.find_by(id: tracker_id)
+      return unless tracker&.active?
+
+      # Evaluate immediate exits (Hard SL, TP, Trailing)
+      # We use UnifiedExitChecker for sub-second logic
+      exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
+
+      if exit_decision && exit_decision[:exit]
+        reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
+        Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
+
+        # Execute exit immediately
+        engine = @exit_engine || self
+        dispatch_exit(engine, tracker, reason)
+        tracker.reload
+        return unless tracker.active?
+      end
+
+      return unless realtime_tick_first_enabled?
+      return unless should_run_realtime_enforcement?(tracker_id)
+
+      run_enforcement_for_tracker(tracker, @exit_engine || self)
+    rescue StandardError => e
+      Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.message}")
+    end
+
+    def should_run_realtime_enforcement?(tracker_id)
+      gap = realtime_min_enforcement_gap_seconds
+      return true if gap <= 0
+
+      @realtime_eval_mutex ||= Mutex.new
+      @last_realtime_eval_at ||= {}
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      @realtime_eval_mutex.synchronize do
+        last = @last_realtime_eval_at[tracker_id]
+        if last.nil? || (now - last) >= gap
+          @last_realtime_eval_at[tracker_id] = now
+          true
+        else
+          false
+        end
+      end
     end
 
     def running?
       @running
+    end
+
+    def active_cache
+      @active_cache ||= Positions::ActiveCache.instance
+    rescue StandardError => e
+      Rails.logger.error("[RiskManagerService] active_cache unavailable: #{e.class} - #{e.message}")
+      nil
     end
 
     # Lightweight risk evaluation helper (unchanged semantics)

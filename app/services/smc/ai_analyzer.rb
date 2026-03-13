@@ -242,7 +242,7 @@ module Smc
         summary: {
           high: candles.map(&:high).max,
           low: candles.map(&:low).min,
-          avg_volume: (candles.map(&:volume).sum.to_f / candles.size).round(2)
+          avg_volume: (candles.sum(&:volume).to_f / candles.size).round(2)
         }
       }
     end

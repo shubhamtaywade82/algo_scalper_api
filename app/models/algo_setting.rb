@@ -7,7 +7,7 @@ class AlgoSetting
   SCHEMA = {
     # General / System
     'paper_trading_enabled' => { type: :boolean, default: true, category: 'General', description: 'Enable Paper Trading engine. Replaces real orders with simulated equivalents.' },
-    'paper_balance' => { type: :integer, default: 100000, category: 'General', description: 'Starting balance for paper trading accounts.' },
+    'paper_balance' => { type: :integer, default: 100_000, category: 'General', description: 'Starting balance for paper trading accounts.' },
 
     # Time Restrictions (Loss Avoidance)
     'trading_time_restrictions_enabled' => { type: :boolean, default: false, category: 'Time Rules', description: 'Enable global blackout periods where no entries are taken.' },
@@ -25,24 +25,11 @@ class AlgoSetting
     'adx_threshold_sensex' => { type: :integer, default: 8, category: 'ADX Trend Filters', description: 'Minimum 1m ADX strength required to take SENSEX breakout entries.' },
 
     # Risk Global
-    'risk_global_max_loss' => { type: :integer, default: -20000, category: 'Risk Exits', description: 'Global hard stop loss limit for the entire day (rupees).' },
-    'risk_global_daily_target' => { type: :integer, default: 50000, category: 'Risk Exits', description: 'Global daily profit target to cease trading (rupees).' }
+    'risk_global_max_loss' => { type: :integer, default: -20_000, category: 'Risk Exits', description: 'Global hard stop loss limit for the entire day (rupees).' },
+    'risk_global_daily_target' => { type: :integer, default: 50_000, category: 'Risk Exits', description: 'Global daily profit target to cease trading (rupees).' }
   }.freeze
 
   class << self
-    def all_settings
-      SCHEMA.map do |key, meta|
-        {
-          key: key,
-          value: fetch(key),
-          type: meta[:type],
-          default: meta[:default],
-          category: meta[:category],
-          description: meta[:description]
-        }
-      end
-    end
-
     def fetch(key)
       meta = SCHEMA[key]
       return nil unless meta

@@ -20,6 +20,8 @@ module Live
       @started_at = nil
       @subscribed_keys = Concurrent::Set.new # Track subscribed segment:security_id pairs
       @watchlist_keys = Concurrent::Set.new
+      @watchdog_thread = nil
+      @restarting = false
     end
 
     def start!
@@ -55,6 +57,8 @@ module Live
         @last_error = nil
 
         # NOTE: Connection state will be updated to :connected when first tick is received
+
+        start_watchdog!
       end
 
       # Subscribe to watchlist OUTSIDE the lock to avoid deadlock
@@ -400,6 +404,26 @@ module Live
       # TickCache.put() handles merging of both types
       Live::TickCache.put(tick) if tick[:ltp].to_f.positive? || tick[:prev_close].to_f.positive?
 
+      # Integrated Institutional Market Data Cache
+      if tick[:ltp].to_f.positive?
+        # Resolve symbol if possible, or use security_id
+        symbol = tick[:symbol] || tick[:security_id]
+
+        # Check if it's an index or an option
+        is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
+        MarketData::MarketCache.update_ltp(symbol, tick[:ltp], is_index: is_index)
+
+        # If it's an option (OI/Volume present), update option data
+        if tick[:oi].present? || tick[:volume].present?
+          MarketData::MarketCache.update_option_data(symbol, {
+            oi: tick[:oi],
+            volume: tick[:volume],
+            ltp: tick[:ltp],
+            timestamp: Time.current
+          })
+        end
+      end
+
       # # puts Live::TickQuery.for_security(segment: tick[:segment], security_id: tick[:security_id])&.ltp
       # # Store in Redis for PnL tracking (secondary)
       # # Only store if we have valid segment, security_id, and LTP
@@ -467,6 +491,59 @@ module Live
       callback.call(payload)
     rescue StandardError => _e
       # Rails.logger.error("DhanHQ tick callback failed: #{_e.class} - #{_e.message}")
+    end
+
+    def start_watchdog!
+      return if @watchdog_thread&.alive?
+
+      @watchdog_thread = Thread.new do
+        Thread.current.name = 'ws-market-feed-watchdog' if Thread.current.respond_to?(:name=)
+
+        loop do
+          sleep 5
+          break unless running?
+
+          check_connection_health!
+        end
+      end
+    end
+
+    def check_connection_health!
+      return unless running?
+
+      last_seen = @last_tick_at
+      return unless last_seen
+
+      threshold = Live::FeedHealthService.instance.threshold_for(:ticks)
+      stale_for = Time.current - last_seen
+      return unless stale_for > threshold
+
+      Rails.logger.warn(
+        "[MarketFeedHub] Tick feed stale for #{stale_for.round(1)}s (> #{threshold}s); restarting WebSocket client"
+      )
+
+      begin
+        Live::FeedHealthService.instance.mark_failure!(:ticks, error: RuntimeError.new('ticks feed stale'))
+      rescue StandardError
+        nil
+      end
+
+      restart!
+    rescue StandardError => e
+      @last_error = e
+      Rails.logger.error("[MarketFeedHub] Failed to restart after stale tick feed: #{e.class} - #{e.message}")
+    end
+
+    def restart!
+      return if @restarting
+      return unless running?
+
+      @restarting = true
+      stop!
+      sleep 1
+      start!
+    ensure
+      @restarting = false
     end
 
     def subscribe_watchlist

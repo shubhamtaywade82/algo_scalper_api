@@ -77,7 +77,7 @@ RSpec.describe Instrument do
     allow(ws_hub).to receive_messages(running?: true, subscribe: true)
     allow(redis_cache).to receive(:clear_tick)
     allow(redis_cache).to receive(:fetch_tick).and_return(nil)
-    allow(Orders.config).to receive(:place_market).and_return(order_response)
+    allow(Orders.config.gateway).to receive(:place_market).and_return(order_response)
   end
 
   describe '#buy_market!' do
@@ -87,7 +87,7 @@ RSpec.describe Instrument do
 
     context 'when quantity is provided' do
       it 'uses provided quantity and places order' do
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           side: 'buy',
           segment: instrument.exchange_segment,
           security_id: instrument.security_id.to_s,
@@ -117,7 +117,7 @@ RSpec.describe Instrument do
 
     context 'when quantity is nil' do
       it 'defaults to quantity 1' do
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           hash_including(qty: 1)
         ).and_return(order_response)
 
@@ -158,7 +158,7 @@ RSpec.describe Instrument do
     context 'when order placement fails' do
       it 'returns nil when order response has no order_id' do
         bad_response = double('Order', order_id: nil)
-        allow(Orders.config).to receive(:place_market).and_return(bad_response)
+        allow(Orders.config.gateway).to receive(:place_market).and_return(bad_response)
 
         result = instrument.buy_market!(qty: 1)
         expect(result).to be_nil
@@ -166,7 +166,7 @@ RSpec.describe Instrument do
 
       it 'returns nil when order response does not respond to order_id' do
         bad_response = double('BadResponse')
-        allow(Orders.config).to receive(:place_market).and_return(bad_response)
+        allow(Orders.config.gateway).to receive(:place_market).and_return(bad_response)
 
         result = instrument.buy_market!(qty: 1)
         expect(result).to be_nil
@@ -177,7 +177,7 @@ RSpec.describe Instrument do
       it 'uses provided product_type' do
         allow(instrument).to receive(:after_order_track!).and_return(instance_double(PositionTracker))
 
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           hash_including(meta: hash_including(product_type: 'CNC'))
         )
 
@@ -206,7 +206,7 @@ RSpec.describe Instrument do
 
     context 'when quantity is provided' do
       it 'uses provided quantity' do
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           side: 'sell',
           segment: instrument.exchange_segment,
           security_id: instrument.security_id.to_s,
@@ -232,7 +232,7 @@ RSpec.describe Instrument do
           status: 'active'
         )
 
-        expect(Orders.config).to receive(:place_market).with(
+        expect(Orders.config.gateway).to receive(:place_market).with(
           side: 'sell',
           segment: instrument.exchange_segment,
           security_id: instrument.security_id.to_s,
@@ -248,7 +248,7 @@ RSpec.describe Instrument do
       it 'returns nil' do
         PositionTracker.where(instrument_id: instrument.id, security_id: instrument.security_id.to_s).delete_all
 
-        expect(Orders.config).not_to receive(:place_market)
+        expect(Orders.config.gateway).not_to receive(:place_market)
 
         result = instrument.sell_market!
         expect(result).to be_nil
@@ -277,7 +277,7 @@ RSpec.describe Instrument do
       it 'returns nil when provided quantity is zero' do
         # Clear existing trackers
         PositionTracker.where(instrument_id: instrument.id, security_id: instrument.security_id.to_s).delete_all
-        expect(Orders.config).not_to receive(:place_market)
+        expect(Orders.config.gateway).not_to receive(:place_market)
 
         result = instrument.sell_market!(qty: 0)
         expect(result).to be_nil

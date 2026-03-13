@@ -20,15 +20,15 @@ module Positions
       @cfg = nil
     end
 
-    # Returns allowed drawdown percent (e.g. 2.34 => 2.34%)
-    # profit_pct: current profit percent (positive, e.g. 5.0 for +5%)
+    # Returns allowed drawdown as DECIMAL (e.g. 0.0234 => 2.34%)
+    # profit_pct: current profit as DECIMAL (positive, e.g. 0.05 for +5%)
     # index_key: "NIFTY", "BANKNIFTY", "SENSEX" etc
     # Returns nil if profit_pct < activation threshold
     def allowed_upward_drawdown_pct(profit_pct, index_key: nil)
-      profit_start = cfg[:profit_min].to_f.nonzero? || 3.0
-      profit_end   = cfg[:profit_max].to_f.nonzero? || 30.0
-      dd_start     = cfg[:dd_start_pct].to_f.nonzero? || 15.0
-      dd_end       = cfg[:dd_end_pct].to_f.nonzero? || 1.0
+      profit_start = cfg[:profit_min].to_f.nonzero? || 0.03  # 3% as DECIMAL
+      profit_end   = cfg[:profit_max].to_f.nonzero? || 0.30  # 30% as DECIMAL
+      dd_start     = cfg[:dd_start_pct].to_f.nonzero? || 0.15  # 15% as DECIMAL
+      dd_end       = cfg[:dd_end_pct].to_f.nonzero? || 0.01   # 1% as DECIMAL
       k            = cfg[:exponential_k].to_f.nonzero? || 3.0
 
       return nil if profit_pct.to_f < profit_start
@@ -51,10 +51,10 @@ module Positions
     end
 
     # Dynamic reverse SL when PnL < 0 (below entry)
-    # pnl_pct: negative value (e.g. -12.5 for -12.5% loss)
+    # pnl_pct: negative DECIMAL value (e.g. -0.125 for -12.5% loss)
     # seconds_below_entry: time spent below entry price
     # atr_ratio: current ATR ratio (for volatility penalty)
-    # Returns allowed loss percent (e.g. 12.5 means -12.5% allowed)
+    # Returns allowed loss as DECIMAL (e.g. 0.125 means -12.5% allowed)
     def reverse_dynamic_sl_pct(pnl_pct, seconds_below_entry: 0, atr_ratio: 1.0)
       return nil if pnl_pct >= 0
 
@@ -69,9 +69,9 @@ module Positions
 
       return nil unless cfg2[:enabled]
 
-      max_loss = cfg2[:max_loss_pct].to_f.nonzero? || 20.0
-      min_loss = cfg2[:min_loss_pct].to_f.nonzero? || 5.0
-      span = cfg2[:loss_span_pct].to_f.nonzero? || 30.0
+      max_loss = cfg2[:max_loss_pct].to_f.nonzero? || 0.20  # 20% as DECIMAL
+      min_loss = cfg2[:min_loss_pct].to_f.nonzero? || 0.05  # 5% as DECIMAL
+      span = cfg2[:loss_span_pct].to_f.nonzero? || 0.30     # 30% as DECIMAL
 
       loss_pct = [-pnl_pct.to_f, span].min
       ratio = (loss_pct / span.to_f)
@@ -99,10 +99,11 @@ module Positions
       new_sl.clamp(min_loss, max_loss).round(4)
     end
 
-    # Helper: Convert entry price and loss percent to SL price
-    # For options, this is straightforward: entry_price * (1 - loss_pct/100)
+    # Helper: Convert entry price and loss DECIMAL to SL price
+    # For options, this is straightforward: entry_price * (1 - loss_pct)
+    # loss_pct is DECIMAL (e.g., 0.12 for 12% stop)
     def sl_price_from_entry(entry_price, loss_pct)
-      entry_price.to_f * (1.0 - (loss_pct.to_f.abs / 100.0))
+      entry_price.to_f * (1.0 - loss_pct.to_f.abs)
     end
   end
 end

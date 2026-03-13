@@ -8,10 +8,10 @@ module Capital
     # Capital-aware deployment policy based on account size
     # Bands are inclusive upper-bounds. Smaller accounts get higher allocation % but lower risk %
     CAPITAL_BANDS = [
-      { upto: 75_000, alloc_pct: 0.30, risk_per_trade_pct: 0.050, daily_max_loss_pct: 0.050 }, # small a/c (≈ ₹50k)
-      { upto: 150_000, alloc_pct: 0.25, risk_per_trade_pct: 0.035, daily_max_loss_pct: 0.060 }, # ≈ ₹1L
-      { upto: 300_000, alloc_pct: 0.20, risk_per_trade_pct: 0.030, daily_max_loss_pct: 0.060 }, # ≈ ₹2–3L
-      { upto: Float::INFINITY, alloc_pct: 0.20, risk_per_trade_pct: 0.025, daily_max_loss_pct: 0.050 }
+      { upto: 75_000, alloc_pct: 0.40, risk_per_trade_pct: 0.060, daily_max_loss_pct: 0.060 }, # small a/c (≈ ₹50k)
+      { upto: 150_000, alloc_pct: 0.35, risk_per_trade_pct: 0.050, daily_max_loss_pct: 0.070 }, # ≈ ₹1L
+      { upto: 300_000, alloc_pct: 0.30, risk_per_trade_pct: 0.040, daily_max_loss_pct: 0.070 }, # ≈ ₹2–3L
+      { upto: Float::INFINITY, alloc_pct: 0.25, risk_per_trade_pct: 0.035, daily_max_loss_pct: 0.060 }
     ].freeze
 
     class << self

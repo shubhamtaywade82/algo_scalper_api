@@ -2,33 +2,15 @@
 
 require 'rails_helper'
 
-RSpec.describe Signal::Engine, vcr: { match_requests_on: [:method, :uri] } do
+RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
   include ActiveSupport::Testing::TimeHelpers
 
-  around do |example|
-    travel_to(Time.zone.parse('2025-11-01 11:47:51')) { example.run }
-  end
-
-  let(:index_cfg) do
-    {
-      key: 'NIFTY',
-      segment: 'IDX_I',
-      sid: '13',
-      capital_alloc_pct: 0.30,
-      max_same_side: 2,
-      cooldown_sec: 180
-    }
-  end
-
-  let(:nifty_instrument) { create(:instrument, :nifty_index) }
-
   before do
-    # Mock IndexInstrumentCache to return our test instrument
-    allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_cfg).and_return(nifty_instrument)
+    travel_to(Time.zone.parse('2025-11-01 11:47:51'))
+allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_cfg).and_return(nifty_instrument)
 
     # Mock Market::Calendar to bypass weekend/market timing failures
-    allow(Market::Calendar).to receive(:trading_day_today?).and_return(true)
-    allow(Market::Calendar).to receive(:today_or_last_trading_day).and_return(Date.parse('2025-10-31'))
+    allow(Market::Calendar).to receive_messages(trading_day_today?: true, today_or_last_trading_day: Date.parse('2025-10-31'))
 
     # Mock AlgoConfig
     allow(AlgoConfig).to receive(:fetch).and_return({
@@ -78,6 +60,19 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: [:method, :uri] } do
     allow(dummy_detector).to receive(:detect).and_return(dummy_regime_result)
     allow(MarketRegimeDetector).to receive(:new).with(any_args).and_return(dummy_detector)
   end
+
+  let(:index_cfg) do
+    {
+      key: 'NIFTY',
+      segment: 'IDX_I',
+      sid: '13',
+      capital_alloc_pct: 0.30,
+      max_same_side: 2,
+      cooldown_sec: 180
+    }
+  end
+
+  let(:nifty_instrument) { create(:instrument, :nifty_index) }
 
   after do
     Signal::StateTracker.reset(index_cfg[:key])

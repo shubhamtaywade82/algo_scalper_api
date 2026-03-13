@@ -105,14 +105,11 @@ module Trading
         # ltf might be mtf fallback, so use internal_structure safely
         ltf_struct = ltf.respond_to?(:internal_structure) ? ltf.internal_structure.to_h : mtf_struct
 
-        structure_state =
-          if htf_trend.to_sym == :range
-            :range
-          elsif %i[bullish bearish].include?(htf_trend.to_sym)
-            :trend
-          else
-            :neutral
-          end
+        structure_state = case htf_trend.to_sym
+                          when :range then :range
+                          when :bullish, :bearish then :trend
+                          else :neutral
+                          end
 
         # Use ltf for FVG/liquidity if available, otherwise fallback to mtf
         fvg_data = ltf.respond_to?(:fvg) ? ltf.fvg.to_h : {}
