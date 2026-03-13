@@ -5,7 +5,6 @@ require 'English'
 class AiTechnicalAnalysisJob < ApplicationJob
   queue_as :background
 
-  # Mutex to serialize chdir operations (Dir.chdir is not thread-safe)
   @chdir_mutex = Mutex.new
 
   class << self
@@ -16,12 +15,28 @@ class AiTechnicalAnalysisJob < ApplicationJob
     market_closed = TradingSession::Service.market_closed?
 
     if market_closed
-      # Market is closed - analyze for next trading day
       next_trading_date = Market::Calendar.next_trading_day
-      query = "OPTIONS buying intraday for next trading day (#{next_trading_date.strftime('%Y-%m-%d')}) in INDEX like #{index_name}"
-      Rails.logger.info("[AiTechnicalAnalysisJob] Market closed - analyzing #{index_name} for next trading day (#{next_trading_date.strftime('%Y-%m-%d')})")
+      target_date = next_trading_date.strftime('%Y-%m-%d')
+      session = closed_market_session_label
+      reason = 'overnight_research'
+      query = "OPTIONS buying intraday for next trading day (#{target_date}) in INDEX like #{index_name}"
+
+      cache_key = "ai_tech_analysis:logged_closed:#{Time.zone.today}:#{index_name}"
+      first_log_for_today = Rails.cache.read(cache_key).nil?
+      Rails.cache.write(cache_key, true, expires_in: 1.day) if first_log_for_today
+
+      if first_log_for_today
+        Rails.logger.info(
+          "[AiTechnicalAnalysisJob] Market closed - analyzing #{index_name} for next trading day " \
+          "(reason=#{reason}, session=#{session}, target_date=#{target_date})"
+        )
+      else
+        Rails.logger.debug do
+          "[AiTechnicalAnalysisJob] Market closed - analyzing #{index_name} " \
+            "(reason=#{reason}, session=#{session}, target_date=#{target_date})"
+        end
+      end
     else
-      # Market is open - analyze for current trading session
       query = "OPTIONS buying intraday in INDEX like #{index_name}"
       Rails.logger.info("[AiTechnicalAnalysisJob] Running analysis for #{index_name} (current trading session)")
     end
@@ -45,5 +60,18 @@ class AiTechnicalAnalysisJob < ApplicationJob
     Rails.logger.error("[AiTechnicalAnalysisJob] Error: #{e.class} - #{e.message}")
     Rails.logger.error("[AiTechnicalAnalysisJob] Backtrace: #{e.backtrace.first(5).join("\n")}")
     raise
+  end
+
+  private
+
+  def closed_market_session_label
+    regime = Live::TimeRegimeService.instance.current_regime
+    case regime
+    when Live::TimeRegimeService::POST_MARKET then 'POST_MARKET'
+    when Live::TimeRegimeService::PRE_MARKET then 'PRE_MARKET'
+    else regime.to_s.upcase
+    end
+  rescue StandardError
+    'CLOSED'
   end
 end

@@ -138,6 +138,7 @@ module Positions
         Rails.logger.error("[ActiveCache] Redis init error: #{e.class} - #{e.message}")
         nil
       end
+      @last_bulk_load_count = nil
     end
 
     # Start the cache (subscribe to MarketFeedHub callbacks)
@@ -345,7 +346,6 @@ module Positions
       Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
         next unless tracker.entry_price&.positive?
 
-        # Try to get SL/TP from meta or calculate defaults
         sl_price = calculate_default_sl(tracker)
         tp_price = calculate_default_tp(tracker)
 
@@ -353,7 +353,12 @@ module Positions
         count += 1
       end
 
-      Rails.logger.info("[Positions::ActiveCache] Bulk loaded #{count} positions")
+      if @last_bulk_load_count.nil? || count != @last_bulk_load_count
+        Rails.logger.info("[Positions::ActiveCache] Bulk loaded #{count} positions")
+        @last_bulk_load_count = count
+      else
+        Rails.logger.debug { "[Positions::ActiveCache] Bulk loaded #{count} positions" }
+      end
       count
     rescue StandardError => e
       Rails.logger.error("[Positions::ActiveCache] Bulk load failed: #{e.class} - #{e.message}")
@@ -367,6 +372,7 @@ module Positions
       @cache.clear
       @tracker_index.clear
       @stats[:positions_tracked] = 0
+      @last_bulk_load_count = nil
       Rails.logger.info('[Positions::ActiveCache] Cleared all positions')
       true
     end
