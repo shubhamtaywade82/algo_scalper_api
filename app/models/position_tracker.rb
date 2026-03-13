@@ -279,6 +279,7 @@ class PositionTracker < ApplicationRecord
     }
 
     update!(attrs.compact)
+    initialize_extremes_in_meta
     subscribe
     broadcast_position_activated
 
@@ -659,7 +660,7 @@ class PositionTracker < ApplicationRecord
     # This ensures last_pnl_pct reflects actual P&L, not stale cache values
     entry_price = BigDecimal((self.entry_price || 0).to_s)
     quantity = (self.quantity || 0).to_i
-    pnl_value = BigDecimal((self.last_pnl_rupees || cache[:pnl] || 0).to_s)
+    pnl_value = BigDecimal((last_pnl_rupees || cache[:pnl] || 0).to_s)
 
     if entry_price.positive? && quantity.positive? && pnl_value != 0
       self.last_pnl_pct = pnl_value / (entry_price * quantity)
@@ -706,6 +707,17 @@ class PositionTracker < ApplicationRecord
     })
   rescue StandardError => e
     Rails.logger.debug("[PositionTracker] broadcast_position_activated failed: #{e.message}")
+  end
+
+  def initialize_extremes_in_meta
+    return if entry_price.blank?
+
+    meta = meta_hash.dup
+    meta['highest_price'] ||= entry_price.to_f
+    meta['lowest_price'] ||= entry_price.to_f
+    update!(meta: meta) if meta != meta_hash
+  rescue StandardError => e
+    Rails.logger.debug("[PositionTracker] initialize_extremes_in_meta failed for #{order_no}: #{e.class} - #{e.message}")
   end
 
   def broadcast_position_exited

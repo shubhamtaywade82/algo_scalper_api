@@ -42,10 +42,15 @@ module Orders
 
     def config
       symbol = @position.symbol.to_s.upcase
+      risk_cfg = AlgoConfig.fetch[:risk] || {}
+      inst_cfg = risk_cfg[:institutional_trailing] || {}
+
       if symbol.include?('SENSEX')
-        CONFIG[:sensex]
+        ratio = inst_cfg.dig(:sensex, :trailing_distance) || CONFIG[:sensex][:retrace_ratio]
+        { retrace_ratio: ratio.to_f }
       else
-        CONFIG[:nifty]
+        ratio = inst_cfg.dig(:nifty, :trailing_distance) || CONFIG[:nifty][:retrace_ratio]
+        { retrace_ratio: ratio.to_f }
       end
     end
 
@@ -67,11 +72,7 @@ module Orders
       end
 
       if updated
-        if @position.respond_to?(:update_columns)
-          @position.update_columns(meta: meta)
-        elsif @position.respond_to?(:meta=)
-          @position.meta = meta
-        end
+        @position.update!(meta: meta)
       end
     end
   end

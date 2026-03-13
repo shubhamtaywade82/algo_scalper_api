@@ -240,17 +240,17 @@ risk:
     expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
 
     nifty:
-      early_trigger: 0.05         # Phase 1: Survival (+5% profit → -12% SL)
+      early_trigger: 0.03         # Phase 1: Survival (+5% profit → -12% SL)
       early_sl_offset: -0.12
-      breakeven_trigger: 0.157    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
-      activation_trigger: 0.20    # Phase 3: HWM Trailing at +20%
-      trailing_distance: 0.386    # 38.6% from HWM (80% of avg 48.3% retrace)
+      breakeven_trigger: 0.08    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
+      activation_trigger: 0.15    # Phase 3: HWM Trailing at +20%
+      trailing_distance: 0.2    # 38.6% from HWM (80% of avg 48.3% retrace)
     sensex:
-      early_trigger: 0.06         # Phase 1: Survival (+6% profit → -10% SL)
+      early_trigger: 0.03         # Phase 1: Survival (+6% profit → -10% SL)
       early_sl_offset: -0.10
-      breakeven_trigger: 0.12     # Phase 2: Breakeven at +12%
-      activation_trigger: 0.18    # Phase 3: HWM Trailing at +18%
-      trailing_distance: 0.80     # 80% from HWM (Based on 5-week avg 99.8% retrace)
+      breakeven_trigger: 0.08     # Phase 2: Breakeven at +12%
+      activation_trigger: 0.15    # Phase 3: HWM Trailing at +18%
+      trailing_distance: 0.2     # 80% from HWM (Based on 5-week avg 99.8% retrace)
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
