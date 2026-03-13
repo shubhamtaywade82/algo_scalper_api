@@ -50,6 +50,7 @@
 #
 #  index_derivatives_on_instrument_code                    (instrument_code)
 #  index_derivatives_on_instrument_id                      (instrument_id)
+#  index_derivatives_on_instrument_id_and_instrument_type  (instrument_id,instrument_type)
 #  index_derivatives_on_symbol_name                        (symbol_name)
 #  index_derivatives_on_underlying_symbol_and_expiry_date  (underlying_symbol,expiry_date)
 #  index_derivatives_unique                                (security_id,symbol_name,exchange,segment) UNIQUE
