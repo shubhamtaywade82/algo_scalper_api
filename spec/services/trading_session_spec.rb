@@ -31,16 +31,20 @@ RSpec.describe TradingSession::Service do
         end
       end
 
-      it 'returns false at midnight (before 3:30 PM, so not closed)' do
+      it 'returns true at midnight (pre-market)' do
         travel_to Time.zone.parse('2025-01-16 00:00:00 +05:30') do
-          # Midnight (hour 0) is before 3:30 PM (hour 15), so market_closed? returns false
-          # market_closed? checks if time is AFTER 3:30 PM, not if market is open
-          expect(described_class.market_closed?).to be false
+          expect(described_class.market_closed?).to be true
+        end
+      end
+
+      it 'returns true at 1:00 AM IST (pre-market)' do
+        travel_to Time.zone.parse('2025-01-15 01:00:00 +05:30') do
+          expect(described_class.market_closed?).to be true
         end
       end
     end
 
-    context 'when market is open (before 3:30 PM IST)' do
+    context 'when market is open (9:20 AM–3:30 PM IST)' do
       it 'returns false at 9:20 AM IST' do
         travel_to Time.zone.parse('2025-01-15 09:20:00 +05:30') do
           expect(described_class.market_closed?).to be false
@@ -71,6 +75,26 @@ RSpec.describe TradingSession::Service do
     it 'returns opposite of market_closed?' do
       travel_to Time.zone.parse('2025-01-15 15:30:00 +05:30') do
         expect(described_class.market_open?).to eq(!described_class.market_closed?)
+      end
+    end
+  end
+
+  describe '.after_market_close_time?' do
+    it 'returns true at or after 15:30 IST' do
+      travel_to Time.zone.parse('2025-01-15 15:30:00 +05:30') do
+        expect(described_class.after_market_close_time?).to be true
+      end
+      travel_to Time.zone.parse('2025-01-15 16:00:00 +05:30') do
+        expect(described_class.after_market_close_time?).to be true
+      end
+    end
+
+    it 'returns false before 15:30 IST' do
+      travel_to Time.zone.parse('2025-01-15 15:29:59 +05:30') do
+        expect(described_class.after_market_close_time?).to be false
+      end
+      travel_to Time.zone.parse('2025-01-15 09:00:00 +05:30') do
+        expect(described_class.after_market_close_time?).to be false
       end
     end
   end
