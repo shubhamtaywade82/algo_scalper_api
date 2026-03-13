@@ -40,7 +40,10 @@ module Live
     end
 
     def find_tracker_by_order_id(order_id)
-      PositionTracker.find_by(order_no: order_id)
+      return nil if order_id.blank?
+
+      PositionTracker.find_by(order_no: order_id) ||
+        PositionTracker.find_by(exit_order_id: order_id)
     end
 
     private
@@ -49,7 +52,7 @@ module Live
       order_no = payload[:order_no] || payload[:order_id]
       return if order_no.blank?
 
-      tracker = PositionTracker.find_by(order_no: order_no)
+      tracker = find_tracker_by_order_id(order_no)
       return unless tracker
 
       # Skip paper trading trackers - they're handled locally by GatewayPaper

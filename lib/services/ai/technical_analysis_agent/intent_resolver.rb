@@ -7,11 +7,13 @@ module Services
       # NO data fetching, NO instrument resolution, NO indicators
       module IntentResolver
         def resolve_intent(query)
+          query_text = query.to_s
+
           # Small prompt - ONLY intent extraction
           prompt = <<~PROMPT
             Extract trading intent from this query. Respond with JSON only (no markdown, no explanations):
 
-            Query: #{query}
+            Query: #{query_text}
 
             Extract:
             - underlying_symbol: The instrument symbol (e.g., "NIFTY", "RELIANCE", "TCS") or null if not found
@@ -32,7 +34,11 @@ module Services
 
           # Single LLM call - NO tool calls
           model = if @client.provider == :ollama
-                    ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                    if @client.respond_to?(:preferred_text_model)
+                      @client.preferred_text_model(default: 'llama3.1:8b')
+                    else
+                      ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
+                    end
                   else
                     'gpt-4o'
                   end
@@ -49,7 +55,7 @@ module Services
             )
 
             # Parse JSON response
-            parsed = JSON.parse(response)
+            parsed = JSON.parse(response.to_s)
             symbol = parsed['underlying_symbol']
 
             # Validate symbol: if null/empty OR doesn't appear as whole word in query, use fallback
@@ -58,16 +64,25 @@ module Services
                              false
                            else
                              symbol_up = symbol.to_s.upcase
-                             query_up = query.upcase
+                             query_up = query_text.upcase
                              # Check for whole word match (word boundaries)
                              query_up.match?(/\b#{Regexp.escape(symbol_up)}\b/)
                            end
 
-            symbol = extract_symbol_fallback(query) unless symbol_valid
+            symbol = extract_symbol_fallback(query_text) unless symbol_valid
+
+            inferred_intent = infer_intent_fallback(query_text)
+            parsed_intent = parsed['intent']&.to_sym
+            # If model returns generic intent for indicator-heavy query, prefer deterministic fallback.
+            intent = if parsed_intent == :general && inferred_intent != :general
+                       inferred_intent
+                     else
+                       parsed_intent || inferred_intent || :general
+                     end
 
             {
               underlying_symbol: symbol,
-              intent: parsed['intent']&.to_sym || :general,
+              intent: intent,
               derivatives_needed: parsed['derivatives_needed'] || false,
               timeframe_hint: parsed['timeframe_hint'] || '15m',
               confidence: parsed['confidence']&.to_f || 0.5
@@ -76,8 +91,8 @@ module Services
             Rails.logger.warn("[IntentResolver] Failed to parse intent JSON: #{e.class} - #{e.message}")
             # Fallback: extract symbol only, default intent
             {
-              underlying_symbol: extract_symbol_fallback(query),
-              intent: :general,
+              underlying_symbol: extract_symbol_fallback(query_text),
+              intent: infer_intent_fallback(query_text),
               derivatives_needed: false,
               timeframe_hint: '15m',
               confidence: 0.3
@@ -86,8 +101,8 @@ module Services
             Rails.logger.warn("[IntentResolver] Failed to resolve intent: #{e.class} - #{e.message}")
             # Fallback: extract symbol only, default intent
             {
-              underlying_symbol: extract_symbol_fallback(query),
-              intent: :general,
+              underlying_symbol: extract_symbol_fallback(query_text),
+              intent: infer_intent_fallback(query_text),
               derivatives_needed: false,
               timeframe_hint: '15m',
               confidence: 0.3
@@ -122,6 +137,14 @@ module Services
             match = query.match(/\b([A-Z]{2,10})\b/)
             match ? match[1] : nil
           end
+        end
+
+        def infer_intent_fallback(query)
+          query_upper = query.to_s.upcase
+          return :options_buying if query_upper.match?(/\b(OPTION|CALL|PUT|STRIKE|PREMIUM|CE|PE)\b/)
+          return :intraday if query_upper.match?(/\b(RSI|MACD|ADX|SUPERTREND|ATR|BOLLINGER|INDICATOR|TREND)\b/)
+
+          :general
         end
       end
     end

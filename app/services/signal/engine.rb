@@ -19,12 +19,16 @@ module Signal
         end
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
-        entry_primary = (
-          signals_cfg.dig(:entry_strategy, :primary) || signals_cfg[:entry_strategy].to_s
-        ).to_s.strip.downcase
+        run_mode = AlgoConfig.run_mode
+        exit_testing_mode = run_mode == 'exit_testing'
+        entry_primary = if exit_testing_mode
+                          'supertrend_adx'
+                        else
+                          (signals_cfg.dig(:entry_strategy, :primary) || signals_cfg[:entry_strategy].to_s).to_s.strip.downcase
+                        end
 
-        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-        enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
+        primary_tf = exit_testing_mode ? '1m' : (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
+        enable_confirmation = exit_testing_mode ? false : signals_cfg.fetch(:enable_confirmation_timeframe, true)
         confirmation_tf = if enable_confirmation && signals_cfg[:confirmation_timeframe].present?
                             signals_cfg[:confirmation_timeframe].to_s
                           end
@@ -124,7 +128,7 @@ module Signal
           confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
 
           # Check if strategy-based recommendations are enabled
-          use_strategy_recommendations = signals_cfg.fetch(:use_strategy_recommendations, false)
+          use_strategy_recommendations = exit_testing_mode ? false : signals_cfg.fetch(:use_strategy_recommendations, false)
 
           # Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
 
@@ -226,49 +230,60 @@ module Signal
             return
           end
 
-          # ===== MARKET REGIME & DIRECTION GATE =====
-          # Always compute regime for diagnostics. Filter via signals.enable_direction_gate.
           primary_series = primary_analysis[:series]
-          regime_result = MarketRegimeDetector.new(primary_series).detect
-          regime = regime_result[:regime]
+          if exit_testing_mode
+            regime_result = { regime: 'EXIT_TESTING', confidence: 0, metrics: {} }
+            regime = regime_result[:regime]
+            effective_validation_mode = 'exit_testing'
+            validation_result = { valid: true, reason: 'Exit-testing mode: 1m Supertrend+ADX only' }
+            Rails.logger.info("[Signal] Exit-testing mode active for #{index_cfg[:key]}: forcing 1m Supertrend+ADX only.")
+          else
+            # ===== MARKET REGIME & DIRECTION GATE =====
+            # Always compute regime for diagnostics. Filter via signals.enable_direction_gate.
+            regime_result = MarketRegimeDetector.new(primary_series).detect
+            regime = regime_result[:regime]
 
-          # DYNAMIC VALIDATION MODE: Use conservative mode in ranging/choppy markets
-          if %w[RANGING CHOPPY].include?(regime)
-            signals_cfg[:validation_mode] = 'conservative'
-            Rails.logger.info("[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} due to #{regime} regime")
-          end
+            # DYNAMIC VALIDATION MODE: Use conservative mode in ranging/choppy markets
+            # NOTE: Use local variable — do NOT mutate signals_cfg (it's a cached AlgoConfig reference)
+            effective_validation_mode = if %w[RANGING CHOPPY].include?(regime)
+                                          Rails.logger.info("[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} due to #{regime} regime")
+                                          'conservative'
+                                        else
+                                          signals_cfg[:validation_mode]
+                                        end
 
-          enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, false)
+            enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, false)
 
-          if enable_direction_gate
-            trade_side = final_direction == :bullish ? :CE : :PE
+            if enable_direction_gate
+              trade_side = final_direction == :bullish ? :CE : :PE
 
-            # Hard block for non-trending markets as per options buying requirements
-            if %w[RANGING CHOPPY INSUFFICIENT_DATA].include?(regime)
-              Rails.logger.info(
-                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Market is #{regime}. Skipping to avoid theta decay."
-              )
-              Signal::StateTracker.reset(index_cfg[:key])
-              return
+              # Hard block for non-trending markets as per options buying requirements
+              if %w[RANGING CHOPPY INSUFFICIENT_DATA].include?(regime)
+                Rails.logger.info(
+                  "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Market is #{regime}. Skipping to avoid theta decay."
+                )
+                Signal::StateTracker.reset(index_cfg[:key])
+                return
+              end
+
+              # Verify alignment with expected trade direction
+              aligned = (regime == 'TRENDING_UP' && trade_side == :CE) ||
+                        (regime == 'TRENDING_DOWN' && trade_side == :PE)
+
+              unless aligned
+                Rails.logger.info(
+                  "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Counter-trend trade. #{trade_side} requested vs #{regime}."
+                )
+                Signal::StateTracker.reset(index_cfg[:key])
+                return
+              end
+              Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} in #{regime}" }
             end
 
-            # Verify alignment with expected trade direction
-            aligned = (regime == 'TRENDING_UP' && trade_side == :CE) ||
-                      (regime == 'TRENDING_DOWN' && trade_side == :PE)
-
-            unless aligned
-              Rails.logger.info(
-                "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Counter-trend trade. #{trade_side} requested vs #{regime}."
-              )
-              Signal::StateTracker.reset(index_cfg[:key])
-              return
-            end
-            Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} in #{regime}" }
+            validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
+                                                         primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
+                                                         validation_mode: effective_validation_mode)
           end
-
-          primary_series = primary_analysis[:series]
-          validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
-                                                       primary_analysis[:supertrend], { value: primary_analysis[:adx_value] })
         end
 
         unless validation_result[:valid]
@@ -277,42 +292,64 @@ module Signal
           return
         end
 
-        Rails.logger.info("[Signal] Proceeding with #{final_direction} signal for #{index_cfg[:key]}")
+        permission = :exit_testing
+        smc_decision = final_direction == :bullish ? :call : :put
 
-        # ===== PERMISSION RESOLUTION (HARD) =====
-        # Source-of-truth permission derived from SMC + AVRZ (deterministic).
-        permission = Trading::PermissionResolver.resolve(symbol: index_cfg[:key], instrument: instrument)
-        if permission == :blocked
-          Rails.logger.info("[Signal] PermissionResolver BLOCKED #{index_cfg[:key]} - no trade")
-          Signal::StateTracker.reset(index_cfg[:key])
-          return
-        end
-        # ===== END PERMISSION RESOLUTION =====
-
-        # ===== SMC DECISION ALIGNMENT (HARD FILTER) =====
-        # Check if SMC decision (call/put/no_trade) aligns with signal direction
-        # This provides additional confirmation beyond permission levels
-        # Skip this check if SMC+AVRZ permission system is disabled
-        enable_smc_permission = signals_cfg.fetch(:enable_smc_avrz_permission, true)
-        enable_smc_alignment = signals_cfg.fetch(:enable_smc_decision_alignment, true)
-
-        if enable_smc_permission && enable_smc_alignment
-          smc_decision = get_smc_decision(index_cfg, instrument, signals_cfg, final_direction)
-          unless smc_decision_aligned?(smc_decision, final_direction)
-            Rails.logger.info(
-              "[Signal] SMC Decision BLOCKED #{index_cfg[:key]}: " \
-              "signal=#{final_direction}, smc=#{smc_decision} (misaligned or no_trade)"
-            )
-            # HARD BLOCK: If TA is neutral or SMC is neutral/misaligned, we do not trade
+        if exit_testing_mode?
+          Rails.logger.info("[Signal] Exit-testing mode: skipping entry filter, permission/SMC gating, and momentum validation.")
+        else
+          # ===== INSTITUTIONAL ENTRY FILTER (Structure + Liquidity + Volatility) =====
+          filter = Entries::EntryFilterEngine.new(series: primary_series, symbol: index_cfg[:key])
+          unless filter.valid_entry?(direction: final_direction)
+            Rails.logger.warn("[Signal] EntryFilterEngine BLOCKED #{index_cfg[:key]}: Missing Structure/Liquidity/Volatility alignment")
             Signal::StateTracker.reset(index_cfg[:key])
             return
           end
-          Rails.logger.info("[Signal] SMC Decision CONFIRMED #{index_cfg[:key]}: #{smc_decision} aligns with #{final_direction}")
-        else
-          Rails.logger.debug { "[Signal] SMC Decision alignment check SKIPPED for #{index_cfg[:key]} (SMC+AVRZ disabled)" }
-          smc_decision = final_direction == :bullish ? :call : :put
+          Rails.logger.info("[Signal] EntryFilterEngine PASSED for #{index_cfg[:key]}")
+          # ===== END INSTITUTIONAL ENTRY FILTER =====
+
+          Rails.logger.info("[Signal] Proceeding with #{final_direction} signal for #{index_cfg[:key]}")
+
+          # ===== PERMISSION RESOLUTION (HARD) =====
+          permission = Trading::PermissionResolver.resolve(symbol: index_cfg[:key], instrument: instrument)
+          if permission == :blocked
+            Rails.logger.info("[Signal] PermissionResolver BLOCKED #{index_cfg[:key]} - no trade")
+            Signal::StateTracker.reset(index_cfg[:key])
+            return
+          end
+          # ===== END PERMISSION RESOLUTION =====
+
+          # ===== SMC DECISION ALIGNMENT (HARD FILTER) =====
+          enable_smc_permission = signals_cfg.fetch(:enable_smc_avrz_permission, true)
+          enable_smc_alignment = signals_cfg.fetch(:enable_smc_decision_alignment, true)
+
+          if enable_smc_permission && enable_smc_alignment
+            smc_decision = get_smc_decision(index_cfg, instrument, signals_cfg, final_direction)
+            unless smc_decision_aligned?(smc_decision, final_direction)
+              Rails.logger.info(
+                "[Signal] SMC Decision BLOCKED #{index_cfg[:key]}: " \
+                "signal=#{final_direction}, smc=#{smc_decision} (misaligned or no_trade)"
+              )
+              Signal::StateTracker.reset(index_cfg[:key])
+              return
+            end
+            Rails.logger.info("[Signal] SMC Decision CONFIRMED #{index_cfg[:key]}: #{smc_decision} aligns with #{final_direction}")
+          else
+            smc_decision = final_direction == :bullish ? :call : :put
+            Rails.logger.debug { "[Signal] SMC Decision alignment check SKIPPED for #{index_cfg[:key]} (SMC+AVRZ disabled)" }
+          end
+          # ===== END SMC DECISION ALIGNMENT =====
+
+          # ===== MOMENTUM VALIDATION =====
+          momentum_result = Signal::MomentumValidator.validate(
+            instrument: instrument,
+            series: primary_series,
+            direction: final_direction
+          )
+          momentum_score = momentum_result.score
+          Rails.logger.info("[Signal] Momentum Score for #{index_cfg[:key]}: #{momentum_score}/3")
+          # ===== END MOMENTUM VALIDATION =====
         end
-        # ===== END SMC DECISION ALIGNMENT =====
 
         # Get state snapshot first for signal persistence
         state_snapshot = Signal::StateTracker.record(
@@ -361,7 +398,7 @@ module Signal
           confirmation_timeframe: confirmation_tf,
           confirmation_enabled: enable_confirmation,
           confirmation_direction: confirmation_analysis&.dig(:direction),
-          validation_mode: signals_cfg[:validation_mode] || 'balanced',
+          validation_mode: effective_validation_mode || signals_cfg[:validation_mode] || 'balanced',
           validation_passed: validation_result[:valid],
           state_count: state_snapshot[:count],
           state_multiplier: state_snapshot[:multiplier],
@@ -384,6 +421,35 @@ module Signal
 
         # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
 
+        # ===== EXPIRY DAY SESSION FILTER =====
+        # Avoid midday decay periods on expiry days for index options
+        if expiry_trade_allowed?(index_cfg[:key]) == false
+          Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+        # ===== END EXPIRY DAY SESSION FILTER =====
+
+        # ===== GAMMA RAMP DETECTION =====
+        # Detect if price is approaching an OI cluster for explosive potential
+        expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
+        chain_data = instrument.fetch_option_chain(expiry_date)
+
+        if chain_data
+          gamma_detector = Options::GammaRampDetector.new(
+            index_key: index_cfg[:key],
+            expiry_date: expiry_date,
+            chain_data: chain_data
+          )
+          gamma_ramp_strike = gamma_detector.ramp_strike(direction: final_direction)
+          if gamma_ramp_strike
+            Rails.logger.info("[Signal] GAMMA RAMP DETECTED for #{index_cfg[:key]} at strike #{gamma_ramp_strike[:strike]}")
+            diagnostic_metadata[:gamma_ramp_strike] = gamma_ramp_strike[:strike]
+            diagnostic_metadata[:gamma_pressure] = gamma_detector.gamma_pressure_score(direction: final_direction)
+          end
+        end
+        # ===== END GAMMA RAMP DETECTION =====
+
         # ===== STRIKE QUALIFICATION LAYER (HARD GATE) =====
         # First point where we have:
         # - symbol (index_cfg[:key])
@@ -405,11 +471,14 @@ module Signal
           return
         end
 
+        execution_permission = effective_execution_permission(permission)
+
         picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
           index_cfg: index_cfg,
           direction: final_direction,
-          permission: permission,
-          expected_spot_move: expected_spot_move
+          permission: execution_permission,
+          expected_spot_move: expected_spot_move,
+          momentum_score: momentum_score
         )
         # ===== END STRIKE QUALIFICATION LAYER =====
 
@@ -421,14 +490,16 @@ module Signal
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
         # Prepare entry metadata to pass to EntryGuard
+        supertrend_direct_entry = (entry_primary == 'supertrend') || exit_testing_mode?
         entry_metadata = diagnostic_metadata.merge(
-          entry_contract: entry_primary == 'supertrend' ? 'supertrend_machine_v1' : 'bos_machine_v1',
-          permission: permission
+          entry_contract: supertrend_direct_entry ? 'supertrend_machine_v1' : 'bos_machine_v1',
+          permission: execution_permission
         )
 
-        if entry_primary == 'supertrend'
+        if supertrend_direct_entry
           # Supertrend-only mode: enter directly on signal without BOS pullback wait.
           # Add stub BOS fields required by EntryGuard's contract check.
+          Rails.logger.info("[Signal] Exit-testing mode: using direct EntryGuard path (no BOS state machine).") if exit_testing_mode?
           entry_metadata.merge!(
             bos_id: "st_#{index_cfg[:key]}_#{Time.current.to_i}",
             bos_timeframe: primary_tf,
@@ -442,7 +513,7 @@ module Signal
               direction: final_direction,
               scale_multiplier: 1,
               entry_metadata: entry_metadata,
-              permission: permission
+              permission: execution_permission
             )
             break if entered
           end
@@ -453,7 +524,7 @@ module Signal
             direction: final_direction,
             picks: picks,
             entry_metadata: entry_metadata,
-            permission: permission
+            permission: execution_permission
           )
         end
 
@@ -608,8 +679,8 @@ module Signal
 
       # Comprehensive validation checks before proceeding with trades
       # When supertrend_only: true, ADX and trend_confirmation are skipped (Supertrend-only entry).
-      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false)
-        mode_config = get_validation_mode_config
+      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false, validation_mode: nil)
+        mode_config = get_validation_mode_config(override_mode: validation_mode)
         # Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction} (mode: #{mode_config[:mode]})")
 
         validation_checks = []
@@ -670,9 +741,10 @@ module Signal
       end
 
       # Get validation mode configuration
-      def get_validation_mode_config
+      # @param override_mode [String, nil] Override the configured validation mode (e.g. 'conservative' for RANGING/CHOPPY regimes)
+      def get_validation_mode_config(override_mode: nil)
         signals_cfg = AlgoConfig.fetch[:signals] || {}
-        mode = signals_cfg[:validation_mode] || 'balanced'
+        mode = override_mode || signals_cfg[:validation_mode] || 'balanced'
         mode_config = signals_cfg.dig(:validation_modes, mode.to_sym) ||
                       signals_cfg.dig(:validation_modes, :balanced) || {}
 
@@ -1054,6 +1126,26 @@ module Signal
         else
           false
         end
+      end
+
+      def expiry_trade_allowed?(symbol)
+        expiry_model = "Strategies::ExpiryModel".safe_constantize
+        return true unless expiry_model
+
+        expiry_model.trade_allowed?(symbol: symbol)
+      rescue StandardError => e
+        Rails.logger.error("[Signal] ExpiryModel unavailable (#{e.class}: #{e.message}); allowing trade")
+        true
+      end
+
+      def exit_testing_mode?
+        AlgoConfig.run_mode == 'exit_testing'
+      end
+
+      def effective_execution_permission(permission)
+        return :scale_ready if permission.to_sym == :exit_testing
+
+        permission
       end
     end
   end

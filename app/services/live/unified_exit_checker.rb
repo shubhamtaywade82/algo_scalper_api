@@ -4,6 +4,8 @@
 # Single method that checks all exit conditions in priority order
 module Live
   class UnifiedExitChecker
+    EXIT_CONFIG_TTL = 30 # seconds — matches AlgoConfig.fetch TTL
+
     class << self
       # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
@@ -46,7 +48,17 @@ module Live
           }
         end
 
-        # 4. Trailing Stop (if enabled)
+        # 4. Premium Momentum Failure (if enabled)
+        if premium_momentum_failure_hit?(tracker, snapshot)
+          return {
+            exit: true,
+            reason: 'PREMIUM_MOMENTUM_FAILURE',
+            path: 'premium_momentum_failure',
+            pnl_pct: (pnl_pct * 100.0).round(2)
+          }
+        end
+
+        # 5. Trailing Stop (if enabled)
         if trailing_stop_hit?(tracker, snapshot)
           return {
             exit: true,
@@ -131,6 +143,54 @@ module Live
         config = exit_config
         return false unless config[:trailing][:enabled]
 
+        ltp = snapshot[:ltp].to_f
+        return false unless ltp.positive?
+
+        # Use advanced Gamma-Aware and MFE exits for NIFTY, BANKNIFTY, and SENSEX
+        symbol = tracker.symbol.to_s.upcase
+        if %w[NIFTY BANKNIFTY SENSEX].any? { |s| symbol.include?(s) }
+          # Guard against division by zero - skip if entry_price or quantity is invalid
+          entry_value = tracker.entry_price.to_f * tracker.quantity.to_f
+          return false unless entry_value.positive?
+
+          # Do not arm gamma/MFE trailing before activation profit is reached.
+          activation = config[:trailing][:activation_profit].to_f
+          peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
+          return false if activation.positive? && peak_profit_pct < activation
+
+          # 1. Resolve price history from ActiveCache for Gamma detection
+          pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+          prices = pos_data&.price_history || [ltp]
+
+          # 2. Use Orders::Analyzer for combined analysis
+          analyzer = Orders::Analyzer.new(
+            tracker: tracker,
+            ltp: ltp,
+            prices: prices,
+            peak_profit_pct: peak_profit_pct
+          )
+          sl_price = analyzer.recommended_sl
+
+          if sl_price && ltp <= sl_price
+            # Identify which engine triggered the stop for logging
+            # Re-running analysis components to find the trigger (minor overhead for logging)
+            highest_price = tracker.entry_price.to_f * (1.0 + peak_profit_pct)
+            mfe_sl = Orders::MfeExitEngine.new(
+              position: tracker,
+              ltp: ltp,
+              entry_price: tracker.entry_price.to_f,
+              highest_price: highest_price
+            ).call
+
+            reason = (mfe_sl && sl_price == mfe_sl) ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
+
+            Rails.logger.info("[UnifiedExitChecker] #{reason} hit for #{tracker.order_no}: ltp=#{ltp}, sl=#{sl_price}")
+            return true
+          end
+          return false
+        end
+
+        # Fallback to legacy trailing for other instruments
         pnl = snapshot[:pnl]
         hwm = snapshot[:hwm_pnl]
         return false if hwm.nil? || hwm.zero?
@@ -256,60 +316,72 @@ module Live
       end
 
       def exit_config
-        @exit_config ||= begin
-          algo_cfg = AlgoConfig.fetch
-          risk_cfg = algo_cfg[:risk] || {}
-          exit_cfg = algo_cfg[:exit] || {}
-
-          # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
-          sl_value = risk_cfg[:sl_pct]
-          if sl_value
-            sl_value_pct = sl_value.to_f  # Use DECIMAL directly (0.12)
-          else
-            sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12  # Default 12% as DECIMAL
-          end
-
-          # Read TP from config (can be in either location, stored as DECIMAL)
-          tp_value = exit_cfg[:take_profit]
-          unless tp_value
-            if risk_cfg[:tp_pct]
-              tp_value = risk_cfg[:tp_pct].to_f  # Use DECIMAL directly (0.50)
-            else
-              tp_value = 0.50  # Default 50% as DECIMAL
-            end
-          end
-
-          # Read trailing config (now using DECIMAL format from algo.yml)
-          trailing_activation = exit_cfg.dig(:trailing, :activation_profit)
-          trailing_activation ||= risk_cfg.dig(:trailing, :activation_pct) || 0.035
-
-          trailing_drop = exit_cfg.dig(:trailing, :drop_threshold)
-          trailing_drop ||= risk_cfg.dig(:trailing, :drawdown_pct) || 0.025
-
-          {
-            stop_loss: {
-              type: exit_cfg.dig(:stop_loss, :type) || 'static',
-              value: sl_value_pct
-            },
-            take_profit: tp_value,
-            trailing: {
-              enabled: exit_cfg.dig(:trailing, :enabled) != false,
-              type: exit_cfg.dig(:trailing, :type) || 'adaptive',
-              activation_profit: trailing_activation,
-              drop_threshold: trailing_drop
-            },
-            early_exit: {
-              enabled: exit_cfg.dig(:early_exit, :enabled) != false,
-              profit_threshold: exit_cfg.dig(:early_exit, :profit_threshold) || 0.07
-            },
-            time_based: {
-              enabled: exit_cfg.dig(:time_based, :enabled) == true,
-              exit_time: exit_cfg.dig(:time_based, :exit_time) || '15:20'
-            }
-          }
-        rescue StandardError
-          default_exit_config
+        now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        if @exit_config && @exit_config_expires_at && now < @exit_config_expires_at
+          return @exit_config
         end
+
+        @exit_config = build_exit_config
+        @exit_config_expires_at = now + EXIT_CONFIG_TTL
+        @exit_config
+      end
+
+      def build_exit_config
+        algo_cfg = AlgoConfig.fetch
+        risk_cfg = algo_cfg[:risk] || {}
+        exit_cfg = algo_cfg[:exit] || {}
+
+        # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
+        sl_value = risk_cfg[:sl_pct]
+        if sl_value
+          sl_value_pct = sl_value.to_f  # Use DECIMAL directly (0.12)
+        else
+          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12  # Default 12% as DECIMAL
+        end
+
+        # Read TP from config (can be in either location, stored as DECIMAL)
+        tp_value = exit_cfg[:take_profit]
+        unless tp_value
+          if risk_cfg[:tp_pct]
+            tp_value = risk_cfg[:tp_pct].to_f  # Use DECIMAL directly (0.50)
+          else
+            tp_value = 0.50  # Default 50% as DECIMAL
+          end
+        end
+
+        # Read trailing config (now using DECIMAL format from algo.yml)
+        trailing_activation = exit_cfg.dig(:trailing, :activation_profit)
+        trailing_activation ||= risk_cfg.dig(:trailing, :activation_pct) || 0.035
+
+        trailing_drop = exit_cfg.dig(:trailing, :drop_threshold)
+        trailing_drop ||= risk_cfg.dig(:trailing, :drawdown_pct) || 0.025
+
+        {
+          stop_loss: {
+            type: exit_cfg.dig(:stop_loss, :type) || 'static',
+            value: sl_value_pct
+          },
+          take_profit: tp_value,
+          trailing: {
+            enabled: exit_cfg.dig(:trailing, :enabled) != false,
+            type: exit_cfg.dig(:trailing, :type) || 'adaptive',
+            activation_profit: trailing_activation,
+            drop_threshold: trailing_drop
+          },
+          early_exit: {
+            enabled: exit_cfg.dig(:early_exit, :enabled) != false,
+            profit_threshold: exit_cfg.dig(:early_exit, :profit_threshold) || 0.07
+          },
+          premium_momentum_failure: {
+            enabled: risk_cfg.dig(:exits, :premium_momentum_failure, :enabled) != false
+          },
+          time_based: {
+            enabled: exit_cfg.dig(:time_based, :enabled) == true,
+            exit_time: exit_cfg.dig(:time_based, :exit_time) || '15:20'
+          }
+        }
+      rescue StandardError
+        default_exit_config
       end
 
       def default_exit_config
@@ -318,8 +390,39 @@ module Live
           take_profit: 0.50,  # 50% take profit (DECIMAL)
           trailing: { enabled: true, type: 'adaptive', activation_profit: 0.035, drop_threshold: 0.025 },
           early_exit: { enabled: true, profit_threshold: 0.07 },
+          premium_momentum_failure: { enabled: true },
           time_based: { enabled: false, exit_time: '15:20' }
         }
+      end
+
+      private
+
+      def premium_momentum_failure_hit?(tracker, snapshot)
+        config = exit_config
+        return false unless config[:premium_momentum_failure][:enabled]
+
+        # Use PremiumMomentumFailureRule via RuleContext
+        # We need a position-like object that has current_ltp
+        ltp = snapshot[:ltp].to_f
+        return false unless ltp.positive?
+
+        position_data = OpenStruct.new(
+          current_ltp: ltp,
+          pnl_pct: snapshot[:pnl_pct].to_f
+        )
+
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: {} # Already handled in evaluate
+        )
+
+        rule = Risk::Rules::PremiumMomentumFailureRule.new(config: { enabled: true })
+        result = rule.evaluate(context)
+        result.exit?
+      rescue StandardError => e
+        Rails.logger.error("[UnifiedExitChecker] premium_momentum_failure_hit? error: #{e.message}")
+        false
       end
     end
   end

@@ -233,8 +233,17 @@ module Live
           BigDecimal(0)
         end
 
-        hwm_bd = payload[:hwm] || (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
+        # HWM: prefer payload, then Redis (real-time), then DB (stale up to 30s)
+        hwm_bd = payload[:hwm]
+        if hwm_bd.nil?
+          redis_hwm = Live::RedisPnlCache.instance.fetch_pnl(tracker_id)&.dig(:hwm_pnl)
+          hwm_bd = safe_decimal(redis_hwm) if redis_hwm
+        end
+        hwm_bd ||= (tracker.high_water_mark_pnl.present? ? safe_decimal(tracker.high_water_mark_pnl) : BigDecimal(0))
         hwm_bd = BigDecimal(0) if hwm_bd.nil?
+
+        # Continuously update HWM from current PnL (don't wait for DB sync)
+        hwm_bd = [hwm_bd, pnl_bd].max if pnl_bd.positive?
 
         # Calculate hwm_pnl_pct if not provided (Store as decimal, e.g. 0.05 for 5%)
         hwm_pnl_pct_bd = payload[:hwm_pnl_pct]

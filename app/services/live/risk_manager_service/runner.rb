@@ -65,50 +65,98 @@ module Live
           return
         end
 
-        # ============================================================
-        # 5-LAYER EXIT SYSTEM (Template Method: run_enforcement_cycle)
-        # Priority order: first-match-wins, evaluation stops on exit
-        # ============================================================
         exit_engine = @exit_engine || self
+        run_interval_enforcement_if_needed(exit_engine)
+      end
+
+      # Interval fallback enforcement when realtime tick-first path is stale/unavailable.
+      # EOD force-close runs every loop when at/past market close so it is never skipped by tick-first.
+      def run_interval_enforcement_if_needed(exit_engine)
+        risk = risk_config
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        if market_close_time && Time.current >= market_close_time
+          enforce_eod_force_close(exit_engine: exit_engine)
+          return
+        end
+
+        return run_enforcement_cycle(exit_engine) unless realtime_tick_first_enabled?
+
+        if tick_stream_fresh?
+          Rails.logger.debug('[RiskManager] Tick-first mode active; skipping interval exit scan') if should_log_realtime_skip?
+          return
+        end
+
+        unless realtime_fallback_enabled?
+          Rails.logger.warn('[RiskManager] Tick stream stale and fallback disabled; skipping interval exit scan')
+          return
+        end
+
+        Rails.logger.warn('[RiskManager] Tick stream stale; running interval fallback exit scan')
         run_enforcement_cycle(exit_engine)
       end
 
       # Template method: single algorithm skeleton for all exit enforcement layers.
       # Add or reorder enforcement by editing this method.
       # First-match-wins: after any layer triggers an exit, we skip remaining layers for that tracker.
+      # EOD force-close runs first when at or past market close so intraday positions never carry overnight.
       def run_enforcement_cycle(exit_engine)
+        enforce_eod_force_close(exit_engine: exit_engine)
+
+        risk = risk_config
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        return if market_close_time && Time.current >= market_close_time
+
         PositionTracker.active.find_each do |tracker|
-          next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
-
-          # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
-          advance_trade_state_for(tracker)
-
-          enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
-          next if exit_requested_or_sent?(tracker)
-
-          enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
-          next if exit_requested_or_sent?(tracker)
-
-          enforce_profit_floor_for(tracker, exit_engine: exit_engine)
-          next if exit_requested_or_sent?(tracker)
-
-          enforce_structure_invalidation_for(tracker, exit_engine: exit_engine)
-          next if exit_requested_or_sent?(tracker)
-
-          enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine)
-          next if exit_requested_or_sent?(tracker)
-
-          enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine)
-          next if exit_requested_or_sent?(tracker)
-
-          enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine)
-          next if exit_requested_or_sent?(tracker)
-
-          enforce_time_stop_for(tracker, exit_engine: exit_engine)
-          next if exit_requested_or_sent?(tracker)
-
-          enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
+          run_enforcement_for_tracker(tracker, exit_engine)
         end
+      end
+
+      def run_enforcement_for_tracker(tracker, exit_engine)
+        return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+
+        # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
+        advance_trade_state_for(tracker)
+
+        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_profit_floor_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_time_stop_for(tracker, exit_engine: exit_engine)
+        return if exit_requested_or_sent?(tracker)
+
+        enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
+      end
+
+      def tick_stream_fresh?
+        last = @last_realtime_tick_at
+        return false unless last
+
+        (Time.current - last) <= realtime_tick_stale_after_seconds
+      end
+
+      def should_log_realtime_skip?
+        @last_realtime_skip_log_at ||= Time.zone.at(0)
+        return false if Time.current - @last_realtime_skip_log_at < 30.seconds
+
+        @last_realtime_skip_log_at = Time.current
+        true
       end
 
       def exit_requested_or_sent?(tracker)

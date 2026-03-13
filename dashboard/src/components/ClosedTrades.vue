@@ -39,9 +39,9 @@ function exitBadge(reason) {
   if (!reason) return { label: '—', cls: 'text-gray-600' }
   const r = reason.toLowerCase()
   if (r.includes('sl') || r.includes('stop_loss')) return { label: 'SL', cls: 'text-red-400' }
+  if (r.includes('time') || r.includes('eod')) return { label: 'TIME', cls: 'text-yellow-400' }
   if (r.includes('tp') || r.includes('target') || r.includes('profit')) return { label: 'TP', cls: 'text-emerald-400' }
   if (r.includes('trail')) return { label: 'TRAIL', cls: 'text-blue-400' }
-  if (r.includes('time') || r.includes('eod')) return { label: 'TIME', cls: 'text-yellow-400' }
   if (r.includes('manual')) return { label: 'MNL', cls: 'text-purple-400' }
   return { label: reason.slice(0, 8).toUpperCase(), cls: 'text-gray-400' }
 }

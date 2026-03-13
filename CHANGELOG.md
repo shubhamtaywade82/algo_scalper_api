@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-03-12
+- Enforce `PLACE_ORDER` as the required live broker execution toggle in `Orders::Placer`; live BUY/SELL/EXIT calls are blocked unless `ENV['PLACE_ORDER'] == 'true'`.
+- Add explicit blocked-order warning logs for live placement attempts when `PLACE_ORDER` is disabled.
+- Update order-placement specs and docs to reflect `PLACE_ORDER` as the canonical live-order safety gate.
+
 ## 2026-03-04
 - Consolidate root-level ad-hoc markdown reports into `docs/reports/`.
 - Add canonical documentation entrypoint `docs/index.md` and simplify `docs/README.md` to point to it.

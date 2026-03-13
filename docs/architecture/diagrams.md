@@ -1,9 +1,29 @@
 # System Architecture Diagrams
 
-This document visualizes the core flows and relationships within the trading system using Mermaid diagrams.
+This document points to the **canonical diagram set** and keeps a few legacy diagrams for quick reference.
 
-## 1. High-Level Logic Flow
+## Canonical diagrams (C4, flows, architecture)
+
+**Full set:** [diagrams/complete-system-diagrams.md](diagrams/complete-system-diagrams.md)
+
+- **C4 Level 1** — System context (Trader, DhanHQ, Telegram, optional Authority/OpenAI)
+- **C4 Level 2** — Containers (Web, Trading Daemon, Jobs, Dashboard, PostgreSQL, Redis)
+- **C4 Level 3** — Components (Supervisor + 11 services, Web API + ActionCable)
+- **High-level process model** — ASCII view of `bin/dev` (4 processes)
+- **End-to-end flow** — Signal → Entry (10 guards) → Order → Position → Exit (per-tick + 5s)
+- **Data flow** — Ticks → PnL pipeline → RedisPnlCache → RiskManager → ExitEngine
+- **Entry guard pipeline** — Order of 10 guards
+- **Exit decision flow** — UnifiedExitChecker + run_enforcement_cycle
+
+**Index:** [diagrams/README.md](diagrams/README.md)
+
+---
+
+## Quick reference (legacy)
+
+### 1. High-Level Logic Flow
 Visualizing the 10,000ft view of the system from Data to Execution.
+
 
 ```mermaid
 graph TD

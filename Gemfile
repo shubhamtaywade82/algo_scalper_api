@@ -28,6 +28,8 @@ gem 'ruby-technical-analysis'
 gem 'sidekiq'
 gem 'technical-analysis'
 
+gem 'whenever', require: false
+
 # Bulk upserts for instruments/derivatives importer
 gem 'activerecord-import'
 

@@ -58,7 +58,7 @@ module Orders
           end
           Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
         else
-          Rails.logger.debug('[Orders::Placer] BUY dry-run disabled order placement')
+          Rails.logger.warn('[Orders::Placer] BUY blocked because PLACE_ORDER is not enabled')
           order = nil
         end
 
@@ -109,7 +109,7 @@ module Orders
           end
           Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}") if order
         else
-          Rails.logger.debug('[Orders::Placer] SELL dry-run disabled order placement')
+          Rails.logger.warn('[Orders::Placer] SELL blocked because PLACE_ORDER is not enabled')
           order = nil
         end
 
@@ -169,7 +169,7 @@ module Orders
           end
           Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
         else
-          Rails.logger.debug('[Orders::Placer] EXIT dry-run disabled order placement')
+          Rails.logger.warn('[Orders::Placer] EXIT blocked because PLACE_ORDER is not enabled')
           order = nil
         end
 
@@ -219,14 +219,7 @@ module Orders
       end
 
       def order_placement_enabled?
-        cfg = begin
-          Rails.application.config.x.dhanhq
-        rescue StandardError
-          nil
-        end
-        (cfg && cfg.enable_order_logging == true) || AlgoConfig.fetch.dig(:dhanhq, :enable_orders) == true
-      rescue StandardError
-        false
+        ENV['PLACE_ORDER'].to_s.casecmp('true').zero?
       end
 
       def duplicate?(client_order_id)

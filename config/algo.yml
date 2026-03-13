@@ -2,6 +2,20 @@ paper_trading:
   enabled: true
   balance: 100000
 
+# Run mode: which profile to merge on top of base config (before DB overrides).
+# production = real flow (default). exit_testing = frequent entries to test exits. entry_testing = relaxed guards to test entries.
+# Override with ENV RUN_MODE=exit_testing (or entry_testing, production).
+run_mode: exit_testing
+
+# Realtime execution controls (tick-first architecture)
+realtime:
+  tick_first_enabled: true         # Evaluate exits from tick-driven Redis state first
+  fallback_enabled: true           # Run interval scanners only when tick stream is stale
+  tick_stale_after_seconds: 3      # Consider feed stale after this many seconds without tick-driven PnL event
+  min_enforcement_gap_ms: 250      # Debounce full rule-chain evaluation per tracker in event-driven path
+  db_sync_interval_seconds: 30      # Throttled DB sync cadence for active positions
+  entry_ltp_max_age_seconds: 2      # Entry/re-entry requires tick timestamp within this window
+
 # Trading time restrictions based on profitability analysis
 # Use analyze_positions_by_time_intervals.rb to identify non-profitable periods
 # Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
@@ -23,6 +37,10 @@ feature_flags:
   enable_underlying_aware_exits: false
   enable_peak_drawdown_activation: false
   auto_paper_on_insufficient_balance: false
+
+# DhanHQ broker settings
+dhanhq:
+  enable_orders: false # Set to true for live order submission (false = dry-run logging only)
 
 # ============================================
 # INDEX CONFIG (TREND-SCORE DRIVEN)
@@ -250,9 +268,9 @@ risk:
   trailing_mode: 'direct' # Moving up only to capture profits
   direct_trailing:
     enabled: true
-    distance_pct: 0.03 # 3% - trail at 3% distance from peak
-    activation_profit_pct: 0.05 # 5% - start direct trailing at 5% profit
-    min_sl_offset_pct: 0.0 # 0% - never let SL go below breakeven once direct trailing starts
+    distance_pct: 0.05 # 5% - trail at 5% distance from peak
+    activation_profit_pct: 0.0 # 0% - start direct trailing at 0% profit
+    min_sl_offset_pct: -0.30 # -30% - never let SL go below -30% from entry
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP

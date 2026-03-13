@@ -1,5 +1,7 @@
 # Exit Mechanism and Rules - Complete Reference
 
+> **Superseded:** This document describes an older exit order and config layout. For the current entry and exit rules (guard pipeline order, UnifiedExitChecker priority, and 5s enforcement cycle order), see **`docs/trading/entry_and_exit_rules.md`**.
+
 ## Overview
 
 The exit system uses a **priority-based enforcement mechanism** where exit rules are evaluated in a specific order. The first rule that triggers an exit wins, and evaluation stops immediately. This ensures critical exits (like stop loss) take precedence over less urgent ones.

@@ -369,6 +369,8 @@ namespace :options do
           to:               to_str,
           ce:               ce_stat,
           pe:               pe_stat,
+          ce_sessions:      ce_sess,
+          pe_sessions:      pe_sess,
           ce_corr_slope:    ce_corr&.[](:slope),
           pe_corr_slope:    pe_corr&.[](:slope)
         }
@@ -526,16 +528,22 @@ namespace :options do
     CSV.open(csv_path, 'w') do |csv|
       csv << %w[symbol expiry from to
                 ce_entry ce_exit ce_max_gain_pct ce_max_loss_pct ce_oc_pct ce_retrace ce_oi_chg ce_spot_chg ce_corr_slope ce_strike
-                pe_entry pe_exit pe_max_gain_pct pe_max_loss_pct pe_oc_pct pe_retrace pe_oi_chg pe_spot_chg pe_corr_slope pe_strike]
+                pe_entry pe_exit pe_max_gain_pct pe_max_loss_pct pe_oc_pct pe_retrace pe_oi_chg pe_spot_chg pe_corr_slope pe_strike
+                ce_morning_oc ce_midday_oc ce_afternoon_oc
+                pe_morning_oc pe_midday_oc pe_afternoon_oc]
       csv_rows.each do |r|
         ce = r[:ce] || {}; pe = r[:pe] || {}
+        ce_sessions = r[:ce_sessions] || {}
+        pe_sessions = r[:pe_sessions] || {}
         csv << [r[:symbol], r[:expiry], r[:from], r[:to],
                 ce[:entry], ce[:exit], ce[:max_gain_pct], ce[:max_loss_pct],
                 ce[:open_to_close_pct], ce[:post_peak_retrace], ce[:oi_change_pct],
                 ce[:spot_change_pct], r[:ce_corr_slope], ce[:strike],
                 pe[:entry], pe[:exit], pe[:max_gain_pct], pe[:max_loss_pct],
                 pe[:open_to_close_pct], pe[:post_peak_retrace], pe[:oi_change_pct],
-                pe[:spot_change_pct], r[:pe_corr_slope], pe[:strike]]
+                pe[:spot_change_pct], r[:pe_corr_slope], pe[:strike],
+                ce_sessions.dig('Morning', :oc_pct), ce_sessions.dig('Midday', :oc_pct), ce_sessions.dig('Afternoon', :oc_pct),
+                pe_sessions.dig('Morning', :oc_pct), pe_sessions.dig('Midday', :oc_pct), pe_sessions.dig('Afternoon', :oc_pct)]
       end
     end
 

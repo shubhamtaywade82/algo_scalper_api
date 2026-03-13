@@ -2,6 +2,8 @@
 
 The system employs a multi-layered risk management strategy, prioritizing capital preservation through a prioritized exit hierarchy.
 
+> **Full reference:** For the exact guard pipeline, exit priority order, 5-second enforcement cycle, and config keys, see **`docs/trading/entry_and_exit_rules.md`**.
+
 ## The Exit Hierarchy
 
 All active positions are evaluated every 1-5 seconds by the `RiskManagerService`. The `Live::UnifiedExitChecker` evaluates conditions in the following strict priority order:

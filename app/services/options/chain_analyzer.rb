@@ -635,8 +635,9 @@ module Options
       # @param direction [Symbol] :bullish or :bearish
       # @param permission [Symbol] :execution_only, :scale_ready, :full_deploy
       # @param expected_spot_move [Float] Expected spot move in points (ATR-derived)
+      # @param momentum_score [Integer] Momentum score (0-3)
       # @return [Array<Hash>] Array with a single qualified pick, or [] if blocked
-      def pick_strikes_with_qualification(index_cfg:, direction:, permission:, expected_spot_move:)
+      def pick_strikes_with_qualification(index_cfg:, direction:, permission:, expected_spot_move:, momentum_score: nil)
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         unless instrument
           Rails.logger.warn("[Options] No instrument found for #{index_cfg[:key]}") if defined?(Rails)
@@ -689,6 +690,8 @@ module Options
         end
 
         normalized_permission = permission.to_s.downcase.to_sym
+        normalized_permission = :scale_ready if normalized_permission == :exit_testing
+        exit_testing_mode = AlgoConfig.run_mode == 'exit_testing'
         expected_move = expected_spot_move.to_f
         unless expected_move.positive?
           Rails.logger.info("[Options] Expected move unavailable -> BLOCK #{index_cfg[:key]}") if defined?(Rails)
@@ -733,6 +736,29 @@ module Options
           )
         end
 
+        # ===== INSTITUTIONAL FLOW & GAMMA ANALYSIS =====
+        flow_analyzer = Options::FlowAnalyzer.new(
+          index_key: index_cfg[:key],
+          expiry_date: expiry_date,
+          chain_data: chain_data
+        )
+        flow_results = flow_analyzer.strong_flow_strikes
+        
+        gamma_detector = Options::GammaRampDetector.new(
+          index_key: index_cfg[:key],
+          expiry_date: expiry_date,
+          chain_data: chain_data
+        )
+        gamma_pressure = gamma_detector.gamma_pressure_score(direction: direction)
+        
+        # Index prices for delta acceleration (last 2 close prices)
+        # Fallback to current spot if series unavailable
+        index_series = instrument.candle_series(interval: '1')
+        index_prices = index_series&.closes&.last(2) || [spot, spot]
+
+        prop_selector = Options::PropStrikeSelector.new(spot: spot)
+        # ===== END INSTITUTIONAL FLOW & GAMMA ANALYSIS =====
+
         selector = Options::StrikeQualification::StrikeSelector.new
         selection = selector.call(
           index_key: index_cfg[:key],
@@ -740,7 +766,8 @@ module Options
           permission: normalized_permission,
           spot: spot,
           option_chain: filtered_chain,
-          trend: direction
+          trend: direction,
+          momentum_score: momentum_score
         )
 
         unless selection[:ok]
@@ -760,7 +787,12 @@ module Options
           index_cfg: index_cfg,
           expiry_date: expiry_date,
           instrument: instrument,
-          target_strikes: [selection[:strike].to_f]
+          target_strikes: [selection[:strike].to_f],
+          flow_results: flow_results,
+          gamma_pressure: gamma_pressure,
+          prop_selector: prop_selector,
+          flow_analyzer: flow_analyzer,
+          index_prices: index_prices
         )
 
         used_strike_type = selection[:strike_type]
@@ -779,7 +811,12 @@ module Options
             index_cfg: index_cfg,
             expiry_date: expiry_date,
             instrument: instrument,
-            target_strikes: [selection[:atm_strike].to_f]
+            target_strikes: [selection[:atm_strike].to_f],
+            flow_results: flow_results,
+            gamma_pressure: gamma_pressure,
+            prop_selector: prop_selector,
+            flow_analyzer: flow_analyzer,
+            index_prices: index_prices
           )
           used_strike_type = :ATM
         end
@@ -795,25 +832,46 @@ module Options
         end
 
         leg = legs.first
-        pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
-                  .merge(strike_type: used_strike_type)
-
-        validator = Options::StrikeQualification::ExpectedMoveValidator.new
-        validation = validator.call(
-          index_key: index_cfg[:key],
-          strike_type: used_strike_type,
-          permission: normalized_permission,
-          expected_spot_move: expected_move,
-          option_ltp: pick[:ltp]
-        )
-
-        unless validation[:ok]
-          if defined?(Rails)
+        
+        # Institutional Rule: If no good strike exists (score too low) -> skip trade
+        # Threshold 140 (scaled score: institutional base + acceleration + ATM bonus)
+        if leg[:score] < 140.0
+          if exit_testing_mode
             Rails.logger.info(
-              "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
-            )
+              "[Options] Exit-testing mode: bypassing low-score gate for #{index_cfg[:key]} " \
+              "(#{leg[:score].round(2)} < 140.0)"
+            ) if defined?(Rails)
+          else
+            if defined?(Rails)
+              Rails.logger.warn("[Options] Best strike for #{index_cfg[:key]} rejected due to low score: #{leg[:score].round(2)} < 140.0")
+            end
+            return []
           end
-          return []
+        end
+
+        pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
+                  .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
+
+        unless exit_testing_mode
+          validator = Options::StrikeQualification::ExpectedMoveValidator.new
+          validation = validator.call(
+            index_key: index_cfg[:key],
+            strike_type: used_strike_type,
+            permission: normalized_permission,
+            expected_spot_move: expected_move,
+            option_ltp: pick[:ltp]
+          )
+
+          unless validation[:ok]
+            if defined?(Rails)
+              Rails.logger.info(
+                "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
+              )
+            end
+            return []
+          end
+        else
+          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
         end
 
         [pick]
@@ -847,9 +905,16 @@ module Options
       end
 
       def filter_and_rank_from_instrument_data(option_chain_data, atm:, side:, index_cfg:, expiry_date:, instrument:,
-                                               target_strikes: nil)
+                                               target_strikes: nil, flow_results: nil, gamma_pressure: 0.0, prop_selector: nil,
+                                               flow_analyzer: nil, index_prices: nil)
         # Force reload - debugging index_cfg scope issue
         return [] unless option_chain_data
+        
+        # Extract flow scores for lookup
+        flow_side = side.to_s.downcase # 'ce' or 'pe'
+        flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
+          h[f[:strike].to_f] = f[:score]
+        end
 
         # Rails.logger.debug { "[Options] Method called with index_cfg: #{index_cfg[:key]}, expiry_date: #{expiry_date}" }
 
@@ -1189,8 +1254,33 @@ module Options
 
         # Apply sophisticated scoring system
         scored_legs = legs.map do |leg|
-          score = calculate_strike_score(leg, side, atm_strike, atm_range_percent)
-          leg.merge(score: score)
+          flow_score = flow_scores[leg[:strike].to_f] || 1.0
+          
+          # Get historical context for this specific strike
+          strike_history = flow_analyzer&.get_history(leg[:strike], flow_side)
+
+          # Detect delta acceleration if history is available
+          acceleration_signal = :none
+          if strike_history && index_prices
+            detector = Options::DeltaAccelerationDetector.new(
+              index_prices: index_prices,
+              option_prices: [strike_history[:ltp], leg[:ltp]],
+              volumes: strike_history[:volume_history] || [leg[:volume]],
+              oi: [strike_history[:oi], leg[:oi]]
+            )
+            acceleration_signal = detector.signal
+          end
+
+          score = calculate_strike_score(
+            leg, side, atm_strike, atm_range_percent,
+            flow_score: flow_score,
+            gamma_pressure: gamma_pressure,
+            prop_selector: prop_selector,
+            acceleration_signal: acceleration_signal,
+            history: strike_history
+          )
+          
+          leg.merge(score: score, acceleration_signal: acceleration_signal)
         end
 
         # Sort by score (descending), then by distance from ATM
@@ -1315,8 +1405,35 @@ module Options
         end
       end
 
-      # Calculate sophisticated strike score based on multiple factors
-      def calculate_strike_score(leg, side, atm_strike, atm_range_percent)
+      # Calculate sophisticated strike score based on professional prop model
+      def calculate_strike_score(leg, side, atm_strike, atm_range_percent, flow_score: 1.0, gamma_pressure: 0.0,
+                                prop_selector: nil, acceleration_signal: :none, history: nil)
+        # Use professional PropStrikeSelector if available
+        if prop_selector
+          # Combine prop model with ATM bonus for legacy compatibility
+          prop_score = prop_selector.score(leg, flow_score: flow_score, gamma_pressure: gamma_pressure, history: history)
+          
+          # Boost score for delta acceleration (explosive premium potential)
+          acceleration_boost = case acceleration_signal
+                               when :strong then 0.3
+                               when :moderate then 0.15
+                               else 0.0
+                               end
+          
+          distance_from_atm = (leg[:strike] - atm_strike).abs
+          atm_range_points = atm_strike * atm_range_percent
+          atm_bonus = if distance_from_atm <= (atm_range_points * 0.1)
+                        0.2
+                      elsif distance_from_atm <= (atm_range_points * 0.3)
+                        0.1
+                      else
+                        0.0
+                      end
+          
+          return (prop_score * 100.0) + (acceleration_boost * 50.0) + (atm_bonus * 10.0)
+        end
+
+        # Fallback to standard institutional scoring
         strike_price = leg[:strike]
         ltp = leg[:ltp]
         iv = leg[:iv]
@@ -1331,7 +1448,32 @@ module Options
 
         delta = leg[:delta] || 0.5 # Default delta if not available
 
-        # 1. ATM Preference Score (0-100)
+        # 1. Delta Score (0.40–0.60 ideal) - 40% weight
+        delta_score = (1.0 - (delta - 0.5).abs) * 40.0
+        
+        # 2. Liquidity Score (Spread < 1% preferred) - 30% weight
+        liquidity_base = if oi >= 1_000_000
+                            30
+                          elsif oi >= 500_000
+                            25
+                          elsif oi >= 100_000
+                            20
+                          else
+                            10
+                          end
+        # Spread penalty (up to 50% reduction)
+        liquidity_score = liquidity_base * [1.0 - (spread_pct / 2.0), 0.5].max
+
+        # 3. Flow Score (Integrated from FlowAnalyzer) - 30% weight
+        # Normalize flow score around 1.0, max 30 points
+        institutional_flow_score = [flow_score / 2.0, 1.0].min * 30.0
+
+        # 4. Gamma Ramp Bonus (Proximity to OI clusters)
+        # Multiply base score by gamma pressure potential
+        base_institutional_score = delta_score + liquidity_score + institutional_flow_score
+        final_institutional_score = base_institutional_score * (1.0 + (gamma_pressure * 0.5))
+
+        # 5. ATM Preference Score (0-100) - Legacy compatibility
         distance_from_atm = (strike_price - atm_strike).abs
         atm_range_points = atm_strike * atm_range_percent
 
@@ -1348,81 +1490,9 @@ module Options
         # Penalty for ITM strikes (30% reduction)
         atm_preference_score *= 0.7 if itm_strike?(strike_price, side, atm_strike)
 
-        # 2. Liquidity Score (0-50)
-        # Based on OI and spread
-        liquidity_score = if oi >= 1_000_000
-                            50 # Excellent liquidity
-                          elsif oi >= 500_000
-                            40  # Good liquidity
-                          elsif oi >= 100_000
-                            30  # Decent liquidity
-                          else
-                            20  # Poor liquidity
-                          end
-
-        # Spread penalty
-        if spread_pct > 2.0
-          liquidity_score *= 0.8  # 20% penalty for wide spreads
-        elsif spread_pct > 1.0
-          liquidity_score *= 0.9  # 10% penalty for moderate spreads
-        end
-
-        # 3. Delta Score (0-30)
-        # Higher delta is better for options buying
-        delta_score = if delta >= 0.5
-                        30 # Excellent delta
-                      elsif delta >= 0.4
-                        25  # Good delta
-                      elsif delta >= 0.3
-                        20  # Decent delta
-                      else
-                        10  # Poor delta
-                      end
-
-        # 4. IV Score (0-20)
-        # Moderate IV is preferred (not too high, not too low)
-        # ATM strikes get bonus for proximity even with lower IV
-        # Use distance_from_atm to determine if it's ATM or ATM±1 (typically 50-100 points for NIFTY)
-        is_atm_or_near = distance_from_atm <= (atm_strike * 0.005) # Within 0.5% of ATM (~125 points for NIFTY)
-
-        iv_score = if iv.between?(15, 25)
-                     20 # Sweet spot
-                   elsif iv.between?(10, 30)
-                     15  # Acceptable range
-                   elsif iv.between?(5, 40)
-                     10  # Marginal
-                   else
-                     5 # Poor IV
-                   end
-        # Bonus for ATM strikes with acceptable IV (even if lower)
-        if is_atm_or_near && iv >= 5 && iv < 10
-          iv_score += 5 # Boost score for ATM strikes with low but acceptable IV
-        end
-
-        # 5. Price Efficiency Score (0-10)
-        # Lower price per point of delta is better
-        price_efficiency = delta.positive? ? (ltp / delta) : ltp
-        price_efficiency_score = if price_efficiency <= 200
-                                   10 # Excellent efficiency
-                                 elsif price_efficiency <= 300
-                                   8   # Good efficiency
-                                 elsif price_efficiency <= 500
-                                   6   # Decent efficiency
-                                 else
-                                   4   # Poor efficiency
-                                 end
-
-        # Calculate total score
-        atm_preference_score + liquidity_score + delta_score + iv_score + price_efficiency_score
-
-        # Log scoring breakdown for debugging
-        # Rails.logger.debug { "[Options] Strike #{strike_price} scoring:" }
-        # Rails.logger.debug { "  - ATM Preference: #{atm_preference_score.round(1)} (distance: #{distance_from_atm.round(1)})" }
-        # Rails.logger.debug { "  - Liquidity: #{liquidity_score.round(1)} (OI: #{oi}, Spread: #{spread_pct.round(2)}%)" }
-        # Rails.logger.debug { "  - Delta: #{delta_score.round(1)} (delta: #{delta.round(3)})" }
-        # Rails.logger.debug { "  - IV: #{iv_score.round(1)} (IV: #{iv.round(2)}%)" }
-        # Rails.logger.debug { "  - Price Efficiency: #{price_efficiency_score.round(1)} (price/delta: #{price_efficiency.round(1)})" }
-        # Rails.logger.debug { "  - Total Score: #{total_score.round(1)}" }
+        # Combine institutional score with ATM preference
+        # Prioritize institutional score (weighted higher)
+        (final_institutional_score * 2.0) + atm_preference_score
       end
 
       # Check if a strike is ITM (In-The-Money)

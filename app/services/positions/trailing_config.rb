@@ -242,5 +242,9 @@ module Positions
     rescue StandardError
       default
     end
+
+    def reset_config!
+      @config = nil
+    end
   end
 end

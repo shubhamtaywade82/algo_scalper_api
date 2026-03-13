@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2026_02_25_090000) do
+ActiveRecord::Schema[8.0].define(version: 2026_03_12_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -275,6 +275,7 @@ ActiveRecord::Schema[8.0].define(version: 2026_02_25_090000) do
     t.string "exit_coid"
     t.string "exit_order_id"
     t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
+    t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
     t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
@@ -414,6 +415,22 @@ ActiveRecord::Schema[8.0].define(version: 2026_02_25_090000) do
     t.index ["key"], name: "index_solid_queue_semaphores_on_key", unique: true
   end
 
+  create_table "trade_analytics", force: :cascade do |t|
+    t.bigint "position_tracker_id", null: false
+    t.string "symbol"
+    t.decimal "entry_price"
+    t.decimal "exit_price"
+    t.decimal "max_favorable_excursion"
+    t.decimal "max_adverse_excursion"
+    t.integer "duration_seconds"
+    t.decimal "volatility"
+    t.string "strategy"
+    t.string "exit_reason"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["position_tracker_id"], name: "index_trade_analytics_on_position_tracker_id"
+  end
+
   create_table "trade_telemetry", force: :cascade do |t|
     t.bigint "tracker_id", null: false
     t.string "index_key", null: false
@@ -485,5 +502,6 @@ ActiveRecord::Schema[8.0].define(version: 2026_02_25_090000) do
   add_foreign_key "solid_queue_ready_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_recurring_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
+  add_foreign_key "trade_analytics", "position_trackers"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"
 end
