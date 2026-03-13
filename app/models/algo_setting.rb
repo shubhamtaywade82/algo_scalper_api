@@ -30,19 +30,6 @@ class AlgoSetting
   }.freeze
 
   class << self
-    def all_settings
-      SCHEMA.map do |key, meta|
-        {
-          key: key,
-          value: fetch(key),
-          type: meta[:type],
-          default: meta[:default],
-          category: meta[:category],
-          description: meta[:description]
-        }
-      end
-    end
-
     def fetch(key)
       meta = SCHEMA[key]
       return nil unless meta

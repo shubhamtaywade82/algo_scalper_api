@@ -1,0 +1,6 @@
+RemoveUnusedMethodsInModelsCheck:
+  enabled: false
+
+UseQueryAttributeCheck:
+  enabled: false
+
