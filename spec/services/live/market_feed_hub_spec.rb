@@ -592,10 +592,6 @@ RSpec.describe Live::MarketFeedHub, :vcr do
     end
 
     describe 'Reconnection Behavior' do
-      # NOTE: Reconnection is handled by DhanHQ::WS::Client library
-      # We verify that the client is properly initialized and configured
-      # Actual reconnection testing would require integration tests with real WebSocket
-
       it 'configures client for automatic reconnection' do
         # The DhanHQ::WS::Client library handles reconnection internally
         # We verify that the client is created with correct mode
@@ -610,7 +606,58 @@ RSpec.describe Live::MarketFeedHub, :vcr do
         expect(watchlist).to be_present
         # The DhanHQ client library maintains subscription state internally
       end
+
+      it 'updates health status timestamps and connection state on tick' do
+        hub.start!
+        tick = {
+          segment: 'NSE_FNO',
+          security_id: '49081',
+          ltp: 123.45,
+          kind: :quote
+        }
+
+        hub.send(:handle_tick, tick)
+
+        status = hub.health_status
+        expect(status[:running]).to be true
+        expect(status[:connected]).to be true
+        expect(status[:connection_state]).to eq(:connected)
+        expect(status[:last_tick_at]).to be_within(1.second).of(Time.current)
+      end
+
+      it 'marks tick feed as successful in FeedHealthService' do
+        feed_health = instance_double(Live::FeedHealthService)
+        allow(Live::FeedHealthService).to receive(:instance).and_return(feed_health)
+        allow(feed_health).to receive(:mark_success!)
+
+        hub.start!
+        tick = {
+          segment: 'NSE_FNO',
+          security_id: '49081',
+          ltp: 123.45,
+          kind: :quote
+        }
+
+        hub.send(:handle_tick, tick)
+
+        expect(feed_health).to have_received(:mark_success!).with(:ticks)
+      end
+
+      it 'restarts when tick feed is stale' do
+        feed_health = instance_double(Live::FeedHealthService, threshold_for: 10)
+        allow(Live::FeedHealthService).to receive(:instance).and_return(feed_health)
+        allow(feed_health).to receive(:mark_failure!)
+        hub.instance_variable_set(:@running, true)
+        hub.instance_variable_set(:@last_tick_at, Time.current - 20)
+        allow(hub).to receive(:restart!)
+
+        hub.send(:check_connection_health!)
+
+        expect(feed_health).to have_received(:mark_failure!).with(:ticks, error: instance_of(RuntimeError))
+        expect(hub).to have_received(:restart!)
+      end
     end
+
   end
 
   describe 'Edge Cases and Error Handling' do
