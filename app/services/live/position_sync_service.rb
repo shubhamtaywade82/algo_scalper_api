@@ -18,6 +18,7 @@ module Live
 
     def sync_positions!
       return unless should_sync?
+      return unless market_open?
 
       if paper_trading_enabled?
         sync_paper_positions
@@ -34,6 +35,14 @@ module Live
     end
 
     private
+
+    # Indian market (NSE/BSE) only — no sync outside market hours.
+    def market_open?
+      TradingSession::Service.market_open?
+    rescue StandardError => e
+      Rails.logger.error("[PositionSync] market_open? check failed: #{e.class} - #{e.message}")
+      false
+    end
 
     def should_sync?
       @last_sync.nil? || (Time.current - @last_sync) >= @sync_interval
