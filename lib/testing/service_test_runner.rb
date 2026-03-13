@@ -7,9 +7,10 @@
 #   Testing::ServiceTestRunner.test_market_feed_hub
 #   Testing::ServiceTestRunner.test_risk_manager_service
 
-module Testing
-  module ServiceTestRunner
-    module_function
+if Rails.env.development? || Rails.env.test?
+  module Testing
+    module ServiceTestRunner
+      module_function
 
   # Colors for console output
   COLORS = {
@@ -601,4 +602,5 @@ module Testing
     print_success('Log monitoring completed')
   end
   end
+end
 end

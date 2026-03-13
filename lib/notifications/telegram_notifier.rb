@@ -92,6 +92,7 @@ module Notifications
 
     # Send typing indicator to show bot is typing
     # @param duration [Integer] Duration in seconds (default: 5)
+    # TODO: debride-suspect dev helper; keep if useful for manual testing.
     def send_typing_indicator(duration: 5)
       return unless enabled?
 
@@ -103,6 +104,7 @@ module Notifications
 
     # Send a test message (for testing purposes)
     # @param message [String] Test message
+    # TODO: debride-suspect dev helper; keep if useful for manual testing.
     def send_test_message(message = 'Test message from Telegram Notifier')
       return unless enabled?
 
