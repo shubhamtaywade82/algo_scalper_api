@@ -79,6 +79,10 @@ group :development, :test do
   gem 'rubocop-rspec', '~> 3.8', require: false
   gem 'rubocop-rspec_rails'
 
+  # Static analysis / code health
+  gem 'rubycritic', require: false
+  gem 'rails_best_practices', require: false
+
   # Load .env files in development/test before initializers
   gem 'dotenv-rails'
 
