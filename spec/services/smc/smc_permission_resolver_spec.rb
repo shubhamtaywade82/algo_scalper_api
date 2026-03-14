@@ -29,7 +29,7 @@ RSpec.describe Smc::SmcPermissionResolver do
       expect(described_class.resolve(smc_result: smc, avrz_result: avrz)).to eq(:execution_only)
     end
 
-    it 'returns :scale_ready' do
+    it 'returns :scale_ready when trend + BOS + displacement and AVRZ expanding_early' do
       smc = {
         structure_state: :trend,
         bos_recent: true,
@@ -41,7 +41,15 @@ RSpec.describe Smc::SmcPermissionResolver do
       }
       avrz = { state: :expanding_early }
 
-      expect(described_class.resolve(smc_result: smc, avrz_result: avrz)).to eq(:scale_ready)
+      # NormalizedSmc reads top-level keys; ensure scale_ready branch conditions
+      normalized = described_class::NormalizedSmc.new(smc)
+      expect(normalized.structure_state).to eq(:trend)
+      expect(normalized.bos_recent?).to be true
+      expect(normalized.displacement?).to be true
+      expect(normalized.active_liquidity_trap?).to be false
+
+      result = described_class.resolve(smc_result: smc, avrz_result: avrz)
+      expect(result).to eq(:scale_ready)
     end
 
     it 'returns :full_deploy' do
