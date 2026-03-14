@@ -108,11 +108,13 @@ module Smc
 
     class NormalizedSmc
       def initialize(raw)
-        @raw = if raw.respond_to?(:to_h)
-                 raw.to_h
-               else
-                 (raw.is_a?(Hash) ? raw : {})
-               end
+        h = if raw.respond_to?(:to_h)
+              raw.to_h
+            else
+              (raw.is_a?(Hash) ? raw : {})
+            end
+        # Normalize to symbol keys so lookups are consistent (e.g. from JSON or symbol keys)
+        @raw = h.transform_keys { |k| k.is_a?(Symbol) ? k : k.to_s.to_sym }
       end
 
       def structure_state
@@ -158,9 +160,13 @@ module Smc
       end
 
       def active_liquidity_trap?
-        # If unknown, treat as active (so scale_ready cannot pass accidentally).
+        # Explicit false (symbol or string key) => not in trap
+        raw_val = @raw[:active_liquidity_trap] || @raw['active_liquidity_trap']
+        return false if raw_val == false || raw_val == 'false'
+
         v =
           value(:active_liquidity_trap) ||
+          value('active_liquidity_trap') ||
           value(:liquidity_trap_active) ||
           value(:liquidity_trap) ||
           dig(:trap, :active) ||

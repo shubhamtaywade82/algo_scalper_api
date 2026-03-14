@@ -27,7 +27,8 @@ module Smc
 
       def find_blocks
         blocks = []
-        return [] if candles.size < 5
+        # Need at least 4 candles: (0...(4-3)) => one index for a=0, b=1
+        return [] if candles.size < 4
 
         # Scan the last 30 candles
         lookback = [0, candles.size - 30].max
