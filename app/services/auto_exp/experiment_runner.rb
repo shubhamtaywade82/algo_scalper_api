@@ -19,10 +19,10 @@ module AutoExp
     end
 
     def run(iterations: 10)
-      puts "Starting AutoExp Runner..."
+      Rails.logger.debug "Starting AutoExp Runner..."
 
       iterations.times do |i|
-        puts "\n--- Iteration #{i + 1}/#{iterations} ---"
+        Rails.logger.debug "\n--- Iteration #{i + 1}/#{iterations} ---"
 
         begin
           # 1. Load context
@@ -30,18 +30,18 @@ module AutoExp
           results = AutoExp::ResultsStore.load_recent
 
           # 2. Propose mutation
-          puts "Asking LLM for next hypothesis..."
+          Rails.logger.debug "Asking LLM for next hypothesis..."
           decision = @planner.propose(results: results, config: config)
 
           unless decision && decision["parameter"]
-            puts "LLM failed to propose a valid decision."
+            Rails.logger.debug "LLM failed to propose a valid decision."
             next
           end
 
-          puts "Mutation Proposed:"
-          puts " - Parameter: #{decision['parameter']}"
-          puts " - New Value: #{decision['value']}"
-          puts " - Reason:    #{decision['reason']}"
+          Rails.logger.debug "Mutation Proposed:"
+          Rails.logger.debug " - Parameter: #{decision['parameter']}"
+          Rails.logger.debug " - New Value: #{decision['value']}"
+          Rails.logger.debug " - Reason:    #{decision['reason']}"
 
           # 3. Apply mutation
           @applier.apply(
@@ -50,22 +50,22 @@ module AutoExp
           )
 
           # 4. Execute backtest
-          puts "Running backtest..."
+          Rails.logger.debug "Running backtest..."
           metrics = @executor.run
 
-          puts "Backtest Metrics:"
-          puts " - Profit Factor: #{metrics[:profit_factor]}"
-          puts " - Drawdown:      #{metrics[:drawdown]}"
-          puts " - Win Rate:      #{metrics[:win_rate]}"
+          Rails.logger.debug "Backtest Metrics:"
+          Rails.logger.debug " - Profit Factor: #{metrics[:profit_factor]}"
+          Rails.logger.debug " - Drawdown:      #{metrics[:drawdown]}"
+          Rails.logger.debug " - Win Rate:      #{metrics[:win_rate]}"
 
           # 5. Evaluate
           if @evaluator.improved?(metrics, @best_metrics)
-            puts "SUCCESS: Metrics improved! Keeping change."
+            Rails.logger.debug "SUCCESS: Metrics improved! Keeping change."
             status = "keep"
             @best_metrics = metrics
             commit(decision["reason"])
           else
-            puts "REJECT: Metrics did not improve. Reverting."
+            Rails.logger.debug "REJECT: Metrics did not improve. Reverting."
             status = "discard"
             revert
           end
@@ -78,7 +78,7 @@ module AutoExp
             description: decision["reason"]
           )
         rescue StandardError => e
-          puts "Error during iteration #{i + 1}: #{e.message}"
+          Rails.logger.debug "Error during iteration #{i + 1}: #{e.message}"
           # puts e.backtrace.first(10).join("\n")
           # Attempt to revert just in case
           begin
@@ -89,8 +89,8 @@ module AutoExp
         end
       end
 
-      puts "\nAutoExp completed."
-      puts "Best metrics achieved: #{@best_metrics.inspect}" if @best_metrics
+      Rails.logger.debug "\nAutoExp completed."
+      Rails.logger.debug "Best metrics achieved: #{@best_metrics.inspect}" if @best_metrics
     end
 
     private

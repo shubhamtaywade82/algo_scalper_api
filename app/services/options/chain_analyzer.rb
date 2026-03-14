@@ -912,8 +912,8 @@ module Options
 
         # Extract flow scores for lookup
         flow_side = side.to_s.downcase # 'ce' or 'pe'
-        flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
-          h[f[:strike].to_f] = f[:score]
+        flow_scores = (flow_results&.[](flow_side) || []).to_h do |f|
+                        [f[:strike].to_f, f[:score]]
         end
 
         # Rails.logger.debug { "[Options] Method called with index_cfg: #{index_cfg[:key]}, expiry_date: #{expiry_date}" }

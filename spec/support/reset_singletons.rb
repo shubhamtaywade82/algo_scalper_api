@@ -35,7 +35,7 @@ RSpec.configure do |config|
         else
           # Generic fallback for other singletons
           instance.instance_variables.each do |ivar|
-            next if [:@lock, :@mutex, :@index].include?(ivar)
+            next if %i[@lock @mutex @index].include?(ivar)
 
             val = instance.instance_variable_get(ivar)
             if val.is_a?(Concurrent::Map)
@@ -49,7 +49,7 @@ RSpec.configure do |config|
             else
               # Only set to nil if not a fundamental state container
               # We explicitly include @redis here to prevent mock leakage
-              instance.instance_variable_set(ivar, nil) unless [:@index, :@cache, :@queue].include?(ivar) && ivar != :@redis
+              instance.instance_variable_set(ivar, nil) unless %i[@index @cache @queue].include?(ivar) && ivar != :@redis
             end
           end
         end

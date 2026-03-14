@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe Orders::TrailingEngine do
   let(:tracker) do
-    instance_double('PositionTracker',
+    instance_double(PositionTracker,
                     symbol: symbol,
                     entry_price: 100.0,
                     highest_price: highest_price,
@@ -46,6 +46,7 @@ RSpec.describe Orders::TrailingEngine do
     describe '#calculate_sl' do
       context 'Phase 1: Slack (+5% profit)' do
         let(:ltp) { 105.0 }
+
         it 'returns early_sl_offset (-12% from entry)' do
           expect(engine.calculate_sl).to eq(88.0) # 100 * (1 - 0.12)
         end
@@ -53,6 +54,7 @@ RSpec.describe Orders::TrailingEngine do
 
       context 'Phase 2: Breakeven (+10% profit)' do
         let(:ltp) { 110.0 }
+
         it 'returns entry price' do
           expect(engine.calculate_sl).to eq(100.0)
         end
@@ -60,6 +62,7 @@ RSpec.describe Orders::TrailingEngine do
 
       context 'Phase 3: High-Watermark (+20% profit)' do
         let(:ltp) { 120.0 }
+
         it 'returns price with 22% trailing gap from peak' do
           # 120 * (1 - 0.22) = 120 * 0.78 = 93.6
           expect(engine.calculate_sl).to eq(93.6)
@@ -68,6 +71,7 @@ RSpec.describe Orders::TrailingEngine do
         context 'with existing high water mark' do
           let(:highest_price) { 130.0 }
           let(:ltp) { 125.0 }
+
           it 'uses the highest price for calculation' do
             # 130 * 0.78 = 101.4
             expect(engine.calculate_sl).to eq(101.4)
@@ -77,6 +81,7 @@ RSpec.describe Orders::TrailingEngine do
 
       context 'No trigger (< 5% profit)' do
         let(:ltp) { 102.0 }
+
         it 'returns nil' do
           expect(engine.calculate_sl).to be_nil
         end
@@ -90,6 +95,7 @@ RSpec.describe Orders::TrailingEngine do
     describe '#calculate_sl' do
       context 'Phase 1: Slack (+6% profit)' do
         let(:ltp) { 106.0 }
+
         it 'returns early_sl_offset (-10% from entry)' do
           expect(engine.calculate_sl).to eq(90.0) # 100 * (1 - 0.10)
         end
@@ -97,6 +103,7 @@ RSpec.describe Orders::TrailingEngine do
 
       context 'Phase 2: Breakeven (+12% profit)' do
         let(:ltp) { 112.0 }
+
         it 'returns entry price' do
           expect(engine.calculate_sl).to eq(100.0)
         end
@@ -104,6 +111,7 @@ RSpec.describe Orders::TrailingEngine do
 
       context 'Phase 3: High-Watermark (+18% profit)' do
         let(:ltp) { 118.0 }
+
         it 'returns price with 30% trailing gap from peak' do
           # 118 * (1 - 0.30) = 118 * 0.7 = 82.6
           expect(engine.calculate_sl).to eq(82.6)

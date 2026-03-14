@@ -40,8 +40,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
 
   before do
     cache.clear_tracker(tracker_id)
-    allow(Positions::MetadataResolver).to receive(:index_key).and_return('NIFTY')
-    allow(Positions::MetadataResolver).to receive(:direction).and_return('long')
+    allow(Positions::MetadataResolver).to receive_messages(index_key: 'NIFTY', direction: 'long')
   end
 
   after do
@@ -253,8 +252,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
     end
 
     it 'returns nil when entry_price is zero' do
-      allow(tracker).to receive(:entry_price).and_return(0)
-      allow(tracker).to receive(:avg_price).and_return(0)
+      allow(tracker).to receive_messages(entry_price: 0, avg_price: 0)
       result = service.send(:compute_pnl_pct, tracker, BigDecimal('130.0'))
       expect(result).to be_nil
     end

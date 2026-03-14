@@ -23,7 +23,7 @@ RSpec.configure do |config|
   config.before(:each) do
     if defined?(Live::MarketFeedHub)
       # Reset the hub before each test to prevent state leakage
-      # NOTE: Using instance_variable_set because calling stop! might trigger methods 
+      # NOTE: Using instance_variable_set because calling stop! might trigger methods
       # on leaked instance doubles from previous tests
       hub = Live::MarketFeedHub.instance
       hub.instance_variable_set(:@ws_client, nil)

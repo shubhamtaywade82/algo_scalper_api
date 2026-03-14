@@ -34,12 +34,10 @@ RSpec.describe Live::RiskManagerService do
     allow(Live::MarketFeedHub).to receive(:instance).and_return(market_feed_hub)
   end
 
-  after(:each) do
-    begin
+  after do
       service.stop if defined?(service) && service.send(:running?)
-    rescue StandardError
-      # ignore
-    end
+  rescue StandardError
+    # ignore
   end
 
   describe 'EPIC G — G1: Enforce Simplified Exit Rules' do
@@ -83,8 +81,7 @@ RSpec.describe Live::RiskManagerService do
         allow(PositionTracker).to receive(:active).and_return(PositionTracker.where(id: tracker.id))
         allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([tracker])
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
-        allow(service).to receive(:fetch_positions_indexed).and_return({})
-        allow(service).to receive(:tick_stream_fresh?).and_return(false)
+        allow(service).to receive_messages(fetch_positions_indexed: {}, tick_stream_fresh?: false)
         allow(service).to receive(:run_interval_enforcement_if_needed).and_call_original
         allow(service).to receive(:enforce_trailing_stops).and_call_original
         allow(service).to receive(:enforce_time_based_exit).and_call_original
@@ -125,7 +122,7 @@ RSpec.describe Live::RiskManagerService do
         service.start
         # Kill watchdog to avoid auto-restart
         service.instance_variable_get(:@watchdog_thread)&.kill
-        
+
         sleep 0.8 # Give thread time to execute and catch error
 
         # Service should log the error
@@ -190,7 +187,7 @@ RSpec.describe Live::RiskManagerService do
 
           service.send(:enforce_profit_floor, exit_engine: exit_engine)
           tracker.reload
-          expect(tracker.be_set?).to be_falsy
+          expect(tracker).not_to be_be_set
         end
       end
     end
@@ -247,7 +244,7 @@ RSpec.describe Live::RiskManagerService do
           # HWM: ₹1500, drop 3% threshold = 1500 × 0.97 = ₹1455
           # Current PnL ₹1455 should trigger exit
           # TrailingConfig handles the logic, we just verify delegation
-          
+
           # Stub TrailingConfig to trigger exit
           allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
 
@@ -278,7 +275,7 @@ RSpec.describe Live::RiskManagerService do
             high_water_mark_pnl: BigDecimal('1000.0'),
             last_pnl_rupees: BigDecimal('1000.0')
           )
-          
+
           # New higher PnL: ₹1125
           allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).with(tracker.id).and_return(
             Positions::ActiveCache::PositionData.new(
@@ -458,9 +455,9 @@ RSpec.describe Live::RiskManagerService do
 
       it 'raises error if exit_engine is missing or invalid' do
         expect(Rails.logger).to receive(:fatal).with(/CRITICAL: ExitEngine unavailable/)
-        expect {
+        expect do
           service.send(:dispatch_exit, nil, tracker, 'test reason')
-        }.to raise_error(/ExitEngine unavailable/)
+        end.to raise_error(/ExitEngine unavailable/)
       end
     end
 
@@ -597,8 +594,7 @@ RSpec.describe Live::RiskManagerService do
         allow(PositionTracker).to receive(:active).and_return(PositionTracker.where(id: tracker.id))
         allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([tracker])
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
-        allow(service).to receive(:fetch_positions_indexed).and_return({})
-        allow(service).to receive(:tick_stream_fresh?).and_return(false)
+        allow(service).to receive_messages(fetch_positions_indexed: {}, tick_stream_fresh?: false)
         allow(service).to receive(:run_interval_enforcement_if_needed).and_call_original
         allow(service).to receive(:enforce_trailing_stops).and_call_original
         allow(service).to receive(:enforce_time_based_exit).and_call_original
@@ -790,8 +786,7 @@ RSpec.describe Live::RiskManagerService do
         allow(PositionTracker).to receive(:active).and_return(PositionTracker.where(id: tracker.id))
         allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([tracker])
         allow(Live::PositionSyncService.instance).to receive(:sync_positions!)
-        allow(service).to receive(:fetch_positions_indexed).and_return({})
-        allow(service).to receive(:tick_stream_fresh?).and_return(false)
+        allow(service).to receive_messages(fetch_positions_indexed: {}, tick_stream_fresh?: false)
         allow(service).to receive(:run_interval_enforcement_if_needed).and_call_original
         allow(service).to receive(:enforce_trailing_stops).and_call_original
         allow(service).to receive(:enforce_time_based_exit).and_call_original
@@ -835,7 +830,7 @@ RSpec.describe Live::RiskManagerService do
         service.start
         # Kill watchdog so it doesn't restart the service after it stops
         service.instance_variable_get(:@watchdog_thread)&.kill
-        
+
         sleep 1.0 # Give thread time to execute, catch error, and stop
 
         # After error, service should stop running (rescue block sets @running = false)

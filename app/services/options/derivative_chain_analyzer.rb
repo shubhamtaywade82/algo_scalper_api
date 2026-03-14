@@ -456,8 +456,8 @@ module Options
       flow_side = direction == :bullish ? 'ce' : 'pe'
 
       # Extract flow scores for lookup
-      flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
-        h[f[:strike].to_f] = f[:score]
+      flow_scores = (flow_results&.[](flow_side) || []).to_h do |f|
+                      [f[:strike].to_f, f[:score]]
       end
 
       max_distance_pct = (@config[:strike_distance_pct] || 0.02).to_f

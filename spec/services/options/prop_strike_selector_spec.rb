@@ -3,13 +3,13 @@
 require 'rails_helper'
 
 RSpec.describe Options::PropStrikeSelector do
-  let(:spot) { 24200.0 }
+  let(:spot) { 24_200.0 }
   let(:selector) { described_class.new(spot: spot) }
 
   describe '#score' do
     let(:option) do
       {
-        strike: 24200.0,
+        strike: 24_200.0,
         delta: 0.5,
         oi: 500_000,
         volume: 50_000,
@@ -24,7 +24,7 @@ RSpec.describe Options::PropStrikeSelector do
     end
 
     it 'penalizes strikes far from spot' do
-      far_option = option.merge(strike: 24500.0, delta: 0.2)
+      far_option = option.merge(strike: 24_500.0, delta: 0.2)
       expect(selector.score(far_option)).to be < selector.score(option)
     end
 

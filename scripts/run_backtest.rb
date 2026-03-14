@@ -31,7 +31,7 @@ def run_backtest
 
   # Calculate a simple profit factor (gross win / gross loss)
   wins = summary[:trades].select { |t| t[:pnl_percent].positive? }.sum { |t| t[:pnl_percent] }
-  losses = summary[:trades].select { |t| t[:pnl_percent] < 0 }.sum { |t| t[:pnl_percent] }.abs
+  losses = summary[:trades].select { |t| t[:pnl_percent].negative? }.sum { |t| t[:pnl_percent] }.abs
 
   profit_factor = if losses.zero?
 wins.positive? ? 5.0 : 0.0

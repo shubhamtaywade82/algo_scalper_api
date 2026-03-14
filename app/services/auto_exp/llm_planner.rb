@@ -24,7 +24,7 @@ module AutoExp
         "value" => { "type" => "number" },
         "reason" => { "type" => "string" }
       }
-    }
+    }.freeze
 
     def initialize
       @client = Services::Ai::OpenaiClient.instance

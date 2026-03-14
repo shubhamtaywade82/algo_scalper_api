@@ -25,7 +25,7 @@ module Orders
       return 0.0 if arr.empty?
 
       mean = arr.sum / arr.size.to_f
-      variance = arr.map { |x| (x - mean)**2 }.sum / arr.size.to_f
+      variance = arr.sum { |x| (x - mean)**2 } / arr.size.to_f
       Math.sqrt(variance)
     end
   end

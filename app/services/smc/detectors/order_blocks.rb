@@ -11,12 +11,12 @@ module Smc
 
       # Latest unmitigated bullish order block
       def bullish
-        active_blocks.select { |b| b[:bias] == :bullish }.last
+        active_blocks.reverse.find { |b| b[:bias] == :bullish }
       end
 
       # Latest unmitigated bearish order block
       def bearish
-        active_blocks.select { |b| b[:bias] == :bearish }.last
+        active_blocks.reverse.find { |b| b[:bias] == :bearish }
       end
 
       def active_blocks

@@ -6,8 +6,7 @@ module Live
       # Lightweight struct for ETF position data (replaces OpenStruct for performance)
       EtfPositionData = Struct.new(
         :trend_score, :peak_trend_score, :adx, :atr_ratio,
-        :underlying_price, :vwap, :is_long?,
-        keyword_init: true
+        :underlying_price, :vwap, :is_long?
       )
 
       # Enforcement methods always accept an exit_engine keyword. They do not fetch positions from caller.

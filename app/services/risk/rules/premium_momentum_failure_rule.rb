@@ -56,7 +56,7 @@ module Risk
 
         # Check if stalled - ONLY for losing trades (Theta protection)
         # Winners are handled by trailing stop/peak drawdown logic
-        return no_action_result if context.pnl_pct.to_f > 0
+        return no_action_result if context.pnl_pct.to_f.positive?
 
         stall_minutes = DEFAULT_STALL_MINUTES
         elapsed_since_peak = (Time.current - last_peak_at) / 60.0

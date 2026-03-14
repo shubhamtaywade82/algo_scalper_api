@@ -36,7 +36,7 @@ module Orders
 
       if @symbol.include?('SENSEX') || @symbol.include?('BANKEX')
         today == 5 # Friday
-      elsif @symbol.include?('NIFTY') && !@symbol.include?('BANK') && !@symbol.include?('FIN') && !@symbol.include?('MIDCP')
+      elsif @symbol.include?('NIFTY') && @symbol.exclude?('BANK') && @symbol.exclude?('FIN') && @symbol.exclude?('MIDCP')
         today == 4 # Thursday
       elsif @symbol.include?('BANKNIFTY')
         today == 3 # Wednesday

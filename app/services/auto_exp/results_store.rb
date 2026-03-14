@@ -35,7 +35,7 @@ module AutoExp
       return [] unless File.exist?(FILE)
 
       lines = File.readlines(FILE).last(limit)
-      lines.map do |line|
+      lines.filter_map do |line|
         parts = line.chomp.split("\t")
         next if parts[0] == "commit" # Skip header if it was in the last 10 lines
 
@@ -47,7 +47,7 @@ module AutoExp
           status: parts[4],
           description: parts[5]
         }
-      end.compact
+      end
     end
   end
 end

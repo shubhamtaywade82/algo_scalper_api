@@ -47,7 +47,7 @@ module Strategies
 
       if sym.include?('SENSEX') || sym.include?('BANKEX')
         today == 5
-      elsif sym.include?('NIFTY') && !sym.include?('BANK') && !sym.include?('FIN') && !sym.include?('MIDCP')
+      elsif sym.include?('NIFTY') && sym.exclude?('BANK') && sym.exclude?('FIN') && sym.exclude?('MIDCP')
         today == 4
       elsif sym.include?('BANKNIFTY')
         today == 3

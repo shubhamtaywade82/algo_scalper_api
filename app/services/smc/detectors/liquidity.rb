@@ -39,7 +39,7 @@ module Smc
 
       # Equal Highs (EQH) - multiple swing highs at similar levels
       def equal_highs?
-        highs = recent_swing_highs.map { |h| h[:price] }.uniq
+        highs = recent_swing_highs.pluck(:price).uniq
         return false if highs.size < 2
 
         (highs.max - highs.min) <= @tolerance
@@ -47,7 +47,7 @@ module Smc
 
       # Equal Lows (EQL) - multiple swing lows at similar levels
       def equal_lows?
-        lows = recent_swing_lows.map { |l| l[:price] }.uniq
+        lows = recent_swing_lows.pluck(:price).uniq
         return false if lows.size < 2
 
         (lows.max - lows.min) <= @tolerance

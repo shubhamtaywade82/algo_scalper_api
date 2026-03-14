@@ -44,7 +44,7 @@ module Orders
       return (@entry_price * 0.88).round(2) if profit < 0.10
 
       # State 3 — Gamma expansion (Loosen trailing to avoid premature exit)
-      if profit > cfg[:gamma_trigger] && acceleration > 0
+      if profit > cfg[:gamma_trigger] && acceleration.positive?
         return (@highest * cfg[:gamma_trail]).round(2)
       end
 

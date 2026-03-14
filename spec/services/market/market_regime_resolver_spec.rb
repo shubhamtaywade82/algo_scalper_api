@@ -128,7 +128,7 @@ RSpec.describe Market::MarketRegimeResolver do
     end
 
     context 'with struct candles' do
-      let(:candle_struct) { Struct.new(:open, :high, :low, :close, keyword_init: true) }
+      let(:candle_struct) { Struct.new(:open, :high, :low, :close) }
       let(:candles) do
         generate_candles(base: 22_000, count: 25, trend: :up).map do |c|
           candle_struct.new(open: c[:open], high: c[:high], low: c[:low], close: c[:close])

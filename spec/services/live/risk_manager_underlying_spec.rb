@@ -42,7 +42,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
     allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
     allow(active_cache).to receive_messages(get_by_tracker_id: position_data, all_positions: [position_data])
     allow(PositionTracker).to receive(:active).and_return(PositionTracker.where(id: tracker.id))
-    
+
     # Mock pnl_snapshot to return valid data
     allow(service).to receive(:pnl_snapshot).with(tracker).and_return({
       pnl: BigDecimal('250.0'),
@@ -61,7 +61,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
     it 'exits when StructureInvalidationRule triggers' do
       # Stub RuleResult
       result = instance_double(Risk::Rules::RuleResult, exit?: true, reason: 'STRUCTURE_INVALIDATION')
-      
+
       # Stub StructureInvalidationRule to return exit result
       allow_any_instance_of(Risk::Rules::StructureInvalidationRule).to receive(:evaluate).and_return(result)
 
@@ -73,7 +73,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
     it 'does not exit when StructureInvalidationRule does not trigger' do
       # Stub RuleResult
       result = instance_double(Risk::Rules::RuleResult, exit?: false)
-      
+
       # Stub StructureInvalidationRule to return no-exit result
       allow_any_instance_of(Risk::Rules::StructureInvalidationRule).to receive(:evaluate).and_return(result)
 
@@ -88,7 +88,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
       # Mock TrailingEngine
       @trailing_engine = instance_double(Live::TrailingEngine)
       service.instance_variable_set(:@trailing_engine, @trailing_engine)
-      
+
       # Ensure trade_state is set so enforce_dynamic_trailing_stops_for doesn't return early
       tracker.update!(trade_state: 'expansion')
     end

@@ -13,9 +13,9 @@ module Smc
         # Only check the last 30 candles for active FVGs
         lookback = [0, candles.size - 30].max
 
-        (lookback...(candles.size - 2)).map do |i|
+        (lookback...(candles.size - 2)).filter_map do |i|
           detect_fvg(i)
-        end.compact
+        end
       end
 
       def active_gaps
