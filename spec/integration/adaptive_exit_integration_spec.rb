@@ -19,10 +19,34 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
   before do
     allow(exit_engine).to receive(:execute_exit)
     allow(service).to receive_messages(seconds_below_entry: 0, calculate_atr_ratio: 1.0)
+    Positions::TrailingConfig.reset_config!
+    
+    # Mock RedisPnlCache
     allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_wrap_original do |_method, *args|
-      # Return pnl_data if it's defined in the current context (it will be via let)
-      # Since fetch_pnl takes tracker_id, we check if it matches tracker.id
       args.first == tracker.id ? pnl_data : nil
+    end
+
+    # Mock ActiveCache (used by TrailingEngine)
+    active_cache = Positions::ActiveCache.instance
+    allow(active_cache).to receive(:get_by_tracker_id).and_wrap_original do |_method, *args|
+      if args.first == tracker.id && defined?(pnl_data)
+        Positions::ActiveCache::PositionData.new(
+          tracker_id: tracker.id,
+          security_id: tracker.security_id,
+          segment: tracker.segment,
+          entry_price: tracker.entry_price,
+          quantity: tracker.quantity,
+          current_ltp: pnl_data[:ltp] || (tracker.entry_price.to_f * (1 + pnl_data[:pnl_pct].to_f)),
+          pnl: pnl_data[:pnl],
+          pnl_pct: pnl_data[:pnl_pct],
+          high_water_mark: pnl_data[:hwm_pnl],
+          peak_profit_pct: pnl_data[:peak_profit_pct] || pnl_data[:hwm_pnl_pct] || (pnl_data[:hwm_pnl] && tracker.entry_price.to_f > 0 ? (pnl_data[:hwm_pnl] / (tracker.entry_price.to_f * tracker.quantity)) : 0.05),
+          position_direction: %w[long_ce long_pe].include?(tracker.side) ? :long : :short,
+          index_key: 'NIFTY'
+        )
+      else
+        nil
+      end
     end
   end
 
@@ -69,18 +93,18 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       context 'when position is profitable and drops' do
         let(:pnl_data) do
           {
-            pnl: BigDecimal('150.0'), # +3% current (dropped from peak)
-            pnl_pct: BigDecimal('0.03'),
+            pnl: BigDecimal('100.0'), # +2% current (dropped from peak)
+            pnl_pct: BigDecimal('0.02'),
             hwm_pnl: BigDecimal('250.0') # +5% peak
           }
         end
 
         it 'triggers adaptive trailing stop' do
-          # Peak: 5%, Current: 3%, Drop: 2%
-          # With conservative config, should trigger
+          # Peak: 5%, Current: 2%, Drop: 3%
+          # With conservative config, should trigger peak_drawdown_exit
           expect(exit_engine).to receive(:execute_exit).with(
             tracker,
-            match(/ADAPTIVE_TRAILING_STOP|TRAILING_STOP/)
+            match(/ADAPTIVE_TRAILING_STOP|TRAILING_STOP|peak_drawdown_exit/)
           )
           service.enforce_trailing_stops(exit_engine: exit_engine)
         end

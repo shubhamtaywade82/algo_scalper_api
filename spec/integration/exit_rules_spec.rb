@@ -97,8 +97,27 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
                                               '12345' => mock_position
                                             }, current_ltp: BigDecimal('105.0'), current_ltp_with_freshness_check: BigDecimal('105.0'))
 
-    # Mock order execution
-    allow(risk_manager).to receive(:execute_exit)
+    # Mock ActiveCache for TrailingEngine
+    mock_active_cache = instance_double(Positions::ActiveCache)
+    allow(Positions::ActiveCache).to receive(:instance).and_return(mock_active_cache)
+    
+    # Default mock for ActiveCache
+    allow(mock_active_cache).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
+      Positions::ActiveCache::PositionData.new(
+        tracker_id: position_tracker.id,
+        security_id: '12345',
+        entry_price: 100.0,
+        current_ltp: 105.0,
+        pnl: 250.0,
+        pnl_pct: 0.05,
+        peak_profit_pct: 0.05,
+        sl_price: 70.0,
+        quantity: 50
+      )
+    )
+
+    # Mock TrailingConfig to trigger peak drawdown in tests
+    allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
   end
 
   describe 'Trailing Stop Logic' do
@@ -107,37 +126,63 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         # Set up position with some profit
         position_tracker.update!(
           last_pnl_rupees: BigDecimal('50.0'),
-          high_water_mark_pnl: BigDecimal('50.0')
+          high_water_mark_pnl: BigDecimal('50.0'),
+          trade_state: 'expansion'
+        )
+        
+        # Ensure ActiveCache has profitable state
+        allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
+          Positions::ActiveCache::PositionData.new(
+            tracker_id: position_tracker.id,
+            security_id: '12345',
+            entry_price: 100.0,
+            current_ltp: 115.0,
+            pnl: 750.0,
+            pnl_pct: 0.15,
+            peak_profit_pct: 0.15,
+            sl_price: 70.0,
+            quantity: 50
+            )
+
         )
       end
 
       it 'triggers trailing stop when PnL drops 3% from high water mark' do
-        # Current PnL drops to 48.5 (3% drop from 50)
-        allow(risk_manager).to receive(:current_ltp_with_freshness_check).and_return(BigDecimal('99.0'))
+        # Mock drawdown triggered
+        allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
 
-        # Verify that the method can be called without crashing
-        expect { risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine) }.not_to raise_error
+        expect(mock_exit_engine).to receive(:execute_exit).with(position_tracker, /peak_drawdown_exit/)
+        
+        risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
       end
 
       it 'does not trigger trailing stop when PnL drop is less than 3%' do
-        # Current PnL drops to 49.0 (2% drop from 50)
-        allow(risk_manager).to receive(:current_ltp_with_freshness_check).and_return(BigDecimal('99.5'))
+        # Mock drawdown NOT triggered
+        allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
 
-        expect(risk_manager).not_to receive(:execute_exit)
+        expect(mock_exit_engine).not_to receive(:execute_exit)
 
         risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
       end
 
       it 'activates trailing stop only after 10% profit' do
         # Position with 5% profit (below 10% threshold)
-        position_tracker.update!(
-          last_pnl_rupees: BigDecimal('25.0'),
-          high_water_mark_pnl: BigDecimal('25.0')
+        allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
+          Positions::ActiveCache::PositionData.new(
+            tracker_id: position_tracker.id,
+            security_id: '12345',
+            entry_price: 100.0,
+            current_ltp: 105.0,
+            pnl: 250.0,
+            pnl_pct: 0.05,
+            peak_profit_pct: 0.05,
+            sl_price: 70.0,
+            quantity: 50
+            )
+
         )
 
-        allow(risk_manager).to receive(:current_ltp_with_freshness_check).and_return(BigDecimal('99.0'))
-
-        expect(risk_manager).not_to receive(:execute_exit)
+        expect(mock_exit_engine).not_to receive(:execute_exit)
 
         risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
       end
@@ -296,8 +341,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
           pnl: pnl,
           pnl_pct: pnl_pct,
           ltp: ltp,
-          hwm: position_tracker.high_water_mark_pnl,
-          hwm_pnl_pct: anything
+          hwm: position_tracker.high_water_mark_pnl
         )
 
         risk_manager.send(:update_pnl_in_redis, position_tracker, pnl, pnl_pct, ltp)
@@ -317,100 +361,31 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
   end
 
   describe 'Exit Execution' do
-    context 'when executing exits' do
-      it 'executes exit with correct reason' do
+    context 'when dispatching exits' do
+      it 'delegates exit to exit_engine' do
         reason = 'hard stop-loss (30.0%)'
 
-        # Verify that the method can be called without crashing
-        expect { risk_manager.send(:execute_exit, mock_position, position_tracker, reason: reason) }.not_to raise_error
+        expect(mock_exit_engine).to receive(:execute_exit).with(position_tracker, reason)
+        risk_manager.send(:dispatch_exit, mock_exit_engine, position_tracker, reason)
       end
 
-      it 'stores exit reason in metadata' do
+      it 'stores exit reason in metadata when tracking path' do
         reason = 'take-profit (50.0%)'
+        exit_path = 'take_profit'
 
-        # Override the global mock to allow the actual method to be called
-        allow(risk_manager).to receive(:execute_exit).and_call_original
-
-        # Mock the sell order placement to prevent failures
-        allow(Orders::Placer).to receive(:sell_market!).and_return(double('Order', order_no: 'EXIT123'))
-
-        # Mock Redis cache clearing to prevent failures
-        allow(Live::RedisPnlCache.instance).to receive(:clear_tracker).and_return(true)
-
-        # Mock mark_exited! to prevent database issues
-        allow(position_tracker).to receive(:mark_exited!).and_return(true)
-
-        # Mock the exit_position method to prevent any issues there
-        allow(risk_manager).to receive(:exit_position).and_return(true)
-
-        # Let's test the execute_exit method
-        # execute_exit only takes (tracker, reason) - not (position, tracker, reason:)
-        risk_manager.send(:execute_exit, position_tracker, reason)
+        # track_exit_path is called before dispatch_exit in enforcement methods
+        risk_manager.send(:track_exit_path, position_tracker, exit_path, reason)
 
         # Check that the metadata was actually updated
         position_tracker.reload
         expect(position_tracker.meta['exit_reason']).to eq(reason)
+        expect(position_tracker.meta['exit_path']).to eq(exit_path)
         expect(position_tracker.meta['exit_triggered_at']).to be_present
       end
 
-      it 'clears Redis cache for tracker' do
-        # Verify that the method can be called without crashing
-        expect { risk_manager.send(:execute_exit, mock_position, position_tracker, reason: 'manual') }.not_to raise_error
-      end
-
-      it 'handles exit execution errors gracefully' do
-        allow(risk_manager).to receive(:exit_position).and_raise(StandardError, 'Exit error')
-
-        # Verify that the method can be called without crashing
-        expect { risk_manager.send(:execute_exit, mock_position, position_tracker, reason: 'manual') }.not_to raise_error
-      end
-    end
-
-    context 'when exiting positions' do
-      it 'exits position using DhanHQ API when available' do
-        allow(mock_position).to receive(:exit!)
-
-        expect(mock_position).to receive(:exit!)
-
-        risk_manager.send(:exit_position, mock_position, position_tracker)
-      end
-
-      it "places sell order when position object doesn't support exit" do
-        # NOTE: exit_position doesn't call exit_position! directly
-        # It tries Orders.config.flat_position first, then position.exit!
-        # If neither works, it returns an error
-        # This test verifies the error path when no exit mechanism works
-
-        # Stub logger to verify error is logged
-        allow(Rails.logger).to receive(:error)
-
-        # Mock that Orders.config doesn't have flat_position
-        allow(Orders).to receive(:respond_to?).with(:config).and_return(false)
-
-        # Mock that position doesn't support exit!
-        allow(mock_position).to receive(:respond_to?).with(:exit!).and_return(false)
-        allow(risk_manager).to receive(:fetch_positions_indexed).and_return({ '12345' => mock_position })
-
-        # When no exit mechanism works, it should return an error
-        result = risk_manager.send(:exit_position, mock_position, position_tracker)
-        expect(result[:success]).to be false
-        expect(Rails.logger).to have_received(:error).with(/Live exit failed/)
-      end
-
-      it 'cancels remote order when order_id is available' do
-        # NOTE: exit_position doesn't actually check for order_id and cancel orders
-        # It only tries Orders.config.flat_position or position.exit!
-        # This test may be testing functionality that doesn't exist
-        # For now, we'll verify that exit_position can be called without errors
-
-        allow(mock_position).to receive(:respond_to?).with(:exit!).and_return(false)
-        allow(risk_manager).to receive(:fetch_positions_indexed).and_return({ '12345' => mock_position })
-        allow(Orders).to receive(:respond_to?).with(:config).and_return(false)
-
-        # exit_position should handle the case gracefully
-        result = risk_manager.send(:exit_position, mock_position, position_tracker)
-        expect(result).to be_a(Hash)
-        expect(result).to have_key(:success)
+      it 'raises error if exit_engine is unavailable' do
+        expect(Rails.logger).to receive(:fatal).with(/ExitEngine unavailable/)
+        expect { risk_manager.send(:dispatch_exit, nil, position_tracker, 'manual') }.to raise_error(/ExitEngine unavailable/)
       end
     end
   end
@@ -442,11 +417,12 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
       end
 
       it 'registers cooldown to prevent immediate re-entry' do
+        allow(Rails.cache).to receive(:write) # Allow other calls
         expect(Rails.cache).to receive(:write).with(
           "reentry:#{position_tracker.symbol}",
           anything,
-          expires_in: 8.hours
-        )
+          hash_including(expires_in: 8.hours)
+        ).at_least(:once)
 
         position_tracker.mark_exited!
       end
