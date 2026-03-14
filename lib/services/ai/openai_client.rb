@@ -340,16 +340,9 @@ module Services
 
         opts = options.merge(log_context: log_context)
 
-        # Serialize Ollama requests to prevent parallel calls
-        result = if @provider == :ollama
-                   with_request_serialization do
-                     execute_chat(messages: messages, model: model, temperature: temperature, tools: tools,
-                                  tool_choice: tool_choice, **opts)
-                   end
-                 else
-                   execute_chat(messages: messages, model: model, temperature: temperature, tools: tools,
-                                tool_choice: tool_choice, **opts)
-                 end
+        # Serialize Ollama requests to prevent parallel calls; retry on connection reset
+        result = chat_with_retry(messages: messages, model: model, temperature: temperature, tools: tools,
+                                 tool_choice: tool_choice, opts: opts)
 
         # If tools are provided, return full response hash; otherwise return content string (backward compatibility)
         if tools
@@ -361,6 +354,41 @@ module Services
       rescue StandardError => e
         Rails.logger.error("[OpenAIClient] Chat error: #{e.class} - #{e.message}")
         nil
+      end
+
+      # Retry wrapper for Ollama chat: connection reset by peer is common under load or long prompts
+      CONNECTION_ERRORS = [
+        Faraday::ConnectionFailed,
+        Faraday::TimeoutError,
+        Errno::ECONNRESET,
+        Errno::ECONNREFUSED,
+        EOFError
+      ].freeze
+
+      def chat_with_retry(messages:, model:, temperature:, tools:, tool_choice:, opts:)
+        max_attempts = @provider == :ollama ? 3 : 1
+        attempt = 0
+
+        begin
+          attempt += 1
+          if @provider == :ollama
+            with_request_serialization do
+              execute_chat(messages: messages, model: model, temperature: temperature, tools: tools,
+                           tool_choice: tool_choice, **opts)
+            end
+          else
+            execute_chat(messages: messages, model: model, temperature: temperature, tools: tools,
+                         tool_choice: tool_choice, **opts)
+          end
+        rescue *CONNECTION_ERRORS => e
+          raise e unless attempt < max_attempts && @provider == :ollama
+
+          Rails.logger.warn(
+            "[OpenAIClient] Chat connection error (attempt #{attempt}/#{max_attempts}): #{e.class} - #{e.message}; retrying in 3s..."
+          )
+          sleep(3)
+          retry
+        end
       end
 
       # Internal chat execution (without serialization wrapper)

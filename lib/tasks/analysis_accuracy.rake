@@ -47,7 +47,7 @@ namespace :analysis do
       puts "No AI analysis entries found for #{symbol} in #{log_file}"
       puts
       puts 'Expected log patterns:'
-      puts "  - [SMCSanner] #{symbol}: <decision>"
+      puts "  - [SmcScanner] #{symbol}: <decision>"
       puts '  - Current price: ₹XXXXX'
       puts '  - BUY CE / BUY PE recommendations'
       exit 0
@@ -104,8 +104,8 @@ namespace :analysis do
   class AnalysisLogParser
     # Patterns for extracting data
     PATTERNS = {
-      # SMC decision line: [SMCSanner] NIFTY: call/put/no_trade
-      decision: /\[SMCSanner\]\s+(\w+):\s+(call|put|no_trade)/i,
+      # SMC decision line: [SmcScanner] NIFTY: call/put/no_trade
+      decision: /\[SmcScanner\]\s+(\w+):\s+(call|put|no_trade)/i,
 
       # Current price in log
       current_price: /Current price:\s*₹?([\d,]+\.?\d*)/,
@@ -152,7 +152,7 @@ namespace :analysis do
         current_line_no += 1
 
         # Check for SMC decision for our symbol
-        if line =~ /\[SMCSanner\]\s+#{@symbol}:\s+(call|put|no_trade)/i
+        if line =~ /\[SmcScanner\]\s+#{@symbol}:\s+(call|put|no_trade)/i
           # Save previous analysis if exists
           analyses << current_analysis if current_analysis&.dig(:decision)
 
