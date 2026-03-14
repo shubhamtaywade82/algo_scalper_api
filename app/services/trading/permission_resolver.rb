@@ -114,18 +114,20 @@ module Trading
         # Use ltf for FVG/liquidity if available, otherwise fallback to mtf
         fvg_data = ltf.respond_to?(:fvg) ? ltf.fvg.to_h : {}
         liquidity_data = ltf.respond_to?(:liquidity) ? ltf.liquidity.to_h : {}
-        fvg_gaps = Array(fvg_data[:gaps])
+        # Active = unmitigated FVGs; all_gaps = all FVGs in lookback (displacement proxy)
+        fvg_active = Array(fvg_data[:active])
+        fvg_any = fvg_active.any? || Array(fvg_data[:all_gaps]).any?
         liquidity_h = liquidity_data
 
         {
           structure_state: structure_state,
           trend: htf_trend,
-          bos_recent: (mtf_struct[:bos] == true),
-          displacement: fvg_gaps.any?, # proxy: presence of FVG gaps
-          liquidity_event_resolved: (liquidity_h[:sweep] == true),
+          bos_recent: mtf_struct[:last_bos].present?,
+          displacement: fvg_any,
+          liquidity_event_resolved: liquidity_h[:buy_side_taken] == true || liquidity_h[:sell_side_taken] == true,
           active_liquidity_trap: liquidity_h[:equal_highs] == true || liquidity_h[:equal_lows] == true,
           trap_resolved: false,
-          follow_through: (ltf_struct[:bos] == true)
+          follow_through: ltf_struct[:last_bos].present?
         }
       rescue StandardError
         {}

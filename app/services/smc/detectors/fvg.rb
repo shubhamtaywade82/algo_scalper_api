@@ -4,6 +4,9 @@ module Smc
   module Detectors
     class Fvg
       DISPLACEMENT_THRESHOLD = 0.8
+      # RVR > 1.5x rolling 20-period average (SMC spec: displacement = institutional)
+      RVR_MIN = 1.5
+      VOLUME_LOOKBACK = 20
 
       def initialize(series)
         @series = series
@@ -50,10 +53,27 @@ module Smc
         return false unless candle
 
         atr = @series.atr(20)
-        return true unless atr # Default to true if not enough data for ATR
-
         body_size = (candle.close - candle.open).abs
-        body_size > (atr * DISPLACEMENT_THRESHOLD)
+        return false if atr && body_size <= (atr * DISPLACEMENT_THRESHOLD)
+        return true unless atr # Not enough data for ATR: allow by body size only
+
+        # Volume confirmation when available (RVR > 1.5x per SMC spec)
+        rvr_ok = rvr_above_threshold?(candle)
+        rvr_ok.nil? ? true : rvr_ok
+      end
+
+      # Returns true if volume > RVR_MIN * avg_volume_20, false if below, nil if no volume data
+      def rvr_above_threshold?(candle)
+        idx = candles.index(candle)
+        return nil unless idx && idx >= VOLUME_LOOKBACK
+
+        window = candles[(idx - VOLUME_LOOKBACK)...idx]
+        return nil unless window.all? { |c| c.respond_to?(:volume) && c.volume.to_i.positive? }
+
+        avg = window.sum(&:volume).to_f / VOLUME_LOOKBACK
+        return nil if avg.zero?
+
+        (candle.volume.to_f / avg) >= RVR_MIN
       end
 
       def mitigated?(gap)

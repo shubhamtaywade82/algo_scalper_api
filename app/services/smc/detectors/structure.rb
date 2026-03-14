@@ -15,6 +15,10 @@ module Smc
       # Returns the trend based on structural breaks
       def trend
         return :range if bos_history.empty?
+        # Current bar BOS as fallback when history is empty (e.g. short series)
+        if (cur = bos?)
+          return cur[:type] == :bullish ? :bullish : :bearish
+        end
 
         bos_history.last[:type] == :bullish ? :bullish : :bearish
       end
@@ -22,10 +26,11 @@ module Smc
       def bos?
         return false if swings.empty?
 
-        last_high = last_swing_high[:price]
-        last_low = last_swing_low[:price]
-        close = @series.candles.last.close
+        last_high = last_swing_high&.dig(:price)
+        last_low = last_swing_low&.dig(:price)
+        return false unless last_high && last_low
 
+        close = @series.candles.last.close
         if close > last_high
           { type: :bullish, price: close, index: @series.candles.size - 1 }
         elsif close < last_low
@@ -92,10 +97,41 @@ module Smc
         end
       end
 
+      # Build BOS history from swings and closes so trend can be bullish/bearish.
+      # Only considers candle close vs last confirmed swing high/low (body close, not wick).
       def detect_bos_history
-        # Simplified: just return based on current relationship
-        # Incremental state would ideally be stored in Redis/Database
-        []
+        history = []
+        return history if swings.size < 2
+
+        arr = @series.candles
+        min_i = @lookback
+        max_i = arr.size - 1
+
+        if max_i >= min_i
+          (min_i..max_i).each do |i|
+            close = arr[i].close
+            last_high = swings.select { |s| s[:type] == :high && s[:index] + @lookback <= i }.last
+            last_low = swings.select { |s| s[:type] == :low && s[:index] + @lookback <= i }.last
+            next unless last_high && last_low
+
+            if close > last_high[:price]
+              history << { type: :bullish, price: close, index: i }
+            elsif close < last_low[:price]
+              history << { type: :bearish, price: close, index: i }
+            end
+          end
+        end
+
+        # When window is too short, add current-bar BOS if it breaks structure (at most one)
+        if history.empty? && arr.any? && last_swing_high && last_swing_low
+          close = arr.last.close
+          if close > last_swing_high[:price]
+            history << { type: :bullish, price: close, index: arr.size - 1 }
+          elsif close < last_swing_low[:price]
+            history << { type: :bearish, price: close, index: arr.size - 1 }
+          end
+        end
+        history
       end
     end
   end

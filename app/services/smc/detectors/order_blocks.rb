@@ -4,6 +4,8 @@ module Smc
   module Detectors
     class OrderBlocks
       DISPLACEMENT_THRESHOLD = 0.8
+      RVR_MIN = 1.5
+      VOLUME_LOOKBACK = 20
 
       def initialize(series)
         @series = series
@@ -36,7 +38,7 @@ module Smc
           b = candles[i + 1]
 
           next unless a && b
-          next unless displacement?(b)
+          next unless displacement?(b, i + 1)
 
           if a.bearish? && b.bullish? && b.close > a.high
             blocks << { bias: :bullish, high: a.high, low: a.low, index: i, timestamp: a.timestamp }
@@ -62,14 +64,29 @@ module Smc
 
       private
 
-      def displacement?(candle)
+      def displacement?(candle, candle_index = nil)
         return false unless candle
 
         atr = @series.atr(20)
+        body_size = (candle.close - candle.open).abs
+        return false if atr && body_size <= (atr * DISPLACEMENT_THRESHOLD)
         return true unless atr
 
-        body_size = (candle.close - candle.open).abs
-        body_size > (atr * DISPLACEMENT_THRESHOLD)
+        rvr_ok = rvr_above_threshold?(candle, candle_index)
+        rvr_ok.nil? ? true : rvr_ok
+      end
+
+      def rvr_above_threshold?(candle, candle_index = nil)
+        idx = candle_index || candles.index(candle)
+        return nil unless idx && idx >= VOLUME_LOOKBACK
+
+        window = candles[(idx - VOLUME_LOOKBACK)...idx]
+        return nil unless window.all? { |c| c.respond_to?(:volume) && c.volume.to_i.positive? }
+
+        avg = window.sum(&:volume).to_f / VOLUME_LOOKBACK
+        return nil if avg.zero?
+
+        (candle.volume.to_f / avg) >= RVR_MIN
       end
 
       def mitigated?(block)
