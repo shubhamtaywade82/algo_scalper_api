@@ -26,6 +26,10 @@ module Live
       # Central monitoring loop: keep PnL and caches fresh.
       # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
       def monitor_loop(last_paper_pnl_update)
+        # Clear per-cycle caches at the start
+        @redis_pnl_cache = {}
+        @cycle_tracker_map = nil
+
         # Skip processing if market is closed and no active positions
         if TradingSession::Service.market_closed?
           # Only fetch once after market closes, then skip all checks until market opens

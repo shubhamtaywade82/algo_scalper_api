@@ -46,9 +46,7 @@ module Redis
       @client.del(key)
     end
 
-    def info
-      @client.info
-    end
+    delegate :info, to: :@client
 
     private
 

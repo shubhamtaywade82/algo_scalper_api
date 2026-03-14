@@ -117,10 +117,10 @@ RSpec.describe PositionTracker do
           tracker.update(segment: nil)
           allow(instrument).to receive(:exchange_segment).and_return('NSE_FNO')
 
-          market_feed_hub = instance_double(Live::MarketFeedHub, start!: true, running?: true, 
-                                           subscribed?: false, subscribe: true, stop!: true)
+          market_feed_hub = instance_double(Live::MarketFeedHub, start!: true, running?: true,
+                                                                 subscribed?: false, subscribe: true, stop!: true)
           allow(Live::MarketFeedHub).to receive(:instance).and_return(market_feed_hub)
-          
+
           expect(market_feed_hub).to receive(:subscribe).with(
             segment: 'NSE_FNO',
             security_id: '50074'

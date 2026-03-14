@@ -77,12 +77,15 @@ module AutoExp
             status: status,
             description: decision["reason"]
           )
-
         rescue StandardError => e
           puts "Error during iteration #{i + 1}: #{e.message}"
           # puts e.backtrace.first(10).join("\n")
           # Attempt to revert just in case
-          revert rescue nil
+          begin
+            revert
+          rescue StandardError
+            nil
+          end
         end
       end
 

@@ -114,7 +114,7 @@ module Options
           institutional_type = Options::StrikeSelector.strike_type_for_momentum(momentum_score)
           if institutional_type == :itm
             # Select ITM (strike lower than ATM for CE, higher than ATM for PE)
-            itm_strike = (side == :CE) ? atm_strike - step : atm_strike + step
+            itm_strike = side == :CE ? atm_strike - step : atm_strike + step
             return { strike: itm_strike, strike_type: :ITM }
           end
         end

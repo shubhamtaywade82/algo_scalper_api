@@ -5,7 +5,7 @@
 #
 #   Console::SmcExample.fetch_nifty_and_sensex_candles
 #
-if Rails.env.development? || Rails.env.test?
+if Rails.env.local?
   module Console
     module SmcExample
       module_function

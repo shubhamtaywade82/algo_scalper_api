@@ -3,7 +3,7 @@
 # Quick Start Script for Service Testing (dev/test only)
 # Usage (Rails console):
 #   Testing::QuickStart.load!
-if Rails.env.development? || Rails.env.test?
+if Rails.env.local?
   module Testing
     module QuickStart
       module_function

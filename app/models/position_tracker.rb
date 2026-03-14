@@ -263,7 +263,7 @@ class PositionTracker < ApplicationRecord
     {
       id: id,
       security_id: security_id.to_s,
-      entry_price: entry_price.present? ? entry_price.to_s : nil,
+      entry_price: entry_price.presence&.to_s,
       quantity: quantity.to_i,
       segment: segment
     }

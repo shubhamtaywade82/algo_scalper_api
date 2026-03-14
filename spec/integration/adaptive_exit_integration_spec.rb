@@ -20,7 +20,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
     allow(exit_engine).to receive(:execute_exit)
     allow(service).to receive_messages(seconds_below_entry: 0, calculate_atr_ratio: 1.0)
     Positions::TrailingConfig.reset_config!
-    
+
     # Mock RedisPnlCache
     allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_wrap_original do |_method, *args|
       args.first == tracker.id ? pnl_data : nil
@@ -44,8 +44,6 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
           position_direction: %w[long_ce long_pe].include?(tracker.side) ? :long : :short,
           index_key: 'NIFTY'
         )
-      else
-        nil
       end
     end
   end

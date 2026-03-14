@@ -2,15 +2,22 @@
 
 module Smc
   class Context
-    attr_reader :internal_structure, :swing_structure, :liquidity, :order_blocks, :fvg, :pd, :trend
+    attr_reader :internal_structure, :swing_structure, :liquidity, :order_blocks, :fvg, :pd, :trend, :phase
 
     def initialize(series)
+      @series = series
       @internal_structure = Detectors::InternalStructure.new(series)
       @swing_structure = Detectors::SwingStructure.new(series)
       @liquidity = Detectors::Liquidity.new(series)
       @order_blocks = Detectors::OrderBlocks.new(series)
       @fvg = Detectors::Fvg.new(series)
       @pd = Detectors::PremiumDiscount.new(series)
+
+      # Use Analyzer for state machine phase
+      @analyzer = Analyzer.new(series)
+      @analysis = @analyzer.run
+      @phase = @analysis[:phase]
+
       # Primary trend comes from swing structure (higher TF control)
       @trend = @swing_structure.trend
     end
@@ -22,15 +29,16 @@ module Smc
 
     def to_h
       {
-        internal_structure: internal_structure.to_h,
-        swing_structure: swing_structure.to_h,
+        internal_structure: @internal_structure.to_h,
+        swing_structure: @swing_structure.to_h,
         # Legacy key for backward compatibility
-        structure: swing_structure.to_h,
-        liquidity: liquidity.to_h,
-        order_blocks: order_blocks.to_h,
-        fvg: fvg.to_h,
-        premium_discount: pd.to_h,
-        trend: trend
+        structure: @swing_structure.to_h,
+        liquidity: @liquidity.to_h,
+        order_blocks: @order_blocks.to_h,
+        fvg: @fvg.to_h,
+        premium_discount: @pd.to_h,
+        trend: @trend,
+        phase: @phase
       }
     end
   end

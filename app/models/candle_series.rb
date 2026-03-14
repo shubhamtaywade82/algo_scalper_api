@@ -4,6 +4,8 @@
 class CandleSeries
   include Enumerable
 
+  MAX_CANDLES = 200
+
   attr_reader :symbol, :interval, :candles
 
   def initialize(symbol:, interval: '5')
@@ -13,7 +15,12 @@ class CandleSeries
   end
 
   def each(&) = candles.each(&)
-  def add_candle(candle) = candles << candle
+
+  def add_candle(candle)
+    candles << candle
+    candles.shift if candles.size > MAX_CANDLES
+    candle
+  end
 
   # Ensures candles are sorted by timestamp (chronological order)
   # CRITICAL: All indicators (Supertrend, ADX, ATR, RSI, MACD) assume chronological order
@@ -177,7 +184,7 @@ class CandleSeries
     nil
   end
 
-  def swing_high?(index, lookback = 2)
+  def swing_high?(index, lookback = 3)
     return false if index < lookback || index + lookback >= candles.size
 
     current = candles[index].high
@@ -186,7 +193,7 @@ class CandleSeries
     current > left.max && current > right.max
   end
 
-  def swing_low?(index, lookback = 2)
+  def swing_low?(index, lookback = 3)
     return false if index < lookback || index + lookback >= candles.size
 
     current = candles[index].low

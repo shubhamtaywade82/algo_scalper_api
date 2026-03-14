@@ -94,7 +94,7 @@ module Live
         return false unless config[:early_exit][:enabled]
 
         pnl_pct = snapshot[:pnl_pct].to_f
-        threshold = config[:early_exit][:profit_threshold].to_f  # Already DECIMAL (e.g. 0.07)
+        threshold = config[:early_exit][:profit_threshold].to_f # Already DECIMAL (e.g. 0.07)
         return false if pnl_pct >= threshold
 
         # Check ETF conditions
@@ -182,7 +182,7 @@ module Live
               highest_price: highest_price
             ).call
 
-            reason = (mfe_sl && sl_price == mfe_sl) ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
+            reason = mfe_sl && sl_price == mfe_sl ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
 
             Rails.logger.info("[UnifiedExitChecker] #{reason} hit for #{tracker.order_no}: ltp=#{ltp}, sl=#{sl_price}")
             return true
@@ -202,7 +202,7 @@ module Live
         if config[:trailing][:type] == 'adaptive'
           # peak_profit_pct is DECIMAL (e.g. 0.20 for 20%)
           peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i))
-          activation = config[:trailing][:activation_profit].to_f  # Already DECIMAL
+          activation = config[:trailing][:activation_profit].to_f # Already DECIMAL
 
           return false if peak_profit_pct < activation
 
@@ -218,7 +218,7 @@ module Live
         end
 
         # Fixed trailing
-        drop_threshold = config[:trailing][:drop_threshold].to_f  # Already DECIMAL
+        drop_threshold = config[:trailing][:drop_threshold].to_f # Already DECIMAL
         drop_pct = (hwm - pnl) / hwm
         drop_pct >= drop_threshold
       end
@@ -334,18 +334,18 @@ module Live
         # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
         sl_value = risk_cfg[:sl_pct]
         if sl_value
-          sl_value_pct = sl_value.to_f  # Use DECIMAL directly (0.12)
+          sl_value_pct = sl_value.to_f # Use DECIMAL directly (0.12)
         else
-          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12  # Default 12% as DECIMAL
+          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12 # Default 12% as DECIMAL
         end
 
         # Read TP from config (can be in either location, stored as DECIMAL)
         tp_value = exit_cfg[:take_profit]
         unless tp_value
           if risk_cfg[:tp_pct]
-            tp_value = risk_cfg[:tp_pct].to_f  # Use DECIMAL directly (0.50)
+            tp_value = risk_cfg[:tp_pct].to_f # Use DECIMAL directly (0.50)
           else
-            tp_value = 0.50  # Default 50% as DECIMAL
+            tp_value = 0.50 # Default 50% as DECIMAL
           end
         end
 
@@ -386,16 +386,14 @@ module Live
 
       def default_exit_config
         {
-          stop_loss: { type: 'static', value: 0.12 },  # 12% stop loss (DECIMAL)
-          take_profit: 0.50,  # 50% take profit (DECIMAL)
+          stop_loss: { type: 'static', value: 0.12 }, # 12% stop loss (DECIMAL)
+          take_profit: 0.50, # 50% take profit (DECIMAL)
           trailing: { enabled: true, type: 'adaptive', activation_profit: 0.035, drop_threshold: 0.025 },
           early_exit: { enabled: true, profit_threshold: 0.07 },
           premium_momentum_failure: { enabled: true },
           time_based: { enabled: false, exit_time: '15:20' }
         }
       end
-
-      private
 
       def premium_momentum_failure_hit?(tracker, snapshot)
         config = exit_config

@@ -7,7 +7,7 @@ module MarketState
       return false if series.candles.size < 16
 
       # Use the latest ATR value compared to the previous one
-      current_atr = series.atr(14)
+      series.atr(14)
 
       # We need history to check expansion
       # CandleSeries#atr returns a single value (latest)

@@ -852,7 +852,9 @@ module Options
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
-        unless exit_testing_mode
+        if exit_testing_mode
+          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
+        else
           validator = Options::StrikeQualification::ExpectedMoveValidator.new
           validation = validator.call(
             index_key: index_cfg[:key],
@@ -870,8 +872,6 @@ module Options
             end
             return []
           end
-        else
-          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
         end
 
         [pick]
@@ -1407,7 +1407,7 @@ module Options
 
       # Calculate sophisticated strike score based on professional prop model
       def calculate_strike_score(leg, side, atm_strike, atm_range_percent, flow_score: 1.0, gamma_pressure: 0.0,
-                                prop_selector: nil, acceleration_signal: :none, history: nil)
+                                 prop_selector: nil, acceleration_signal: :none, history: nil)
         # Use professional PropStrikeSelector if available
         if prop_selector
           # Combine prop model with ATM bonus for legacy compatibility
@@ -1435,8 +1435,8 @@ module Options
 
         # Fallback to standard institutional scoring
         strike_price = leg[:strike]
-        ltp = leg[:ltp]
-        iv = leg[:iv]
+        leg[:ltp]
+        leg[:iv]
         oi = leg[:oi]
 
         # Calculate spread percentage from spread and LTP
@@ -1454,13 +1454,13 @@ module Options
         # 2. Liquidity Score (Spread < 1% preferred) - 30% weight
         liquidity_base = if oi >= 1_000_000
                             30
-                          elsif oi >= 500_000
+                         elsif oi >= 500_000
                             25
-                          elsif oi >= 100_000
+                         elsif oi >= 100_000
                             20
-                          else
+                         else
                             10
-                          end
+                         end
         # Spread penalty (up to 50% reduction)
         liquidity_score = liquidity_base * [1.0 - (spread_pct / 2.0), 0.5].max
 

@@ -92,17 +92,17 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
 
     # Mock position fetching
 
+    # Mock ActiveCache for TrailingEngine
+    @mock_active_cache = instance_double(Positions::ActiveCache)
+    allow(Positions::ActiveCache).to receive(:instance).and_return(@mock_active_cache)
+
     # Mock LTP fetching
     allow(risk_manager).to receive_messages(fetch_positions_indexed: {
                                               '12345' => mock_position
                                             }, current_ltp: BigDecimal('105.0'), current_ltp_with_freshness_check: BigDecimal('105.0'))
 
-    # Mock ActiveCache for TrailingEngine
-    mock_active_cache = instance_double(Positions::ActiveCache)
-    allow(Positions::ActiveCache).to receive(:instance).and_return(mock_active_cache)
-    
     # Default mock for ActiveCache
-    allow(mock_active_cache).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
+    allow(@mock_active_cache).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
       Positions::ActiveCache::PositionData.new(
         tracker_id: position_tracker.id,
         security_id: '12345',
@@ -115,6 +115,11 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         quantity: 50
       )
     )
+    allow(@mock_active_cache).to receive(:update_position)
+
+    # Ensure mock_exit_engine responds to execute_exit so dispatch_exit works
+    allow(mock_exit_engine).to receive(:respond_to?).with(:execute_exit).and_return(true)
+    allow(mock_exit_engine).to receive(:execute_exit)
 
     # Mock TrailingConfig to trigger peak drawdown in tests
     allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(false)
@@ -123,15 +128,19 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
   describe 'Trailing Stop Logic' do
     context 'when enforcing trailing stops' do
       before do
-        # Set up position with some profit
+        # Ensure position_tracker is active and persisted
         position_tracker.update!(
+          status: 'active',
           last_pnl_rupees: BigDecimal('50.0'),
           high_water_mark_pnl: BigDecimal('50.0'),
           trade_state: 'expansion'
         )
-        
+
+        # Explicitly mock PositionTracker.active to return our tracker
+        allow(PositionTracker).to receive(:active).and_return(PositionTracker.where(id: position_tracker.id))
+
         # Ensure ActiveCache has profitable state
-        allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
+        allow(@mock_active_cache).to receive(:get_by_tracker_id).with(position_tracker.id).and_return(
           Positions::ActiveCache::PositionData.new(
             tracker_id: position_tracker.id,
             security_id: '12345',
@@ -142,8 +151,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
             peak_profit_pct: 0.15,
             sl_price: 70.0,
             quantity: 50
-            )
-
+          )
         )
       end
 
@@ -152,7 +160,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         allow(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).and_return(true)
 
         expect(mock_exit_engine).to receive(:execute_exit).with(position_tracker, /peak_drawdown_exit/)
-        
+
         risk_manager.send(:enforce_trailing_stops, exit_engine: mock_exit_engine)
       end
 
@@ -178,8 +186,7 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
             peak_profit_pct: 0.05,
             sl_price: 70.0,
             quantity: 50
-            )
-
+          )
         )
 
         expect(mock_exit_engine).not_to receive(:execute_exit)
@@ -193,11 +200,11 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
         # This test verifies that trailing stops are not triggered when PnL increases
 
         # Create a mock position with increased PnL (higher than current HWM)
-        mock_position_data = double('PositionData',
-                                    tracker_id: position_tracker.id,
-                                    pnl: 500.0,
-                                    high_water_mark: 50.0,
-                                    active?: true)
+        double('PositionData',
+               tracker_id: position_tracker.id,
+               pnl: 500.0,
+               high_water_mark: 50.0,
+               active?: true)
         allow(risk_manager).to receive_messages(trackers_for_positions: { position_tracker.id => position_tracker })
 
         # When PnL increases above HWM, trailing stop should not be triggered
@@ -546,10 +553,10 @@ RSpec.describe 'Exit Rules Integration', :vcr, type: :integration do
       end
 
       it 'handles database connection errors' do
-        allow(position_tracker).to receive(:with_lock).and_raise(ActiveRecord::ConnectionNotEstablished, 'DB error')
+        allow(mock_exit_engine).to receive(:execute_exit).and_raise(ActiveRecord::ConnectionNotEstablished, 'DB error')
 
-        # Verify that the method can be called without crashing
-        expect { risk_manager.send(:execute_exit, mock_position, position_tracker, reason: 'manual') }.not_to raise_error
+        # Verify that the method propagates the error correctly
+        expect { risk_manager.send(:dispatch_exit, mock_exit_engine, position_tracker, 'manual') }.to raise_error(ActiveRecord::ConnectionNotEstablished)
       end
     end
   end

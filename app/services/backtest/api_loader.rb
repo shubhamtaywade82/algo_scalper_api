@@ -20,9 +20,7 @@ module Backtest
                   Market::Calendar.today_or_last_trading_day
                 else
                   today = Date.current
-                  while today.saturday? || today.sunday?
-                    today -= 1.day
-                  end
+                  today -= 1.day while today.saturday? || today.sunday?
                   today
                 end
 
@@ -30,9 +28,7 @@ module Backtest
                     Market::Calendar.trading_days_ago(@days)
                   else
                     candidate = to_date - @days.days
-                    while candidate.saturday? || candidate.sunday?
-                      candidate -= 1.day
-                    end
+                    candidate -= 1.day while candidate.saturday? || candidate.sunday?
                     candidate
                   end
 

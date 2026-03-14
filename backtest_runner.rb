@@ -25,14 +25,7 @@ class InstitutionalOptionsStrategy
     return :none if @series.candles.size < 21
 
     # 3. Apply Institutional Entry Filter (Market Structure + Expansion + Volatility)
-    if !@in_position
-      # Check for Bullish entry (Institutional alignment)
-      if @filter.valid_entry?(direction: :bullish)
-        @in_position = true
-        @entry_price = tick[:index_price]
-        return :buy
-      end
-    else
+    if @in_position
       # 4. Institutional Exit (MFE-style underlying logic)
       profit_pct = (tick[:index_price] - @entry_price) / @entry_price
 
@@ -41,6 +34,11 @@ class InstitutionalOptionsStrategy
         @in_position = false
         return :exit
       end
+    elsif @filter.valid_entry?(direction: :bullish)
+      # Check for Bullish entry (Institutional alignment)
+      @in_position = true
+        @entry_price = tick[:index_price]
+        return :buy
     end
 
     :none

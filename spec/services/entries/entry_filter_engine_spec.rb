@@ -25,7 +25,7 @@ RSpec.describe Entries::EntryFilterEngine do
       context 'when range expansion is sufficient' do
         before do
           # Mock 21 candles
-          mock_candles = Array.new(21) { |i| instance_double('Candle', high: 100, low: 90, close: 95) }
+          mock_candles = Array.new(21) { |_i| instance_double('Candle', high: 100, low: 90, close: 95) }
           # Current candle has range 20 (110-90)
           allow(mock_candles.last).to receive(:high).and_return(110)
           allow(mock_candles.last).to receive(:low).and_return(90)
@@ -58,7 +58,7 @@ RSpec.describe Entries::EntryFilterEngine do
 
       context 'when range expansion is insufficient' do
         before do
-          mock_candles = Array.new(21) { |i| instance_double('Candle', high: 100, low: 90, close: 95) }
+          mock_candles = Array.new(21) { |_i| instance_double('Candle', high: 100, low: 90, close: 95) }
           # Current candle has range 11 (avg is 10, threshold is 1.4x)
           allow(mock_candles.last).to receive(:high).and_return(101)
           allow(mock_candles.last).to receive(:low).and_return(90)

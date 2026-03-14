@@ -8,7 +8,7 @@ module AutoExp
 
     SCHEMA = {
       "type" => "object",
-      "required" => ["parameter", "value", "reason"],
+      "required" => %w[parameter value reason],
       "properties" => {
         "parameter" => {
           "type" => "string",
@@ -48,26 +48,26 @@ module AutoExp
       end.join("\n")
 
       <<~PROMPT
-      You are optimizing a trading strategy.
+        You are optimizing a trading strategy.
 
-      Goal:
-      Increase profit_factor while avoiding drawdown increases.
+        Goal:
+        Increase profit_factor while avoiding drawdown increases.
 
-      Recent experiment results:
-      #{history.empty? ? 'No previous results.' : history}
+        Recent experiment results:
+        #{history.empty? ? 'No previous results.' : history}
 
-      Current configuration:
-      #{config.to_yaml}
+        Current configuration:
+        #{config.to_yaml}
 
-      Suggest ONE parameter change. Ensure the value is within reasonable bounds:
-      - entry.range_expansion_threshold: 1.2..2.0
-      - entry.atr_rising_lookback: 1..5
-      - strike_selection.delta_target: 0.4..0.6
-      - exit.mfe_ratio_nifty: 0.2..0.6
-      - exit.initial_stop: 0.08..0.20
-      - risk.max_trades_per_day: 1..5
+        Suggest ONE parameter change. Ensure the value is within reasonable bounds:
+        - entry.range_expansion_threshold: 1.2..2.0
+        - entry.atr_rising_lookback: 1..5
+        - strike_selection.delta_target: 0.4..0.6
+        - exit.mfe_ratio_nifty: 0.2..0.6
+        - exit.initial_stop: 0.08..0.20
+        - risk.max_trades_per_day: 1..5
 
-      Output JSON only.
+        Output JSON only.
       PROMPT
     end
   end

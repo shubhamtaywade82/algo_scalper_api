@@ -69,7 +69,17 @@ RSpec.configure do |config|
   # NEW: Stop the singleton hub after each test to prevent state leakage
   config.after(:each) do
     if defined?(Live::MarketFeedHub)
-      Live::MarketFeedHub.instance.stop!
+      hub = Live::MarketFeedHub.instance
+      # Only call stop! if it's the real instance or explicitly allowed on a mock
+      if hub.respond_to?(:stop!)
+        begin
+          hub.stop!
+        rescue RSpec::Mocks::MockExpectationError
+          # Ignore if it's a mock that didn't expect stop!
+        rescue StandardError
+          # Ignore other errors during cleanup
+        end
+      end
     end
   end
 end

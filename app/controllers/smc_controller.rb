@@ -32,7 +32,7 @@ class SmcController < ApplicationController
     symbol_name = params[:symbol_name].to_s.presence
 
     if security_id.blank? || segment.blank?
-      render json: { ok: false, error: 'security_id and segment are required' }, status: :unprocessable_entity
+      render json: { ok: false, error: 'security_id and segment are required' }, status: :unprocessable_content
       return nil
     end
 

@@ -255,6 +255,8 @@ module Live
         PositionTracker.active.find_each do |tracker|
           enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
         end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_time_based_exit error: #{e.class} - #{e.message}")
       end
 
       # EOD force-close: at or after market close, close all active positions.
@@ -634,8 +636,6 @@ module Live
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_profit_floor_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
-
-      private
 
       # Ratchet the profit floor upward as HWM PnL grows.
       # Monotonic — floor only moves up, never down.

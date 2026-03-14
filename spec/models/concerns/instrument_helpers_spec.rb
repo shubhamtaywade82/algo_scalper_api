@@ -15,7 +15,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
     allow(hub).to receive_messages(running?: false, connected?: false)
     allow(redis_tick_cache).to receive(:fetch_tick).and_return({})
     allow(redis_tick_cache).to receive(:clear_tick)
-    
+
     # Mock DhanHQ API
     allow(DhanHQ::Models::MarketFeed).to receive(:ltp).and_return({ 'status' => 'error' })
   end
@@ -41,7 +41,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
 
     it 'falls back to REST API when meta ltp and WS cache missing' do
       # Mock the API call to return a success response
-      allow(DhanHQ::Models::MarketFeed).to receive(:ltp).with({ 'NSE_FNO' => [12345] }).and_return({
+      allow(DhanHQ::Models::MarketFeed).to receive(:ltp).with({ 'NSE_FNO' => [12_345] }).and_return({
         'status' => 'success',
         'data' => { 'NSE_FNO' => { '12345' => { 'last_price' => 199.55 } } }
       })
@@ -64,10 +64,10 @@ RSpec.describe InstrumentHelpers, type: :concern do
       # Logged in fetch_ltp_from_api_for_segment
       expect(Rails.logger).to have_received(:error).with(/Failed to fetch LTP from API/)
     end
-    
+
     it 'uses WebSocket cache when hub is running and connected' do
       allow(hub).to receive_messages(running?: true, connected?: true)
-      
+
       # Mock Live::TickCache.fetch (which is called by TickQuery)
       allow(Live::TickCache).to receive(:fetch).and_return({ ltp: 205.50, timestamp: Time.current })
 
@@ -93,7 +93,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
 
   describe '#ensure_ws_subscription!' do
     let(:ws_hub) { Live::WsHub.instance }
-    
+
     it 'subscribes when websocket hub is running' do
       allow(ws_hub).to receive(:running?).and_return(true)
       allow(ws_hub).to receive(:subscribe).with(seg: 'NSE_FNO', sid: '12345').and_return(true)
@@ -119,7 +119,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
 
   describe '#after_order_track!' do
     let(:ws_hub) { Live::WsHub.instance }
-    
+
     before do
       allow(ws_hub).to receive_messages(running?: true, subscribe: true)
       allow(Live::RedisPnlCache.instance).to receive(:clear_tick)

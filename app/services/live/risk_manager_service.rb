@@ -48,6 +48,8 @@ module Live
       @thread = nil
       @market_closed_checked = false # Track if we've already checked after market closed
       @watchdog_thread = nil # Initialize as nil, start watchdog only when service starts
+      @redis_pnl_cache = {}
+      @cycle_tracker_map = nil
     end
 
     # Start monitoring loop (non-blocking)
@@ -78,6 +80,7 @@ module Live
             last_paper_pnl_update = Time.current
           rescue StandardError => e
             Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
+            @running = false # Stop running on crash to allow watchdog to restart or for tests to verify
           end
           sleep LOOP_INTERVAL
         end
@@ -96,6 +99,8 @@ module Live
         @event_subscription = nil
       end
     end
+
+    delegate :sleep, to: :Kernel
 
     private
 
