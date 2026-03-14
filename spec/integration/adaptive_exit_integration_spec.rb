@@ -12,12 +12,18 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
            entry_price: 100.0,
            quantity: 50,
            segment: 'NSE_FNO',
+           trade_state: 'expansion',
            meta: { 'index_key' => 'NIFTY' })
   end
 
   before do
     allow(exit_engine).to receive(:execute_exit)
     allow(service).to receive_messages(seconds_below_entry: 0, calculate_atr_ratio: 1.0)
+    allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_wrap_original do |_method, *args|
+      # Return pnl_data if it's defined in the current context (it will be via let)
+      # Since fetch_pnl takes tracker_id, we check if it matches tracker.id
+      args.first == tracker.id ? pnl_data : nil
+    end
   end
 
   describe 'full exit flow with different configurations' do

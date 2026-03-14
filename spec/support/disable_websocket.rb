@@ -22,6 +22,16 @@ RSpec.configure do |config|
   # Let the rest of the code execute normally so we can verify method calls
   config.before(:each) do
     if defined?(Live::MarketFeedHub)
+      # Reset the hub before each test to prevent state leakage
+      # NOTE: Using instance_variable_set because calling stop! might trigger methods 
+      # on leaked instance doubles from previous tests
+      hub = Live::MarketFeedHub.instance
+      hub.instance_variable_set(:@ws_client, nil)
+      hub.instance_variable_set(:@running, false)
+      hub.instance_variable_set(:@connection_state, :disconnected)
+      hub.instance_variable_get(:@subscribed_keys)&.clear
+      hub.instance_variable_get(:@callbacks)&.clear
+
       # Create a mock WebSocket client that can track method calls
       mock_ws_client = instance_double('DhanHQ::WS::Client',
                                        start: true,
@@ -33,8 +43,7 @@ RSpec.configure do |config|
                                        subscribe_many: true,
                                        unsubscribe_one: true)
 
-      # Only stub build_client to prevent actual WebSocket client creation
-      # This is the minimal stub needed - everything else should execute normally
+      # Allow any instance to return the mock, but also stop it after each test
       allow_any_instance_of(Live::MarketFeedHub).to receive(:build_client).and_return(mock_ws_client)
 
       # Stub ensure_running! to not raise, but allow it to execute logic
@@ -54,6 +63,13 @@ RSpec.configure do |config|
           raise e unless e.message.include?('not running')
         end
       end
+    end
+  end
+
+  # NEW: Stop the singleton hub after each test to prevent state leakage
+  config.after(:each) do
+    if defined?(Live::MarketFeedHub)
+      Live::MarketFeedHub.instance.stop!
     end
   end
 end

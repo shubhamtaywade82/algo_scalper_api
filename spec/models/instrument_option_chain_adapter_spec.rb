@@ -16,7 +16,7 @@ RSpec.describe Instrument do
   end
 
   describe '#fetch_fresh_option_chain' do
-    let(:instrument) { described_class.new(security_id: '12345', exchange_segment: 'NSE_FNO') }
+    let(:instrument) { described_class.new(security_id: '12345', exchange: 'nse', segment: 'derivatives') }
     let(:adapter) { instance_double(Adapters::OptionChain::DhanAdapter) }
 
     before do
@@ -52,7 +52,7 @@ RSpec.describe Instrument do
   end
 
   describe '#expiry_list' do
-    let(:instrument) { described_class.new(security_id: '50074', exchange_segment: 'NSE_IDX') }
+    let(:instrument) { described_class.new(security_id: '50074', exchange: 'nse', segment: 'index') }
     let(:adapter) { instance_double(Adapters::OptionChain::DhanAdapter) }
 
     before do
@@ -70,7 +70,7 @@ RSpec.describe Instrument do
 
       expect(adapter).to have_received(:fetch_expiry_list).with(
         underlying_scrip: 50_074,
-        underlying_seg: 'NSE_IDX'
+        underlying_seg: 'IDX_I'
       )
       expect(result).to eq(%w[2026-03-05 2026-03-12])
     end

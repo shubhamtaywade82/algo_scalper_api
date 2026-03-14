@@ -30,6 +30,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
            hget: nil,
            hgetall: {},
            hdel: true,
+           incrbyfloat: true,
            ttl: 3600,
            expire: true,
            scan_each: [].each)
