@@ -19,7 +19,7 @@ module Live
     # Check if trading is allowed for the given index
     # @param index_key [Symbol, String] Index key (e.g., :NIFTY, :BANKNIFTY)
     # @return [Hash] { allowed: true/false, reason: "..." }
-    # rubocop:disable Metrics/AbcSize
+    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def can_trade?(index_key:)
       return { allowed: false, reason: 'redis_unavailable' } unless @redis
 
@@ -38,49 +38,62 @@ module Live
         }
       end
 
-      # Daily loss limits ONLY enforced when daily profit >= ₹20k (protect profits)
-      # If profit < ₹20k, allow trading even if loss limits exceeded
-      profit_threshold = max_daily_profit&.to_f || 20_000.0
-      if global_daily_profit >= profit_threshold
-        # Check daily loss limit (per-index) - only when profit >= threshold
-        daily_loss = get_daily_loss(index_key)
-        max_daily_loss = risk_config[:max_daily_loss_pct] || risk_config[:daily_loss_limit_pct]
-        # Convert percentage to absolute amount if needed
-        # For now, assume max_daily_loss is in rupees (can be enhanced later)
-        if max_daily_loss && (daily_loss >= max_daily_loss.to_f)
-          return {
-            allowed: false,
-            reason: 'daily_loss_limit_exceeded',
-            daily_loss: daily_loss,
-            max_daily_loss: max_daily_loss.to_f,
-            index_key: index_key,
-            note: 'Loss limit enforced because daily profit >= ₹20k'
-          }
-        end
-
-        # Check global daily loss limit - only when profit >= threshold
-        global_daily_loss = get_global_daily_loss
-        max_global_loss = risk_config[:max_global_daily_loss_pct] || risk_config[:global_daily_loss_limit_pct]
-        if max_global_loss && global_daily_loss >= max_global_loss.to_f
-          return {
-            allowed: false,
-            reason: 'global_daily_loss_limit_exceeded',
-            global_daily_loss: global_daily_loss,
-            max_global_loss: max_global_loss.to_f,
-            note: 'Loss limit enforced because daily profit >= ₹20k'
-          }
-        end
+      # 1. Check daily loss limit (per-index)
+      daily_loss = get_daily_loss(index_key)
+      max_daily_loss = risk_config[:max_daily_loss_pct] || risk_config[:daily_loss_limit_pct]
+      if max_daily_loss && (daily_loss >= max_daily_loss.to_f)
+        return {
+          allowed: false,
+          reason: 'daily_loss_limit_exceeded',
+          daily_loss: daily_loss,
+          max_daily_loss: max_daily_loss.to_f,
+          index_key: index_key
+        }
       end
 
-      # Trade frequency limits are NOT enforced (no cap on trade count)
-      # Trade counts are still tracked for monitoring/analytics but don't block entries
+      # 2. Check global daily loss limit
+      global_daily_loss = get_global_daily_loss
+      max_global_loss = risk_config[:max_global_daily_loss_pct] || risk_config[:global_daily_loss_limit_pct]
+      if max_global_loss && global_daily_loss >= max_global_loss.to_f
+        return {
+          allowed: false,
+          reason: 'global_daily_loss_limit_exceeded',
+          global_daily_loss: global_daily_loss,
+          max_global_loss: max_global_loss.to_f
+        }
+      end
+
+      # 3. Check trade frequency limit (per-index)
+      daily_trades = get_daily_trades(index_key)
+      max_daily_trades = risk_config[:max_daily_trades] || risk_config[:daily_trade_limit]
+      if max_daily_trades && (daily_trades >= max_daily_trades.to_i)
+        return {
+          allowed: false,
+          reason: 'trade_frequency_limit_exceeded',
+          daily_trades: daily_trades,
+          max_daily_trades: max_daily_trades.to_i,
+          index_key: index_key
+        }
+      end
+
+      # 4. Check global trade frequency limit
+      global_trades = get_global_daily_trades
+      max_global_trades = risk_config[:max_global_daily_trades] || risk_config[:global_daily_trade_limit]
+      if max_global_trades && global_trades >= max_global_trades.to_i
+        return {
+          allowed: false,
+          reason: 'global_trade_frequency_limit_exceeded',
+          global_daily_trades: global_trades,
+          max_global_trades: max_global_trades.to_i
+        }
+      end
 
       { allowed: true, reason: nil }
     rescue StandardError => e
       Rails.logger.error("[DailyLimits] can_trade? error: #{e.class} - #{e.message}")
       { allowed: false, reason: "error: #{e.message}" }
     end
-    # rubocop:enable Metrics/AbcSize
+    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
     # Record a loss for the given index
     # @param index_key [Symbol, String] Index key
