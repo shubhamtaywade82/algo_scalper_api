@@ -1,0 +1,24 @@
+---
+description: Execution rules for trade triggers and rejection criteria
+globs: ["**/*.{rb,py,ts}"]
+alwaysApply: true
+---
+
+# Trading Execution Rules
+
+Trades must follow these deterministic triggers and filters.
+
+## Entry Triggers
+- **Primary**: Price returns to an unmitigated FVG or OB after a valid BOS and Liquidity Sweep.
+- **Secondary**: 1m/5m CHoCH + FVG retest within the designated Kill Zones.
+
+## Rejection Criteria
+- **Low Volume**: Strike/Index volume $< 0.8\times$ 20-period average during trigger.
+- **No Displacement**: Moves without a displacement candle ($body/ATR < 0.8$) are ignored.
+- **Full Mitigation**: If an OB/FVG has been fully filled (High/Low penetrated), it is invalid.
+- **Range Markets**: If no clear BOS/CHoCH is present within 50 candles.
+
+## Risk Filters
+- Max drawdown per trade: 1.5% of account equity.
+- Stop Loss: Must be placed below/above the candle causing the BOS or at the structural low/high.
+- Target: Minimum Risk-to-Reward (RR) of 1:2.

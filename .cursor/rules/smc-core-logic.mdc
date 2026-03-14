@@ -1,0 +1,34 @@
+---
+description: Core definitions for Smart Money Concepts structures (BOS, CHoCH, OB, FVG)
+globs: ["**/*.{rb,py,ts}"]
+alwaysApply: true
+---
+
+# SMC Core Logic Definitions
+
+All SMC structure detection must follow these deterministic definitions:
+
+## BOS (Break of Structure)
+BOS represents trend continuation.
+- **Bullish BOS**: Price closes above the previous swing high.
+- **Bearish BOS**: Price closes below the previous swing low.
+- **Verification**: Must be a candle body close, not just a wick sweep.
+
+## CHoCH (Change of Character)
+CHOCH indicates an early orderflow shift.
+- **Bullish CHoCH**: In a downtrend (LL -> LH -> LL), price breaks the previous LH.
+- **Bearish CHoCH**: In an uptrend (HH -> HL -> HH), price breaks the previous HL.
+
+## FVG (Fair Value Gap)
+FVG represents price inefficiency formed during displacement.
+- **Bullish FVG**: $High(Candle_{n-2}) < Low(Candle_n)$.
+- **Bearish FVG**: $Low(Candle_{n-2}) > High(Candle_n)$.
+- **Rebalancing**: Price should return to the FVG to re-fill orders (mitigation).
+
+## Order Block (OB)
+OB represents institutional accumulation/distribution zones.
+- **Bullish OB**: The last bearish candle before a strong bullish displacement.
+- **Bearish OB**: The last bullish candle before a strong bearish displacement.
+
+## Displacement
+- A valid displacement requires a candle body-to-ATR ratio $> 0.8$ and a Relative Volume Ratio (RVR) $> 1.5\times$ the rolling 20-period average.

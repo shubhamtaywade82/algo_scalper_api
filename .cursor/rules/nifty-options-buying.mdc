@@ -1,0 +1,27 @@
+---
+description: Context for NIFTY/SENSEX options buying and timing rules
+globs: ["**/*.{rb,py,ts}"]
+alwaysApply: true
+---
+
+# NIFTY/SENSEX Options Buying Rules
+
+Rules specific to Indian market indices (NIFTY/SENSEX) for intraday options buying.
+
+## Kill Zones (IST)
+Focus exclusively on these periods of high institutional activity:
+- **Opening Drive**: 09:15 – 10:30
+- **Closing Repricing**: 14:00 – 15:15
+
+## Strike Selection
+For intraday long buying:
+- **Priority**: At-the-Money (ATM, Delta $\approx 0.5$) or slightly In-the-Money (ITM, Delta $> 0.6$).
+- **Goal**: Capture Gamma acceleration while managing Theta decay.
+
+## Displacement Verification (Index Specific)
+- **Ratio**: Candle body-to-ATR ratio $> 0.8$.
+- **Volume**: Relative Volume Ratio (RVR) $> 1.5\times$ the rolling 20-period average.
+
+## Operational Constraints
+- No new trades after 15:00.
+- Mandatory square-off by 15:20 if not automated by system.

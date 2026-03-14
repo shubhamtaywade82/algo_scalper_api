@@ -1,0 +1,11 @@
+{
+  "aiModel": "claude-3.7-sonnet",
+  "contextDirectories": [
+    ".cursor/skills",
+    ".cursor/rules"
+  ],
+  "agentsDirectory": ".cursor/agents",
+  "autoApplyAgents": true,
+  "maxContextFiles": 30,
+  "projectType": "trading_system"
+}

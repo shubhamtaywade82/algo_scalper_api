@@ -1,0 +1,25 @@
+---
+description: Patterns for the state machine and concurrency in the trading system
+globs: ["**/*.{rb,py,ts}"]
+alwaysApply: true
+---
+
+# State Management & Concurrency Rules
+
+Deterministic state transition logic for the SMC engine.
+
+## Event-Driven Architecture (EDA)
+- Implement the SMC engine as an event-driven architecture.
+- Use in-memory data (Redis) for low-latency state management of unmitigated Order Blocks and Fair Value Gaps.
+
+## Actor Model
+- Use the **Actor Model** pattern for concurrency to prevent race conditions during multi-instrument scanning (e.g., scanning NIFTY and SENSEX simultaneously).
+- Each instrument should be managed by its own isolated state handler/thread.
+
+## Sliding Window Detection
+- Use a sliding window buffer (e.g., 200 candles) for swing detection to maintain memory efficiency.
+- Only re-evaluate structure on candle close ($is\_confirmed = true$).
+
+## Resilience
+- All states must be recoverable from the database/Redis in case of process restart.
+- Use atomic operations for state transitions.
