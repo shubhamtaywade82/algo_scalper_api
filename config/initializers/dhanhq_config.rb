@@ -132,7 +132,8 @@ def fetch_authority_token!
 
         if response.success?
           data = JSON.parse(response.body)
-          return data["access_token"] if data["access_token"].present?
+          token = data["access_token"].presence || data["accessToken"].presence
+          return token if token.present?
         end
 
         Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
