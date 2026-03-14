@@ -39,7 +39,8 @@ module Positions
       :underlying_trend_score,
       :underlying_ltp,
       :price_history,
-      :last_updated_at
+      :last_updated_at,
+      keyword_init: true
     ) do
       def composite_key
         "#{segment}:#{security_id}"

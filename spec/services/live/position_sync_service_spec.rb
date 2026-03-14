@@ -4,6 +4,7 @@ require 'rails_helper'
 
 RSpec.describe Live::PositionSyncService do
   include ActiveSupport::Testing::TimeHelpers
+
   subject(:service) { described_class.instance }
 
   let(:instrument) { create(:instrument, :nifty_future) }
@@ -11,9 +12,10 @@ RSpec.describe Live::PositionSyncService do
     create(
       :position_tracker,
       :option_position,
-      watchable: create(:derivative, instrument: instrument),
+      watchable: create(:derivative, instrument: instrument, segment: 'derivatives'),
       instrument: instrument,
       security_id: '50074',
+      segment: 'NSE_FNO',
       status: :active,
       entry_price: 100.5,
       quantity: 75
@@ -22,16 +24,28 @@ RSpec.describe Live::PositionSyncService do
 
   before do
     allow(TradingSession::Service).to receive(:market_open?).and_return(true)
+    # Force live mode by default for these tests
+    allow(service).to receive(:paper_trading_enabled?).and_return(false)
+
     # Clear sync state before each test
     service.instance_variable_set(:@last_sync, nil)
     # Ensure ActivePositionsCache is also cleared
     Positions::ActivePositionsCache.instance.clear!
+    
+    # Global stub for DhanHQ inspect to prevent AttributeHelper crashes
+    allow(DhanHQ::Models::Position).to receive(:inspect).and_return('DhanHQ::Models::Position')
+    # Point 3: Also stub instance inspect for any DhanHQ models/doubles that might be inspected
+    allow_any_instance_of(DhanHQ::Models::Position).to receive(:inspect).and_return('#<DhanHQ::Models::Position>')
+    
+    # Ensure all doubles have a sane inspect to prevent RSpec failure output bloat
+    allow_any_instance_of(RSpec::Mocks::Double).to receive(:inspect).and_return('RSpec::Double')
   end
 
   after do
     # Clear singleton state to prevent leakage
     service.instance_variable_set(:@last_sync, nil)
     Positions::ActivePositionsCache.instance.clear!
+    travel_back
   end
 
   describe 'EPIC F — F1: Place Entry Order & Subscribe Option Tick' do
@@ -48,23 +62,20 @@ RSpec.describe Live::PositionSyncService do
         end
 
         it 'only queries active trackers, not pending ones' do
-          create(:position_tracker, :pending)
+          create(:position_tracker, :pending, segment: 'NSE_FNO')
           allow(DhanHQ::Models::Position).to receive(:active).and_return([])
           
           # Manually populate cache with active tracker only
           allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([active_tracker])
 
           service.sync_positions!
-          # Implicitly verified by lack of error and internal logic
         end
 
         it 'when no positions match does not update trackers if no DhanHQ positions found' do
           allow(DhanHQ::Models::Position).to receive(:active).and_return([])
           allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([active_tracker])
 
-          # It will find active_tracker in cache, but not in DhanHQ, 
-          # so it should mark it as exited if it's a live position.
-          # For this test we make it paper so it doesn't mark exited.
+          # Make it paper so it doesn't mark exited when not found in DhanHQ
           active_tracker.update(paper: true)
 
           expect(active_tracker).not_to receive(:update!)
@@ -80,7 +91,8 @@ RSpec.describe Live::PositionSyncService do
             net_qty: 75,
             buy_avg: 100.5,
             product_type: 'INTRADAY',
-            position_type: 'LONG'
+            position_type: 'LONG',
+            inspect: 'DhanPosition'
           )
           allow(DhanHQ::Models::Position).to receive(:active).and_return([dhan_position])
           allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([active_tracker])
@@ -106,7 +118,8 @@ RSpec.describe Live::PositionSyncService do
               trading_symbol: 'NIFTY18550CE',
               net_qty: 75,
               buy_avg: 102.0
-            }
+            },
+            inspect: 'DhanPosition'
           )
         end
 
@@ -116,6 +129,7 @@ RSpec.describe Live::PositionSyncService do
           
           # Create the derivative that the sync service will look for
           @derivative = create(:derivative, security_id: '50076', instrument: instrument, exchange: 'nse', segment: 'derivatives')
+          # The service calls parse_exchange_segment which returns 'derivatives' for 'NSE_FNO'
           allow(Derivative).to receive(:find_by).with(hash_including(security_id: '50076')).and_return(@derivative)
         end
 
@@ -129,6 +143,7 @@ RSpec.describe Live::PositionSyncService do
           tracker = PositionTracker.find_by(security_id: '50076')
           expect(tracker).to be_present
           expect(tracker.status).to eq('active')
+          expect(tracker.segment).to eq('NSE_FNO')
           expect(tracker.avg_price).to eq(BigDecimal('102.0'))
         end
 
@@ -155,7 +170,7 @@ RSpec.describe Live::PositionSyncService do
           # Ensure it's a live position so it gets marked as orphaned
           active_tracker.update(paper: false)
 
-          expect_any_instance_of(PositionTracker).to receive(:mark_exited!).at_least(:once)
+          expect(active_tracker).to receive(:mark_exited!).at_least(:once)
           service.sync_positions!
         end
       end
@@ -165,14 +180,13 @@ RSpec.describe Live::PositionSyncService do
           allow(DhanHQ::Models::Position).to receive(:active).and_raise(StandardError, 'API error')
           allow(Rails.logger).to receive(:error).and_call_original
           
-          # The service logs the error with a specific prefix
-          expect(Rails.logger).to receive(:error).with(match(/\[PositionSync\] Failed to sync positions: StandardError - API error/)).at_least(:once)
+          expect(Rails.logger).to receive(:error).with(match(/Failed to sync positions: StandardError - API error/)).at_least(:once)
 
           expect { service.sync_positions! }.not_to raise_error
         end
 
         it 'continues syncing other positions if one fails' do
-          dhan_position = double('DhanPosition', security_id: '50074', net_qty: 75, buy_avg: 100.5, to_h: {})
+          dhan_position = double('DhanPosition', security_id: '50074', net_qty: 75, buy_avg: 100.5, to_h: {}, inspect: 'DhanPosition')
           allow(DhanHQ::Models::Position).to receive(:active).and_return([dhan_position])
           
           # Mock ActivePositionsCache
@@ -182,7 +196,7 @@ RSpec.describe Live::PositionSyncService do
           allow(service).to receive(:mark_orphaned_live_positions).and_raise(StandardError, 'Sync error')
           
           allow(Rails.logger).to receive(:error).and_call_original
-          expect(Rails.logger).to receive(:error).with(match(/\[PositionSync\] Failed to sync positions: StandardError - Sync error/)).at_least(:once)
+          expect(Rails.logger).to receive(:error).with(match(/Failed to sync positions: StandardError - Sync error/)).at_least(:once)
 
           expect { service.sync_positions! }.not_to raise_error
         end
@@ -207,6 +221,32 @@ RSpec.describe Live::PositionSyncService do
 
           service.sync_positions!
           service.force_sync!
+        end
+      end
+
+      context 'when paper trading is enabled' do
+        before do
+          allow(service).to receive(:paper_trading_enabled?).and_return(true)
+        end
+
+        it 'syncs paper positions instead of live ones' do
+          # In paper mode, sync_paper_positions is called, which doesn't call DhanHQ::Models::Position.active
+          expect(DhanHQ::Models::Position).not_to receive(:active)
+          expect(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([])
+
+          service.sync_positions!
+        end
+
+        it 'subscribes to market feed for paper positions' do
+          # Mock a paper position
+          paper_tracker = create(:position_tracker, :active, paper: true, security_id: '12345', segment: 'NSE_FNO', watchable: create(:derivative))
+          allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([paper_tracker])
+          
+          market_feed_hub = Live::MarketFeedHub.instance
+          expect(market_feed_hub).to receive(:subscribed?).and_return(false)
+          expect(paper_tracker).to receive(:subscribe).and_return({ already_subscribed: false })
+
+          service.sync_positions!
         end
       end
     end

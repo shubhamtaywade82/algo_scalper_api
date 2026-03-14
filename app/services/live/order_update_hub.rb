@@ -20,11 +20,11 @@ module Live
     end
 
     def start!
-      return unless enabled?
-      return if running?
+      return false unless enabled?
+      return true if running?
 
       @lock.synchronize do
-        return if running?
+        return true if running?
 
         @ws_client = DhanHQ::WS::Orders::Client.new
         @ws_client.on(:update) { |payload| handle_update(payload) }

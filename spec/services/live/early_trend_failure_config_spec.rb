@@ -232,6 +232,7 @@ RSpec.describe Live::EarlyTrendFailure, 'configuration variations' do
     end
 
     before do
+      described_class.reset_config!
       allow(AlgoConfig).to receive(:fetch).and_return(config)
     end
 

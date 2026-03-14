@@ -50,7 +50,9 @@ RSpec.describe Live::UnderlyingMonitor do
           trend_score: 18,
           breakdown: { mtf: 4 }
         )
-        allow(Live::TickCache).to receive(:ltp).and_return(21_500)
+        allow(Live::TickQuery).to receive(:for_security)
+          .with(segment: 'IDX_I', security_id: '13')
+          .and_return(double(ltp: 21_500))
       end
 
       it 'computes underlying state with caching' do
