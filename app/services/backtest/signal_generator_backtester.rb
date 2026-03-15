@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# rubocop:disable Style/GlobalVars, Rails/Output
 module Backtest
   # Backtests the Signal Generator (Supertrend + ADX) to measure signal quality
   # Tests signal accuracy, distribution, and forward-looking price movement
@@ -414,3 +415,5 @@ module Backtest
     end
   end
 end
+
+# rubocop:enable Style/GlobalVars, Rails/Output

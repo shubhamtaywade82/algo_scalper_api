@@ -46,11 +46,13 @@ module Options
 
         # Get available strikes from the filtered chain (only strikes that exist)
         # Handle different key formats in option chain
+        # rubocop:disable Style/MultilineBlockChain
         available_strikes = option_chain.keys.filter_map do |k|
           k.to_f
         rescue StandardError
           nil
         end.to_set
+        # rubocop:enable Style/MultilineBlockChain
 
         desired = desired_strike(
           index: index,
@@ -210,8 +212,8 @@ module Options
         possible_keys = [
           strike_int.to_s,
           strike_float.to_s,
-          format('%.6f', strike_float),  # Format like "25750.000000"
-          format('%.2f', strike_float),  # Format like "25750.00"
+          format('%<v>.6f', v: strike_float),  # Format like "25750.000000"
+          format('%<v>.2f', v: strike_float),  # Format like "25750.00"
           strike_int,
           strike_float,
           strike_int.to_s.to_sym, # Symbol keys sometimes

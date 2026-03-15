@@ -20,7 +20,7 @@ module Live
       @mutex = Monitor.new
       @running = false
       @thread = nil
-      @logger = defined?(Rails) ? Rails.logger : Logger.new($stdout)
+      @logger = defined?(Rails) ? Rails.logger : Logger.new($stdout) # rubocop:disable Style/GlobalVars
       @sleep_mutex = Mutex.new
       @sleep_cv = ConditionVariable.new
       @last_heartbeat_at = nil

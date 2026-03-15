@@ -52,7 +52,7 @@ class AiTechnicalAnalysisJob < ApplicationJob
         if result
           Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")
         else
-          Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$CHILD_STATUS.exitstatus})")
+          Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$CHILD_STATUS.exitstatus})") # rubocop:disable Style/GlobalVars
         end
       end
     end

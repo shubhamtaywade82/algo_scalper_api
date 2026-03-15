@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# rubocop:disable Style/GlobalVars
 module Optimization
   class IndicatorOptimizer
     PARAM_SPACE = {
@@ -151,7 +152,7 @@ module Optimization
 
       # Use upsert to update existing or create new
       # unique_by can use either column names or index name
-      BestIndicatorParam.upsert(
+      BestIndicatorParam.upsert( # rubocop:disable Rails/SkipsModelValidations
         {
           instrument_id: @instrument.id,
           interval: @interval,
@@ -167,3 +168,5 @@ module Optimization
     end
   end
 end
+
+# rubocop:enable Style/GlobalVars

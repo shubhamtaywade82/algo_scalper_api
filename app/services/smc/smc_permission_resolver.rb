@@ -162,7 +162,7 @@ module Smc
       def active_liquidity_trap?
         # Explicit false (symbol or string key) => not in trap
         raw_val = @raw[:active_liquidity_trap] || @raw['active_liquidity_trap']
-        return false if raw_val == false || raw_val == 'false'
+        return false if [false, 'false'].include?(raw_val)
 
         v =
           value(:active_liquidity_trap) ||

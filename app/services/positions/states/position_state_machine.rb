@@ -32,17 +32,17 @@ module Positions
     class PositionStateMachine
       # ── Allowed state transitions (DB states only) ────────────────────────
       TRANSITIONS = {
-        pending:   %i[active cancelled],
-        active:    %i[exited cancelled],
-        exited:    [],
+        pending: %i[active cancelled],
+        active: %i[exited cancelled],
+        exited: [],
         cancelled: []
       }.freeze
 
       # ── DB status → State class mapping ──────────────────────────────────
       STATE_CLASSES = {
-        pending:   PendingState,
-        active:    ActiveState,
-        exited:    ClosedState,
+        pending: PendingState,
+        active: ActiveState,
+        exited: ClosedState,
         cancelled: ClosedState
       }.freeze
 

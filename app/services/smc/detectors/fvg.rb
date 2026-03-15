@@ -65,13 +65,13 @@ module Smc
       # Returns true if volume > RVR_MIN * avg_volume_20, false if below, nil if no volume data
       def rvr_above_threshold?(candle)
         idx = candles.index(candle)
-        return nil unless idx && idx >= VOLUME_LOOKBACK
+        return nil unless idx && idx >= VOLUME_LOOKBACK # rubocop:disable Style/ReturnNilInPredicateMethodDefinition
 
         window = candles[(idx - VOLUME_LOOKBACK)...idx]
-        return nil unless window.all? { |c| c.respond_to?(:volume) && c.volume.to_i.positive? }
+        return nil unless window.all? { |c| c.respond_to?(:volume) && c.volume.to_i.positive? } # rubocop:disable Style/ReturnNilInPredicateMethodDefinition
 
         avg = window.sum(&:volume).to_f / VOLUME_LOOKBACK
-        return nil if avg.zero?
+        return nil if avg.zero? # rubocop:disable Style/ReturnNilInPredicateMethodDefinition
 
         (candle.volume.to_f / avg) >= RVR_MIN
       end

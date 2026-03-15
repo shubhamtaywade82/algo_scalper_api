@@ -26,8 +26,8 @@ module Orders
       VALID_SIDES = %w[buy sell BUY SELL].freeze
 
       # tracker is optional here — it does not exist yet at placement time
-      def initialize(gateway:, side:, segment:, security_id:, qty:, meta: {}, tracker: nil, **opts)
-        super(gateway: gateway, tracker: tracker, **opts)
+      def initialize(gateway:, side:, segment:, security_id:, qty:, meta: {}, tracker: nil, **)
+        super(gateway: gateway, tracker: tracker, **)
         @side        = side.to_s
         @segment     = segment
         @security_id = security_id
@@ -50,18 +50,18 @@ module Orders
 
       def execute
         response = gateway.place_market(
-          side:        @side.upcase,
-          segment:     @segment,
+          side: @side.upcase,
+          segment: @segment,
           security_id: @security_id,
-          qty:         @qty,
-          meta:        @meta
+          qty: @qty,
+          meta: @meta
         )
 
         if response.is_a?(Hash) && response[:success]
           success(
             order_id: response[:order_id],
-            paper:    response[:paper],
-            raw:      response
+            paper: response[:paper],
+            raw: response
           )
         else
           failure('broker_rejected', payload: { raw: response })

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# rubocop:disable Metrics/BlockNesting
 
 require_relative '../concerns/broker_fee_calculator'
 require_relative 'bos_extractor'
@@ -139,10 +140,10 @@ module Entries
 
         # Risk-level policy gate (portfolio exposure + drawdown check before broker call)
         risk_policy = Policies::RiskPolicy.new(
-          index_key:    index_cfg[:key].to_s,
+          index_key: index_cfg[:key].to_s,
           proposed_qty: quantity,
-          entry_price:  ltp.to_f,
-          lot_size:     lot_size
+          entry_price: ltp.to_f,
+          lot_size: lot_size
         )
         unless risk_policy.permitted?
           Rails.logger.info("[EntryGuard] RiskPolicy blocked for #{index_cfg[:key]} — #{risk_policy.reasons.join(', ')}")
@@ -150,12 +151,12 @@ module Entries
         end
 
         place_cmd = Orders::Commands::PlaceOrderCommand.new(
-          gateway:     Orders.config.gateway,
-          side:        :buy,
-          segment:     pick[:segment] || index_cfg[:segment],
+          gateway: Orders.config.gateway,
+          side: :buy,
+          segment: pick[:segment] || index_cfg[:segment],
           security_id: pick[:security_id],
-          qty:         quantity,
-          meta:        {
+          qty: quantity,
+          meta: {
             client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
             ltp: ltp,
             price: ltp,

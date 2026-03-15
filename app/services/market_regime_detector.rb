@@ -60,6 +60,7 @@ class MarketRegimeDetector
 
     metrics = calculate_metrics
 
+    # rubocop:disable Style/MultilineBlockChain
     case
     when trending?(metrics)
       trend_direction(metrics)
@@ -68,6 +69,7 @@ class MarketRegimeDetector
     else
       { regime: 'CHOPPY', confidence: 50.0 } # Needs more confirmation
     end.merge(metrics: metrics, timestamp: Time.current.iso8601)
+    # rubocop:enable Style/MultilineBlockChain
   end
 
   def calculate_metrics
@@ -123,7 +125,7 @@ class MarketRegimeDetector
     recent_low = series.recent_lows(20).min.to_f
 
     range = recent_high - recent_low
-    return 0.5 if range <= 0.0 # Prevent division by zero if completely flat
+    return 0.5 if range <= 0 # Prevent division by zero if completely flat
 
     current_close = series.candles.last.close.to_f
 

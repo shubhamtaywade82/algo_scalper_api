@@ -53,7 +53,6 @@ module Live
 
     def sync_live_positions
       Rails.logger.info('[PositionSync] Starting live position synchronization')
-      puts "[PositionSync DEBUG] Starting live position synchronization"
 
       dhan_positions = DhanHQ::Models::Position.active
       tracked_positions = Positions::ActivePositionsCache.instance.active_trackers
@@ -61,7 +60,6 @@ module Live
 
       dhan_count = dhan_positions.size
       tracked_count = tracked_positions.size
-      puts "[PositionSync DEBUG] Dhan count: #{dhan_count}, Tracked count: #{tracked_count}"
       counts_changed = @last_dhan_count.nil? || @last_tracked_count.nil? ||
                        dhan_count != @last_dhan_count || tracked_count != @last_tracked_count
 
@@ -225,12 +223,10 @@ module Live
       exchange_segment = extract_exchange_segment(dhan_position)
       quantity = extract_quantity(dhan_position)
       average_price = extract_average_price(dhan_position)
-      puts "[PositionSync DEBUG] Creating tracker for #{security_id} (#{exchange_segment})"
 
       # Find the derivative (for options) or instrument (for indices)
       # Parse exchange_segment (e.g., "NSE_FNO" -> exchange: "NSE", segment: "FNO")
       exchange, segment = parse_exchange_segment(exchange_segment)
-      puts "[PositionSync DEBUG] Parsed: exchange=#{exchange}, segment=#{segment}"
 
       # For options (derivatives), look up derivatives
       if segment == 'derivatives'
@@ -241,7 +237,6 @@ module Live
         )
 
         unless derivative
-          puts "[PositionSync DEBUG] Could not find derivative for #{security_id} (#{exchange_segment})"
           Rails.logger.error("[PositionSync] Could not find derivative for #{security_id} (#{exchange_segment})")
           return false
         end
@@ -256,12 +251,10 @@ module Live
         )
 
         unless instrument
-          puts "[PositionSync DEBUG] Could not find instrument for #{security_id} (#{exchange_segment})"
           Rails.logger.error("[PositionSync] Could not find instrument for #{security_id} (#{exchange_segment})")
           return false
         end
       end
-      puts "[PositionSync DEBUG] Found instrument: #{instrument&.id}"
 
       # Generate a synthetic order number for untracked positions
       synthetic_order_no = "SYNC-#{security_id}-#{Time.current.to_i}"
@@ -274,34 +267,28 @@ module Live
                   end
 
       # Create PositionTracker
-      begin
-        tracker = PositionTracker.create!(
-          watchable: watchable,
-          instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
-          order_no: synthetic_order_no,
-          security_id: security_id.to_s,
-          symbol: symbol,
-          segment: exchange_segment,
-          side: 'long', # Default assumption - could be enhanced to detect actual side
-          status: 'active',
-          quantity: quantity,
-          avg_price: average_price,
-          entry_price: average_price,
-          meta: {
-            synced_from_dhan: true,
-            sync_timestamp: Time.current,
-            original_position_data: begin
-              dhan_position.to_h
-            rescue StandardError
-              {}
-            end
-          }
-        )
-        puts "[PositionSync DEBUG] Created tracker #{tracker.id}"
-      rescue StandardError => e
-        puts "[PositionSync DEBUG] FAILED to create tracker: #{e.message}"
-        raise e
-      end
+      tracker = PositionTracker.create!(
+        watchable: watchable,
+        instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
+        order_no: synthetic_order_no,
+        security_id: security_id.to_s,
+        symbol: symbol,
+        segment: exchange_segment,
+        side: 'long', # Default assumption - could be enhanced to detect actual side
+        status: 'active',
+        quantity: quantity,
+        avg_price: average_price,
+        entry_price: average_price,
+        meta: {
+          synced_from_dhan: true,
+          sync_timestamp: Time.current,
+          original_position_data: begin
+            dhan_position.to_h
+          rescue StandardError
+            {}
+          end
+        }
+      )
 
       # Subscribe to market feed
       tracker.subscribe

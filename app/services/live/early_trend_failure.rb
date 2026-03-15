@@ -90,10 +90,10 @@ module Live
       # Heuristic: if value <= 1.0 and not zero, treat as decimal and convert to percentage
       # This matches the logic used in RiskManagerService::ExitEnforcement
       pnl_value = pnl_pct.to_f
-      pnl_value = pnl_value * 100.0 if pnl_value.abs <= 1.0 && pnl_value.nonzero?
+      pnl_value *= 100.0 if pnl_value.abs <= 1.0 && pnl_value.nonzero?
 
       activation_value = activation.to_f
-      activation_value = activation_value * 100.0 if activation_value.abs <= 1.0 && activation_value.nonzero?
+      activation_value *= 100.0 if activation_value.abs <= 1.0 && activation_value.nonzero?
 
       pnl_value < activation_value
     end

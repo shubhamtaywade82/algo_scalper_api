@@ -208,7 +208,7 @@ module Notifications
       message += "📦 <b>Quantity:</b> #{quantity}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
 
-      if pnl_pct == 0.0
+      if pnl_pct.zero?
         message += "\n"
       else
         pnl_pct_emoji = pnl_pct.positive? ? '📈' : '📉'
@@ -250,7 +250,7 @@ module Notifications
       message += "💵 <b>Current:</b> ₹#{current_price.round(2)}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
 
-      message += if pnl_pct_value == 0.0
+      message += if pnl_pct_value.zero?
                    "\n"
                  else
                    " (#{'+' if pnl_pct_value.positive?}#{pnl_pct_value.round(2)}%)\n"

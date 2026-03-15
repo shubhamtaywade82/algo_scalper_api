@@ -11,6 +11,8 @@ module Options
       @chain_data = chain_data # { last_price: float, oc: { strike => { ce: {}, pe: {} } } }
     end
 
+    OPTION_TYPES = %w[ce pe].freeze
+
     # Identifies strikes with strong institutional flow (long buildup)
     # @return [Hash] { 'ce' => [strikes], 'pe' => [strikes] }
     def strong_flow_strikes
@@ -18,7 +20,7 @@ module Options
       return result unless @chain_data && @chain_data[:oc]
 
       @chain_data[:oc].each do |strike, data|
-        %w[ce pe].each do |type|
+        OPTION_TYPES.each do |type|
           option = data[type]
           next unless option && option['oi'].to_i.positive?
 

@@ -58,14 +58,14 @@ module Policies
     end
 
     def max_active_positions_exceeded?
-      max = risk_cfg.dig(:max_active_positions) || 3
+      max = risk_cfg[:max_active_positions] || 3
       PositionTracker.active.count >= max
     rescue StandardError
       false
     end
 
     def max_exposure_exceeded?
-      max_pct = risk_cfg.dig(:max_exposure_pct).to_f
+      max_pct = risk_cfg[:max_exposure_pct].to_f
       return false unless max_pct.positive?
 
       wallet = Orders.config.gateway.wallet_snapshot

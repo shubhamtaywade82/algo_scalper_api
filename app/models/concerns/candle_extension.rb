@@ -28,7 +28,7 @@ module CandleExtension
       include_today = !Rails.env.test? &&
                       ENV['BACKTEST_MODE'] != '1' &&
                       ENV['SCRIPT_MODE'] != '1' &&
-                      !($PROGRAM_NAME.include?('runner') if defined?($PROGRAM_NAME))
+                      !($PROGRAM_NAME.include?('runner') if defined?($PROGRAM_NAME)) # rubocop:disable Style/GlobalVars
 
       if include_today
         # Include today's date to get the most recent candles
@@ -152,9 +152,9 @@ module CandleExtension
       end
 
       TechnicalAnalysis::Obv.calculate(dcv)
-    rescue NoMethodError => e
-      raise e
     rescue StandardError => e
+      raise e if e.is_a?(NoMethodError)
+
       # OBV.calculate might have different signature - try alternative approach
       Rails.logger.warn("[CandleExtension] OBV calculation failed: #{e.message}")
       nil

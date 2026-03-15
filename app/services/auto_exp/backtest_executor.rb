@@ -12,8 +12,8 @@ module AutoExp
       # Capture stdout for the JSON metrics and ignore stderr (or handle separately)
       output = `rails runner #{SCRIPT}`
 
-      unless $CHILD_STATUS.success?
-        Rails.logger.error("[AutoExp] Backtest script failed with status #{$CHILD_STATUS.exitstatus}")
+      unless $CHILD_STATUS.success? # rubocop:disable Style/GlobalVars
+        Rails.logger.error("[AutoExp] Backtest script failed with status #{$CHILD_STATUS.exitstatus}") # rubocop:disable Style/GlobalVars
         raise "Backtest failed"
       end
 

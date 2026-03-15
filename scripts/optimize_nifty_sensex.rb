@@ -47,7 +47,7 @@ unless sensex_cfg
 end
 
 # Helper to run optimization
-def run_optimization(index_name, index_cfg, interval, lookback_days, test_mode = false)
+def run_optimization(index_name, index_cfg, interval, lookback_days, test_mode = false) # rubocop:disable Style/OptionalBooleanParameter
   puts "\n#{'-' * 80}"
   puts "Optimizing #{index_name} (#{interval}m, #{lookback_days} days)"
   puts '-' * 80

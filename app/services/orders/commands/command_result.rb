@@ -47,12 +47,12 @@ module Orders
 
       def to_h
         {
-          success:      success,
-          reason:       reason,
-          payload:      payload,
-          error:        error&.message,
-          executed_at:  executed_at,
-          command:      command_class
+          success: success,
+          reason: reason,
+          payload: payload,
+          error: error&.message,
+          executed_at: executed_at,
+          command: command_class
         }
       end
 

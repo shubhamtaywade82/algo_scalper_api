@@ -57,10 +57,10 @@ module Live
       ltp = safe_ltp(tracker)
 
       cmd_result = Orders::Commands::ExitOrderCommand.new(
-        gateway:         @router,
-        tracker:         tracker,
+        gateway: @router,
+        tracker: tracker,
         client_order_id: tracker.exit_coid,
-        reason:          reason
+        reason: reason
       ).call
 
       unless cmd_result.success?
@@ -113,7 +113,7 @@ module Live
     # @return [void]
     def persist_broker_ack!(tracker, result)
       order_id = result.is_a?(Hash) ? (result[:order_id] || result['order_id']) : nil
-      tracker.update_columns(
+      tracker.update_columns( # rubocop:disable Rails/SkipsModelValidations
         exit_sent_at: Time.current,
         exit_order_id: order_id,
         updated_at: Time.current

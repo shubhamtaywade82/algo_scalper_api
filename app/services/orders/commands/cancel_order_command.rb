@@ -16,8 +16,8 @@ module Orders
     #   result = cmd.call
     #   result.success?  # => true
     class CancelOrderCommand < BaseCommand
-      def initialize(gateway:, tracker:, order_id:, **opts)
-        super(gateway: gateway, tracker: tracker, **opts)
+      def initialize(gateway:, tracker:, order_id:, **)
+        super(gateway: gateway, tracker: tracker, **)
         @order_id = order_id
       end
 
