@@ -27,6 +27,7 @@ module Orders
         base = super
         return base if base
 
+        return failure('missing_tracker') unless tracker
         return failure('missing_order_id') if @order_id.blank?
 
         nil

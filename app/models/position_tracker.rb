@@ -269,7 +269,16 @@ class PositionTracker < ApplicationRecord
     }
   end
 
+  # Returns the state machine for this tracker, giving callers a clean
+  # capability-based interface (can_trail?, can_request_exit?, etc.) and
+  # validated transition helpers without reading raw status strings.
+  def state_machine
+    Positions::States::PositionStateMachine.new(self)
+  end
+
   def mark_active!(avg_price:, quantity:)
+    state_machine.transition_to!(:active)
+
     price = avg_price.present? ? BigDecimal(avg_price.to_s) : nil
     attrs = {
       status: :active,
@@ -300,6 +309,7 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_cancelled!
+    state_machine.transition_to!(:cancelled)
     update!(status: :cancelled)
   end
 
@@ -316,6 +326,8 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
+    state_machine.transition_to!(:exited)
+
     # Persist final PnL from Redis cache to DB (force sync, no throttling)
     persist_final_pnl_from_cache
 

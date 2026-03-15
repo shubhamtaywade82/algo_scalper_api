@@ -30,6 +30,8 @@ module Orders
         base = super
         return base if base
 
+        return failure('missing_tracker') unless tracker
+
         unless tracker.active?
           return failure('not_active', payload: { status: tracker.status })
         end

@@ -20,6 +20,13 @@ module Entries
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
 
+        # Portfolio-level policy gate (fast fail before building context)
+        entry_policy = Policies::EntryPolicy.new(index_cfg: index_cfg, direction: direction)
+        unless entry_policy.permitted?
+          Rails.logger.info("[EntryGuard] EntryPolicy blocked — #{entry_policy.reasons.join(', ')}")
+          return false
+        end
+
         context = {
           index_cfg: index_cfg,
           pick: pick,
@@ -130,24 +137,38 @@ module Entries
           return false
         end
 
-        response = Orders.config.gateway.place_market(
-          side: 'buy',
-          segment: pick[:segment] || index_cfg[:segment],
+        # Risk-level policy gate (portfolio exposure + drawdown check before broker call)
+        risk_policy = Policies::RiskPolicy.new(
+          index_key:    index_cfg[:key].to_s,
+          proposed_qty: quantity,
+          entry_price:  ltp.to_f,
+          lot_size:     lot_size
+        )
+        unless risk_policy.permitted?
+          Rails.logger.info("[EntryGuard] RiskPolicy blocked for #{index_cfg[:key]} — #{risk_policy.reasons.join(', ')}")
+          return false
+        end
+
+        place_cmd = Orders::Commands::PlaceOrderCommand.new(
+          gateway:     Orders.config.gateway,
+          side:        :buy,
+          segment:     pick[:segment] || index_cfg[:segment],
           security_id: pick[:security_id],
-          qty: quantity,
-          meta: {
+          qty:         quantity,
+          meta:        {
             client_order_id: build_client_order_id(index_cfg: index_cfg, pick: pick),
             ltp: ltp,
             price: ltp,
             symbol: pick[:symbol]
           }
-        )
+        ).call
 
-        if response.is_a?(Hash) && response[:success] == false
-          Rails.logger.error("[EntryGuard] place_market failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+        unless place_cmd.success?
+          Rails.logger.error("[EntryGuard] place_market failed for #{index_cfg[:key]}: #{pick[:symbol]} (#{place_cmd.reason})")
           return false
         end
 
+        response = place_cmd.payload[:raw] || {}
         order_no = extract_order_no(response)
         unless order_no
           Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")

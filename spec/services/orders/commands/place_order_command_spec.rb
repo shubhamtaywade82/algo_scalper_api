@@ -4,16 +4,15 @@ require 'rails_helper'
 
 RSpec.describe Orders::Commands::PlaceOrderCommand do
   let(:gateway) { instance_double('Orders::GatewayPaper') }
-  let(:tracker)  { build_stubbed(:position_tracker, status: 'active', order_no: 'ORD001') }
 
+  # tracker is intentionally absent — it doesn't exist at placement time
   let(:default_params) do
     {
       gateway:     gateway,
-      tracker:     tracker,
       side:        :buy,
       segment:     'NSE_FNO',
       security_id: '12345',
-      quantity:    50,
+      qty:         50,
       meta:        { index_key: 'NIFTY' }
     }
   end
@@ -34,6 +33,13 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
       expect(result).to be_success
       expect(result.payload[:order_id]).to eq('DHAN123')
       expect(result.payload[:paper]).to be true
+    end
+
+    it 'passes keyword args to gateway' do
+      expect(gateway).to receive(:place_market).with(
+        side: 'BUY', segment: 'NSE_FNO', security_id: '12345', qty: 50, meta: { index_key: 'NIFTY' }
+      ).and_return({ success: true, order_id: 'X' })
+      command.call
     end
   end
 
@@ -63,8 +69,8 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
     end
   end
 
-  context 'when quantity is zero' do
-    subject(:command) { described_class.new(**default_params.merge(quantity: 0)) }
+  context 'when qty is zero' do
+    subject(:command) { described_class.new(**default_params.merge(qty: 0)) }
 
     it 'fails with invalid_quantity' do
       result = command.call
@@ -90,6 +96,16 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
       result = command.call
       expect(result).to be_failure
       expect(result.reason).to eq('missing_segment')
+    end
+  end
+
+  # ── No tracker required ─────────────────────────────────────────────────────
+
+  context 'without a tracker (normal placement flow)' do
+    it 'does not fail for missing tracker' do
+      allow(gateway).to receive(:place_market).and_return({ success: true, order_id: 'X' })
+      result = command.call
+      expect(result).to be_success
     end
   end
 

@@ -59,7 +59,6 @@ module Orders
       # @return [CommandResult, nil]
       def validate
         return failure('missing_gateway') unless gateway
-        return failure('missing_tracker') unless tracker
 
         nil
       end
