@@ -7,38 +7,43 @@ module Positions
     #   • A concrete State object for the current DB status
     #   • Transition validation (TRANSITIONS table)
     #   • Lifecycle hooks (on_exit / on_enter) fired during transitions
-    #   • Convenience predicate helpers (active?, trailing?, etc.)
+    #   • Convenience predicate helpers (active?, closed?, etc.)
     #
-    # The machine is READ-ONLY with respect to the database — it never
-    # writes to the tracker itself.  Callers are responsible for persisting
-    # the new status via the appropriate tracker method (mark_active! etc.).
+    # DB states (PositionTracker enum): pending | active | exited | cancelled
+    #
+    # NOTE: TrailingState and ExitPendingState exist as domain concepts but are
+    # NOT separate DB states — trailing is tracked via tracker.meta and
+    # exit_pending via tracker.exit_requested_at. The state machine therefore
+    # works with the 4 DB-backed states only.
+    #
+    # The machine is READ-ONLY with respect to the database — it never writes
+    # to the tracker itself. Callers persist the new status via mark_active! etc.
+    #
+    # Idempotency: transition_to! is a no-op when already in the target state,
+    # matching WebSocket handler semantics (fills can replay on reconnect).
     #
     # Usage:
     #   sm = PositionStateMachine.new(tracker)
     #   sm.state                          # => #<ActiveState …>
     #   sm.can?(:trail)                   # => true
-    #   sm.valid_transition?(:trailing)   # => true
-    #   sm.transition_to!(:trailing)      # fires on_exit + on_enter hooks
-    #   sm.available_transitions          # => [:trailing, :exit_pending, :exited, :cancelled]
+    #   sm.valid_transition?(:exited)     # => true
+    #   sm.transition_to!(:exited)        # fires on_exit + on_enter hooks
+    #   sm.available_transitions          # => [:exited, :cancelled]
     class PositionStateMachine
-      # ── Allowed state transitions ──────────────────────────────────────────
+      # ── Allowed state transitions (DB states only) ────────────────────────
       TRANSITIONS = {
-        pending:      %i[active cancelled],
-        active:       %i[trailing exit_pending exited cancelled],
-        trailing:     %i[exit_pending exited cancelled],
-        exit_pending: %i[exited cancelled],
-        exited:       [],
-        cancelled:    []
+        pending:   %i[active cancelled],
+        active:    %i[exited cancelled],
+        exited:    [],
+        cancelled: []
       }.freeze
 
-      # ── DB status → State class mapping ───────────────────────────────────
+      # ── DB status → State class mapping ──────────────────────────────────
       STATE_CLASSES = {
-        pending:      PendingState,
-        active:       ActiveState,
-        trailing:     TrailingState,
-        exit_pending: ExitPendingState,
-        exited:       ClosedState,
-        cancelled:    ClosedState
+        pending:   PendingState,
+        active:    ActiveState,
+        exited:    ClosedState,
+        cancelled: ClosedState
       }.freeze
 
       attr_reader :tracker
@@ -47,7 +52,7 @@ module Positions
         @tracker = tracker
       end
 
-      # ── State access ───────────────────────────────────────────────────────
+      # ── State access ──────────────────────────────────────────────────────
 
       # Returns the concrete State object for the current tracker status.
       # @return [BaseState]
@@ -61,7 +66,7 @@ module Positions
         tracker.status.to_sym
       end
 
-      # ── Capability checks ──────────────────────────────────────────────────
+      # ── Capability checks ─────────────────────────────────────────────────
 
       # Delegates capability check to the current state object.
       #
@@ -77,7 +82,7 @@ module Positions
         state.terminal?
       end
 
-      # ── Transition logic ───────────────────────────────────────────────────
+      # ── Transition logic ──────────────────────────────────────────────────
 
       # Returns the list of reachable next states from the current status.
       # @return [Array<Symbol>]
@@ -105,26 +110,27 @@ module Positions
       end
 
       # Fires lifecycle hooks for the transition.
+      # Idempotent: no-op when already in the target state (supports WebSocket
+      # replay semantics — fill events can arrive more than once).
       # NOTE: Does NOT persist anything — caller must update the DB status.
       #
       # @param to_state [Symbol, String]
       # @raise [IllegalTransitionError] if transition is not allowed
       def transition_to!(to_state)
         to_sym = to_state.to_sym
-        assert_transition!(to_sym)
+        return if current_status == to_sym  # already there — idempotent no-op
 
+        assert_transition!(to_sym)
         state.on_exit
         STATE_CLASSES.fetch(to_sym, BaseState).new(tracker).on_enter
       end
 
-      # ── Convenience predicates ─────────────────────────────────────────────
-      def pending?      = current_status == :pending
-      def active?       = current_status == :active
-      def trailing?     = current_status == :trailing
-      def exit_pending? = current_status == :exit_pending
-      def closed?       = %i[exited cancelled].include?(current_status)
+      # ── Convenience predicates ────────────────────────────────────────────
+      def pending?  = current_status == :pending
+      def active?   = current_status == :active
+      def closed?   = %i[exited cancelled].include?(current_status)
 
-      # ── Errors ─────────────────────────────────────────────────────────────
+      # ── Errors ────────────────────────────────────────────────────────────
       class IllegalTransitionError < StandardError; end
     end
   end

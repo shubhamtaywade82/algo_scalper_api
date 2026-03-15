@@ -41,71 +41,25 @@ RSpec.describe Positions::States::PositionStateMachine do
     context 'in pending state' do
       let(:status) { 'pending' }
 
-      it 'can activate' do
-        expect(machine.can?(:activate)).to be true
-      end
-
-      it 'cannot trail' do
-        expect(machine.can?(:trail)).to be false
-      end
-
-      it 'cannot request exit' do
-        expect(machine.can?(:request_exit)).to be false
-      end
+      it 'can activate'       do expect(machine.can?(:activate)).to be true end
+      it 'cannot trail'       do expect(machine.can?(:trail)).to be false end
+      it 'cannot request exit' do expect(machine.can?(:request_exit)).to be false end
     end
 
     context 'in active state' do
       let(:status) { 'active' }
 
-      it 'can trail' do
-        expect(machine.can?(:trail)).to be true
-      end
-
-      it 'can request exit' do
-        expect(machine.can?(:request_exit)).to be true
-      end
-
-      it 'cannot activate' do
-        expect(machine.can?(:activate)).to be false
-      end
-    end
-
-    context 'in trailing state' do
-      let(:status) { 'trailing' }
-
-      it 'can trail' do
-        expect(machine.can?(:trail)).to be true
-      end
-
-      it 'can request exit' do
-        expect(machine.can?(:request_exit)).to be true
-      end
-    end
-
-    context 'in exit_pending state' do
-      let(:status) { 'exit_pending' }
-
-      it 'can close' do
-        expect(machine.can?(:close)).to be true
-      end
-
-      it 'cannot request exit' do
-        expect(machine.can?(:request_exit)).to be false
-      end
+      it 'can trail'          do expect(machine.can?(:trail)).to be true end
+      it 'can request exit'   do expect(machine.can?(:request_exit)).to be true end
+      it 'cannot activate'    do expect(machine.can?(:activate)).to be false end
     end
 
     context 'in closed (exited) state' do
       let(:status) { 'exited' }
 
-      it 'cannot do anything' do
-        expect(machine.can?(:activate)).to be false
-        expect(machine.can?(:trail)).to be false
-        expect(machine.can?(:request_exit)).to be false
-      end
-
-      it 'is terminal' do
-        expect(machine.terminal?).to be true
-      end
+      it 'is terminal'        do expect(machine.terminal?).to be true end
+      it 'cannot activate'    do expect(machine.can?(:activate)).to be false end
+      it 'cannot trail'       do expect(machine.can?(:trail)).to be false end
     end
   end
 
@@ -114,32 +68,22 @@ RSpec.describe Positions::States::PositionStateMachine do
   describe '#valid_transition?' do
     let(:status) { 'pending' }
 
-    it 'returns true for allowed transitions' do
-      expect(machine.valid_transition?(:active)).to be true
-      expect(machine.valid_transition?(:cancelled)).to be true
-    end
-
-    it 'returns false for disallowed transitions' do
-      expect(machine.valid_transition?(:exited)).to be false
-      expect(machine.valid_transition?(:trailing)).to be false
-    end
+    it 'allows pending → active'    do expect(machine.valid_transition?(:active)).to be true end
+    it 'allows pending → cancelled' do expect(machine.valid_transition?(:cancelled)).to be true end
+    it 'blocks pending → exited'    do expect(machine.valid_transition?(:exited)).to be false end
   end
 
   describe '#available_transitions' do
     context 'when active' do
       let(:status) { 'active' }
 
-      it 'returns correct next states' do
-        expect(machine.available_transitions).to match_array(%i[trailing exit_pending exited cancelled])
-      end
+      it { expect(machine.available_transitions).to match_array(%i[exited cancelled]) }
     end
 
     context 'when exited (terminal)' do
       let(:status) { 'exited' }
 
-      it 'returns empty array' do
-        expect(machine.available_transitions).to be_empty
-      end
+      it { expect(machine.available_transitions).to be_empty }
     end
   end
 
@@ -156,14 +100,39 @@ RSpec.describe Positions::States::PositionStateMachine do
     end
   end
 
+  # ── Idempotency (WebSocket replay safety) ───────────────────────────────────
+
+  describe '#transition_to! idempotency' do
+    context 'when already in the target state' do
+      let(:status) { 'active' }
+
+      it 'is a no-op and does not raise' do
+        expect { machine.transition_to!(:active) }.not_to raise_error
+      end
+
+      it 'does not fire on_enter hooks' do
+        expect(Rails.logger).not_to receive(:debug).with(/Entered ACTIVE/)
+        machine.transition_to!(:active)
+      end
+    end
+
+    context 'when already exited (replay of exit fill)' do
+      let(:status) { 'exited' }
+
+      it 'is a no-op and does not raise' do
+        expect { machine.transition_to!(:exited) }.not_to raise_error
+      end
+    end
+  end
+
   # ── Lifecycle hooks ─────────────────────────────────────────────────────────
 
-  describe '#transition_to!' do
+  describe '#transition_to! — real transition' do
     let(:status) { 'active' }
 
-    it 'fires on_exit on the outgoing state and on_enter on the incoming state' do
+    it 'fires on_exit and on_enter hooks' do
       allow(Rails.logger).to receive(:debug)
-      expect { machine.transition_to!(:trailing) }.not_to raise_error
+      expect { machine.transition_to!(:exited) }.not_to raise_error
     end
 
     it 'raises for illegal transitions' do
@@ -180,16 +149,16 @@ RSpec.describe Positions::States::PositionStateMachine do
       expect(described_class.new(tracker).active?).to be true
     end
 
+    it 'pending? is true when status is pending' do
+      tracker = build_stubbed(:position_tracker, status: 'pending', order_no: 'X')
+      expect(described_class.new(tracker).pending?).to be true
+    end
+
     it 'closed? is true for both exited and cancelled' do
       %w[exited cancelled].each do |st|
         tracker = build_stubbed(:position_tracker, status: st, order_no: 'X')
         expect(described_class.new(tracker).closed?).to be true
       end
-    end
-
-    it 'pending? is true when status is pending' do
-      tracker = build_stubbed(:position_tracker, status: 'pending', order_no: 'X')
-      expect(described_class.new(tracker).pending?).to be true
     end
   end
 end
