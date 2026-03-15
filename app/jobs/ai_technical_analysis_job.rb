@@ -65,13 +65,6 @@ class AiTechnicalAnalysisJob < ApplicationJob
   private
 
   def closed_market_session_label
-    regime = Live::TimeRegimeService.instance.current_regime
-    case regime
-    when Live::TimeRegimeService::POST_MARKET then 'POST_MARKET'
-    when Live::TimeRegimeService::PRE_MARKET then 'PRE_MARKET'
-    else regime.to_s.upcase
-    end
-  rescue StandardError
-    'CLOSED'
+    Live::TimeRegimeService.closed_session_label
   end
 end

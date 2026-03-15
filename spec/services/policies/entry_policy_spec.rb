@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Policies::EntryPolicy do
-  let(:index_cfg) { { index_key: 'NIFTY' } }
+  let(:index_cfg) { { key: 'NIFTY' } }
 
   subject(:policy) { described_class.new(index_cfg: index_cfg, direction: :long) }
 

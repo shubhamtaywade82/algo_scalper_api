@@ -43,6 +43,23 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
     end
   end
 
+  # ── Paper gateway (paper: true without explicit success) ────────────────────
+
+  describe '#call — paper gateway response' do
+    before do
+      allow(gateway).to receive(:place_market).and_return(
+        { paper: true, order_id: 'PAPER-abc123' }
+      )
+    end
+
+    it 'treats paper response as success' do
+      result = command.call
+      expect(result).to be_success
+      expect(result.payload[:order_id]).to eq('PAPER-abc123')
+      expect(result.payload[:paper]).to be true
+    end
+  end
+
   # ── Broker rejection ────────────────────────────────────────────────────────
 
   describe '#call — broker rejects' do

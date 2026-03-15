@@ -64,7 +64,7 @@ module Policies
     end
 
     def daily_loss_limit_reached?
-      index_key = @index_cfg&.dig(:index_key) || @index_cfg&.dig('index_key')
+      index_key = @index_cfg&.dig(:key)
       result = Live::DailyLimits.new.can_trade?(index_key: index_key)
       !result[:allowed]
     rescue StandardError

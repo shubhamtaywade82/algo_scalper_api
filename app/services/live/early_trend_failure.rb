@@ -81,21 +81,14 @@ module Live
       false
     end
 
-    # Check if ETF checks are applicable (before trailing activation)
-    # pnl_pct can be percentage (5.0) or decimal (0.05)
+    # Check if ETF checks are applicable (before trailing activation).
+    # Both pnl_pct and activation_profit_pct must be in the same unit (percentage).
+    # The caller is responsible for normalizing formats before invoking this method.
     def applicable?(pnl_pct, activation_profit_pct: nil)
-      activation = activation_profit_pct || etf_cfg[:activation_profit_pct].to_f
+      activation = (activation_profit_pct || etf_cfg[:activation_profit_pct]).to_f
       return false if activation.zero?
 
-      # Heuristic: if value <= 1.0 and not zero, treat as decimal and convert to percentage
-      # This matches the logic used in RiskManagerService::ExitEnforcement
-      pnl_value = pnl_pct.to_f
-      pnl_value *= 100.0 if pnl_value.abs <= 1.0 && pnl_value.nonzero?
-
-      activation_value = activation.to_f
-      activation_value *= 100.0 if activation_value.abs <= 1.0 && activation_value.nonzero?
-
-      pnl_value < activation_value
+      pnl_pct.to_f < activation
     end
   end
 end
