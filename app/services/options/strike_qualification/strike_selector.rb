@@ -46,11 +46,13 @@ module Options
 
         # Get available strikes from the filtered chain (only strikes that exist)
         # Handle different key formats in option chain
+        # rubocop:disable Style/MultilineBlockChain
         available_strikes = option_chain.keys.filter_map do |k|
           k.to_f
         rescue StandardError
           nil
         end.to_set
+        # rubocop:enable Style/MultilineBlockChain
 
         desired = desired_strike(
           index: index,
