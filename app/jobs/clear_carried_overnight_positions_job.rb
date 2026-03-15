@@ -29,8 +29,6 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
     trackers.each do |tracker|
       execute_exit_with_retry(exit_engine, tracker)
     end
-  rescue StandardError
-    raise
   ensure
     exit_engine&.stop
   end
@@ -45,7 +43,7 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
       return unless tracker.active? && tracker.exit_requested_at.present?
 
       Rails.logger.info("[ClearCarriedOvernightPositionsJob] #{tracker.order_no} stuck; clearing intent and retrying")
-      tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current)
+      tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
       tracker.reload
       result = exit_engine.execute_exit(tracker, REASON)
     end

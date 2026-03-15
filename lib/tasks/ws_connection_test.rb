@@ -367,7 +367,7 @@ module WsConnectionTest
 end
 
 # Main execution
-if __FILE__ == $PROGRAM_NAME || defined?(Rails::Console)
+if __FILE__ == $PROGRAM_NAME || defined?(Rails::Console) # rubocop:disable Style/GlobalVars
   # Parse command line arguments
   instruments = ARGV.find { |a| !a.start_with?('--') }
   segment = ARGV.find { |a| a.start_with?('--segment=') }&.split('=')&.last || 'IDX_I'

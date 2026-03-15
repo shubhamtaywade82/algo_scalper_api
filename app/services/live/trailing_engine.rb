@@ -193,7 +193,7 @@ module Live
 
       meta['highest_price'] = new_highest
       meta['lowest_price'] = new_lowest
-      tracker.update_column(:meta, meta)
+      tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
     end
 
     # Apply direct trailing SL (follows price directly, only moves upward)
@@ -330,6 +330,7 @@ module Live
     end
 
     # Apply tailored trailing SL (Gamma-Aware + MFE approach for indices)
+    # rubocop:disable Metrics/AbcSize
     def apply_tailored_sl(position_data)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
@@ -380,6 +381,7 @@ module Live
       Rails.logger.error("[TrailingEngine] Failed to apply tailored SL: #{e.class} - #{e.message}")
       { updated: false, new_sl_price: nil, reason: e.message }
     end
+    # rubocop:enable Metrics/AbcSize
 
     # Build failure result hash
     # @param error [String] Error message

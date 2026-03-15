@@ -267,11 +267,11 @@ module Services
 
           lines = []
           lines << "Indicator Analysis (#{instrument_name})"
-          lines << "- LTP: #{ltp ? format('%.2f', ltp) : 'N/A'}"
-          lines << "- 15m RSI: #{rsi ? format('%.2f', rsi.to_f) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
-          lines << "- 15m ADX: #{adx ? format('%.2f', adx.to_f) : 'N/A'} (trend #{strength})"
+          lines << "- LTP: #{ltp ? ltp.round(2) : 'N/A'}"
+          lines << "- 15m RSI: #{rsi ? rsi.to_f.round(2) : 'N/A'}" if %w[RSI TREND indicators].include?(requested)
+          lines << "- 15m ADX: #{adx ? adx.to_f.round(2) : 'N/A'} (trend #{strength})"
           lines << "- 15m Supertrend: #{supertrend || 'N/A'}"
-          lines << "- 15m MACD hist: #{macd_hist ? format('%.2f', macd_hist.to_f) : 'N/A'}"
+          lines << "- 15m MACD hist: #{macd_hist ? macd_hist.to_f.round(2) : 'N/A'}"
           lines << "- Bias: #{bias}"
           lines << "- Action: use this as directional filter only; options strike planning requires an explicit options query."
           lines.join("\n")
@@ -308,7 +308,7 @@ module Services
         def build_facts_prompt(context)
           # Compact facts only - NO raw data
           indicators_text = if context.indicators.any?
-                              context.indicators.map do |timeframe, inds|
+                              indicator_lines = context.indicators.map do |timeframe, inds|
                                 # Handle error entries specially
                                 if inds.key?('error') || inds.key?(:error)
                                   error_msg = inds['error'] || inds[:error]
@@ -317,7 +317,8 @@ module Services
                                   ind_values = inds.map { |name, val| "#{name}: #{val}" }.join(', ')
                                   "  #{timeframe}: #{ind_values}"
                                 end
-                              end.join("\n")
+                              end
+                              indicator_lines.join("\n")
                             else
                               '  None'
                             end

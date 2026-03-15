@@ -88,7 +88,7 @@ module Orders
         # highest_price is a store_accessor on meta
         if @position.respond_to?(:update_columns)
           meta = (@position.meta || {}).merge('highest_price' => @highest)
-          @position.update_columns(meta: meta)
+          @position.update_columns(meta: meta) # rubocop:disable Rails/SkipsModelValidations
         elsif @position.respond_to?(:meta=)
           @position.meta = (@position.meta || {}).merge('highest_price' => @highest)
         end

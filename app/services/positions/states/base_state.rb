@@ -23,7 +23,7 @@ module Positions
 
       # ── Lifecycle hooks ────────────────────────────────────────────────────
       def on_enter; end
-      def on_exit;  end
+      def on_exit; end
 
       # ── Identity ───────────────────────────────────────────────────────────
       def name

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# rubocop:disable Style/GlobalVars, Rails/Output, Metrics/BlockNesting
 # Backtest Service with No-Trade Engine Integration
 # Backtests Supertrend + ADX strategy with No-Trade Engine validation on historical index data
 #
@@ -892,3 +893,5 @@ class BacktestServiceWithNoTradeEngine
     ((stats[:phase1_blocked].to_f / total_attempts) * 100).round(2)
   end
 end
+
+# rubocop:enable Style/GlobalVars, Rails/Output

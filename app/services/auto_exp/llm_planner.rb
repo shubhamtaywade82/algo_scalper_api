@@ -43,9 +43,9 @@ module AutoExp
     private
 
     def build_prompt(results, config)
-      history = (results || []).last(10).map do |r|
-        "pf=#{r[:profit_factor]} dd=#{r[:drawdown]} win_rate=#{r[:win_rate]}"
-      end.join("\n")
+      history = (results || []).last(10)
+                              .map { |r| "pf=#{r[:profit_factor]} dd=#{r[:drawdown]} win_rate=#{r[:win_rate]}" }
+                              .join("\n")
 
       <<~PROMPT
         You are optimizing a trading strategy.

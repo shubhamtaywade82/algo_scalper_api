@@ -957,11 +957,12 @@ module Services
 
       # Log prompt and token count. When log_context == :ai_intent, use dedicated log/ai_intent.log only.
       def log_prompt_and_tokens(messages:, model:, token_count:, log_context: nil)
-        message_summary = messages.map do |msg|
+        message_lines = messages.map do |msg|
           role = msg[:role] || msg['role'] || 'unknown'
           content = msg[:content] || msg['content'] || ''
           "#{role}: #{content}"
-        end.join("\n")
+        end
+        message_summary = message_lines.join("\n")
 
         if log_context == :ai_intent
           ai_logger = Rails.application.config.respond_to?(:ai_intent_logger) && Rails.application.config.ai_intent_logger

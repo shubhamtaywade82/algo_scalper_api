@@ -18,8 +18,8 @@ module Orders
     #   result.success?              # => true
     #   result.payload[:exit_price]  # => BigDecimal("245.50")
     class ExitOrderCommand < BaseCommand
-      def initialize(gateway:, tracker:, client_order_id:, reason: nil, **opts)
-        super(gateway: gateway, tracker: tracker, **opts)
+      def initialize(gateway:, tracker:, client_order_id:, reason: nil, **)
+        super(gateway: gateway, tracker: tracker, **)
         @client_order_id = client_order_id
         @reason          = reason
       end
@@ -47,10 +47,10 @@ module Orders
         if exit_successful?(response)
           success(
             exit_price: response[:exit_price],
-            order_id:   response[:order_id],
-            paper:      response[:paper],
-            reason:     @reason,
-            raw:        response
+            order_id: response[:order_id],
+            paper: response[:paper],
+            reason: @reason,
+            raw: response
           )
         else
           failure('broker_rejected', payload: { raw: response })

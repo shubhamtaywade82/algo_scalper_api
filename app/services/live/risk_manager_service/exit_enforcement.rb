@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# rubocop:disable Metrics/BlockNesting
 
 module Live
   class RiskManagerService
@@ -145,17 +146,17 @@ module Live
         current_r = (net_pnl / risk_value).to_f
 
         if tracker.trade_state.blank?
-          tracker.update_column(:trade_state, 'init')
+          tracker.update_column(:trade_state, 'init') # rubocop:disable Rails/SkipsModelValidations
         end
 
         case tracker.trade_state
         when 'init'
           if current_r >= 1.0
-            tracker.update_columns(trade_state: 'validated', validated_at: Time.current)
+            tracker.update_columns(trade_state: 'validated', validated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
           end
         when 'validated'
           if current_r >= 2.0
-            tracker.update_columns(trade_state: 'expansion', expansion_at: Time.current)
+            tracker.update_columns(trade_state: 'expansion', expansion_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
           end
         end
       rescue StandardError => e
@@ -190,7 +191,7 @@ module Live
         if trend_score > peak
           meta = tracker.meta || {}
           meta['peak_trend_score'] = trend_score
-          tracker.update_column(:meta, meta)
+          tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
         end
       rescue StandardError
         nil
@@ -650,7 +651,7 @@ module Live
         current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
         return if dynamic_floor <= current_floor
 
-        tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i)
+        tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i) # rubocop:disable Rails/SkipsModelValidations
         Rails.logger.info(
           "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \
           "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{(trail_pct * 100).round}%)"
@@ -857,7 +858,7 @@ module Live
         meta['secured_sl_rupees'] = secured_sl_rupees.to_f
         meta['profit_zone_transitioned_at'] = Time.current.iso8601
 
-        tracker.update_column(:meta, meta)
+        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
 
         Rails.logger.info(
           "[RiskManager] Transitioned #{tracker.order_no} to SECURED_PROFIT_ZONE " \
