@@ -6,9 +6,6 @@ module MarketState
     def self.expanding?(series)
       return false if series.candles.size < 16
 
-      # Use the latest ATR value compared to the previous one
-      series.atr(14)
-
       # We need history to check expansion
       # CandleSeries#atr returns a single value (latest)
       # We need to manually calculate or check if ATR is rising

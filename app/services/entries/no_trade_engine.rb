@@ -5,7 +5,7 @@ module Entries
   # Blocks trades when multiple unfavorable conditions are present
   # Uses index-specific thresholds optimized for OPTIONS BUYING
   class NoTradeEngine
-    Result = Struct.new(:allowed, :score, :reasons)
+    Result = Struct.new(:allowed, :score, :reasons, keyword_init: true)
 
     # Validate context and determine if trade should be allowed
     # @param ctx [OpenStruct] Context from NoTradeContextBuilder

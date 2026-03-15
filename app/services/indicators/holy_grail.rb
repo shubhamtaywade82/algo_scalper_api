@@ -45,7 +45,8 @@ module Indicators
 
     Result = Struct.new(
       :bias, :adx, :momentum, :proceed?,
-      :sma50, :ema200, :rsi14, :atr14, :macd, :trend
+      :sma50, :ema200, :rsi14, :atr14, :macd, :trend,
+      keyword_init: true
     ) do
       def to_h = members.zip(values).to_h
     end

@@ -81,7 +81,9 @@ module Policies
 
     def portfolio_drawdown_limit_reached?
       result = Live::DailyLimits.new.can_trade?(index_key: @index_key)
-      !result[:allowed]
+      return false if result[:allowed]
+
+      !%w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].include?(result[:reason])
     rescue StandardError
       false
     end
