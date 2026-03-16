@@ -222,8 +222,9 @@ risk:
   # Exit-layer overrides (optional). Price-based structure invalidation uses these when set.
   exits:
     structure_invalidation:
-      min_hold_seconds: 90   # No structure exit until position age >= this (reduces tick-noise and brokerage)
-      buffer_pct: 0.002      # Require underlying to breach level by this fraction (0.2%) before exit
+      enabled: false         # Disable price-based structure exits (use SL, time stop, trailing instead)
+      min_hold_seconds: 120  # If re-enabled: no structure exit until position age >= this (reduces churn)
+      buffer_pct: 0.004      # If re-enabled: require underlying to breach level by this fraction (~0.4%) before exit
 
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
