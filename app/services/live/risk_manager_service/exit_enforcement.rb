@@ -327,6 +327,14 @@ module Live
         snapshot = pnl_snapshot(tracker)
         return unless snapshot
 
+        # Skip R-stop when trailing system has taken ownership
+        if trailing_armed_for?(tracker, snapshot)
+          Rails.logger.debug do
+            "[RiskManager] PREMIUM_R_STOP suppressed for #{tracker.order_no} — trailing armed"
+          end
+          return
+        end
+
         ltp = snapshot[:ltp]
         return unless ltp
 
@@ -342,6 +350,22 @@ module Live
         end
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_premium_r_stop_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def trailing_armed_for?(tracker, snapshot)
+        trailing_cfg = AlgoConfig.fetch.dig(:risk, :trailing) || {}
+        return false if trailing_cfg[:enabled] == false
+
+        activation = (trailing_cfg[:activation_pct] || 0.025).to_f
+        return false unless activation.positive?
+
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false unless entry_value.positive?
+
+        peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
+        peak_profit_pct >= activation
+      rescue StandardError
+        false
       end
 
       # LAYER 1: DYNAMIC TRAILING SL
