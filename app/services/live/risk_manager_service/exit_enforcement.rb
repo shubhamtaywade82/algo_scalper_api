@@ -652,7 +652,10 @@ module Live
         current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
         return if dynamic_floor <= current_floor
 
-        tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i) # rubocop:disable Rails/SkipsModelValidations
+        # profit_floor_rupees is stored in meta (store_accessor), not a DB column
+        meta = (tracker.meta || {}).stringify_keys
+        meta['profit_floor_rupees'] = dynamic_floor.to_i
+        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
         Rails.logger.info(
           "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \
           "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{(trail_pct * 100).round}%)"

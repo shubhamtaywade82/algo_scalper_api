@@ -896,7 +896,7 @@ module Entries
           sl_decimal = supertrend_sl_decimal
           premium_r = entry_price.to_f * sl_decimal
           entry_risk_rupees = premium_r * quantity.to_i
-          origin_price = entry_price.to_f
+          origin_price = nil # No BOS swing level; structure invalidation must use underlying at entry
           entry_underlying_price = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_underlying_price] : nil
         else
           origin_price = bos_context[:origin_swing][:price].to_f
@@ -908,7 +908,13 @@ module Entries
         premium_stop = entry_price.to_f - premium_r
         premium_target = entry_price.to_f + premium_r
 
-        meta_hash[:structure_invalidation_price] = origin_price
+        # Structure invalidation must be in UNDERLYING domain (index level). Never use option premium.
+        # For BOS entries we use origin_swing price (underlying). For supertrend we omit so only the
+        # 5m/15m candle-based rule runs (avoids tick-noise exits and reduces brokerage from quick flips).
+        if origin_price.present?
+          meta_hash[:structure_invalidation_price] = origin_price
+        end
+        underlying_at_entry = entry_underlying_price || resolve_underlying_ltp(meta_hash[:index_key])
         meta_hash[:entry_premium] = entry_price.to_f
         meta_hash[:entry_risk_rupees] = entry_risk_rupees
         meta_hash[:premium_stop_price] = premium_stop

@@ -870,18 +870,16 @@ module Signal
         end
       end
 
-      # Validate market timing - avoid problematic trading times
+      # Validate market timing - avoid problematic trading times.
+      # Uses IST via TradingSession so behavior matches market_closed? and entry_allowed?
       def validate_market_timing
-        # TODO: Implement market timing validation if needed
-        current_time = Time.zone.now
-
-        # First check if it's a trading day using Market::Calendar
         unless Market::Calendar.trading_day_today?
           return { valid: false, name: 'Market Timing', message: 'Not a trading day (weekend/holiday)' }
         end
 
-        hour = current_time.hour
-        minute = current_time.min
+        current_ist = TradingSession::Service.current_ist_time
+        hour = current_ist.hour
+        minute = current_ist.min
 
         # Market hours: 9:15 AM to 3:30 PM IST
         market_open = hour > 9 || (hour == 9 && minute >= 15)
@@ -895,7 +893,7 @@ module Signal
           # Check for session blackouts (Loss Avoidance)
           restrictions = AlgoConfig.fetch[:trading_time_restrictions]
           if restrictions&.[](:enabled) && restrictions[:avoid_periods].present?
-            current_hm = current_time.strftime('%H:%M')
+            current_hm = current_ist.strftime('%H:%M')
             restrictions[:avoid_periods].each do |period|
               start_time, end_time = period.split('-')
               if current_hm >= start_time && current_hm < end_time

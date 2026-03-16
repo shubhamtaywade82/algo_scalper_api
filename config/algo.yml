@@ -219,6 +219,12 @@ risk:
     enabled: true
     target_rr: 2.5        # Exit fully at 2.5R (e.g., if SL is 10%, TP at 25%)
 
+  # Exit-layer overrides (optional). Price-based structure invalidation uses these when set.
+  exits:
+    structure_invalidation:
+      min_hold_seconds: 90   # No structure exit until position age >= this (reduces tick-noise and brokerage)
+      buffer_pct: 0.002      # Require underlying to breach level by this fraction (0.2%) before exit
+
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
   time_stop:

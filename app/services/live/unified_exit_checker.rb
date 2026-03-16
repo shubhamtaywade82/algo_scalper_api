@@ -84,7 +84,8 @@ module Live
         end
 
         # 6. Structure Invalidation (underlying broke past entry structure level)
-        if (invalidation_price = tracker.meta&.dig('structure_invalidation_price'))
+        # Skip until min hold time to avoid tick-noise exits and reduce brokerage from instant flips.
+        if (invalidation_price = tracker.meta&.dig('structure_invalidation_price')) && structure_min_hold_elapsed?(tracker)
           underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
           if underlying_ltp && structure_invalidated?(tracker, underlying_ltp, invalidation_price)
             return {
@@ -463,16 +464,37 @@ module Live
         peak_pct >= min_peak_pct && current_pct < -0.02
       end
 
+      # Require a meaningful breach (buffer) to avoid exits on 1-tick noise; reduces brokerage from quick flips.
       def structure_invalidated?(tracker, underlying_ltp, invalidation_price)
         direction = tracker.meta&.dig('direction').to_s
+        level = invalidation_price.to_f
+        buffer = structure_invalidation_buffer(level)
         case direction
         when 'long_pe'
-          underlying_ltp > invalidation_price.to_f
+          underlying_ltp > level + buffer
         when 'long_ce'
-          underlying_ltp < invalidation_price.to_f
+          underlying_ltp < level - buffer
         else
           false
         end
+      end
+
+      def structure_min_hold_elapsed?(tracker)
+        return false unless tracker.created_at
+        min_seconds = structure_invalidation_min_hold_seconds
+        (Time.current - tracker.created_at) >= min_seconds
+      end
+
+      def structure_invalidation_min_hold_seconds
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        (cfg[:min_hold_seconds] || cfg['min_hold_seconds'] || 90).to_i
+      end
+
+      def structure_invalidation_buffer(invalidation_level)
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        pct = (cfg[:buffer_pct] || cfg['buffer_pct'] || 0.002).to_f # 0.2% default
+        return 0.0 if invalidation_level.blank? || invalidation_level.zero?
+        (invalidation_level * pct).abs
       end
     end
   end
