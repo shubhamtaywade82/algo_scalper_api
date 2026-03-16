@@ -7,6 +7,8 @@ module Live
     EXIT_CONFIG_TTL = 30 # seconds — matches AlgoConfig.fetch TTL
 
     class << self
+      include Live::UnderlyingLtpResolver
+
       # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
       def check_exit_conditions(tracker)
@@ -79,6 +81,17 @@ module Live
             path: 'trailing_stop',
             pnl_pct: (pnl_pct * 100.0).round(2)
           }
+        end
+
+        # 6. Structure Invalidation (underlying broke past entry structure level)
+        if (invalidation_price = tracker.meta&.dig('structure_invalidation_price'))
+          underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
+          if underlying_ltp && structure_invalidated?(tracker, underlying_ltp, invalidation_price)
+            return {
+              exit: true,
+              reason: "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{invalidation_price})"
+            }
+          end
         end
 
         # 5. Time-Based Exit (if configured)
@@ -448,6 +461,18 @@ module Live
         current_pct = tracker.current_pnl_pct.to_f
 
         peak_pct >= min_peak_pct && current_pct < -0.02
+      end
+
+      def structure_invalidated?(tracker, underlying_ltp, invalidation_price)
+        direction = tracker.meta&.dig('direction').to_s
+        case direction
+        when 'long_pe'
+          underlying_ltp > invalidation_price.to_f
+        when 'long_ce'
+          underlying_ltp < invalidation_price.to_f
+        else
+          false
+        end
       end
     end
   end

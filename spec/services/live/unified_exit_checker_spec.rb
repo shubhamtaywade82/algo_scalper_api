@@ -76,4 +76,56 @@ RSpec.describe Live::UnifiedExitChecker do
       expect(result).to be false
     end
   end
+
+  describe 'structure invalidation' do
+    it 'triggers exit for long_pe when underlying rises above invalidation price' do
+      allow(tracker).to receive(:meta).and_return({
+        'direction' => 'long_pe',
+        'structure_invalidation_price' => 23800.0,
+        'index_key' => 'NIFTY'
+      })
+      tick = double(ltp: 23850.0)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+
+      result = described_class.send(:structure_invalidated?, tracker, 23850.0, 23800.0)
+      expect(result).to be true
+    end
+
+    it 'triggers exit for long_ce when underlying falls below invalidation price' do
+      allow(tracker).to receive(:meta).and_return({
+        'direction' => 'long_ce',
+        'structure_invalidation_price' => 23800.0,
+        'index_key' => 'NIFTY'
+      })
+
+      result = described_class.send(:structure_invalidated?, tracker, 23750.0, 23800.0)
+      expect(result).to be true
+    end
+
+    it 'does not trigger for long_pe when underlying is below invalidation' do
+      allow(tracker).to receive(:meta).and_return({ 'direction' => 'long_pe' })
+      result = described_class.send(:structure_invalidated?, tracker, 23750.0, 23800.0)
+      expect(result).to be false
+    end
+
+    it 'does not trigger for unknown direction' do
+      allow(tracker).to receive(:meta).and_return({ 'direction' => 'unknown' })
+      result = described_class.send(:structure_invalidated?, tracker, 23850.0, 23800.0)
+      expect(result).to be false
+    end
+
+    it 'returns nil gracefully when TickQuery fails' do
+      allow(Live::TickQuery).to receive(:for_security).and_raise(StandardError)
+      result = described_class.send(:resolve_underlying_ltp, 'NIFTY')
+      expect(result).to be_nil
+    end
+
+    it 'skips structure invalidation when invalidation_price is nil in meta' do
+      allow(tracker).to receive(:meta).and_return({
+        'direction' => 'long_pe',
+        'index_key' => 'NIFTY'
+      })
+      expect(Live::TickQuery).not_to receive(:for_security)
+    end
+  end
 end
