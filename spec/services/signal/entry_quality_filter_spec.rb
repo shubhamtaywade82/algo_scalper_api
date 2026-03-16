@@ -9,6 +9,84 @@ RSpec.describe Signal::EntryQualityFilter do
     OpenStruct.new(open: open, high: high, low: low, close: close, time: time)
   end
 
+  describe 'session-aware overrides' do
+    let(:base_config) do
+      {
+        entry_quality: {
+          enforce: true,
+          min_score: 55,
+          gates: { min_adx: 25, block_choppy_regime: true, min_body_ratio: 0.40, require_momentum_confirm: true },
+          scoring: {
+            candle_body_weight: 25,
+            adx_strength_weight: 20,
+            bos_weight: 20,
+            range_expansion_weight: 20,
+            momentum_weight: 15
+          },
+          session_overrides: {
+            chop_decay: { min_score: 60, gates: { min_adx: 30 } }
+          },
+          index_overrides: {}
+        },
+        risk: {
+          time_regimes: {
+            open_expansion: { start: '09:15', end: '09:45' },
+            trend_continuation: { start: '09:45', end: '11:30' },
+            chop_decay: { start: '11:30', end: '13:45' },
+            close_gamma: { start: '13:45', end: '15:15' }
+          }
+        }
+      }
+    end
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return(base_config)
+      allow(Entries::BosExtractor).to receive(:last_confirmed_bos).and_return(nil)
+    end
+
+    context 'during chop_decay session (12:00 IST)' do
+      before do
+        allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-16 12:00:00 +05:30'))
+      end
+
+      it 'applies chop_decay session overrides (min_adx: 30)' do
+        result = described_class.evaluate(
+          series: series,
+          supertrend_result: supertrend_result,
+          adx_value: 27,
+          direction: :bullish,
+          regime: 'TRENDING',
+          index_key: 'NIFTY'
+        )
+        expect(result[:pass]).to be false
+        expect(result[:reject_reason]).to eq('min_adx')
+      end
+
+      it 'loads config with overridden min_score and min_adx' do
+        config = described_class.send(:load_config, 'NIFTY')
+        expect(config[:min_score]).to eq(60)
+        expect(config[:gates][:min_adx]).to eq(30)
+      end
+    end
+
+    context 'during trend_continuation session (10:00 IST)' do
+      before do
+        allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-16 10:00:00 +05:30'))
+      end
+
+      it 'uses standard thresholds (min_adx: 25)' do
+        result = described_class.evaluate(
+          series: series,
+          supertrend_result: supertrend_result,
+          adx_value: 27,
+          direction: :bullish,
+          regime: 'TRENDING',
+          index_key: 'NIFTY'
+        )
+        expect(result[:reject_reason]).not_to eq('min_adx')
+      end
+    end
+  end
   def build_series(candles)
     series = instance_double('CandleSeries')
     allow(series).to receive(:candles).and_return(candles)

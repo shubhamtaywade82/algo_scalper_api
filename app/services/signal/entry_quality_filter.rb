@@ -67,6 +67,8 @@ module Signal
         raw = AlgoConfig.fetch[:entry_quality] || {}
         config = deep_symbolize(DEFAULTS.deep_merge(raw))
 
+        apply_session_overrides!(config)
+
         # Apply index-specific overrides (check Symbol and String keys)
         overrides = config.dig(:index_overrides, index_key.to_sym) ||
                     config.dig(:index_overrides, index_key.to_s) || {}
@@ -77,6 +79,45 @@ module Signal
         end
 
         config
+      end
+
+      def apply_session_overrides!(config)
+        session_overrides = config[:session_overrides]
+        return unless session_overrides.is_a?(Hash)
+
+        current_session = detect_current_session
+        return unless current_session
+
+        override = session_overrides[current_session.to_sym]
+        return unless override.is_a?(Hash)
+
+        override = deep_symbolize(override)
+
+        config[:min_score] = override[:min_score] if override[:min_score]
+
+        if override[:gates].is_a?(Hash)
+          config[:gates] = config[:gates].merge(override[:gates])
+        end
+      end
+
+      def detect_current_session
+        time_regimes = AlgoConfig.fetch.dig(:risk, :time_regimes)
+        return nil unless time_regimes.is_a?(Hash)
+
+        now = Time.current.in_time_zone('Asia/Kolkata')
+        current_hhmm = now.strftime('%H:%M')
+
+        time_regimes.each do |name, cfg|
+          next unless cfg.is_a?(Hash)
+
+          start_time = cfg[:start] || cfg['start']
+          end_time = cfg[:end] || cfg['end']
+          next unless start_time && end_time
+
+          return name.to_sym if current_hhmm >= start_time.to_s && current_hhmm < end_time.to_s
+        end
+
+        nil
       end
 
       def deep_symbolize(hash)
