@@ -344,8 +344,9 @@ RSpec.describe Signal::EntryQualityFilter do
       end
 
       it 'scores 3 when distance < 0.25x ATR' do
-        # distance = (106 - 105) / 10 = 0.1
-        candle = build_candle(open: 100.0, high: 115.0, low: 95.0, close: 106.0)
+        # body_ratio = |106 - 95| / (115 - 95) = 11/20 = 0.55 (passes body gate)
+        # distance = (106 - 105) / 10 = 0.1 (< 0.25)
+        candle = build_candle(open: 95.0, high: 115.0, low: 95.0, close: 106.0)
         s = build_series([candle])
         result = described_class.evaluate(**default_params.merge(series: s))
         expect(result[:breakdown][:momentum]).to eq(3)

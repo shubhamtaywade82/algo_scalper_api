@@ -130,9 +130,114 @@ module Signal
         { pass: true, gates: gates }
       end
 
-      def calculate_score(_candles, _supertrend_result, _adx_value, _direction, _series, config)
-        # Placeholder — returns minimum passing score. Replaced in Task 5.
-        { score: config[:min_score], breakdown: {} }
+      def calculate_score(candles, supertrend_result, adx_value, direction, series, config)
+        scoring = config[:scoring]
+        breakdown = {}
+
+        candle = candles.last
+        range = candle.high - candle.low
+        body_ratio = range > 0 ? (candle.close - candle.open).abs / range : 0.0
+
+        # Component 1: Candle body strength (0 - candle_body_weight)
+        max_body = scoring[:candle_body_weight]
+        breakdown[:candle_body] = if body_ratio >= 0.70
+                                    max_body
+                                  elsif body_ratio >= 0.55
+                                    (max_body * 0.72).round
+                                  elsif body_ratio >= 0.40
+                                    (max_body * 0.40).round
+                                  else
+                                    0
+                                  end
+
+        # Component 2: ADX strength bonus (0 - adx_strength_weight)
+        max_adx = scoring[:adx_strength_weight]
+        adx = adx_value.to_f
+        breakdown[:adx_strength] = if adx >= 35
+                                      max_adx
+                                    elsif adx >= 25
+                                      (max_adx * 0.60).round
+                                    elsif adx >= 20
+                                      (max_adx * 0.25).round
+                                    else
+                                      0
+                                    end
+
+        # Component 3: Break of structure (0 - bos_weight)
+        max_bos = scoring[:bos_weight]
+        breakdown[:bos] = score_bos(series, direction, candles, max_bos)
+
+        # Component 4: Range expansion (0 - range_expansion_weight)
+        max_range = scoring[:range_expansion_weight]
+        atr_value = current_atr(supertrend_result)
+        breakdown[:range_expansion] = if atr_value.nil? || atr_value <= 0
+                                        0
+                                      elsif range >= 1.5 * atr_value
+                                        max_range
+                                      elsif range >= 1.2 * atr_value
+                                        (max_range * 0.60).round
+                                      elsif range >= 1.0 * atr_value
+                                        (max_range * 0.25).round
+                                      else
+                                        0
+                                      end
+
+        # Component 5: Momentum confirmation strength (0 - momentum_weight)
+        max_momentum = scoring[:momentum_weight]
+        breakdown[:momentum] = score_momentum(candle, supertrend_result, direction, atr_value, max_momentum)
+
+        total = breakdown.values.sum
+        { score: total, breakdown: breakdown }
+      end
+
+      def score_bos(series, direction, candles, max_points)
+        bos = begin
+          Entries::BosExtractor.last_confirmed_bos(series)
+        rescue StandardError
+          nil
+        end
+
+        return max_points if bos && bos[:direction] == direction
+
+        # Fallback: simple structure check (last 3 candles)
+        if candles.length >= 3
+          last3 = candles.last(3)
+          if direction == :bullish
+            return (max_points * 0.50).round if last3[0].high < last3[1].high && last3[1].high < last3[2].high
+          else
+            return (max_points * 0.50).round if last3[0].low > last3[1].low && last3[1].low > last3[2].low
+          end
+        end
+
+        0
+      end
+
+      def score_momentum(candle, supertrend_result, direction, atr_value, max_points)
+        if atr_value.nil? || atr_value <= 0
+          return (max_points * 0.20).round
+        end
+
+        st_value = supertrend_result[:last_value].to_f
+        distance = if direction == :bullish
+                     (candle.close - st_value) / atr_value
+                   else
+                     (st_value - candle.close) / atr_value
+                   end
+
+        if distance >= 0.5
+          max_points
+        elsif distance >= 0.25
+          (max_points * 0.67).round
+        else
+          (max_points * 0.20).round
+        end
+      end
+
+      def current_atr(supertrend_result)
+        atr_array = supertrend_result[:atr]
+        return nil unless atr_array.is_a?(Array)
+
+        atr_array.compact.last
       end
 
       def reject_result(reason)
