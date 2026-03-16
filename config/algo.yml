@@ -52,6 +52,7 @@ indices:
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -95,6 +96,7 @@ indices:
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -138,6 +140,7 @@ indices:
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -191,14 +194,14 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.12 # -12% STOP LOSS
-  tp_pct: 0.50 # +50% TAKE PROFIT
+  sl_pct: 0.06 # -6% STOP LOSS
+  tp_pct: 0.12 # +12% TAKE PROFIT
   per_trade_risk_pct: 0.15
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
     enabled: true
-    target_pct: 0.30 # 30% - increased from 15% to allow larger moves
+    target_pct: 0.15 # 15% safety net for options
 
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
@@ -222,9 +225,11 @@ risk:
   # Exit-layer overrides (optional). Price-based structure invalidation uses these when set.
   exits:
     structure_invalidation:
-      enabled: false         # Disable price-based structure exits (use SL, time stop, trailing instead)
-      min_hold_seconds: 120  # If re-enabled: no structure exit until position age >= this (reduces churn)
-      buffer_pct: 0.004      # If re-enabled: require underlying to breach level by this fraction (~0.4%) before exit
+      enabled: true           # Re-enabled with options-aware dual condition
+      min_hold_seconds: 120   # No structure exit until position age >= this (reduces churn)
+      buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
+      underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
+      premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
 
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
@@ -247,17 +252,27 @@ risk:
     expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
 
     nifty:
-      early_trigger: 0.03         # Phase 1: Survival (+5% profit → -12% SL)
-      early_sl_offset: -0.12
-      breakeven_trigger: 0.08    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
-      activation_trigger: 0.15    # Phase 3: HWM Trailing at +20%
-      trailing_distance: 0.2    # 38.6% from HWM (80% of avg 48.3% retrace)
+      early_trigger: 0.025        # Phase 1: Survival (+2.5% profit → -6% SL)
+      early_sl_offset: -0.06
+      breakeven_trigger: 0.05     # Phase 2: Breakeven at +5%
+      activation_trigger: 0.10    # Phase 3: HWM Trailing at +10%
+      trailing_distance: 0.018    # Base trailing distance (tier 1)
+      adaptive_drawdown:
+        - { min_profit: 0.025, drawdown: 0.018 }
+        - { min_profit: 0.10, drawdown: 0.022 }
+        - { min_profit: 0.20, drawdown: 0.025 }
+        - { min_profit: 0.35, drawdown: 0.030 }
     sensex:
-      early_trigger: 0.03         # Phase 1: Survival (+6% profit → -10% SL)
-      early_sl_offset: -0.10
-      breakeven_trigger: 0.08     # Phase 2: Breakeven at +12%
-      activation_trigger: 0.15    # Phase 3: HWM Trailing at +18%
-      trailing_distance: 0.2     # 80% from HWM (Based on 5-week avg 99.8% retrace)
+      early_trigger: 0.025
+      early_sl_offset: -0.06
+      breakeven_trigger: 0.05
+      activation_trigger: 0.10
+      trailing_distance: 0.018
+      adaptive_drawdown:
+        - { min_profit: 0.025, drawdown: 0.018 }
+        - { min_profit: 0.10, drawdown: 0.022 }
+        - { min_profit: 0.20, drawdown: 0.025 }
+        - { min_profit: 0.35, drawdown: 0.030 }
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
@@ -864,9 +879,9 @@ ai:
 # ===== ENTRY QUALITY FILTER =====
 entry_quality:
   enforce: true                      # false = log-only mode (no blocking)
-  min_score: 40                      # minimum quality score to enter (0-100)
+  min_score: 55                      # tightened minimum quality score (0-100)
   gates:
-    min_adx: 20                      # hard gate: minimum ADX value
+    min_adx: 25                      # hard gate: minimum ADX value
     block_choppy_regime: true        # hard gate: block CHOPPY regime
     min_body_ratio: 0.40             # hard gate: minimum candle body/range ratio
     require_momentum_confirm: true   # hard gate: close must be beyond Supertrend level
@@ -876,6 +891,11 @@ entry_quality:
     bos_weight: 20                   # max points for break of structure
     range_expansion_weight: 20       # max points for range expansion
     momentum_weight: 15              # max points for momentum strength
+  session_overrides:
+    chop_decay:
+      min_score: 60
+      gates:
+        min_adx: 30
   index_overrides:
     SENSEX:
-      min_adx: 22                    # SENSEX is noisier, needs higher ADX
+      min_adx: 25                    # SENSEX keeps slightly higher ADX floor

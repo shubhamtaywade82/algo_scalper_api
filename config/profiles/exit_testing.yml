@@ -39,3 +39,11 @@ trade_limits:
 # Entry quality filter: log-only in exit testing (don't block entries)
 entry_quality:
   enforce: false
+  min_score: 55
+  gates:
+    min_adx: 25
+  session_overrides:
+    chop_decay:
+      min_score: 60
+      gates:
+        min_adx: 30
