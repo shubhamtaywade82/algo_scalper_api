@@ -82,10 +82,9 @@ RSpec.describe Live::TrailingEngine do
       end
 
       it 'does not exit if activation thresholds are not met' do
-        # peak 0.40, current 0.22, sl_offset 0.08
-        # activation_profit_pct is 0.25 (default)
-        # sl_offset_pct 0.08 >= activation_sl_offset_pct 0.10 (False)
-        position = build_position(peak_profit_pct: 0.40, pnl_pct: 0.22, sl_offset_pct: 0.08)
+        # peak 0.20, current 0.12, sl_offset 0.08
+        # OR logic: profit 0.20 >= 0.25 (False) OR sl_offset 0.08 >= 0.10 (False) → blocked
+        position = build_position(peak_profit_pct: 0.20, pnl_pct: 0.12, sl_offset_pct: 0.08)
 
         result = engine.process_tick(position, exit_engine: exit_engine)
 
@@ -96,7 +95,7 @@ RSpec.describe Live::TrailingEngine do
       it 'exits once when activation thresholds are satisfied' do
         # peak 0.60, current 0.30
         # sl_price 112.0 means sl_offset is 0.12 (12%)
-        # activation thresholds: peak >= 0.25 AND sl_offset >= 0.10 (True)
+        # activation thresholds: peak >= 0.25 OR sl_offset >= 0.10 (True)
         # drawdown 0.30 >= threshold 0.008 (True)
         position = build_position(peak_profit_pct: 0.60, pnl_pct: 0.30, sl_price: 112.0, sl_offset_pct: 0.12)
         allow(tracker).to receive(:active?).and_return(true, false)

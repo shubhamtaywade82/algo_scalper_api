@@ -15,6 +15,7 @@ module Entries
 
     class << self
       include Live::UnderlyingLtpResolver
+
       def entry_guard_pipeline
         @entry_guard_pipeline ||= EntryGuardPipeline.new
       end
