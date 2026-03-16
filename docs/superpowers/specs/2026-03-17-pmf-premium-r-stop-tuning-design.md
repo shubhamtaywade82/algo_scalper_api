@@ -57,11 +57,10 @@ Config is read via `AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failur
 
 **File:** `app/services/concerns/session_detector.rb` (NEW)
 
-Extract the `detect_current_session` logic (currently duplicated in `Signal::EntryQualityFilter`) into a shared concern. Both `EntryQualityFilter` and `PremiumMomentumFailureRule` include it.
+Extract the `detect_current_session` logic (currently duplicated in `Signal::EntryQualityFilter`) into a shared concern. Both `EntryQualityFilter` and `PremiumMomentumFailureRule` include it. Uses bare module name (matching existing pattern: `BrokerFeeCalculator`, `DhanhqErrorHandler`).
 
 ```ruby
-module Concerns
-  module SessionDetector
+module SessionDetector
     def detect_current_session
       time_regimes = AlgoConfig.fetch.dig(:risk, :time_regimes)
       return nil unless time_regimes.is_a?(Hash)
@@ -83,13 +82,13 @@ module Concerns
 end
 ```
 
-`EntryQualityFilter` switches from its private `detect_current_session` to `include Concerns::SessionDetector`.
+`EntryQualityFilter` switches from its private `detect_current_session` to `include SessionDetector`.
 
 ### Changes to PremiumMomentumFailureRule
 
 **File:** `app/services/risk/rules/premium_momentum_failure_rule.rb`
 
-1. `include Concerns::SessionDetector`
+1. `include SessionDetector`
 2. Replace `DEFAULT_STALL_MINUTES = 3` usage with `resolve_stall_minutes(tracker)`
 3. Add private method `resolve_stall_minutes(tracker)`:
    - Read config via `AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}`
@@ -167,7 +166,7 @@ This is a behavioral fix. The R-stop distance itself stays at `sl_pct`. No new c
 |---|---|
 | `app/services/concerns/session_detector.rb` | **NEW** — shared session detection concern |
 | `app/services/risk/rules/premium_momentum_failure_rule.rb` | Config-driven stall minutes with index+session resolution |
-| `app/services/signal/entry_quality_filter.rb` | Replace private `detect_current_session` with `include Concerns::SessionDetector` |
+| `app/services/signal/entry_quality_filter.rb` | Replace private `detect_current_session` with `include SessionDetector` |
 | `app/services/live/risk_manager_service/exit_enforcement.rb` | R-stop suppression when trailing armed |
 | `config/algo.yml` | PMF config section |
 | `config/profiles/exit_testing.yml` | PMF test config |
