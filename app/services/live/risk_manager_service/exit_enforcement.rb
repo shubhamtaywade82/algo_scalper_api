@@ -4,6 +4,7 @@ module Live
   class RiskManagerService
     module ExitEnforcement
       include Live::UnderlyingLtpResolver
+      include Live::StructureInvalidationEvaluator
 
       # Lightweight struct for ETF position data (replaces OpenStruct for performance)
       EtfPositionData = Struct.new(
@@ -419,38 +420,11 @@ module Live
         min_hold = (si_cfg[:min_hold_seconds] || 120).to_i
         return false unless tracker.created_at && (Time.current - tracker.created_at) >= min_hold
 
-        entry_underlying = tracker.meta&.dig('entry_underlying_price').to_f
-        return false unless entry_underlying.positive?
-
         index_key = tracker.meta&.dig('index_key')
         underlying_ltp = resolve_underlying_ltp(index_key)
         return false unless underlying_ltp
 
-        direction = tracker.meta&.dig('direction').to_s
-        move_pct = si_cfg[:underlying_move_pct].to_f
-        return false unless move_pct.positive?
-
-        underlying_moved = case direction
-                           when 'long_ce'
-                             (entry_underlying - underlying_ltp) / entry_underlying >= move_pct
-                           when 'long_pe'
-                             (underlying_ltp - entry_underlying) / entry_underlying >= move_pct
-                           else
-                             false
-                           end
-        return false unless underlying_moved
-
-        peak_premium = tracker.meta&.dig('peak_premium').to_f
-        return false unless peak_premium.positive?
-
-        current_premium = snapshot[:ltp].to_f
-        return false unless current_premium.positive?
-
-        premium_drop_pct = si_cfg[:premium_drop_pct].to_f
-        return false unless premium_drop_pct.positive?
-
-        drop = (peak_premium - current_premium) / peak_premium
-        drop >= premium_drop_pct
+        dual_condition_met?(tracker, underlying_ltp, snapshot[:ltp].to_f, si_cfg)
       end
 
       # LAYER 3: PREMIUM MOMENTUM FAILURE

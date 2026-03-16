@@ -8,6 +8,7 @@ module Live
 
     class << self
       include Live::UnderlyingLtpResolver
+      include Live::StructureInvalidationEvaluator
 
       # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
@@ -87,7 +88,7 @@ module Live
         si_result = check_structure_invalidation(tracker, snapshot)
         return si_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if si_result
 
-        # 5. Time-Based Exit (if configured)
+        # 7. Time-Based Exit (if configured)
         if time_based_exit?(tracker)
           return {
             exit: true,
@@ -510,34 +511,7 @@ module Live
       end
 
       def options_structure_invalidated?(tracker, underlying_ltp, snapshot, si_cfg)
-        entry_underlying = tracker.meta&.dig('entry_underlying_price').to_f
-        return false unless entry_underlying.positive?
-
-        direction = tracker.meta&.dig('direction').to_s
-        underlying_move_pct = si_cfg[:underlying_move_pct].to_f
-        return false unless underlying_move_pct.positive?
-
-        underlying_moved = case direction
-                           when 'long_ce'
-                             (entry_underlying - underlying_ltp) / entry_underlying >= underlying_move_pct
-                           when 'long_pe'
-                             (underlying_ltp - entry_underlying) / entry_underlying >= underlying_move_pct
-                           else
-                             false
-                           end
-        return false unless underlying_moved
-
-        peak_premium = tracker.meta&.dig('peak_premium').to_f
-        return false unless peak_premium.positive?
-
-        current_premium = snapshot[:ltp].to_f
-        return false unless current_premium.positive?
-
-        premium_drop_pct = si_cfg[:premium_drop_pct].to_f
-        return false unless premium_drop_pct.positive?
-
-        premium_drop = (peak_premium - current_premium) / peak_premium
-        premium_drop >= premium_drop_pct
+        dual_condition_met?(tracker, underlying_ltp, snapshot[:ltp].to_f, si_cfg)
       end
 
       # Require a meaningful breach (buffer) to avoid exits on 1-tick noise; reduces brokerage from quick flips.
@@ -598,6 +572,7 @@ module Live
         pnl_value = snapshot[:pnl].to_f
         return false unless hwm.positive?
 
+        # Convert fractional drop from HWM into profit-percent scale for comparison with allowed_dd
         drop_from_peak_pct = (hwm - pnl_value) / hwm * peak_profit_pct
         return false unless drop_from_peak_pct >= allowed_dd
 
