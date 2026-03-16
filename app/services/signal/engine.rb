@@ -293,6 +293,25 @@ module Signal
           return
         end
 
+        # ===== ENTRY QUALITY FILTER =====
+        quality_result = Signal::EntryQualityFilter.evaluate(
+          series: primary_series,
+          supertrend_result: primary_analysis[:supertrend],
+          adx_value: primary_analysis[:adx_value],
+          direction: final_direction,
+          regime: regime,
+          index_key: index_cfg[:key]
+        )
+        unless quality_result[:pass]
+          Rails.logger.info("[Signal] EntryQualityFilter REJECTED #{index_cfg[:key]} #{final_direction}: " \
+                            "#{quality_result[:reject_reason]} (score=#{quality_result[:score]})")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+        Rails.logger.info("[Signal] EntryQualityFilter PASSED #{index_cfg[:key]} #{final_direction} " \
+                          "score=#{quality_result[:score]} #{quality_result[:breakdown]}")
+        # ===== END ENTRY QUALITY FILTER =====
+
         permission = :exit_testing
         smc_decision = final_direction == :bullish ? :call : :put
 
@@ -494,7 +513,9 @@ module Signal
         supertrend_direct_entry = (entry_primary == 'supertrend') || exit_testing_mode?
         entry_metadata = diagnostic_metadata.merge(
           entry_contract: supertrend_direct_entry ? 'supertrend_machine_v1' : 'bos_machine_v1',
-          permission: execution_permission
+          permission: execution_permission,
+          entry_quality_score: quality_result[:score],
+          entry_quality_breakdown: quality_result[:breakdown]
         )
 
         if supertrend_direct_entry
