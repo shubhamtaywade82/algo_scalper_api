@@ -85,7 +85,9 @@ module Live
 
         # 6. Structure Invalidation (underlying broke past entry structure level)
         # Skip until min hold time to avoid tick-noise exits and reduce brokerage from instant flips.
-        if (invalidation_price = tracker.meta&.dig('structure_invalidation_price')) && structure_min_hold_elapsed?(tracker)
+        if structure_invalidation_enabled? &&
+           (invalidation_price = tracker.meta&.dig('structure_invalidation_price')) &&
+           structure_min_hold_elapsed?(tracker)
           underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
           if underlying_ltp && structure_invalidated?(tracker, underlying_ltp, invalidation_price)
             return {
@@ -462,6 +464,13 @@ module Live
         current_pct = tracker.current_pnl_pct.to_f
 
         peak_pct >= min_peak_pct && current_pct < -0.02
+      end
+
+      def structure_invalidation_enabled?
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        cfg.fetch(:enabled, true)
+      rescue StandardError
+        true
       end
 
       # Require a meaningful breach (buffer) to avoid exits on 1-tick noise; reduces brokerage from quick flips.
