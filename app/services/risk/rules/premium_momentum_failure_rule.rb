@@ -6,28 +6,16 @@ module Risk
     #
     # PURPOSE: Kill dead option trades before theta eats them
     #
-    # This rule replaces:
-    # - Early Trend Failure (ETF)
-    # - Stall Detection
-    # - Most trailing stop logic
+    # Logic: Track last premium high. Exit when premium does NOT make
+    # progress within N minutes (configurable per index and session).
     #
-    # Logic: Track last premium high (CE) or low (PE)
-    # Exit when premium does NOT make progress within N candles
-    #
-    # This aligns with:
-    # - Gamma decay
-    # - Theta bleed
-    # - Real option premium behavior
-    #
-    # Index-specific thresholds:
-    # - NIFTY: 1m → 2 candles, 5m → 1 candle
-    # - SENSEX: 1m → 3 candles, 5m → 2 candles
+    # Only fires on losing positions. Winners are handled by trailing.
     #
     # Priority: 30 (checked after structure invalidation)
     class PremiumMomentumFailureRule < BaseRule
-      PRIORITY = 30
+      include SessionDetector
 
-      # Default thresholds (number of minutes without a new peak)
+      PRIORITY = 30
       DEFAULT_STALL_MINUTES = 3
 
       def evaluate(context)
@@ -37,16 +25,13 @@ module Risk
         tracker = context.tracker
         return skip_result unless tracker.created_at
 
-        # Use the fresh LTP from context if available
         current_ltp = context.position.respond_to?(:current_ltp) ? context.position.current_ltp.to_f : nil
-        current_ltp ||= tracker.entry_price.to_f # Fallback (should not happen in live)
+        current_ltp ||= tracker.entry_price.to_f
 
-        # Initialize or update peak premium in meta
         meta = tracker.meta || {}
         peak = meta['peak_premium'].to_f
         last_peak_at = meta['peak_premium_at'] ? Time.zone.parse(meta['peak_premium_at']) : tracker.created_at
 
-        # Update peak if current LTP is higher
         if current_ltp > peak
           meta['peak_premium'] = current_ltp
           meta['peak_premium_at'] = Time.current.iso8601
@@ -54,11 +39,9 @@ module Risk
           return no_action_result
         end
 
-        # Check if stalled - ONLY for losing trades (Theta protection)
-        # Winners are handled by trailing stop/peak drawdown logic
         return no_action_result if context.pnl_pct.to_f.positive?
 
-        stall_minutes = DEFAULT_STALL_MINUTES
+        stall_minutes = resolve_stall_minutes(tracker)
         elapsed_since_peak = (Time.current - last_peak_at) / 60.0
 
         if elapsed_since_peak >= stall_minutes
@@ -68,7 +51,8 @@ module Risk
             metadata: {
               peak: peak,
               current: current_ltp,
-              elapsed_since_peak: elapsed_since_peak
+              elapsed_since_peak: elapsed_since_peak,
+              stall_threshold: stall_minutes
             }
           )
         end
@@ -77,6 +61,27 @@ module Risk
       rescue StandardError => e
         Rails.logger.error("[PremiumMomentumFailureRule] Error: #{e.class} - #{e.message}")
         skip_result
+      end
+
+      private
+
+      def resolve_stall_minutes(tracker)
+        pmf_cfg = AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}
+
+        index_key = tracker.meta&.dig('index_key')
+        base = if index_key
+                 pmf_cfg.dig(:index_overrides, index_key.to_sym, :stall_minutes) ||
+                   pmf_cfg[:default_stall_minutes] || DEFAULT_STALL_MINUTES
+               else
+                 pmf_cfg[:default_stall_minutes] || DEFAULT_STALL_MINUTES
+               end
+
+        session = detect_current_session
+        additive = session ? (pmf_cfg.dig(:session_overrides, session, :stall_minutes_add) || 0) : 0
+
+        (base.to_f + additive.to_f).to_i
+      rescue StandardError
+        DEFAULT_STALL_MINUTES
       end
     end
   end
