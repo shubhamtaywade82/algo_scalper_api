@@ -505,7 +505,8 @@ module Signal
             bos_id: "st_#{index_cfg[:key]}_#{Time.current.to_i}",
             bos_timeframe: primary_tf,
             bos_origin_price: primary_series.candles.last&.close,
-            bos_level: primary_series.candles.last&.close
+            bos_level: primary_series.candles.last&.close,
+            entry_underlying_price: primary_series.candles.last&.close
           )
           picks.each do |pick|
             entered = Entries::EntryGuard.try_enter(
