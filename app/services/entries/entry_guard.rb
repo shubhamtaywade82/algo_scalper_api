@@ -14,6 +14,7 @@ module Entries
     BOS_MAX_ENTRY_DISTANCE_R = 0.5
 
     class << self
+      include Live::UnderlyingLtpResolver
       def entry_guard_pipeline
         @entry_guard_pipeline ||= EntryGuardPipeline.new
       end
@@ -899,9 +900,9 @@ module Entries
         else
           origin_price = bos_context[:origin_swing][:price].to_f
           entry_underlying_price = bos_context[:entry_underlying_price]
-          reference_price = entry_underlying_price || entry_price
-          entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
-          premium_r = entry_risk_rupees / quantity.to_f
+          sl_decimal = supertrend_sl_decimal
+          premium_r = entry_price.to_f * sl_decimal
+          entry_risk_rupees = premium_r * quantity.to_i
         end
         premium_stop = entry_price.to_f - premium_r
         premium_target = entry_price.to_f + premium_r
@@ -912,7 +913,7 @@ module Entries
         meta_hash[:premium_stop_price] = premium_stop
         meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
         meta_hash[:premium_target_price] = premium_target
-        meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
+        meta_hash[:entry_underlying_price] = entry_underlying_price || resolve_underlying_ltp(meta_hash[:index_key])
         meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
         meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
         meta_hash[:bos_timeframe] = bos_context[:timeframe]
