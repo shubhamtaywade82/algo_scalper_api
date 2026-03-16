@@ -64,7 +64,7 @@ module Signal
       private
 
       def load_config(index_key)
-        raw = AlgoConfig.fetch.dig(:entry_quality) || {}
+        raw = AlgoConfig.fetch[:entry_quality] || {}
         config = deep_symbolize(DEFAULTS.deep_merge(raw))
 
         # Apply index-specific overrides (check Symbol and String keys)
@@ -110,7 +110,7 @@ module Signal
         # Gate 3: Candle body ratio
         candle = candles.last
         range = candle.high - candle.low
-        body_ratio = range > 0 ? (candle.close - candle.open).abs / range : 0.0
+        body_ratio = range.positive? ? (candle.close - candle.open).abs / range : 0.0
         gates[:body_ratio] = body_ratio >= gate_cfg[:min_body_ratio].to_f
         unless gates[:body_ratio]
           return { pass: false, score: 0, gates: gates, breakdown: {}, reject_reason: 'body_ratio' }
@@ -136,7 +136,7 @@ module Signal
 
         candle = candles.last
         range = candle.high - candle.low
-        body_ratio = range > 0 ? (candle.close - candle.open).abs / range : 0.0
+        body_ratio = range.positive? ? (candle.close - candle.open).abs / range : 0.0
 
         # Component 1: Candle body strength (0 - candle_body_weight)
         max_body = scoring[:candle_body_weight]
@@ -155,13 +155,13 @@ module Signal
         adx = adx_value.to_f
         breakdown[:adx_strength] = if adx >= 35
                                       max_adx
-                                    elsif adx >= 25
+                                   elsif adx >= 25
                                       (max_adx * 0.60).round
-                                    elsif adx >= 20
+                                   elsif adx >= 20
                                       (max_adx * 0.25).round
-                                    else
+                                   else
                                       0
-                                    end
+                                   end
 
         # Component 3: Break of structure (0 - bos_weight)
         max_bos = scoring[:bos_weight]
@@ -204,8 +204,8 @@ module Signal
           last3 = candles.last(3)
           if direction == :bullish
             return (max_points * 0.50).round if last3[0].high < last3[1].high && last3[1].high < last3[2].high
-          else
-            return (max_points * 0.50).round if last3[0].low > last3[1].low && last3[1].low > last3[2].low
+          elsif last3[0].low > last3[1].low && last3[1].low > last3[2].low
+            return (max_points * 0.50).round
           end
         end
 
@@ -253,7 +253,7 @@ module Signal
         Rails.logger.info(
           "[EntryQualityFilter] #{status} #{index_key} #{direction} | " \
           "score=#{score} gates=#{gate_result[:gates]} breakdown=#{breakdown}" \
-          "#{reason ? " reason=#{reason}" : ''}"
+          "#{" reason=#{reason}" if reason}"
         )
       end
     end
