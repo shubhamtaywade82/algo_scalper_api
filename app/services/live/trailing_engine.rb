@@ -76,6 +76,20 @@ module Live
         return false
       end
 
+      # Emergency defense-in-depth: sub-second path in UnifiedExitChecker is primary
+      drawdown_cfg = AlgoConfig.fetch.dig(:position_sizing, :drawdown) || {}
+      unless drawdown_cfg[:emergency_peak_loss_exit] == false
+        emergency_min_peak = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
+        if peak >= emergency_min_peak && current < -0.02
+          tracker = PositionTracker.find_by(id: position_data.tracker_id)
+          if tracker&.active?
+            reason = "emergency_peak_loss_exit (peak: #{(peak * 100).round(2)}%, current: #{(current * 100).round(2)}%)"
+            Live::ExitEngine.execute_exit(tracker: tracker, reason: reason, source: :trailing_engine)
+            return true
+          end
+        end
+      end
+
       # Calculate capital deployed (entry_price * quantity)
       capital_deployed = calculate_capital_deployed(position_data)
 

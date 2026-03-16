@@ -111,6 +111,53 @@ RSpec.describe Live::TrailingEngine do
     end
   end
 
+  describe '#check_peak_drawdown emergency exit' do
+    it 'triggers emergency exit when peak >= 10% and current < -2%' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
+      position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.05)
+      allow(Live::ExitEngine).to receive(:execute_exit)
+
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(result).to be true
+      expect(Live::ExitEngine).to have_received(:execute_exit).with(
+        hash_including(reason: /emergency_peak_loss_exit/)
+      )
+    end
+
+    it 'does not trigger emergency when peak < 10%' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
+      allow(Live::ExitEngine).to receive(:execute_exit)
+      position = build_position(peak_profit_pct: 0.05, pnl_pct: -0.05)
+
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(Live::ExitEngine).not_to have_received(:execute_exit)
+    end
+
+    it 'does not trigger emergency when current loss is shallow (> -2%)' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
+      allow(Live::ExitEngine).to receive(:execute_exit)
+      position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.01)
+
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(Live::ExitEngine).not_to have_received(:execute_exit)
+    end
+  end
+
   def build_position(overrides = {})
     defaults = {
       tracker_id: 42,
