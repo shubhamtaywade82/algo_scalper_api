@@ -230,6 +230,17 @@ risk:
       buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
       underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
       premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
+    premium_momentum_failure:
+      enabled: true
+      default_stall_minutes: 3
+      index_overrides:
+        SENSEX:
+          stall_minutes: 4
+      session_overrides:
+        chop_decay:
+          stall_minutes_add: 2
+        close_gamma:
+          stall_minutes_add: 2
 
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
