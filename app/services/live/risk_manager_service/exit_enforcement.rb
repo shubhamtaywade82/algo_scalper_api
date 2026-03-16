@@ -1,14 +1,14 @@
 # frozen_string_literal: true
-# rubocop:disable Metrics/BlockNesting
 
 module Live
   class RiskManagerService
     module ExitEnforcement
+      include Live::UnderlyingLtpResolver
+
       # Lightweight struct for ETF position data (replaces OpenStruct for performance)
       EtfPositionData = Struct.new(
         :trend_score, :peak_trend_score, :adx, :atr_ratio,
-        :underlying_price, :vwap, :is_long?,
-        keyword_init: true
+        :underlying_price, :vwap, :is_long?
       )
 
       # Enforcement methods always accept an exit_engine keyword. They do not fetch positions from caller.
@@ -380,7 +380,20 @@ module Live
         snapshot = pnl_snapshot(tracker)
         return unless snapshot
 
-        # Build rule context
+        si_cfg = (risk_config[:exits] || {})[:structure_invalidation] || {}
+
+        if si_cfg[:underlying_move_pct] && si_cfg[:premium_drop_pct]
+          return unless options_structure_invalidated_enforcement?(tracker, snapshot, si_cfg)
+
+          reason = 'STRUCTURE_INVALIDATION (dual: underlying move + premium drop)'
+          exit_path = 'structure_invalidation'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          return
+        end
+
+        # Legacy rule-engine path
         position_data = build_position_data_for_rule_engine(tracker, snapshot)
         context = Risk::Rules::RuleContext.new(
           position: position_data,
@@ -388,7 +401,6 @@ module Live
           risk_config: risk_config
         )
 
-        # Evaluate StructureInvalidationRule
         rule = Risk::Rules::StructureInvalidationRule.new(config: { enabled: true })
         result = rule.evaluate(context)
 
@@ -401,6 +413,44 @@ module Live
         end
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_structure_invalidation_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def options_structure_invalidated_enforcement?(tracker, snapshot, si_cfg)
+        min_hold = (si_cfg[:min_hold_seconds] || 120).to_i
+        return false unless tracker.created_at && (Time.current - tracker.created_at) >= min_hold
+
+        entry_underlying = tracker.meta&.dig('entry_underlying_price').to_f
+        return false unless entry_underlying.positive?
+
+        index_key = tracker.meta&.dig('index_key')
+        underlying_ltp = resolve_underlying_ltp(index_key)
+        return false unless underlying_ltp
+
+        direction = tracker.meta&.dig('direction').to_s
+        move_pct = si_cfg[:underlying_move_pct].to_f
+        return false unless move_pct.positive?
+
+        underlying_moved = case direction
+                           when 'long_ce'
+                             (entry_underlying - underlying_ltp) / entry_underlying >= move_pct
+                           when 'long_pe'
+                             (underlying_ltp - entry_underlying) / entry_underlying >= move_pct
+                           else
+                             false
+                           end
+        return false unless underlying_moved
+
+        peak_premium = tracker.meta&.dig('peak_premium').to_f
+        return false unless peak_premium.positive?
+
+        current_premium = snapshot[:ltp].to_f
+        return false unless current_premium.positive?
+
+        premium_drop_pct = si_cfg[:premium_drop_pct].to_f
+        return false unless premium_drop_pct.positive?
+
+        drop = (peak_premium - current_premium) / peak_premium
+        drop >= premium_drop_pct
       end
 
       # LAYER 3: PREMIUM MOMENTUM FAILURE

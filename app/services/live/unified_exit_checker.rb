@@ -83,19 +83,9 @@ module Live
           }
         end
 
-        # 6. Structure Invalidation (underlying broke past entry structure level)
-        # Skip until min hold time to avoid tick-noise exits and reduce brokerage from instant flips.
-        if structure_invalidation_enabled? &&
-           (invalidation_price = tracker.meta&.dig('structure_invalidation_price')) &&
-           structure_min_hold_elapsed?(tracker)
-          underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
-          if underlying_ltp && structure_invalidated?(tracker, underlying_ltp, invalidation_price)
-            return {
-              exit: true,
-              reason: "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{invalidation_price})"
-            }
-          end
-        end
+        # 6. Structure Invalidation (options-aware dual condition)
+        si_result = check_structure_invalidation(tracker, snapshot)
+        return si_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if si_result
 
         # 5. Time-Based Exit (if configured)
         if time_based_exit?(tracker)
@@ -160,12 +150,21 @@ module Live
         pnl_pct <= -static_sl
       end
 
-      def profit_target_hit?(_tracker, snapshot)
+      def profit_target_hit?(tracker, snapshot)
         config = exit_config
         pnl_pct = snapshot[:pnl_pct].to_f # DECIMAL format (e.g., 0.05 for 5%)
         tp = config[:take_profit].to_f # Already DECIMAL (e.g., 0.50 for 50%)
 
-        pnl_pct >= tp
+        return false unless pnl_pct >= tp
+
+        if trailing_armed?(tracker, snapshot, config)
+          Rails.logger.debug do
+            "[UnifiedExitChecker] TP suppressed for #{tracker.id} — trailing armed, pnl=#{(pnl_pct * 100).round(2)}%"
+          end
+          return false
+        end
+
+        true
       end
 
       def trailing_stop_hit?(tracker, snapshot)
@@ -186,6 +185,15 @@ module Live
           activation = config[:trailing][:activation_profit].to_f
           peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
           return false if activation.positive? && peak_profit_pct < activation
+
+          # Adaptive drawdown from institutional trailing config (options-aware)
+          index_key = tracker.meta&.dig('index_key')&.downcase
+          inst_trailing = AlgoConfig.fetch.dig(:risk, :institutional_trailing, index_key&.to_sym) || {}
+          adaptive_tiers = inst_trailing[:adaptive_drawdown]
+
+          return true if adaptive_tiers.is_a?(Array) &&
+                         adaptive_tiers.any? &&
+                         adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers)
 
           # 1. Resolve price history from ActiveCache for Gamma detection
           pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
@@ -473,6 +481,65 @@ module Live
         true
       end
 
+      def check_structure_invalidation(tracker, snapshot)
+        return unless structure_invalidation_enabled? &&
+                      tracker.meta&.dig('structure_invalidation_price') &&
+                      structure_min_hold_elapsed?(tracker)
+
+        underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
+        return unless underlying_ltp
+
+        si_cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        if si_cfg[:underlying_move_pct] && si_cfg[:premium_drop_pct]
+          if options_structure_invalidated?(tracker, underlying_ltp, snapshot, si_cfg)
+            return {
+              exit: true,
+              reason: "STRUCTURE_INVALIDATION (underlying move + premium drop)",
+              path: 'structure_invalidation'
+            }
+          end
+        elsif structure_invalidated?(tracker, underlying_ltp, tracker.meta['structure_invalidation_price'])
+          return {
+            exit: true,
+            reason: "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{tracker.meta['structure_invalidation_price']})",
+            path: 'structure_invalidation'
+          }
+        end
+
+        nil
+      end
+
+      def options_structure_invalidated?(tracker, underlying_ltp, snapshot, si_cfg)
+        entry_underlying = tracker.meta&.dig('entry_underlying_price').to_f
+        return false unless entry_underlying.positive?
+
+        direction = tracker.meta&.dig('direction').to_s
+        underlying_move_pct = si_cfg[:underlying_move_pct].to_f
+        return false unless underlying_move_pct.positive?
+
+        underlying_moved = case direction
+                           when 'long_ce'
+                             (entry_underlying - underlying_ltp) / entry_underlying >= underlying_move_pct
+                           when 'long_pe'
+                             (underlying_ltp - entry_underlying) / entry_underlying >= underlying_move_pct
+                           else
+                             false
+                           end
+        return false unless underlying_moved
+
+        peak_premium = tracker.meta&.dig('peak_premium').to_f
+        return false unless peak_premium.positive?
+
+        current_premium = snapshot[:ltp].to_f
+        return false unless current_premium.positive?
+
+        premium_drop_pct = si_cfg[:premium_drop_pct].to_f
+        return false unless premium_drop_pct.positive?
+
+        premium_drop = (peak_premium - current_premium) / peak_premium
+        premium_drop >= premium_drop_pct
+      end
+
       # Require a meaningful breach (buffer) to avoid exits on 1-tick noise; reduces brokerage from quick flips.
       def structure_invalidated?(tracker, underlying_ltp, invalidation_price)
         direction = tracker.meta&.dig('direction').to_s
@@ -504,6 +571,41 @@ module Live
         pct = (cfg[:buffer_pct] || cfg['buffer_pct'] || 0.002).to_f # 0.2% default
         return 0.0 if invalidation_level.blank? || invalidation_level.zero?
         (invalidation_level * pct).abs
+      end
+
+      def trailing_armed?(tracker, snapshot, config)
+        trailing_cfg = config[:trailing] || {}
+        return false unless trailing_cfg[:enabled]
+
+        activation = trailing_cfg[:activation_profit].to_f
+        return false unless activation.positive?
+
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false unless entry_value.positive?
+
+        hwm = snapshot[:hwm_pnl].to_f
+        return false unless hwm.positive?
+
+        peak_profit_pct = hwm / entry_value
+        peak_profit_pct >= activation
+      end
+
+      def adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers)
+        allowed_dd = Positions::TrailingConfig.adaptive_drawdown_for_peak(peak_profit_pct, adaptive_tiers)
+        return false unless allowed_dd && peak_profit_pct.positive?
+
+        hwm = snapshot[:hwm_pnl].to_f
+        pnl_value = snapshot[:pnl].to_f
+        return false unless hwm.positive?
+
+        drop_from_peak_pct = (hwm - pnl_value) / hwm * peak_profit_pct
+        return false unless drop_from_peak_pct >= allowed_dd
+
+        Rails.logger.info(
+          "[UnifiedExitChecker] ADAPTIVE_TRAILING hit for #{tracker.order_no}: " \
+          "drop=#{(drop_from_peak_pct * 100).round(2)}% >= allowed=#{(allowed_dd * 100).round(2)}%"
+        )
+        true
       end
     end
   end

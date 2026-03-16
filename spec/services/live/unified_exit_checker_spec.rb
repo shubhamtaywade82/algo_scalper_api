@@ -117,11 +117,133 @@ RSpec.describe Live::UnifiedExitChecker do
     end
 
     it 'skips structure invalidation when invalidation_price is nil in meta' do
+      tick_query_spy = instance_spy(Live::TickQuery)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick_query_spy)
       allow(tracker).to receive(:meta).and_return({
         'direction' => 'long_pe',
         'index_key' => 'NIFTY'
       })
-      expect(Live::TickQuery).not_to receive(:for_security)
+      expect(Live::TickQuery).not_to have_received(:for_security)
+    end
+  end
+
+  describe 'options-aware structure invalidation dual condition' do
+    let(:tracker) do
+      instance_double(
+        PositionTracker,
+        id: 1,
+        meta: {
+          'structure_invalidation_price' => 23_500.0,
+          'index_key' => 'NIFTY',
+          'direction' => 'long_ce',
+          'entry_underlying_price' => 23_500.0,
+          'peak_premium' => 200.0
+        },
+        created_at: 5.minutes.ago,
+        entry_price: 180.0,
+        quantity: 100,
+        order_no: 'ORD-1'
+      )
+    end
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          exits: {
+            structure_invalidation: {
+              enabled: true,
+              min_hold_seconds: 120,
+              buffer_pct: 0.004,
+              underlying_move_pct: 0.01,
+              premium_drop_pct: 0.05
+            }
+          }
+        }
+      })
+
+      allow(described_class).to receive_messages(
+        early_exit_triggered?: false,
+        loss_limit_hit?: false,
+        emergency_peak_loss_exit_triggered?: false,
+        profit_target_hit?: false,
+        premium_momentum_failure_hit?: false,
+        trailing_stop_hit?: false,
+        time_based_exit?: false
+      )
+    end
+
+    context 'when only underlying moved 1%+ (premium still near peak)' do
+      before do
+        allow(described_class).to receive(:resolve_underlying_ltp).and_return(23_147.0)
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+          pnl: -200, pnl_pct: -0.02, ltp: 196.0, hwm_pnl: 0
+        })
+      end
+
+      it 'does NOT trigger structure invalidation' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to be_nil
+      end
+    end
+
+    context 'when only premium dropped 5%+ (underlying stable)' do
+      before do
+        allow(described_class).to receive(:resolve_underlying_ltp).and_return(23_453.0)
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+          pnl: -1000, pnl_pct: -0.10, ltp: 180.0, hwm_pnl: 0
+        })
+      end
+
+      it 'does NOT trigger structure invalidation' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to be_nil
+      end
+    end
+
+    context 'when BOTH underlying moved 1%+ AND premium dropped 5%+' do
+      before do
+        allow(described_class).to receive(:resolve_underlying_ltp).and_return(23_147.0)
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+          pnl: -1500, pnl_pct: -0.15, ltp: 170.0, hwm_pnl: 0
+        })
+      end
+
+      it 'triggers structure invalidation' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to include(exit: true)
+        expect(result[:reason]).to include('STRUCTURE_INVALIDATION')
+        expect(result[:path]).to eq('structure_invalidation')
+      end
+    end
+
+    context 'when dual condition config is absent (backward compat)' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: {
+            exits: {
+              structure_invalidation: {
+                enabled: true,
+                min_hold_seconds: 120,
+                buffer_pct: 0.004
+              }
+            }
+          }
+        })
+
+        allow(described_class).to receive(:resolve_underlying_ltp).and_return(23_400.0)
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({
+          pnl: -500, pnl_pct: -0.03, ltp: 150.0, hwm_pnl: 0
+        })
+      end
+
+      it 'falls back to legacy single-condition check' do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to include(exit: true)
+        expect(result[:reason]).to include('STRUCTURE_INVALIDATION')
+      end
     end
   end
 
@@ -189,6 +311,65 @@ RSpec.describe Live::UnifiedExitChecker do
         result = described_class.check_exit_conditions(tracker)
         expect(result).to include(exit: true)
         expect(result[:reason]).to include('STRUCTURE_INVALIDATION')
+      end
+    end
+  end
+
+  describe '#profit_target_hit? with trailing suppression' do
+    let(:config) do
+      {
+        stop_loss: { type: 'static', value: 0.06 },
+        take_profit: 0.12,
+        trailing: { enabled: true, type: 'adaptive', activation_profit: 0.025, drop_threshold: 0.018 },
+        early_exit: { enabled: false, profit_threshold: 0.07 },
+        premium_momentum_failure: { enabled: false },
+        time_based: { enabled: false, exit_time: '15:20' }
+      }
+    end
+
+    before do
+      described_class.instance_variable_set(:@exit_config, nil)
+      described_class.instance_variable_set(:@exit_config_expires_at, nil)
+      allow(described_class).to receive(:exit_config).and_return(config)
+    end
+
+    context 'when trailing is armed and profit exceeds TP' do
+      let(:tracker) do
+        instance_double(
+          PositionTracker,
+          id: 1,
+          entry_price: 100.0,
+          quantity: 100,
+          meta: {},
+          high_water_mark_pnl: 2_000.0
+        )
+      end
+
+      let(:snapshot) { { pnl_pct: 0.15, ltp: 115.0, pnl: 1_500.0, hwm_pnl: 2_000.0 } }
+
+      it 'suppresses TP and returns false' do
+        result = described_class.send(:profit_target_hit?, tracker, snapshot)
+        expect(result).to be false
+      end
+    end
+
+    context 'when trailing is NOT armed and profit exceeds TP' do
+      let(:tracker) do
+        instance_double(
+          PositionTracker,
+          id: 1,
+          entry_price: 100.0,
+          quantity: 100,
+          meta: {},
+          high_water_mark_pnl: 200.0
+        )
+      end
+
+      let(:snapshot) { { pnl_pct: 0.13, ltp: 113.0, pnl: 1_300.0, hwm_pnl: 200.0 } }
+
+      it 'triggers TP normally' do
+        result = described_class.send(:profit_target_hit?, tracker, snapshot)
+        expect(result).to be true
       end
     end
   end
