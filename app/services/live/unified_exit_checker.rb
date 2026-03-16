@@ -38,6 +38,19 @@ module Live
           }
         end
 
+        # 2.5 Emergency: profitable position flipped to loss
+        if emergency_peak_loss_exit_triggered?(tracker)
+          entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+          peak_pct = tracker.high_water_mark_pnl.to_f / entry_value
+          current_pct = tracker.current_pnl_pct.to_f
+          return {
+            exit: true,
+            reason: "EMERGENCY_PEAK_LOSS (peak: #{(peak_pct * 100).round(2)}%, current: #{(current_pct * 100).round(2)}%)",
+            path: 'emergency_peak_loss',
+            pnl_pct: (pnl_pct * 100.0).round(2)
+          }
+        end
+
         # 3. Profit Target (take profit)
         if profit_target_hit?(tracker, snapshot)
           return {
@@ -421,6 +434,20 @@ module Live
       rescue StandardError => e
         Rails.logger.error("[UnifiedExitChecker] premium_momentum_failure_hit? error: #{e.message}")
         false
+      end
+
+      def emergency_peak_loss_exit_triggered?(tracker)
+        drawdown_cfg = AlgoConfig.fetch.dig(:position_sizing, :drawdown) || {}
+        return false if drawdown_cfg[:emergency_peak_loss_exit] == false
+
+        min_peak_pct = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false if entry_value <= 0
+
+        peak_pct = tracker.high_water_mark_pnl.to_f / entry_value
+        current_pct = tracker.current_pnl_pct.to_f
+
+        peak_pct >= min_peak_pct && current_pct < -0.02
       end
     end
   end
