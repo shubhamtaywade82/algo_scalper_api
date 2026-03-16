@@ -859,3 +859,22 @@ ai:
   #   - AI_AGENT_STREAM_TIMEOUT: Timeout for streaming responses per iteration (default: 60 seconds)
   #     If AI doesn't respond within this time, iteration is aborted and retried
   #     Example: export AI_AGENT_STREAM_TIMEOUT=30
+
+# ===== ENTRY QUALITY FILTER =====
+entry_quality:
+  enforce: true                      # false = log-only mode (no blocking)
+  min_score: 40                      # minimum quality score to enter (0-100)
+  gates:
+    min_adx: 20                      # hard gate: minimum ADX value
+    block_choppy_regime: true        # hard gate: block CHOPPY regime
+    min_body_ratio: 0.40             # hard gate: minimum candle body/range ratio
+    require_momentum_confirm: true   # hard gate: close must be beyond Supertrend level
+  scoring:
+    candle_body_weight: 25           # max points for candle body strength
+    adx_strength_weight: 20          # max points for ADX bonus
+    bos_weight: 20                   # max points for break of structure
+    range_expansion_weight: 20       # max points for range expansion
+    momentum_weight: 15              # max points for momentum strength
+  index_overrides:
+    SENSEX:
+      min_adx: 22                    # SENSEX is noisier, needs higher ADX
