@@ -144,7 +144,9 @@ RSpec.describe Signal::EntryQualityFilter do
 
     context 'Gate 4: Momentum confirmation' do
       it 'rejects bullish flip when close < supertrend' do
-        candle = build_candle(open: 100.0, high: 110.0, low: 95.0, close: 103.0)
+        # body_ratio = |104 - 95| / (110 - 95) = 9/15 = 0.60 (passes body gate)
+        # but close 104 < supertrend 105 (fails momentum)
+        candle = build_candle(open: 95.0, high: 110.0, low: 95.0, close: 104.0)
         st = build_supertrend(last_value: 105.0)
         s = build_series([candle])
         result = described_class.evaluate(**default_params.merge(series: s, supertrend_result: st))
@@ -159,7 +161,9 @@ RSpec.describe Signal::EntryQualityFilter do
       end
 
       it 'rejects bearish flip when close > supertrend' do
-        candle = build_candle(open: 110.0, high: 115.0, low: 95.0, close: 107.0)
+        # body_ratio = |110 - 98| / (115 - 90) = 12/25 = 0.48 (passes body gate)
+        # but close 110 > supertrend 105 (fails bearish momentum)
+        candle = build_candle(open: 98.0, high: 115.0, low: 90.0, close: 110.0)
         st = build_supertrend(last_value: 105.0, trend: :bearish)
         s = build_series([candle])
         result = described_class.evaluate(**default_params.merge(
