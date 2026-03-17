@@ -191,3 +191,39 @@ All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 
 - `Live::Gateway` is **deprecated** — use `Orders::GatewayLive` directly
 - Option chain adapter is always `DhanAdapter` (even in paper mode) — option chain reads are live
 - Token refresh uses `Dhan::TokenManager` with 3-tier fallback: authority server → TOTP auto-refresh → static ENV
+
+## Stable vs Alpha Layers (Change Policy)
+
+You MUST treat execution infrastructure as **stable** and only iterate on the **alpha layer** by default.
+
+- **LOCKED (infra, do not change unless Critical Scenario):**
+  - DhanHQ integration and gateways: `app/services/dhan/`, `app/services/orders/gateway_live.rb`, `app/services/orders/gateway_paper.rb`, `app/services/orders/gateway_factory.rb`, `app/services/orders/placer.rb`, DhanHQ-specific adapters in `app/services/options/` or `lib/`.
+  - WebSocket + market data + caching: `app/services/live/market_feed_hub.rb`, `app/services/live/order_update_hub.rb`, `app/services/live/order_update_handler.rb`, `app/services/live/redis_tick_cache.rb`, `app/services/live/tick_query.rb`, `app/services/market_data/market_cache.rb`, `app/services/live/pnl_updater_service.rb`, `app/services/live/redis_pnl_cache.rb`.
+  - Position lifecycle: `app/services/positions/active_cache.rb`, `app/services/positions/serializer.rb`, all `app/services/positions/states/*`, and any position index/`PositionTracker`-style services.
+  - Core order execution plumbing: `app/services/orders/commands/*`, `app/services/orders/executor.rb`, `app/services/orders/entry_manager.rb`, `app/services/orders/exit_engine.rb`, `app/services/orders/trailing_engine.rb`, `app/services/orders/mfe_exit_engine.rb`, `app/services/orders/gamma_trailing_engine.rb`, `app/services/orders/expiry_rule_engine.rb`, `app/services/live/unified_exit_checker.rb`.
+  - Risk-manager plumbing: all `app/services/live/risk_manager_service*` files (runner, config, pnl cache, exit execution/enforcement).
+  - Process wiring and orchestration: `lib/trading_system/`, `app/services/trading_session.rb`, `app/services/orchestration/strategy_runner.rb`, `app/jobs/*`, and API controllers/routes (except when adding new endpoints).
+  - Instrument and chain plumbing: `app/models/instrument.rb`, `app/services/options/chain_analyzer.rb`, `app/services/options/derivative_chain_analyzer.rb`, `app/services/options/strike_selector.rb`, `app/services/options/strike_aggregator.rb`, `app/services/options/expiry_calendar.rb`, and other pure data/chain assembly services.
+
+- **ALPHA LAYERS (safe to iterate):**
+  - Entry strategy: `app/services/signal/*`, `app/services/indicators/*`, `app/services/market_state/*`, `app/services/smc/*`, `app/services/trading/trend_scorer.rb`, `app/services/trading/permission_resolver.rb`.
+  - Entry orchestration and guards: `app/services/entries/entry_guard.rb`, `app/services/entries/entry_filter_engine.rb`, `app/services/entries/entry_guard_pipeline.rb`, all `app/services/entries/guards/*`.
+  - Exit logic (conditions, not plumbing): `app/services/orders/analyzer.rb`, `app/services/orders/adjuster.rb`, `app/services/orders/adaptive_trailing.rb`, `app/services/orders/gamma_detector.rb`, `app/services/trading/trailing_engine.rb`.
+  - Risk model: all `app/services/risk/*`, all `app/services/policies/*`, and `app/services/capital/allocator.rb`.
+  - Option-chain decision logic: `app/services/options/flow_analyzer.rb`, all `app/services/options/strike_qualification/*`, `app/services/options/historical_calibration_engine.rb`.
+
+### Critical Scenarios (when infra may be modified)
+
+Only touch LOCKED layers when **one of these is explicitly in scope**:
+
+1. **DhanHQ gem/API change**: the `dhanhq-client` gem or upstream DhanHQ API changes in a way that breaks compatibility or requires new fields/endpoints.
+2. **Verified execution defect**: reproducible duplicate orders, missing exits, incorrect quantities, or misrouted orders, ideally reproducible in paper mode.
+3. **Data integrity / state divergence**: tick cache serving stale/incorrect prices, positions not recovering correctly after restart, or broker vs DB position mismatch attributable to infra.
+4. **Structural performance failure**: WebSocket/feed/caching cannot keep up with production load and directly threatens fills or risk management.
+5. **Security/compliance**: issues related to broker integration, credentials handling, or sensitive data exposure.
+
+When changing locked layers for a Critical Scenario:
+
+- Prefer the smallest possible change that fixes the concrete issue.
+- Preserve idempotency, order uniqueness, and linear position lifecycle.
+- Keep PnL tuning (alpha work) in the ALPHA LAYERS only.
