@@ -25,6 +25,13 @@ Rails.application.routes.draw do
     get    'settings',      to: 'settings#index'
     patch  'settings/bulk', to: 'settings#update_bulk'
 
+    # Calibration runs — view and apply automated config patches
+    resources :calibration_runs, only: %i[index show] do
+      member do
+        post :apply
+      end
+    end
+
     # Circuit breaker — emergency halt
     # GET    /api/circuit_breaker        → status (unauthenticated)
     # POST   /api/circuit_breaker/trip   → trip   (requires X-Circuit-Breaker-Token)
@@ -44,5 +51,5 @@ Rails.application.routes.draw do
   end
 
   # Quietly handle browser/devtools well-known probes with 204 No Content
-  get "/.well-known/*path", to: proc { [ 204, { "Content-Type" => "text/plain" }, [ "" ] ] }
+  get "/.well-known/*path", to: proc { [204, { "Content-Type" => "text/plain" }, [""]] }
 end
