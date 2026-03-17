@@ -112,6 +112,8 @@ result = Options::AutoCalibrator.call(symbol: 'SENSEX', weeks: 52)
 
 **`AutoCalibrator.call` never raises.** All internal errors are rescued, logged, and surfaced as a nil return or a partial result with `error:` key. This allows `WeeklyCalibrationJob` to rescue per-symbol without worrying about internal failure modes.
 
+**Engine output extraction:** `HistoricalCalibrationEngine#call` returns a rich hash (`{ symbol:, row_count:, ce:, pe:, combined:, objective:, profiles:, confidence:, warnings:, suggested_patch: }`). `AutoCalibrator` extracts only `result[:ce]` and `result[:pe]` from each engine call before passing them to `StrikeAggregator`.
+
 **ATM±1 fetch strategy:** The DhanHQ `ExpiredOptionsData` API `strike:` param is checked for OTM offset support. If the gem exposes `'OTM1'` / `'OTM2'` values, use them directly. If not, calculate explicit strike prices from spot price at window open and fetch by strike number. `AutoCalibrator` handles this internally; no external consumer needs to know.
 
 ---
@@ -160,7 +162,7 @@ Compares the most recent 4-week rolling window of `CalibrationRun` stats against
 Translates weighted calibration stats into the exact config structure `algo.yml` uses. Only outputs keys where the derived value differs from the current `AlgoConfig.fetch` value by more than 10% — keeps the patch minimal.
 
 **Input:** combined stats from `StrikeAggregator` (`avg_gain`, `avg_retrace_abs`, `avg_loss_abs`, `avg_oc`, `oc_stddev`, sessions)
-**Output:** nested hash ready for `deep_merge` into `algo_config_overrides`
+**Output:** nested hash with **string keys** (call `.deep_stringify_keys` before returning) — required for correct JSON round-trip through `calibration_runs.proposed_patch` (JSONB) and the `apply!` deep-merge path
 
 **Derivation formulas** (all clamped to safe ranges):
 
@@ -196,7 +198,11 @@ class WeeklyCalibrationJob < ApplicationJob
     symbols = symbol ? [symbol.upcase] : %w[NIFTY SENSEX]
     symbols.each do |sym|
       result = Options::AutoCalibrator.call(symbol: sym, weeks: weeks)
-      CalibrationNotifier.notify(sym, result)
+      if result
+        CalibrationNotifier.notify(sym, result)
+      else
+        CalibrationNotifier.notify_error(sym, 'AutoCalibrator returned nil — all DhanHQ fetches failed')
+      end
     rescue StandardError => e
       Rails.logger.error("[WeeklyCalibrationJob] #{sym} failed: #{e.class} — #{e.message}")
       CalibrationNotifier.notify_error(sym, e)
@@ -205,7 +211,7 @@ class WeeklyCalibrationJob < ApplicationJob
 end
 ```
 
-Processes symbols sequentially to respect DhanHQ rate limits. Each symbol is independently rescued — a NIFTY failure does not prevent SENSEX from running. `AutoCalibrator.call` is documented as non-raising, but the job wraps each symbol in `rescue StandardError` as a defensive belt-and-suspenders guard.
+Processes symbols sequentially to respect DhanHQ rate limits. Each symbol is independently rescued — a NIFTY failure does not prevent SENSEX from running. `AutoCalibrator.call` is documented as non-raising and returns `nil` on total failure; the job checks for nil before calling `notify` vs `notify_error`.
 
 ### `config/recurring.yml` addition
 
@@ -214,6 +220,8 @@ weekly_options_calibration:
   class: WeeklyCalibrationJob
   schedule: every Sunday at 6:00 am Asia/Kolkata
   queue_name: background
+  priority: 3
+  description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
 ```
 
 ---
@@ -305,12 +313,17 @@ end
 
 Deep-merges `proposed_patch` into `algo_config_overrides` in the `settings` table. Uses `Setting.put` (not `upsert`) to ensure the Solid Cache entry for `setting:algo_config_overrides` is busted immediately. Also calls `AlgoConfig.reset!` to bust the in-process 30-second config cache. Trading daemon sees the new config on its next `AlgoConfig.fetch` call.
 
+**Merge safety:** `proposed_patch` contains only scalar `risk.*` and `institutional_trailing.*` keys (no config arrays). This means plain `Hash#deep_merge` is safe here — `AlgoConfig`'s custom `deep_merge_hashes_with_arrays` (which handles array-of-hashes merging keyed on `:key`) is not required because the patch builder never emits array-valued keys. If this constraint is ever relaxed, `apply!` must switch to `AlgoConfig.send(:deep_merge_hashes_with_arrays, current, proposed_patch)`.
+
+**Key format:** Both `current` (parsed from `Setting.find_by`) and `proposed_patch` (retrieved from JSONB column) use **string keys**. `deep_merge` operates on matching string keys. `AlgoConfig.fetch` applies `deep_symbolize_keys` after reading — this is handled by `AlgoConfig`, not `apply!`.
+
 ```ruby
 def apply!(applied_by: 'api')
   raise 'already applied' if applied_at.present?
 
   current = JSON.parse(Setting.find_by(key: 'algo_config_overrides')&.value || '{}')
-  merged  = current.deep_merge(proposed_patch)
+  # proposed_patch from JSONB is already string-keyed; deep_merge is safe (no array-valued keys)
+  merged  = current.deep_merge(proposed_patch.deep_stringify_keys)
   Setting.put('algo_config_overrides', merged.to_json)  # busts Solid Cache entry
   AlgoConfig.reset!                                       # busts in-process cache
   update!(applied_at: Time.current, applied_by: applied_by)
