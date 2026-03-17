@@ -12,7 +12,7 @@ module Risk
     # This is how professional options traders exit: structure-first, not PnL-first.
     #
     # Exit conditions:
-    # - 1m or 5m structure breaks AGAINST position direction
+    # - 5m or 15m structure breaks AGAINST position direction (underlying)
     # - BOS/CHoCH invalidation detected
     # - Reclaim of broken level
     #
@@ -37,7 +37,7 @@ module Risk
           return exit_result(reason: reason, metadata: { direction: position_direction })
         end
 
-        # Check structure invalidation on 1m and 5m timeframes
+        # Check structure invalidation on 5m and 15m timeframes (underlying)
         if structure_invalidated?(instrument, position_direction)
           reason = "STRUCTURE_INVALIDATION (#{position_direction} structure broken)"
           return exit_result(reason: reason, metadata: { direction: position_direction })
@@ -70,19 +70,19 @@ module Risk
         nil
       end
 
-      # Check if structure is invalidated on 1m or 5m
+      # Check if structure is invalidated on 5m or 15m timeframes (underlying)
       def structure_invalidated?(instrument, position_direction)
-        # Check 1m structure
-        series_1m = instrument.candle_series(interval: '1')
-        if series_1m&.candles&.any? && structure_broken?(series_1m.candles, position_direction)
-          Rails.logger.debug { "[StructureInvalidationRule] 1m structure broken for #{position_direction}" }
-          return true
-        end
-
-        # Check 5m structure
+        # Check 5m structure first
         series_5m = instrument.candle_series(interval: '5')
         if series_5m&.candles&.any? && structure_broken?(series_5m.candles, position_direction)
           Rails.logger.debug { "[StructureInvalidationRule] 5m structure broken for #{position_direction}" }
+          return true
+        end
+
+        # Check 15m structure
+        series_15m = instrument.candle_series(interval: '15')
+        if series_15m&.candles&.any? && structure_broken?(series_15m.candles, position_direction)
+          Rails.logger.debug { "[StructureInvalidationRule] 15m structure broken for #{position_direction}" }
           return true
         end
 

@@ -474,7 +474,7 @@ module Options
     def get_option_data(strike, option_type)
       return nil unless @chain_data && @chain_data[:oc]
 
-      strike_data = @chain_data[:oc][strike.to_s]
+      strike_data = @chain_data[:oc][strike.to_f.to_s]
       return nil unless strike_data
 
       strike_data[option_type]
