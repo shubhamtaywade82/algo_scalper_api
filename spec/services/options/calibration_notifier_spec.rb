@@ -12,10 +12,10 @@ RSpec.describe Options::CalibrationNotifier do
     )
   end
 
-  let(:telegram_client) { instance_double(Notifications::Telegram::Client, send_message: true) }
+  let(:telegram_client) { instance_double(Notifications::TelegramNotifier, send_message: true, enabled?: true) }
 
   before do
-    allow(Notifications::Telegram::Client).to receive(:instance).and_return(telegram_client)
+    allow(Notifications::TelegramNotifier).to receive(:instance).and_return(telegram_client)
   end
 
   describe '.notify' do
@@ -27,6 +27,39 @@ RSpec.describe Options::CalibrationNotifier do
     it 'includes symbol in the message' do
       described_class.notify('NIFTY', run)
       expect(telegram_client).to have_received(:send_message).with(a_string_including('NIFTY'))
+    end
+
+    it 'includes weeks and strike_mode in the message' do
+      described_class.notify('NIFTY', run)
+      expect(telegram_client).to have_received(:send_message)
+        .with(a_string_including('52').and(a_string_including('atm_plus_minus')))
+    end
+
+    it 'includes dot-notation patch key in the message' do
+      described_class.notify('NIFTY', run)
+      expect(telegram_client).to have_received(:send_message)
+        .with(a_string_including('risk.percentage_pnl_exit.target_pct'))
+    end
+
+    it 'includes Apply instruction in the message' do
+      described_class.notify('NIFTY', run)
+      expect(telegram_client).to have_received(:send_message).with(a_string_including('Apply'))
+    end
+
+    context 'when run is a regime shift' do
+      let(:run) do
+        CalibrationRun.create!(
+          symbol: 'NIFTY', weeks_analyzed: 52, strike_mode: 'atm_plus_minus',
+          raw_stats: {}, proposed_patch: {}, is_regime_shift: true,
+          regime_reason: 'avg_retrace_abs: 12.0 is 3.2σ higher than historical mean'
+        )
+      end
+
+      it 'includes the regime shift warning in the message' do
+        described_class.notify('NIFTY', run)
+        expect(telegram_client).to have_received(:send_message)
+          .with(a_string_including('Regime shift'))
+      end
     end
 
     it 'does not raise when Telegram fails' do

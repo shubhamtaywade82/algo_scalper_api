@@ -14,14 +14,14 @@ module Options
 
     def notify(symbol, run)
       text = build_success_message(symbol, run)
-      Notifications::Telegram::Client.instance.send_message(text)
+      Notifications::TelegramNotifier.instance.send_message(text)
     rescue StandardError => e
       Rails.logger.error("[CalibrationNotifier] Telegram send failed: #{e.class} — #{e.message}")
     end
 
     def notify_error(symbol, error)
       text = "❌ Calibration failed: #{symbol}\n#{error.class}: #{error.message}"
-      Notifications::Telegram::Client.instance.send_message(text)
+      Notifications::TelegramNotifier.instance.send_message(text)
     rescue StandardError => e
       Rails.logger.error("[CalibrationNotifier] notify_error send failed: #{e.class} — #{e.message}")
     end
