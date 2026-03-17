@@ -311,7 +311,7 @@ module Indicators
                    when 0
                      multiplier_candidates.select { |mult| mult <= base_multiplier + 0.5 }
                    when 1
-                     multiplier_candidates.select { |mult| mult.between?(base_multiplier, base_multiplier + 1.0) }
+                     multiplier_candidates.grep(base_multiplier..(base_multiplier + 1.0))
                    when 2
                      multiplier_candidates.select { |mult| mult >= base_multiplier + 0.5 }
                    else

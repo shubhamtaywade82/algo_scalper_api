@@ -48,6 +48,8 @@ module Live
       @thread = nil
       @market_closed_checked = false # Track if we've already checked after market closed
       @watchdog_thread = nil # Initialize as nil, start watchdog only when service starts
+      @redis_pnl_cache = {}
+      @cycle_tracker_map = nil
     end
 
     # Start monitoring loop (non-blocking)
@@ -96,6 +98,8 @@ module Live
         @event_subscription = nil
       end
     end
+
+    delegate :sleep, to: :Kernel
 
     private
 

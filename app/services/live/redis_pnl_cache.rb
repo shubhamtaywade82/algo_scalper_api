@@ -244,6 +244,8 @@ module Live
     end
 
     def each_tracker_key(&)
+      return unless @redis
+
       pattern = "#{REDIS_KEY_PREFIX}:*"
       @redis.scan_each(match: pattern) do |key|
         tracker_id = key.split(':').last

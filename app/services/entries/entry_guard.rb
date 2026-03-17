@@ -13,12 +13,21 @@ module Entries
     BOS_MAX_ENTRY_DISTANCE_R = 0.5
 
     class << self
+      include Live::UnderlyingLtpResolver
+
       def entry_guard_pipeline
         @entry_guard_pipeline ||= EntryGuardPipeline.new
       end
 
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
+
+        # Portfolio-level policy gate (fast fail before building context)
+        entry_policy = Policies::EntryPolicy.new(index_cfg: index_cfg, direction: direction)
+        unless entry_policy.permitted?
+          Rails.logger.info("[EntryGuard] EntryPolicy blocked — #{entry_policy.reasons.join(', ')}")
+          return false
+        end
 
         context = {
           index_cfg: index_cfg,
@@ -130,8 +139,21 @@ module Entries
           return false
         end
 
-        response = Orders.config.gateway.place_market(
-          side: 'buy',
+        # Risk-level policy gate (portfolio exposure + drawdown check before broker call)
+        risk_policy = Policies::RiskPolicy.new(
+          index_key: index_cfg[:key].to_s,
+          proposed_qty: quantity,
+          entry_price: ltp.to_f,
+          lot_size: lot_size
+        )
+        unless risk_policy.permitted?
+          Rails.logger.info("[EntryGuard] RiskPolicy blocked for #{index_cfg[:key]} — #{risk_policy.reasons.join(', ')}")
+          return false
+        end
+
+        place_cmd = Orders::Commands::PlaceOrderCommand.new(
+          gateway: Orders.config.gateway,
+          side: :buy,
           segment: pick[:segment] || index_cfg[:segment],
           security_id: pick[:security_id],
           qty: quantity,
@@ -141,13 +163,14 @@ module Entries
             price: ltp,
             symbol: pick[:symbol]
           }
-        )
+        ).call
 
-        if response.is_a?(Hash) && response[:success] == false
-          Rails.logger.error("[EntryGuard] place_market failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+        unless place_cmd.success?
+          Rails.logger.error("[EntryGuard] place_market failed for #{index_cfg[:key]}: #{pick[:symbol]} (#{place_cmd.reason})")
           return false
         end
 
+        response = place_cmd.payload[:raw] || {}
         order_no = extract_order_no(response)
         unless order_no
           Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
@@ -406,6 +429,13 @@ module Entries
         return false if symbol.blank? || cooldown <= 0
 
         last = Rails.cache.read("reentry:#{symbol}")
+        last.present? && (Time.current - last) < cooldown
+      end
+
+      def cooldown_active_for_index?(index_key, cooldown)
+        return false if index_key.blank? || cooldown <= 0
+
+        last = Rails.cache.read("reentry:index:#{index_key}")
         last.present? && (Time.current - last) < cooldown
       end
 
@@ -872,25 +902,30 @@ module Entries
           sl_decimal = supertrend_sl_decimal
           premium_r = entry_price.to_f * sl_decimal
           entry_risk_rupees = premium_r * quantity.to_i
-          origin_price = entry_price.to_f
+          origin_price = nil # No BOS swing level; structure invalidation must use underlying at entry
           entry_underlying_price = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_underlying_price] : nil
         else
           origin_price = bos_context[:origin_swing][:price].to_f
           entry_underlying_price = bos_context[:entry_underlying_price]
-          reference_price = entry_underlying_price || entry_price
-          entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
-          premium_r = entry_risk_rupees / quantity.to_f
+          sl_decimal = supertrend_sl_decimal
+          premium_r = entry_price.to_f * sl_decimal
+          entry_risk_rupees = premium_r * quantity.to_i
         end
         premium_stop = entry_price.to_f - premium_r
         premium_target = entry_price.to_f + premium_r
 
-        meta_hash[:structure_invalidation_price] = origin_price
+        # Structure invalidation must be in UNDERLYING domain (index level). Never use option premium.
+        # For BOS entries we use origin_swing price (underlying). For supertrend we omit so only the
+        # 5m/15m candle-based rule runs (avoids tick-noise exits and reduces brokerage from quick flips).
+        meta_hash[:structure_invalidation_price] = origin_price if origin_price.present?
         meta_hash[:entry_premium] = entry_price.to_f
+        meta_hash[:peak_premium] = entry_price.to_f
+        meta_hash[:peak_premium_at] = Time.current.iso8601
         meta_hash[:entry_risk_rupees] = entry_risk_rupees
         meta_hash[:premium_stop_price] = premium_stop
         meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
         meta_hash[:premium_target_price] = premium_target
-        meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
+        meta_hash[:entry_underlying_price] = entry_underlying_price || resolve_underlying_ltp(meta_hash[:index_key])
         meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
         meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
         meta_hash[:bos_timeframe] = bos_context[:timeframe]

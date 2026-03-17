@@ -10,16 +10,15 @@ RSpec.describe Live::RiskManagerService do
     context 'when market is closed and no active positions' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
-        allow(PositionTracker).to receive_message_chain(:active, :count).and_return(0)
+        allow(PositionTracker).to receive_message_chain(:active, :includes, :to_a).and_return([])
         allow(service).to receive(:monitor_loop)
         # Stub demand_driven_enabled? to prevent it from affecting the test
         allow(service).to receive(:demand_driven_enabled?).and_return(false)
       end
 
       it 'does not call monitor_loop (sleeps instead)' do
+        expect(service).not_to receive(:monitor_loop)
         service.start
-        sleep(0.15) # Give thread time to check market status and sleep
-        expect(service).not_to have_received(:monitor_loop)
         service.stop
       end
     end
@@ -27,7 +26,7 @@ RSpec.describe Live::RiskManagerService do
     context 'when market is closed but positions exist' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
-        allow(PositionTracker).to receive_message_chain(:active, :count).and_return(1)
+        allow(PositionTracker).to receive_message_chain(:active, :includes, :to_a).and_return([instance_double(PositionTracker)])
         allow(service).to receive(:update_paper_positions_pnl_if_due)
         allow(service).to receive(:ensure_all_positions_in_redis)
         allow(service).to receive(:ensure_all_positions_in_active_cache)
@@ -66,7 +65,7 @@ RSpec.describe Live::RiskManagerService do
     context 'when market is closed and no active positions' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
-        allow(PositionTracker).to receive_message_chain(:active, :count).and_return(0)
+        allow(PositionTracker).to receive_message_chain(:active, :includes, :to_a).and_return([])
       end
 
       it 'sleeps 60 seconds in the loop' do

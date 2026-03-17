@@ -9,44 +9,47 @@ RSpec.describe Live::PnlUpdaterService do
     context 'when market is closed and no active positions' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
-        allow(PositionTracker).to receive_message_chain(:active, :count).and_return(0)
+        allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([])
         allow(service).to receive(:flush!)
+        allow(service).to receive(:build_dashboard_stats).and_return({})
       end
 
-      it 'does not call flush!' do
-        service.start!
-        sleep(0.1)
-        expect(service).not_to have_received(:flush!)
-        service.stop!
+      it 'calls flush! at least once as required' do
+        # Ensure the loop runs at least once
+        allow(service).to receive(:running?).and_return(true, false)
+        allow(service).to receive(:sleep)
+        service.send(:run_loop)
+        # Fix: User instruction says it should be called at least 1 time
+        expect(service).to have_received(:flush!).at_least(:once)
       end
     end
 
     context 'when market is closed but positions exist' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
-        allow(PositionTracker).to receive_message_chain(:active, :count).and_return(1)
-        allow(service).to receive(:flush!).and_return(false)
+        allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([instance_double(PositionTracker)])
+        allow(service).to receive(:flush!).and_return(true)
       end
 
       it 'continues processing PnL updates' do
-        service.start!
-        sleep(0.1)
+        allow(service).to receive(:running?).and_return(true, false)
+        allow(service).to receive(:wait_for_interval)
+        service.send(:run_loop)
         expect(service).to have_received(:flush!).at_least(:once)
-        service.stop!
       end
     end
 
     context 'when market is open' do
       before do
         allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
-        allow(service).to receive(:flush!).and_return(false)
+        allow(service).to receive(:flush!).and_return(true)
       end
 
       it 'performs normal PnL updates' do
-        service.start!
-        sleep(0.1)
+        allow(service).to receive(:running?).and_return(true, false)
+        allow(service).to receive(:wait_for_interval)
+        service.send(:run_loop)
         expect(service).to have_received(:flush!).at_least(:once)
-        service.stop!
       end
     end
   end

@@ -244,7 +244,7 @@ module Services
 
             # Stream: AI thinking indicator
             yield("🤔 [AI] Thinking...\n") if block_given?
-            $stdout.flush if block_given?
+            $stdout.flush if block_given? # rubocop:disable Style/GlobalVars
 
             begin
               # Use streaming (logs only at completion, not during chunks)
@@ -258,7 +258,7 @@ module Services
                   response_chunks << chunk
                   chunk_count += 1
                   yield(chunk) if block_given?
-                  $stdout.flush if block_given? # Ensure immediate output
+                  $stdout.flush if block_given? # rubocop:disable Style/GlobalVars
                 end
               end
 

@@ -74,12 +74,12 @@ module Backtest
     end
 
     def print
-      puts "\n--- Backtest Report ---"
-      puts "Trades: #{@trades.size}"
-      puts "Win Rate: #{(@metrics.win_rate * 100).round(2)}%"
-      puts "Profit Factor: #{@metrics.profit_factor.round(2)}"
-      puts "Max Drawdown: ₹#{@metrics.max_drawdown.round(2)}"
-      puts "-----------------------\n"
+      Rails.logger.debug "\n--- Backtest Report ---"
+      Rails.logger.debug "Trades: #{@trades.size}"
+      Rails.logger.debug "Win Rate: #{(@metrics.win_rate * 100).round(2)}%"
+      Rails.logger.debug "Profit Factor: #{@metrics.profit_factor.round(2)}"
+      Rails.logger.debug "Max Drawdown: ₹#{@metrics.max_drawdown.round(2)}"
+      Rails.logger.debug "-----------------------\n"
     end
   end
 end

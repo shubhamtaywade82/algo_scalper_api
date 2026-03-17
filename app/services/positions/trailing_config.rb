@@ -53,6 +53,27 @@ module Positions
       nil
     end
 
+    # Select drawdown threshold based on peak profit using adaptive tiers.
+    # @param peak_profit_pct [Float] peak profit as decimal (e.g. 0.15 for 15%)
+    # @param tiers [Array<Hash>] array of { min_profit:, drawdown: }
+    # @return [Float, nil] drawdown decimal or nil when no tier applies
+    def adaptive_drawdown_for_peak(peak_profit_pct, tiers)
+      return nil unless tiers.is_a?(Array) && tiers.any?
+
+      peak = peak_profit_pct.to_f
+      selected = nil
+
+      tiers.each do |tier|
+        min_profit = tier[:min_profit] || tier['min_profit']
+        drawdown = tier[:drawdown] || tier['drawdown']
+        next unless min_profit && drawdown
+
+        selected = drawdown.to_f if peak >= min_profit.to_f
+      end
+
+      selected
+    end
+
     # Calculate SL price using direct trailing mode (based on current price)
     # @param current_price [Float] Current LTP
     # @param entry_price [Float] Entry price
@@ -130,7 +151,11 @@ module Positions
     end
 
     def peak_drawdown_active?(profit_pct:, current_sl_offset_pct:)
-      profit_pct.to_f >= config[:activation_profit_pct] &&
+      # Emergency: always protect if peak profit exceeds 2x activation threshold
+      return true if profit_pct.to_f >= config[:activation_profit_pct].to_f * 2.0
+
+      # Normal: either profit threshold OR SL already moved up is sufficient
+      profit_pct.to_f >= config[:activation_profit_pct] ||
         current_sl_offset_pct.to_f >= config[:activation_sl_offset_pct]
     end
 
@@ -138,7 +163,7 @@ module Positions
       raise ArgumentError, 'entry_price required' if entry_price.nil?
 
       # sl_offset_pct is DECIMAL format (e.g., -0.15 for -15%)
-      entry_price.to_f * (1.0 + sl_offset_pct.to_f)
+      (entry_price.to_f * (1.0 + sl_offset_pct.to_f)).round(2)
     end
 
     def calculate_sl_price(entry_price, profit_pct)

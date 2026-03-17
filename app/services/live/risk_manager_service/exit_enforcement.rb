@@ -3,11 +3,13 @@
 module Live
   class RiskManagerService
     module ExitEnforcement
+      include Live::UnderlyingLtpResolver
+      include Live::StructureInvalidationEvaluator
+
       # Lightweight struct for ETF position data (replaces OpenStruct for performance)
       EtfPositionData = Struct.new(
         :trend_score, :peak_trend_score, :adx, :atr_ratio,
-        :underlying_price, :vwap, :is_long?,
-        keyword_init: true
+        :underlying_price, :vwap, :is_long?
       )
 
       # Enforcement methods always accept an exit_engine keyword. They do not fetch positions from caller.
@@ -146,17 +148,17 @@ module Live
         current_r = (net_pnl / risk_value).to_f
 
         if tracker.trade_state.blank?
-          tracker.update_column(:trade_state, 'init')
+          tracker.update_column(:trade_state, 'init') # rubocop:disable Rails/SkipsModelValidations
         end
 
         case tracker.trade_state
         when 'init'
           if current_r >= 1.0
-            tracker.update_columns(trade_state: 'validated', validated_at: Time.current)
+            tracker.update_columns(trade_state: 'validated', validated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
           end
         when 'validated'
           if current_r >= 2.0
-            tracker.update_columns(trade_state: 'expansion', expansion_at: Time.current)
+            tracker.update_columns(trade_state: 'expansion', expansion_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
           end
         end
       rescue StandardError => e
@@ -191,7 +193,7 @@ module Live
         if trend_score > peak
           meta = tracker.meta || {}
           meta['peak_trend_score'] = trend_score
-          tracker.update_column(:meta, meta)
+          tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
         end
       rescue StandardError
         nil
@@ -255,6 +257,8 @@ module Live
         PositionTracker.active.find_each do |tracker|
           enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
         end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_time_based_exit error: #{e.class} - #{e.message}")
       end
 
       # EOD force-close: at or after market close, close all active positions.
@@ -323,6 +327,14 @@ module Live
         snapshot = pnl_snapshot(tracker)
         return unless snapshot
 
+        # Skip R-stop when trailing system has taken ownership
+        if trailing_armed_for?(tracker, snapshot)
+          Rails.logger.debug do
+            "[RiskManager] PREMIUM_R_STOP suppressed for #{tracker.order_no} — trailing armed"
+          end
+          return
+        end
+
         ltp = snapshot[:ltp]
         return unless ltp
 
@@ -338,6 +350,22 @@ module Live
         end
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_premium_r_stop_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def trailing_armed_for?(tracker, snapshot)
+        trailing_cfg = AlgoConfig.fetch.dig(:risk, :trailing) || {}
+        return false if trailing_cfg[:enabled] == false
+
+        activation = (trailing_cfg[:activation_pct] || 0.025).to_f
+        return false unless activation.positive?
+
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false unless entry_value.positive?
+
+        peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
+        peak_profit_pct >= activation
+      rescue StandardError
+        false
       end
 
       # LAYER 1: DYNAMIC TRAILING SL
@@ -377,7 +405,20 @@ module Live
         snapshot = pnl_snapshot(tracker)
         return unless snapshot
 
-        # Build rule context
+        si_cfg = (risk_config[:exits] || {})[:structure_invalidation] || {}
+
+        if si_cfg[:underlying_move_pct] && si_cfg[:premium_drop_pct]
+          return unless options_structure_invalidated_enforcement?(tracker, snapshot, si_cfg)
+
+          reason = 'STRUCTURE_INVALIDATION (dual: underlying move + premium drop)'
+          exit_path = 'structure_invalidation'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          return
+        end
+
+        # Legacy rule-engine path
         position_data = build_position_data_for_rule_engine(tracker, snapshot)
         context = Risk::Rules::RuleContext.new(
           position: position_data,
@@ -385,7 +426,6 @@ module Live
           risk_config: risk_config
         )
 
-        # Evaluate StructureInvalidationRule
         rule = Risk::Rules::StructureInvalidationRule.new(config: { enabled: true })
         result = rule.evaluate(context)
 
@@ -398,6 +438,17 @@ module Live
         end
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_structure_invalidation_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def options_structure_invalidated_enforcement?(tracker, snapshot, si_cfg)
+        min_hold = (si_cfg[:min_hold_seconds] || 120).to_i
+        return false unless tracker.created_at && (Time.current - tracker.created_at) >= min_hold
+
+        index_key = tracker.meta&.dig('index_key')
+        underlying_ltp = resolve_underlying_ltp(index_key)
+        return false unless underlying_ltp
+
+        dual_condition_met?(tracker, underlying_ltp, snapshot[:ltp].to_f, si_cfg)
       end
 
       # LAYER 3: PREMIUM MOMENTUM FAILURE
@@ -635,8 +686,6 @@ module Live
         Rails.logger.error("[RiskManager] enforce_profit_floor_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
 
-      private
-
       # Ratchet the profit floor upward as HWM PnL grows.
       # Monotonic — floor only moves up, never down.
       # Called every monitor cycle once the floor is armed.
@@ -651,7 +700,10 @@ module Live
         current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
         return if dynamic_floor <= current_floor
 
-        tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i)
+        # profit_floor_rupees is stored in meta (store_accessor), not a DB column
+        meta = (tracker.meta || {}).stringify_keys
+        meta['profit_floor_rupees'] = dynamic_floor.to_i
+        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
         Rails.logger.info(
           "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \
           "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{(trail_pct * 100).round}%)"
@@ -858,7 +910,7 @@ module Live
         meta['secured_sl_rupees'] = secured_sl_rupees.to_f
         meta['profit_zone_transitioned_at'] = Time.current.iso8601
 
-        tracker.update_column(:meta, meta)
+        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
 
         Rails.logger.info(
           "[RiskManager] Transitioned #{tracker.order_no} to SECURED_PROFIT_ZONE " \

@@ -90,17 +90,13 @@ class PositionTracker < ApplicationRecord
       # Calculate average per-trade percentages (for reference)
       # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
       avg_realized_pnl_pct = if exited.any?
-                               (exited.filter_map do |t|
-                                 t.last_pnl_pct.to_f * 100.0
-                               end.sum / exited.size.to_f).round(2)
+                               (exited.filter_map { |t| t.last_pnl_pct.to_f * 100.0 }.sum / exited.size.to_f).round(2)
                              else
                                0.0
                              end
       # current_pnl_pct returns decimal from Redis, convert to percentage for display
       avg_unrealized_pnl_pct = if active.any?
-                                 (active.filter_map do |t|
-                                   (t.current_pnl_pct || 0).to_f * 100.0
-                                 end.sum / active.size.to_f).round(2)
+                                 (active.filter_map { |t| (t.current_pnl_pct || 0).to_f * 100.0 }.sum / active.size.to_f).round(2)
                                else
                                  0.0
                                end
@@ -263,13 +259,22 @@ class PositionTracker < ApplicationRecord
     {
       id: id,
       security_id: security_id.to_s,
-      entry_price: entry_price.present? ? entry_price.to_s : nil,
+      entry_price: entry_price.presence&.to_s,
       quantity: quantity.to_i,
       segment: segment
     }
   end
 
+  # Returns the state machine for this tracker, giving callers a clean
+  # capability-based interface (can_trail?, can_request_exit?, etc.) and
+  # validated transition helpers without reading raw status strings.
+  def state_machine
+    Positions::States::PositionStateMachine.new(self)
+  end
+
   def mark_active!(avg_price:, quantity:)
+    state_machine.transition_to!(:active)
+
     price = avg_price.present? ? BigDecimal(avg_price.to_s) : nil
     attrs = {
       status: :active,
@@ -300,6 +305,7 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_cancelled!
+    state_machine.transition_to!(:cancelled)
     update!(status: :cancelled)
   end
 
@@ -316,6 +322,8 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
+    state_machine.transition_to!(:exited)
+
     # Persist final PnL from Redis cache to DB (force sync, no throttling)
     persist_final_pnl_from_cache
 
@@ -623,6 +631,11 @@ class PositionTracker < ApplicationRecord
     return if symbol.blank?
 
     Rails.cache.write("reentry:#{symbol}", Time.current, expires_in: 8.hours)
+
+    idx_key = meta&.dig('index_key')
+    if idx_key.present?
+      Rails.cache.write("reentry:index:#{idx_key}", Time.current, expires_in: 8.hours)
+    end
   end
 
   def clear_redis_cache_if_exited

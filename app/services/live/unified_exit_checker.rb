@@ -7,6 +7,9 @@ module Live
     EXIT_CONFIG_TTL = 30 # seconds — matches AlgoConfig.fetch TTL
 
     class << self
+      include Live::UnderlyingLtpResolver
+      include Live::StructureInvalidationEvaluator
+
       # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
       def check_exit_conditions(tracker)
@@ -34,6 +37,19 @@ module Live
             exit: true,
             reason: 'STOP_LOSS',
             path: 'stop_loss',
+            pnl_pct: (pnl_pct * 100.0).round(2)
+          }
+        end
+
+        # 2.5 Emergency: profitable position flipped to loss
+        if emergency_peak_loss_exit_triggered?(tracker)
+          entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+          peak_pct = tracker.high_water_mark_pnl.to_f / entry_value
+          current_pct = tracker.current_pnl_pct.to_f
+          return {
+            exit: true,
+            reason: "EMERGENCY_PEAK_LOSS (peak: #{(peak_pct * 100).round(2)}%, current: #{(current_pct * 100).round(2)}%)",
+            path: 'emergency_peak_loss',
             pnl_pct: (pnl_pct * 100.0).round(2)
           }
         end
@@ -68,7 +84,11 @@ module Live
           }
         end
 
-        # 5. Time-Based Exit (if configured)
+        # 6. Structure Invalidation (options-aware dual condition)
+        si_result = check_structure_invalidation(tracker, snapshot)
+        return si_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if si_result
+
+        # 7. Time-Based Exit (if configured)
         if time_based_exit?(tracker)
           return {
             exit: true,
@@ -94,7 +114,7 @@ module Live
         return false unless config[:early_exit][:enabled]
 
         pnl_pct = snapshot[:pnl_pct].to_f
-        threshold = config[:early_exit][:profit_threshold].to_f  # Already DECIMAL (e.g. 0.07)
+        threshold = config[:early_exit][:profit_threshold].to_f # Already DECIMAL (e.g. 0.07)
         return false if pnl_pct >= threshold
 
         # Check ETF conditions
@@ -131,12 +151,21 @@ module Live
         pnl_pct <= -static_sl
       end
 
-      def profit_target_hit?(_tracker, snapshot)
+      def profit_target_hit?(tracker, snapshot)
         config = exit_config
         pnl_pct = snapshot[:pnl_pct].to_f # DECIMAL format (e.g., 0.05 for 5%)
         tp = config[:take_profit].to_f # Already DECIMAL (e.g., 0.50 for 50%)
 
-        pnl_pct >= tp
+        return false unless pnl_pct >= tp
+
+        if trailing_armed?(tracker, snapshot, config)
+          Rails.logger.debug do
+            "[UnifiedExitChecker] TP suppressed for #{tracker.id} — trailing armed, pnl=#{(pnl_pct * 100).round(2)}%"
+          end
+          return false
+        end
+
+        true
       end
 
       def trailing_stop_hit?(tracker, snapshot)
@@ -157,6 +186,15 @@ module Live
           activation = config[:trailing][:activation_profit].to_f
           peak_profit_pct = snapshot[:hwm_pnl].to_f / entry_value
           return false if activation.positive? && peak_profit_pct < activation
+
+          # Adaptive drawdown from institutional trailing config (options-aware)
+          index_key = tracker.meta&.dig('index_key')&.downcase
+          inst_trailing = AlgoConfig.fetch.dig(:risk, :institutional_trailing, index_key&.to_sym) || {}
+          adaptive_tiers = inst_trailing[:adaptive_drawdown]
+
+          return true if adaptive_tiers.is_a?(Array) &&
+                         adaptive_tiers.any? &&
+                         adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers)
 
           # 1. Resolve price history from ActiveCache for Gamma detection
           pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
@@ -182,7 +220,7 @@ module Live
               highest_price: highest_price
             ).call
 
-            reason = (mfe_sl && sl_price == mfe_sl) ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
+            reason = mfe_sl && sl_price == mfe_sl ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
 
             Rails.logger.info("[UnifiedExitChecker] #{reason} hit for #{tracker.order_no}: ltp=#{ltp}, sl=#{sl_price}")
             return true
@@ -202,7 +240,7 @@ module Live
         if config[:trailing][:type] == 'adaptive'
           # peak_profit_pct is DECIMAL (e.g. 0.20 for 20%)
           peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i))
-          activation = config[:trailing][:activation_profit].to_f  # Already DECIMAL
+          activation = config[:trailing][:activation_profit].to_f # Already DECIMAL
 
           return false if peak_profit_pct < activation
 
@@ -218,7 +256,7 @@ module Live
         end
 
         # Fixed trailing
-        drop_threshold = config[:trailing][:drop_threshold].to_f  # Already DECIMAL
+        drop_threshold = config[:trailing][:drop_threshold].to_f # Already DECIMAL
         drop_pct = (hwm - pnl) / hwm
         drop_pct >= drop_threshold
       end
@@ -334,18 +372,18 @@ module Live
         # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
         sl_value = risk_cfg[:sl_pct]
         if sl_value
-          sl_value_pct = sl_value.to_f  # Use DECIMAL directly (0.12)
+          sl_value_pct = sl_value.to_f # Use DECIMAL directly (0.12)
         else
-          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12  # Default 12% as DECIMAL
+          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12 # Default 12% as DECIMAL
         end
 
         # Read TP from config (can be in either location, stored as DECIMAL)
         tp_value = exit_cfg[:take_profit]
         unless tp_value
           if risk_cfg[:tp_pct]
-            tp_value = risk_cfg[:tp_pct].to_f  # Use DECIMAL directly (0.50)
+            tp_value = risk_cfg[:tp_pct].to_f # Use DECIMAL directly (0.50)
           else
-            tp_value = 0.50  # Default 50% as DECIMAL
+            tp_value = 0.50 # Default 50% as DECIMAL
           end
         end
 
@@ -386,16 +424,14 @@ module Live
 
       def default_exit_config
         {
-          stop_loss: { type: 'static', value: 0.12 },  # 12% stop loss (DECIMAL)
-          take_profit: 0.50,  # 50% take profit (DECIMAL)
+          stop_loss: { type: 'static', value: 0.12 }, # 12% stop loss (DECIMAL)
+          take_profit: 0.50, # 50% take profit (DECIMAL)
           trailing: { enabled: true, type: 'adaptive', activation_profit: 0.035, drop_threshold: 0.025 },
           early_exit: { enabled: true, profit_threshold: 0.07 },
           premium_momentum_failure: { enabled: true },
           time_based: { enabled: false, exit_time: '15:20' }
         }
       end
-
-      private
 
       def premium_momentum_failure_hit?(tracker, snapshot)
         config = exit_config
@@ -423,6 +459,128 @@ module Live
       rescue StandardError => e
         Rails.logger.error("[UnifiedExitChecker] premium_momentum_failure_hit? error: #{e.message}")
         false
+      end
+
+      def emergency_peak_loss_exit_triggered?(tracker)
+        drawdown_cfg = AlgoConfig.fetch.dig(:position_sizing, :drawdown) || {}
+        return false if drawdown_cfg[:emergency_peak_loss_exit] == false
+
+        min_peak_pct = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false if entry_value <= 0
+
+        peak_pct = tracker.high_water_mark_pnl.to_f / entry_value
+        current_pct = tracker.current_pnl_pct.to_f
+
+        peak_pct >= min_peak_pct && current_pct < -0.02
+      end
+
+      def structure_invalidation_enabled?
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        cfg.fetch(:enabled, true)
+      rescue StandardError
+        true
+      end
+
+      def check_structure_invalidation(tracker, snapshot)
+        return unless structure_invalidation_enabled? &&
+                      tracker.meta&.dig('structure_invalidation_price') &&
+                      structure_min_hold_elapsed?(tracker)
+
+        underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
+        return unless underlying_ltp
+
+        si_cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        if si_cfg[:underlying_move_pct] && si_cfg[:premium_drop_pct]
+          if options_structure_invalidated?(tracker, underlying_ltp, snapshot, si_cfg)
+            return {
+              exit: true,
+              reason: "STRUCTURE_INVALIDATION (underlying move + premium drop)",
+              path: 'structure_invalidation'
+            }
+          end
+        elsif structure_invalidated?(tracker, underlying_ltp, tracker.meta['structure_invalidation_price'])
+          return {
+            exit: true,
+            reason: "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{tracker.meta['structure_invalidation_price']})",
+            path: 'structure_invalidation'
+          }
+        end
+
+        nil
+      end
+
+      def options_structure_invalidated?(tracker, underlying_ltp, snapshot, si_cfg)
+        dual_condition_met?(tracker, underlying_ltp, snapshot[:ltp].to_f, si_cfg)
+      end
+
+      # Require a meaningful breach (buffer) to avoid exits on 1-tick noise; reduces brokerage from quick flips.
+      def structure_invalidated?(tracker, underlying_ltp, invalidation_price)
+        direction = tracker.meta&.dig('direction').to_s
+        level = invalidation_price.to_f
+        buffer = structure_invalidation_buffer(level)
+        case direction
+        when 'long_pe'
+          underlying_ltp > level + buffer
+        when 'long_ce'
+          underlying_ltp < level - buffer
+        else
+          false
+        end
+      end
+
+      def structure_min_hold_elapsed?(tracker)
+        return false unless tracker.created_at
+        min_seconds = structure_invalidation_min_hold_seconds
+        (Time.current - tracker.created_at) >= min_seconds
+      end
+
+      def structure_invalidation_min_hold_seconds
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        (cfg[:min_hold_seconds] || cfg['min_hold_seconds'] || 90).to_i
+      end
+
+      def structure_invalidation_buffer(invalidation_level)
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        pct = (cfg[:buffer_pct] || cfg['buffer_pct'] || 0.002).to_f # 0.2% default
+        return 0.0 if invalidation_level.blank? || invalidation_level.zero?
+        (invalidation_level * pct).abs
+      end
+
+      def trailing_armed?(tracker, snapshot, config)
+        trailing_cfg = config[:trailing] || {}
+        return false unless trailing_cfg[:enabled]
+
+        activation = trailing_cfg[:activation_profit].to_f
+        return false unless activation.positive?
+
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false unless entry_value.positive?
+
+        hwm = snapshot[:hwm_pnl].to_f
+        return false unless hwm.positive?
+
+        peak_profit_pct = hwm / entry_value
+        peak_profit_pct >= activation
+      end
+
+      def adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers)
+        allowed_dd = Positions::TrailingConfig.adaptive_drawdown_for_peak(peak_profit_pct, adaptive_tiers)
+        return false unless allowed_dd && peak_profit_pct.positive?
+
+        hwm = snapshot[:hwm_pnl].to_f
+        pnl_value = snapshot[:pnl].to_f
+        return false unless hwm.positive?
+
+        # Convert fractional drop from HWM into profit-percent scale for comparison with allowed_dd
+        drop_from_peak_pct = (hwm - pnl_value) / hwm * peak_profit_pct
+        return false unless drop_from_peak_pct >= allowed_dd
+
+        Rails.logger.info(
+          "[UnifiedExitChecker] ADAPTIVE_TRAILING hit for #{tracker.order_no}: " \
+          "drop=#{(drop_from_peak_pct * 100).round(2)}% >= allowed=#{(allowed_dd * 100).round(2)}%"
+        )
+        true
       end
     end
   end

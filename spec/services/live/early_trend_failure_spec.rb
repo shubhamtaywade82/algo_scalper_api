@@ -38,6 +38,20 @@ RSpec.describe Live::EarlyTrendFailure do
       expect(described_class.applicable?(5.0, activation_profit_pct: 3.0)).to be false
       expect(described_class.applicable?(2.0, activation_profit_pct: 3.0)).to be true
     end
+
+    it 'handles decimal pnl_pct correctly (0.10 for 10%, 0.05 for 5%)' do
+      # 10% is NOT less than 7%
+      expect(described_class.applicable?(0.10)).to be false
+      # 5% IS less than 7%
+      expect(described_class.applicable?(0.05)).to be true
+    end
+
+    it 'handles decimal activation_profit_pct correctly' do
+      # Activation is 0.03 (3%), PNL is 2% (0.02)
+      expect(described_class.applicable?(0.02, activation_profit_pct: 0.03)).to be true
+      # Activation is 0.03 (3%), PNL is 5% (0.05)
+      expect(described_class.applicable?(0.05, activation_profit_pct: 0.03)).to be false
+    end
   end
 
   describe '.early_trend_failure?' do

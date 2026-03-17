@@ -358,4 +358,116 @@ RSpec.describe Entries::EntryGuard do
       end
     end
   end
+
+  describe 'apply_bos_metadata!' do
+    let(:meta_hash) { { index_key: 'NIFTY' } }
+    let(:entry_price) { 200.0 }
+    let(:quantity) { 50 }
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: { sl_pct: 0.12 },
+        indices: [{ key: 'NIFTY', segment: 'IDX_I', sid: '13' }]
+      })
+    end
+
+    context 'supertrend contract' do
+      let(:bos_context) do
+        {
+          confirmed_at: Time.current,
+          direction: 'long_pe',
+          bos_id: 'st_NIFTY_123',
+          timeframe: '1m',
+          origin_swing: { price: 200.0, index: 0 },
+          entry_underlying_price: 23850.0
+        }
+      end
+      let(:entry_metadata) do
+        {
+          entry_contract: 'supertrend_machine_v1',
+          entry_underlying_price: 23850.0
+        }
+      end
+
+      it 'stores entry_underlying_price from entry_metadata' do
+        described_class.send(:apply_bos_metadata!, meta_hash, bos_context, entry_metadata,
+                             entry_price: entry_price, quantity: quantity)
+        expect(meta_hash[:entry_underlying_price]).to eq(23850.0)
+      end
+
+      it 'calculates initial_sl_pct in premium domain (≈12%)' do
+        described_class.send(:apply_bos_metadata!, meta_hash, bos_context, entry_metadata,
+                             entry_price: entry_price, quantity: quantity)
+        expect(meta_hash[:initial_sl_pct]).to be_within(1.0).of(12.0)
+      end
+
+      it 'calculates premium_stop_price as positive below entry' do
+        described_class.send(:apply_bos_metadata!, meta_hash, bos_context, entry_metadata,
+                             entry_price: entry_price, quantity: quantity)
+        expect(meta_hash[:premium_stop_price]).to be > 0
+        expect(meta_hash[:premium_stop_price]).to be < entry_price
+      end
+    end
+
+    context 'BOS contract' do
+      let(:bos_context) do
+        {
+          confirmed_at: Time.current,
+          direction: 'long_pe',
+          bos_id: 'bos_NIFTY_123',
+          timeframe: '5m',
+          origin_swing: { price: 23800.0, index: 0 },
+          entry_underlying_price: 23850.0
+        }
+      end
+      let(:entry_metadata) do
+        { entry_contract: 'bos_machine_v1' }
+      end
+
+      it 'uses premium domain for stops (not underlying domain)' do
+        described_class.send(:apply_bos_metadata!, meta_hash, bos_context, entry_metadata,
+                             entry_price: entry_price, quantity: quantity)
+        expect(meta_hash[:initial_sl_pct]).to be_within(1.0).of(12.0)
+      end
+
+      it 'stores structure_invalidation_price in underlying domain' do
+        described_class.send(:apply_bos_metadata!, meta_hash, bos_context, entry_metadata,
+                             entry_price: entry_price, quantity: quantity)
+        expect(meta_hash[:structure_invalidation_price]).to eq(23800.0)
+      end
+
+      it 'stores entry_underlying_price from bos_context' do
+        described_class.send(:apply_bos_metadata!, meta_hash, bos_context, entry_metadata,
+                             entry_price: entry_price, quantity: quantity)
+        expect(meta_hash[:entry_underlying_price]).to eq(23850.0)
+      end
+    end
+
+    context 'when entry_underlying_price is nil' do
+      let(:bos_context) do
+        {
+          confirmed_at: Time.current,
+          direction: 'long_pe',
+          bos_id: 'st_NIFTY_123',
+          timeframe: '1m',
+          origin_swing: { price: 200.0, index: 0 },
+          entry_underlying_price: nil
+        }
+      end
+      let(:entry_metadata) do
+        { entry_contract: 'supertrend_machine_v1', entry_underlying_price: nil }
+      end
+
+      it 'falls back to TickQuery for underlying price' do
+        tick = double(ltp: 23900.0)
+        allow(Live::TickQuery).to receive(:for_security)
+          .with(segment: 'IDX_I', security_id: '13')
+          .and_return(tick)
+
+        described_class.send(:apply_bos_metadata!, meta_hash, bos_context, entry_metadata,
+                             entry_price: entry_price, quantity: quantity)
+        expect(meta_hash[:entry_underlying_price]).to eq(23900.0)
+      end
+    end
+  end
 end

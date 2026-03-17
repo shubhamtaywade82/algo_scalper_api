@@ -5,11 +5,11 @@ module Entries
     class CooldownGuard
       class << self
         def call(context)
-          symbol = context[:pick][:symbol]
+          index_key = context[:index_cfg][:key]
           cooldown = context[:index_cfg][:cooldown_sec].to_i
-          return EntryGuardPipeline::PASS unless EntryGuard.cooldown_active?(symbol, cooldown)
+          return EntryGuardPipeline::PASS unless EntryGuard.cooldown_active_for_index?(index_key, cooldown)
 
-          { blocked: "cooldown active for #{context[:index_cfg][:key]}: #{symbol}" }
+          { blocked: "cooldown active for index #{index_key}" }
         end
       end
     end

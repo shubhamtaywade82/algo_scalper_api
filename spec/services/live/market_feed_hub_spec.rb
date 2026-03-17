@@ -657,7 +657,6 @@ RSpec.describe Live::MarketFeedHub, :vcr do
         expect(hub).to have_received(:restart!)
       end
     end
-
   end
 
   describe 'Edge Cases and Error Handling' do

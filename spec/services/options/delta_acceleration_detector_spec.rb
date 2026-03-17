@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Options::DeltaAccelerationDetector do
-  let(:index_prices) { [24200.0, 24215.0] }
+  let(:index_prices) { [24_200.0, 24_215.0] }
   let(:option_prices) { [110.0, 150.0] }
   let(:volumes) { Array.new(20, 1000.0) + [2000.0] }
   let(:oi) { [500_000, 510_000] }
@@ -27,7 +27,7 @@ RSpec.describe Options::DeltaAccelerationDetector do
 
     it 'returns 0 if index and option move in opposite directions' do
       opposite_detector = described_class.new(
-        index_prices: [24200.0, 24215.0],
+        index_prices: [24_200.0, 24_215.0],
         option_prices: [110.0, 100.0],
         volumes: volumes,
         oi: oi

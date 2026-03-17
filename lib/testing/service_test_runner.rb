@@ -7,7 +7,7 @@
 #   Testing::ServiceTestRunner.test_market_feed_hub
 #   Testing::ServiceTestRunner.test_risk_manager_service
 
-if Rails.env.development? || Rails.env.test?
+if Rails.env.local?
   module Testing
     module ServiceTestRunner
       module_function
@@ -601,6 +601,6 @@ if Rails.env.development? || Rails.env.test?
     wait_for_logs(seconds)
     print_success('Log monitoring completed')
   end
+    end
   end
-end
 end

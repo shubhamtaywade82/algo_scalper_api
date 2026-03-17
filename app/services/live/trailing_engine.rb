@@ -76,6 +76,20 @@ module Live
         return false
       end
 
+      # Emergency defense-in-depth: sub-second path in UnifiedExitChecker is primary
+      drawdown_cfg = AlgoConfig.fetch.dig(:position_sizing, :drawdown) || {}
+      unless drawdown_cfg[:emergency_peak_loss_exit] == false
+        emergency_min_peak = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
+        if peak >= emergency_min_peak && current < -0.02
+          tracker = PositionTracker.find_by(id: position_data.tracker_id)
+          if tracker&.active?
+            reason = "emergency_peak_loss_exit (peak: #{(peak * 100).round(2)}%, current: #{(current * 100).round(2)}%)"
+            Live::ExitEngine.execute_exit(tracker: tracker, reason: reason, source: :trailing_engine)
+            return true
+          end
+        end
+      end
+
       # Calculate capital deployed (entry_price * quantity)
       capital_deployed = calculate_capital_deployed(position_data)
 
@@ -193,7 +207,7 @@ module Live
 
       meta['highest_price'] = new_highest
       meta['lowest_price'] = new_lowest
-      tracker.update_column(:meta, meta)
+      tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
     end
 
     # Apply direct trailing SL (follows price directly, only moves upward)
@@ -322,7 +336,7 @@ module Live
 
       # Get symbol or index key
       key = position_data.index_key.to_s.upcase
-      symbol = position_data.security_id.to_s.upcase # security_id often contains the symbol in some contexts, but better check both
+      position_data.security_id.to_s.upcase # security_id often contains the symbol in some contexts, but better check both
 
       # Use index_key or underlying symbol
       search_key = position_data.underlying_symbol.to_s.upcase.presence || key
@@ -330,6 +344,7 @@ module Live
     end
 
     # Apply tailored trailing SL (Gamma-Aware + MFE approach for indices)
+    # rubocop:disable Metrics/AbcSize
     def apply_tailored_sl(position_data)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
@@ -358,7 +373,7 @@ module Live
         entry_price: position_data.entry_price.to_f,
         highest_price: position_data.entry_price.to_f * (1.0 + peak_profit_pct)
       ).call
-      reason_code = (mfe_sl && new_sl_price == mfe_sl) ? 'mfe_retrace' : 'gamma_aware'
+      reason_code = mfe_sl && new_sl_price == mfe_sl ? 'mfe_retrace' : 'gamma_aware'
 
       adjusted = Orders::Adjuster.adjust_sl(
         tracker: tracker,
@@ -380,6 +395,7 @@ module Live
       Rails.logger.error("[TrailingEngine] Failed to apply tailored SL: #{e.class} - #{e.message}")
       { updated: false, new_sl_price: nil, reason: e.message }
     end
+    # rubocop:enable Metrics/AbcSize
 
     # Build failure result hash
     # @param error [String] Error message

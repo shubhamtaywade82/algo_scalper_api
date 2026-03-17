@@ -227,10 +227,12 @@ class MultiIndicatorStrategy
     neutral_count = results.count { |r| r[:direction] == :neutral }
 
     # Determine dominant direction
-    dominant_direction = case
-                         when bullish_count > bearish_count && bullish_count > neutral_count then :bullish
-                         when bearish_count > bullish_count && bearish_count > neutral_count then :bearish
-                         else :neutral
+    dominant_direction = if bullish_count > bearish_count && bullish_count > neutral_count
+ :bullish
+                         elsif bearish_count > bullish_count && bearish_count > neutral_count
+ :bearish
+                         else
+                           :neutral
                          end
 
     # Calculate confluence score (0-100): percentage of indicators agreeing with dominant direction
@@ -241,11 +243,14 @@ class MultiIndicatorStrategy
                        end
 
     # Determine confluence strength
-    confluence_strength = case
-                          when confluence_score >= 80 then :strong
-                          when confluence_score >= 60 then :moderate
-                          when confluence_score >= 40 then :weak
-                          else :none
+    confluence_strength = if confluence_score >= 80
+ :strong
+                          elsif confluence_score >= 60
+ :moderate
+                          elsif confluence_score >= 40
+ :weak
+                          else
+                            :none
                           end
 
     # Build indicator breakdown

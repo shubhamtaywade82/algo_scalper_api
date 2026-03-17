@@ -119,7 +119,8 @@ module Live
       end
 
       def time_stop_enabled?
-        config = algo_config.dig(:risk, :exits, :time_stop) || {}
+        # time_stop lives under risk.time_stop in algo.yml (same level as profit_floor, rr_profit_booking)
+        config = algo_config.dig(:risk, :time_stop) || algo_config.dig(:risk, :exits, :time_stop) || {}
         config.fetch(:enabled, true) # Default: enabled
       rescue StandardError
         true

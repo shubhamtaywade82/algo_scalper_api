@@ -81,10 +81,11 @@ module Live
       false
     end
 
-    # Check if ETF checks are applicable (before trailing activation)
-    # pnl_pct is percentage (e.g. 5.0 for 5%)
+    # Check if ETF checks are applicable (before trailing activation).
+    # Both pnl_pct and activation_profit_pct must be in the same unit (percentage).
+    # The caller is responsible for normalizing formats before invoking this method.
     def applicable?(pnl_pct, activation_profit_pct: nil)
-      activation = activation_profit_pct || etf_cfg[:activation_profit_pct].to_f
+      activation = (activation_profit_pct || etf_cfg[:activation_profit_pct]).to_f
       return false if activation.zero?
 
       pnl_pct.to_f < activation

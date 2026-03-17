@@ -33,6 +33,7 @@ module Entries
         Guards::BankniftyLastWeekGuard,
         Guards::EdgeFailureGuard,
         Guards::DailyLimitsGuard,
+        Guards::MaxConcurrentGuard,
         Guards::InstrumentLookupGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,

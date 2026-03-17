@@ -320,7 +320,8 @@ module Services
       # Chat completion interface (works with both gems)
       # For Ollama: Serializes requests to prevent parallel calls
       # Returns full response object if tools are provided, otherwise returns content string
-      def chat(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, **)
+      # log_context: :ai_intent routes prompt logging to log/ai_intent.log only
+      def chat(messages:, model: nil, temperature: 0.7, tools: nil, tool_choice: nil, log_context: nil, **options)
         return nil unless enabled?
 
         # Auto-select model for Ollama if not provided (lazy fetch so boot never blocks)
@@ -337,16 +338,11 @@ module Services
           model = fallback_model
         end
 
-        # Serialize Ollama requests to prevent parallel calls
-        result = if @provider == :ollama
-                   with_request_serialization do
-                     execute_chat(messages: messages, model: model, temperature: temperature, tools: tools,
-                                  tool_choice: tool_choice, **)
-                   end
-                 else
-                   execute_chat(messages: messages, model: model, temperature: temperature, tools: tools,
-                                tool_choice: tool_choice, **)
-                 end
+        opts = options.merge(log_context: log_context)
+
+        # Serialize Ollama requests to prevent parallel calls; retry on connection reset
+        result = chat_with_retry(messages: messages, model: model, temperature: temperature, tools: tools,
+                                 tool_choice: tool_choice, opts: opts)
 
         # If tools are provided, return full response hash; otherwise return content string (backward compatibility)
         if tools
@@ -360,23 +356,58 @@ module Services
         nil
       end
 
+      # Retry wrapper for Ollama chat: connection reset by peer is common under load or long prompts
+      CONNECTION_ERRORS = [
+        Faraday::ConnectionFailed,
+        Faraday::TimeoutError,
+        Errno::ECONNRESET,
+        Errno::ECONNREFUSED,
+        EOFError
+      ].freeze
+
+      def chat_with_retry(messages:, model:, temperature:, tools:, tool_choice:, opts:)
+        max_attempts = @provider == :ollama ? 3 : 1
+        attempt = 0
+
+        begin
+          attempt += 1
+          if @provider == :ollama
+            with_request_serialization do
+              execute_chat(messages: messages, model: model, temperature: temperature, tools: tools,
+                           tool_choice: tool_choice, **opts)
+            end
+          else
+            execute_chat(messages: messages, model: model, temperature: temperature, tools: tools,
+                         tool_choice: tool_choice, **opts)
+          end
+        rescue *CONNECTION_ERRORS => e
+          raise e unless attempt < max_attempts && @provider == :ollama
+
+          Rails.logger.warn(
+            "[OpenAIClient] Chat connection error (attempt #{attempt}/#{max_attempts}): #{e.class} - #{e.message}; retrying in 3s..."
+          )
+          sleep(3)
+          retry
+        end
+      end
+
       # Internal chat execution (without serialization wrapper)
-      def execute_chat(messages:, model:, temperature:, tools: nil, tool_choice: nil, **)
+      def execute_chat(messages:, model:, temperature:, tools: nil, tool_choice: nil, log_context: nil, **options)
+        opts = options.merge(log_context: log_context)
         case @provider
         when :ruby_openai
           chat_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools,
-                           tool_choice: tool_choice, **)
+                           tool_choice: tool_choice, **opts)
         when :openai_ruby
           chat_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools,
-                           tool_choice: tool_choice, **)
+                           tool_choice: tool_choice, **opts)
         when :ollama
-          # Ollama uses OpenAI-compatible API, use the same client methods
           if defined?(OpenAI) && OpenAI.respond_to?(:configure)
             chat_ruby_openai(messages: messages, model: model, temperature: temperature, tools: tools,
-                             tool_choice: tool_choice, **)
+                             tool_choice: tool_choice, **opts)
           else
             chat_openai_ruby(messages: messages, model: model, temperature: temperature, tools: tools,
-                             tool_choice: tool_choice, **)
+                             tool_choice: tool_choice, **opts)
           end
         else
           raise "Unknown provider: #{@provider}"
@@ -613,12 +644,11 @@ module Services
       end
 
       # Chat completion using ruby-openai
-      def chat_ruby_openai(messages:, model:, temperature:, tools: nil, tool_choice: nil, **options)
+      def chat_ruby_openai(messages:, model:, temperature:, tools: nil, tool_choice: nil, log_context: nil, **options)
         formatted_messages = format_messages_ruby_openai(messages)
         token_count = estimate_token_count(formatted_messages)
 
-        # Log prompt and token count
-        log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
+        log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count, log_context: log_context)
 
         parameters = {
           model: model,
@@ -643,12 +673,11 @@ module Services
       end
 
       # Chat completion using openai-ruby
-      def chat_openai_ruby(messages:, model:, temperature:, tools: nil, tool_choice: nil, **)
+      def chat_openai_ruby(messages:, model:, temperature:, tools: nil, tool_choice: nil, log_context: nil, **)
         formatted_messages = format_messages_openai_ruby(messages)
         token_count = estimate_token_count(formatted_messages)
 
-        # Log prompt and token count
-        log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count)
+        log_prompt_and_tokens(messages: formatted_messages, model: model, token_count: token_count, log_context: log_context)
 
         params = {
           messages: formatted_messages,
@@ -926,18 +955,30 @@ module Services
         (total_chars / 4.0).ceil + (messages.length * 2)
       end
 
-      # Log prompt and token count
-      def log_prompt_and_tokens(messages:, model:, token_count:)
-        # Build a summary of messages for logging (no truncation by default)
-        message_summary = messages.map do |msg|
+      # Log prompt and token count. When log_context == :ai_intent, use dedicated log/ai_intent.log only.
+      def log_prompt_and_tokens(messages:, model:, token_count:, log_context: nil)
+        message_lines = messages.map do |msg|
           role = msg[:role] || msg['role'] || 'unknown'
           content = msg[:content] || msg['content'] || ''
           "#{role}: #{content}"
-        end.join("\n")
+        end
+        message_summary = message_lines.join("\n")
 
-        Rails.logger.info("[OpenAIClient] Sending prompt to #{model}")
-        Rails.logger.info("[OpenAIClient] Estimated token count: #{token_count}")
-        Rails.logger.debug { "[OpenAIClient] Prompt messages:\n#{message_summary}" }
+        if log_context == :ai_intent
+          ai_logger = Rails.application.config.respond_to?(:ai_intent_logger) && Rails.application.config.ai_intent_logger
+          if ai_logger
+            ai_logger.info("[OpenAIClient] Sending prompt to #{model}")
+            ai_logger.info("[OpenAIClient] Estimated token count: #{token_count}")
+            ai_logger.debug { "[OpenAIClient] Prompt messages:\n#{message_summary}" }
+            Rails.logger.debug { '[OpenAIClient] Intent extraction request sent (see log/ai_intent.log)' }
+          else
+            Rails.logger.debug { '[OpenAIClient] Intent extraction request sent (ai_intent logger not configured)' }
+          end
+        else
+          Rails.logger.info("[OpenAIClient] Sending prompt to #{model}")
+          Rails.logger.info("[OpenAIClient] Estimated token count: #{token_count}")
+          Rails.logger.debug { "[OpenAIClient] Prompt messages:\n#{message_summary}" }
+        end
       end
     end
   end

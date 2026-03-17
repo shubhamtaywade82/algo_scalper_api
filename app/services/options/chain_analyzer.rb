@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# rubocop:disable Metrics/BlockNesting
 
 require 'bigdecimal'
 require 'active_support/core_ext/hash'
@@ -440,6 +441,7 @@ module Options
       iv_rank = 0.5 # Default - could be calculated from historical IV
       atm_range_percent = self.class.atm_range_pct(iv_rank)
 
+      # rubocop:disable Style/MultilineBlockChain
       filtered.map do |item|
         strike = item[:strike]
         option_data = item[:option_data]
@@ -457,6 +459,7 @@ module Options
         score = self.class.calculate_strike_score(leg, option_type.to_sym, atm_strike, atm_range_percent)
         leg.merge(score: score)
       end.sort_by { |leg| [-leg[:score], leg[:distance_from_atm]] }
+      # rubocop:enable Style/MultilineBlockChain
     end
 
     def calculate_spread_ratio(option_data)
@@ -471,7 +474,7 @@ module Options
     def get_option_data(strike, option_type)
       return nil unless @chain_data && @chain_data[:oc]
 
-      strike_data = @chain_data[:oc][strike.to_s]
+      strike_data = @chain_data[:oc][strike.to_f.to_s]
       return nil unless strike_data
 
       strike_data[option_type]
@@ -852,7 +855,9 @@ module Options
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
-        unless exit_testing_mode
+        if exit_testing_mode
+          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
+        else
           validator = Options::StrikeQualification::ExpectedMoveValidator.new
           validation = validator.call(
             index_key: index_cfg[:key],
@@ -870,8 +875,6 @@ module Options
             end
             return []
           end
-        else
-          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
         end
 
         [pick]
@@ -912,8 +915,8 @@ module Options
 
         # Extract flow scores for lookup
         flow_side = side.to_s.downcase # 'ce' or 'pe'
-        flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
-          h[f[:strike].to_f] = f[:score]
+        flow_scores = (flow_results&.[](flow_side) || []).to_h do |f|
+                        [f[:strike].to_f, f[:score]]
         end
 
         # Rails.logger.debug { "[Options] Method called with index_cfg: #{index_cfg[:key]}, expiry_date: #{expiry_date}" }
@@ -942,7 +945,7 @@ module Options
 
         # For buying options, focus on ATM and nearby strikes only (ATM, 1OTM, 2OTM max)
         # This prevents selecting expensive ITM options or far OTM options
-        computed_target_strikes = if [:ce, 'ce'].include?(side)
+        computed_target_strikes = if side.to_s == 'ce'
                                     # CE: ATM, ATM+1, ATM+2 (OTM calls, max 2OTM)
                                     [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval)]
                                   else
@@ -1000,7 +1003,7 @@ module Options
           # Debug: strike label calculation (currently unused)
           _strike_label = if strike == atm_strike
                             'ATM'
-                          elsif [:ce, 'ce'].include?(side)
+                          elsif side.to_s == 'ce'
                             strike_diff = (strike - atm_strike) / strike_interval
                             case strike_diff
                             when 1
@@ -1164,12 +1167,14 @@ module Options
                                     option_type: option_type
                                   ).pluck(:strike_price).map(&:to_f).sort
                                 else
+                                  # rubocop:disable Style/MultilineBlockChain
                                   Array(derivatives_collection).filter_map do |d|
                                     next unless derivative_like?(d)
                                     next unless d.expiry_date == expiry_date_obj && d.option_type.to_s.upcase == option_type
 
                                     d.strike_price.to_f
                                   end.sort
+                                  # rubocop:enable Style/MultilineBlockChain
                                 end
 
             Rails.logger.debug do
@@ -1295,6 +1300,7 @@ module Options
         min_oi = AlgoConfig.fetch.dig(:option_chain, :min_oi).to_i
         max_spread_pct = AlgoConfig.fetch.dig(:option_chain, :max_spread_pct).to_f
 
+        # rubocop:disable Style/MultilineBlockChain
         legs.select do |leg|
           leg[:type] == side &&
             (leg[:strike].to_f - atm.to_f).abs <= window &&
@@ -1302,6 +1308,7 @@ module Options
             leg[:oi].to_i >= min_oi &&
             leg.fetch(:spread_pct, 0.0).to_f <= max_spread_pct
         end.sort_by { |leg| [-leg[:oi].to_i, leg.fetch(:spread_pct, 0.0).to_f] }
+        # rubocop:enable Style/MultilineBlockChain
       end
 
       # Dynamic minimum delta thresholds depending on time of day
@@ -1359,7 +1366,7 @@ module Options
                          else 'High'
                          end
 
-        _strike_guidance = if [:ce, 'ce'].include?(side)
+        _strike_guidance = if side.to_s == 'ce'
                              'CE strikes: ATM, ATM+1, ATM+2, ATM+3 (OTM calls only)'
                            else
                              'PE strikes: ATM, ATM-1, ATM-2, ATM-3 (OTM puts only)'
@@ -1379,7 +1386,7 @@ module Options
           (strike - spot).abs
           if strike == atm_strike
             'ATM'
-          elsif [:ce, 'ce'].include?(side)
+          elsif side.to_s == 'ce'
             strike_diff = (strike - atm_strike) / strike_interval
             case strike_diff
             when 1
@@ -1407,7 +1414,7 @@ module Options
 
       # Calculate sophisticated strike score based on professional prop model
       def calculate_strike_score(leg, side, atm_strike, atm_range_percent, flow_score: 1.0, gamma_pressure: 0.0,
-                                prop_selector: nil, acceleration_signal: :none, history: nil)
+                                 prop_selector: nil, acceleration_signal: :none, history: nil)
         # Use professional PropStrikeSelector if available
         if prop_selector
           # Combine prop model with ATM bonus for legacy compatibility
@@ -1435,8 +1442,8 @@ module Options
 
         # Fallback to standard institutional scoring
         strike_price = leg[:strike]
-        ltp = leg[:ltp]
-        iv = leg[:iv]
+        leg[:ltp]
+        leg[:iv]
         oi = leg[:oi]
 
         # Calculate spread percentage from spread and LTP
@@ -1454,13 +1461,13 @@ module Options
         # 2. Liquidity Score (Spread < 1% preferred) - 30% weight
         liquidity_base = if oi >= 1_000_000
                             30
-                          elsif oi >= 500_000
+                         elsif oi >= 500_000
                             25
-                          elsif oi >= 100_000
+                         elsif oi >= 100_000
                             20
-                          else
+                         else
                             10
-                          end
+                         end
         # Spread penalty (up to 50% reduction)
         liquidity_score = liquidity_base * [1.0 - (spread_pct / 2.0), 0.5].max
 
@@ -1529,7 +1536,7 @@ module Options
           # Rails.logger.warn('  - ⚠️  No strikes passed all filters - consider adjusting criteria')
         elsif accepted_count < 3
           # Rails.logger.info("  - ℹ️  Limited strikes available - #{accepted_count} option(s) found")
-        else
+        else # rubocop:disable Style/EmptyElse
           # Rails.logger.info("  - ✅ Good strike selection - #{accepted_count} options available")
         end
       end

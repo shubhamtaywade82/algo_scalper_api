@@ -30,6 +30,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
            hget: nil,
            hgetall: {},
            hdel: true,
+           incrbyfloat: true,
            ttl: 3600,
            expire: true,
            scan_each: [].each)
@@ -37,6 +38,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
 
   before do
     # Reset singletons to avoid state leakage
+    Positions::ActivePositionsCache.instance.clear!
     Live::RedisPnlCache.instance.instance_variable_set(:@redis, mock_redis)
     Live::MarketFeedHub.instance.instance_variable_set(:@ws_client, nil)
     Live::MarketFeedHub.instance.instance_variable_set(:@running, false)
@@ -54,9 +56,9 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
     allow(WatchlistItem).to receive(:active).and_return([watchlist_item])
 
     # Mock environment variables
+    allow(ENV).to receive(:[]).and_call_original
     allow(ENV).to receive(:[]).with('DHANHQ_WS_WATCHLIST').and_return('NSE_FNO:12345,NSE_FNO:67890')
     allow(ENV).to receive(:[]).with('REDIS_URL').and_return('redis://localhost:6379/0')
-    allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('test_client_id')
     allow(ENV).to receive(:[]).with('CLIENT_ID').and_return('test_client_id')
     allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return('test_access_token')
@@ -405,7 +407,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Mock PositionTracker.active to return the tracker with eager loading
         active_relation = PositionTracker.where(id: tracker.id)
         allow(PositionTracker).to receive(:active).and_return(active_relation)
-        allow(active_relation).to receive(:eager_load).with(:instrument).and_return([tracker])
+        allow(active_relation).to receive(:includes).with(:instrument).and_return([tracker])
 
         expect(tracker).to receive(:mark_exited!)
 

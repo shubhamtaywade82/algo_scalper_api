@@ -34,11 +34,11 @@ class TradeAnalytic < ApplicationRecord
   # MAE = (Lowest Price - Entry Price) / Entry Price
   def mfe_pct
     return 0 if entry_price.to_f.zero?
-    max_favorable_excursion.to_f / entry_price.to_f
+    max_favorable_excursion.to_f / entry_price
   end
 
   def mae_pct
     return 0 if entry_price.to_f.zero?
-    max_adverse_excursion.to_f / entry_price.to_f
+    max_adverse_excursion.to_f / entry_price
   end
 end

@@ -52,7 +52,7 @@ class RedisUiController < ActionController::Base
     begin
       render json: redis_inspector.fetch(key: @key, db: @db)
     rescue StandardError => e
-      render json: { error: e.message }, status: :unprocessable_entity
+      render json: { error: e.message }, status: :unprocessable_content
     end
   end
 
@@ -64,14 +64,14 @@ class RedisUiController < ActionController::Base
       redis_inspector.delete(key: @key, db: @db)
       render json: { success: true, message: "Key '#{@key}' deleted" }
     rescue StandardError => e
-      render json: { error: e.message }, status: :unprocessable_entity
+      render json: { error: e.message }, status: :unprocessable_content
     end
   end
 
   def info
     render json: { info: redis_inspector.info }
   rescue StandardError => e
-    render json: { error: e.message }, status: :unprocessable_entity
+    render json: { error: e.message }, status: :unprocessable_content
   end
 
   private

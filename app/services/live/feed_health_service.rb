@@ -90,7 +90,7 @@ module Live
     end
 
     def status
-      feeds = DEFAULT_THRESHOLDS.keys | with_lock { (@timestamps.keys + @threshold_overrides.keys + @failures.keys) }
+      feeds = DEFAULT_THRESHOLDS.keys | with_lock { @timestamps.keys + @threshold_overrides.keys + @failures.keys }
 
       feeds.each_with_object({}) do |feed, memo|
         last_seen = with_lock { @timestamps[feed.to_sym] }

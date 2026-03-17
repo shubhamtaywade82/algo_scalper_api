@@ -10,7 +10,7 @@ module Risk
       def evaluate(context)
         return skip_result unless context.active?
 
-        pnl_pct = context.pnl_pct  # DECIMAL format (e.g., 0.30 for 30%)
+        pnl_pct = context.pnl_pct # DECIMAL format (e.g., 0.30 for 30%)
         return skip_result if pnl_pct.nil?
 
         # Get target from config (passed to rule on init)

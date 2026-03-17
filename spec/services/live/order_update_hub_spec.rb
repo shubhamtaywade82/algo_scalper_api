@@ -257,7 +257,7 @@ RSpec.describe Live::OrderUpdateHub do
 
   describe '#on_update' do
     it 'registers callback' do
-      callback = proc { |payload| puts payload }
+      callback = proc { |payload| }
 
       hub.on_update(&callback)
 
@@ -270,8 +270,8 @@ RSpec.describe Live::OrderUpdateHub do
     end
 
     it 'allows multiple callbacks' do
-      callback1 = proc { |p| puts "1: #{p}" }
-      callback2 = proc { |p| puts "2: #{p}" }
+      callback1 = proc { |p|  }
+      callback2 = proc { |p|  }
 
       hub.on_update(&callback1)
       hub.on_update(&callback2)

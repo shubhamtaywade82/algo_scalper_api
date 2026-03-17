@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'cgi'
 require 'singleton'
 require_relative '../telegram_notifier'
 
@@ -133,29 +134,35 @@ module Notifications
     def send_message(text)
       return unless enabled? && text.present?
 
-      ::TelegramNotifier.send_message(text, parse_mode: 'HTML')
+      # Messages are pre-formatted HTML — skip the Markdown→HTML converter to
+      # prevent it from re-escaping the tags we deliberately embedded.
+      ::TelegramNotifier.send_message(text, parse_mode: 'HTML', skip_formatter: true)
+    end
+
+    # Escape dynamic values so stray <, >, & characters don't break HTML parsing.
+    def h(value)
+      CGI.escapeHTML(value.to_s)
     end
 
     def format_entry_message(tracker, entry_data)
-      symbol = tracker.symbol || entry_data[:symbol] || 'N/A'
+      symbol     = h(tracker.symbol || entry_data[:symbol] || 'N/A')
       entry_price = tracker.entry_price&.to_f || entry_data[:entry_price] || 0.0
-      quantity = tracker.quantity || entry_data[:quantity] || 0
-      direction = tracker.direction || entry_data[:direction] || 'BUY'
-      index_key = tracker.index_key || entry_data[:index_key] || 'N/A'
-      risk_pct = entry_data[:risk_pct]
-      sl_price = entry_data[:sl_price]
-      tp_price = entry_data[:tp_price]
+      quantity   = tracker.quantity || entry_data[:quantity] || 0
+      direction  = tracker.direction || entry_data[:direction] || 'BUY'
+      index_key  = h(tracker.index_key || entry_data[:index_key] || 'N/A')
+      risk_pct   = entry_data[:risk_pct]
+      sl_price   = entry_data[:sl_price]
+      tp_price   = entry_data[:tp_price]
 
-      emoji = direction.to_s.upcase == 'BUY' ? '🟢' : '🔴'
-      direction_text = direction.to_s.upcase == 'BULLISH' ? 'BUY' : direction.to_s.upcase
+      emoji          = direction.to_s.upcase == 'BUY' ? '🟢' : '🔴'
+      direction_text = direction.to_s.upcase == 'BULLISH' ? 'BUY' : h(direction.to_s.upcase)
 
-      message = "#{emoji} <b>ENTRY</b>\n\n"
+      message  = "#{emoji} <b>ENTRY</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
       message += "📈 <b>Index:</b> #{index_key}\n"
       message += "💰 <b>Entry Price:</b> ₹#{entry_price.round(2)}\n"
       message += "📦 <b>Quantity:</b> #{quantity}\n"
       message += "🎯 <b>Direction:</b> #{direction_text}\n"
-
       message += "⚖️ <b>Risk:</b> #{(risk_pct * 100).round(2)}%\n" if risk_pct
 
       if sl_price && tp_price
@@ -163,18 +170,17 @@ module Notifications
         message += "🎯 <b>TP:</b> ₹#{tp_price.round(2)}\n"
       end
 
-      message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
+      message += "🆔 <b>Order No:</b> #{h(tracker.order_no)}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
-
       message
     end
 
     def format_exit_message(tracker, exit_reason, exit_price, pnl)
-      symbol = tracker.symbol || 'N/A'
-      entry_price = tracker.entry_price.to_f
+      symbol           = h(tracker.symbol || 'N/A')
+      entry_price      = tracker.entry_price.to_f
       exit_price_value = exit_price&.to_f || tracker.exit_price&.to_f || 0.0
-      quantity = tracker.quantity || 0
-      pnl_value = pnl&.to_f || tracker.last_pnl_rupees&.to_f || 0.0
+      quantity         = tracker.quantity || 0
+      pnl_value        = pnl&.to_f || tracker.last_pnl_rupees&.to_f || 0.0
 
       # Calculate PnL percentage from PnL value (includes broker fees) for consistency with exit reason
       # Exit reason shows PnL percentage (after fees), not price change percentage
@@ -192,7 +198,6 @@ module Notifications
                   0.0
                 end
 
-      # Determine emoji based on PnL
       emoji = if pnl_value.positive?
                 '✅'
               elsif pnl_value.negative?
@@ -201,29 +206,27 @@ module Notifications
                 '⚪'
               end
 
-      message = "#{emoji} <b>EXIT</b>\n\n"
+      message  = "#{emoji} <b>EXIT</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
       message += "💰 <b>Entry:</b> ₹#{entry_price.round(2)}\n"
       message += "💵 <b>Exit:</b> ₹#{exit_price_value.round(2)}\n"
       message += "📦 <b>Quantity:</b> #{quantity}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
 
-      if pnl_pct == 0.0
+      if pnl_pct.zero?
         message += "\n"
       else
         pnl_pct_emoji = pnl_pct.positive? ? '📈' : '📉'
         message += " (#{pnl_pct_emoji} #{pnl_pct.round(2)}%)\n"
       end
 
-      message += "📝 <b>Reason:</b> #{exit_reason}\n"
-      message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
+      message += "📝 <b>Reason:</b> #{h(exit_reason)}\n"
+      message += "🆔 <b>Order No:</b> #{h(tracker.order_no)}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
 
-      # Append trading stats if enabled in config (daily stats only)
       config = AlgoConfig.fetch[:telegram] || {}
       if config[:include_stats_on_exit] == true
         message += "\n\n"
-        # Get today's stats only
         message += format_trading_stats(PositionTracker.paper_trading_stats_with_pct(date: Time.zone.today))
       end
 
@@ -231,11 +234,11 @@ module Notifications
     end
 
     def format_pnl_message(tracker, pnl, pnl_pct)
-      symbol = tracker.symbol || 'N/A'
-      entry_price = tracker.entry_price.to_f
+      symbol        = h(tracker.symbol || 'N/A')
+      entry_price   = tracker.entry_price.to_f
       current_price = tracker.avg_price&.to_f || entry_price
       tracker.quantity || 0
-      pnl_value = pnl.to_f
+      pnl_value     = pnl.to_f
       pnl_pct_value = pnl_pct.to_f
 
       emoji = if pnl_value.positive?
@@ -244,59 +247,50 @@ module Notifications
                 pnl_value.negative? ? '📉' : '➡️'
               end
 
-      message = "#{emoji} <b>PnL Update</b>\n\n"
+      message  = "#{emoji} <b>PnL Update</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
       message += "💰 <b>Entry:</b> ₹#{entry_price.round(2)}\n"
       message += "💵 <b>Current:</b> ₹#{current_price.round(2)}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)}"
-
-      message += if pnl_pct_value == 0.0
+      message += if pnl_pct_value.zero?
                    "\n"
                  else
                    " (#{'+' if pnl_pct_value.positive?}#{pnl_pct_value.round(2)}%)\n"
                  end
-
-      message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
+      message += "🆔 <b>Order No:</b> #{h(tracker.order_no)}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
-
       message
     end
 
     def format_milestone_message(tracker, milestone, pnl, pnl_pct)
-      symbol = tracker.symbol || 'N/A'
-      pnl_value = pnl.to_f
+      symbol        = h(tracker.symbol || 'N/A')
+      pnl_value     = pnl.to_f
       pnl_pct_value = pnl_pct.to_f
 
-      emoji = '🎯'
-
-      message = "#{emoji} <b>Milestone Reached</b>\n\n"
+      message  = "🎯 <b>Milestone Reached</b>\n\n"
       message += "📊 <b>Symbol:</b> #{symbol}\n"
-      message += "🏆 <b>Milestone:</b> #{milestone}\n"
+      message += "🏆 <b>Milestone:</b> #{h(milestone)}\n"
       message += "💸 <b>PnL:</b> ₹#{pnl_value.round(2)} (#{'+' if pnl_pct_value.positive?}#{pnl_pct_value.round(2)}%)\n"
-      message += "🆔 <b>Order No:</b> #{tracker.order_no}\n"
+      message += "🆔 <b>Order No:</b> #{h(tracker.order_no)}\n"
       message += "⏰ <b>Time:</b> #{Time.current.strftime('%H:%M:%S')}"
-
       message
     end
 
     def format_risk_alert(message, severity)
       emoji = case severity
-              when 'error'
-                '🚨'
-              when 'warning'
-                '⚠️'
-              else
-                'ℹ️'
+              when 'error'   then '🚨'
+              when 'warning' then '⚠️'
+              else                'ℹ️'
               end
 
-      "#{emoji} <b>Risk Alert</b>\n\n#{message}\n\n⏰ #{Time.current.strftime('%H:%M:%S')}"
+      "#{emoji} <b>Risk Alert</b>\n\n#{h(message)}\n\n⏰ #{Time.current.strftime('%H:%M:%S')}"
     end
 
     def format_trading_stats(stats)
-      total_pnl_emoji = stats[:total_pnl_rupees] >= 0 ? '📈' : '📉'
+      total_pnl_emoji    = stats[:total_pnl_rupees] >= 0 ? '📈' : '📉'
       realized_pnl_emoji = stats[:realized_pnl_rupees] >= 0 ? '✅' : '❌'
 
-      message = "📊 <b>Daily Trading Statistics</b>\n"
+      message  = "📊 <b>Daily Trading Statistics</b>\n"
       message += "📅 <b>Date:</b> #{Time.zone.today.strftime('%Y-%m-%d')}\n\n"
       message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
       message += "<b>#{total_pnl_emoji} Total PnL:</b> ₹#{stats[:total_pnl_rupees].round(2)} (#{stats[:total_pnl_pct].round(2)}%)\n"
@@ -313,7 +307,6 @@ module Notifications
       message += "<b>📊 Avg Unrealized PnL %:</b> #{stats[:avg_unrealized_pnl_pct].round(2)}%\n"
       message += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
       message += "⏰ <b>Updated:</b> #{Time.current.strftime('%Y-%m-%d %H:%M:%S')}"
-
       message
     end
   end

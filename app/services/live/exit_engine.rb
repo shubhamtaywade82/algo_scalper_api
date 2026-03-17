@@ -55,18 +55,25 @@ module Live
       return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
 
       ltp = safe_ltp(tracker)
-      result = @router.exit_market(tracker, client_order_id: tracker.exit_coid)
-      success = success?(result)
 
-      unless success
-        Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{result.inspect} (coid: #{tracker.exit_coid})")
-        return { success: false, reason: 'router_failed', error: result }
+      cmd_result = Orders::Commands::ExitOrderCommand.new(
+        gateway: @router,
+        tracker: tracker,
+        client_order_id: tracker.exit_coid,
+        reason: reason
+      ).call
+
+      unless cmd_result.success?
+        Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{cmd_result.reason} (coid: #{tracker.exit_coid})")
+        return { success: false, reason: 'router_failed', error: cmd_result.error || cmd_result.payload }
       end
 
+      # Extract raw broker response from command payload for downstream helpers
+      result = cmd_result.payload[:raw] || {}
       persist_broker_ack!(tracker, result)
 
-      # Use exit_price from gateway if available, fallback to LTP
-      exit_price = (result.is_a?(Hash) && result[:exit_price]) || ltp
+      # Use exit_price from command payload if available, fallback to LTP
+      exit_price = cmd_result.payload[:exit_price] || ltp
 
       finalize_exit!(tracker, exit_price: exit_price, reason: reason)
     rescue StandardError => e
@@ -106,7 +113,7 @@ module Live
     # @return [void]
     def persist_broker_ack!(tracker, result)
       order_id = result.is_a?(Hash) ? (result[:order_id] || result['order_id']) : nil
-      tracker.update_columns(
+      tracker.update_columns( # rubocop:disable Rails/SkipsModelValidations
         exit_sent_at: Time.current,
         exit_order_id: order_id,
         updated_at: Time.current

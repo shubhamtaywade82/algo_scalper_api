@@ -50,8 +50,10 @@ RSpec.describe CandleSeries do
       it 'loads candles from array' do
         series.load_from_raw(raw_data)
         expect(series.candles.size).to eq(2)
-        expect(series.candles.first.open).to eq(25_000.0)
-        expect(series.candles.first.close).to eq(25_050.0)
+        # Sorted chronologically: 1.hour.ago comes first
+        expect(series.candles.first.open).to eq(24_950.0)
+        expect(series.candles.first.close).to eq(24_980.0)
+        expect(series.candles.last.open).to eq(25_000.0)
       end
     end
 
@@ -70,7 +72,8 @@ RSpec.describe CandleSeries do
       it 'loads candles from hash' do
         series.load_from_raw(raw_data)
         expect(series.candles.size).to eq(2)
-        expect(series.candles.first.open).to eq(25_000.0)
+        # Sorted chronologically: 1.hour.ago comes first
+        expect(series.candles.first.open).to eq(24_950.0)
       end
     end
 

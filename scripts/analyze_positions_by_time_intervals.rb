@@ -174,9 +174,9 @@ puts 'Time       | Days     | Trades | Exited | Win%     | Total PnL ₹  | Avg 
 puts '-' * 100
 
 time_period_metrics.each do |metrics|
-  metrics[:exited_trades].positive? ? "#{metrics[:winners]}/#{metrics[:losers]}" : 'N/A'
+  wl_ratio = metrics[:exited_trades].positive? ? "#{metrics[:winners]}/#{metrics[:losers]}" : 'N/A'
 
-  puts format('%-10s | %-8d | %-6d | %-6d | %-8.1f | %-12.2f | %-15.2f | %-15s',
+  puts format('%-10s | %-8d | %-6d | %-6d | %-8.1f | %-12.2f | %-15.2f | %-15s (%s)',
               metrics[:time_key],
               metrics[:interval_count],
               metrics[:total_trades],
@@ -184,7 +184,8 @@ time_period_metrics.each do |metrics|
               metrics[:win_rate],
               metrics[:total_pnl],
               metrics[:avg_pnl_per_trade],
-              metrics[:profitability])
+              metrics[:profitability],
+              wl_ratio)
 end
 
 puts '-' * 100

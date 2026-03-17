@@ -196,6 +196,7 @@ module Options
     # Get spot price for index
     # @param index_key [String] Index key
     # @return [Float, nil] Spot price
+    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
     def get_spot_price(index_key)
       index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == index_key.to_s.upcase }
       return nil unless index_cfg
@@ -221,6 +222,7 @@ module Options
 
       nil
     end
+    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     def candidate_valid?(candidate, rules, premium_filter)
       # Validate liquidity
@@ -252,6 +254,7 @@ module Options
       candidate[:ltp]&.to_f || candidate[:last_price]&.to_f
     end
 
+    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
     def build_instrument_hash(candidate, index_key, ltp, rules, max_otm_depth)
       {
         index: index_key,
@@ -274,12 +277,14 @@ module Options
         max_otm_allowed: max_otm_depth
       }
     end
+    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     # Calculate OTM depth for selected strike (0=ATM, 1=1OTM, 2=2OTM)
     # @param candidate [Hash] Selected candidate
     # @param index_key [String] Index key
     # @param rules [IndexRules] Index rules instance
     # @return [Integer] OTM depth (0, 1, or 2)
+    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
     def calculate_otm_depth(candidate, index_key, rules)
       strike = candidate[:strike]&.to_f || candidate[:strike_price]&.to_f
       return 0 unless strike
@@ -301,6 +306,7 @@ module Options
         -1 # Deeper OTM (should not happen after filtering)
       end
     end
+    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
   end
   # rubocop:enable Metrics/ClassLength
 end

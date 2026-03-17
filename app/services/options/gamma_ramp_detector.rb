@@ -21,11 +21,11 @@ module Options
 
       # 1. Find strike with Max OI (OI cluster)
       # Focus only on the requested side
-      strikes_data = @chain_data[:oc].map do |strike, data|
+      strikes_data = @chain_data[:oc].filter_map do |strike, data|
         option = data[type]
         next nil unless option
         { strike: strike.to_f, oi: option['oi'].to_i, volume: option['volume'].to_i, data: option }
-      end.compact
+      end
 
       return nil if strikes_data.empty?
 

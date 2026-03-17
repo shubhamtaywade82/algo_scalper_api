@@ -159,16 +159,20 @@ module Smc
     end
 
     def ltf_entry(htf, _mtf, ltf)
-      avrz = Avrz::Detector.new(@instrument.candles(interval: LTF_INTERVAL))
-      return :no_trade unless avrz.rejection?
+      # State-machine driven entry: Trap -> Expansion -> Trend -> Entry Zone
+      # We check if LTF is in a phase that supports the bias
 
-      if htf.pd.discount? && ltf.liquidity.sell_side_taken? && ltf.structure.choch?
-        :call
-      elsif htf.pd.premium? && ltf.liquidity.buy_side_taken? && ltf.structure.choch?
-        :put
-      else
-        :no_trade
+      if htf.pd.discount?
+        # CALL bias: HTF in discount
+        # Need LTF to have had a trap (liquidity sweep) and now showing shift (CHoCH)
+        return :call if ltf.phase == :trap_detected || (ltf.liquidity.sell_side_taken? && ltf.structure.trend == :bullish)
+      elsif htf.pd.premium?
+        # PUT bias: HTF in premium
+        # Need LTF to have had a trap (liquidity sweep) and now showing shift (CHoCH)
+        return :put if ltf.phase == :trap_detected || (ltf.liquidity.buy_side_taken? && ltf.structure.trend == :bearish)
       end
+
+      :no_trade
     end
 
     def notify(decision, htf, mtf, ltf)

@@ -46,7 +46,7 @@ def tally_positions
     candle = series.candles.find { |c| c.timestamp == candle_time }
 
     if candle
-      within_range = entry_price >= candle.low.to_f && entry_price <= candle.high.to_f
+      within_range = entry_price.between?(candle.low.to_f, candle.high.to_f)
       range_str = "[L: #{candle.low.to_f}, H: #{candle.high.to_f}]"
 
       if within_range

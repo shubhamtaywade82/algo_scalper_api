@@ -34,8 +34,8 @@ feature_flags:
   enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
   enable_auto_subscribe_unsubscribe: true
   enable_demand_driven_services: true
-  enable_underlying_aware_exits: false
-  enable_peak_drawdown_activation: false
+  enable_underlying_aware_exits: true
+  enable_peak_drawdown_activation: true
   auto_paper_on_insufficient_balance: false
 
 # DhanHQ broker settings
@@ -52,6 +52,7 @@ indices:
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -95,6 +96,7 @@ indices:
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -138,6 +140,7 @@ indices:
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
+    max_concurrent_per_index: 2
     direction: bullish
 
     premium_band:
@@ -191,14 +194,14 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.12 # -12% STOP LOSS
-  tp_pct: 0.50 # +50% TAKE PROFIT
+  sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
+  tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
   per_trade_risk_pct: 0.15
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
     enabled: true
-    target_pct: 0.30 # 30% - increased from 15% to allow larger moves
+    target_pct: 0.20 # 20% safety net for options
 
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
@@ -218,6 +221,26 @@ risk:
   rr_profit_booking:
     enabled: true
     target_rr: 2.5        # Exit fully at 2.5R (e.g., if SL is 10%, TP at 25%)
+
+  # Exit-layer overrides (optional). Price-based structure invalidation uses these when set.
+  exits:
+    structure_invalidation:
+      enabled: true           # Re-enabled with options-aware dual condition
+      min_hold_seconds: 120   # No structure exit until position age >= this (reduces churn)
+      buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
+      underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
+      premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
+    premium_momentum_failure:
+      enabled: true
+      default_stall_minutes: 3
+      index_overrides:
+        SENSEX:
+          stall_minutes: 4
+      session_overrides:
+        chop_decay:
+          stall_minutes_add: 2
+        close_gamma:
+          stall_minutes_add: 2
 
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
@@ -240,17 +263,27 @@ risk:
     expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
 
     nifty:
-      early_trigger: 0.03         # Phase 1: Survival (+5% profit → -12% SL)
-      early_sl_offset: -0.12
-      breakeven_trigger: 0.08    # Phase 2: Breakeven at +15.7% (25% of avg 62.88% max gain)
-      activation_trigger: 0.15    # Phase 3: HWM Trailing at +20%
-      trailing_distance: 0.2    # 38.6% from HWM (80% of avg 48.3% retrace)
+      early_trigger: 0.03         # Phase 1: Survival (+3% profit → -8% SL)
+      early_sl_offset: -0.08
+      breakeven_trigger: 0.07     # Phase 2: Breakeven at +7%
+      activation_trigger: 0.12    # Phase 3: HWM Trailing at +12%
+      trailing_distance: 0.06     # 6% from HWM (was 1.8% — too tight)
+      adaptive_drawdown:
+        - { min_profit: 0.03, drawdown: 0.06 }
+        - { min_profit: 0.12, drawdown: 0.05 }
+        - { min_profit: 0.25, drawdown: 0.04 }
+        - { min_profit: 0.40, drawdown: 0.03 }
     sensex:
-      early_trigger: 0.03         # Phase 1: Survival (+6% profit → -10% SL)
-      early_sl_offset: -0.10
-      breakeven_trigger: 0.08     # Phase 2: Breakeven at +12%
-      activation_trigger: 0.15    # Phase 3: HWM Trailing at +18%
-      trailing_distance: 0.2     # 80% from HWM (Based on 5-week avg 99.8% retrace)
+      early_trigger: 0.03
+      early_sl_offset: -0.08
+      breakeven_trigger: 0.07
+      activation_trigger: 0.12
+      trailing_distance: 0.06
+      adaptive_drawdown:
+        - { min_profit: 0.03, drawdown: 0.06 }
+        - { min_profit: 0.12, drawdown: 0.05 }
+        - { min_profit: 0.25, drawdown: 0.04 }
+        - { min_profit: 0.40, drawdown: 0.03 }
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
@@ -458,6 +491,9 @@ position_sizing:
       NIFTY: 0.01 # 1% floor
       BANKNIFTY: 0.012 # 1.2% floor
       SENSEX: 0.015 # 1.5% floor
+    # Emergency peak-loss exit: exit immediately if position had significant profit and flips to loss
+    emergency_peak_loss_exit: true    # Enable emergency exit
+    emergency_min_peak_pct: 0.10     # 10% minimum peak before emergency logic applies
 
   # Reverse (below entry) dynamic loss tightening
   reverse_loss:
@@ -850,3 +886,27 @@ ai:
   #   - AI_AGENT_STREAM_TIMEOUT: Timeout for streaming responses per iteration (default: 60 seconds)
   #     If AI doesn't respond within this time, iteration is aborted and retried
   #     Example: export AI_AGENT_STREAM_TIMEOUT=30
+
+# ===== ENTRY QUALITY FILTER =====
+entry_quality:
+  enforce: true                      # false = log-only mode (no blocking)
+  min_score: 55                      # tightened minimum quality score (0-100)
+  gates:
+    min_adx: 25                      # hard gate: minimum ADX value
+    block_choppy_regime: true        # hard gate: block CHOPPY regime
+    min_body_ratio: 0.40             # hard gate: minimum candle body/range ratio
+    require_momentum_confirm: true   # hard gate: close must be beyond Supertrend level
+  scoring:
+    candle_body_weight: 25           # max points for candle body strength
+    adx_strength_weight: 20          # max points for ADX bonus
+    bos_weight: 20                   # max points for break of structure
+    range_expansion_weight: 20       # max points for range expansion
+    momentum_weight: 15              # max points for momentum strength
+  session_overrides:
+    chop_decay:
+      min_score: 60
+      gates:
+        min_adx: 30
+  index_overrides:
+    SENSEX:
+      min_adx: 25                    # SENSEX keeps slightly higher ADX floor

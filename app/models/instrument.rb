@@ -242,7 +242,10 @@ class Instrument < ApplicationRecord
     )
     return nil unless data
 
-    filtered_data = filter_option_chain_data(data)
+    normalized = normalize_option_chain_response(data)
+    return nil unless normalized
+
+    filtered_data = filter_option_chain_data(normalized)
 
     { last_price: data['last_price'], oc: filtered_data }
   rescue StandardError => e
@@ -266,8 +269,37 @@ class Instrument < ApplicationRecord
     Time.current - cached_at > cache_duration_minutes.minutes
   end
 
+  # Normalize DhanHQ option chain response to consistent Hash format.
+  # DhanHQ 2.7.0+ returns {"strikes": [{strike:, call:, put:}, ...]}
+  # Legacy format:        {"oc": {"23400": {"ce": {...}, "pe": {...}}, ...}}
+  # Returns: Hash with string strike keys and ce/pe sub-hashes
+  def normalize_option_chain_response(data)
+    # Legacy format — already a hash keyed by strike
+    return data if data['oc'].is_a?(Hash)
+
+    # DhanHQ 2.7.0+ format — array of strike objects
+    strikes = data['strikes']
+    return data if strikes.nil? && data['oc']
+
+    return nil unless strikes.is_a?(Array)
+
+    oc_hash = {}
+    strikes.each do |strike_obj|
+      key = strike_obj['strike'].to_f.to_s
+      oc_hash[key] = {
+        'ce' => strike_obj['call'],
+        'pe' => strike_obj['put']
+      }
+    end
+
+    data.merge('oc' => oc_hash)
+  end
+
   def filter_option_chain_data(data)
-    data['oc'].select do |_strike, option_data|
+    oc = data['oc']
+    return {} unless oc.is_a?(Hash)
+
+    oc.select do |_strike, option_data|
       call_data = option_data['ce']
       put_data = option_data['pe']
 

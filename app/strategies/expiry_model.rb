@@ -25,8 +25,8 @@ module Strategies
       return false if s == :closed
 
       # Institutional rule: On expiry days, avoid trading during midday decay period
-      if expiry_day?(symbol)
-        return false if s == :midday
+      if expiry_day?(symbol) && (s == :midday)
+        return false
       end
 
       true
@@ -45,16 +45,15 @@ module Strategies
       # NIFTY: Thursday (4)
       # SENSEX/BANKEX: Friday (5)
 
-      case
-      when sym.include?('SENSEX') || sym.include?('BANKEX')
+      if sym.include?('SENSEX') || sym.include?('BANKEX')
         today == 5
-      when sym.include?('NIFTY') && !sym.include?('BANK') && !sym.include?('FIN') && !sym.include?('MIDCP')
+      elsif sym.include?('NIFTY') && sym.exclude?('BANK') && sym.exclude?('FIN') && sym.exclude?('MIDCP')
         today == 4
-      when sym.include?('BANKNIFTY')
+      elsif sym.include?('BANKNIFTY')
         today == 3
-      when sym.include?('FINNIFTY')
+      elsif sym.include?('FINNIFTY')
         today == 2
-      when sym.include?('MIDCPNIFTY')
+      elsif sym.include?('MIDCPNIFTY')
         today == 1
       else
         false
