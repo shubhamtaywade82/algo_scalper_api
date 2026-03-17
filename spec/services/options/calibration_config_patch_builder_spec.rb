@@ -99,6 +99,13 @@ RSpec.describe Options::CalibrationConfigPatchBuilder do
       expect(actual).to be_within(0.001).of(expected)
     end
 
+    it 'derives profit_floor lock_pct as avg_gain * 0.20 / 100 clamped to 0.06..0.15' do
+      # 14.2 * 0.20 / 100 = 0.0284 → clamped to 0.06 (below minimum)
+      expected = [[14.2 * 0.20 / 100.0, 0.06].max, 0.15].min
+      actual = patch.dig('risk', 'profit_floor', 'lock_pct')
+      expect(actual).to be_within(0.001).of(expected)
+    end
+
     it 'uses the correct symbol key for institutional_trailing' do
       sensex_patch = described_class.build(combined_stats: combined_stats, symbol: 'SENSEX')
       expect(sensex_patch.dig('risk', 'institutional_trailing')).to have_key('sensex')
