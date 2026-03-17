@@ -85,12 +85,22 @@
 
       </div>
     </div>
+
+    <!-- Calibration Runs Panels -->
+    <div class="mt-12 max-w-7xl mx-auto w-full space-y-6">
+      <CalibrationRunsPanel
+        v-for="sym in ['NIFTY', 'SENSEX']"
+        :key="sym"
+        :symbol="sym"
+      />
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import RecursiveFormNode from '../components/settings/RecursiveFormNode.vue'
+import CalibrationRunsPanel from '../components/settings/CalibrationRunsPanel.vue'
 
 const configRoot = ref(null)
 const activeSection = ref('')
