@@ -13,14 +13,17 @@ module Options
   # adaptive_drawdown is deliberately excluded — it is an array-of-hashes
   # that cannot be safely deep-merged with plain Hash#deep_merge.
   class CalibrationConfigPatchBuilder
-    CHANGE_THRESHOLD = 0.10  # 10% minimum change to include a key
+    CHANGE_THRESHOLD = 0.10 # 10% minimum change to include a key
 
     def self.build(combined_stats:, symbol:)
       new(combined_stats: combined_stats, symbol: symbol).build
     end
 
     def initialize(combined_stats:, symbol:)
-      @stats  = combined_stats
+      # deep_symbolize_keys ensures consistent access regardless of whether the
+      # caller passed a symbol-keyed hash (from StrikeAggregator) or a
+      # string-keyed hash (e.g. CalibrationRun#raw_stats loaded from JSONB).
+      @stats  = combined_stats.deep_symbolize_keys
       @symbol = symbol.to_s.downcase
     end
 
@@ -54,7 +57,7 @@ module Options
           institutional_trailing: {
             @symbol.to_sym => {
               trailing_distance: distance,
-              early_trigger:     early_trigger,
+              early_trigger: early_trigger,
               breakeven_trigger: breakeven,
               activation_trigger: activation_it
             }
@@ -74,7 +77,7 @@ module Options
           sub = filter_significant_changes(value, current_value || {}, path + [key])
           result[key] = sub unless sub.empty?
         elsif significant_change?(value, current_value)
-          result[key] = value.round(4)
+          result[key] = value
         end
       end
       result
