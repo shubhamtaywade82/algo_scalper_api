@@ -178,7 +178,6 @@ Translates weighted calibration stats into the exact config structure `algo.yml`
 | `institutional_trailing.breakeven_trigger` | `activation_pct × 1.5` | 0.040..0.12 | |
 | `institutional_trailing.activation_trigger` | `target_pct × 0.55` | 0.08..0.20 | |
 | `institutional_trailing.trailing_distance` | `drawdown_pct × 1.1` | 0.030..0.12 | |
-| `institutional_trailing.adaptive_drawdown` | `[td, td×0.9, td×0.75, td×0.6]` | each ≥ 0.020 | `td` = trailing_distance |
 | `risk.profit_floor.lock_pct` | `avg_gain × 0.20 / 100` | 0.06..0.15 | |
 | `risk.profit_floor.trail_pct` | `1.0 - (avg_retrace_abs × 0.8 / 100)` | 0.55..0.92 | |
 | `risk.time_stop.trend.{symbol}` | session-aware (from existing `suggested_time_stop` logic) | 6..30 min | |
@@ -186,6 +185,8 @@ Translates weighted calibration stats into the exact config structure `algo.yml`
 `institutional_trailing` is nested under the symbol key (`:nifty` or `:sensex`).
 
 `early_sl_offset` is not derived from stats — it remains at its current configured value (insufficient data to derive a meaningful stop offset from historical candles alone).
+
+`adaptive_drawdown` is **excluded** from auto-derived keys. It is an array-of-hashes config key (`[{min_profit:, drawdown:}, ...]`) with `min_profit:` tier levels that are not derivable from historical candle stats. Including it would require `AlgoConfig.send(:deep_merge_hashes_with_arrays, ...)` and full tier reconstruction. Instead, `CalibrationConfigPatchBuilder` leaves `adaptive_drawdown` untouched — the trader adjusts it manually using `trailing_distance` as a reference point. **This is the only array-valued key in `institutional_trailing`; all other emitted keys are scalars, keeping `apply!`'s use of plain `Hash#deep_merge` safe.**
 
 ---
 
@@ -197,8 +198,12 @@ Translates weighted calibration stats into the exact config structure `algo.yml`
 class WeeklyCalibrationJob < ApplicationJob
   queue_as :background
 
-  def perform(symbol: nil, weeks: 52)
-    symbols = symbol ? [symbol.upcase] : %w[NIFTY SENSEX]
+  # Use positional defaults (not keyword args) — Active Job serializes
+  # keyword arguments as a single positional hash, which causes ArgumentError
+  # with keyword-only signatures in Ruby 3.3. Positional defaults work
+  # correctly for both scheduler (no args) and manual enqueue.
+  def perform(symbol = nil, weeks = 52)
+    symbols = symbol ? [symbol.to_s.upcase] : %w[NIFTY SENSEX]
     symbols.each do |sym|
       result = Options::AutoCalibrator.call(symbol: sym, weeks: weeks)
       if result
@@ -214,7 +219,7 @@ class WeeklyCalibrationJob < ApplicationJob
 end
 ```
 
-Processes symbols sequentially to respect DhanHQ rate limits. Each symbol is independently rescued — a NIFTY failure does not prevent SENSEX from running. `AutoCalibrator.call` is documented as non-raising and returns `nil` on total failure; the job checks for nil before calling `notify` vs `notify_error`.
+Processes symbols sequentially to respect DhanHQ rate limits. Each symbol is independently rescued — a NIFTY failure does not prevent SENSEX from running. Enqueue with `WeeklyCalibrationJob.perform_later('NIFTY')` (positional) not `perform_later(symbol: 'NIFTY')` (keyword).
 
 ### `config/recurring.yml` addition
 
