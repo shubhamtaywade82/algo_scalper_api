@@ -194,14 +194,14 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
-  sl_pct: 0.06 # -6% STOP LOSS
-  tp_pct: 0.12 # +12% TAKE PROFIT
+  sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
+  tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
   per_trade_risk_pct: 0.15
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
     enabled: true
-    target_pct: 0.15 # 15% safety net for options
+    target_pct: 0.20 # 20% safety net for options
 
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
@@ -263,27 +263,27 @@ risk:
     expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
 
     nifty:
-      early_trigger: 0.025        # Phase 1: Survival (+2.5% profit → -6% SL)
-      early_sl_offset: -0.06
-      breakeven_trigger: 0.05     # Phase 2: Breakeven at +5%
-      activation_trigger: 0.10    # Phase 3: HWM Trailing at +10%
-      trailing_distance: 0.018    # Base trailing distance (tier 1)
+      early_trigger: 0.03         # Phase 1: Survival (+3% profit → -8% SL)
+      early_sl_offset: -0.08
+      breakeven_trigger: 0.07     # Phase 2: Breakeven at +7%
+      activation_trigger: 0.12    # Phase 3: HWM Trailing at +12%
+      trailing_distance: 0.06     # 6% from HWM (was 1.8% — too tight)
       adaptive_drawdown:
-        - { min_profit: 0.025, drawdown: 0.018 }
-        - { min_profit: 0.10, drawdown: 0.022 }
-        - { min_profit: 0.20, drawdown: 0.025 }
-        - { min_profit: 0.35, drawdown: 0.030 }
+        - { min_profit: 0.03, drawdown: 0.06 }
+        - { min_profit: 0.12, drawdown: 0.05 }
+        - { min_profit: 0.25, drawdown: 0.04 }
+        - { min_profit: 0.40, drawdown: 0.03 }
     sensex:
-      early_trigger: 0.025
-      early_sl_offset: -0.06
-      breakeven_trigger: 0.05
-      activation_trigger: 0.10
-      trailing_distance: 0.018
+      early_trigger: 0.03
+      early_sl_offset: -0.08
+      breakeven_trigger: 0.07
+      activation_trigger: 0.12
+      trailing_distance: 0.06
       adaptive_drawdown:
-        - { min_profit: 0.025, drawdown: 0.018 }
-        - { min_profit: 0.10, drawdown: 0.022 }
-        - { min_profit: 0.20, drawdown: 0.025 }
-        - { min_profit: 0.35, drawdown: 0.030 }
+        - { min_profit: 0.03, drawdown: 0.06 }
+        - { min_profit: 0.12, drawdown: 0.05 }
+        - { min_profit: 0.25, drawdown: 0.04 }
+        - { min_profit: 0.40, drawdown: 0.03 }
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
