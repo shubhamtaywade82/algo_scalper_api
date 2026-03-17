@@ -92,6 +92,12 @@ module Api
 
       ai_response = client.chat(messages: messages, temperature: 0.3)
 
+      # OpenaiClient#chat rescues all StandardError internally and returns nil on failure.
+      # Treat nil as a service failure — exception-based rescues below are defense-in-depth only.
+      if ai_response.nil?
+        return render json: { error: 'AI service unavailable' }, status: :service_unavailable
+      end
+
       render json: { snapshot: ai_response, generated_at: Time.current.iso8601 }
     rescue Net::ReadTimeout, Faraday::TimeoutError => e
       Rails.logger.warn("[AnalysisController] ai_snapshot timeout: #{e.class}")

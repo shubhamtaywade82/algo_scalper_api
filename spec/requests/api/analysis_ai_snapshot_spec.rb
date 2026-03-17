@@ -40,10 +40,11 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     end
   end
 
-  context 'when OpenaiClient raises Net::ReadTimeout' do
+  # OpenaiClient#chat rescues all StandardError internally and returns nil on failure
+  # (timeouts, connection errors, etc.). This is the actual production failure path.
+  context 'when OpenaiClient returns nil (service failure / timeout)' do
     before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: true)
-      allow(client).to receive(:chat).and_raise(Net::ReadTimeout)
+      client = instance_double(Services::Ai::OpenaiClient, enabled?: true, chat: nil)
       allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
     end
 
@@ -55,20 +56,7 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     it 'returns a human-readable error' do
       post '/api/analysis/NIFTY/ai_snapshot'
       json = response.parsed_body
-      expect(json['error']).to include('timed out')
-    end
-  end
-
-  context 'when OpenaiClient raises a generic error' do
-    before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: true)
-      allow(client).to receive(:chat).and_raise(StandardError, 'connection refused')
-      allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
-    end
-
-    it 'returns 503' do
-      post '/api/analysis/NIFTY/ai_snapshot'
-      expect(response).to have_http_status(:service_unavailable)
+      expect(json['error']).to include('unavailable')
     end
   end
 
