@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_13_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_17_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -27,6 +27,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_090000) do
     t.index ["instrument_id"], name: "index_best_indicator_params_on_instrument_id"
     t.index ["metrics"], name: "index_best_indicator_params_on_metrics", using: :gin
     t.index ["params"], name: "index_best_indicator_params_on_params", using: :gin
+  end
+
+  create_table "calibration_runs", force: :cascade do |t|
+    t.datetime "applied_at"
+    t.string "applied_by"
+    t.datetime "created_at", null: false
+    t.boolean "is_regime_shift", default: false, null: false
+    t.jsonb "proposed_patch", default: {}, null: false
+    t.jsonb "raw_stats", default: {}, null: false
+    t.string "regime_reason"
+    t.string "strike_mode", default: "atm_plus_minus", null: false
+    t.string "symbol", null: false
+    t.datetime "updated_at", null: false
+    t.integer "weeks_analyzed", default: 52, null: false
+    t.index ["applied_at"], name: "index_calibration_runs_on_applied_at_not_null", where: "(applied_at IS NOT NULL)"
+    t.index ["proposed_patch"], name: "index_calibration_runs_on_proposed_patch", using: :gin
+    t.index ["raw_stats"], name: "index_calibration_runs_on_raw_stats", using: :gin
+    t.index ["symbol", "created_at"], name: "index_calibration_runs_on_symbol_and_created_at"
   end
 
   create_table "derivatives", force: :cascade do |t|
