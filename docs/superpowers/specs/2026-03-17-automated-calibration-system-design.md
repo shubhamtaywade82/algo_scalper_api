@@ -81,7 +81,7 @@ Options::ExpiryCalendar.windows(symbol: 'NIFTY', weeks: 52)
 
 **Expiry day map:**
 ```ruby
-EXPIRY_WEEKDAY = { 'NIFTY' => 4, 'SENSEX' => 5 }.freeze  # Thu=4, Fri=5 (Date#wday)
+EXPIRY_WEEKDAY = { 'NIFTY' => 4, 'SENSEX' => 5 }.freeze  # Thu=4, Fri=5 — uses Date#wday (Sunday=0 convention, NOT Date#cwday)
 ```
 
 Extensible: adding a new symbol requires one line in the constant. Raises `ArgumentError` for unknown symbols.
@@ -162,6 +162,9 @@ Compares the most recent 4-week rolling window of `CalibrationRun` stats against
 Translates weighted calibration stats into the exact config structure `algo.yml` uses. Only outputs keys where the derived value differs from the current `AlgoConfig.fetch` value by more than 10% — keeps the patch minimal.
 
 **Input:** combined stats from `StrikeAggregator` (`avg_gain`, `avg_retrace_abs`, `avg_loss_abs`, `avg_oc`, `oc_stddev`, sessions)
+
+**Unit convention for all input stat keys:** All `avg_*` and `oc_stddev` values are **percentage points** (e.g., `14.2` for 14.2%), not decimal fractions. This matches how `HistoricalCalibrationEngine` stores them (sourced directly from CSV percentage columns). The `/100` terms throughout the formula table are intentional — they convert percentage-point stats into the project's decimal config format (`0.12` = 12%).
+
 **Output:** nested hash with **string keys** (call `.deep_stringify_keys` before returning) — required for correct JSON round-trip through `calibration_runs.proposed_patch` (JSONB) and the `apply!` deep-merge path
 
 **Derivation formulas** (all clamped to safe ranges):
@@ -215,13 +218,17 @@ Processes symbols sequentially to respect DhanHQ rate limits. Each symbol is ind
 
 ### `config/recurring.yml` addition
 
+Add under the **`production:`** environment key only (matching all other production-only jobs in `config/recurring.yml`). Do not add under `development:` — calibration should not run automatically on developer machines.
+
 ```yaml
-weekly_options_calibration:
-  class: WeeklyCalibrationJob
-  schedule: every Sunday at 6:00 am Asia/Kolkata
-  queue_name: background
-  priority: 3
-  description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
+production:
+  # ... existing entries ...
+  weekly_options_calibration:
+    class: WeeklyCalibrationJob
+    schedule: every Sunday at 6:00 am Asia/Kolkata
+    queue_name: background
+    priority: 3
+    description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
 ```
 
 ---
