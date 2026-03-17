@@ -88,3 +88,10 @@ production:
     queue_name: background
     priority: 5
     description: "AI technical analysis for SENSEX - market hours only, runs every 15 minutes (aligns with SMC scanner)"
+
+  weekly_options_calibration:
+    class: WeeklyCalibrationJob
+    schedule: every Sunday at 6:00 am Asia/Kolkata
+    queue_name: background
+    priority: 3
+    description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
