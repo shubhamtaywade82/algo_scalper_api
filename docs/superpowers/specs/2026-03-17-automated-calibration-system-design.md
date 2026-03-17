@@ -297,6 +297,145 @@ end
 | `GET` | `/api/calibration_runs` | List recent runs (symbol filter, pending/applied filter) |
 | `GET` | `/api/calibration_runs/:id` | Full patch + stats for one run |
 | `POST` | `/api/calibration_runs/:id/apply` | Apply patch to settings, set `applied_at`; 422 if already applied |
+| `POST` | `/api/analysis/:index_key/ai_snapshot` | On-demand Ollama AI analysis for current market context |
+
+---
+
+## Dashboard UI
+
+### Settings view — `CalibrationRunsPanel.vue` (new)
+
+New section added at the bottom of `Settings.vue`, below the existing config tree editor. Displays the last 5 `CalibrationRun` records per symbol, ordered newest first.
+
+**Layout per run:**
+```
+┌─────────────────────────────────────────────────────────┐
+│ SENSEX  2026-03-23  Score: 4.2  Confidence: high        │
+│ ⚠️ REGIME SHIFT — avg_retrace_abs jumped +1.8σ          │
+│                                                          │
+│ trailing.activation_pct:    0.025 → 0.030               │
+│ institutional_trailing.sensex.breakeven_trigger: ...     │
+│                                                          │
+│ [  APPLY  ]   52 weeks · ATM±1                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+- **Pending runs**: highlighted border (cyan), Apply button active
+- **Applied runs**: greyed out, shows `Applied ${date} via ${applied_by}` instead of Apply button
+- **Regime shift runs**: amber warning badge
+- Patch diff shows only changed keys (same logic as Telegram message — keys differing >10% from current config)
+
+**Data fetching:** On mount, calls `GET /api/calibration_runs?limit=10` (last 5 per symbol = max 10). Re-fetches after successful apply. No polling — calibration runs are low-frequency.
+
+**Apply flow:**
+1. Click Apply → confirm dialog: "Apply SENSEX calibration from 2026-03-23? This will update your live trading config."
+2. On confirm → `POST /api/calibration_runs/:id/apply`
+3. On success → show "✅ Config updated — daemon picks up in ~30s", mark run as applied inline
+4. On 422 → show "Already applied"
+5. On 500 → show error message
+
+**New files:**
+- `dashboard/src/components/settings/CalibrationRunsPanel.vue`
+
+**Modified files:**
+- `dashboard/src/views/Settings.vue` — import and render `<CalibrationRunsPanel />` below the config tree
+
+---
+
+### Analysis view — On-demand AI snapshot
+
+**Backend: `POST /api/analysis/:index_key/ai_snapshot`**
+
+New action on `AnalysisController`. Gathers current market context and calls Ollama synchronously. Returns within `OLLAMA_TIMEOUT` (default 120s).
+
+```ruby
+def ai_snapshot
+  index_key = params[:index_key].to_s.upcase
+  instrument = find_instrument(index_key)
+  return render json: { error: 'Index not found' }, status: :not_found unless instrument
+
+  stored = AnalysisStore.read_all(index_key)
+  latest_run = CalibrationRun.where(symbol: index_key).order(created_at: :desc).first
+  ltp = Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)
+
+  prompt = AiSnapshotPromptBuilder.build(
+    index_key: index_key,
+    ltp: ltp,
+    smc: stored[:smc]&.dig(:data),
+    regime: stored[:regime]&.dig(:data),
+    calibration_stats: latest_run&.raw_stats
+  )
+
+  client = Services::Ai::OpenaiClient.instance
+  return render json: { error: 'AI not configured' }, status: :service_unavailable unless client.enabled?
+
+  response = client.chat(
+    messages: [
+      { role: 'system', content: 'You are an expert intraday options trader for Indian index markets. Be concise and data-driven.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.3
+  )
+
+  render json: { analysis: response, generated_at: Time.current.iso8601 }
+rescue StandardError => e
+  Rails.logger.error("[AnalysisController] ai_snapshot error: #{e.class} - #{e.message}")
+  render json: { error: e.message }, status: :internal_server_error
+end
+```
+
+**`AiSnapshotPromptBuilder`** (new service, `app/services/ai_snapshot_prompt_builder.rb`):
+
+Assembles a compact prompt from available data:
+- Current LTP and index
+- SMC structure (order blocks, BOS, trend direction) if available
+- Market regime (trending/choppy/news-driven) if available
+- Calibration stats from latest run (avg gain, retrace, session breakdown) if available
+- Asks for: current bias, key levels to watch, entry timing, risk note
+
+Falls back gracefully when any component is nil — the prompt is still valid with partial data.
+
+**Dashboard: `AiInsights.vue` (modified)**
+
+Adds a **"🤖 Snapshot"** button. On click:
+1. Sets `snapshotLoading = true`, displays spinner overlay on the AI panel
+2. Calls `POST /api/analysis/${currentIndex}/ai_snapshot`
+3. On success: replaces displayed analysis with snapshot response + shows "🔴 Live snapshot · ${time}" badge instead of the scheduled analysis age
+4. On error: shows inline error, keeps previous analysis visible
+5. `snapshotLoading = false`
+
+The snapshot result is **display-only** — it does not overwrite `AnalysisStore`. When the page is refreshed or the 30s poll fires, the display reverts to the latest scheduled analysis from `AnalysisStore`.
+
+**`useAnalysis.js` (modified)**
+
+Adds `fetchAiSnapshot()` function:
+```js
+async function fetchAiSnapshot() {
+  try {
+    snapshotLoading.value = true
+    snapshotError.value = null
+    const res = await fetch(`/api/analysis/${currentIndex.value}/ai_snapshot`, { method: 'POST' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    snapshotData.value = data
+  } catch (e) {
+    snapshotError.value = e.message
+  } finally {
+    snapshotLoading.value = false
+  }
+}
+```
+
+**New files:**
+- `app/services/ai_snapshot_prompt_builder.rb`
+- `spec/services/ai_snapshot_prompt_builder_spec.rb`
+
+**Modified files:**
+- `app/controllers/api/analysis_controller.rb` — add `ai_snapshot` action + route
+- `config/routes.rb` — add `post :ai_snapshot` to analysis resource
+- `dashboard/src/composables/useAnalysis.js` — add `snapshotLoading`, `snapshotData`, `snapshotError`, `fetchAiSnapshot`
+- `dashboard/src/components/analysis/AiInsights.vue` — add Snapshot button + snapshot display state
+- `dashboard/src/views/Analysis.vue` — pass `fetchAiSnapshot` + snapshot state to `AiInsights`
 
 ---
 
@@ -370,13 +509,21 @@ When the `algo_config_versions` branch lands: `apply!` creates an `AlgoConfigVer
 | `spec/services/options/calibration_config_patch_builder_spec.rb` | |
 | `spec/jobs/weekly_calibration_job_spec.rb` | |
 | `spec/requests/api/calibration_runs_spec.rb` | Request spec: index, show, apply (success + 422) |
+| `app/services/ai/ai_snapshot_prompt_builder.rb` | Assembles Ollama prompt from LTP, SMC, regime, calibration stats |
+| `dashboard/src/components/settings/CalibrationRunsPanel.vue` | Settings panel: list pending/applied runs, Apply button |
+| `spec/requests/api/analysis_ai_snapshot_spec.rb` | Request spec: success, 503 on AI error |
+| `spec/services/ai/ai_snapshot_prompt_builder_spec.rb` | Unit spec: all context sources nil-safe |
 
 ### Modified files
 
 | Path | Change |
 |------|--------|
 | `config/recurring.yml` | Add `weekly_options_calibration` schedule |
-| `config/routes.rb` | Add `calibration_runs` resource |
+| `config/routes.rb` | Add `calibration_runs` resource + `ai_snapshot` route |
+| `app/controllers/api/analysis_controller.rb` | Add `ai_snapshot` action |
+| `dashboard/src/views/Settings.vue` | Render `CalibrationRunsPanel` per symbol |
+| `dashboard/src/components/analysis/AiInsights.vue` | Add Snapshot button, loading/error states |
+| `dashboard/src/composables/useAnalysis.js` | Add snapshot state and `fetchAiSnapshot` |
 
 ### Unchanged files
 
@@ -419,3 +566,123 @@ All DhanHQ calls stubbed in specs via WebMock — no live API calls in tests.
 - **Pre-versioning:** `propose_config!` is a no-op. `apply!` uses `Setting.put` + `AlgoConfig.reset!`. Works today.
 - **Post-versioning:** When `AlgoConfigVersion` is defined, `propose_config!` creates a version record. `apply!` routes through `AlgoConfigVersion#activate`. `CalibrationRun` gains a `config_version_id` FK in a follow-up migration. No controller or job changes.
 - **Rake task:** Never modified by this feature. Continues to use `HistoricalCalibrationEngine` directly.
+
+---
+
+## UI Changes
+
+### Settings View — Calibration Runs Panel
+
+**New component:** `dashboard/src/components/settings/CalibrationRunsPanel.vue`
+
+**Added to:** `dashboard/src/views/Settings.vue` as a new section below the existing settings form, rendered once for each watched symbol (`['NIFTY', 'SENSEX']`).
+
+**Behaviour:**
+
+- On mount, fetches `GET /api/calibration_runs?limit=10` (all symbols). Filters client-side by symbol to populate each panel.
+- Displays the last 5 `CalibrationRun` records per symbol in reverse-chronological order.
+- **Pending run** (no `applied_at`):
+  - Cyan left border (`border-l-4 border-cyan-500`).
+  - Active **Apply** button. Clicking opens a `window.confirm` dialog: `"Apply calibration patch for ${symbol}? This will update live config."`. On confirmation, calls `POST /api/calibration_runs/:id/apply`.
+  - On success: applied run moves to greyed state; success toast shown.
+  - On 422: toast shows `"Already applied"`.
+  - On 500: toast shows `"Apply failed — check server logs"`.
+- **Applied run** (has `applied_at`):
+  - Greyed out, Apply button disabled. Shows applied timestamp (`applied_at` formatted as `dd MMM HH:mm`).
+- **Regime shift run** (`regime_shift: true`):
+  - Amber warning badge: `"⚠ Regime shift detected"` overlaid on the run card.
+- **Patch diff:** Shows only config keys where the proposed value differs from current by ≥10%. Displayed as a compact key→value list (current → proposed). Keys derived from `proposed_patch` object; current values fetched from the same `GET /api/calibration_runs` response (include `current_snapshot` field in index response, see API section below).
+
+**API addition for index response:** `GET /api/calibration_runs` returns each record with a `current_snapshot` field containing the currently-active values for each key in `proposed_patch`. This allows the frontend to compute diff without a separate request.
+
+**Files to create/modify:**
+
+| Path | Change |
+|------|--------|
+| `dashboard/src/components/settings/CalibrationRunsPanel.vue` | New component |
+| `dashboard/src/views/Settings.vue` | Import and render `CalibrationRunsPanel` per symbol |
+
+---
+
+### Analysis View — On-Demand AI Snapshot
+
+**Purpose:** Allow the user to trigger an immediate Ollama AI analysis from the Analysis view, without waiting for the next scheduled `AiTechnicalAnalysisJob` run. The snapshot uses local Ollama (same client used by existing AI analysis) and assembles a richer prompt including current regime and calibration context.
+
+#### Backend
+
+**New endpoint:** `POST /api/analysis/:index_key/ai_snapshot`
+
+- Added to `app/controllers/api/analysis_controller.rb` as the `ai_snapshot` action.
+- Route: `post 'analysis/:index_key/ai_snapshot', to: 'api/analysis#ai_snapshot'` in `config/routes.rb`.
+- Calls `Services::Ai::AiSnapshotPromptBuilder.call(index_key:)` to assemble context.
+- Passes assembled prompt to `Services::Ai::OpenaiClient.instance.chat(prompt)` (existing singleton — same client used by rake task).
+- Returns `{ snapshot: "<markdown string>", generated_at: "<ISO8601>" }`.
+- Does **not** write to `AnalysisStore` — snapshot is display-only and transient.
+- On Ollama/OpenAI error: returns 503 `{ error: "AI service unavailable" }`.
+- Timeout: 30 seconds (OpenAI client default). If exceeded, returns 504.
+
+**New service:** `app/services/ai/ai_snapshot_prompt_builder.rb`
+
+Assembles prompt from:
+1. Current LTP — from `TickQuery.ltp(index_key)` (nil-safe: omits if unavailable).
+2. Latest SMC analysis — from `AnalysisStore.read(index_key, :smc)` (nil-safe).
+3. Current regime — from `AnalysisStore.read(index_key, :regime)` (nil-safe).
+4. Latest calibration stats — from `CalibrationRun.where(symbol: index_key.upcase).order(created_at: :desc).first` (nil-safe).
+5. Session context — from `TradingSession::Service.current_session_label` (nil-safe).
+
+Returns a single prompt string. If all context sources return nil, returns a minimal prompt: `"Provide a brief technical outlook for #{index_key} options trading."`.
+
+**Files to create/modify:**
+
+| Path | Change |
+|------|--------|
+| `app/controllers/api/analysis_controller.rb` | Add `ai_snapshot` action |
+| `app/services/ai/ai_snapshot_prompt_builder.rb` | New service |
+| `config/routes.rb` | Add `ai_snapshot` route |
+| `spec/requests/api/analysis_ai_snapshot_spec.rb` | Request spec: success, 503 on AI error |
+| `spec/services/ai/ai_snapshot_prompt_builder_spec.rb` | Unit spec: all context sources nil-safe |
+
+#### Frontend
+
+**Modified:** `dashboard/src/components/analysis/AiInsights.vue`
+
+- Accepts new prop: `snapshotData` (string or null), `snapshotLoading` (bool), `snapshotError` (string or null), `onSnapshot` (function).
+- **Snapshot button:** `"🤖 Snapshot"` button in the component header. Disabled when `snapshotLoading` is true. Shows spinner overlay on the analysis text area while loading.
+- On click, calls `onSnapshot()` (provided by `useAnalysis` composable via parent).
+- When `snapshotData` is non-null, renders it **instead of** the polled `analysis` prop — snapshot takes display priority.
+- When `snapshotError` is non-null, shows inline error message below the button.
+- Snapshot display reverts to polled data on next `fetchLive()` call (i.e., when user switches symbol or triggers manual refresh). There is no explicit "clear snapshot" button.
+
+**Modified:** `dashboard/src/composables/useAnalysis.js`
+
+New reactive state added:
+```js
+const snapshotLoading = ref(false)
+const snapshotData    = ref(null)
+const snapshotError   = ref(null)
+```
+
+New function:
+```js
+async function fetchAiSnapshot() {
+  snapshotLoading.value = true
+  snapshotError.value   = null
+  try {
+    const res = await api.post(`/analysis/${activeIndex.value}/ai_snapshot`)
+    snapshotData.value = res.data.snapshot
+  } catch (err) {
+    snapshotError.value = err.response?.data?.error || 'Snapshot failed'
+  } finally {
+    snapshotLoading.value = false
+  }
+}
+```
+
+`snapshotData` is reset to `null` inside `fetchLive()` so stale snapshot doesn't persist across symbol changes.
+
+**Files to modify:**
+
+| Path | Change |
+|------|--------|
+| `dashboard/src/components/analysis/AiInsights.vue` | Add Snapshot button, snapshot display, loading/error states |
+| `dashboard/src/composables/useAnalysis.js` | Add `snapshotLoading`, `snapshotData`, `snapshotError`, `fetchAiSnapshot` |
