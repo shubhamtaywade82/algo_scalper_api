@@ -522,8 +522,9 @@ When the `algo_config_versions` branch lands: `apply!` creates an `AlgoConfigVer
 | `config/routes.rb` | Add `calibration_runs` resource + `ai_snapshot` route |
 | `app/controllers/api/analysis_controller.rb` | Add `ai_snapshot` action |
 | `dashboard/src/views/Settings.vue` | Render `CalibrationRunsPanel` per symbol |
-| `dashboard/src/components/analysis/AiInsights.vue` | Add Snapshot button, loading/error states |
-| `dashboard/src/composables/useAnalysis.js` | Add snapshot state and `fetchAiSnapshot` |
+| `dashboard/src/components/analysis/AiInsights.vue` | Add Snapshot button, new props, snapshot display, loading/error states |
+| `dashboard/src/views/Analysis.vue` | Destructure new composable returns, bind new props on `<AiInsights>` |
+| `dashboard/src/composables/useAnalysis.js` | Add snapshot state, `fetchAiSnapshot`, reset in `switchIndex` |
 
 ### Unchanged files
 
@@ -591,9 +592,23 @@ All DhanHQ calls stubbed in specs via WebMock — no live API calls in tests.
   - Greyed out, Apply button disabled. Shows applied timestamp (`applied_at` formatted as `dd MMM HH:mm`).
 - **Regime shift run** (`regime_shift: true`):
   - Amber warning badge: `"⚠ Regime shift detected"` overlaid on the run card.
-- **Patch diff:** Shows only config keys where the proposed value differs from current by ≥10%. Displayed as a compact key→value list (current → proposed). Keys derived from `proposed_patch` object; current values fetched from the same `GET /api/calibration_runs` response (include `current_snapshot` field in index response, see API section below).
+- **Patch diff:** Shows only config keys where the proposed value differs from current by ≥10%. Displayed as a compact key→value list (current → proposed). Keys derived from `proposed_patch`; current values from the `current_snapshot` field included in each record of the `GET /api/calibration_runs` response.
 
-**API addition for index response:** `GET /api/calibration_runs` returns each record with a `current_snapshot` field containing the currently-active values for each key in `proposed_patch`. This allows the frontend to compute diff without a separate request.
+**API addition for index response:** `GET /api/calibration_runs` serialises each record with a computed `current_snapshot` field. The controller calls `AlgoConfig.fetch` once per request (not per record — single fetch, then extract), then builds a snapshot hash by extracting the same fixed set of keys that `CalibrationConfigPatchBuilder` may emit:
+
+```ruby
+# In Api::CalibrationRunsController#index
+cfg   = AlgoConfig.fetch
+snap  = {
+  'risk.percentage_pnl_exit.target_pct'     => cfg.dig(:risk, :percentage_pnl_exit, :target_pct),
+  'risk.trailing.activation_pct'            => cfg.dig(:risk, :trailing, :activation_pct),
+  'risk.trailing.drawdown_pct'              => cfg.dig(:risk, :trailing, :drawdown_pct),
+  'institutional_trailing.trailing_distance'=> cfg.dig(:risk, :institutional_trailing, :trailing_distance)
+}
+# each record serialised with: record.as_json.merge(current_snapshot: snap)
+```
+
+Because the snapshot key set is fixed and bounded (~4 keys), this adds no per-record overhead. The frontend computes diff by comparing each `proposed_patch` key against the same-named key in `current_snapshot`.
 
 **Files to create/modify:**
 
@@ -606,52 +621,72 @@ All DhanHQ calls stubbed in specs via WebMock — no live API calls in tests.
 
 ### Analysis View — On-Demand AI Snapshot
 
-**Purpose:** Allow the user to trigger an immediate Ollama AI analysis from the Analysis view, without waiting for the next scheduled `AiTechnicalAnalysisJob` run. The snapshot uses local Ollama (same client used by existing AI analysis) and assembles a richer prompt including current regime and calibration context.
+**Purpose:** Allow the user to trigger an immediate Ollama AI analysis from the Analysis view, without waiting for the next scheduled `AiTechnicalAnalysisJob` run. The snapshot uses local Ollama (same client as the existing AI analysis rake task) and assembles a richer prompt including current regime and calibration context.
 
 #### Backend
 
 **New endpoint:** `POST /api/analysis/:index_key/ai_snapshot`
 
 - Added to `app/controllers/api/analysis_controller.rb` as the `ai_snapshot` action.
-- Route: `post 'analysis/:index_key/ai_snapshot', to: 'api/analysis#ai_snapshot'` in `config/routes.rb`.
-- Calls `Services::Ai::AiSnapshotPromptBuilder.call(index_key:)` to assemble context.
-- Passes assembled prompt to `Services::Ai::OpenaiClient.instance.chat(prompt)` (existing singleton — same client used by rake task).
+- Route: added inside `namespace :api` block in `config/routes.rb` as `post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot`. Note: `to: 'analysis#ai_snapshot'` (no `api/` prefix) because it is already inside the `namespace :api` block.
+- The controller resolves instrument and LTP exactly as `show` does (`find_instrument` + `Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)`), then passes resolved values to the builder.
+- Calls `Ai::AiSnapshotPromptBuilder.build(index_key:, ltp:, smc:, regime:, calibration_stats:)` to assemble context. `smc` and `regime` come from `AnalysisStore.read_all(index_key)[:smc]&.dig(:data)` and `[:regime]&.dig(:data)` respectively (same pattern as `show`). `calibration_stats` comes from `CalibrationRun.where(symbol: index_key.upcase).order(created_at: :desc).first&.stats`.
+- Passes assembled messages array to `Services::Ai::OpenaiClient.instance.chat(messages: [...], temperature: 0.3)` — keyword argument form; `messages` is an array of `{ role:, content: }` hashes as `OpenaiClient` expects.
 - Returns `{ snapshot: "<markdown string>", generated_at: "<ISO8601>" }`.
 - Does **not** write to `AnalysisStore` — snapshot is display-only and transient.
-- On Ollama/OpenAI error: returns 503 `{ error: "AI service unavailable" }`.
-- Timeout: 30 seconds (OpenAI client default). If exceeded, returns 504.
+- On `Net::ReadTimeout` or `Faraday::TimeoutError`: returns 503 `{ error: "AI service unavailable — timed out" }`.
+- On other AI/network errors (`StandardError` rescue): returns 503 `{ error: "AI service unavailable" }`.
+- Note: Rails does not emit 504. Timeout errors from `OpenaiClient` propagate as `Net::ReadTimeout` or `Faraday::TimeoutError` and are rescued explicitly to return 503.
 
-**New service:** `app/services/ai/ai_snapshot_prompt_builder.rb`
+**New service:** `app/services/ai/ai_snapshot_prompt_builder.rb` — constant `Ai::AiSnapshotPromptBuilder`
 
-Assembles prompt from:
-1. Current LTP — from `TickQuery.ltp(index_key)` (nil-safe: omits if unavailable).
-2. Latest SMC analysis — from `AnalysisStore.read(index_key, :smc)` (nil-safe).
-3. Current regime — from `AnalysisStore.read(index_key, :regime)` (nil-safe).
-4. Latest calibration stats — from `CalibrationRun.where(symbol: index_key.upcase).order(created_at: :desc).first` (nil-safe).
-5. Session context — from `TradingSession::Service.current_session_label` (nil-safe).
+All context sources are pre-resolved by the controller and passed as parameters. The builder is a pure function with no external dependencies. Method signature:
 
-Returns a single prompt string. If all context sources return nil, returns a minimal prompt: `"Provide a brief technical outlook for #{index_key} options trading."`.
+```ruby
+module Ai
+  class AiSnapshotPromptBuilder
+    def self.build(index_key:, ltp: nil, smc: nil, regime: nil, calibration_stats: nil)
+      # ...assembles and returns messages array
+    end
+  end
+end
+```
+
+Assembles from:
+1. **LTP** — `ltp` parameter (nil-safe: omits line if nil).
+2. **SMC data** — `smc` parameter (nil-safe: omits section if nil).
+3. **Market regime** — `regime` parameter (nil-safe: omits section if nil).
+4. **Calibration stats** — `calibration_stats` parameter: `avg_gain`, `avg_retrace_abs`, `win_rate` (nil-safe: omits section if nil).
+5. **Session context** — `TradingSession::Service.market_closed? ? 'market_closed' : 'market_open'` (called inside the builder; `market_closed?` is a class method that always succeeds).
+
+Returns a messages array: `[{ role: 'user', content: assembled_prompt }]`. If all context parameters are nil, falls back to `[{ role: 'user', content: "Provide a brief technical outlook for #{index_key} options trading." }]`.
 
 **Files to create/modify:**
 
 | Path | Change |
 |------|--------|
 | `app/controllers/api/analysis_controller.rb` | Add `ai_snapshot` action |
-| `app/services/ai/ai_snapshot_prompt_builder.rb` | New service |
-| `config/routes.rb` | Add `ai_snapshot` route |
-| `spec/requests/api/analysis_ai_snapshot_spec.rb` | Request spec: success, 503 on AI error |
-| `spec/services/ai/ai_snapshot_prompt_builder_spec.rb` | Unit spec: all context sources nil-safe |
+| `app/services/ai/ai_snapshot_prompt_builder.rb` | New service (`Ai::AiSnapshotPromptBuilder`) |
+| `config/routes.rb` | Add `ai_snapshot` route inside `namespace :api` |
+| `spec/requests/api/analysis_ai_snapshot_spec.rb` | Request spec: success, 503 on AI error, 404 on unknown index |
+| `spec/services/ai/ai_snapshot_prompt_builder_spec.rb` | Unit spec: all context params nil-safe, fallback prompt, correct messages format |
 
 #### Frontend
 
 **Modified:** `dashboard/src/components/analysis/AiInsights.vue`
 
-- Accepts new prop: `snapshotData` (string or null), `snapshotLoading` (bool), `snapshotError` (string or null), `onSnapshot` (function).
+- Accepts four new props in addition to existing `analysis`: `snapshotData` (string or null), `snapshotLoading` (bool), `snapshotError` (string or null), `onSnapshot` (function).
 - **Snapshot button:** `"🤖 Snapshot"` button in the component header. Disabled when `snapshotLoading` is true. Shows spinner overlay on the analysis text area while loading.
-- On click, calls `onSnapshot()` (provided by `useAnalysis` composable via parent).
+- On click, calls `onSnapshot()` (provided by `useAnalysis` composable, passed from `Analysis.vue` via prop).
 - When `snapshotData` is non-null, renders it **instead of** the polled `analysis` prop — snapshot takes display priority.
 - When `snapshotError` is non-null, shows inline error message below the button.
-- Snapshot display reverts to polled data on next `fetchLive()` call (i.e., when user switches symbol or triggers manual refresh). There is no explicit "clear snapshot" button.
+- Snapshot display persists until the user switches symbol (see `useAnalysis` below). There is no explicit "clear snapshot" button.
+
+**Modified:** `dashboard/src/views/Analysis.vue`
+
+- Destructures new composable returns from `useAnalysis`: `snapshotLoading`, `snapshotData`, `snapshotError`, `fetchAiSnapshot`.
+- Passes them to `<AiInsights>` as props: `:snapshotData`, `:snapshotLoading`, `:snapshotError`, `:onSnapshot="fetchAiSnapshot"`.
+- No other changes to `Analysis.vue`.
 
 **Modified:** `dashboard/src/composables/useAnalysis.js`
 
@@ -678,11 +713,12 @@ async function fetchAiSnapshot() {
 }
 ```
 
-`snapshotData` is reset to `null` inside `fetchLive()` so stale snapshot doesn't persist across symbol changes.
+`snapshotData` is reset to `null` only inside `switchIndex()` (the function that changes `activeIndex`), **not** inside `fetchLive()`. This means background polls do not clear a visible snapshot — the user sees it until they switch to a different index. When they switch back, the snapshot is gone and the polled analysis is shown.
 
 **Files to modify:**
 
 | Path | Change |
 |------|--------|
-| `dashboard/src/components/analysis/AiInsights.vue` | Add Snapshot button, snapshot display, loading/error states |
-| `dashboard/src/composables/useAnalysis.js` | Add `snapshotLoading`, `snapshotData`, `snapshotError`, `fetchAiSnapshot` |
+| `dashboard/src/components/analysis/AiInsights.vue` | Add Snapshot button, new props, snapshot display, loading/error states |
+| `dashboard/src/views/Analysis.vue` | Destructure new composable returns, bind new props on `<AiInsights>` |
+| `dashboard/src/composables/useAnalysis.js` | Add snapshot state, `fetchAiSnapshot`, reset in `switchIndex` |
