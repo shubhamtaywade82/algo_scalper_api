@@ -23,6 +23,9 @@ module Positions
     def closed(tracker)
       entry = tracker.entry_price.to_f
       exit_p = tracker.exit_price.to_f
+      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
+      execution_meta = meta['execution'].is_a?(Hash) ? meta['execution'] : {}
+      classification = execution_meta['classified_as']
 
       base_attributes(tracker).merge(
         entry_price: entry.round(2),
@@ -30,7 +33,8 @@ module Positions
         pnl: tracker.last_pnl_rupees.to_f.round(2),
         pnl_pct: pnl_pct(entry, exit_p),
         hwm_pnl: tracker.high_water_mark_pnl.to_f.round(2),
-        exit_reason: tracker.exit_reason || tracker.meta&.dig('exit_reason'),
+        exit_reason: tracker.exit_reason || meta['exit_reason'],
+        exit_classification: classification,
         exited_at: tracker.exited_at&.iso8601
       )
     end

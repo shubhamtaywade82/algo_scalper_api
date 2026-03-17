@@ -945,17 +945,7 @@ module Live
       end
 
       def calculate_peak_profit_pct(tracker, snapshot)
-        hwm = snapshot[:hwm_pnl]
-        return nil unless hwm&.positive?
-
-        entry_price = tracker.entry_price
-        quantity = tracker.quantity
-        return nil unless entry_price && quantity&.positive?
-
-        buy_value = entry_price * quantity
-        return nil unless buy_value.positive?
-
-        (hwm / buy_value).to_f
+        Risk::ProfitManager.instance.peak_profit_pct_for(tracker, snapshot)
       end
     end
   end
