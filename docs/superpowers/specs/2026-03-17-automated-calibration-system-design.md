@@ -358,7 +358,7 @@ def ai_snapshot
   latest_run = CalibrationRun.where(symbol: index_key).order(created_at: :desc).first
   ltp = Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)
 
-  prompt = AiSnapshotPromptBuilder.build(
+  prompt = Ai::AiSnapshotPromptBuilder.build(
     index_key: index_key,
     ltp: ltp,
     smc: stored[:smc]&.dig(:data),
@@ -377,14 +377,17 @@ def ai_snapshot
     temperature: 0.3
   )
 
-  render json: { analysis: response, generated_at: Time.current.iso8601 }
+  render json: { snapshot: response, generated_at: Time.current.iso8601 }
+rescue Net::ReadTimeout, Faraday::TimeoutError => e
+  Rails.logger.warn("[AnalysisController] ai_snapshot timeout: #{e.class}")
+  render json: { error: 'AI service unavailable — timed out' }, status: :service_unavailable
 rescue StandardError => e
   Rails.logger.error("[AnalysisController] ai_snapshot error: #{e.class} - #{e.message}")
-  render json: { error: e.message }, status: :internal_server_error
+  render json: { error: 'AI service unavailable' }, status: :service_unavailable
 end
 ```
 
-**`AiSnapshotPromptBuilder`** (new service, `app/services/ai_snapshot_prompt_builder.rb`):
+**`Ai::AiSnapshotPromptBuilder`** (new service, `app/services/ai/ai_snapshot_prompt_builder.rb`):
 
 Assembles a compact prompt from available data:
 - Current LTP and index
@@ -594,21 +597,26 @@ All DhanHQ calls stubbed in specs via WebMock — no live API calls in tests.
   - Amber warning badge: `"⚠ Regime shift detected"` overlaid on the run card.
 - **Patch diff:** Shows only config keys where the proposed value differs from current by ≥10%. Displayed as a compact key→value list (current → proposed). Keys derived from `proposed_patch`; current values from the `current_snapshot` field included in each record of the `GET /api/calibration_runs` response.
 
-**API addition for index response:** `GET /api/calibration_runs` serialises each record with a computed `current_snapshot` field. The controller calls `AlgoConfig.fetch` once per request (not per record — single fetch, then extract), then builds a snapshot hash by extracting the same fixed set of keys that `CalibrationConfigPatchBuilder` may emit:
+**API addition for index response:** `GET /api/calibration_runs` serialises each record with a computed `current_snapshot` field. The controller calls `AlgoConfig.fetch` once per request (not per record — single fetch, then extract), then builds a snapshot hash covering all keys that `CalibrationConfigPatchBuilder` may emit:
 
 ```ruby
 # In Api::CalibrationRunsController#index
 cfg   = AlgoConfig.fetch
 snap  = {
-  'risk.percentage_pnl_exit.target_pct'     => cfg.dig(:risk, :percentage_pnl_exit, :target_pct),
-  'risk.trailing.activation_pct'            => cfg.dig(:risk, :trailing, :activation_pct),
-  'risk.trailing.drawdown_pct'              => cfg.dig(:risk, :trailing, :drawdown_pct),
-  'institutional_trailing.trailing_distance'=> cfg.dig(:risk, :institutional_trailing, :trailing_distance)
+  'risk.percentage_pnl_exit.target_pct'          => cfg.dig(:risk, :percentage_pnl_exit, :target_pct),
+  'risk.trailing.activation_pct'                 => cfg.dig(:risk, :trailing, :activation_pct),
+  'risk.trailing.drawdown_pct'                   => cfg.dig(:risk, :trailing, :drawdown_pct),
+  'risk.profit_floor.lock_pct'                   => cfg.dig(:risk, :profit_floor, :lock_pct),
+  'risk.profit_floor.trail_pct'                  => cfg.dig(:risk, :profit_floor, :trail_pct),
+  'institutional_trailing.trailing_distance'     => cfg.dig(:risk, :institutional_trailing, :trailing_distance),
+  'institutional_trailing.early_trigger'         => cfg.dig(:risk, :institutional_trailing, :early_trigger),
+  'institutional_trailing.breakeven_trigger'     => cfg.dig(:risk, :institutional_trailing, :breakeven_trigger),
+  'institutional_trailing.activation_trigger'    => cfg.dig(:risk, :institutional_trailing, :activation_trigger)
 }
 # each record serialised with: record.as_json.merge(current_snapshot: snap)
 ```
 
-Because the snapshot key set is fixed and bounded (~4 keys), this adds no per-record overhead. The frontend computes diff by comparing each `proposed_patch` key against the same-named key in `current_snapshot`.
+Because the snapshot key set is fixed and bounded (~9 keys matching `CalibrationConfigPatchBuilder` output), this adds no per-record overhead. The frontend computes diff by comparing each `proposed_patch` key against the same-named key in `current_snapshot`. If a proposed key has no matching entry in `current_snapshot` (e.g., a future builder expansion), the frontend shows the proposed value without a baseline ("— → proposed").
 
 **Files to create/modify:**
 
@@ -616,6 +624,7 @@ Because the snapshot key set is fixed and bounded (~4 keys), this adds no per-re
 |------|--------|
 | `dashboard/src/components/settings/CalibrationRunsPanel.vue` | New component |
 | `dashboard/src/views/Settings.vue` | Import and render `CalibrationRunsPanel` per symbol |
+| `app/controllers/api/calibration_runs_controller.rb` | Add `current_snapshot` to index serialisation |
 
 ---
 
@@ -657,7 +666,7 @@ Assembles from:
 2. **SMC data** — `smc` parameter (nil-safe: omits section if nil).
 3. **Market regime** — `regime` parameter (nil-safe: omits section if nil).
 4. **Calibration stats** — `calibration_stats` parameter: `avg_gain`, `avg_retrace_abs`, `win_rate` (nil-safe: omits section if nil).
-5. **Session context** — `TradingSession::Service.market_closed? ? 'market_closed' : 'market_open'` (called inside the builder; `market_closed?` is a class method that always succeeds).
+5. **Session context** — `TradingSession::Service.market_closed? ? 'market_closed' : 'market_open'` (called inside the builder). `TradingSession::Service.market_closed?` is a class method that reads only `Time.zone.now` and does not touch the database, Redis, or DhanHQ — it is safe to call inside a pure-function builder. This is the one permitted internal call; all other context is received as parameters.
 
 Returns a messages array: `[{ role: 'user', content: assembled_prompt }]`. If all context parameters are nil, falls back to `[{ role: 'user', content: "Provide a brief technical outlook for #{index_key} options trading." }]`.
 
