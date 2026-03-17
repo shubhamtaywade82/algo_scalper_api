@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Rails.application.routes.draw do
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
@@ -18,8 +20,9 @@ Rails.application.routes.draw do
     get :positions, to: "positions#index"
 
     # Live AI analysis dashboard
-    get 'analysis/:index_key', to: 'analysis#show', as: :analysis
-    get 'analysis/:index_key/historical', to: 'analysis#historical', as: :analysis_historical
+    get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
+    get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
+    post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
 
     # Algo Settings
     get    'settings',      to: 'settings#index'
