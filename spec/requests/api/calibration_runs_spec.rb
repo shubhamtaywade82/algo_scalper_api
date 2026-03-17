@@ -47,6 +47,12 @@ RSpec.describe 'Api::CalibrationRuns', type: :request do
       expect(json['id']).to eq(run.id)
     end
 
+    it 'includes current_snapshot in the response' do
+      get "/api/calibration_runs/#{run.id}"
+      json = JSON.parse(response.body)
+      expect(json).to have_key('current_snapshot')
+    end
+
     it 'returns 404 for unknown id' do
       get '/api/calibration_runs/999999'
       expect(response).to have_http_status(:not_found)
