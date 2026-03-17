@@ -55,9 +55,7 @@ RSpec.describe WeeklyCalibrationJob do
 
     context 'when NIFTY raises an exception' do
       before do
-        call_count = 0
         allow(Options::AutoCalibrator).to receive(:call) do |symbol:, **|
-          call_count += 1
           raise StandardError, 'NIFTY exploded' if symbol == 'NIFTY'
 
           mock_run
