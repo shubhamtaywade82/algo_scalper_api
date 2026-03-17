@@ -82,7 +82,7 @@ RSpec.describe 'Api::CalibrationRuns', type: :request do
     it 'returns 422 on double-apply' do
       run.update!(applied_at: Time.current)
       post "/api/calibration_runs/#{run.id}/apply"
-      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response).to have_http_status(:unprocessable_content)
     end
 
     it 'returns 404 for unknown id' do
