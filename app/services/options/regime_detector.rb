@@ -51,12 +51,11 @@ module Options
 
         deviation_sigma = (current_val - mean).abs / sigma
 
-        if deviation_sigma > SIGMA_THRESHOLD
-          direction = current_val > mean ? 'higher' : 'lower'
-          reason = "#{metric}: #{current_val.round(2)} is #{deviation_sigma.round(1)}σ " \
-                   "#{direction} than historical mean (#{mean.round(2)}) — regime shift likely"
-          return { shift: true, reason: reason }
-        end
+        next unless deviation_sigma > SIGMA_THRESHOLD
+        direction = current_val > mean ? 'higher' : 'lower'
+        reason = "#{metric}: #{current_val.round(2)} is #{deviation_sigma.round(1)}σ " \
+                 "#{direction} than historical mean (#{mean.round(2)}) — regime shift likely"
+        return { shift: true, reason: reason }
       end
 
       { shift: false, reason: 'stable (all metrics within 1.5σ of historical mean)' }

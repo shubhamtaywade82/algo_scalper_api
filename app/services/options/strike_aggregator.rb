@@ -22,7 +22,7 @@ module Options
     end
 
     def combine
-      available = @entries.reject { |_, v| v.nil? }
+      available = @entries.compact
       return fallback_empty if available.empty?
 
       # Redistribute weights to available entries
@@ -31,14 +31,14 @@ module Options
       normalized   = available.map { |k, _| [k, WEIGHTS[k] / total_weight] }
 
       {
-        avg_gain:         weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_gain) },
-        avg_retrace_abs:  weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_retrace_abs) },
-        avg_loss_abs:     weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_loss_abs) },
-        avg_oc:           weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_oc) },
-        oc_stddev:        weighted_avg(normalized) { |stats| avg_ce_pe(stats, :oc_stddev) },
+        avg_gain: weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_gain) },
+        avg_retrace_abs: weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_retrace_abs) },
+        avg_loss_abs: weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_loss_abs) },
+        avg_oc: weighted_avg(normalized) { |stats| avg_ce_pe(stats, :avg_oc) },
+        oc_stddev: weighted_avg(normalized) { |stats| avg_ce_pe(stats, :oc_stddev) },
         sessions: {
-          morning_oc:   weighted_avg(normalized) { |stats| avg_session(stats, :morning_oc) },
-          midday_oc:    weighted_avg(normalized) { |stats| avg_session(stats, :midday_oc) },
+          morning_oc: weighted_avg(normalized) { |stats| avg_session(stats, :morning_oc) },
+          midday_oc: weighted_avg(normalized) { |stats| avg_session(stats, :midday_oc) },
           afternoon_oc: weighted_avg(normalized) { |stats| avg_session(stats, :afternoon_oc) }
         }
       }
@@ -47,8 +47,8 @@ module Options
     private
 
     # Available entries: [[:key, normalized_weight], ...]
-    def weighted_avg(entries, &block)
-      entries.sum { |(key, weight)| weight * block.call(@entries[key]).to_f }.round(4)
+    def weighted_avg(entries, &)
+      entries.sum { |(key, weight)| weight * yield(@entries[key]).to_f }.round(4)
     end
 
     def avg_ce_pe(stats, key)
