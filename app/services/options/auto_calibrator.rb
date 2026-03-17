@@ -32,7 +32,13 @@ module Options
         return nil
       end
 
+      unless Options::ExpiryCalendar::EXPIRY_WEEKDAY.key?(@symbol)
+        Rails.logger.warn("[AutoCalibrator] #{@symbol}: weekly expiry not supported — skipping calibration")
+        return nil
+      end
+
       @security_id = index_cfg[:sid].to_s
+      # IndexConfigLoader returns IDX_I (spot segment); we need the FNO segment for ExpiredOptionsData.
       @segment     = @symbol == 'SENSEX' ? 'BSE_FNO' : 'NSE_FNO'
 
       windows = Options::ExpiryCalendar.windows(symbol: @symbol, weeks: @weeks)

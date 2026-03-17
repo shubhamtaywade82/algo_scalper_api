@@ -8,18 +8,18 @@ RSpec.describe Options::AutoCalibrator do
   # Minimal fake ExpiredOptionsData response
   def fake_dhan_result(candle_count: 5)
     ts_base = Time.new(2026, 3, 10, 9, 15, 0, '+05:30').to_i
-    timestamps = candle_count.times.map { |i| ts_base + (i * 300) } # 5-min bars
+    timestamps = Array.new(candle_count) { |i| ts_base + (i * 300) } # 5-min bars
 
     data_hash = {
       'timestamp' => timestamps,
-      'open'      => [100.0] * candle_count,
-      'high'      => [120.0] * candle_count,
-      'low'       => [90.0]  * candle_count,
-      'close'     => [105.0] * candle_count,
-      'volume'    => [1000]  * candle_count,
-      'oi'        => [5000]  * candle_count,
-      'spot'      => [22000.0] * candle_count,
-      'strike'    => [22000.0] * candle_count
+      'open' => [100.0] * candle_count,
+      'high' => [120.0] * candle_count,
+      'low' => [90.0] * candle_count,
+      'close' => [105.0] * candle_count,
+      'volume' => [1000] * candle_count,
+      'oi' => [5000] * candle_count,
+      'spot' => [22_000.0] * candle_count,
+      'strike' => [22_000.0] * candle_count
     }
 
     # Use plain double: DhanHQ assigns :data via define_singleton_method, not class-level,
@@ -35,8 +35,8 @@ RSpec.describe Options::AutoCalibrator do
 
     # Stub IndexConfigLoader
     allow(IndexConfigLoader).to receive(:load_indices).and_return([
-      { key: 'NIFTY', segment: 'NSE_FNO', sid: '13' }
-    ])
+                                                                    { key: 'NIFTY', segment: 'NSE_FNO', sid: '13' }
+                                                                  ])
   end
 
   describe '.call' do
@@ -76,11 +76,11 @@ RSpec.describe Options::AutoCalibrator do
       expect(result).to be_nil
     end
 
-    it 'still returns a result when OTM1 fetch fails (ATM-only fallback)' do
+    it 'still returns a result when only the first ATM fetch succeeds (all other fetches fail)' do
       call_count = 0
       allow(DhanHQ::Models::ExpiredOptionsData).to receive(:fetch) do
         call_count += 1
-        call_count == 1 ? fake_dhan_result : nil  # ATM succeeds, rest fail
+        call_count == 1 ? fake_dhan_result : nil # ATM succeeds, rest fail
       end
       result = described_class.call(symbol: 'NIFTY', weeks: 4)
       expect(result).not_to be_nil
