@@ -63,7 +63,7 @@ RSpec.describe WeeklyCalibrationJob do
       end
 
       it 'still runs SENSEX' do
-        described_class.new.perform  # nil symbol → both
+        described_class.new.perform # nil symbol → both
         expect(Options::AutoCalibrator).to have_received(:call).with(symbol: 'SENSEX', weeks: 52)
       end
 
