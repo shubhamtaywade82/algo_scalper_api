@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Domain
   class TradingContext
     attr_reader :day_type, :session, :regime, :score, :stability
