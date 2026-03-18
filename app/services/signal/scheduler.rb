@@ -13,6 +13,7 @@ module Signal
       @mutex   = Mutex.new
       @data_provider = data_provider || default_provider
       @expiry_cache = {}
+      @regime_states = {}
     end
 
     def start
@@ -116,9 +117,10 @@ module Signal
     private
 
     def process_index(index_cfg)
+      regime_state = @regime_states[index_cfg[:key]] ||= Market::RegimeState.new
       # Use run_for() which includes full No-Trade Engine integration
-      # run_for() handles: Phase 1 pre-check, signal generation, strike selection, Phase 2 validation, and entry
-      Signal::Engine.run_for(index_cfg)
+      # run_for() handles: Phase 1 pre-check, TradingContext gate, signal generation, strike selection, Phase 2 validation, and entry
+      Signal::Engine.run_for(index_cfg, regime_state: regime_state)
 
       # NOTE: run_for() handles entry internally, so we don't need process_signal() here
       # The old flow (evaluate_supertrend_signal + process_signal) is bypassed

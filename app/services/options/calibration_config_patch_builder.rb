@@ -39,6 +39,10 @@ module Options
       avg_gain        = @stats[:avg_gain].to_f
       avg_retrace_abs = @stats[:avg_retrace_abs].to_f
 
+      sessions       = @stats[:sessions] || {}
+      weak_midday    = sessions[:midday_oc].to_f < 0.0
+      weak_afternoon = sessions[:afternoon_oc].to_f < 0.0
+
       target_pct     = clamp(avg_gain * 0.45 / 100.0, 0.08, 0.35)
       activation_pct = clamp(avg_gain * 0.25 / 100.0, 0.020, 0.08)
       drawdown_pct   = clamp(avg_retrace_abs * 0.80 / 100.0, 0.015, 0.060)
@@ -48,12 +52,14 @@ module Options
       early_trigger  = clamp(activation_pct * 0.85, 0.020, 0.06)
       breakeven      = clamp(activation_pct * 1.5, 0.040, 0.12)
       activation_it  = clamp(target_pct * 0.55, 0.08, 0.20)
+      time_stop_mins = suggested_time_stop(weak_midday: weak_midday, weak_afternoon: weak_afternoon)
 
       {
         risk: {
           percentage_pnl_exit: { target_pct: target_pct },
           trailing: { activation_pct: activation_pct, drawdown_pct: drawdown_pct },
           profit_floor: { lock_pct: lock_pct, trail_pct: trail_pct },
+          time_stop: { trend: { @symbol.upcase.to_sym => time_stop_mins } },
           institutional_trailing: {
             @symbol.to_sym => {
               trailing_distance: distance,
@@ -64,6 +70,17 @@ module Options
           }
         }
       }
+    end
+
+    def suggested_time_stop(weak_midday:, weak_afternoon:)
+      base = case @symbol.upcase
+             when 'NIFTY'   then 20
+             when 'SENSEX'  then 10
+             else 15
+             end
+      base = (base * 0.8).round if weak_midday
+      base = (base * 0.9).round if weak_afternoon
+      [base, 6].max
     end
 
     # Recursively walks proposed and current; returns only paths where

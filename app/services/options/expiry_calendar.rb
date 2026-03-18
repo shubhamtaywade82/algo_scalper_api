@@ -24,7 +24,7 @@ module Options
 
       Array.new(weeks) do |i|
         expiry = current_expiry - (i * 7).days
-        { expiry: expiry, from: expiry - 6.days, to: expiry }
+        { expiry: expiry, from: expiry - (expiry.wday - 1).days, to: expiry }
       end.reverse
     end
   end

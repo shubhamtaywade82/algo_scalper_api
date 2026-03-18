@@ -207,7 +207,7 @@ module Live
 
         execution_meta = (meta['execution'].is_a?(Hash) ? meta['execution'].dup : {})
         execution_meta['type'] = reason.to_s
-        execution_meta['final_pnl_pct'] = (pnl_pct_display * 100.0).round(2)
+        execution_meta['final_pnl_pct'] = pnl_pct_display.round(2)
         execution_meta['classified_as'] = classification
         meta['execution'] = execution_meta
 

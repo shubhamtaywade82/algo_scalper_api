@@ -176,11 +176,11 @@ module Options
 
     def cycle_stats(candles)
       entry   = candles.first[:open].to_f
-      max_h   = candles.pluck(:high).max.to_f
-      min_l   = candles.pluck(:low).min.to_f
+      max_h   = candles.map { |c| c[:high] }.max.to_f
+      min_l   = candles.map { |c| c[:low] }.min.to_f
       final_c = candles.last[:close].to_f
       peak_idx   = candles.index { |c| c[:high] == max_h } || 0
-      pullback_l = candles[peak_idx..].pluck(:low).min.to_f
+      pullback_l = candles[peak_idx..].map { |c| c[:low] }.min.to_f
 
       {
         entry: entry.round(2),

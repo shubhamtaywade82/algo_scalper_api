@@ -36,14 +36,14 @@ ctx.min_score  # 60 for expiry, 50 for normal
 
 **Usage:** `Context::Builder.call(market:, indicators:, regime_state:)`
 
-**Dependencies (not yet in repo):**
+**Dependencies (wired in signal pipeline):**
 
-- `Market::RegimeScorer.new(market:, indicators:).call` → expects `{ regime:, score: }`
-- `Market::SessionResolver.current` → expects session symbol
-- `Market::RegimeState` (exists) for stability/cooldown
-- `expiry_day?` is hard-coded to Thursday
+- `Market::RegimeScorer` (`app/services/market/regime_scorer.rb`) — adapts `MarketRegimeDetector` to return `{ regime: :trend_bull|:trend_bear|:chop, score: 0–100 }`.
+- `Market::SessionResolver.current` (`app/services/market/session_resolver.rb`) — returns `:opening` (09:15–10:30 IST), `:gamma` (14:00–15:15 IST), or `:midday`.
+- `Market::RegimeState` — per-index stability and cooldown; used by Scheduler and passed into `Engine.run_for`.
+- `expiry_day?` — hard-coded to Thursday for `day_type`.
 
-**Gap:** `Market::RegimeScorer` and `Market::SessionResolver` are not defined. You need to add them or stub them before using `Context::Builder` in production. Existing `Market::MarketRegimeResolver` returns `:bullish`/`:bearish`/`:neutral` (different from `:trend_bull`/`:trend_bear`/`:chop`).
+**Signal pipeline:** `Signal::Scheduler` holds a `RegimeState` per index and passes it to `Signal::Engine.run_for(index_cfg, regime_state:)`. When `signals.enable_trading_context_gate` is true (default), the engine builds `Domain::TradingContext` via `Context::Builder` after primary analysis and blocks signal generation when `context.tradable?` is false (chop, low score, or stability &lt; 3). Exit-testing mode skips the gate.
 
 ---
 

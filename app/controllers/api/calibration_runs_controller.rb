@@ -53,10 +53,16 @@ module Api
         'risk.trailing.drawdown_pct' => cfg.dig(:risk, :trailing, :drawdown_pct),
         'risk.profit_floor.lock_pct' => cfg.dig(:risk, :profit_floor, :lock_pct),
         'risk.profit_floor.trail_pct' => cfg.dig(:risk, :profit_floor, :trail_pct),
-        'institutional_trailing.trailing_distance' => cfg.dig(:risk, :institutional_trailing, :trailing_distance),
-        'institutional_trailing.early_trigger' => cfg.dig(:risk, :institutional_trailing, :early_trigger),
-        'institutional_trailing.breakeven_trigger' => cfg.dig(:risk, :institutional_trailing, :breakeven_trigger),
-        'institutional_trailing.activation_trigger' => cfg.dig(:risk, :institutional_trailing, :activation_trigger)
+        'risk.institutional_trailing.nifty.trailing_distance' => cfg.dig(:risk, :institutional_trailing, :nifty, :trailing_distance),
+        'risk.institutional_trailing.nifty.early_trigger' => cfg.dig(:risk, :institutional_trailing, :nifty, :early_trigger),
+        'risk.institutional_trailing.nifty.breakeven_trigger' => cfg.dig(:risk, :institutional_trailing, :nifty, :breakeven_trigger),
+        'risk.institutional_trailing.nifty.activation_trigger' => cfg.dig(:risk, :institutional_trailing, :nifty, :activation_trigger),
+        'risk.institutional_trailing.sensex.trailing_distance' => cfg.dig(:risk, :institutional_trailing, :sensex, :trailing_distance),
+        'risk.institutional_trailing.sensex.early_trigger' => cfg.dig(:risk, :institutional_trailing, :sensex, :early_trigger),
+        'risk.institutional_trailing.sensex.breakeven_trigger' => cfg.dig(:risk, :institutional_trailing, :sensex, :breakeven_trigger),
+        'risk.institutional_trailing.sensex.activation_trigger' => cfg.dig(:risk, :institutional_trailing, :sensex, :activation_trigger),
+        'risk.time_stop.trend.NIFTY' => cfg.dig(:risk, :time_stop, :trend, :NIFTY),
+        'risk.time_stop.trend.SENSEX' => cfg.dig(:risk, :time_stop, :trend, :SENSEX)
       }
     rescue StandardError
       {}

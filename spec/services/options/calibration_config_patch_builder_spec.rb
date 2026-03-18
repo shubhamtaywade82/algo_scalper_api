@@ -111,6 +111,22 @@ RSpec.describe Options::CalibrationConfigPatchBuilder do
       expect(sensex_patch.dig('risk', 'institutional_trailing')).to have_key('sensex')
       expect(sensex_patch.dig('risk', 'institutional_trailing')).not_to have_key('nifty')
     end
+
+    it 'derives time_stop minutes using NIFTY base (20) when no weak sessions' do
+      actual = patch.dig('risk', 'time_stop', 'trend', 'NIFTY')
+      expect(actual).to eq(20)
+    end
+
+    it 'reduces time_stop when midday session is negative' do
+      weak_stats = combined_stats.merge(sessions: { morning_oc: 1.0, midday_oc: -2.0, afternoon_oc: 0.5 })
+      p = described_class.build(combined_stats: weak_stats, symbol: 'NIFTY')
+      expect(p.dig('risk', 'time_stop', 'trend', 'NIFTY')).to eq((20 * 0.8).round)
+    end
+
+    it 'uses SENSEX base (10) for time_stop' do
+      s_patch = described_class.build(combined_stats: combined_stats, symbol: 'SENSEX')
+      expect(s_patch.dig('risk', 'time_stop', 'trend', 'SENSEX')).to eq(10)
+    end
   end
 
   describe 'change filter (≥10% difference from current)' do
@@ -147,6 +163,7 @@ RSpec.describe Options::CalibrationConfigPatchBuilder do
           percentage_pnl_exit: { target_pct: target },
           trailing: { activation_pct: activation, drawdown_pct: drawdown },
           profit_floor: { lock_pct: lock, trail_pct: trail },
+          time_stop: { trend: { NIFTY: 20 } },
           institutional_trailing: {
             nifty: {
               trailing_distance: distance, early_trigger: early,

@@ -4,7 +4,7 @@
 module Signal
   class Engine
     class << self
-      def run_for(index_cfg)
+      def run_for(index_cfg, regime_state: nil)
         # Skip signal generation if market is closed (after 3:30 PM IST)
         if defined?(TradingSession::Service) && TradingSession::Service.respond_to?(:market_closed?) && TradingSession::Service.market_closed?
           Rails.logger.debug { "[Signal] Market closed - skipping analysis for #{index_cfg[:key]}" }
@@ -286,6 +286,30 @@ module Signal
                                                          validation_mode: effective_validation_mode)
           end
         end
+
+        # ===== TRADING CONTEXT GATE (day_type / session / regime / score / stability) =====
+        enable_trading_context_gate = signals_cfg.fetch(:enable_trading_context_gate, true)
+        if enable_trading_context_gate && regime_state && !exit_testing_mode
+          market = primary_series
+          indicators = {
+            adx_value: primary_analysis[:adx_value],
+            regime_confidence: regime_result&.[](:confidence)
+          }
+          context = Context::Builder.call(market: market, indicators: indicators, regime_state: regime_state)
+          unless context.tradable?
+            Rails.logger.info(
+              "[Signal] TradingContext BLOCKED #{index_cfg[:key]}: day_type=#{context.day_type} session=#{context.session} " \
+              "regime=#{context.regime} score=#{context.score} stability=#{context.stability} (not tradable)"
+            )
+            Signal::StateTracker.reset(index_cfg[:key])
+            return
+          end
+          Rails.logger.debug(
+            "[Signal] TradingContext PASSED #{index_cfg[:key]}: #{context.day_type}/#{context.session}/#{context.regime} " \
+            "score=#{context.score} stability=#{context.stability}"
+          )
+        end
+        # ===== END TRADING CONTEXT GATE =====
 
         unless validation_result[:valid]
           Rails.logger.warn("[Signal] NOT proceeding for #{index_cfg[:key]}: #{validation_result[:reason]}")
