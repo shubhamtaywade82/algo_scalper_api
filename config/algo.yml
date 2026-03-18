@@ -232,15 +232,15 @@ risk:
       premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
     premium_momentum_failure:
       enabled: true
-      default_stall_minutes: 3
+      default_stall_minutes: 2
       index_overrides:
         SENSEX:
-          stall_minutes: 4
+          stall_minutes: 2
       session_overrides:
         chop_decay:
-          stall_minutes_add: 2
+          stall_minutes_add: 0  # In chop, cut dead trades fast — no extension
         close_gamma:
-          stall_minutes_add: 2
+          stall_minutes_add: 1
 
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
@@ -265,25 +265,27 @@ risk:
     nifty:
       early_trigger: 0.03         # Phase 1: Survival (+3% profit → -8% SL)
       early_sl_offset: -0.08
-      breakeven_trigger: 0.07     # Phase 2: Breakeven at +7%
-      activation_trigger: 0.12    # Phase 3: HWM Trailing at +12%
-      trailing_distance: 0.06     # 6% from HWM (was 1.8% — too tight)
+      breakeven_trigger: 0.12     # Phase 2: Breakeven at +12% (was 7% — too early)
+      activation_trigger: 0.20    # Phase 3: HWM Trailing at +20% (was 12%)
+      trailing_distance: 0.08     # 8% from HWM (was 6%)
       adaptive_drawdown:
         - { min_profit: 0.03, drawdown: 0.06 }
         - { min_profit: 0.12, drawdown: 0.05 }
         - { min_profit: 0.25, drawdown: 0.04 }
         - { min_profit: 0.40, drawdown: 0.03 }
     sensex:
-      early_trigger: 0.03
+      # SENSEX profile: CE avg max gain +30.47%, PE +69.07%, post-peak retrace ~99.8%
+      # Options decay to near-zero after peak → activate early, lock in gains quickly
+      early_trigger: 0.03         # Phase 1: Survival (+3% profit → -8% SL)
       early_sl_offset: -0.08
-      breakeven_trigger: 0.07
-      activation_trigger: 0.12
-      trailing_distance: 0.06
+      breakeven_trigger: 0.08     # Phase 2: Breakeven at +8% (calibration: CE breakeven 7.6%)
+      activation_trigger: 0.15    # Phase 3: HWM Trailing at +15% (between CE 7.6% and PE 17.3%)
+      trailing_distance: 0.15     # 15% from HWM (wider than NIFTY — SENSEX moves are 2x larger)
       adaptive_drawdown:
-        - { min_profit: 0.03, drawdown: 0.06 }
-        - { min_profit: 0.12, drawdown: 0.05 }
-        - { min_profit: 0.25, drawdown: 0.04 }
-        - { min_profit: 0.40, drawdown: 0.03 }
+        - { min_profit: 0.08, drawdown: 0.12 }  # At +8%: 12% drawdown room
+        - { min_profit: 0.15, drawdown: 0.10 }  # At +15%: tighten to 10%
+        - { min_profit: 0.30, drawdown: 0.08 }  # At +30% (avg CE peak): 8%
+        - { min_profit: 0.50, drawdown: 0.06 }  # At +50% (deep PE zone): 6%
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
@@ -295,14 +297,14 @@ risk:
   # Dynamic Trailing stops
   trailing:
     enabled: true
-    activation_pct: 0.035    # 3.5% - lower activation for more aggressive trailing
-    drawdown_pct: 0.025      # 2.5% - tighter drawdown to capture move
+    activation_pct: 0.10     # 10% - let trade develop before arming (avg max gain 14.2%)
+    drawdown_pct: 0.05       # 5% - wider drawdown to survive avg retrace of 3.1%
 
   trailing_mode: 'direct' # Moving up only to capture profits
   direct_trailing:
     enabled: true
-    distance_pct: 0.05 # 5% - trail at 5% distance from peak
-    activation_profit_pct: 0.0 # 0% - start direct trailing at 0% profit
+    distance_pct: 0.08       # 8% - wider trail distance once active
+    activation_profit_pct: 0.10 # 10% - don't start direct trailing from entry
     min_sl_offset_pct: -0.30 # -30% - never let SL go below -30% from entry
 
   # Post-Profit Zone Management (State Machine)
