@@ -35,9 +35,11 @@ class PositionTracker < ApplicationRecord
   after_update_commit :analyze_trade_if_exited
 
   # Associations
-  belongs_to :instrument, optional: false # Kept for backward compatibility during transition
+  belongs_to :instrument, optional: false, inverse_of: :position_trackers # Kept for backward compatibility during transition
   belongs_to :watchable, polymorphic: true, optional: false
-  has_one :trade_analytic, dependent: :destroy
+  has_one :trade_analytic, dependent: :destroy, inverse_of: :position_tracker
+  has_one :trade_telemetry, class_name: 'TradeTelemetry', foreign_key: :tracker_id, dependent: :destroy,
+                            inverse_of: :tracker
 
   # Scopes
   # Note: enum automatically creates scopes for :pending, :active, :exited, :cancelled

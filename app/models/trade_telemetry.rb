@@ -35,5 +35,5 @@
 class TradeTelemetry < ApplicationRecord
   self.table_name = 'trade_telemetry'
 
-  belongs_to :tracker, class_name: 'PositionTracker'
+  belongs_to :tracker, class_name: 'PositionTracker', optional: false, inverse_of: :trade_telemetry
 end

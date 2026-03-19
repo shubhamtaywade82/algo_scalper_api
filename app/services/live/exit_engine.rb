@@ -47,6 +47,9 @@ module Live
       return { success: false, reason: 'invalid_router' } unless @router
       return { success: false, reason: 'invalid_reason' } if reason.blank?
 
+      tracker.reload
+      return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
+
       # State validation
       return { success: false, reason: 'not_active' } unless tracker.active?
 
@@ -70,8 +73,16 @@ module Live
       ).call
 
       unless cmd_result.success?
+        raise cmd_result.error if cmd_result.reason == 'command_exception' && cmd_result.error
+
+        error_detail = cmd_result.error
+        if error_detail.nil? && cmd_result.payload.is_a?(Hash) && cmd_result.payload.key?(:raw)
+          error_detail = cmd_result.payload[:raw]
+        end
+        error_detail = cmd_result.payload if error_detail.nil?
+
         Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{cmd_result.reason} (coid: #{tracker.exit_coid})")
-        return { success: false, reason: 'router_failed', error: cmd_result.error || cmd_result.payload }
+        return { success: false, reason: 'router_failed', error: error_detail }
       end
 
       # Extract raw broker response from command payload for downstream helpers
@@ -96,7 +107,7 @@ module Live
     def prepare_exit_intent!(tracker, reason)
       tracker.with_lock do
         tracker.reload
-        return false if tracker.exited? || tracker.exit_requested_at.present?
+        return false if tracker.exited? || tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
         metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
@@ -262,21 +273,6 @@ module Live
       Live::TickQuery.ltp_for(tracker)
     rescue StandardError
       nil
-    end
-
-    # Determine if router result indicates success
-    # Handles various return formats: boolean true, hash with success: true, hash with success: 1, etc.
-    def success?(result)
-      return true if result == true
-      return false unless result.is_a?(Hash)
-
-      success_value = result[:success]
-      return true if success_value == true
-      return true if success_value == 1
-      return true if success_value.to_s.downcase == 'true'
-      return true if success_value.to_s.downcase == 'yes'
-
-      false
     end
 
     # Send Telegram exit notification
