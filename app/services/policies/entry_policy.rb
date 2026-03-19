@@ -81,7 +81,15 @@ module Policies
 
     def log_blocked_reasons
       index_key = @index_cfg&.dig(:key).to_s
-      Rails.logger.warn("[EntryPolicy] blocked index=#{index_key} reasons=#{reasons.join(',')}")
+      Observability::StructuredLog.warn(
+        event: 'entry_policy_blocked',
+        payload: {
+          service: 'Policies::EntryPolicy',
+          index_key: index_key,
+          direction: @direction.to_s,
+          reasons: reasons
+        }
+      )
     end
   end
 end
