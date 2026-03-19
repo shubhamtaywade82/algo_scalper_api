@@ -250,9 +250,9 @@ risk:
       max_minutes: 8 # 8 mins max for scalps
       max_candles: 8
     trend:
-      NIFTY: 20       # minutes (tightened from 45)
-      BANKNIFTY: 15    # minutes (tightened from 45)
-      SENSEX: 10       # minutes (tightened from 90 - critical for SENSEX)
+      NIFTY: 20       # minutes
+      BANKNIFTY: 15   # minutes
+      SENSEX: 15      # minutes (raised from 10 — avg max gain 30-69%, needs time to develop)
 
   # Institutional Trailing System (3-Phase)
   # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
