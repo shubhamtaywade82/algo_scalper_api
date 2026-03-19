@@ -123,8 +123,15 @@ module Policies
     end
 
     def log_blocked_reasons
-      Rails.logger.warn(
-        "[RiskPolicy] blocked index=#{@index_key} qty=#{@proposed_qty} price=#{@entry_price} reasons=#{reasons.join(',')}"
+      Observability::StructuredLog.warn(
+        event: 'risk_policy_blocked',
+        payload: {
+          service: 'Policies::RiskPolicy',
+          index_key: @index_key,
+          proposed_qty: @proposed_qty,
+          entry_price: @entry_price,
+          reasons: reasons
+        }
       )
     end
   end
