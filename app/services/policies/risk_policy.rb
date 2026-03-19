@@ -26,7 +26,9 @@ module Policies
     end
 
     def permitted?
-      violations.empty?
+      allowed = violations.empty?
+      log_blocked_reasons unless allowed
+      allowed
     end
 
     def reasons
@@ -40,11 +42,12 @@ module Policies
     end
 
     def compute_violations
-      checks = [
-        :circuit_breaker_tripped?,
-        :max_active_positions_exceeded?,
-        :max_exposure_exceeded?,
-        :portfolio_drawdown_limit_reached?
+      checks = %i[
+        circuit_breaker_tripped?
+        max_active_positions_exceeded?
+        per_trade_risk_exceeded?
+        max_exposure_exceeded?
+        portfolio_drawdown_limit_reached?
       ]
       checks.each_with_object([]) do |check, acc|
         acc << check.to_s.delete_suffix('?') if send(check)
@@ -59,7 +62,19 @@ module Policies
 
     def max_active_positions_exceeded?
       max = risk_cfg[:max_active_positions] || 3
-      PositionTracker.active.count >= max
+      Positions::ActiveForExit.call.count >= max
+    rescue StandardError
+      false
+    end
+
+    def per_trade_risk_exceeded?
+      max_pct = per_trade_risk_limit
+      return false unless max_pct.positive?
+
+      equity = wallet_snapshot[:equity].to_f
+      return false unless equity.positive?
+
+      proposed_notional > (equity * max_pct)
     rescue StandardError
       false
     end
@@ -68,12 +83,10 @@ module Policies
       max_pct = risk_cfg[:max_exposure_pct].to_f
       return false unless max_pct.positive?
 
-      wallet = Orders.config.gateway.wallet_snapshot
-      equity = wallet[:equity].to_f
+      equity = wallet_snapshot[:equity].to_f
       return false unless equity.positive?
 
-      proposed_notional  = @entry_price * @proposed_qty
-      current_exposure   = wallet[:exposure].to_f
+      current_exposure = wallet_snapshot[:exposure].to_f
       (current_exposure + proposed_notional) / equity > max_pct
     rescue StandardError
       false
@@ -83,7 +96,7 @@ module Policies
       result = Live::DailyLimits.new.can_trade?(index_key: @index_key)
       return false if result[:allowed]
 
-      !%w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].include?(result[:reason])
+      %w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].exclude?(result[:reason])
     rescue StandardError
       false
     end
@@ -92,6 +105,27 @@ module Policies
       AlgoConfig.fetch[:risk] || {}
     rescue StandardError
       {}
+    end
+
+    def per_trade_risk_limit
+      risk_cfg[:max_risk_per_trade_pct].to_f.nonzero? ||
+        risk_cfg[:per_trade_risk_pct].to_f
+    end
+
+    def proposed_notional
+      @entry_price * @proposed_qty
+    end
+
+    def wallet_snapshot
+      @wallet_snapshot ||= Orders.config.gateway.wallet_snapshot || {}
+    rescue StandardError
+      {}
+    end
+
+    def log_blocked_reasons
+      Rails.logger.warn(
+        "[RiskPolicy] blocked index=#{@index_key} qty=#{@proposed_qty} price=#{@entry_price} reasons=#{reasons.join(',')}"
+      )
     end
   end
 end

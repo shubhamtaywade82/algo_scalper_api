@@ -24,7 +24,9 @@ module Policies
     end
 
     def permitted?
-      violations.empty?
+      allowed = violations.empty?
+      log_blocked_reasons unless allowed
+      allowed
     end
 
     def reasons
@@ -38,10 +40,10 @@ module Policies
     end
 
     def compute_violations
-      checks = [
-        :circuit_breaker_tripped?,
-        :outside_trading_hours?,
-        :daily_loss_limit_reached?
+      checks = %i[
+        circuit_breaker_tripped?
+        outside_trading_hours?
+        daily_loss_limit_reached?
       ]
       checks.each_with_object([]) do |check, acc|
         acc << check.to_s.delete_suffix('?') if send(check)
@@ -68,9 +70,18 @@ module Policies
       result = Live::DailyLimits.new.can_trade?(index_key: index_key)
       return false if result[:allowed]
 
-      !%w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].include?(result[:reason])
+      blocked_for_risk_reason?(result[:reason])
     rescue StandardError
       false
+    end
+
+    def blocked_for_risk_reason?(reason)
+      %w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].exclude?(reason)
+    end
+
+    def log_blocked_reasons
+      index_key = @index_cfg&.dig(:key).to_s
+      Rails.logger.warn("[EntryPolicy] blocked index=#{index_key} reasons=#{reasons.join(',')}")
     end
   end
 end
