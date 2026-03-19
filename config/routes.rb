@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Rails.application.routes.draw do
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
@@ -18,12 +20,20 @@ Rails.application.routes.draw do
     get :positions, to: "positions#index"
 
     # Live AI analysis dashboard
-    get 'analysis/:index_key', to: 'analysis#show', as: :analysis
-    get 'analysis/:index_key/historical', to: 'analysis#historical', as: :analysis_historical
+    get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
+    get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
+    post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
 
     # Algo Settings
     get    'settings',      to: 'settings#index'
     patch  'settings/bulk', to: 'settings#update_bulk'
+
+    # Calibration runs — view and apply automated config patches
+    resources :calibration_runs, only: %i[index show] do
+      member do
+        post :apply
+      end
+    end
 
     # Circuit breaker — emergency halt
     # GET    /api/circuit_breaker        → status (unauthenticated)
@@ -44,5 +54,5 @@ Rails.application.routes.draw do
   end
 
   # Quietly handle browser/devtools well-known probes with 204 No Content
-  get "/.well-known/*path", to: proc { [ 204, { "Content-Type" => "text/plain" }, [ "" ] ] }
+  get "/.well-known/*path", to: proc { [204, { "Content-Type" => "text/plain" }, [""]] }
 end

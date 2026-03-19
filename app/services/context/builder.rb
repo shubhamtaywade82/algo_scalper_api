@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Context
   class Builder
     def self.call(market:, indicators:, regime_state:)

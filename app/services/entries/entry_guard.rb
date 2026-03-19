@@ -605,7 +605,7 @@ module Entries
       end
 
       def time_regime_rules_enabled?
-        AlgoConfig.fetch.dig(:time_regimes, :enabled) == true
+        AlgoConfig.fetch.dig(:risk, :time_regimes, :enabled) == true
       rescue StandardError
         false
       end

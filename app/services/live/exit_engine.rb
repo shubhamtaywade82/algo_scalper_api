@@ -50,6 +50,12 @@ module Live
       # State validation
       return { success: false, reason: 'not_active' } unless tracker.active?
 
+      # Acquire process-wide exit lock to avoid dual intent (per-tick vs 5s loop)
+      unless acquire_exit_lock(tracker.id)
+        Rails.logger.info("[ExitEngine] Exit lock already held for #{tracker.order_no}, skipping duplicate exit request.")
+        return { success: false, reason: 'exit_lock_held' }
+      end
+
       intent_persisted = prepare_exit_intent!(tracker, reason)
       return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
       return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
@@ -94,8 +100,21 @@ module Live
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
         metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+
         metadata['exit_reason'] = reason
         metadata['exit_triggered_at'] = Time.current
+
+        snapshot = safe_pnl_snapshot(tracker)
+        decision_pnl_pct = if snapshot && snapshot[:pnl_pct]
+                             (snapshot[:pnl_pct].to_f * 100.0).round(2)
+                           end
+
+        decision_meta = (metadata['decision'].is_a?(Hash) ? metadata['decision'].dup : {})
+        decision_meta['type'] = reason.to_s
+        decision_meta['path'] ||= 'unknown'
+        decision_meta['decided_at'] = Time.current.iso8601
+        decision_meta['pnl_pct_at_decision'] = decision_pnl_pct if decision_pnl_pct
+        metadata['decision'] = decision_meta
 
         tracker.update!(
           exit_requested_at: Time.current,
@@ -174,23 +193,60 @@ module Live
       quantity = tracker.quantity
 
       unless final_pnl.present? && entry_price.present? && quantity.present? &&
-             entry_price.to_f.positive? && quantity.to_i.positive? && reason.present? && reason.include?('%')
+             entry_price.to_f.positive? && quantity.to_i.positive?
         Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
         return reason
       end
 
-      pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0).round(2)
-      updated_reason = "#{reason} (Actual: #{pnl_pct_display}%)"
-      return reason if reason == updated_reason
+      pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0)
+      classification = classify_exit(pnl_pct_display)
 
-      Rails.logger.info("[ExitEngine] Updating exit reason for #{tracker.order_no}: '#{reason}' -> '#{updated_reason}' (PnL: ₹#{final_pnl}, PnL%: #{pnl_pct_display}%)")
       tracker.transaction do
         tracker.lock!
         meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-        meta['exit_reason'] = updated_reason
-        tracker.update!(meta: meta)
+
+        execution_meta = (meta['execution'].is_a?(Hash) ? meta['execution'].dup : {})
+        execution_meta['type'] = reason.to_s
+        execution_meta['final_pnl_pct'] = pnl_pct_display.round(2)
+        execution_meta['classified_as'] = classification
+        meta['execution'] = execution_meta
+
+        meta['exit_reason'] ||= reason
+
+        tracker.update!(meta: meta, exit_reason: build_final_reason(reason, execution_meta))
       end
-      updated_reason
+
+      tracker.exit_reason
+    end
+
+    def classify_exit(final_pnl_pct_decimal)
+      return 'profit' if final_pnl_pct_decimal.positive?
+      return 'loss' if final_pnl_pct_decimal.negative?
+
+      'breakeven'
+    end
+
+    def build_final_reason(reason, execution_meta)
+      final_pct = execution_meta['final_pnl_pct']
+      classification = execution_meta['classified_as']
+      return reason unless final_pct && classification
+
+      "#{reason} (Final: #{final_pct.round(2)}%, #{classification})"
+    end
+
+    def acquire_exit_lock(tracker_id, ttl: 10)
+      key = "exit_lock:#{tracker_id}"
+      redis = Redis.current
+      redis.set(key, '1', nx: true, ex: ttl)
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
+      true
+    end
+
+    def safe_pnl_snapshot(tracker)
+      Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+    rescue StandardError
+      nil
     end
 
     # Generates a deterministic, broker-safe correlation id for exits.

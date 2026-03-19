@@ -1,5 +1,5 @@
 <script setup>
-defineProps({
+const props = defineProps({
   positions: { type: Array, default: () => [] }
 })
 
@@ -35,8 +35,15 @@ function formatTime(iso) {
   }
 }
 
-function exitBadge(reason) {
+function exitBadge(pos) {
+  const classification = pos.exit_classification
+  if (classification === 'profit') return { label: 'TP', cls: 'text-emerald-400' }
+  if (classification === 'loss') return { label: 'SL', cls: 'text-red-400' }
+  if (classification === 'breakeven') return { label: 'BE', cls: 'text-yellow-400' }
+
+  const reason = pos.exit_reason
   if (!reason) return { label: '—', cls: 'text-gray-600' }
+
   const r = reason.toLowerCase()
   if (r.includes('sl') || r.includes('stop_loss')) return { label: 'SL', cls: 'text-red-400' }
   if (r.includes('time') || r.includes('eod')) return { label: 'TIME', cls: 'text-yellow-400' }
@@ -105,8 +112,8 @@ function exitBadge(reason) {
               {{ sign(pos.pnl_pct) }}{{ inr(pos.pnl_pct) }}%
             </td>
             <td class="px-4 py-4 text-center">
-              <span :class="['text-[9px] font-black px-1.5 py-0.5 rounded border tracking-widest', exitBadge(pos.exit_reason).cls + '/20 border-' + exitBadge(pos.exit_reason).cls + '/10']">
-                {{ exitBadge(pos.exit_reason).label }}
+              <span :class="['text-[9px] font-black px-1.5 py-0.5 rounded border tracking-widest', exitBadge(pos).cls + '/20 border-' + exitBadge(pos).cls + '/10']">
+                {{ exitBadge(pos).label }}
               </span>
             </td>
             <td class="px-6 py-4 text-right text-gray-600 text-data text-[10px]">{{ formatTime(pos.exited_at) }}</td>

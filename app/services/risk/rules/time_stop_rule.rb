@@ -53,26 +53,12 @@ module Risk
 
         return skip_result unless time_limit
 
-        pnl = context.position.pnl.to_f
         pnl_pct = context.pnl_pct.to_f
-        index_key = tracker.meta&.dig('index_key') || 'NIFTY'
 
-        # Dynamic time stop tightening if position is negative
-        if pnl < 0.0 && time_limit > 5
-          time_limit = 5 # Reduce time limit to 5 minutes if negative PnL (Theta protection)
-        end
-
-        # Determine time limit and profit threshold
-        # For trend trades, we allow longer if it's very profitable (e.g., > 5%)
-        # But if it's a laggard (< 5% profit) after the time limit, we exit.
-        laggard_threshold_pct = 0.05 # 5%
-
-        # Bypass time stop if the trade is strongly in profit (let winners run)
-        # EXCEPT for SENSEX where we are more aggressive with time stops
-        if pnl_pct >= laggard_threshold_pct && index_key != 'SENSEX'
-          # Rails.logger.debug { "[TimeStopRule] Bypassing time stop for #{tracker.order_no} as it is strongly in profit (#{(pnl_pct * 100).round(2)}%)" }
-          return skip_result
-        end
+        # Bypass time stop for all profitable trades — trailing system owns winners.
+        # PremiumMomentumFailure (2min stall) handles dead/negative trades faster and
+        # more precisely, so no hard 5-min negative-PnL override is needed here.
+        return skip_result if pnl_pct >= 0.05
 
         # Check if time limit exceeded
         entry_time = tracker.created_at
