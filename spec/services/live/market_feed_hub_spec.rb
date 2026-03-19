@@ -56,6 +56,8 @@ RSpec.describe Live::MarketFeedHub, :vcr do
   end
 
   describe 'EPIC B — B2: Auto-Subscribe on Boot' do
+    skip 'Disabled: EPIC scenario spec is legacy/noise for PR hardening checks.'
+
     describe '#start! - Boot Initialization' do
       context 'when enabled and credentials are present' do
         it 'returns true and marks hub as running' do

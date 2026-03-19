@@ -7,17 +7,16 @@ RSpec.describe Policies::EntryPolicy do
 
   subject(:policy) { described_class.new(index_cfg: index_cfg, direction: :long) }
 
+  let(:current_time) { Time.zone.now.change(hour: 10, min: 0, sec: 0) }
+
   # ── Helpers: stub all checks to pass by default ─────────────────────────────
 
   before do
     allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(false)
     allow_any_instance_of(Live::DailyLimits).to receive(:can_trade?)
       .and_return({ allowed: true })
-    # Freeze time inside market hours (10:00 IST)
-    travel_to(Time.zone.parse('2026-01-13 10:00:00 +0530'))
+    allow(Time).to receive(:current).and_return(current_time)
   end
-
-  after { travel_back }
 
   # ── Permitted: all checks pass ──────────────────────────────────────────────
 
@@ -39,7 +38,7 @@ RSpec.describe Policies::EntryPolicy do
   # ── Outside trading hours ───────────────────────────────────────────────────
 
   context 'when outside market hours' do
-    before { travel_to(Time.zone.parse('2026-01-13 08:00:00 +0530')) }
+    let(:current_time) { Time.zone.now.change(hour: 8, min: 0, sec: 0) }
 
     it { is_expected.to be_forbidden }
     it { expect(policy.reasons).to include('outside_trading_hours') }
@@ -62,8 +61,9 @@ RSpec.describe Policies::EntryPolicy do
   context 'with multiple violations' do
     before do
       allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(true)
-      travel_to(Time.zone.parse('2026-01-13 08:00:00 +0530'))
     end
+
+    let(:current_time) { Time.zone.now.change(hour: 8, min: 0, sec: 0) }
 
     it 'reports all violations' do
       expect(policy.reasons).to include('circuit_breaker_tripped', 'outside_trading_hours')
