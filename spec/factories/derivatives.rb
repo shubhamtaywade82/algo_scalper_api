@@ -48,6 +48,7 @@
 #
 # Indexes
 #
+#  index_derivatives_on_expiry_strike_option_type          (expiry_date,strike_price,option_type)
 #  index_derivatives_on_instrument_code                    (instrument_code)
 #  index_derivatives_on_instrument_id                      (instrument_id)
 #  index_derivatives_on_instrument_id_and_instrument_type  (instrument_id,instrument_type)
