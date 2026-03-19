@@ -35,8 +35,8 @@ class PositionTracker < ApplicationRecord
   after_update_commit :analyze_trade_if_exited
 
   # Associations
-  belongs_to :instrument # Kept for backward compatibility during transition
-  belongs_to :watchable, polymorphic: true
+  belongs_to :instrument, optional: false # Kept for backward compatibility during transition
+  belongs_to :watchable, polymorphic: true, optional: false
   has_one :trade_analytic, dependent: :destroy
 
   # Scopes
@@ -44,6 +44,7 @@ class PositionTracker < ApplicationRecord
   scope :paper, -> { where(paper: true) }
   scope :live, -> { where(paper: false) }
   scope :exited_paper, -> { where(paper: true, status: :exited) }
+  scope :today, -> { where(created_at: Time.zone.today.all_day) }
   # Active with exit requested but not yet exited (stuck if order failed or pending)
   scope :active_with_exit_requested, -> { active.where.not(exit_requested_at: nil) }
 
@@ -263,6 +264,10 @@ class PositionTracker < ApplicationRecord
       quantity: quantity.to_i,
       segment: segment
     }
+  end
+
+  def in_profit?
+    current_pnl_rupees.to_f.positive?
   end
 
   # Returns the state machine for this tracker, giving callers a clean

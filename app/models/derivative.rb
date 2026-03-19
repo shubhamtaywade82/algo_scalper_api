@@ -61,7 +61,7 @@
 class Derivative < ApplicationRecord
   include InstrumentHelpers
 
-  belongs_to :instrument
+  belongs_to :instrument, optional: false
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
   has_one  :watchlist_item,  lambda {
     where(active: true)
@@ -73,6 +73,9 @@ class Derivative < ApplicationRecord
 
   scope :options, -> { where.not(option_type: [nil, '']) }
   scope :futures, -> { where(option_type: [nil, '']) }
+  scope :ce, -> { where(option_type: 'CE') }
+  scope :pe, -> { where(option_type: 'PE') }
+  scope :current_expiry, -> { where(expiry_date: Date.current) }
 
   # Find derivative by underlying symbol, strike price, expiry date, and option type
   # @param underlying_symbol [String] Underlying symbol (e.g., 'NIFTY', 'BANKNIFTY')

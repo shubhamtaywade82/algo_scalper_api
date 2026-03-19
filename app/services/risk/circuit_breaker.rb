@@ -73,7 +73,7 @@ module Risk
     # @param exit_engine [Live::ExitEngine]
     # @param reason [String] exit reason recorded on each tracker
     def force_close_all!(exit_engine:, reason: 'circuit_breaker')
-      trackers = PositionTracker.active.to_a
+      trackers = Positions::ActiveForExit.call.to_a
       Rails.logger.error("[CircuitBreaker] Force-closing #{trackers.size} position(s): #{reason}")
 
       trackers.each do |tracker|
