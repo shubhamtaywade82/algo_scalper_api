@@ -83,12 +83,11 @@ RSpec.describe Live::ExitEngine do
       it 'returns success hash on successful exit' do
         result = engine.execute_exit(tracker, 'stop_loss')
 
-        expect(result).to be_a(Hash)
-        expect(result[:success]).to be true
-        expect(result[:exit_price]).to eq(101.5)
-        expect(result[:reason]).to eq('stop_loss')
+        expect(result).to include(success: true, exit_price: 101.5, reason: 'stop_loss')
         expect(result[:client_order_id]).to be_present
-        expect(tracker.reload.exit_requested_at).to be_present
+
+        tracker.reload
+        expect(tracker.exit_requested_at).to be_present
         expect(tracker.exit_sent_at).to be_present
       end
 
@@ -111,12 +110,10 @@ RSpec.describe Live::ExitEngine do
         result = engine.execute_exit(tracker, 'duplicate exit')
 
         tracker.reload
-        expect(tracker.status).to eq('exited')
-        expect(tracker.meta['exit_reason']).to eq('paper exit')
+        expect([tracker.status, tracker.meta['exit_reason']]).to eq(['exited', 'paper exit'])
         expect(router).to have_received(:exit_market).once
         # After first exit, tracker is no longer active, so second call returns not_active
-        expect(result[:success]).to be false
-        expect(result[:reason]).to eq('not_active')
+        expect(result).to include(success: false, reason: 'not_active')
       end
 
       it 'returns not_active if tracker is already exited' do
