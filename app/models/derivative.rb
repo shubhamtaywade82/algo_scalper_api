@@ -61,12 +61,12 @@
 class Derivative < ApplicationRecord
   include InstrumentHelpers
 
-  belongs_to :instrument, optional: false
+  belongs_to :instrument, optional: false, inverse_of: :derivatives
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
   has_one  :watchlist_item,  lambda {
     where(active: true)
   }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
-  has_many :position_trackers, as: :watchable, dependent: :destroy
+  has_many :position_trackers, as: :watchable, dependent: :destroy, inverse_of: :watchable
 
   validates :security_id, presence: true, uniqueness: { scope: %i[symbol_name exchange segment] }
   validates :option_type, inclusion: { in: %w[CE PE], allow_blank: true }
