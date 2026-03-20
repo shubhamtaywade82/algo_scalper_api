@@ -50,6 +50,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
 
     # Mock DhanHQ API
     allow(DhanHQ::Models::Position).to receive(:active).and_return([])
+    allow(TradingSession::Service).to receive(:market_open?).and_return(true)
 
     # Mock database queries
     allow(PositionTracker).to receive(:active).and_return(PositionTracker.where(id: position_tracker.id))
@@ -375,6 +376,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
 
         # Ensure paper trading is disabled so sync_live_positions is called
         allow(position_sync_service).to receive(:paper_trading_enabled?).and_return(false)
+        allow(position_sync_service).to receive(:market_open?).and_return(true)
       end
 
       it 'syncs positions from DhanHQ to database' do

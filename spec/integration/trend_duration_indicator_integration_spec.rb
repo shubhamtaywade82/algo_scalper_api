@@ -17,7 +17,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
       20.times do |i|
         price = base_price + (i * 15)
         candle = Candle.new(
-          ts: current_time + (i * 5).minutes,
+          timestamp: current_time + (i * 5).minutes,
           open: price,
           high: price + 10,
           low: price - 5,
@@ -32,7 +32,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
       15.times do |i|
         price = base_price - (i * 12)
         candle = Candle.new(
-          ts: current_time + ((20 + i) * 5).minutes,
+          timestamp: current_time + ((20 + i) * 5).minutes,
           open: price,
           high: price + 5,
           low: price - 10,
@@ -47,7 +47,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
       10.times do |i|
         price = base_price + (i * 18)
         candle = Candle.new(
-          ts: current_time + ((35 + i) * 5).minutes,
+          timestamp: current_time + ((35 + i) * 5).minutes,
           open: price,
           high: price + 12,
           low: price - 3,
@@ -108,7 +108,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
       min_candles.times do |i|
         price = base_price + (i * 10)
         candle = Candle.new(
-          ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+          timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
           open: price,
           high: price + 5,
           low: price - 5,
@@ -187,7 +187,7 @@ RSpec.describe 'Trend Duration Indicator Integration', type: :integration do
         # Strong upward momentum
         price = base_price + (i * 25)
         candle = Candle.new(
-          ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+          timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
           open: price,
           high: price + 15,
           low: price - 5,

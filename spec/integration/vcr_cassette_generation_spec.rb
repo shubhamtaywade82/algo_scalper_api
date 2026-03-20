@@ -8,10 +8,12 @@ require 'rails_helper'
 
 RSpec.describe 'VCR Cassette Generation', :vcr, type: :integration do
   describe 'DhanHQ API calls' do
+puts "DHAN_CLIENT_ID: #{ENV['DHAN_CLIENT_ID']}"; puts "DHAN_ACCESS_TOKEN: #{ENV['DHAN_ACCESS_TOKEN']}"
     context 'when making real API calls' do
       it 'records OHLC API call with filtered sensitive data' do
+puts "INSIDE IT: DHAN_CLIENT_ID: #{ENV['DHAN_CLIENT_ID']}"
         # Skip if no credentials are available
-        skip 'No DhanHQ credentials available' unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
+        skip 'No DhanHQ credentials available' unless ENV['DHAN_CLIENT_ID'] && ENV['DHAN_ACCESS_TOKEN']
 
         # Create a real instrument (use find_or_create to avoid duplicate security_id errors)
         instrument = Instrument.find_or_create_by!(security_id: '13') do |inst|
@@ -34,7 +36,7 @@ RSpec.describe 'VCR Cassette Generation', :vcr, type: :integration do
 
       it 'records historical data API call with filtered sensitive data' do
         # Skip if no credentials are available
-        skip 'No DhanHQ credentials available' unless ENV['CLIENT_ID'] && ENV['ACCESS_TOKEN']
+        skip 'No DhanHQ credentials available' unless ENV['DHAN_CLIENT_ID'] && ENV['DHAN_ACCESS_TOKEN']
 
         # Create a real instrument (use find_or_create to avoid duplicate security_id errors)
         instrument = Instrument.find_or_create_by!(security_id: '13') do |inst|

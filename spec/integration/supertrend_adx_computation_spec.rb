@@ -590,11 +590,11 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
       let(:large_series) do
         series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
 
-        # Create 1000 candles
-        1000.times do |i|
+        # Create 200 candles (MAX_CANDLES limit)
+        200.times do |i|
           base_price = 100.0 + (i * 0.1)
           series.add_candle(Candle.new(
-                              timestamp: (Time.current - (1000 - i).minutes).to_i,
+                              timestamp: (Time.current - (200 - i).minutes).to_i,
                               open: base_price,
                               high: base_price + 1.0,
                               low: base_price - 1.0,
@@ -622,7 +622,7 @@ RSpec.describe 'Supertrend & ADX Computation Integration', :vcr, type: :integrat
         result = large_supertrend.call
 
         expect(result[:trend]).to be_in(%i[bullish bearish])
-        expect(result[:adaptive_multipliers].size).to eq(1000)
+        expect(result[:adaptive_multipliers].size).to eq(200)
       end
     end
   end
