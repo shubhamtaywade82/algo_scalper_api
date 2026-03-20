@@ -139,6 +139,7 @@ module Positions
         nil
       end
       @last_bulk_load_count = nil
+      @last_profit_lock_check = Time.current
     end
 
     # Start the cache (subscribe to MarketFeedHub callbacks)
@@ -412,6 +413,9 @@ module Positions
 
       # Check exit triggers
       check_exit_triggers(position)
+
+      # Evaluate portfolio-level profit lock
+      evaluate_profit_lock
     rescue StandardError => e
       @stats[:errors] += 1
       Rails.logger.error("[Positions::ActiveCache] Error handling tick: #{e.class} - #{e.message}")
@@ -436,6 +440,16 @@ module Positions
                                         tracker_id: position.tracker_id,
                                         position: position
                                       })
+    end
+
+    def evaluate_profit_lock
+      now = Time.current
+      return unless now - @last_profit_lock_check >= 2.0
+
+      @last_profit_lock_check = now
+      Portfolio::ProfitLockEngine.evaluate!
+    rescue StandardError => e
+      Rails.logger.error("[ActiveCache] ProfitLock evaluation failed: #{e.message}")
     end
 
     # Calculate default SL from tracker (30% below entry for CE)
