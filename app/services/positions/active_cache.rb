@@ -2,6 +2,7 @@
 
 require 'singleton'
 require 'concurrent/map'
+require_relative '../concerns/broker_fee_calculator'
 
 module Positions
   # Position data structure - defined outside ActiveCache to avoid re-definition issues
@@ -84,17 +85,21 @@ module Positions
     def recalculate_pnl
       return unless entry_price&.positive? && current_ltp&.positive? && quantity&.positive?
 
-      self.pnl = (current_ltp - entry_price) * quantity
-      # Calculate pnl_pct as decimal (0.0573 for 5.73%) for consistent storage (matches Redis format)
-      self.pnl_pct = entry_price.positive? ? ((current_ltp - entry_price) / entry_price) : 0.0
+      gross_pnl = (current_ltp - entry_price) * quantity
+      # Deduct broker fees (₹20 per order)
+      self.pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: false)
+
+      # Calculate Net pnl_pct as decimal (0.0573 for 5.73%)
+      invested_capital = entry_price * quantity
+      self.pnl_pct = invested_capital.positive? ? (pnl / invested_capital) : 0.0
 
       # Update HWM
       self.high_water_mark = pnl if high_water_mark.nil? || pnl > high_water_mark
 
-      # Update peak profit percentage (highest profit % achieved)
+      # Update peak profit percentage
       self.peak_profit_pct = pnl_pct if peak_profit_pct.nil? || pnl_pct > peak_profit_pct
 
-      # Update min profit percentage (lowest profit % achieved - MAE)
+      # Update min profit percentage (MAE)
       self.min_profit_pct = pnl_pct if min_profit_pct.nil? || pnl_pct < min_profit_pct
     end
     # rubocop:enable Metrics/AbcSize

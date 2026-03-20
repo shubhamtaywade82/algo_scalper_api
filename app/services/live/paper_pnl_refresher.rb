@@ -98,11 +98,12 @@ module Live
       # Deduct broker fees (₹20 per order, ₹40 per trade if exited)
       pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
 
-      # Calculate decimal (e.g. 0.05 for 5%)
-      pct = entry.positive? ? ((ltp.to_d - entry) / entry) : 0
+      # Calculate Net PnL % decimal (e.g. 0.05 for 5%)
+      invested_capital = entry * qty
+      pct = invested_capital.positive? ? (pnl / invested_capital) : 0
 
       hwm_pnl = [tracker.high_water_mark_pnl.to_d, pnl].max
-      hwm_pnl_pct = entry.positive? ? (hwm_pnl / (entry * qty)) : 0
+      hwm_pnl_pct = invested_capital.positive? ? (hwm_pnl / invested_capital) : 0
 
       # Throttle DB updates: only update DB every 30 seconds OR if PnL changed by > 5% milestone
       last_sync = @last_db_sync[tracker.id]

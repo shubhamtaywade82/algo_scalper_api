@@ -420,6 +420,32 @@ module Signal
           enable_confirmation: enable_confirmation
         )
 
+        # ===== OPTIONS BEHAVIOR ANALYSIS =====
+        # 1. Expiry Day Session Filter
+        expiry_blocked = expiry_trade_allowed?(index_cfg[:key]) == false
+
+        # 2. Gamma Ramp Detection & Volatility Proxy
+        expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
+        chain_data = instrument.fetch_option_chain(expiry_date)
+        
+        gamma_pressure_result = if chain_data
+                                  detector = Options::GammaRampDetector.new(
+                                    index_key: index_cfg[:key],
+                                    expiry_date: expiry_date,
+                                    chain_data: chain_data
+                                  )
+                                  {
+                                    score: detector.gamma_pressure_score(direction: final_direction),
+                                    strike: detector.ramp_strike(direction: final_direction)&.dig(:strike)
+                                  }
+                                else
+                                  { score: 0.0, strike: nil }
+                                end
+
+        iv_rank_result = validate_iv_rank(index_cfg, primary_series, effective_validation_mode)
+        theta_risk_result = validate_theta_risk(index_cfg, final_direction, effective_validation_mode)
+        # ===== END OPTIONS BEHAVIOR ANALYSIS =====
+
         # Prepare enriched diagnostic diagnostic_metadata payload
         diagnostic_metadata = {
           # Market State Diagnostics
@@ -433,6 +459,12 @@ module Signal
           mtf_rsi: ta_result&.dig(:indicators)&.transform_values { |v| v[:rsi] },
           mtf_macd: ta_result&.dig(:indicators)&.transform_values { |v| v[:macd] },
           mtf_atr: ta_result&.dig(:indicators)&.transform_values { |v| v[:atr] },
+          # Options Behavior / Greeks
+          gamma_pressure: gamma_pressure_result&.dig(:score),
+          gamma_ramp_strike: gamma_pressure_result&.dig(:strike),
+          iv_rank_proxy: iv_rank_result&.dig(:iv_rank_proxy),
+          theta_risk_score: theta_risk_result&.dig(:risk_score),
+          expiry_blocked: expiry_blocked,
           # Execution Context
           entry_path: entry_path,
           strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
@@ -465,34 +497,14 @@ module Signal
 
         # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
 
-        # ===== EXPIRY DAY SESSION FILTER =====
-        # Avoid midday decay periods on expiry days for index options
-        if expiry_trade_allowed?(index_cfg[:key]) == false
+        # ===== EXIT IF BLOCKED BY OPTIONS BEHAVIOR =====
+        if expiry_blocked
           Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
-        # ===== END EXPIRY DAY SESSION FILTER =====
 
-        # ===== GAMMA RAMP DETECTION =====
-        # Detect if price is approaching an OI cluster for explosive potential
-        expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
-        chain_data = instrument.fetch_option_chain(expiry_date)
-
-        if chain_data
-          gamma_detector = Options::GammaRampDetector.new(
-            index_key: index_cfg[:key],
-            expiry_date: expiry_date,
-            chain_data: chain_data
-          )
-          gamma_ramp_strike = gamma_detector.ramp_strike(direction: final_direction)
-          if gamma_ramp_strike
-            Rails.logger.info("[Signal] GAMMA RAMP DETECTED for #{index_cfg[:key]} at strike #{gamma_ramp_strike[:strike]}")
-            diagnostic_metadata[:gamma_ramp_strike] = gamma_ramp_strike[:strike]
-            diagnostic_metadata[:gamma_pressure] = gamma_detector.gamma_pressure_score(direction: final_direction)
-          end
-        end
-        # ===== END GAMMA RAMP DETECTION =====
+        # ===== END OPTIONS BEHAVIOR ANALYSIS =====
 
         # ===== STRIKE QUALIFICATION LAYER (HARD GATE) =====
         # First point where we have:

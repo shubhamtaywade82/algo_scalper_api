@@ -83,7 +83,13 @@ module Ai
           exit_r:           telemetry&.exit_r.to_f,
           exit_path:        telemetry&.exit_path,
           entry_tf:         telemetry&.entry_tf,
-          htf_tf:           telemetry&.htf_tf
+          htf_tf:           telemetry&.htf_tf,
+
+          # Options Behavior (extracted from Signal metadata)
+          gamma_score:      signal&.metadata&.dig('gamma_pressure').to_f,
+          gamma_strike:     signal&.metadata&.dig('gamma_ramp_strike'),
+          iv_rank:          signal&.metadata&.dig('iv_rank_proxy').to_f,
+          theta_risk:       signal&.metadata&.dig('theta_risk_score').to_f
         }
       rescue StandardError => e
         Rails.logger.warn("[DatasetBuilder] Skipping tracker #{tracker.id}: #{e.class} — #{e.message}")

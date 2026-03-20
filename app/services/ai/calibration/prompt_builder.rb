@@ -117,7 +117,8 @@ module Ai
           You are a quantitative trading calibration engine for an automated options buying system.
 
           The system trades #{@symbol} weekly expiry options (CE/PE) on Indian indices.
-          It uses indicator-based signals (Supertrend, ADX, VWAP) and real-time LTP-based exits.
+          It uses indicator-based signals (Supertrend, ADX, VWAP), real-time LTP-based exits,
+          and "Options Sentiment" (Gamma Ramps, IV Rank, and Theta Risk).
 
           Your job is to ANALYZE past paper trades and suggest optimal PARAMETER ADJUSTMENTS.
 
@@ -228,7 +229,12 @@ module Ai
              - Trailing cutting winners? (early trail_activation)
              - Missing TP captures? (profitable trades exiting before target)
 
-          4. PARAMETER SENSITIVITY (logical simulation)
+          4. OPTIONS SENTIMENT ANALYSIS
+             - Did high gamma_score (+0.7) lead to explosive winners or slippage-based losers?
+             - Does high iv_rank (> 0.8) correlate with SL hits? (If so, suggest wider SL for high IV).
+             - Did late-day entries (high theta_risk) outperform or decay?
+
+          5. PARAMETER SENSITIVITY (logical simulation)
              For each parameter change: describe what % of losing trades would have been avoided
              or what % of winning trades would have been captured better.
         ANALYSIS
