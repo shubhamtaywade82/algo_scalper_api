@@ -196,7 +196,7 @@ broker_fees:
 risk:
   sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
   tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
-  per_trade_risk_pct: 0.15
+  per_trade_risk_pct: 0.40
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
