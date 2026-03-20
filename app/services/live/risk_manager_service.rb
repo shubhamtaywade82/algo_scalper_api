@@ -113,8 +113,8 @@ module Live
 
       @last_realtime_tick_at = Time.current
 
-      # Use ActiveCache to avoid DB load in the high-frequency path
-      tracker = PositionTracker.find_by(id: tracker_id)
+      # Use ActivePositionsCache to avoid DB load in the high-frequency path
+      tracker = Positions::ActivePositionsCache.instance.active_trackers.find { |t| t.id == tracker_id }
       return unless tracker&.active?
 
       # Evaluate immediate exits (Hard SL, TP, Trailing)
@@ -128,7 +128,6 @@ module Live
         # Execute exit immediately
         engine = @exit_engine || self
         dispatch_exit(engine, tracker, reason)
-        tracker.reload
         return unless tracker.active?
       end
 
@@ -148,9 +147,13 @@ module Live
       return unless realtime_tick_first_enabled?
       return unless should_run_realtime_enforcement?(tracker_id)
 
-      run_enforcement_for_tracker(tracker, @exit_engine || self)
+      # We need position_data for the rules
+      position_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker_id)
+      return unless position_data
+
+      run_enforcement_for_tracker(tracker, @exit_engine || self, position_data: position_data)
     rescue StandardError => e
-      Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.message}")
+      Rails.logger.error("[RiskManager] Event-driven evaluation failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
     end
 
     def should_run_realtime_enforcement?(tracker_id)

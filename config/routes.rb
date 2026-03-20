@@ -43,6 +43,10 @@ Rails.application.routes.draw do
       post :trip, on: :member
       delete :trip, action: :reset, on: :member
     end
+
+    resource :drawdown_guard, only: [], controller: 'drawdown_guard' do
+      delete :reset, on: :member
+    end
   end
 
   # Redis UI (development only)

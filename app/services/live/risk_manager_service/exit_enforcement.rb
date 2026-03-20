@@ -258,9 +258,9 @@ module Live
         Rails.logger.error("[RiskManager] enforce_stall_detection_exit_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
 
-      def enforce_time_based_exit(exit_engine:)
-        PositionTracker.active.find_each do |tracker|
-          enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
+      def enforce_time_based_exit(exit_engine:, position_data: nil)
+        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
+          enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data)
         end
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_time_based_exit error: #{e.class} - #{e.message}")
@@ -268,7 +268,7 @@ module Live
 
       # EOD force-close: at or after market close, close all active positions.
       # Ensures intraday positions never carry overnight regardless of time-stop bypass or other rules.
-      def enforce_eod_force_close(exit_engine:)
+      def enforce_eod_force_close(exit_engine:, position_data: nil)
         risk = risk_config
         market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
         return unless market_close_time
@@ -276,7 +276,7 @@ module Live
         now = Time.current
         return unless now >= market_close_time
 
-        PositionTracker.active.find_each do |tracker|
+        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
           next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
           reason = "MARKET_CLOSE (EOD #{market_close_time.strftime('%H:%M')} IST)"
@@ -289,7 +289,7 @@ module Live
         end
       end
 
-      def enforce_time_based_exit_for(tracker, exit_engine:)
+      def enforce_time_based_exit_for(tracker, exit_engine:, position_data: nil)
         risk = risk_config
         exit_time = parse_time_hhmm(risk[:time_exit_hhmm] || '15:20')
         return unless exit_time
@@ -300,14 +300,19 @@ module Live
         market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
         return if market_close_time && now >= market_close_time
 
-        tracker.hydrate_pnl_from_cache!
-        if tracker.last_pnl_rupees.present? && tracker.last_pnl_rupees.positive?
+        # Use passed position_data or fetch from cache if not provided
+        position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+        
+        # We can use PnL from position_data instead of hydration
+        pnl_rupees = position_data ? position_data.pnl : tracker.current_pnl_rupees.to_f
+
+        if pnl_rupees.present? && pnl_rupees.positive?
           min_profit = begin
             BigDecimal((risk[:min_profit_rupees] || 0).to_s)
           rescue StandardError
             BigDecimal(0)
           end
-          if min_profit.positive? && tracker.last_pnl_rupees < min_profit
+          if min_profit.positive? && pnl_rupees < min_profit
             Rails.logger.info("[RiskManager] Time-based exit skipped for #{tracker.order_no} - PnL < min_profit")
             return
           end

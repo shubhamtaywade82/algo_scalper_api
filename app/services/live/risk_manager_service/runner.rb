@@ -118,16 +118,16 @@ module Live
         return if market_close_time && Time.current >= market_close_time
 
         Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
-          run_enforcement_for_tracker(tracker, exit_engine)
+          run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
         end
       end
 
-      def run_enforcement_for_tracker(tracker, exit_engine)
+      def run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
         return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
         # Get high-performance position snapshot from ActiveCache (which already has latest LTP/PnL from Redis)
         # This avoids redundant DB/API calls in every rule method.
-        position_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+        position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
         # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
