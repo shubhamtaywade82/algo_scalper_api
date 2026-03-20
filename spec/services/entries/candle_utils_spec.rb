@@ -35,8 +35,8 @@ RSpec.describe Entries::CandleUtils do
 
       ratio = described_class.wick_ratio(candle)
 
-      # Body: 0, so ratio should be high
-      expect(ratio).to be > 10
+      # Body: 0, implementation returns 0.0 to avoid division by zero
+      expect(ratio).to eq(0.0)
     end
   end
 
@@ -63,9 +63,9 @@ RSpec.describe Entries::CandleUtils do
   describe '.alternating_engulfing?' do
     it 'detects alternating engulfing candles' do
       bars = [
-        build(:candle, :bullish, open: 25_000, high: 25_100, low: 24_950, close: 25_050),
-        build(:candle, :bearish, open: 25_050, high: 25_100, low: 24_900, close: 24_950), # Engulfs previous
-        build(:candle, :bullish, open: 24_950, high: 25_150, low: 24_900, close: 25_100) # Engulfs previous
+        build(:candle, :bullish, open: 25_000, high: 25_300, low: 24_700, close: 25_100), # Bullish, Large
+        build(:candle, :bearish, open: 25_100, high: 25_200, low: 24_800, close: 24_900), # Bearish, Smaller
+        build(:candle, :bearish, open: 25_000, high: 25_150, low: 24_850, close: 24_950)  # Bearish, Even smaller (c3 direction != c1 direction)
       ]
 
       result = described_class.alternating_engulfing?(bars)

@@ -31,7 +31,7 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
 
     candles_data.each do |data|
       series.add_candle(Candle.new(
-                          ts: data[:timestamp].to_i,
+                          timestamp: data[:timestamp].to_i,
                           open: data[:open],
                           high: data[:high],
                           low: data[:low],
@@ -602,7 +602,7 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
           }
         )
 
-        risk_assessment = risk_manager.evaluate_signal_risk(signal_data)
+        risk_assessment = risk_manager.send(:evaluate_signal_risk, signal_data)
 
         expect(risk_assessment[:risk_level]).to eq(:low)
         expect(risk_assessment[:max_position_size]).to eq(100)
@@ -685,7 +685,7 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
         # Test with extreme price movements
         extreme_series = CandleSeries.new(symbol: 'NIFTY', interval: '5')
         extreme_series.add_candle(Candle.new(
-                                    ts: Time.current.to_i,
+                                    timestamp: Time.current.to_i,
                                     open: 100.0,
                                     high: 200.0,
                                     low: 50.0,

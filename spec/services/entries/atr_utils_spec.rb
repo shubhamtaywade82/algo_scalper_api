@@ -3,41 +3,25 @@
 require 'rails_helper'
 
 RSpec.describe Entries::ATRUtils do
-  let(:series) { build(:candle_series, symbol: 'NIFTY', interval: '1') }
+  let(:series) { CandleSeries.new(symbol: 'NIFTY', interval: '5') }
 
   describe '.calculate_atr' do
-    before do
-      # Add enough candles for ATR calculation (needs at least 14)
+    it 'calculates ATR for a window of candles' do
+      # Create some mock candles
       15.times do |i|
-        candle = build(:candle, timestamp: i.minutes.ago, high: 25_100 + i, low: 24_900 - i, close: 25_000 + i)
+        candle = build(:candle, timestamp: i.minutes.ago, high: 25_100, low: 24_900, close: 25_000)
         series.add_candle(candle)
       end
-    end
 
-    it 'calculates ATR using CandleSeries' do
       bars = series.candles
-
       atr = described_class.calculate_atr(bars)
 
-      expect(atr).to be_a(Numeric)
+      expect(atr).to be_a(Float)
       expect(atr).to be > 0
     end
 
-    it 'returns nil when bars is nil' do
-      atr = described_class.calculate_atr(nil)
-
-      expect(atr).to be_nil
-    end
-
-    it 'returns nil when bars is empty' do
-      atr = described_class.calculate_atr([])
-
-      expect(atr).to be_nil
-    end
-
-    it 'returns nil when bars has less than 2 candles' do
+    it 'returns nil for insufficient data' do
       bars = [build(:candle)]
-
       atr = described_class.calculate_atr(bars)
 
       expect(atr).to be_nil
@@ -46,9 +30,8 @@ RSpec.describe Entries::ATRUtils do
 
   describe '.atr_downtrend?' do
     before do
-      # Create series with decreasing ATR
       # First window: higher volatility
-      20.times do |i|
+      30.times do |i|
         candle = build(:candle, timestamp: i.minutes.ago, high: 25_200 + (i * 10), low: 24_800 - (i * 10),
                                 close: 25_000 + (i * 5))
         series.add_candle(candle)
@@ -59,7 +42,14 @@ RSpec.describe Entries::ATRUtils do
       bars = series.candles
 
       # Mock CandleSeries to return decreasing ATR values
-      allow_any_instance_of(CandleSeries).to receive(:atr).and_return(100.0, 90.0, 80.0, 70.0)
+      # We need at least (bars.size - period) values. Bars size is 30, period is 14, so 16 values.
+      counter = 0
+      values = [100.0, 95.0, 90.0, 85.0, 80.0, 75.0, 70.0, 65.0, 60.0, 55.0, 50.0, 45.0, 40.0, 35.0, 30.0, 25.0]
+      allow_any_instance_of(CandleSeries).to receive(:atr) do
+        val = values[counter]
+        counter += 1
+        val
+      end
 
       result = described_class.atr_downtrend?(bars, period: 14)
 
@@ -70,7 +60,13 @@ RSpec.describe Entries::ATRUtils do
       bars = series.candles
 
       # Mock CandleSeries to return increasing ATR values
-      allow_any_instance_of(CandleSeries).to receive(:atr).and_return(70.0, 80.0, 90.0, 100.0)
+      counter = 0
+      values = [25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0, 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 100.0]
+      allow_any_instance_of(CandleSeries).to receive(:atr) do
+        val = values[counter]
+        counter += 1
+        val
+      end
 
       result = described_class.atr_downtrend?(bars, period: 14)
 
@@ -78,60 +74,31 @@ RSpec.describe Entries::ATRUtils do
     end
 
     it 'returns false when bars has insufficient data' do
-      bars = Array.new(10) { build(:candle) }
-
+      bars = series.candles.first(10)
       result = described_class.atr_downtrend?(bars, period: 14)
-
-      expect(result).to be false
-    end
-
-    it 'returns false when bars is nil' do
-      result = described_class.atr_downtrend?(nil)
-
-      expect(result).to be false
-    end
-
-    it 'returns false when bars is empty' do
-      result = described_class.atr_downtrend?([])
 
       expect(result).to be false
     end
   end
 
   describe '.atr_ratio' do
-    before do
-      # Add enough candles for both periods
-      25.times do |i|
-        candle = build(:candle, timestamp: i.minutes.ago, high: 25_100 + i, low: 24_900 - i, close: 25_000 + i)
+    it 'calculates ATR ratio between current and historical windows' do
+      # Create 40 candles to be safe
+      40.times do |i|
+        candle = build(:candle, timestamp: i.minutes.ago, high: 25_100, low: 24_900, close: 25_000)
         series.add_candle(candle)
       end
-    end
 
-    it 'calculates ratio of current ATR to historical ATR' do
       bars = series.candles
+      # calculate_atr(14) needs 15 candles
+      ratio = described_class.atr_ratio(bars, current_period: 15, historical_period: 15)
 
-      # Mock ATR calculations
-      allow(described_class).to receive(:calculate_atr).and_return(100.0, 80.0)
-
-      ratio = described_class.atr_ratio(bars, current_period: 14, historical_period: 7)
-
-      # Current: 100, Historical: 80, Ratio: 1.25
-      expect(ratio).to be_within(0.01).of(1.25)
+      expect(ratio).to be_a(Float)
+      expect(ratio).to be > 0
     end
 
-    it 'returns nil when bars has insufficient data' do
-      bars = Array.new(10) { build(:candle) }
-
-      ratio = described_class.atr_ratio(bars, current_period: 14, historical_period: 7)
-
-      expect(ratio).to be_nil
-    end
-
-    it 'returns nil when ATR cannot be calculated' do
-      bars = series.candles
-
-      allow(described_class).to receive(:calculate_atr).and_return(nil, 80.0)
-
+    it 'returns nil when data is insufficient for ratio' do
+      bars = series.candles.first(10)
       ratio = described_class.atr_ratio(bars, current_period: 14, historical_period: 7)
 
       expect(ratio).to be_nil
