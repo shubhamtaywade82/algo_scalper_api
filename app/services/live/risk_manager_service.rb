@@ -132,6 +132,19 @@ module Live
         return unless tracker.active?
       end
 
+      # Portfolio-level profit lock evaluation (event-driven, after per-position checks)
+      # Updates unrealized PnL for this tracker and checks if the portfolio floor has been
+      # breached. Only runs if profit_lock is enabled in algo.yml.
+      begin
+        Portfolio::PnlTracker.update_unrealized(
+          tracker_id: tracker_id,
+          pnl: event[:pnl].to_f
+        )
+        Portfolio::ProfitLockEngine.evaluate!
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] Portfolio::ProfitLockEngine error: #{e.class} - #{e.message}")
+      end
+
       return unless realtime_tick_first_enabled?
       return unless should_run_realtime_enforcement?(tracker_id)
 

@@ -1,0 +1,156 @@
+# frozen_string_literal: true
+
+require 'rails_helper'
+
+RSpec.describe Portfolio::ProfitLockEngine do
+  # Stub the PnlTracker and DrawdownGuard to test the engine in isolation
+  before do
+    described_class.reset_levels_cache!
+    allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(false)
+    allow(Portfolio::PnlTracker).to  receive(:update_lock)
+    allow(AlgoConfig).to receive(:fetch).and_return(config)
+  end
+
+  let(:config) do
+    {
+      profit_lock: {
+        enabled: true,
+        levels: [
+          { trigger: 10_000, lock_ratio: 0.60 },
+          { trigger: 20_000, lock_ratio: 0.70 },
+          { trigger: 30_000, lock_ratio: 0.73 }
+        ]
+      }
+    }
+  end
+
+  after { described_class.reset_levels_cache! }
+
+  describe '.determine_level' do
+    it 'returns 0 when pnl is below all thresholds' do
+      expect(described_class.determine_level(5_000)).to eq(0)
+    end
+
+    it 'returns 1 when pnl is exactly at the first threshold' do
+      expect(described_class.determine_level(10_000)).to eq(1)
+    end
+
+    it 'returns 2 when pnl is between 20k and 30k' do
+      expect(described_class.determine_level(25_000)).to eq(2)
+    end
+
+    it 'returns 3 when pnl is above all thresholds' do
+      expect(described_class.determine_level(35_000)).to eq(3)
+    end
+  end
+
+  describe '.levels' do
+    context 'when config levels are provided' do
+      it 'loads levels from config' do
+        expect(described_class.levels.first[:trigger]).to eq(10_000)
+      end
+    end
+
+    context 'when config is missing or malformed' do
+      let(:config) { { profit_lock: { enabled: true } } }
+
+      it 'falls back to DEFAULT_LEVELS' do
+        expect(described_class.levels).to eq(described_class::DEFAULT_LEVELS)
+      end
+    end
+  end
+
+  describe '.evaluate!' do
+    context 'when profit_lock is disabled' do
+      let(:config) { { profit_lock: { enabled: false } } }
+
+      it 'returns false without touching PnlTracker' do
+        expect(Portfolio::PnlTracker).not_to receive(:net_pnl)
+        expect(described_class.evaluate!).to be(false)
+      end
+    end
+
+    context 'when DrawdownGuard has already triggered' do
+      before do
+        allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(true)
+      end
+
+      it 'is a no-op and returns false' do
+        expect(Portfolio::PnlTracker).not_to receive(:net_pnl)
+        expect(described_class.evaluate!).to be(false)
+      end
+    end
+
+    context 'when net PnL is below all thresholds' do
+      before do
+        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(5_000.0)
+        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(5_000.0)
+        allow(Portfolio::PnlTracker).to receive(:current_level).and_return(0)
+        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(0.0)
+      end
+
+      it 'returns false and does not trigger guard' do
+        expect(Portfolio::DrawdownGuard).not_to receive(:trigger_global_exit!)
+        expect(described_class.evaluate!).to be(false)
+      end
+    end
+
+    context 'when net PnL crosses ₹10k for the first time' do
+      before do
+        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(12_000.0)
+        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(0.0)
+        allow(Portfolio::PnlTracker).to receive(:current_level).and_return(0)
+        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(7_200.0) # 12k × 0.60
+      end
+
+      it 'calls update_lock with level 1 and 60% floor' do
+        expect(Portfolio::PnlTracker).to receive(:update_lock).with(
+          new_peak: 12_000.0,
+          new_floor: 7_200.0,
+          new_level: 1
+        )
+        described_class.evaluate!
+      end
+
+      it 'does not trigger guard when net > floor' do
+        expect(Portfolio::DrawdownGuard).not_to receive(:trigger_global_exit!)
+        described_class.evaluate!
+      end
+    end
+
+    context 'when net PnL drops below the locked floor' do
+      before do
+        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(5_500.0)
+        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(15_000.0)
+        allow(Portfolio::PnlTracker).to receive(:current_level).and_return(1)
+        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(6_000.0)
+        allow(Portfolio::DrawdownGuard).to receive(:trigger_global_exit!)
+      end
+
+      it 'returns true and triggers the guard' do
+        expect(Portfolio::DrawdownGuard).to receive(:trigger_global_exit!).with(
+          net_pnl: 5_500.0,
+          floor: 6_000.0,
+          level: 1
+        )
+        expect(described_class.evaluate!).to be(true)
+      end
+    end
+
+    context 'when peak ratchets above a higher level trigger' do
+      before do
+        # PnL peaked at ₹25k (Level 2), then dipped to ₹22k still above floor
+        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(22_000.0)
+        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(25_000.0)
+        allow(Portfolio::PnlTracker).to receive(:current_level).and_return(2)
+        # floor = 25k × 0.70 = 17.5k (stored from previous ratchet)
+        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(17_500.0)
+      end
+
+      it 'does not downgrade the level or breach the guard' do
+        expect(Portfolio::DrawdownGuard).not_to receive(:trigger_global_exit!)
+        expect(described_class.evaluate!).to be(false)
+      end
+    end
+  end
+end

@@ -1,65 +1,142 @@
 # frozen_string_literal: true
 
 module Portfolio
+  # Hard kill switch for portfolio-level profit protection.
+  #
+  # When ProfitLockEngine detects a floor breach, this guard:
+  #   1. Sets an idempotency key (fires only once per trading day)
+  #   2. Exits all active positions at market
+  #   3. Blocks new entries for the rest of the session
+  #   4. Sends a Telegram alert
+  #
+  # State lives in Redis (TTL-scoped to the trading session).
   class DrawdownGuard
-    REDIS_BLOCK_KEY = "trading:profit_protection_blocked"
+    REDIS_URL        = ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')
+    KEY_TRIGGERED    = 'portfolio:floor_breach:triggered'
+    KEY_ENTRIES_BLOCKED = 'portfolio:floor_breach:entries_blocked'
+    TTL = 26.hours.to_i
 
     class << self
-      def trigger_global_exit!(total_pnl: 0, floor: 0)
-        # 1. Fetch all active positions from ActiveCache
-        active_positions = Positions::ActiveCache.instance.all_positions
-        
-        if active_positions.empty?
-          Rails.logger.info("[DrawdownGuard] No active positions to exit.")
-        else
-          Rails.logger.warn("[DrawdownGuard] Exiting #{active_positions.size} positions to protect profits (PnL: ₹#{total_pnl} <= Floor: ₹#{floor})")
-          
-          active_positions.each do |pos_data|
-            tracker = PositionTracker.find_by(id: pos_data.tracker_id)
-            next unless tracker&.active?
-            
-            Orders::Executor.exit_market!(tracker: tracker, reason: 'profit_protection_breach')
-          end
-        end
+      # Main entry point. Idempotent — will not fire twice per trading day.
+      #
+      # @param net_pnl  [Float]   portfolio net PnL at the time of breach
+      # @param floor    [Float]   locked floor that was breached
+      # @param level    [Integer] arm level that was active
+      def trigger_global_exit!(net_pnl:, floor:, level: 0)
+        r = redis
+        return unless r
 
-        # 2. Block new entries for the rest of the day
+        # Idempotency: only fire once per day
+        return if r.get(KEY_TRIGGERED) == 'true'
+
+        r.set(KEY_TRIGGERED, 'true')
+        r.expire(KEY_TRIGGERED, TTL)
+
+        Rails.logger.warn(
+          "[Portfolio::DrawdownGuard] 🚨 GLOBAL EXIT TRIGGERED — " \
+          "net=₹#{net_pnl.round(2)}, floor=₹#{floor.round(2)}, level=#{level}"
+        )
+
+        exit_all_positions!(net_pnl: net_pnl, floor: floor)
         block_new_entries!
-        
-        # 3. Notify
-        notify_breach(total_pnl, floor)
-      end
-
-      def block_new_entries!
-        # Set a block key in Redis that expires at the end of the day (15:30 IST)
-        expiry_seconds = TradingSession::Service.seconds_until_session_end
-        Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')).setex(REDIS_BLOCK_KEY, [expiry_seconds, 60].max, "true")
-        Rails.logger.info("[DrawdownGuard] New entries blocked until end of session.")
-      end
-
-      def blocked?
-        Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')).get(REDIS_BLOCK_KEY) == "true"
+        notify_breach(net_pnl: net_pnl, floor: floor, level: level)
       rescue StandardError => e
-        Rails.logger.error("[DrawdownGuard] Error checking block status: #{e.message}")
+        Rails.logger.error("[Portfolio::DrawdownGuard] trigger_global_exit! error: #{e.class} - #{e.message}")
+      end
+
+      # True if the global exit has already been triggered today.
+      # Used by: EntryPolicy, ProfitLockEngine, UnifiedExitChecker.
+      #
+      # @return [Boolean]
+      def triggered?
+        redis&.get(KEY_TRIGGERED) == 'true'
+      rescue StandardError
         false
       end
 
-      def unblock!
-        Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')).del(REDIS_BLOCK_KEY)
-        Rails.logger.info("[DrawdownGuard] Manual unblock successful.")
+      # True if entries have been blocked (subset of triggered? — same lifetime here).
+      # @return [Boolean]
+      def entries_blocked?
+        redis&.get(KEY_ENTRIES_BLOCKED) == 'true'
+      rescue StandardError
+        false
+      end
+
+      # Manual reset for console use or test teardown.
+      def reset_day!
+        r = redis
+        return unless r
+
+        r.del(KEY_TRIGGERED)
+        r.del(KEY_ENTRIES_BLOCKED)
+        Portfolio::PnlTracker.reset_day!
+        Rails.logger.info('[Portfolio::DrawdownGuard] Daily state reset')
+      rescue StandardError => e
+        Rails.logger.error("[Portfolio::DrawdownGuard] reset_day! error: #{e.message}")
       end
 
       private
 
-      def notify_breach(pnl, floor)
-        # Check if TelegramNotifier is available
-        return unless defined?(::TelegramNotifier)
-        
-        msg = "🚨 *Profit Protection Triggered*\n" \
-              "Current PnL: ₹#{pnl.round(2)}\n" \
-              "Breached Floor: ₹#{floor.round(2)}\n" \
-              "Actions: All positions exited & new entries blocked."
-        
-        ::TelegramNotifier.send_message(msg) rescue nil
+      def redis
+        @redis ||= Redis.new(url: REDIS_URL)
+      rescue StandardError => e
+        Rails.logger.error("[Portfolio::DrawdownGuard] Redis init error: #{e.message}")
+        nil
+      end
+
+      # Exit all active positions at market.
+      def exit_all_positions!(net_pnl:, floor:)
+        active_positions = Positions::ActiveCache.instance.all_positions
+
+        if active_positions.empty?
+          Rails.logger.info('[Portfolio::DrawdownGuard] No active positions to exit.')
+          return
+        end
+
+        Rails.logger.warn(
+          "[Portfolio::DrawdownGuard] Exiting #{active_positions.size} positions " \
+          "(net=₹#{net_pnl.round(2)}, floor=₹#{floor.round(2)})"
+        )
+
+        active_positions.each do |pos_data|
+          tracker = PositionTracker.find_by(id: pos_data.tracker_id)
+          next unless tracker&.active?
+
+          begin
+            exit_engine = Live::ExitEngine.instance
+            exit_engine.execute_exit(tracker, 'PORTFOLIO_FLOOR_BREACH')
+          rescue StandardError => e
+            Rails.logger.error(
+              "[Portfolio::DrawdownGuard] Exit failed for tracker=#{pos_data.tracker_id}: " \
+              "#{e.class} - #{e.message}"
+            )
+          end
+        end
+      end
+
+      # Block new entries for the trading session.
+      def block_new_entries!
+        r = redis
+        return unless r
+
+        r.set(KEY_ENTRIES_BLOCKED, 'true')
+        r.expire(KEY_ENTRIES_BLOCKED, TTL)
+        Rails.logger.info('[Portfolio::DrawdownGuard] New entries blocked for the rest of the session.')
+      end
+
+      # Send Telegram alert (best-effort — does not raise).
+      def notify_breach(net_pnl:, floor:, level:)
+        return unless defined?(Notifications::TelegramNotifier)
+        return unless Notifications::TelegramNotifier.instance.enabled?
+
+        msg = "🚨 *Profit Protection Triggered* (Level #{level})\n" \
+              "Net PnL: ₹#{net_pnl.round(2)}\n" \
+              "Locked Floor: ₹#{floor.round(2)}\n" \
+              "Action: All positions exited, new entries blocked."
+
+        Notifications::TelegramNotifier.instance.send_message(msg)
+      rescue StandardError => e
+        Rails.logger.warn("[Portfolio::DrawdownGuard] Telegram notify failed: #{e.message}")
       end
     end
   end

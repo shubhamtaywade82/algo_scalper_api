@@ -44,6 +44,7 @@ module Policies
         circuit_breaker_tripped?
         outside_trading_hours?
         daily_loss_limit_reached?
+        profit_lock_triggered?
       ]
       checks.each_with_object([]) do |check, acc|
         acc << check.to_s.delete_suffix('?') if send(check)
@@ -71,6 +72,14 @@ module Policies
       return false if result[:allowed]
 
       blocked_for_risk_reason?(result[:reason])
+    rescue StandardError
+      false
+    end
+
+    # Block new entries when the portfolio profit floor has been breached today.
+    # DrawdownGuard.triggered? is O(1) — a single Redis GET.
+    def profit_lock_triggered?
+      Portfolio::DrawdownGuard.triggered?
     rescue StandardError
       false
     end

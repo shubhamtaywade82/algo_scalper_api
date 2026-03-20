@@ -247,8 +247,8 @@ module Live
 
     def acquire_exit_lock(tracker_id, ttl: 10)
       key = "exit_lock:#{tracker_id}"
-      redis = Redis.current
-      redis.set(key, '1', nx: true, ex: ttl)
+      @redis ||= Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+      @redis.set(key, '1', nx: true, ex: ttl)
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
       true
@@ -318,7 +318,7 @@ module Live
         entry_time: tracker.created_at,
         exit_time: tracker.exited_at || Time.current,
         entry_tf: resolved_entry_tf(tracker),
-        htf_tf: tracker.meta&.dig('htf_tf'),
+        htf_tf: tracker.meta&.dig('htf_tf') || '15m', # Default to 15m if missing
         bos_age_at_entry: tracker.meta&.dig('bos_age_at_entry'),
         retrace_pct: tracker.meta&.dig('retrace_pct'),
         pullback_candles: tracker.meta&.dig('pullback_candles'),

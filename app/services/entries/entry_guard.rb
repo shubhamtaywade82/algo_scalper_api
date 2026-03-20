@@ -21,7 +21,7 @@ module Entries
 
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
         # Global Profit Protection Check
-        if Portfolio::DrawdownGuard.blocked?
+        if Portfolio::DrawdownGuard.triggered?
           Observability::StructuredLog.info(
             event: 'entry_blocked',
             payload: {

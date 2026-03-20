@@ -1,98 +1,113 @@
 # frozen_string_literal: true
 
 module Portfolio
-  # Monitors portfolio PnL and locks in profits by enforcing a trailing floor.
-  # If PnL falls below the locked floor, it triggers a global exit.
+  # Core portfolio-level profit lock governor.
+  #
+  # Called on every :ltp EventBus event (via RiskManagerService#handle_pnl_event).
+  # Determines the current arm level based on net PnL, ratchets the monotonic floor,
+  # and triggers DrawdownGuard when a breach is detected.
+  #
+  # Levels are configurable in algo.yml under profit_lock.levels.
+  # Default: ₹10k → 60% floor, ₹20k → 70% floor, ₹30k → 73% floor
   class ProfitLockEngine
-    REDIS_KEY = "portfolio:profit_lock_state"
-    
-    # Milestone-based floor configuration
-    # Example: If PnL hits 10k, floor is locked at 6k.
+    # Fallback levels used when algo.yml profit_lock.levels is absent or malformed.
     DEFAULT_LEVELS = [
-      { trigger: 10_000, lock: 6_000 },
-      { trigger: 20_000, lock: 14_000 },
-      { trigger: 30_000, lock: 22_000 },
-      { trigger: 40_000, lock: 32_000 },
-      { trigger: 50_000, lock: 42_000 }
+      { trigger: 10_000, lock_ratio: 0.60 },
+      { trigger: 20_000, lock_ratio: 0.70 },
+      { trigger: 30_000, lock_ratio: 0.73 }
     ].freeze
 
     class << self
+      # Main evaluation entry point. Stateless — reads from PnlTracker, writes back via update_lock.
+      # Safe to call on every tick — debounce is handled by the EventBus caller.
+      #
+      # @return [Boolean] true if a floor breach was detected and DrawdownGuard fired
       def evaluate!
-        pnl_state = PnlTracker.refresh!
-        total_pnl = pnl_state[:total]
-        
-        state = current_state
-        
-        # Determine if we've hit a new milestone level
-        new_level = determine_level(total_pnl)
-        
-        if new_level > state[:level]
-          state[:level] = new_level
-          # Monotonic update: only increase the floor
-          new_floor = DEFAULT_LEVELS[new_level - 1][:lock]
-          state[:locked_floor] = [state[:locked_floor].to_f, new_floor].max
-          state[:last_milestone_at] = Time.current
-          
-          save_state(state)
-          
-          Rails.logger.info("[ProfitLock] Milestone reached: Level #{new_level}. PnL=₹#{total_pnl}. Floor locked at ₹#{state[:locked_floor]}.")
-          
-          # Optional: Notify via Telegram on milestone
-          notify_milestone(new_level, total_pnl, state[:locked_floor])
+        return false unless enabled?
+        return false if DrawdownGuard.triggered? # already fired today, no-op
+
+        net   = PnlTracker.net_pnl
+        peak  = PnlTracker.peak_pnl
+        level = PnlTracker.current_level
+
+        # Determine which milestone level we're now at
+        new_level = determine_level(net)
+
+        # Level is monotonic — never downgrade even if net PnL drops
+        effective_level = [new_level, level].max
+        return false if effective_level.zero?
+
+        # Ratchet peak upward only
+        new_peak   = [net, peak].max
+        lock_ratio = levels[effective_level - 1][:lock_ratio]
+        new_floor  = new_peak * lock_ratio
+
+        # Write (monotonic) updates back to Redis via PnlTracker
+        PnlTracker.update_lock(
+          new_peak: new_peak,
+          new_floor: new_floor,
+          new_level: effective_level
+        )
+
+        # Check for floor breach (use the stored floor for monotonic comparison)
+        current_floor = PnlTracker.locked_floor
+        if current_floor.positive? && net <= current_floor
+          Rails.logger.warn(
+            "[Portfolio::ProfitLockEngine] 🚨 FLOOR BREACH! " \
+            "net=₹#{net.round(2)} ≤ floor=₹#{current_floor.round(2)} " \
+            "(Level #{effective_level})"
+          )
+          DrawdownGuard.trigger_global_exit!(
+            net_pnl: net,
+            floor: current_floor,
+            level: effective_level
+          )
+          return true
         end
 
-        # Check for drawdown breach
-        check_breach!(total_pnl, state)
-      end
-
-      def current_state
-        raw = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')).get(REDIS_KEY)
-        if raw
-          JSON.parse(raw).symbolize_keys
-        else
-          { level: 0, locked_floor: 0.0, last_milestone_at: nil }
-        end
+        false
       rescue StandardError => e
-        Rails.logger.error("[ProfitLock] Failed to fetch state: #{e.message}")
-        { level: 0, locked_floor: 0.0, last_milestone_at: nil }
+        Rails.logger.error("[Portfolio::ProfitLockEngine] evaluate! error: #{e.class} - #{e.message}")
+        false
       end
 
-      # Manual reset for next trading day (or via scheduled task)
-      def reset!
-        Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')).del(REDIS_KEY)
-        Rails.logger.info("[ProfitLock] State reset.")
+      # Returns the highest level milestone currently exceeded by pnl.
+      # 0 = below all thresholds, 1 = ≥₹10k, 2 = ≥₹20k, 3 = ≥₹30k, etc.
+      #
+      # @param pnl [Float]
+      # @return [Integer]
+      def determine_level(pnl)
+        levels.count { |l| pnl >= l[:trigger] }
+      end
+
+      # Sorted profit lock levels from config (or defaults).
+      # Memoized per process — call reset_levels_cache! after config reload.
+      # @return [Array<Hash>]
+      def levels
+        @levels ||= begin
+          cfg = AlgoConfig.fetch.dig(:profit_lock, :levels)
+          if cfg.is_a?(Array) && cfg.any?
+            cfg.map { |l| { trigger: l[:trigger].to_f, lock_ratio: l[:lock_ratio].to_f } }
+               .sort_by { |l| l[:trigger] }
+          else
+            DEFAULT_LEVELS
+          end
+        rescue StandardError
+          DEFAULT_LEVELS
+        end
+      end
+
+      # Refresh the levels cache (call after AlgoConfig.reload)
+      def reset_levels_cache!
+        @levels = nil
       end
 
       private
 
-      def determine_level(pnl)
-        DEFAULT_LEVELS.count { |l| pnl >= l[:trigger] }
-      end
-
-      def check_breach!(total_pnl, state)
-        floor = state[:locked_floor].to_f
-        return if floor <= 0
-
-        if total_pnl <= floor
-          Rails.logger.warn("[ProfitLock] BREACH DETECTED: PnL ₹#{total_pnl} <= Floor ₹#{floor}. Triggering DrawdownGuard!")
-          DrawdownGuard.trigger_global_exit!(total_pnl: total_pnl, floor: floor)
-        end
-      end
-
-      def save_state(state)
-        Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0')).set(REDIS_KEY, state.to_json)
-      end
-
-      def notify_milestone(level, pnl, floor)
-        # Check if TelegramNotifier is available
-        return unless defined?(::TelegramNotifier)
-        
-        msg = "🎯 *PnL Milestone Reached*\n" \
-              "Level: #{level}\n" \
-              "Current PnL: ₹#{pnl.round(2)}\n" \
-              "Locked Floor: ₹#{floor.round(2)}"
-        
-        ::TelegramNotifier.send_message(msg) rescue nil
+      def enabled?
+        AlgoConfig.fetch.dig(:profit_lock, :enabled) != false
+      rescue StandardError
+        true
       end
     end
   end

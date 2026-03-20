@@ -643,6 +643,28 @@ position_sizing:
     s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
 
 # ============================================
+# PORTFOLIO-LEVEL PROFIT LOCK ENGINE
+# ============================================
+# Protects accumulated intraday gains using a monotonic profit floor.
+# Once net PnL crosses a milestone, a floor is locked in at peak_pnl × lock_ratio.
+# If net PnL ever drops below the floor → ALL positions exit + new entries blocked.
+#
+# Floor is monotonic: it only moves up as PnL peaks climb.
+# Example: PnL peaks at ₹25k (past the ₹20k trigger):
+#   floor = ₹25k × 0.70 = ₹17.5k  (not just the static ₹14k)
+#
+# Set enabled: false to disable the entire engine without removing config.
+profit_lock:
+  enabled: true
+  levels:
+    - trigger: 10000   # ₹10k — Level 1
+      lock_ratio: 0.60 # floor = peak_pnl × 60%  (e.g. ₹10k peak → ₹6k floor)
+    - trigger: 20000   # ₹20k — Level 2
+      lock_ratio: 0.70 # floor = peak_pnl × 70%  (e.g. ₹20k peak → ₹14k floor)
+    - trigger: 30000   # ₹30k — Level 3
+      lock_ratio: 0.73 # floor = peak_pnl × 73%  (e.g. ₹30k peak → ₹21.9k floor)
+
+# ============================================
 # SIGNAL SETTINGS
 # ============================================
 signals:
