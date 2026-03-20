@@ -16,11 +16,15 @@ module Live
     # @param position_data [Positions::ActiveCache::PositionData] Position data from ActiveCache
     # @param exit_engine [Live::ExitEngine, nil] Exit engine for peak-drawdown exits
     # @return [Hash] Result hash with :peak_updated, :sl_updated, :exit_triggered, :error
-    def process_tick(position_data, exit_engine: nil)
+    def process_tick(position_data, exit_engine: nil, tracker: nil)
       return failure_result('Invalid position data') unless position_data&.valid?
 
+      # Use passed tracker or find if not provided (fallback for other callers)
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
+      return failure_result('Tracker not found') unless tracker
+
       # 1. Check peak-drawdown FIRST (before any SL adjustments)
-      if exit_engine && check_peak_drawdown(position_data, exit_engine)
+      if exit_engine && check_peak_drawdown(position_data, exit_engine, tracker: tracker)
         return {
           peak_updated: false,
           sl_updated: false,
@@ -30,15 +34,15 @@ module Live
       end
 
       # 2. Update peak_profit_pct if current profit exceeds peak
-      peak_updated = update_peak(position_data)
+      peak_updated = update_peak(position_data, tracker: tracker)
 
       # 3. Apply trailing SL (direct or tiered based on config)
       sl_result = if tailored_trailing_applicable?(position_data)
-                    apply_tailored_sl(position_data)
+                    apply_tailored_sl(position_data, tracker: tracker)
                   elsif Positions::TrailingConfig.direct_trailing_enabled?
-                    apply_direct_trailing_sl(position_data)
+                    apply_direct_trailing_sl(position_data, tracker: tracker)
                   else
-                    apply_tiered_sl(position_data)
+                    apply_tiered_sl(position_data, tracker: tracker)
                   end
 
       {
@@ -59,7 +63,7 @@ module Live
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @param exit_engine [Live::ExitEngine] Exit engine instance
     # @return [Boolean] True if exit was triggered
-    def check_peak_drawdown(position_data, exit_engine)
+    def check_peak_drawdown(position_data, exit_engine, tracker: nil)
       return false unless exit_engine && position_data.peak_profit_pct
 
       # peak and current are decimal (e.g. 0.05 for 5%)
@@ -81,7 +85,7 @@ module Live
       unless drawdown_cfg[:emergency_peak_loss_exit] == false
         emergency_min_peak = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
         if peak >= emergency_min_peak && current < -0.02
-          tracker = PositionTracker.find_by(id: position_data.tracker_id)
+          tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
           if tracker&.active?
             reason = "emergency_peak_loss_exit (peak: #{(peak * 100).round(2)}%, current: #{(current * 100).round(2)}%)"
             Live::ExitEngine.execute_exit(tracker: tracker, reason: reason, source: :trailing_engine)
@@ -120,7 +124,7 @@ module Live
         end
       end
 
-      tracker = PositionTracker.find_by(id: position_data.tracker_id)
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
       unless tracker&.active?
         Rails.logger.warn("[TrailingEngine] Tracker #{position_data.tracker_id} not found or inactive for peak-drawdown exit")
         return false
@@ -147,8 +151,9 @@ module Live
 
     # Update peak profit percentage if current exceeds peak
     # @param position_data [Positions::ActiveCache::PositionData] Position data
+    # @param tracker [PositionTracker] Tracker object
     # @return [Boolean] True if peak was updated
-    def update_peak(position_data)
+    def update_peak(position_data, tracker: nil)
       return false unless position_data.pnl_pct && position_data.peak_profit_pct
 
       current = position_data.pnl_pct.to_f
@@ -175,7 +180,7 @@ module Live
       highest_price = entry_price * (1.0 + current)
       lowest_price = entry_price * (1.0 + min_profit)
 
-      persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price)
+      persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price, tracker: tracker)
 
       if peak_updated
         Rails.logger.debug { "[TrailingEngine] Updated peak_profit_pct for #{position_data.tracker_id}: #{(peak * 100).round(2)}% → #{(current * 100).round(2)}% (Highest: ₹#{highest_price.round(2)})" }
@@ -191,8 +196,9 @@ module Live
     # @param tracker_id [Integer] Tracker ID
     # @param highest_price [Float] New highest price
     # @param lowest_price [Float] New lowest price
-    def persist_extremes_if_changed(tracker_id, highest_price, lowest_price)
-      tracker = PositionTracker.find_by(id: tracker_id)
+    # @param tracker [PositionTracker] Tracker object
+    def persist_extremes_if_changed(tracker_id, highest_price, lowest_price, tracker: nil)
+      tracker ||= PositionTracker.find_by(id: tracker_id)
       return unless tracker
 
       meta = tracker.meta || {}
@@ -214,7 +220,7 @@ module Live
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @return [Hash] Result hash with :updated, :new_sl_price, :reason
     # rubocop:disable Metrics/AbcSize
-    def apply_direct_trailing_sl(position_data)
+    def apply_direct_trailing_sl(position_data, tracker: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
@@ -237,7 +243,7 @@ module Live
       # Only update if new SL is higher than current SL (only moves upward)
       return { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved' } unless new_sl_price > current_sl
 
-      tracker = PositionTracker.find_by(id: position_data.tracker_id)
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
       # Calculate SL offset for logging
@@ -278,7 +284,7 @@ module Live
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @return [Hash] Result hash with :updated, :new_sl_price, :reason
     # rubocop:disable Metrics/AbcSize
-    def apply_tiered_sl(position_data)
+    def apply_tiered_sl(position_data, tracker: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
@@ -294,7 +300,7 @@ module Live
 
       return { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved' } unless new_sl_price > current_sl
 
-      tracker = PositionTracker.find_by(id: position_data.tracker_id)
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
       bracket_result = @bracket_placer.update_bracket(
@@ -345,7 +351,7 @@ module Live
 
     # Apply tailored trailing SL (Gamma-Aware + MFE approach for indices)
     # rubocop:disable Metrics/AbcSize
-    def apply_tailored_sl(position_data)
+    def apply_tailored_sl(position_data, tracker: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       current_price = position_data.current_ltp.to_f
@@ -353,7 +359,7 @@ module Live
       peak_profit_pct = position_data.peak_profit_pct.to_f
       prices = position_data.price_history || [current_price]
 
-      tracker = PositionTracker.find_by(id: position_data.tracker_id)
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
       # 1. Use Orders::Analyzer for combined analysis

@@ -117,7 +117,7 @@ module Live
         market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
         return if market_close_time && Time.current >= market_close_time
 
-        PositionTracker.active.find_each do |tracker|
+        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
           run_enforcement_for_tracker(tracker, exit_engine)
         end
       end
@@ -125,34 +125,39 @@ module Live
       def run_enforcement_for_tracker(tracker, exit_engine)
         return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
+        # Get high-performance position snapshot from ActiveCache (which already has latest LTP/PnL from Redis)
+        # This avoids redundant DB/API calls in every rule method.
+        position_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+        return unless position_data
+
         # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
-        advance_trade_state_for(tracker)
+        advance_trade_state_for(tracker, position_data: position_data)
 
-        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
+        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine)
+        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_profit_floor_for(tracker, exit_engine: exit_engine)
+        enforce_profit_floor_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine)
+        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine)
+        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine)
+        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine)
+        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_time_stop_for(tracker, exit_engine: exit_engine)
+        enforce_time_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
+        enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data)
       end
 
       def tick_stream_fresh?
@@ -171,7 +176,7 @@ module Live
       end
 
       def exit_requested_or_sent?(tracker)
-        tracker.reload
+        # Check object state first. If it's already set, definitely true.
         tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
       end
 

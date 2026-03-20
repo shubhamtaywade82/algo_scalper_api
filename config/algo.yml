@@ -734,7 +734,7 @@ signals:
   # Set to false to disable loading optimized indicator parameters from BestIndicatorParam
   # When disabled, uses hardcoded defaults from config/algo.yml (supertrend.period, supertrend.base_multiplier, etc.)
   # When enabled (default: true), automatically loads best-scoring parameters from optimization runs
-  use_optimized_params: false # Enable optimized parameters from BestIndicatorParam (default: true)
+  use_optimized_params: true # Enable optimized parameters from BestIndicatorParam (default: true)
 
   # Modular Indicator System Configuration
   # Use multi_indicator_strategy: true to enable modular indicator system

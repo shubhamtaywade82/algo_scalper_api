@@ -600,6 +600,9 @@ module Signal
         # Rails.logger.info("[Signal] Fetched #{series.candles.size} candles for #{index_cfg[:key]} @ #{timeframe}")
         # Rails.logger.debug { "[Signal] Adaptive Supertrend config: #{supertrend_cfg}" }
 
+        # [DYNAMIC CONFIG] Use optimized parameters if available
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        supertrend_cfg = resolved_supertrend_cfg(instrument, interval, signals_cfg)
         st_service = Indicators::Supertrend.new(series: series, **supertrend_cfg)
         st = st_service.call
         st[:adaptive_multipliers]&.compact&.last
@@ -607,13 +610,15 @@ module Signal
         #   "[Signal] Supertrend(#{timeframe}) for #{index_cfg[:key]}: trend=#{st[:trend]} last_value=#{st[:last_value]} multiplier=#{last_multiplier}"
         # )
 
+        # [DYNAMIC CONFIG] Use optimized ADX strength if available
+        adx_min = resolved_adx_min(instrument, interval, index_cfg, timeframe)
         adx_value = instrument.adx(14, interval: interval)
         # Rails.logger.info("[Signal] ADX(#{timeframe}) for #{index_cfg[:key]}: #{adx_value}")
 
         direction = decide_direction(
           st,
           adx_value,
-          min_strength: adx_min_strength,
+          min_strength: adx_min,
           timeframe_label: timeframe
         )
 
@@ -637,24 +642,24 @@ module Signal
         enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
         confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
 
-        supertrend_cfg = signals_cfg[:supertrend]
-        unless supertrend_cfg
-          Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
-          return { status: :error, message: 'Supertrend configuration missing' }
-        end
+        # supertrend_cfg = signals_cfg[:supertrend] # No longer needed here, resolved in analyze_timeframe
+        # unless supertrend_cfg
+        #   Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
+        #   return { status: :error, message: 'Supertrend configuration missing' }
+        # end
 
-        adx_cfg = signals_cfg[:adx] || {}
-        enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
+        # adx_cfg = signals_cfg[:adx] || {} # No longer needed here, resolved in analyze_timeframe
+        # enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
         # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-        adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
+        # adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0 # No longer needed here, resolved in analyze_timeframe
 
         # Analyze primary timeframe
         primary_analysis = analyze_timeframe(
           index_cfg: index_cfg,
           instrument: instrument,
-          timeframe: primary_tf,
-          supertrend_cfg: supertrend_cfg,
-          adx_min_strength: adx_min_strength
+          timeframe: primary_tf
+          # supertrend_cfg: supertrend_cfg, # Removed
+          # adx_min_strength: adx_min_strength # Removed
         )
 
         unless primary_analysis[:status] == :ok
@@ -667,18 +672,18 @@ module Signal
 
         if confirmation_tf.present?
           # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-          confirmation_adx_min = if enable_adx_filter
-                                   adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
-                                 else
-                                   0
-                                 end
+          # confirmation_adx_min = if enable_adx_filter # No longer needed here, resolved in analyze_timeframe
+          #                          adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
+          #                        else
+          #                          0
+          #                        end
 
           confirmation_analysis = analyze_timeframe(
             index_cfg: index_cfg,
             instrument: instrument,
-            timeframe: confirmation_tf,
-            supertrend_cfg: supertrend_cfg,
-            adx_min_strength: confirmation_adx_min
+            timeframe: confirmation_tf
+            # supertrend_cfg: supertrend_cfg, # Removed
+            # adx_min_strength: confirmation_adx_min # Removed
           )
 
           confirmation_direction = confirmation_analysis[:direction] if confirmation_analysis[:status] == :ok
@@ -1191,6 +1196,45 @@ module Signal
         return :scale_ready if permission.to_sym == :exit_testing
 
         permission
+      end
+
+      # --- Dynamic Configuration Helpers ---
+
+      def dynamic_config_enabled?
+        AlgoConfig.fetch.dig(:signals, :use_optimized_params) != false
+      end
+
+      def resolved_supertrend_cfg(instrument, interval, signals_cfg)
+        base_cfg = (signals_cfg[:supertrend] || { period: 7, multiplier: 3.0 }).dup
+
+        return base_cfg unless dynamic_config_enabled?
+
+        # Try to find optimized params for this specific instrument + interval
+        optimized = BestIndicatorParam.best_for_indicator(instrument.id, interval, :supertrend).first
+        return base_cfg unless optimized && optimized.params.is_a?(Hash)
+
+        # Map optimized keys (atr_period, multiplier) to service keys (period, base_multiplier)
+        params = optimized.params.symbolize_keys
+        base_cfg[:period] = params[:atr_period] if params[:atr_period]
+        base_cfg[:base_multiplier] = params[:multiplier] if params[:multiplier]
+
+        Rails.logger.info("[Signal] 🚀 Using optimized Supertrend for #{instrument.symbol_name} @ #{interval}: #{base_cfg}")
+        base_cfg
+      end
+
+      def resolved_adx_min(instrument, interval, index_cfg, timeframe_label)
+        static_min = index_cfg.dig(:adx_thresholds, timeframe_label == 'primary' ? :primary_min_strength : :confirmation_min_strength) || 15
+
+        return static_min unless dynamic_config_enabled?
+
+        optimized = BestIndicatorParam.best_for_indicator(instrument.id, interval, :adx).first
+        return static_min unless optimized && optimized.params.is_a?(Hash)
+
+        optimized_min = optimized.params.symbolize_keys[:min_strength]
+        return static_min unless optimized_min
+
+        Rails.logger.info("[Signal] 🚀 Using optimized ADX min for #{instrument.symbol_name} @ #{interval}: #{optimized_min}")
+        optimized_min
       end
     end
   end

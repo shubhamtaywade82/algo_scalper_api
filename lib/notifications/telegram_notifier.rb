@@ -129,8 +129,6 @@ module Notifications
       Rails.logger.error("[TelegramNotifier] Failed to send trading stats: #{e.class} - #{e.message}")
     end
 
-    private
-
     def send_message(text)
       return unless enabled? && text.present?
 
@@ -138,6 +136,8 @@ module Notifications
       # prevent it from re-escaping the tags we deliberately embedded.
       ::TelegramNotifier.send_message(text, parse_mode: 'HTML', skip_formatter: true)
     end
+
+    private
 
     # Escape dynamic values so stray <, >, & characters don't break HTML parsing.
     def h(value)
