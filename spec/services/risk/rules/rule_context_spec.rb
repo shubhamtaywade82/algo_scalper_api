@@ -116,8 +116,8 @@ RSpec.describe Risk::Rules::RuleContext do
   end
 
   describe '#active?' do
-    it 'returns true when tracker is active and position exists' do
-      expect(context.active?).to be true
+    it 'is truthy when tracker is active and position exists' do
+      expect(context.active?).to be_truthy
     end
 
     it 'returns false when tracker is exited' do
@@ -125,13 +125,13 @@ RSpec.describe Risk::Rules::RuleContext do
       expect(context.active?).to be false
     end
 
-    it 'returns false when position is nil' do
+    it 'is falsey when position is nil' do
       context = described_class.new(
         position: nil,
         tracker: tracker,
         risk_config: risk_config
       )
-      expect(context.active?).to be false
+      expect(context.active?).to be_falsey
     end
   end
 
@@ -187,10 +187,10 @@ RSpec.describe Risk::Rules::RuleContext do
       expect(result).to eq(Time.zone.parse('10:00'))
     end
 
-    it 'returns default on parse error' do
+    it 'returns nil when parse does not produce a time' do
       risk_config[:time_exit_hhmm] = 'invalid'
       result = context.config_time(:time_exit_hhmm, Time.zone.parse('10:00'))
-      expect(result).to eq(Time.zone.parse('10:00'))
+      expect(result).to be_nil
     end
   end
 

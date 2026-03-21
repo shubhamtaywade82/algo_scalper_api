@@ -26,8 +26,7 @@ module Risk
           reason: "SL HIT #{pnl_pct_display}%",
           metadata: {
             pnl_pct: pnl_pct,
-            sl_pct: sl_pct.to_f,
-            normalized_pct: normalized_pct
+            sl_pct: sl_pct.to_f
           }
         )
       end

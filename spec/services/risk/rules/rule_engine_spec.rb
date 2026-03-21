@@ -3,6 +3,11 @@
 require 'rails_helper'
 
 RSpec.describe Risk::Rules::RuleEngine do
+  before do
+    hub = Live::MarketFeedHub.instance
+    allow(hub).to receive_messages(subscribe: nil, subscribed?: true)
+  end
+
   let(:instrument) { create(:instrument, :nifty_future) }
   let(:tracker) do
     create(
@@ -20,13 +25,13 @@ RSpec.describe Risk::Rules::RuleEngine do
       quantity: 10,
       current_ltp: 96.0,
       pnl: -40.0,
-      pnl_pct: -4.0
+      pnl_pct: -0.04
     )
   end
   let(:risk_config) do
     {
-      sl_pct: 2.0,
-      tp_pct: 5.0
+      sl_pct: 0.02,
+      tp_pct: 0.05
     }
   end
   let(:context) do
@@ -96,13 +101,20 @@ RSpec.describe Risk::Rules::RuleEngine do
 
     context 'with disabled rules' do
       it 'skips disabled rules' do
-        sl_rule = Risk::Rules::StopLossRule.new(config: { sl_pct: 0 }) # Disabled
+        # Rules read thresholds from RuleContext#risk_config, not the rule instance.
+        zero_sl_config = risk_config.merge(sl_pct: 0)
+        ctx = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: zero_sl_config
+        )
+        sl_rule = Risk::Rules::StopLossRule.new(config: {})
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
-        result = engine.evaluate(context)
+        result = engine.evaluate(ctx)
 
-        # SL rule skipped (disabled), TP rule evaluated but doesn't trigger
+        # SL rule skipped (sl_pct 0), TP rule evaluated but doesn't trigger
         expect(result.no_action?).to be true
       end
     end
@@ -144,10 +156,12 @@ RSpec.describe Risk::Rules::RuleEngine do
         allow(error_rule).to receive(:evaluate).and_raise(StandardError.new('Test error'))
         allow(error_rule).to receive_messages(priority: 15, enabled?: true, name: 'error_rule')
 
-        expect(Rails.logger).to receive(:error).with(/Error evaluating rule error_rule/)
+        allow(Rails.logger).to receive(:error)
 
         engine = described_class.new(rules: [error_rule])
         engine.evaluate(context)
+
+        expect(Rails.logger).to have_received(:error).with(/Error evaluating rule error_rule/)
       end
     end
 
@@ -167,7 +181,7 @@ RSpec.describe Risk::Rules::RuleEngine do
         session_rule = Risk::Rules::SessionEndRule.new(config: {})
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
-        position_data.pnl_pct = 10.0 # TP would trigger
+        position_data.pnl_pct = 0.10 # TP would trigger (10% as decimal)
 
         allow(TradingSession::Service).to receive(:should_force_exit?).and_return(
           { should_exit: true }
@@ -185,7 +199,7 @@ RSpec.describe Risk::Rules::RuleEngine do
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
         # Both conditions could be met, but SL has higher priority
-        position_data.pnl_pct = -4.0 # SL triggers
+        position_data.pnl_pct = -0.04 # SL triggers
         position_data.current_ltp = 96.0
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
@@ -245,7 +259,7 @@ RSpec.describe Risk::Rules::RuleEngine do
 
   describe '#enabled_rules' do
     it 'returns only enabled rules' do
-      sl_rule = Risk::Rules::StopLossRule.new(config: { sl_pct: 0 }) # Disabled
+      sl_rule = Risk::Rules::StopLossRule.new(config: { enabled: false })
       tp_rule = Risk::Rules::TakeProfitRule.new(config: {})
 
       engine = described_class.new(rules: [sl_rule, tp_rule])
