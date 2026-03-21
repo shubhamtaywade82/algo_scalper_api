@@ -473,6 +473,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
         allow(Entries::EntryGuard).to receive(:create_paper_tracker!).and_raise(ActiveRecord::RecordInvalid.new(mock_record))
 
         expect(Rails.logger).to receive(:error).with(/EntryGuard failed for nifty: ActiveRecord::RecordInvalid/)
+        expect(Rails.logger).to receive(:error).with(/entry_guard_exception.*ActiveRecord::RecordInvalid/)
 
         result = Entries::EntryGuard.try_enter(
           index_cfg: index_config,

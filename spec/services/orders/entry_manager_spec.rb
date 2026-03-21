@@ -30,7 +30,7 @@ RSpec.describe Orders::EntryManager do
       active?: true
     )
   end
-  let(:position_data) { instance_double(Positions::ActiveCache::PositionData) }
+  let(:position_data) { instance_double(Positions::PositionData) }
 
   before do
     allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)

@@ -61,7 +61,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
 
   # Helper to create/update position in ActiveCache
   def create_position_in_cache(pnl:, pnl_pct:, ltp:, hwm_pnl: nil, peak_profit_pct: nil)
-    position_data = Positions::ActiveCache::PositionData.new(
+    position_data = Positions::PositionData.new(
       tracker_id: tracker.id,
       security_id: tracker.security_id,
       segment: tracker.segment,
@@ -493,7 +493,7 @@ RSpec.describe 'Risk Rule Engine - Full Position Simulation (Integration)', type
         quantity: qty
       )
 
-      position = Positions::ActiveCache::PositionData.new(
+      position = Positions::PositionData.new(
         tracker_id: bad_tracker.id,
         entry_price: nil,
         quantity: qty,

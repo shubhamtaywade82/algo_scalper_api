@@ -18,7 +18,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
 
   describe 'live data from ActiveCache' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -52,7 +52,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
 
   describe 'PnL recalculation' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -78,7 +78,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
 
   describe 'peak profit tracking' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -108,7 +108,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
 
   describe 'high water mark tracking' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -138,7 +138,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
 
   describe 'missing data handling' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -164,7 +164,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
 
   describe 'data consistency' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,

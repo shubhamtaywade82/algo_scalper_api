@@ -218,7 +218,7 @@ RSpec.describe Orders::BracketPlacer do
   describe '#update_bracket' do
     let(:position_data) do
       instance_double(
-        Positions::ActiveCache::PositionData,
+        Positions::PositionData,
         sl_price: 105.0,
         tp_price: 240.0
       )

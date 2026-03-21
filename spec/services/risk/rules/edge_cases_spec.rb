@@ -18,7 +18,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
   describe 'zero thresholds' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -47,7 +47,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
   describe 'invalid time format' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -76,7 +76,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
   describe 'stale data handling' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -103,7 +103,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
   describe 'missing risk config' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -131,7 +131,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
   describe 'rule evaluation errors' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -166,7 +166,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
   describe 'concurrent rule evaluation' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -202,7 +202,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
   describe 'very large profit values' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,
@@ -229,7 +229,7 @@ RSpec.describe 'Rule Engine Edge Cases' do
 
   describe 'very small profit values' do
     let(:position_data) do
-      Positions::ActiveCache::PositionData.new(
+      Positions::PositionData.new(
         tracker_id: tracker.id,
         entry_price: 100.0,
         quantity: 10,

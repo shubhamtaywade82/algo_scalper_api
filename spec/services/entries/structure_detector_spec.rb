@@ -43,9 +43,9 @@ RSpec.describe Entries::StructureDetector do
 
       it 'respects lookback_minutes parameter' do
         bars = Array.new(20) do |i|
-          build(:candle, high: 25_000 + i, low: 24_900 + i, close: 24_950 + i, timestamp: i.minutes.ago)
+          close_price = (i == 19 ? 26_000 : 24_950 + i)
+          build(:candle, high: 25_000 + i, low: 24_900 + i, close: close_price, timestamp: i.minutes.ago)
         end
-        bars.last.close = 26_000 # Breaks high, but outside lookback
 
         result = described_class.bos?(bars, lookback_minutes: 5)
 

@@ -40,8 +40,8 @@ RSpec.describe Ai::Calibration::ResultParser do
 
       expect(result[:diagnosis]['primary_failure']).to eq('SL too tight')
       expect(result[:parameter_changes].size).to eq(2)
-      expect(result[:proposed_patch]['risk']['sl_pct']).to eq(0.15)
-      expect(result[:proposed_patch]['risk']['rr_profit_booking']['target_rr']).to eq(3.0)
+      expect(result[:proposed_patch]['sl_pct']).to eq(0.15)
+      expect(result[:proposed_patch]['target_rr']).to eq(3.0)
     end
 
     it 'filters out low confidence suggestions' do
