@@ -413,9 +413,9 @@ module Live
       @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
     end
 
-    # Broadcast aggregate dashboard stats every 5 seconds to the "dashboard" channel.
+    # Broadcast aggregate dashboard stats every 1 second to the "dashboard" channel.
     def maybe_broadcast_heartbeat
-      return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 5.0
+      return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 1.0
 
       @last_heartbeat_at = Time.current.to_f
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)

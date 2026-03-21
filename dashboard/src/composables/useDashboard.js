@@ -19,6 +19,9 @@ export function useDashboard(onPositionChange) {
   const balance = ref({ cash: 0, equity: 0, mtm: 0, exposure: 0 })
   const indices = ref({ nifty: null, banknifty: null, sensex: null })
   const system = ref({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
+  const publicIpv4 = ref('Unknown')
+  const publicIpv6 = ref('Unknown')
+  const registeredIps = ref(null)
   const circuitBreaker = ref({})
   const lastUpdated = ref(null)
   const recentSignals = ref([])
@@ -33,6 +36,9 @@ export function useDashboard(onPositionChange) {
     if (data.today) stats.value = data.today
     if (data.indices) indices.value = data.indices
     if (data.system) system.value = data.system
+    if (data.public_ipv4) publicIpv4.value = data.public_ipv4
+    if (data.public_ipv6) publicIpv6.value = data.public_ipv6
+    if (data.registered_ips !== undefined) registeredIps.value = data.registered_ips
     if (data.circuit_breaker) circuitBreaker.value = data.circuit_breaker
     if (data.recent_signals) recentSignals.value = data.recent_signals
     if (data.config) config.value = data.config
@@ -78,5 +84,5 @@ export function useDashboard(onPositionChange) {
     clearInterval(pollTimer)
   })
 
-  return { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals, config }
+  return { mode, connected, stats, balance, indices, system, publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config }
 }

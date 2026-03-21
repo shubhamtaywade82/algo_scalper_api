@@ -386,3 +386,20 @@ Execute strictly in this order:
 
 If a proposed change conflicts with deterministic behavior, low latency, or
 observability, reject it and redesign.
+
+## Query Wiring Safety Rules
+
+- New query objects (for example, `Positions::ActiveForExit`, `Positions::RiskCandidates`,
+  `Derivatives::AtmOptions`) MUST be introduced and tested in isolation first.
+- Initial wiring for `feat/query-layer-foundation` is limited to low-risk paths only
+  (e.g., `Risk::CircuitBreaker.force_close_all!` using `Positions::ActiveForExit`).
+- DO NOT touch locked infrastructure in this PR:
+  - `app/services/live/risk_manager_service/*`
+  - `app/services/options/chain_analyzer.rb` and related chain plumbing
+- Wiring into alpha layers (policies, guards, strategy/entry/exit conditions) MUST:
+  - Happen in follow-up, tightly scoped PRs
+  - Include parity checks (old query vs new query) in specs and paper mode
+  - Preserve the same candidate sets for entries/exits/risk before removing legacy queries
+- Unused query objects are allowed in this PR, but they MUST:
+  - Be covered by focused specs
+  - Have their first runtime consumers added only in subsequent PRs with explicit validation

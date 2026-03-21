@@ -33,6 +33,7 @@ module TradingSystem
       keep_process_alive! if keep_alive
       true
     rescue StandardError => e
+      Notifications::TelegramNotifier.instance.notify_error("#{e.class} - #{e.message}", context: 'TradingSystem::Daemon')
       Rails.logger.error("[TradingDaemon] #{e.class} - #{e.message}")
       safe_stop!
       false
@@ -108,29 +109,48 @@ module TradingSystem
     end
 
     def trap_signals!
+      @shutdown_requested = nil
       %w[INT TERM].each do |sig|
         Signal.trap(sig) do
-          Rails.logger.info("[TradingDaemon] Received #{sig}, shutting down...")
-          safe_stop!
-          exit(0) # rubocop:disable Rails/Exit
+          @shutdown_requested = sig
         end
       end
 
+      # Still keep at_exit as a fallback for other types of termination
       at_exit { safe_stop! }
     end
 
     def safe_stop!
+      # Guard against multiple calls
+      return if @stopping
+      @stopping = true
+
       if @market_open_thread&.alive?
         @market_open_thread.kill
         @market_open_thread = nil
       end
-      @supervisor&.stop_all
+
+      if @supervisor
+        begin
+          @supervisor.stop_all
+        rescue StandardError => e
+          # If we're here, we're likely outside trap context, but let's be safe
+          $stderr.puts "[TradingDaemon] stop_all failed: #{e.class} - #{e.message}"
+        end
+      end
     rescue StandardError => e
-      Rails.logger.error("[TradingDaemon] stop_all failed: #{e.class} - #{e.message}")
+      $stderr.puts "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
     end
 
     def keep_process_alive!
-      sleep
+      loop do
+        if @shutdown_requested
+          Rails.logger.info("[TradingDaemon] Received #{@shutdown_requested}, shutting down...")
+          safe_stop!
+          break
+        end
+        sleep 1
+      end
     end
   end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_17_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_21_114756) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -90,6 +90,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_17_000001) do
     t.string "underlying_security_id"
     t.string "underlying_symbol"
     t.datetime "updated_at", null: false
+    t.index ["expiry_date", "strike_price", "option_type"], name: "index_derivatives_on_expiry_strike_option_type"
     t.index ["instrument_code"], name: "index_derivatives_on_instrument_code"
     t.index ["instrument_id", "instrument_type"], name: "index_derivatives_on_instrument_id_and_instrument_type"
     t.index ["instrument_id"], name: "index_derivatives_on_instrument_id"
@@ -293,6 +294,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_17_000001) do
     t.datetime "validated_at"
     t.bigint "watchable_id", null: false
     t.string "watchable_type", null: false
+    t.index ["created_at"], name: "index_position_trackers_on_created_at"
     t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
     t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
     t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
@@ -303,6 +305,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_17_000001) do
     t.index ["status", "security_id"], name: "index_trackers_on_status_and_security_id"
     t.index ["status"], name: "index_position_trackers_on_status"
     t.index ["watchable_type", "watchable_id"], name: "index_position_trackers_on_watchable"
+  end
+
+  create_table "public_ip_logs", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "first_seen_at"
+    t.string "ip_address"
+    t.string "ip_version"
+    t.datetime "last_seen_at"
+    t.datetime "updated_at", null: false
   end
 
   create_table "settings", force: :cascade do |t|

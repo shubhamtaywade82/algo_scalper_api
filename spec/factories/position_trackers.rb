@@ -98,5 +98,8 @@ FactoryBot.define do
       last_pnl_rupees { BigDecimal('250.00') }
       last_pnl_pct { BigDecimal('6.67') }
     end
+    trait :paper do
+      paper { true }
+    end
   end
 end

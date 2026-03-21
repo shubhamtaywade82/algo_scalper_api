@@ -42,6 +42,19 @@ module Api
       render json: { error: e.message }, status: :internal_server_error
     end
 
+    def update_ip
+      ip = params[:ip].presence || DhanHQ::Utils::NetworkInspector.public_ipv4
+      result = Dhan::IpService.update_ip(ip)
+
+      if result[:success]
+        render json: { success: true, flag: result[:flag] }
+      else
+        render json: { success: false, error: result[:error] }, status: :unprocessable_entity
+      end
+    rescue StandardError => e
+      render json: { success: false, error: e.message }, status: :internal_server_error
+    end
+
     private
 
     def authenticate_settings!

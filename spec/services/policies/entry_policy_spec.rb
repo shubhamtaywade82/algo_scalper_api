@@ -9,8 +9,6 @@ RSpec.describe Policies::EntryPolicy do
   let(:current_time) { Time.zone.now.change(hour: 10, min: 0, sec: 0) }
   let(:daily_limits) { instance_double(Live::DailyLimits) }
 
-  # ── Helpers: stub all checks to pass by default ─────────────────────────────
-
   before do
     allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(false)
     allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
@@ -19,15 +17,11 @@ RSpec.describe Policies::EntryPolicy do
     allow(Time).to receive(:current).and_return(current_time)
   end
 
-  # ── Permitted: all checks pass ──────────────────────────────────────────────
-
   describe '#permitted? — all clear' do
     it { is_expected.to be_permitted }
     it { expect(policy.reasons).to be_empty }
     it { expect { policy.authorize! }.not_to raise_error }
   end
-
-  # ── Circuit breaker tripped ─────────────────────────────────────────────────
 
   context 'when circuit breaker is tripped' do
     before { allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(true) }
@@ -36,18 +30,12 @@ RSpec.describe Policies::EntryPolicy do
     it { expect(policy.reasons).to include('circuit_breaker_tripped') }
   end
 
-  # ── Outside trading hours ───────────────────────────────────────────────────
-
   context 'when outside market hours' do
-    before do
-      allow(Time).to receive(:current).and_return(Time.zone.now.change(hour: 8, min: 0, sec: 0))
-    end
+    let(:current_time) { Time.zone.now.change(hour: 8, min: 0, sec: 0) }
 
     it { is_expected.to be_forbidden }
     it { expect(policy.reasons).to include('outside_trading_hours') }
   end
-
-  # ── Daily loss limit reached ────────────────────────────────────────────────
 
   context 'when daily loss limit is reached' do
     before do
@@ -59,20 +47,27 @@ RSpec.describe Policies::EntryPolicy do
     it { expect(policy.reasons).to include('daily_loss_limit_reached') }
   end
 
-  # ── Multiple violations ─────────────────────────────────────────────────────
+  context 'when only trade frequency limit is exceeded' do
+    before do
+      allow(daily_limits).to receive(:can_trade?)
+        .and_return({ allowed: false, reason: 'trade_frequency_limit_exceeded' })
+    end
+
+    it { is_expected.to be_permitted }
+    it { expect(policy.reasons).not_to include('daily_loss_limit_reached') }
+  end
 
   context 'with multiple violations' do
     before do
       allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(true)
-      allow(Time).to receive(:current).and_return(Time.zone.now.change(hour: 8, min: 0, sec: 0))
     end
+
+    let(:current_time) { Time.zone.now.change(hour: 8, min: 0, sec: 0) }
 
     it 'reports all violations' do
       expect(policy.reasons).to include('circuit_breaker_tripped', 'outside_trading_hours')
     end
   end
-
-  # ── authorize! ──────────────────────────────────────────────────────────────
 
   describe '#authorize!' do
     context 'when forbidden' do

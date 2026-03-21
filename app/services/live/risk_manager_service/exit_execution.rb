@@ -11,6 +11,17 @@ module Live
       def dispatch_exit(exit_engine, tracker, reason)
         if exit_engine.respond_to?(:execute_exit) && !exit_engine.equal?(self)
           exit_engine.execute_exit(tracker, reason)
+
+          # Record realized PnL in portfolio tracker after exit (best-effort)
+          begin
+            pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)&.dig(:pnl) ||
+                  tracker.last_pnl_rupees.to_f
+            Portfolio::PnlTracker.mark_realized(tracker_id: tracker.id, pnl: pnl.to_f)
+          rescue StandardError => e
+            Rails.logger.error(
+              "[RiskManager] Portfolio::PnlTracker.mark_realized failed for tracker=#{tracker.id}: #{e.message}"
+            )
+          end
         else
           Rails.logger.fatal(
             "[RiskManager] CRITICAL: ExitEngine unavailable for #{tracker.order_no} " \

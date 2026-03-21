@@ -24,7 +24,7 @@
 # frozen_string_literal: true
 
 class TradeAnalytic < ApplicationRecord
-  belongs_to :position_tracker
+  belongs_to :position_tracker, optional: false, inverse_of: :trade_analytic
 
   validates :symbol, presence: true
   validates :entry_price, presence: true

@@ -194,9 +194,10 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
+  auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
   sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
   tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
-  per_trade_risk_pct: 0.15
+  per_trade_risk_pct: 0.40
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
@@ -643,6 +644,28 @@ position_sizing:
     s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
 
 # ============================================
+# PORTFOLIO-LEVEL PROFIT LOCK ENGINE
+# ============================================
+# Protects accumulated intraday gains using a monotonic profit floor.
+# Once net PnL crosses a milestone, a floor is locked in at peak_pnl × lock_ratio.
+# If net PnL ever drops below the floor → ALL positions exit + new entries blocked.
+#
+# Floor is monotonic: it only moves up as PnL peaks climb.
+# Example: PnL peaks at ₹25k (past the ₹20k trigger):
+#   floor = ₹25k × 0.70 = ₹17.5k  (not just the static ₹14k)
+#
+# Set enabled: false to disable the entire engine without removing config.
+profit_lock:
+  enabled: true
+  levels:
+    - trigger: 10000   # ₹10k — Level 1
+      lock_ratio: 0.60 # floor = peak_pnl × 60%  (e.g. ₹10k peak → ₹6k floor)
+    - trigger: 20000   # ₹20k — Level 2
+      lock_ratio: 0.70 # floor = peak_pnl × 70%  (e.g. ₹20k peak → ₹14k floor)
+    - trigger: 30000   # ₹30k — Level 3
+      lock_ratio: 0.73 # floor = peak_pnl × 73%  (e.g. ₹30k peak → ₹21.9k floor)
+
+# ============================================
 # SIGNAL SETTINGS
 # ============================================
 signals:
@@ -712,7 +735,7 @@ signals:
   # Set to false to disable loading optimized indicator parameters from BestIndicatorParam
   # When disabled, uses hardcoded defaults from config/algo.yml (supertrend.period, supertrend.base_multiplier, etc.)
   # When enabled (default: true), automatically loads best-scoring parameters from optimization runs
-  use_optimized_params: false # Enable optimized parameters from BestIndicatorParam (default: true)
+  use_optimized_params: true # Enable optimized parameters from BestIndicatorParam (default: true)
 
   # Modular Indicator System Configuration
   # Use multi_indicator_strategy: true to enable modular indicator system

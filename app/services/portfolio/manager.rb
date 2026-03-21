@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Portfolio
   class Manager
     MAX_CAPITAL = 100_000.0

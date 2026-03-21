@@ -20,12 +20,44 @@ module Entries
       end
 
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
-        Rails.logger.info("[EntryGuard] Attempting entry for #{index_cfg[:key]} (#{direction})")
+        # Global Profit Protection Check
+        if Portfolio::DrawdownGuard.triggered?
+          Observability::StructuredLog.info(
+            event: 'entry_blocked',
+            payload: {
+              service: 'Entries::EntryGuard',
+              index_key: index_cfg[:key].to_s,
+              symbol: pick[:symbol].to_s,
+              stage: 'profit_protection',
+              reason: 'drawdown_guard_active'
+            }
+          )
+          return false
+        end
+
+        Observability::StructuredLog.info(
+          event: 'entry_attempted',
+          payload: {
+            service: 'Entries::EntryGuard',
+            index_key: index_cfg[:key].to_s,
+            direction: direction.to_s,
+            symbol: pick[:symbol].to_s
+          }
+        )
 
         # Portfolio-level policy gate (fast fail before building context)
         entry_policy = Policies::EntryPolicy.new(index_cfg: index_cfg, direction: direction)
         unless entry_policy.permitted?
-          Rails.logger.info("[EntryGuard] EntryPolicy blocked — #{entry_policy.reasons.join(', ')}")
+          Observability::StructuredLog.info(
+            event: 'entry_blocked',
+            payload: {
+              service: 'Entries::EntryGuard',
+              index_key: index_cfg[:key].to_s,
+              symbol: pick[:symbol].to_s,
+              stage: 'entry_policy',
+              reasons: entry_policy.reasons
+            }
+          )
           return false
         end
 
@@ -40,7 +72,16 @@ module Entries
         result = entry_guard_pipeline.run(context)
         if result != EntryGuardPipeline::PASS
           reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
-          Rails.logger.info("[EntryGuard] Entry blocked — #{reason}")
+          Observability::StructuredLog.info(
+            event: 'entry_blocked',
+            payload: {
+              service: 'Entries::EntryGuard',
+              index_key: index_cfg[:key].to_s,
+              symbol: pick[:symbol].to_s,
+              stage: 'guard_pipeline',
+              reason: reason.to_s
+            }
+          )
           return false
         end
 
@@ -147,7 +188,16 @@ module Entries
           lot_size: lot_size
         )
         unless risk_policy.permitted?
-          Rails.logger.info("[EntryGuard] RiskPolicy blocked for #{index_cfg[:key]} — #{risk_policy.reasons.join(', ')}")
+          Observability::StructuredLog.info(
+            event: 'entry_blocked',
+            payload: {
+              service: 'Entries::EntryGuard',
+              index_key: index_cfg[:key].to_s,
+              symbol: pick[:symbol].to_s,
+              stage: 'risk_policy',
+              reasons: risk_policy.reasons
+            }
+          )
           return false
         end
 
@@ -167,6 +217,15 @@ module Entries
 
         unless place_cmd.success?
           Rails.logger.error("[EntryGuard] place_market failed for #{index_cfg[:key]}: #{pick[:symbol]} (#{place_cmd.reason})")
+          Observability::StructuredLog.error(
+            event: 'entry_order_failed',
+            payload: {
+              service: 'Entries::EntryGuard',
+              index_key: index_cfg[:key].to_s,
+              symbol: pick[:symbol].to_s,
+              reason: place_cmd.reason.to_s
+            }
+          )
           return false
         end
 
@@ -174,6 +233,14 @@ module Entries
         order_no = extract_order_no(response)
         unless order_no
           Rails.logger.warn("[EntryGuard] Order placement failed for #{index_cfg[:key]}: #{pick[:symbol]} (response: #{response.inspect})")
+          Observability::StructuredLog.warn(
+            event: 'entry_order_missing_order_no',
+            payload: {
+              service: 'Entries::EntryGuard',
+              index_key: index_cfg[:key].to_s,
+              symbol: pick[:symbol].to_s
+            }
+          )
           return false
         end
 
@@ -206,9 +273,30 @@ module Entries
         mark_bos_consumed!(index_cfg: index_cfg, bos_context: bos_context) if tracker
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
+        Observability::StructuredLog.info(
+          event: 'entry_order_placed',
+          payload: {
+            service: 'Entries::EntryGuard',
+            index_key: index_cfg[:key].to_s,
+            symbol: pick[:symbol].to_s,
+            order_no: order_no.to_s,
+            quantity: quantity.to_i,
+            ltp: ltp.to_f
+          }
+        )
         !!tracker
       rescue StandardError => e
         Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+        Observability::StructuredLog.error(
+          event: 'entry_guard_exception',
+          payload: {
+            service: 'Entries::EntryGuard',
+            index_key: index_cfg[:key].to_s,
+            symbol: pick[:symbol].to_s,
+            error_class: e.class.to_s,
+            error_message: e.message
+          }
+        )
         false
       end
 
