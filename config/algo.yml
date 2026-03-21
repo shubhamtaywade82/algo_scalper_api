@@ -194,6 +194,7 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
+  auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
   sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
   tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
   per_trade_risk_pct: 0.40

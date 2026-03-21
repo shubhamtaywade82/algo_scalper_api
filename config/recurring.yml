@@ -47,6 +47,13 @@ development:
     priority: 5
     description: "AI technical analysis for SENSEX options buying intraday - runs every 15 minutes (aligns with SMC scanner)"
 
+  dhan_auto_ip_sync:
+    class: Dhan::AutoIpUpdaterJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 20
+    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
+
 production:
   instruments_import:
     class: InstrumentsImportJob
@@ -95,3 +102,10 @@ production:
     queue_name: background
     priority: 3
     description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
+
+  dhan_auto_ip_sync:
+    class: Dhan::AutoIpUpdaterJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 20
+    description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"

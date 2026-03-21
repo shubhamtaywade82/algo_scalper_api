@@ -1,7 +1,8 @@
 <script setup>
-import { computed, inject } from 'vue'
+import { computed, inject, ref } from 'vue'
 
-const { publicIpv4, publicIpv6, registeredIps } = inject('dashboardState')
+const { publicIpv4, publicIpv6, registeredIps, config } = inject('dashboardState')
+const updating = ref(false)
 
 const isIpVerified = computed(() => {
   if (!registeredIps?.value) return false
@@ -13,6 +14,8 @@ const isIpVerified = computed(() => {
   return registered.includes(publicIpv4.value) || (publicIpv6.value !== 'None' && registered.includes(publicIpv6.value))
 })
 
+const autoUpdateEnabled = computed(() => config.value?.risk?.auto_update_ip === true)
+
 function daysRemaining(dateStr) {
   if (!dateStr) return null
   const target = new Date(dateStr)
@@ -23,6 +26,37 @@ function daysRemaining(dateStr) {
   const diffTime = target - today
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   return diffDays > 0 ? diffDays : 0
+}
+
+const canUpdateAny = computed(() => {
+  if (!registeredIps.value) return false
+  const pDays = daysRemaining(registeredIps.value.modification_allowed_date_for_primary_ip)
+  const sDays = daysRemaining(registeredIps.value.modification_allowed_date_for_secondary_ip)
+  return (pDays === 0) || (sDays === 0)
+})
+
+async function triggerIpUpdate() {
+  if (!confirm(`This will attempt to whitelist your current IPv4 (${publicIpv4.value}) on Dhan. Continue?`)) return
+  
+  updating.value = true
+  
+  try {
+    const res = await fetch('/api/settings/update_ip', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    const data = await res.json()
+    if (data.success) {
+      alert(`Success! Updated ${data.flag} slot to ${publicIpv4.value}`)
+      location.reload()
+    } else {
+      alert('Update failed: ' + data.error)
+    }
+  } catch (e) {
+    alert('Failed to connect to server')
+  } finally {
+    updating.value = false
+  }
 }
 </script>
 
@@ -46,9 +80,36 @@ function daysRemaining(dateStr) {
       </div>
       <div class="text-right">
         <span class="text-[10px] font-black uppercase tracking-widest opacity-50 block mb-1">Dhan Compliance</span>
-        <div :class="['px-3 py-1 rounded-full text-[10px] font-black uppercase border', isIpVerified ? 'border-emerald-500/30' : 'border-amber-500/30']">
-          {{ isIpVerified ? 'GATE OPEN' : 'GATE CLOSED' }}
+        <div class="flex flex-col items-end gap-2">
+          <div :class="['px-3 py-1 rounded-full text-[10px] font-black uppercase border', isIpVerified ? 'border-emerald-500/30' : 'border-amber-500/30']">
+            {{ isIpVerified ? 'GATE OPEN' : 'GATE CLOSED' }}
+          </div>
+          <button 
+            v-if="!isIpVerified && canUpdateAny"
+            @click="triggerIpUpdate"
+            :disabled="updating"
+            class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-cyan-900/20 disabled:opacity-50"
+          >
+            {{ updating ? 'UPDATING...' : 'WHITELIST CURRENT IP' }}
+          </button>
+          <div v-else-if="!isIpVerified" class="text-[9px] font-black text-amber-600 uppercase italic">
+            Cooldown Active
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Auto-update Status -->
+    <div class="bg-gray-800/30 border border-gray-700/50 rounded-lg p-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div :class="['w-2 h-2 rounded-full', autoUpdateEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-gray-600']"></div>
+        <div>
+          <span class="text-xs font-bold text-gray-300 uppercase tracking-widest">Auto-Sync Engine</span>
+          <p class="text-[10px] text-gray-500">Automatically updates Dhan whitelisting when cooldown expires.</p>
+        </div>
+      </div>
+      <div class="text-[10px] font-black uppercase tracking-tighter" :class="autoUpdateEnabled ? 'text-emerald-500' : 'text-gray-500'">
+        {{ autoUpdateEnabled ? 'ENABLED' : 'DISABLED (ENABLE IN RISK SETTINGS)' }}
       </div>
     </div>
 

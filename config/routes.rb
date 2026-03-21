@@ -25,8 +25,9 @@ Rails.application.routes.draw do
     post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
 
     # Algo Settings
-    get    'settings',      to: 'settings#index'
-    patch  'settings/bulk', to: 'settings#update_bulk'
+    get    'settings',           to: 'settings#index'
+    patch  'settings/bulk',      to: 'settings#update_bulk'
+    post   'settings/update_ip', to: 'settings#update_ip'
 
     # Calibration runs — view and apply automated config patches
     resources :calibration_runs, only: %i[index show] do
