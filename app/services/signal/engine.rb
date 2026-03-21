@@ -427,7 +427,7 @@ module Signal
         # 2. Gamma Ramp Detection & Volatility Proxy
         expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
         chain_data = instrument.fetch_option_chain(expiry_date)
-        
+
         gamma_pressure_result = if chain_data
                                   detector = Options::GammaRampDetector.new(
                                     index_key: index_cfg[:key],
@@ -545,9 +545,22 @@ module Signal
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
+        market_context_extra, mc_gate_blocked = evaluate_market_context_for_entry(
+          index_cfg: index_cfg,
+          primary_series: primary_series,
+          expiry_date: expiry_date,
+          chain_data: chain_data,
+          final_direction: final_direction,
+          pick: picks.first
+        )
+        if mc_gate_blocked
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
         # Prepare entry metadata to pass to EntryGuard
         supertrend_direct_entry = (entry_primary == 'supertrend') || exit_testing_mode?
-        entry_metadata = diagnostic_metadata.merge(
+        entry_metadata = diagnostic_metadata.merge(market_context_extra).merge(
           entry_contract: supertrend_direct_entry ? 'supertrend_machine_v1' : 'bos_machine_v1',
           permission: execution_permission,
           entry_quality_score: quality_result[:score],
@@ -1220,6 +1233,64 @@ module Signal
         return :scale_ready if permission.to_sym == :exit_testing
 
         permission
+      end
+
+      # MarketContext regime snapshot + optional hard gate (config: market_context.*).
+      # @return [Array<Hash, Boolean>] extra metadata hash, and true if gate blocked entry
+      def evaluate_market_context_for_entry(index_cfg:, primary_series:, expiry_date:, chain_data:,
+                                            final_direction:, pick:)
+        return [{}, false] unless AlgoConfig.fetch.dig(:market_context, :enabled) == true
+
+        snapshot = MarketContext::RegimeComposer.new(series: primary_series, index_key: index_cfg[:key]).call
+        chain_signal = Options::ChainSignalExtractor.new(
+          index_key: index_cfg[:key],
+          expiry_date: expiry_date,
+          chain_data: chain_data,
+          final_direction: final_direction,
+          atm_strike: pick[:strike]
+        ).call
+        profile = Trading::StrategyProfileSelector.select(snapshot)
+
+        extra = {
+          strategy_profile: profile,
+          market_context_structure: snapshot.structure,
+          market_context_strength: snapshot.strength,
+          market_context_volatility: snapshot.volatility_state,
+          market_context_participation: snapshot.participation,
+          market_context_conviction: snapshot.conviction_score,
+          market_context_displacement: snapshot.displacement,
+          market_context_legacy_regime: snapshot.legacy_regime,
+          chain_direction_confidence: chain_signal.direction_confidence,
+          chain_direction_hint: chain_signal.direction_hint.to_s,
+          chain_oi_confirmation: chain_signal.oi_confirmation,
+          chain_premium_expansion: chain_signal.premium_expansion,
+          chain_pcr: chain_signal.pcr
+        }
+
+        return [extra, false] unless AlgoConfig.fetch.dig(:market_context, :gate, :enabled) == true
+
+        gate = Trading::MarketPermissionGate.new(
+          snapshot: snapshot,
+          chain_signal: chain_signal,
+          final_direction: final_direction
+        ).call
+        return [extra, false] if gate.allowed
+
+        Observability::StructuredLog.info(
+          event: 'entry_blocked',
+          payload: {
+            service: 'Signal::Engine',
+            index_key: index_cfg[:key].to_s,
+            stage: 'market_permission_gate',
+            reason: gate.reason.to_s,
+            code: gate.code.to_s
+          }
+        )
+        Rails.logger.info("[Signal] MarketPermissionGate BLOCKED #{index_cfg[:key]}: #{gate.reason}")
+        [extra, true]
+      rescue StandardError => e
+        Rails.logger.error("[Signal] Market context evaluation failed: #{e.class} - #{e.message}")
+        [{}, false]
       end
 
       # --- Dynamic Configuration Helpers ---

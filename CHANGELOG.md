@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-03-21
+- **Market context (alpha):** Add `MarketContext::RegimeSnapshot`, `RegimeComposer`, `StructureAnalyzer`, `VolatilityAnalyzer`, and `ParticipationAnalyzer` under `app/services/market_context/`. Composes existing `MarketRegimeDetector` with candle/VWAP/volume signals and a weighted `conviction_score` from `config/algo.yml` (`market_context.regime_scoring`).
+- **Chain signal (alpha):** Add `Options::ChainSignalExtractor` (`app/services/options/chain_signal_extractor.rb`) using raw `chain_data` + `Options::FlowAnalyzer` history (PCR, flow scores, ATM premium expansion vs cache). Does not modify `Options::ChainAnalyzer`.
+- **Permission gate (alpha):** Add `Trading::MarketPermissionGate` (`app/services/trading/market_permission_gate.rb`); optional hard block after strike qualification in `Signal::Engine#evaluate_market_context_for_entry` when `market_context.gate.enabled` is true. Structured log `entry_blocked` with `stage: market_permission_gate`.
+- **Strategy profiles:** Add `Trading::StrategyProfileSelector`; `strategy_profile` and market/chain diagnostics merge into `entry_metadata` and persist on `PositionTracker.meta` via `Entries::EntryGuard` diagnostic merge.
+- **Trailing:** `Trading::TrailingEngine#config_for_symbol` merges `risk.institutional_trailing.profiles.<strategy_profile>` when `tracker.meta['strategy_profile']` is set.
+- **Config:** New `market_context:` and `institutional_trailing.profiles` sections in `config/algo.yml` (defaults keep feature off: `market_context.enabled: false`, `gate.enabled: false`).
+- **Specs:** `spec/services/market_context/`, `chain_signal_extractor_spec`, `market_permission_gate_spec`, `strategy_profile_selector_spec`, `signal/engine_market_context_spec`, trailing profile example in `trailing_engine_spec`.
+- **Autoload / naming:** Move `Strategies::ExpiryModel` to `app/models/strategies/expiry_model.rb` for Zeitwerk. Rename dev Redis key browser from `Redis::Inspector` to `RedisUi::Inspector` (`app/services/redis_ui/inspector.rb`) to avoid clashing with the `redis` gem’s `Redis` class; `RedisUiController` updated.
+
 ## 2026-03-12
 - Enforce `PLACE_ORDER` as the required live broker execution toggle in `Orders::Placer`; live BUY/SELL/EXIT calls are blocked unless `ENV['PLACE_ORDER'] == 'true'`.
 - Add explicit blocked-order warning logs for live placement attempts when `PLACE_ORDER` is disabled.

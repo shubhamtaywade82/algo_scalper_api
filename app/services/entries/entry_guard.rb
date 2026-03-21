@@ -1135,6 +1135,12 @@ module Entries
           validation_mode validation_passed
           state_count state_multiplier original_timeframe
           smc_decision smc_permission
+          strategy_profile
+          market_context_structure market_context_strength market_context_volatility
+          market_context_participation market_context_conviction market_context_displacement
+          market_context_legacy_regime
+          chain_direction_confidence chain_direction_hint chain_oi_confirmation
+          chain_premium_expansion chain_pcr
         ]
         diagnostic_keys.each do |key|
           meta_hash[key] = entry_metadata[key] if entry_metadata.key?(key)

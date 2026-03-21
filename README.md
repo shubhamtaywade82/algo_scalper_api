@@ -8,7 +8,11 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 
 ### Key Capabilities
 
-- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation, market regime detection, and dynamic validation modes (balanced/conservative)
+- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation,
+  market regime detection, and dynamic validation modes (balanced/conservative).
+  Optional **market context** (`MarketContext::RegimeComposer`, chain signal extraction,
+  `Trading::MarketPermissionGate`) is configurable in `config/algo.yml` (`market_context`);
+  see `docs/trading/market_context_and_permission_gate.md`.
 - **Smart Money Concepts (SMC)** — Order block detection, FVG analysis, break-of-structure entries, institutional flow scoring
 - **Real-time WebSocket Hub** — DhanHQ tick ingestion with write-through Redis caching, automatic reconnection, and per-position subscription management
 - **Institutional Risk Management** — 15 exit rule engines: stop-loss, take-profit, trailing stops (tiered/direct/gamma-aware), peak drawdown, time-based, early trend failure, premium momentum failure, structure invalidation

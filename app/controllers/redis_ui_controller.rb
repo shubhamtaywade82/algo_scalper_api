@@ -90,7 +90,7 @@ class RedisUiController < ActionController::Base
   end
 
   def redis_inspector
-    @redis_inspector ||= ::Redis::Inspector.new(client: @redis)
+    @redis_inspector ||= ::RedisUi::Inspector.new(client: @redis)
   end
 end
 # rubocop:enable Rails/ApplicationController, Metrics/ClassLength

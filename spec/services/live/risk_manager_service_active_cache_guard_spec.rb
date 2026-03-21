@@ -24,7 +24,7 @@ RSpec.describe Live::RiskManagerService do
       expect do
         service.enforce_dynamic_trailing_stops_for(tracker, exit_engine: instance_double(Live::ExitEngine))
       end.not_to raise_error
-      expect(Rails.logger).to have_received(:error).with(match(/active_cache unavailable/)).at_least(:once)
+      expect(Rails.logger).to have_received(:error).with(match(/redis unavailable/)).at_least(:once)
     end
   end
 end
