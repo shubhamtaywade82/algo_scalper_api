@@ -13,7 +13,7 @@ const {
   lastMessageAt: positionsLastMessageAt,
   fetchPositions
 } = usePositions()
-const { mode, connected, stats, balance, indices, system, circuitBreaker, lastUpdated, recentSignals, config } =
+const { mode, connected, stats, balance, indices, system, publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config } =
   useDashboard(() => fetchPositions())
 
 // Provide state to all view components
@@ -24,6 +24,9 @@ provide('dashboardState', {
   balance,
   indices,
   system,
+  publicIpv4,
+  publicIpv6,
+  registeredIps,
   circuitBreaker,
   lastUpdated,
   recentSignals,

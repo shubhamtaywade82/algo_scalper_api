@@ -3,11 +3,15 @@
 module Api
   class DashboardController < ApplicationController
     def show
+      ip_info = Dhan::IpService.fetch_ip_info
       render json: {
         mode: AlgoConfig.mode,
         balance: safe_wallet_snapshot,
         today: PositionTracker.paper_trading_stats_with_pct,
         indices: formatted_indices,
+        public_ipv4: ip_info[:public_ipv4],
+        public_ipv6: ip_info[:public_ipv6],
+        registered_ips: ip_info[:registered_ips],
         recent_signals: TradingSignal.order(created_at: :desc).limit(10).as_json(methods: [:confidence_level]),
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(

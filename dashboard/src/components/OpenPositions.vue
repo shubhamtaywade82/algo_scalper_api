@@ -69,7 +69,7 @@ const isWsLive = computed(() => props.wsConnected && !props.wsStale)
             <th class="text-right px-4 py-4 font-bold">Current</th>
             <th class="text-right px-4 py-4 font-bold">Net P&amp;L</th>
             <th class="text-right px-4 py-4 font-bold">% Change</th>
-            <th class="text-center px-4 py-4 font-bold">Trend</th>
+            <th class="text-right px-4 py-4 font-bold">Peak (HWM)</th>
             <th class="text-right px-6 py-4 font-bold">Duration</th>
           </tr>
         </thead>

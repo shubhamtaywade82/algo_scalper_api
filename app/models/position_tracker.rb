@@ -117,7 +117,10 @@ class PositionTracker < ApplicationRecord
         avg_realized_pnl_pct: avg_realized_pnl_pct,
         avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
         winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
-        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? }
+        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? },
+        is_blocked: Portfolio::DrawdownGuard.triggered?,
+        blocked_reason: Portfolio::DrawdownGuard.triggered? ? 'Drawdown Guard Active' : nil,
+        peak_pnl: Portfolio::PnlTracker.peak_pnl.to_f.round(2)
       }
     end
 

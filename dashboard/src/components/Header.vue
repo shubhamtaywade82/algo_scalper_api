@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { useFlash } from '../composables/useFlash'
 
 const props = defineProps({
@@ -7,6 +7,18 @@ const props = defineProps({
   indices: Object,
   system: Object,
   connected: Boolean
+})
+
+const { publicIpv4, publicIpv6, registeredIps } = inject('dashboardState')
+
+const isIpVerified = computed(() => {
+  if (!registeredIps?.value) return false
+  const registered = [
+    registeredIps.value.primary_ip,
+    registeredIps.value.secondary_ip
+  ].filter(Boolean)
+  
+  return registered.includes(publicIpv4.value) || (publicIpv6.value !== 'None' && registered.includes(publicIpv6.value))
 })
 
 const niftyRef = computed(() => props.indices?.nifty)
@@ -88,6 +100,10 @@ function inr(val) {
 
     <!-- Right: system status + connection -->
     <div class="flex items-center gap-6 text-[10px]">
+      <div class="flex items-center gap-2 group cursor-help" :title="isIpVerified ? `Verified: ${publicIpv4}` : `Not Registered: ${publicIpv4}`">
+        <div :class="['w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors', isIpVerified ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-rose-500 shadow-rose-500/40']"></div>
+        <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">NET IDENTITY</span>
+      </div>
       <div class="flex items-center gap-2 group cursor-help">
         <div :class="['w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors', system?.ws_market_feed ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-gray-700']"></div>
         <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">MD FEED</span>

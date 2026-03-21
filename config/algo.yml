@@ -194,6 +194,7 @@ broker_fees:
 # RISK MODEL (NEMESIS V3)
 # ============================================
 risk:
+  auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
   sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
   tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
   per_trade_risk_pct: 0.40
@@ -734,7 +735,7 @@ signals:
   # Set to false to disable loading optimized indicator parameters from BestIndicatorParam
   # When disabled, uses hardcoded defaults from config/algo.yml (supertrend.period, supertrend.base_multiplier, etc.)
   # When enabled (default: true), automatically loads best-scoring parameters from optimization runs
-  use_optimized_params: false # Enable optimized parameters from BestIndicatorParam (default: true)
+  use_optimized_params: true # Enable optimized parameters from BestIndicatorParam (default: true)
 
   # Modular Indicator System Configuration
   # Use multi_indicator_strategy: true to enable modular indicator system

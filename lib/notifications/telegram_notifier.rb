@@ -91,6 +91,54 @@ module Notifications
       Rails.logger.error("[TelegramNotifier] Failed to send risk alert: #{e.class} - #{e.message}")
     end
 
+    # Send error notification
+    # @param message [String] Error message or exception
+    # @param context [String, nil] Optional context or service name
+    def notify_error(message, context: nil)
+      return unless enabled?
+
+      formatted_message = "🚨 <b>ERROR</b>\n"
+      formatted_message += "<b>Context:</b> #{h(context)}\n" if context
+      formatted_message += "\n#{h(message)}"
+      formatted_message += "\n\n⏰ #{Time.current.strftime('%H:%M:%S')}"
+
+      send_message(formatted_message)
+    rescue StandardError => e
+      Rails.logger.error("[TelegramNotifier] Failed to send error notification: #{e.class} - #{e.message}")
+    end
+
+    # Send warning notification
+    # @param message [String] Warning message
+    # @param context [String, nil] Optional context or service name
+    def notify_warning(message, context: nil)
+      return unless enabled?
+
+      formatted_message = "⚠️ <b>WARNING</b>\n"
+      formatted_message += "<b>Context:</b> #{h(context)}\n" if context
+      formatted_message += "\n#{h(message)}"
+      formatted_message += "\n\n⏰ #{Time.current.strftime('%H:%M:%S')}"
+
+      send_message(formatted_message)
+    rescue StandardError => e
+      Rails.logger.error("[TelegramNotifier] Failed to send warning notification: #{e.class} - #{e.message}")
+    end
+
+    # Send status change notification
+    # @param message [String] Status message
+    # @param status [String, nil] New status
+    def notify_status(message, status: nil)
+      return unless enabled?
+
+      formatted_message = "ℹ️ <b>STATUS UPDATE</b>\n"
+      formatted_message += "<b>Status:</b> #{h(status.upcase)}\n" if status
+      formatted_message += "\n#{h(message)}"
+      formatted_message += "\n\n⏰ #{Time.current.strftime('%H:%M:%S')}"
+
+      send_message(formatted_message)
+    rescue StandardError => e
+      Rails.logger.error("[TelegramNotifier] Failed to send status notification: #{e.class} - #{e.message}")
+    end
+
     # Send typing indicator to show bot is typing
     # @param duration [Integer] Duration in seconds (default: 5)
     # TODO: debride-suspect dev helper; keep if useful for manual testing.
@@ -129,8 +177,6 @@ module Notifications
       Rails.logger.error("[TelegramNotifier] Failed to send trading stats: #{e.class} - #{e.message}")
     end
 
-    private
-
     def send_message(text)
       return unless enabled? && text.present?
 
@@ -138,6 +184,8 @@ module Notifications
       # prevent it from re-escaping the tags we deliberately embedded.
       ::TelegramNotifier.send_message(text, parse_mode: 'HTML', skip_formatter: true)
     end
+
+    private
 
     # Escape dynamic values so stray <, >, & characters don't break HTML parsing.
     def h(value)
