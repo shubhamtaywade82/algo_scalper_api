@@ -7,12 +7,13 @@ RSpec.describe Policies::EntryPolicy do
 
   let(:index_cfg) { { key: 'NIFTY' } }
   let(:current_time) { Time.zone.now.change(hour: 10, min: 0, sec: 0) }
-  let(:daily_limit_result) { { allowed: true } }
-  let(:daily_limits) { instance_double(Live::DailyLimits, can_trade?: daily_limit_result) }
+  let(:daily_limits) { instance_double(Live::DailyLimits) }
 
   before do
     allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(false)
     allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
+    allow(daily_limits).to receive(:can_trade?)
+      .and_return({ allowed: true, reason: nil })
     allow(Time).to receive(:current).and_return(current_time)
   end
 
@@ -37,14 +38,20 @@ RSpec.describe Policies::EntryPolicy do
   end
 
   context 'when daily loss limit is reached' do
-    let(:daily_limit_result) { { allowed: false, reason: 'daily_loss_limit_reached' } }
+    before do
+      allow(daily_limits).to receive(:can_trade?)
+        .and_return({ allowed: false, reason: 'daily_loss_limit_reached' })
+    end
 
     it { is_expected.to be_forbidden }
     it { expect(policy.reasons).to include('daily_loss_limit_reached') }
   end
 
   context 'when only trade frequency limit is exceeded' do
-    let(:daily_limit_result) { { allowed: false, reason: 'trade_frequency_limit_exceeded' } }
+    before do
+      allow(daily_limits).to receive(:can_trade?)
+        .and_return({ allowed: false, reason: 'trade_frequency_limit_exceeded' })
+    end
 
     it { is_expected.to be_permitted }
     it { expect(policy.reasons).not_to include('daily_loss_limit_reached') }

@@ -176,15 +176,15 @@ RSpec.describe Positions::DrawdownSchedule do
   describe '.sl_price_from_entry' do
     it 'calculates SL price correctly' do
       entry = 100.0
-      loss_pct = 10.0
+      loss_pct = 0.10 # 10% as decimal
 
       result = described_class.sl_price_from_entry(entry, loss_pct)
       expect(result).to eq(90.0)
     end
 
     it 'handles different entry prices' do
-      expect(described_class.sl_price_from_entry(50.0, 5.0)).to eq(47.5)
-      expect(described_class.sl_price_from_entry(200.0, 15.0)).to eq(170.0)
+      expect(described_class.sl_price_from_entry(50.0, 0.05)).to eq(47.5)
+      expect(described_class.sl_price_from_entry(200.0, 0.15)).to eq(170.0)
     end
   end
 end

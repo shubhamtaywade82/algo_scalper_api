@@ -207,6 +207,7 @@ RSpec.describe 'Modular Indicator System Integration', type: :integration do
     end
 
     it 'builds strategy from configuration' do
+      allow(Indicators::ThresholdConfig).to receive(:current_preset).and_return(:moderate)
       enabled_indicators = signals_cfg[:indicators].reject { |ic| ic[:enabled] == false }
       global_config = { supertrend_cfg: { period: 7, multiplier: 3.0 } }
 
