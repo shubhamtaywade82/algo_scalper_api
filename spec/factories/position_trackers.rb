@@ -7,7 +7,8 @@ FactoryBot.define do
     sequence(:order_no) { |n| "ORD#{n.to_s.rjust(6, '0')}" }
     security_id { instrument.security_id }
     symbol { instrument.symbol_name }
-    segment { instrument.segment }
+    # Broker segment for execution (tradable); instrument.segment stays catalog enum (e.g. derivatives).
+    segment { 'NSE_FNO' }
     side { 'long_ce' }
     status { 'active' }
     quantity { 25 }
@@ -73,7 +74,7 @@ FactoryBot.define do
     trait :nifty_position do
       instrument factory: %i[instrument nifty_future]
       security_id { '12345' }
-      segment { 'derivatives' }
+      segment { 'NSE_FNO' }
       quantity { 25 }
       avg_price { BigDecimal('25000.00') }
       entry_price { BigDecimal('25000.00') }
@@ -82,7 +83,7 @@ FactoryBot.define do
     trait :banknifty_position do
       instrument factory: %i[instrument banknifty_future]
       security_id { '67890' }
-      segment { 'derivatives' }
+      segment { 'NSE_FNO' }
       quantity { 15 }
       avg_price { BigDecimal('56000.00') }
       entry_price { BigDecimal('56000.00') }
@@ -91,7 +92,7 @@ FactoryBot.define do
     trait :option_position do
       instrument factory: %i[instrument nifty_call_option]
       security_id { '11111' }
-      segment { 'derivatives' }
+      segment { 'NSE_FNO' }
       quantity { 25 }
       avg_price { BigDecimal('150.00') }
       entry_price { BigDecimal('150.00') }

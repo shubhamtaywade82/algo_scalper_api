@@ -14,7 +14,7 @@ RSpec.describe Indicators::AdxIndicator do
     50.times do |i|
       price = 22_000.0 + (i * 10)
       candle = Candle.new(
-        ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+        timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
         open: price,
         high: price + 5,
         low: price - 5,

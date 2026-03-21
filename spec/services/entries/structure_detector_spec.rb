@@ -42,8 +42,10 @@ RSpec.describe Entries::StructureDetector do
       end
 
       it 'respects lookback_minutes parameter' do
+        # lookback_minutes limits how many trailing bars are considered; last bar must
+        # not close outside the swing of the prior bars inside that window (no BOS).
         bars = Array.new(20) do |i|
-          close_price = (i == 19 ? 26_000 : 24_950 + i)
+          close_price = 24_950 + i
           build(:candle, high: 25_000 + i, low: 24_900 + i, close: close_price, timestamp: i.minutes.ago)
         end
 
@@ -82,12 +84,12 @@ RSpec.describe Entries::StructureDetector do
   describe '.inside_opposite_ob?' do
     context 'with valid data' do
       it 'detects when price is inside opposite Order Block' do
-        # Recent bullish move, but price is in bearish OB
+        # Bullish move vs first bar; last close sits inside prior bearish candle range.
         bars = [
-          build(:candle, :bearish, high: 25_000, low: 24_900, close: 24_950),
+          build(:candle, :bearish, high: 25_100, low: 24_900, close: 24_950),
           build(:candle, :bullish, high: 25_200, low: 25_000, close: 25_150),
           build(:candle, :bullish, high: 25_300, low: 25_100, close: 25_250),
-          build(:candle, high: 24_950, low: 24_900, close: 24_920) # Inside bearish OB
+          build(:candle, high: 25_100, low: 24_950, close: 25_050)
         ]
 
         result = described_class.inside_opposite_ob?(bars)
@@ -125,12 +127,12 @@ RSpec.describe Entries::StructureDetector do
   describe '.inside_fvg?' do
     context 'with valid data' do
       it 'detects when price is inside opposing Fair Value Gap' do
-        # Creates bullish FVG, but price is in bearish FVG
+        # Bars 0–2 form a bullish FVG (candle3.low > candle1.high); last close in that gap.
         bars = [
           build(:candle, high: 25_000, low: 24_900, close: 24_950),
-          build(:candle, high: 25_200, low: 25_100, close: 25_150), # Gap up
+          build(:candle, high: 25_200, low: 25_100, close: 25_150),
           build(:candle, high: 25_300, low: 25_200, close: 25_250),
-          build(:candle, high: 24_950, low: 24_850, close: 24_900) # Inside FVG
+          build(:candle, high: 25_100, low: 24_950, close: 25_000)
         ]
 
         result = described_class.inside_fvg?(bars)

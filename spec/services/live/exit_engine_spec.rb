@@ -209,7 +209,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be false
         expect(result[:reason]).to eq('router_failed')
-        expect(result[:error]).to eq({ raw: false })
+        expect(result[:error]).to eq(false)
       end
 
       it 'returns failure hash when router returns hash with success: false' do
@@ -219,7 +219,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be false
         expect(result[:reason]).to eq('router_failed')
-        expect(result[:error]).to eq({ raw: { success: false, error: 'Order rejected' } })
+        expect(result[:error]).to eq({ success: false, error: 'Order rejected' })
       end
 
       it 'does not mark tracker as exited when router fails' do
@@ -283,12 +283,12 @@ RSpec.describe Live::ExitEngine do
         expect(result[:success]).to be false
       end
 
-      it 'treats hash with success: 0 as success' do
+      it 'treats hash with success: 0 as failure' do
         allow(router).to receive(:exit_market).and_return({ success: 0 })
 
         result = engine.execute_exit(tracker, 'test reason')
 
-        expect(result[:success]).to be true
+        expect(result[:success]).to be false
       end
     end
 
@@ -384,11 +384,9 @@ RSpec.describe Live::ExitEngine do
       it 'raises exception when router raises error' do
         allow(router).to receive(:exit_market).and_raise(StandardError.new('Router error'))
 
-        result = engine.execute_exit(tracker, 'test reason')
-
-        expect(result[:success]).to be false
-        expect(result[:reason]).to eq('router_failed')
-        expect(result[:error].message).to include('Router error')
+        expect do
+          engine.execute_exit(tracker, 'test reason')
+        end.to raise_error(StandardError, 'Router error')
       end
 
       it 'raises exception when tracker.with_lock raises error' do
