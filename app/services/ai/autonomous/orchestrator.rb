@@ -5,24 +5,18 @@ module Ai
     # The "System Brain" that orchestrates the Observe-Think-Act loop.
     # Uses LLM to diagnose performance leaks and select the optimal remediation tool.
     class Orchestrator
-      # Map of human-friendly strategies to actual solvers/rakes
-      SOLVERS = {
-        'calibration' => ->(symbol, days) { Ai::Calibration::Runner.call(symbol: symbol, days: days) },
-        'indicator_tuning' => ->(symbol, _days) { run_indicator_optimizer(symbol) },
-        'trailing_optimization' => ->(symbol, _days) { run_trailing_optimizer(symbol) }
-      }.freeze
-
-      def self.call(symbol:, days: 30)
-        new(symbol: symbol, days: days).call
+      def self.call(symbol:, days: 30, dry_run: false)
+        new(symbol: symbol, days: days, dry_run: dry_run).call
       end
 
-      def initialize(symbol:, days:)
-        @symbol = symbol.upcase
-        @days   = days
+      def initialize(symbol:, days:, dry_run: false)
+        @symbol  = symbol.to_s.upcase
+        @days    = days.to_i
+        @dry_run = dry_run
       end
 
       def call
-        Rails.logger.info("[Orchestrator] 🧠 Starting Autonomous Optimization for #{@symbol}")
+        Rails.logger.info("[Orchestrator] 🧠 Starting Autonomous Optimization for #{@symbol} (Dry Run: #{@dry_run})")
 
         # 1. OBSERVE: Run Audit
         audit_report = Ai::Autonomous::Auditor.report(symbol: @symbol, days: @days)
@@ -37,42 +31,21 @@ module Ai
 
         Rails.logger.info("[Orchestrator] 🎯 AI Selected Strategy: #{strategy['selected_solver']} - #{strategy['reasoning']}")
 
-        # 3. ACT: Execute Solver
+        # 3. ACT: Execute Solver via TaskRunner
         solver_key = strategy['selected_solver']
-        if SOLVERS.key?(solver_key)
-          result = SOLVERS[solver_key].call(@symbol, @days)
-          { 
-            status: :success, 
-            strategy: strategy, 
-            solver_result: result,
-            audit: audit_report
-          }
-        else
-          Rails.logger.error("[Orchestrator] ❌ Unknown solver selected: #{solver_key}")
-          { status: :error, reason: 'unknown_solver' }
-        end
+        
+        result = TaskRunner.run(solver_key, @symbol, @days, dry_run: @dry_run)
+        
+        { 
+          status: :success, 
+          strategy: strategy, 
+          solver_result: result,
+          audit: audit_report,
+          dry_run: @dry_run
+        }
       rescue StandardError => e
         Rails.logger.error("[Orchestrator] ❌ Failed: #{e.message}")
         { status: :error, message: e.message }
-      end
-
-      class << self
-        private
-
-        def run_indicator_optimizer(symbol)
-          instrument = Instrument.find_by!(symbol_name: symbol)
-          # Run for ADX first as it's the most common signal bottleneck
-          Optimization::SingleIndicatorOptimizer.new(
-            instrument: instrument,
-            interval: '5',
-            indicator: :adx,
-            lookback_days: 30
-          ).run
-        end
-
-        def run_trailing_optimizer(symbol)
-          Optimization::TrailingOptimizer.new(index_key: symbol).optimize
-        end
       end
 
       private
@@ -100,7 +73,15 @@ module Ai
         PROMPT
 
         response = Services::Ai::OpenaiClient.new.generate(prompt: prompt)
-        JSON.parse(response.gsub(/```json|```/, '').strip)
+        
+        # Robust parsing: find the first { and last }
+        json_match = response.match(/\{.*\}/m)
+        if json_match
+          JSON.parse(json_match[0])
+        else
+          # Fallback to direct parse if no brackets found (unlikely but safe)
+          JSON.parse(response.gsub(/```json|```/, '').strip)
+        end
       rescue StandardError => e
         Rails.logger.error("[Orchestrator] Strategy decision failed: #{e.message}")
         { 'selected_solver' => 'calibration', 'reasoning' => "Fallback to broad calibration due to error: #{e.message}" }

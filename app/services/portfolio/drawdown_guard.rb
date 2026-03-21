@@ -41,6 +41,7 @@ module Portfolio
         block_new_entries!
         notify_breach(net_pnl: net_pnl, floor: floor, level: level)
       rescue StandardError => e
+        Notifications::TelegramNotifier.instance.notify_error(e.message, context: 'Portfolio::DrawdownGuard#trigger_global_exit!')
         Rails.logger.error("[Portfolio::DrawdownGuard] trigger_global_exit! error: #{e.class} - #{e.message}")
       end
 
@@ -70,8 +71,10 @@ module Portfolio
         r.del(KEY_TRIGGERED)
         r.del(KEY_ENTRIES_BLOCKED)
         Portfolio::PnlTracker.reset_day!
+        
         Rails.logger.info('[Portfolio::DrawdownGuard] Daily state reset')
       rescue StandardError => e
+        Notifications::TelegramNotifier.instance.notify_error(e.message, context: 'Portfolio::DrawdownGuard')
         Rails.logger.error("[Portfolio::DrawdownGuard] reset_day! error: #{e.message}")
       end
 

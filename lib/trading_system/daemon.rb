@@ -33,6 +33,7 @@ module TradingSystem
       keep_process_alive! if keep_alive
       true
     rescue StandardError => e
+      Notifications::TelegramNotifier.instance.notify_error("#{e.class} - #{e.message}", context: 'TradingSystem::Daemon')
       Rails.logger.error("[TradingDaemon] #{e.class} - #{e.message}")
       safe_stop!
       false

@@ -38,10 +38,13 @@ module Ai
         'profit_floor_lock_pct'    => { path: %i[risk profit_floor lock_pct],  min: 0.05, max: 0.50 },
         'profit_floor_trail_pct'   => { path: %i[risk profit_floor trail_pct], min: 0.40, max: 0.95 },
         'primary_adx_min'          => { path: nil, min: 10.0, max: 35.0 }, # per-index, handled separately
+        'adx_threshold'            => { path: nil, min: 10.0, max: 35.0 }, # Alias for primary_adx_min
         'rolling_window_threshold' => { path: %i[risk edge_failure_detector rolling_window_threshold_rupees],
                                         min: -20_000, max: -500 },
         'max_consecutive_sls'      => { path: %i[risk edge_failure_detector max_consecutive_sls],
-                                        min: 1, max: 10 }
+                                        min: 1, max: 10 },
+        'trailing_activation_threshold' => { path: %i[position_sizing trailing activation_pct],
+                                             min: 0.03, max: 0.30 } # Alias
       }.freeze
 
       class ParseError     < StandardError; end
@@ -146,7 +149,7 @@ module Ai
 
       def set_nested(hash, path, value)
         *parents, last = path
-        node = parents.reduce(hash) do |h, k|
+        node = parents.each_with_object(hash) do |k, h|
           h[k.to_s] ||= {}
           h[k.to_s]
         end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_19_110000) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_21_114756) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -305,6 +305,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_19_110000) do
     t.index ["status", "security_id"], name: "index_trackers_on_status_and_security_id"
     t.index ["status"], name: "index_position_trackers_on_status"
     t.index ["watchable_type", "watchable_id"], name: "index_position_trackers_on_watchable"
+  end
+
+  create_table "public_ip_logs", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "first_seen_at"
+    t.string "ip_address"
+    t.string "ip_version"
+    t.datetime "last_seen_at"
+    t.datetime "updated_at", null: false
   end
 
   create_table "settings", force: :cascade do |t|

@@ -821,7 +821,15 @@ module Signal
 
       # Validate IV Rank - avoid extreme volatility conditions
       def validate_iv_rank(_index_cfg, series, mode_config = nil)
-        mode_config ||= get_validation_mode_config
+        if mode_config.nil? || mode_config.is_a?(String) || mode_config.is_a?(Symbol)
+          mode_config = get_validation_mode_config(override_mode: mode_config)
+        end
+
+        unless mode_config.is_a?(Hash)
+          Rails.logger.error("[Signal] CRITICAL: mode_config is #{mode_config.class} (#{mode_config.inspect}) in validate_iv_rank")
+          # Force it to be a valid hash to prevent crash
+          mode_config = get_validation_mode_config
+        end
 
         # For now, we'll use a simple volatility check based on recent price movement
         # In a full implementation, you'd calculate actual IV rank from historical IV data
@@ -856,7 +864,9 @@ module Signal
 
       # Validate theta risk - avoid high theta decay situations
       def validate_theta_risk(_index_cfg, _direction, mode_config = nil)
-        mode_config ||= get_validation_mode_config
+        if mode_config.nil? || mode_config.is_a?(String) || mode_config.is_a?(Symbol)
+          mode_config = get_validation_mode_config(override_mode: mode_config)
+        end
 
         current_time = Time.zone.now
         hour = current_time.hour
@@ -877,7 +887,9 @@ module Signal
 
       # Enhanced ADX validation with trend strength assessment
       def validate_adx_strength(index_cfg, adx, _supertrend_result, mode_config = nil)
-        mode_config ||= get_validation_mode_config
+        if mode_config.nil? || mode_config.is_a?(String) || mode_config.is_a?(Symbol)
+          mode_config = get_validation_mode_config(override_mode: mode_config)
+        end
 
         adx_value = adx[:value].to_f
         # 1. Check per-index override

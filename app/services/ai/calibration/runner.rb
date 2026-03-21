@@ -19,13 +19,14 @@ module Ai
 
       class InsufficientDataError < StandardError; end
 
-      def self.call(symbol:, days: 30)
-        new(symbol: symbol, days: days).call
+      def self.call(symbol:, days: 30, dry_run: false)
+        new(symbol: symbol, days: days, dry_run: dry_run).call
       end
 
-      def initialize(symbol:, days:)
-        @symbol = symbol.to_short_name.upcase rescue symbol.to_s.upcase
-        @days   = days.to_i
+      def initialize(symbol:, days:, dry_run: false)
+        @symbol  = symbol.to_short_name.upcase rescue symbol.to_s.upcase
+        @days    = days.to_i
+        @dry_run = dry_run
       end
 
       def call
@@ -84,7 +85,8 @@ module Ai
           symbol:            @symbol,
           parsed_result:     parsed,
           validation_result: validation,
-          dataset_meta:      dataset[:meta]
+          dataset_meta:      dataset[:meta],
+          dry_run:           @dry_run
         )
 
         log "CalibrationRun ##{run&.id} persisted."

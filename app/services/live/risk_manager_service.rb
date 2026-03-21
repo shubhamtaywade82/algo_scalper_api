@@ -79,6 +79,7 @@ module Live
             # update timestamp after paper update occurred inside monitor_loop
             last_paper_pnl_update = Time.current
           rescue StandardError => e
+            Notifications::TelegramNotifier.instance.notify_error("#{e.class} - #{e.message}", context: 'RiskManagerService#monitor_loop')
             Rails.logger.error("[RiskManagerService] monitor_loop crashed: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
           end
           sleep LOOP_INTERVAL

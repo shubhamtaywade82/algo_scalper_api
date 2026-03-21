@@ -5,13 +5,14 @@ namespace :trading do
   task autonomous_optimize: :environment do
     symbols = ENV['SYMBOL'] ? [ENV['SYMBOL'].upcase] : IndexInstrumentCache::INDEX_KEYS
     days = (ENV['DAYS'] || 30).to_i
+    dry_run = ENV['DRY_RUN'] == 'true'
 
-    puts "🤖 Starting Autonomous Optimization Engine (AIL) for #{symbols.join(', ')}"
+    puts "🤖 Starting Autonomous Optimization Engine (AIL) for #{symbols.join(', ')} (Dry Run: #{dry_run})"
     puts "-----------------------------------------------------------------------"
 
     symbols.each do |symbol|
       begin
-        result = Ai::Autonomous::Orchestrator.call(symbol: symbol, days: days)
+        result = Ai::Autonomous::Orchestrator.call(symbol: symbol, days: days, dry_run: dry_run)
 
         if result[:status] == :success
           strategy = result[:strategy]

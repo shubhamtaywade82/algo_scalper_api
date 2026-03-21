@@ -8,20 +8,22 @@ module Ai
     #
     # Also sends a Telegram notification and emits a Rails log entry.
     class ConfigApplier
-      def self.call(symbol:, parsed_result:, validation_result:, dataset_meta:)
+      def self.call(symbol:, parsed_result:, validation_result:, dataset_meta:, dry_run: false)
         new(
           symbol:            symbol,
           parsed_result:     parsed_result,
           validation_result: validation_result,
-          dataset_meta:      dataset_meta
+          dataset_meta:      dataset_meta,
+          dry_run:           dry_run
         ).call
       end
 
-      def initialize(symbol:, parsed_result:, validation_result:, dataset_meta:)
+      def initialize(symbol:, parsed_result:, validation_result:, dataset_meta:, dry_run: false)
         @symbol            = symbol.to_s.upcase
         @parsed_result     = parsed_result
         @validation_result = validation_result
         @dataset_meta      = dataset_meta
+        @dry_run           = dry_run
       end
 
       def call
@@ -33,6 +35,12 @@ module Ai
         end
 
         raw_stats = build_raw_stats
+
+        if @dry_run
+          Rails.logger.info("[ConfigApplier] [DRY_RUN] #{@symbol}: Would create CalibrationRun with #{patch.keys.size} param changes.")
+          Rails.logger.info("[ConfigApplier] [DRY_RUN] Proposed Patch: #{patch.inspect}")
+          return nil
+        end
 
         run = CalibrationRun.create!(
           symbol:          @symbol,

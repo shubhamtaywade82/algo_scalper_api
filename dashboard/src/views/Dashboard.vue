@@ -4,7 +4,7 @@ import StatsBar from '../components/StatsBar.vue'
 import OpenPositions from '../components/OpenPositions.vue'
 import ClosedTrades from '../components/ClosedTrades.vue'
 
-const { balance, stats, open, closed, circuitBreaker, positionsConnected, positionsStale, fetchPositions } =
+const { balance, stats, open, closed, publicIpv4, publicIpv6, registeredIps, circuitBreaker, positionsConnected, positionsStale, fetchPositions } =
   inject('dashboardState')
 
 // Instantly reflect portfolio changes by summing up high-frequency position updates
@@ -28,7 +28,7 @@ const liveStats = computed(() => {
 
 <template>
   <div class="space-y-8">
-    <StatsBar :balance="balance" :stats="liveStats" />
+    <StatsBar :balance="balance" :stats="liveStats" :public-ipv4="publicIpv4" :public-ipv6="publicIpv6" :registered-ips="registeredIps" />
     <div class="grid grid-cols-1 gap-8">
       <OpenPositions
         :positions="open"

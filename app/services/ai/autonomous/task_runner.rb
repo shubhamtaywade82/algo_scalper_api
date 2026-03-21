@@ -5,14 +5,14 @@ module Ai
     # Unifies the execution of various optimization tools (solvers).
     # Handles Rake task invocation or direct service calls.
     class TaskRunner
-      def self.run(solver_key, symbol, days = 30)
+      def self.run(solver_key, symbol, days = 30, dry_run: false)
         case solver_key.to_s
         when 'calibration'
-          Ai::Calibration::Runner.call(symbol: symbol, days: days)
+          Ai::Calibration::Runner.call(symbol: symbol, days: days, dry_run: dry_run)
         when 'indicator_tuning'
-          run_indicator_optimization(symbol, days)
+          run_indicator_optimization(symbol, days, dry_run: dry_run)
         when 'trailing_optimization'
-          run_trailing_optimization(symbol)
+          run_trailing_optimization(symbol, dry_run: dry_run)
         else
           raise "Unknown solver: #{solver_key}"
         end
@@ -21,7 +21,7 @@ module Ai
       class << self
         private
 
-        def run_indicator_optimization(symbol, days)
+        def run_indicator_optimization(symbol, days, dry_run: false)
           instrument = IndexInstrumentCache.instance.get_or_fetch(key: symbol)
           return { error: 'Instrument not found' } unless instrument
 
@@ -32,25 +32,31 @@ module Ai
               instrument: instrument,
               interval: '5', # Default to 5m for index
               indicator: indicator,
-              lookback_days: days
+              lookback_days: days,
+              dry_run: dry_run
             )
             results[indicator] = optimizer.run
           end
           results
         end
 
-        def run_trailing_optimization(symbol)
+        def run_trailing_optimization(symbol, dry_run: false)
           optimizer = Optimization::TrailingOptimizer.new(index_key: symbol)
           result = optimizer.optimize
           
           if result && result[:best_params]
             # We need to apply these to algo.yml as TrailingOptimizer doesn't self-persist yet
-            apply_trailing_params(symbol, result[:best_params])
+            apply_trailing_params(symbol, result[:best_params], dry_run: dry_run)
           end
           result
         end
 
-        def apply_trailing_params(symbol, params)
+        def apply_trailing_params(symbol, params, dry_run: false)
+          if dry_run
+            Rails.logger.info("[TaskRunner] [DRY_RUN] Would apply trailing params to algo.yml for #{symbol}: #{params.inspect}")
+            return
+          end
+
           # Reusing logic from optimize_trailing.rake but in a service context
           config_path = Rails.root.join('config/algo.yml')
           config = YAML.safe_load(File.read(config_path))
