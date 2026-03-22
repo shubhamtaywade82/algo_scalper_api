@@ -3,6 +3,14 @@
 require 'rails_helper'
 
 RSpec.describe Risk::Rules::UnderlyingExitRule do
+  before do
+    hub = Live::MarketFeedHub.instance
+    allow(hub).to receive_messages(subscribe: nil, subscribed?: true)
+    allow(AlgoConfig).to receive(:fetch).and_return(
+      feature_flags: { enable_underlying_aware_exits: true }
+    )
+  end
+
   let(:instrument) { create(:instrument, :nifty_future) }
   let(:tracker) do
     create(
@@ -18,7 +26,7 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
       entry_price: 100.0,
       current_ltp: 105.0,
       pnl: 50.0,
-      pnl_pct: 5.0,
+      pnl_pct: 0.05,
       position_direction: 'bullish'
     )
   end
@@ -37,13 +45,8 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
   end
   let(:rule) { described_class.new(config: risk_config) }
 
-  before do
-    allow(AlgoConfig).to receive(:fetch).and_return(
-      feature_flags: { enable_underlying_aware_exits: true }
-    )
-  end
-
   describe '#evaluate' do
+    # rubocop:disable RSpec/VerifiedDoubles -- no shared UnderlyingState type in app
     context 'when underlying exits are disabled' do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return(feature_flags: {})
@@ -57,8 +60,8 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
 
     context 'when structure break against position' do
       let(:underlying_state) do
-        instance_double(
-          UnderlyingState,
+        double(
+          'underlying_state',
           bos_state: :broken,
           bos_direction: :bearish,
           trend_score: 15.0,
@@ -81,8 +84,8 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
 
     context 'when trend is weak' do
       let(:underlying_state) do
-        instance_double(
-          UnderlyingState,
+        double(
+          'underlying_state',
           bos_state: :intact,
           trend_score: 8.0,
           atr_trend: :rising,
@@ -105,8 +108,8 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
 
     context 'when ATR collapses' do
       let(:underlying_state) do
-        instance_double(
-          UnderlyingState,
+        double(
+          'underlying_state',
           bos_state: :intact,
           trend_score: 15.0,
           atr_trend: :falling,
@@ -129,8 +132,8 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
 
     context 'when underlying state is OK' do
       let(:underlying_state) do
-        instance_double(
-          UnderlyingState,
+        double(
+          'underlying_state',
           bos_state: :intact,
           trend_score: 15.0,
           atr_trend: :rising,
@@ -172,5 +175,6 @@ RSpec.describe Risk::Rules::UnderlyingExitRule do
         expect(described_class::PRIORITY).to eq(60)
       end
     end
+    # rubocop:enable RSpec/VerifiedDoubles
   end
 end

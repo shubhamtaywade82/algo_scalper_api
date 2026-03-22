@@ -198,16 +198,16 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
         quantity: 75,
         current_ltp: 110.0,
         pnl: 750.0,
-        pnl_pct: 10.0,
+        pnl_pct: 0.10,
         high_water_mark: 1200.0
       )
     end
     let(:risk_config) do
       {
         trailing: {
-          activation_pct: 10.0
+          activation_pct: 0.10
         },
-        exit_drop_pct: 10.0
+        exit_drop_pct: 0.10
       }
     end
     let(:context) do
@@ -230,7 +230,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
     context 'when trailing is not activated (pnl_pct < 10%)' do
       before do
-        position_data.pnl_pct = 5.0
+        position_data.pnl_pct = 0.05
         position_data.pnl = 375.0
       end
 
@@ -242,11 +242,11 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
 
     context 'with 6% activation threshold' do
       before do
-        risk_config[:trailing][:activation_pct] = 6.0
+        risk_config[:trailing][:activation_pct] = 0.06
       end
 
       it 'activates at 6% profit' do
-        position_data.pnl_pct = 6.0
+        position_data.pnl_pct = 0.06
         position_data.pnl = 450.0
         position_data.high_water_mark = 600.0
 
@@ -256,7 +256,7 @@ RSpec.describe 'Trailing Activation Percentage Rule' do
       end
 
       it 'does not activate at 5.99% profit' do
-        position_data.pnl_pct = 5.99
+        position_data.pnl_pct = 0.0599
         result = rule.evaluate(context)
         expect(result.skip?).to be true
       end

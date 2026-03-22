@@ -20,10 +20,10 @@ RSpec.describe Risk::Rules::TakeProfitRule do
       quantity: 10,
       current_ltp: 107.0,
       pnl: 70.0,
-      pnl_pct: 7.0
+      pnl_pct: 0.07
     )
   end
-  let(:risk_config) { { tp_pct: 5.0 } }
+  let(:risk_config) { { tp_pct: 0.05 } }
   let(:context) do
     Risk::Rules::RuleContext.new(
       position: position_data,
@@ -39,19 +39,19 @@ RSpec.describe Risk::Rules::TakeProfitRule do
         result = rule.evaluate(context)
         expect(result.exit?).to be true
         expect(result.reason).to include('TP HIT')
-        expect(result.reason).to include('7.00%')
-        expect(result.metadata[:pnl_pct]).to eq(7.0)
-        expect(result.metadata[:tp_pct]).to eq(5.0)
+        expect(result.reason).to include('7.0%')
+        expect(result.metadata[:pnl_pct]).to eq(0.07)
+        expect(result.metadata[:tp_pct]).to eq(0.05)
       end
 
       it 'triggers exit when PnL exactly equals threshold' do
-        position_data.pnl_pct = 5.0
+        position_data.pnl_pct = 0.05
         result = rule.evaluate(context)
         expect(result.exit?).to be true
       end
 
       it 'triggers exit when PnL exceeds threshold' do
-        position_data.pnl_pct = 10.0
+        position_data.pnl_pct = 0.10
         result = rule.evaluate(context)
         expect(result.exit?).to be true
       end
@@ -59,13 +59,13 @@ RSpec.describe Risk::Rules::TakeProfitRule do
 
     context 'when take profit is not hit' do
       it 'returns no_action when PnL is below threshold' do
-        position_data.pnl_pct = 3.0
+        position_data.pnl_pct = 0.03
         result = rule.evaluate(context)
         expect(result.no_action?).to be true
       end
 
       it 'returns no_action when PnL is negative' do
-        position_data.pnl_pct = -2.0
+        position_data.pnl_pct = -0.02
         result = rule.evaluate(context)
         expect(result.no_action?).to be true
       end
@@ -105,15 +105,15 @@ RSpec.describe Risk::Rules::TakeProfitRule do
 
     context 'with different thresholds' do
       it 'works with 3% threshold' do
-        risk_config[:tp_pct] = 3.0
-        position_data.pnl_pct = 5.0
+        risk_config[:tp_pct] = 0.03
+        position_data.pnl_pct = 0.05
         result = rule.evaluate(context)
         expect(result.exit?).to be true
       end
 
       it 'works with 10% threshold' do
-        risk_config[:tp_pct] = 10.0
-        position_data.pnl_pct = 7.0
+        risk_config[:tp_pct] = 0.10
+        position_data.pnl_pct = 0.07
         result = rule.evaluate(context)
         expect(result.no_action?).to be true
       end

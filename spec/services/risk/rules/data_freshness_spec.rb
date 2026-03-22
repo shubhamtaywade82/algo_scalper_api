@@ -13,8 +13,12 @@ RSpec.describe 'Rule Engine Data Freshness' do
       quantity: 10
     )
   end
-  let(:risk_config) { { sl_pct: 2.0, tp_pct: 5.0 } }
-  let(:engine) { Risk::Rules::RuleFactory.create_engine(risk_config: risk_config) }
+  let(:risk_config) { { sl_pct: 0.02, tp_pct: 0.05 } }
+  let(:engine) do
+    eng = Risk::Rules::RuleFactory.create_engine(risk_config: risk_config)
+    eng.remove_rule(Risk::Rules::SessionEndRule)
+    eng
+  end
 
   describe 'live data from ActiveCache' do
     let(:position_data) do
@@ -24,7 +28,7 @@ RSpec.describe 'Rule Engine Data Freshness' do
         quantity: 10,
         current_ltp: 96.0,
         pnl: -40.0,
-        pnl_pct: -4.0,
+        pnl_pct: -0.04,
         last_updated_at: Time.current
       )
     end
@@ -71,8 +75,9 @@ RSpec.describe 'Rule Engine Data Freshness' do
 
     it 'recalculates PnL when LTP is updated' do
       position_data.update_ltp(105.0)
-      expect(position_data.pnl).to eq(50.0)
-      expect(position_data.pnl_pct).to be_within(0.01).of(5.0)
+      # Net PnL deducts entry fee (₹20) on open positions
+      expect(position_data.pnl).to eq(30.0)
+      expect(position_data.pnl_pct).to be_within(0.0001).of(0.03)
     end
   end
 
@@ -84,17 +89,17 @@ RSpec.describe 'Rule Engine Data Freshness' do
         quantity: 10,
         current_ltp: 120.0,
         pnl: 200.0,
-        pnl_pct: 20.0,
+        pnl_pct: 0.20,
         peak_profit_pct: nil
       )
     end
 
     it 'updates peak profit when PnL increases' do
       position_data.update_ltp(120.0)
-      expect(position_data.peak_profit_pct).to eq(20.0)
+      expect(position_data.peak_profit_pct).to be_within(0.0001).of(0.18)
 
       position_data.update_ltp(125.0)
-      expect(position_data.peak_profit_pct).to eq(25.0)
+      expect(position_data.peak_profit_pct).to be_within(0.0001).of(0.23)
     end
 
     it 'maintains peak profit when PnL decreases' do
@@ -114,17 +119,17 @@ RSpec.describe 'Rule Engine Data Freshness' do
         quantity: 10,
         current_ltp: 110.0,
         pnl: 100.0,
-        pnl_pct: 10.0,
+        pnl_pct: 0.10,
         high_water_mark: nil
       )
     end
 
     it 'updates HWM when PnL increases' do
       position_data.update_ltp(110.0)
-      expect(position_data.high_water_mark).to eq(100.0)
+      expect(position_data.high_water_mark).to eq(80.0)
 
       position_data.update_ltp(120.0)
-      expect(position_data.high_water_mark).to eq(200.0)
+      expect(position_data.high_water_mark).to eq(180.0)
     end
 
     it 'maintains HWM when PnL decreases' do
@@ -169,8 +174,8 @@ RSpec.describe 'Rule Engine Data Freshness' do
         entry_price: 100.0,
         quantity: 10,
         current_ltp: 105.0,
-        pnl: 50.0,
-        pnl_pct: 5.0
+        pnl: 30.0,
+        pnl_pct: 0.03
       )
     end
     let(:context) do
@@ -182,16 +187,15 @@ RSpec.describe 'Rule Engine Data Freshness' do
     end
 
     it 'ensures PnL and PnL% are consistent' do
-      # PnL should be (105 - 100) * 10 = 50
-      # PnL% should be (105 - 100) / 100 * 100 = 5%
-      expect(position_data.pnl).to eq(50.0)
-      expect(position_data.pnl_pct).to be_within(0.01).of(5.0)
+      # Net PnL after entry fee on active position; pnl_pct is decimal of invested capital
+      expect(position_data.pnl).to eq(30.0)
+      expect(position_data.pnl_pct).to be_within(0.0001).of(0.03)
     end
 
     it 'recalculates PnL when LTP changes' do
       position_data.update_ltp(107.0)
-      expect(position_data.pnl).to eq(70.0)
-      expect(position_data.pnl_pct).to be_within(0.01).of(7.0)
+      expect(position_data.pnl).to eq(50.0)
+      expect(position_data.pnl_pct).to be_within(0.0001).of(0.05)
     end
   end
 end

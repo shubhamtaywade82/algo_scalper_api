@@ -18,7 +18,7 @@ RSpec.describe Risk::Rules::TimeBasedExitRule do
       entry_price: 100.0,
       current_ltp: 103.0,
       pnl: 300.0,
-      pnl_pct: 3.0
+      pnl_pct: 0.03
     )
   end
   let(:exit_time) { Time.zone.parse('15:20') }
@@ -132,9 +132,10 @@ RSpec.describe Risk::Rules::TimeBasedExitRule do
         position_data.pnl = -100.0
       end
 
-      it 'returns no_action even if time reached' do
+      it 'exits at exit time because min-profit gate only applies when PnL is positive' do
         result = rule.evaluate(context)
-        expect(result.no_action?).to be true
+        expect(result.exit?).to be true
+        expect(result.reason).to include('time-based exit')
       end
     end
 
