@@ -551,7 +551,8 @@ module Signal
           expiry_date: expiry_date,
           chain_data: chain_data,
           final_direction: final_direction,
-          pick: picks.first
+          pick: picks.first,
+          smc_decision: smc_decision
         )
         if mc_gate_blocked
           Signal::StateTracker.reset(index_cfg[:key])
@@ -1238,7 +1239,7 @@ module Signal
       # MarketContext regime snapshot + optional hard gate (config: market_context.*).
       # @return [Array<Hash, Boolean>] extra metadata hash, and true if gate blocked entry
       def evaluate_market_context_for_entry(index_cfg:, primary_series:, expiry_date:, chain_data:,
-                                            final_direction:, pick:)
+                                            final_direction:, pick:, smc_decision: nil)
         return [{}, false] unless AlgoConfig.fetch.dig(:market_context, :enabled) == true
 
         snapshot = MarketContext::RegimeComposer.new(series: primary_series, index_key: index_cfg[:key]).call
@@ -1272,7 +1273,8 @@ module Signal
         gate = Trading::MarketPermissionGate.new(
           snapshot: snapshot,
           chain_signal: chain_signal,
-          final_direction: final_direction
+          final_direction: final_direction,
+          smc_decision: smc_decision
         ).call
         return [extra, false] if gate.allowed
 
