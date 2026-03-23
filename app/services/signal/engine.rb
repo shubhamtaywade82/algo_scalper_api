@@ -318,14 +318,20 @@ module Signal
         end
 
         # ===== ENTRY QUALITY FILTER =====
-        quality_result = Signal::EntryQualityFilter.evaluate(
-          series: primary_series,
-          supertrend_result: primary_analysis[:supertrend],
-          adx_value: primary_analysis[:adx_value],
-          direction: final_direction,
-          regime: regime,
-          index_key: index_cfg[:key]
-        )
+        # Skipped in exit_testing mode — free entries are required to test exit logic.
+        quality_result = if exit_testing_mode?
+                           Rails.logger.info("[Signal] Exit-testing mode: skipping EntryQualityFilter for #{index_cfg[:key]}")
+                           { pass: true, score: 0, breakdown: {}, reject_reason: nil }
+                         else
+                           Signal::EntryQualityFilter.evaluate(
+                             series: primary_series,
+                             supertrend_result: primary_analysis[:supertrend],
+                             adx_value: primary_analysis[:adx_value],
+                             direction: final_direction,
+                             regime: regime,
+                             index_key: index_cfg[:key]
+                           )
+                         end
         unless quality_result[:pass]
           Rails.logger.info("[Signal] EntryQualityFilter REJECTED #{index_cfg[:key]} #{final_direction}: " \
                             "#{quality_result[:reject_reason]} (score=#{quality_result[:score]})")
@@ -333,7 +339,7 @@ module Signal
           return
         end
         Rails.logger.info("[Signal] EntryQualityFilter PASSED #{index_cfg[:key]} #{final_direction} " \
-                          "score=#{quality_result[:score]} #{quality_result[:breakdown]}")
+                          "score=#{quality_result[:score]} #{quality_result[:breakdown]}") unless exit_testing_mode?
         # ===== END ENTRY QUALITY FILTER =====
 
         permission = :exit_testing

@@ -759,7 +759,7 @@ signals:
   smc_event_store_publish: true
 
   # SMC Navigator overlay (LTF tactical gate; additive to PermissionResolver — not a replacement)
-  enable_smc_navigator_overlay: true
+  enable_smc_navigator_overlay: false
   smc_navigator_min_confidence: 0.6
   smc_navigator_exit_advisory: true
 
