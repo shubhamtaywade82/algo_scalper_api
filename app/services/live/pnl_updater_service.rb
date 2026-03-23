@@ -409,7 +409,8 @@ module Live
         ltp: ltp_f.round(2),
         pnl: pnl.to_f.round(2),
         pnl_pct: pnl_pct,
-        hwm_pnl: hwm.to_f.round(2)
+        hwm_pnl: hwm.to_f.round(2),
+        ltp_stale: false
       })
     rescue StandardError => e
       @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
