@@ -8,13 +8,13 @@ module Portfolio
   # and triggers DrawdownGuard when a breach is detected.
   #
   # Levels are configurable in algo.yml under profit_lock.levels.
-  # Default: ₹10k → 60% floor, ₹20k → 70% floor, ₹30k → 73% floor
+  # Default: ₹20k → 60% floor, ₹35k → 70% floor, ₹50k → 73% floor
   class ProfitLockEngine
     # Fallback levels used when algo.yml profit_lock.levels is absent or malformed.
     DEFAULT_LEVELS = [
-      { trigger: 10_000, lock_ratio: 0.60 },
-      { trigger: 20_000, lock_ratio: 0.70 },
-      { trigger: 30_000, lock_ratio: 0.73 }
+      { trigger: 20_000, lock_ratio: 0.60 },
+      { trigger: 35_000, lock_ratio: 0.70 },
+      { trigger: 50_000, lock_ratio: 0.73 }
     ].freeze
 
     class << self
@@ -72,7 +72,7 @@ module Portfolio
       end
 
       # Returns the highest level milestone currently exceeded by pnl.
-      # 0 = below all thresholds, 1 = ≥₹10k, 2 = ≥₹20k, 3 = ≥₹30k, etc.
+      # 0 = below all thresholds, 1 = ≥₹20k, 2 = ≥₹35k, 3 = ≥₹50k, etc.
       #
       # @param pnl [Float]
       # @return [Integer]

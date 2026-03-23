@@ -16,9 +16,9 @@ RSpec.describe Portfolio::ProfitLockEngine do
       profit_lock: {
         enabled: true,
         levels: [
-          { trigger: 10_000, lock_ratio: 0.60 },
-          { trigger: 20_000, lock_ratio: 0.70 },
-          { trigger: 30_000, lock_ratio: 0.73 }
+          { trigger: 20_000, lock_ratio: 0.60 },
+          { trigger: 35_000, lock_ratio: 0.70 },
+          { trigger: 50_000, lock_ratio: 0.73 }
         ]
       }
     }
@@ -32,22 +32,22 @@ RSpec.describe Portfolio::ProfitLockEngine do
     end
 
     it 'returns 1 when pnl is exactly at the first threshold' do
-      expect(described_class.determine_level(10_000)).to eq(1)
+      expect(described_class.determine_level(20_000)).to eq(1)
     end
 
-    it 'returns 2 when pnl is between 20k and 30k' do
-      expect(described_class.determine_level(25_000)).to eq(2)
+    it 'returns 2 when pnl is between 35k and 50k' do
+      expect(described_class.determine_level(40_000)).to eq(2)
     end
 
     it 'returns 3 when pnl is above all thresholds' do
-      expect(described_class.determine_level(35_000)).to eq(3)
+      expect(described_class.determine_level(55_000)).to eq(3)
     end
   end
 
   describe '.levels' do
     context 'when config levels are provided' do
       it 'loads levels from config' do
-        expect(described_class.levels.first[:trigger]).to eq(10_000)
+        expect(described_class.levels.first[:trigger]).to eq(20_000)
       end
     end
 
@@ -95,18 +95,18 @@ RSpec.describe Portfolio::ProfitLockEngine do
       end
     end
 
-    context 'when net PnL crosses ₹10k for the first time' do
+    context 'when net PnL crosses ₹20k for the first time' do
       before do
-        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(12_000.0)
+        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(22_000.0)
         allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(0.0)
         allow(Portfolio::PnlTracker).to receive(:current_level).and_return(0)
-        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(7_200.0) # 12k × 0.60
+        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(13_200.0) # 22k × 0.60
       end
 
       it 'calls update_lock with level 1 and 60% floor' do
         expect(Portfolio::PnlTracker).to receive(:update_lock).with(
-          new_peak: 12_000.0,
-          new_floor: 7_200.0,
+          new_peak: 22_000.0,
+          new_floor: 13_200.0,
           new_level: 1
         )
         described_class.evaluate!
@@ -139,12 +139,12 @@ RSpec.describe Portfolio::ProfitLockEngine do
 
     context 'when peak ratchets above a higher level trigger' do
       before do
-        # PnL peaked at ₹25k (Level 2), then dipped to ₹22k still above floor
-        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(22_000.0)
-        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(25_000.0)
+        # PnL peaked at ₹40k (Level 2), net ₹30k still above floor
+        allow(Portfolio::PnlTracker).to receive(:net_pnl).and_return(30_000.0)
+        allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(40_000.0)
         allow(Portfolio::PnlTracker).to receive(:current_level).and_return(2)
-        # floor = 25k × 0.70 = 17.5k (stored from previous ratchet)
-        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(17_500.0)
+        # floor = 40k × 0.70 = 28k (stored from previous ratchet)
+        allow(Portfolio::PnlTracker).to receive(:locked_floor).and_return(28_000.0)
       end
 
       it 'does not downgrade the level or breach the guard' do
