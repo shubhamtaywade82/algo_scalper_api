@@ -160,8 +160,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (strict filter for volatile Sensex)
-      confirmation_min_strength: 18 # 5m ADX threshold
+      primary_min_strength: 15 # 1m ADX threshold (loosened to allow more SENSEX signals)
+      confirmation_min_strength: 15 # 5m ADX threshold
 
     strategies:
       open_interest:
