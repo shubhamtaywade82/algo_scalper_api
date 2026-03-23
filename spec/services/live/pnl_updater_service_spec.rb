@@ -86,5 +86,35 @@ RSpec.describe Live::PnlUpdaterService, :freeze_time do
         service.flush_now!
       end
     end
+
+    context 'when LTP recovers then drops again within debounce window' do
+      let(:tick_double) { double(ltp: 110.0) }
+
+      it 'broadcasts pnl_stale again after recovery clears the debounce' do
+        # Step 1: LTP missing → pnl_stale broadcast + debounce key set
+        allow(Live::TickQuery).to receive(:for_security).and_return(nil)
+        allow(ActionCable.server).to receive(:broadcast)
+        service.flush_now!
+        expect(ActionCable.server).to have_received(:broadcast).with(
+          'positions', { type: 'pnl_stale', id: tracker.id }
+        )
+
+        # Step 2: LTP returns → pnl_update broadcast + debounce key cleared
+        allow(Live::TickQuery).to receive(:for_security).and_return(tick_double)
+        service.cache_intermediate_pnl(tracker_id: tracker.id, ltp: 110.0)
+        service.flush_now!
+        expect(ActionCable.server).to have_received(:broadcast).with(
+          'positions', hash_including(type: 'pnl_update', ltp_stale: false)
+        )
+
+        # Step 3: LTP drops again within 5s — should broadcast pnl_stale (debounce was cleared)
+        allow(Live::TickQuery).to receive(:for_security).and_return(nil)
+        service.cache_intermediate_pnl(tracker_id: tracker.id, ltp: nil)
+        service.flush_now!
+        expect(ActionCable.server).to have_received(:broadcast).with(
+          'positions', { type: 'pnl_stale', id: tracker.id }
+        ).twice
+      end
+    end
   end
 end

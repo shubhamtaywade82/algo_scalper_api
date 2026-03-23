@@ -412,6 +412,7 @@ module Live
         hwm_pnl: hwm.to_f.round(2),
         ltp_stale: false
       })
+      Rails.cache.delete("pnl_stale:#{tracker_id}") rescue nil
     rescue StandardError => e
       @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
     end
