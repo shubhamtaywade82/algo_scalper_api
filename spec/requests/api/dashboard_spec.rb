@@ -35,4 +35,12 @@ RSpec.describe 'GET /api/dashboard', type: :request do
     body = JSON.parse(response.body)
     expect(body['system']['pnl_updater_running']).to eq(true)
   end
+
+  it 'reflects pnl_updater_running as false when service is stopped' do
+    allow(Live::PnlUpdaterService.instance).to receive(:running?).and_return(false)
+    get '/api/dashboard'
+    expect(response).to have_http_status(:ok)
+    body = JSON.parse(response.body)
+    expect(body['system']['pnl_updater_running']).to eq(false)
+  end
 end
