@@ -75,6 +75,8 @@ export function useDashboard(onPositionChange) {
         } else if (data.type === 'position_activated' || data.type === 'position_exited') {
           onPositionChange?.()
           fetchInitial()
+        } else if (data.type === 'circuit_breaker') {
+          circuitBreaker.value = { tripped: data.tripped, reason: data.reason, at: data.at }
         }
       }
     })
