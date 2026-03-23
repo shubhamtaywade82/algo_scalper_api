@@ -88,16 +88,16 @@ skip_ws = Rails.env.test? ||
 
 Rails.application.configure do
   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
-    enabled: !Rails.env.test? && !skip_ws,  # Disable in test environment or script mode
-    ws_enabled: !skip_ws,  # Disable WebSocket in test environment or script mode
-    order_ws_enabled: !skip_ws,  # Disable order WebSocket in test environment or script mode
-    enable_order_logging: ENV["ENABLE_ORDER"] == "true",  # Order payload logging
+    enabled: !Rails.env.test? && !skip_ws, # Disable in test environment or script mode
+    ws_enabled: !skip_ws, # Disable WebSocket in test environment or script mode
+    order_ws_enabled: !skip_ws, # Disable order WebSocket in test environment or script mode
+    enable_order_logging: ENV["ENABLE_ORDER"] == "true", # Order payload logging
     ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
-    ws_watchlist: ENV["DHANHQ_WS_WATCHLIST"],
-    order_ws_url: ENV["DHANHQ_WS_ORDER_URL"],
-    ws_user_type: ENV["DHANHQ_WS_USER_TYPE"],
-    partner_id: ENV["DHANHQ_PARTNER_ID"],
-    partner_secret: ENV["DHANHQ_PARTNER_SECRET"]
+    ws_watchlist: ENV.fetch("DHANHQ_WS_WATCHLIST", nil),
+    order_ws_url: ENV.fetch("DHANHQ_WS_ORDER_URL", nil),
+    ws_user_type: ENV.fetch("DHANHQ_WS_USER_TYPE", nil),
+    partner_id: ENV.fetch("DHANHQ_PARTNER_ID", nil),
+    partner_secret: ENV.fetch("DHANHQ_PARTNER_SECRET", nil)
   )
 end
 
@@ -124,51 +124,26 @@ def fetch_authority_token!
     token_url = token_authority_url
     authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
 
-    if token_url.present? && authority_token.present?
-      begin
-        response = Faraday.get(token_url) do |req|
-          req.headers["Authorization"] = "Bearer #{authority_token}"
-        end
-
-        if response.success?
-          data = JSON.parse(response.body)
-          token = data["access_token"].presence || data["accessToken"].presence
-          return token if token.present?
-        end
-
-        Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
-      rescue StandardError => e
-        Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
-      end
-    elsif token_url.present?
-      log_token_authority_fallback_once!(
-        key: "scalper:token_authority_missing_bearer",
-        message: "[SCALPER] Token authority token missing (DHAN_TOKEN_ACCESS_TOKEN), trying TOTP refresh..."
-      )
-    else
-      log_token_authority_fallback_once!(
-        key: "scalper:token_authority_invalid_url",
-        message: "[SCALPER] Token authority URL invalid/missing (TRADER_API_BASE_URL), trying TOTP refresh..."
-      )
+    if token_url.blank?
+      raise "Token authority URL invalid/missing (TRADER_API_BASE_URL)"
+    end
+    if authority_token.blank?
+      raise "Token authority bearer missing (DHAN_TOKEN_ACCESS_TOKEN)"
     end
 
-    # Second fallback: TOTP auto-refresh via Dhan::TokenManager (requires DHAN_PIN + DHAN_TOTP_SECRET)
-    if defined?(Dhan::TokenManager)
-      totp_token = Dhan::TokenManager.current_token
-      if totp_token.present?
-        Rails.logger.info "[SCALPER] Token refreshed via TOTP auto-refresh"
-        return totp_token
-      end
+    response = Faraday.get(token_url) do |req|
+      req.headers["Authorization"] = "Bearer #{authority_token}"
     end
 
-    # Final fallback: static ENV token
-    env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
-    if env_token.present?
-      Rails.logger.warn "[SCALPER] Falling back to static ENV['DHAN_ACCESS_TOKEN'] (may be expired)"
-      return env_token
+    unless response.success?
+      raise "Token authority unreachable (status=#{response.status})"
     end
 
-    raise "Token authority unreachable, TOTP refresh failed, and no ENV['DHAN_ACCESS_TOKEN'] found"
+    data = JSON.parse(response.body)
+    token = data["access_token"].presence || data["accessToken"].presence
+    return token if token.present?
+
+    raise "Token authority response missing access_token"
   end
 end
 

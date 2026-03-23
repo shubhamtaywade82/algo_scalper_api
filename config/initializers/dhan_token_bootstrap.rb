@@ -34,24 +34,19 @@ Rails.application.config.after_initialize do
     unless Rails.cache.read(hint_key)
       msg = if bearer.present?
         "[SCALPER] To fetch Dhan token from your authority server, set TRADER_API_BASE_URL in .env " \
-        "(base URL of the API that serves /auth/dhan/token). See .env.example."
-      elsif base_url.present?
+          "(base URL of the API that serves /auth/dhan/token). See .env.example."
+            elsif base_url.present?
         "[SCALPER] To fetch Dhan token from your authority server, set DHAN_TOKEN_ACCESS_TOKEN in .env " \
-        "(Bearer token you use in Postman for /auth/dhan/token). See .env.example."
-      else
+          "(Bearer token you use in Postman for /auth/dhan/token). See .env.example."
+            else
         "[SCALPER] To fetch Dhan token from an authority server (e.g. algo_trading_api), set TRADER_API_BASE_URL " \
-        "and DHAN_TOKEN_ACCESS_TOKEN in .env. See .env.example."
-      end
+          "and DHAN_TOKEN_ACCESS_TOKEN in .env. See .env.example."
+            end
       Rails.logger.warn(msg)
       Rails.cache.write(hint_key, true, expires_in: 1.hour)
     end
   end
 
-  # Only bootstrap if TOTP refresh is configured
-  client_id_present = ENV['CLIENT_ID'].present? || ENV['DHAN_CLIENT_ID'].present?
-  required = %w[DHAN_PIN DHAN_TOTP_SECRET]
-  next unless client_id_present && required.all? { |key| ENV[key].present? }
-
-  Dhan::TokenManager.current_token! if defined?(Dhan::TokenManager)
+  # Authority-server-only mode: do not trigger local TOTP bootstrap.
 end
 

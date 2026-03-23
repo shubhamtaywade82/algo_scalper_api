@@ -29,51 +29,11 @@ module Dhan
         mutex.synchronize do
           token_data = cached_token
           return token_data[:token] if token_data && !expiring?(token_data) && !force
-          return nil unless credentials_available?
+          authority_response = fetch_from_authority
+          return nil if authority_response.blank?
 
-          env_token = static_env_token
-          if totp_cooldown_active?
-            Rails.logger.debug("[DHAN] TOTP cooldown until #{@totp_refresh_cooldown_until&.strftime('%H:%M %Z')}; using ENV token")
-            cache_token(env_token, @totp_refresh_cooldown_until) if env_token.present?
-            return env_token
-          end
-
-          Rails.logger.info("[DHAN] Regenerating token via TOTP... (force=#{force})")
-
-          response = DhanHQ::Auth.generate_access_token(
-            dhan_client_id: creds[:client_id],
-            pin: creds[:pin],
-            totp: generate_totp
-          )
-
-          unless response.is_a?(Hash)
-            Rails.logger.error("[DHAN] Token refresh failed: response is not a Hash (#{response.inspect})")
-            return nil
-          end
-
-          if response['status'] == 'error'
-            msg = response['message'] || ''
-            if too_many_attempts?(msg) && env_token.present?
-              @totp_refresh_cooldown_until = TOTP_COOLDOWN_HOURS.hours.from_now
-              cache_token(env_token, @totp_refresh_cooldown_until)
-              Rails.logger.warn(
-                "[DHAN] TOTP rate-limited (Too many attempts); using ENV token for next #{TOTP_COOLDOWN_HOURS} hours"
-              )
-              return env_token
-            end
-            Rails.logger.error("[DHAN] Token refresh failed: #{msg.presence || response.inspect}")
-            return nil
-          end
-
-          access_token = response['access_token'] || response['accessToken']
-          expiry_time_raw = response['expires_at'] || response['expiryTime']
-
-          if access_token.blank? || expiry_time_raw.blank?
-            Rails.logger.error("[DHAN] Token refresh failed: missing access_token or expires_at in response (#{response.inspect})")
-            return nil
-          end
-
-          expiry_time = Time.parse(expiry_time_raw)
+          access_token = authority_response[:access_token]
+          expiry_time = authority_response[:expiry_time]
 
           persist_token(access_token, expiry_time)
           cache_token(access_token, expiry_time)
@@ -90,7 +50,6 @@ module Dhan
       def clear_cache!
         mutex.synchronize do
           @cached_token = nil
-          @totp_refresh_cooldown_until = nil
           DhanAccessToken.delete_all
         end
         true
@@ -133,53 +92,49 @@ module Dhan
         end
       end
 
-      def generate_totp
-        secret = creds[:totp_secret]
-        if secret.blank?
-          Rails.logger.error("[DHAN] TOTP Secret is blank")
+      def fetch_from_authority
+        token_url = token_authority_url
+        bearer = ENV['DHAN_TOKEN_ACCESS_TOKEN'].presence
+
+        if token_url.blank? || bearer.blank?
+          Rails.logger.error(
+            '[DHAN] Token refresh skipped: authority config missing. ' \
+            'Set TRADER_API_BASE_URL and DHAN_TOKEN_ACCESS_TOKEN.'
+          )
           return nil
         end
-        unless secret.is_a?(String)
-          Rails.logger.error("[DHAN] TOTP Secret is not a String: #{secret.class}")
+
+        response = Faraday.get(token_url) { |req| req.headers['Authorization'] = "Bearer #{bearer}" }
+        unless response.success?
+          Rails.logger.error("[DHAN] Token authority request failed (status=#{response.status})")
           return nil
         end
-        DhanHQ::Auth.generate_totp(secret)
-      end
 
-      def creds
-        @creds ||= begin
-          env = {
-            client_id: ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence,
-            pin: ENV['DHAN_PIN'].presence,
-            totp_secret: ENV['DHAN_TOTP_SECRET'].presence
-          }
+        data = JSON.parse(response.body)
+        access_token = data['access_token'].presence || data['accessToken'].presence
+        expiry_raw = data['expires_at'].presence || data['expiryTime'].presence
 
-          if env.values.all?(&:present?)
-            env
-          else
-            cred = Rails.application.credentials.dhan
-            {
-              client_id: cred&.dig(:client_id),
-              pin: cred&.dig(:pin),
-              totp_secret: cred&.dig(:totp_secret)
-            }
-          end
+        if access_token.blank? || expiry_raw.blank?
+          Rails.logger.error('[DHAN] Token authority response missing access_token or expires_at')
+          return nil
         end
+
+        { access_token: access_token, expiry_time: Time.parse(expiry_raw) }
+      rescue StandardError => e
+        Rails.logger.error("[DHAN] Token authority fetch failed: #{e.class} - #{e.message}")
+        nil
       end
 
-      def credentials_available?
-        missing = []
-        missing << 'client_id' if creds[:client_id].blank?
-        missing << 'pin' if creds[:pin].blank?
-        missing << 'totp_secret' if creds[:totp_secret].blank?
+      def token_authority_url
+        raw_base = ENV['TRADER_API_BASE_URL'].to_s.strip
+        return nil if raw_base.blank? || raw_base.include?('<') || raw_base.include?('>')
 
-        return true if missing.empty?
+        uri = URI.parse(raw_base)
+        return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
 
-        Rails.logger.warn(
-          "[DHAN] Token refresh skipped: missing credentials #{missing.join(', ')}. " \
-          "Set DHAN_CLIENT_ID/CLIENT_ID, #{REQUIRED_ENV_KEYS.join(', ')} or Rails credentials.dhan."
-        )
-        false
+        "#{raw_base.chomp('/')}/auth/dhan/token"
+      rescue URI::InvalidURIError
+        nil
       end
 
       def apply_token_to_runtime!(access_token)
@@ -208,20 +163,6 @@ module Dhan
 
       def mutex
         @mutex ||= Mutex.new
-      end
-
-      def static_env_token
-        ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
-      end
-
-      def too_many_attempts?(message)
-        message.to_s.include?('Too many attempts')
-      end
-
-      def totp_cooldown_active?
-        return false unless @totp_refresh_cooldown_until
-
-        Time.current < @totp_refresh_cooldown_until
       end
     end
   end
