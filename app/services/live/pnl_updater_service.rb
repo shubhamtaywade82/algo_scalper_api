@@ -12,6 +12,7 @@ module Live
 
     FLUSH_INTERVAL_SECONDS = 0.25
     MAX_BATCH = 200
+    PNL_STALE_DEBOUNCE_SECONDS = 5
 
     attr_reader :running
 
@@ -203,6 +204,7 @@ module Live
 
         unless tick_ltp&.to_f&.positive?
           @logger.debug { "[PnlUpdater] Skip #{tracker_id}: no valid LTP (seg=#{seg} sid=#{security_id})" }
+          maybe_broadcast_pnl_stale(tracker_id)
           next
         end
 
@@ -413,6 +415,20 @@ module Live
       @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
     end
 
+    # Notify the frontend that LTP (and thus live PnL) is stale for this tracker.
+    # Debounced to avoid flooding the WS channel during cache outages.
+    def maybe_broadcast_pnl_stale(tracker_id)
+      return if tracker_id.blank?
+
+      debounce_key = "pnl_stale:#{tracker_id}"
+      return if Rails.cache&.read(debounce_key)
+
+      Rails.cache&.write(debounce_key, true, expires_in: PNL_STALE_DEBOUNCE_SECONDS)
+      ActionCable.server.broadcast("positions", { type: "pnl_stale", id: tracker_id })
+    rescue StandardError => e
+      @logger.debug("[PnlUpdater] maybe_broadcast_pnl_stale failed: #{e.message}")
+    end
+
     # Broadcast aggregate dashboard stats every 1 second to the "dashboard" channel.
     def maybe_broadcast_heartbeat
       return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 1.0
@@ -435,7 +451,10 @@ module Live
           sensex: Live::TickCache.ltp('IDX_I', '51')
         },
         circuit_breaker: Risk::CircuitBreaker.instance.status,
-        system: Live::SystemStatusCache.instance.all_statuses,
+        system: Live::SystemStatusCache.instance.all_statuses.merge(
+          pnl_updater_running: running?,
+          ws_order_update: Live::OrderUpdateHub.instance.running?
+        ),
         timestamp: Time.current.iso8601
       }
     rescue StandardError
