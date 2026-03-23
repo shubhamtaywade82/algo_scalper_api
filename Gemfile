@@ -72,7 +72,7 @@ group :development, :test do
   gem 'brakeman', require: false
 
   # Code quality and style enforcement
-  gem 'rubocop', '~> 1.85', require: false
+  gem 'rubocop', '~> 1.86', require: false
   gem 'rubocop-factory_bot', '~> 2.28', require: false
   gem 'rubocop-performance', '~> 1.21', require: false
   gem 'rubocop-rails', '~> 2.23', require: false
