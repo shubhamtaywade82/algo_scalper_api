@@ -104,3 +104,5 @@ group :development, :test do
 
   gem "debride"
 end
+
+gem "json_schemer", "~> 2.4"

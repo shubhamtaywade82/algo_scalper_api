@@ -748,6 +748,11 @@ signals:
   # Set to false to disable SMC decision alignment check (but keep permission checks)
   enable_smc_decision_alignment: true # Set to false to disable SMC decision alignment (default: true)
 
+  # SMC Navigator overlay (LTF tactical gate; additive to PermissionResolver — not a replacement)
+  enable_smc_navigator_overlay: false
+  smc_navigator_min_confidence: 0.6
+  smc_navigator_exit_advisory: false
+
   # DirectionGate Configuration
   # DirectionGate blocks trades that go against the market regime:
   # - Blocks PE trades in bullish regime

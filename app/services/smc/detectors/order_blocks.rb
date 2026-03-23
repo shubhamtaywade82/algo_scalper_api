@@ -74,7 +74,7 @@ module Smc
         return true unless atr
 
         rvr_ok = rvr_above_threshold?(candle, candle_index)
-        rvr_ok.nil? ? true : rvr_ok
+        rvr_ok.nil? || rvr_ok
       end
 
       def rvr_above_threshold?(candle, candle_index = nil)
@@ -91,7 +91,8 @@ module Smc
       end
 
       def mitigated?(block)
-        start_index = block[:index] + 1
+        # Skip the displacement candle (index + 1); mitigation starts after the impulse.
+        start_index = block[:index] + 2
         return false if start_index >= candles.size
 
         candles[start_index..].any? do |c|
