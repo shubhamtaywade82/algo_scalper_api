@@ -15,10 +15,10 @@ RSpec.describe Risk::CircuitBreaker do
 
   before do
     allow(ActionCable.server).to receive(:broadcast)
-    cb.reset! rescue nil
+    cb.reset!
   end
 
-  after { cb.reset! rescue nil }
+  after { cb.reset! }
 
   describe '#trip!' do
     it 'broadcasts circuit_breaker status to the dashboard channel' do
