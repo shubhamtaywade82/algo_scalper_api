@@ -755,6 +755,9 @@ signals:
   # Set to false to disable SMC decision alignment check (but keep permission checks)
   enable_smc_decision_alignment: true # Set to false to disable SMC decision alignment (default: true)
 
+  # SMC EventStore: persist every scan decision to smc_events for audit/replay
+  smc_event_store_publish: true
+
   # SMC Navigator overlay (LTF tactical gate; additive to PermissionResolver — not a replacement)
   enable_smc_navigator_overlay: true
   smc_navigator_min_confidence: 0.6
