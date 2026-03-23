@@ -6,10 +6,11 @@ module Trading
     # keyword_init: required for keyword construction (RuboCop redundant warning is incorrect here)
     Result = Struct.new(:allowed, :reason, :code, keyword_init: true) # rubocop:disable Style/RedundantStructKeywordInit
 
-    def initialize(snapshot:, chain_signal:, final_direction:)
+    def initialize(snapshot:, chain_signal:, final_direction:, smc_decision: nil)
       @snapshot = snapshot
       @chain = chain_signal
       @direction = final_direction.to_sym
+      @smc_decision = smc_decision
     end
 
     def call
@@ -52,6 +53,10 @@ module Trading
         return reject('Premium expansion not detected', :no_premium_expansion)
       end
 
+      if cfg[:require_smc_alignment] == true && smc_conflicts?
+        return reject("SMC bias #{@smc_decision} conflicts with direction #{@direction}", :smc_misaligned)
+      end
+
       pass
     end
 
@@ -80,6 +85,13 @@ module Trading
       else
         false
       end
+    end
+
+    def smc_conflicts?
+      return false if @smc_decision.nil? || @smc_decision == :no_trade
+
+      ((@direction == :bullish) && (@smc_decision == :put)) ||
+        ((@direction == :bearish) && (@smc_decision == :call))
     end
 
     def pass

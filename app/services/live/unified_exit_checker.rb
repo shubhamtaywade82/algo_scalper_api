@@ -98,6 +98,10 @@ module Live
         si_result = check_structure_invalidation(tracker, snapshot)
         return si_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if si_result
 
+        # 6.5 SMC Navigator Exit (LTF CHoCH / liquidity sweep against position)
+        smc_nav_result = check_smc_navigator_exit(tracker, snapshot)
+        return smc_nav_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if smc_nav_result
+
         # 7. Time-Based Exit (if configured)
         if time_based_exit?(tracker)
           return {
@@ -491,6 +495,53 @@ module Live
         current_pct = tracker.current_pnl_pct.to_f
 
         peak_pct >= min_peak_pct && current_pct < -0.02
+      end
+
+      def check_smc_navigator_exit(tracker, snapshot)
+        return unless smc_navigator_exit_enabled? && smc_navigator_min_hold_elapsed?(tracker)
+
+        instrument = tracker.instrument
+        return unless instrument
+
+        ltp = snapshot[:ltp].to_f
+        return unless ltp.positive?
+
+        result = Smc::Navigator.evaluate_exit(tracker: tracker, ltp: ltp, instrument: instrument)
+        return unless result.suggest_exit?
+        return unless result.confidence >= smc_navigator_min_exit_confidence
+
+        {
+          exit: true,
+          reason: "SMC_NAVIGATOR_EXIT (#{result.reason})",
+          path: 'smc_navigator'
+        }
+      rescue StandardError => e
+        Rails.logger.error("[UnifiedExitChecker] SMC navigator exit check failed: #{e.class} - #{e.message}")
+        nil
+      end
+
+      def smc_navigator_exit_enabled?
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
+        cfg[:enabled] == true
+      rescue StandardError
+        false
+      end
+
+      def smc_navigator_min_hold_elapsed?(tracker)
+        return false unless tracker.created_at
+
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
+        min_seconds = (cfg[:min_hold_seconds] || 120).to_i
+        (Time.current - tracker.created_at) >= min_seconds
+      rescue StandardError
+        false
+      end
+
+      def smc_navigator_min_exit_confidence
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
+        (cfg[:min_confidence] || 0.65).to_f
+      rescue StandardError
+        0.65
       end
 
       def structure_invalidation_enabled?

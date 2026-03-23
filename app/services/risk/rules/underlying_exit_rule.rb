@@ -52,6 +52,18 @@ module Risk
           )
         end
 
+        # Check SMC bias flip (opt-in via use_smc_bias_flip config)
+        if smc_bias_flip_exit?(underlying_state)
+          return exit_result(
+            reason: 'smc_bias_flip',
+            metadata: {
+              underlying_state: underlying_state,
+              trend_score: underlying_state.trend_score,
+              threshold: smc_bias_flip_trend_threshold
+            }
+          )
+        end
+
         no_action_result
       end
 
@@ -98,6 +110,18 @@ module Risk
         underlying_state.atr_trend == :falling &&
           underlying_state.atr_ratio &&
           underlying_state.atr_ratio.to_f < underlying_atr_ratio_threshold
+      end
+
+      def smc_bias_flip_exit?(underlying_state)
+        return false unless @config.fetch(:use_smc_bias_flip, false) == true
+        return false unless underlying_state&.smc_bias_flip == true
+
+        score = underlying_state.trend_score
+        score.nil? || score.to_f < smc_bias_flip_trend_threshold
+      end
+
+      def smc_bias_flip_trend_threshold
+        @config.fetch(:smc_bias_flip_trend_threshold, 40).to_f
       end
     end
   end

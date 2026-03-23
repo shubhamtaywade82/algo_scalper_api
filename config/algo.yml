@@ -231,6 +231,10 @@ risk:
       buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
       underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
       premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
+    smc_navigator_exit:
+      enabled: false           # opt-in: enforce Navigator exit signals (CHoCH, liquidity sweep)
+      min_hold_seconds: 120    # no SMC navigator exit before position age >= this
+      min_confidence: 0.65     # minimum Navigator exit confidence to trigger
     premium_momentum_failure:
       enabled: true
       default_stall_minutes: 2
@@ -607,6 +611,8 @@ position_sizing:
   # Underlying-aware exit thresholds
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
   underlying_atr_collapse_multiplier: 0.65 # Exit if ATR ratio < this value (falling volatility)
+  use_smc_bias_flip: false               # opt-in: exit when SMC bias flips against position direction
+  smc_bias_flip_trend_threshold: 40      # only exit on bias flip when trend_score is also below this
 
   daily_limits:
     enable: true
@@ -702,6 +708,7 @@ market_context:
     min_chain_confidence: 40
     allow_normal_participation: true
     require_premium_expansion: false
+    require_smc_alignment: false   # opt-in: reject if SMC bias conflicts with final_direction
   strategy_profiles:
     aggressive_min_score: 80
     controlled_min_score: 60
@@ -749,9 +756,9 @@ signals:
   enable_smc_decision_alignment: true # Set to false to disable SMC decision alignment (default: true)
 
   # SMC Navigator overlay (LTF tactical gate; additive to PermissionResolver — not a replacement)
-  enable_smc_navigator_overlay: false
+  enable_smc_navigator_overlay: true
   smc_navigator_min_confidence: 0.6
-  smc_navigator_exit_advisory: false
+  smc_navigator_exit_advisory: true
 
   # DirectionGate Configuration
   # DirectionGate blocks trades that go against the market regime:
