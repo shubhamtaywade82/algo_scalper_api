@@ -46,7 +46,6 @@ module Dhan
           strategy  = Dhan::Auth::StrategyResolver.resolve
           response  = strategy.call
 
-          pp response
           access_token = response[:access_token]
           expiry_time  = response[:expiry_time]
 
