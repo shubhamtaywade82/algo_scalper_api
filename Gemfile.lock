@@ -1,7 +1,7 @@
 GEM
   remote: https://rubygems.org/
   specs:
-    DhanHQ (2.7.0)
+    DhanHQ (2.8.0)
       activesupport
       base64
       bindata
@@ -581,7 +581,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
-  DhanHQ (= 2.7.0)
+  DhanHQ (= 2.8.0)
   activerecord-import
   annotate
   bootsnap
@@ -627,7 +627,7 @@ DEPENDENCIES
   whenever
 
 CHECKSUMS
-  DhanHQ (2.7.0) sha256=f2b490f152eb2788d746f587ed17aa10d76d35d6bf6a287a11ea06a815bdb3b0
+  DhanHQ (2.8.0) sha256=ceea98e7948f8a0889090437cc2c7592db3af7aa24c356b647aa69d02d188c7e
   action_text-trix (2.1.17) sha256=b44691639d77e67169dc054ceacd1edc04d44dc3e4c6a427aa155a2beb4cc951
   actioncable (8.1.2) sha256=dc31efc34cca9cdefc5c691ddb8b4b214c0ea5cd1372108cbc1377767fb91969
   actionmailbox (8.1.2) sha256=058b2fb1980e5d5a894f675475fcfa45c62631103d5a2596d9610ec81581889b
