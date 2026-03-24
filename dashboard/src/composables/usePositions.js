@@ -28,9 +28,15 @@ export function usePositions() {
 
   // Replace the whole object at the index so Vue's reactivity picks up the change
   function applyPnlUpdate(update) {
-    const idx = open.value.findIndex(p => p.id === update.id)
+    const idx = open.value.findIndex(p => Number(p.id) === Number(update.id))
     if (idx === -1) return
     open.value[idx] = { ...open.value[idx], ...update }
+  }
+
+  function applyPnlStale(staleEvent) {
+    const idx = open.value.findIndex(p => Number(p.id) === Number(staleEvent.id))
+    if (idx === -1) return
+    open.value[idx] = { ...open.value[idx], ltp_stale: true }
   }
 
   function clearStaleTimer() {
@@ -89,6 +95,9 @@ export function usePositions() {
       received(data) {
         if (data.type === 'pnl_update') {
           applyPnlUpdate(data)
+          markFresh()
+        } else if (data.type === 'pnl_stale') {
+          applyPnlStale(data)
           markFresh()
         }
       }

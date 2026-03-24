@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_21_114756) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_22_143000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -322,6 +322,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_21_114756) do
     t.datetime "updated_at", null: false
     t.text "value"
     t.index ["key"], name: "index_settings_on_key", unique: true
+  end
+
+  create_table "smc_events", force: :cascade do |t|
+    t.string "correlation_id", null: false
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.jsonb "payload", default: {}, null: false
+    t.integer "sequence", null: false
+    t.string "stream", null: false
+    t.datetime "updated_at", null: false
+    t.index ["correlation_id", "sequence"], name: "index_smc_events_on_correlation_id_and_sequence", unique: true
+    t.index ["correlation_id"], name: "index_smc_events_on_correlation_id"
+    t.index ["payload"], name: "index_smc_events_on_payload", using: :gin
+    t.index ["stream", "created_at"], name: "index_smc_events_on_stream_and_created_at"
   end
 
   create_table "solid_queue_blocked_executions", force: :cascade do |t|

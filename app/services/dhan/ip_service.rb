@@ -10,6 +10,7 @@ module Dhan
       new.update_ip(ip)
     end
 
+    # Fetches public IPs + registered slots only. Does not write {PublicIpLog} (hot paths: dashboard, health).
     def fetch_ip_info
       # Ensure DhanHQ is configured with latest token
       DhanHQ.configure { |c| c.access_token = Dhan::TokenManager.current_token }
@@ -20,10 +21,6 @@ module Dhan
       v4 = fetch_public_ipv4
       v6 = fetch_public_ipv6
 
-      # Persist discovery locally
-      PublicIpLog.log_ip(v4, 'v4')
-      PublicIpLog.log_ip(v6, 'v6')
-
       {
         public_ipv4: v4,
         public_ipv6: v6,
@@ -32,6 +29,18 @@ module Dhan
     rescue StandardError => e
       Rails.logger.error("[Dhan::IpService] Error fetching IP info: #{e.message}")
       { public_ipv4: 'Unknown', public_ipv6: 'Unknown', registered_ips: nil }
+    end
+
+    # Background / scheduled audit: persist last-seen IPs with {PublicIpLog::RECENT_TOUCH_COOLDOWN} throttle.
+    def self.audit_public_ips!
+      info = fetch_ip_info
+      persist_public_ip_logs(info)
+      info
+    end
+
+    def self.persist_public_ip_logs(info)
+      PublicIpLog.log_ip(info[:public_ipv4], 'v4')
+      PublicIpLog.log_ip(info[:public_ipv6], 'v6')
     end
 
     def update_ip(ip_to_whitelist)
@@ -49,7 +58,7 @@ module Dhan
       end
 
       # Determine which slot to update based on modification dates
-      today = Date.today
+      today = Time.zone.today
 
       primary_date = parse_dhan_date(status[:modification_allowed_date_for_primary_ip])
       secondary_date = parse_dhan_date(status[:modification_allowed_date_for_secondary_ip])
@@ -92,8 +101,8 @@ module Dhan
     def fetch_public_ipv6
       ip = DhanHQ::Utils::NetworkInspector.public_ipv6
       return 'Unknown' if ip == 'unknown'
-      return 'None' if ip == DhanHQ::Utils::NetworkInspector.public_ipv4 && !ip.include?(':')
-      
+      return 'None' if ip == DhanHQ::Utils::NetworkInspector.public_ipv4 && ip.exclude?(':')
+
       ip
     rescue StandardError => e
       Rails.logger.warn("[Dhan::IpService] Failed to fetch public IPv6: #{e.message}")

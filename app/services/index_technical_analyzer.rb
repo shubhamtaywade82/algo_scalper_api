@@ -454,6 +454,7 @@ class IndexTechnicalAnalyzer < ApplicationService
   end
 
   def dhanhq_ta_available?
+    ensure_dhanhq_ta_loaded
     defined?(TA) && TA.const_defined?(:TechnicalAnalysis)
   end
 
@@ -471,13 +472,25 @@ class IndexTechnicalAnalyzer < ApplicationService
   def normalize_timeframe_keys(indicators)
     return indicators unless indicators.is_a?(Hash)
 
-    indicators.each_with_object({}) do |(key, value), normalized|
-      normalized[key.to_s] = value
-    end
+    indicators.deep_symbolize_keys
   end
 
   def valid_analysis_payload?(payload)
-    payload.is_a?(Hash) && payload[:meta].present? && payload[:indicators].present?
+    return false unless payload.is_a?(Hash)
+
+    meta = payload[:meta] || payload['meta']
+    indicators = payload[:indicators] || payload['indicators']
+    meta.present? && indicators.present?
+  end
+
+  def ensure_dhanhq_ta_loaded
+    return if defined?(@ta_load_attempted) && @ta_load_attempted
+
+    require 'ta/technical_analysis'
+  rescue LoadError => e
+    log_warn("DhanHQ TA load failed: #{e.message}")
+  ensure
+    @ta_load_attempted = true
   end
 
   def sanitize_timeframes(timeframes)

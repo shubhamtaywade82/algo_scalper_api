@@ -13,11 +13,30 @@ module Smc
       end
 
       def buy_side_taken?
+        return false if @series.nil?
+        if @series.respond_to?(:liquidity_grab_up?)
+          return @series.liquidity_grab_up?
+        end
+
         sweep?(:high)
       end
 
       def sell_side_taken?
+        return false if @series.nil?
+        if @series.respond_to?(:liquidity_grab_down?)
+          return @series.liquidity_grab_down?
+        end
+
         sweep?(:low)
+      end
+
+      def sweep_direction
+        return nil if @series.nil?
+
+        return :buy_side if buy_side_taken?
+        return :sell_side if sell_side_taken?
+
+        nil
       end
 
       def sweep?(type)
@@ -57,14 +76,18 @@ module Smc
         {
           buy_side_taken: buy_side_taken?,
           sell_side_taken: sell_side_taken?,
+          sweep_direction: sweep_direction,
           equal_highs: equal_highs?,
-          equal_lows: equal_lows?
+          equal_lows: equal_lows?,
+          sweep: buy_side_taken? || sell_side_taken?
         }
       end
 
       private
 
       def swings
+        return [] if @series.nil?
+
         @swings ||= Structure.new(@series).swings
       end
 

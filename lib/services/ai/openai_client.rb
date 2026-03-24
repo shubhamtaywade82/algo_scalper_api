@@ -109,6 +109,8 @@ module Services
             read_timeout: read_timeout
           ) do |http|
             request = Net::HTTP::Get.new(uri)
+            api_key = ENV.fetch('OLLAMA_API_KEY', nil)
+            request['Authorization'] = "Bearer #{api_key}" if api_key.present?
             http.request(request)
           end
 
