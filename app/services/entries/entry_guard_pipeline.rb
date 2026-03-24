@@ -37,7 +37,8 @@ module Entries
         Guards::InstrumentLookupGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
-        Guards::LtpResolutionGuard
+        Guards::LtpResolutionGuard,
+        Guards::SmcNavigatorGuard
       ]
     end
   end
