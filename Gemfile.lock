@@ -619,6 +619,7 @@ DEPENDENCIES
   rails (~> 8.1.2)
   rails_best_practices
   redis
+  rotp (~> 6.3)
   rspec-rails
   rubocop (~> 1.85)
   rubocop-factory_bot (~> 2.28)
