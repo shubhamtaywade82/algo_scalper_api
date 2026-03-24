@@ -11,6 +11,9 @@ module Notifications
   class TelegramNotifier
     include Singleton
 
+    DAILY_PROFIT_NOTIFY_REDIS_PREFIX = 'daily_limits:telegram:daily_profit_cap'
+    DAILY_PROFIT_NOTIFY_TTL_SECONDS = 26.hours.to_i
+
     def initialize
       @last_pnl_notification = {} # tracker_id => timestamp (throttle PnL updates)
       @pnl_notification_interval = 300 # 5 minutes between PnL updates per position
@@ -89,6 +92,25 @@ module Notifications
       send_message(formatted_message)
     rescue StandardError => e
       Rails.logger.error("[TelegramNotifier] Failed to send risk alert: #{e.class} - #{e.message}")
+    end
+
+    # One Telegram per calendar day when global daily profit hits the configured cap (entries blocked).
+    # Uses Redis SET NX so repeated can_trade? checks do not spam the chat.
+    #
+    # @param global_daily_profit [Numeric] realized global daily profit (rupees)
+    # @param max_daily_profit [Numeric] configured cap (rupees)
+    def notify_daily_profit_target_once(global_daily_profit:, max_daily_profit:)
+      return unless enabled?
+      return unless daily_profit_target_notify_enabled?
+
+      return unless acquire_daily_profit_notify_slot!
+
+      message = format_daily_profit_target_message(global_daily_profit, max_daily_profit)
+      send_message(message)
+    rescue StandardError => e
+      Rails.logger.error(
+        "[TelegramNotifier] Failed to send daily profit target notification: #{e.class} - #{e.message}"
+      )
     end
 
     # Send error notification
@@ -193,7 +215,7 @@ module Notifications
     end
 
     def format_entry_message(tracker, entry_data)
-      symbol     = h(tracker.symbol || entry_data[:symbol] || 'N/A')
+      symbol = h(tracker.symbol || entry_data[:symbol] || 'N/A')
       entry_price = tracker.entry_price&.to_f || entry_data[:entry_price] || 0.0
       quantity   = tracker.quantity || entry_data[:quantity] || 0
       direction  = tracker.direction || entry_data[:direction] || 'BUY'
@@ -332,6 +354,32 @@ module Notifications
               end
 
       "#{emoji} <b>Risk Alert</b>\n\n#{h(message)}\n\n⏰ #{Time.current.strftime('%H:%M:%S')}"
+    end
+
+    def daily_profit_target_notify_enabled?
+      config = AlgoConfig.fetch[:telegram] || {}
+      config[:enabled] != false && config[:notify_daily_profit_target] != false
+    rescue StandardError
+      false
+    end
+
+    def acquire_daily_profit_notify_slot!
+      r = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+      key = "#{DAILY_PROFIT_NOTIFY_REDIS_PREFIX}:#{Time.zone.today}"
+      r.set(key, '1', nx: true, ex: DAILY_PROFIT_NOTIFY_TTL_SECONDS)
+    rescue StandardError => e
+      Rails.logger.warn("[TelegramNotifier] Redis lock for daily profit notify failed: #{e.message}")
+      false
+    end
+
+    def format_daily_profit_target_message(global_daily_profit, max_daily_profit)
+      g = global_daily_profit.to_f.round(2)
+      m = max_daily_profit.to_f.round(2)
+      "ℹ️ <b>Daily profit target reached</b>\n\n" \
+        "<b>Global PnL:</b> ₹#{h(g)}\n" \
+        "<b>Cap:</b> ₹#{h(m)}\n" \
+        "<b>Action:</b> New entries blocked for the rest of the session.\n\n" \
+        "⏰ #{Time.current.strftime('%H:%M:%S')}"
     end
 
     def format_trading_stats(stats)
