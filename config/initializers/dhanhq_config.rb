@@ -105,64 +105,18 @@ end
 client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
 DhanHQ.configuration.client_id = client_id if client_id
 
-# Inject access token from DB so the gem always uses the latest valid token.
-# No refresh API exists; token must be renewed via /auth/dhan/login when expired.
+# Route all token acquisition through TokenManager so the configured
+# DHAN_AUTH_MODE strategy (authority / totp / manual / renew) is used
+# consistently by both the gem client and the trading daemon.
 DhanHQ.configure do |config|
   config.access_token_provider = lambda do
-    fetch_authority_token!
+    Dhan::TokenManager.current_token!
   end
 
   config.on_token_expired = lambda do |_error|
-    Rails.logger.warn "[SCALPER] Token expired, clearing cache..."
+    Rails.logger.warn "[SCALPER] Token expired — forcing refresh via #{ENV.fetch('DHAN_AUTH_MODE', 'authority')} strategy"
     Rails.cache.delete("scalper:dhan_token")
     Dhan::TokenManager.clear_cache! if defined?(Dhan::TokenManager)
+    Dhan::TokenManager.refresh!(force: true) if defined?(Dhan::TokenManager)
   end
-end
-
-def fetch_authority_token!
-  Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
-    token_url = token_authority_url
-    authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
-
-    if token_url.blank?
-      raise "Token authority URL invalid/missing (TRADER_API_BASE_URL)"
-    end
-    if authority_token.blank?
-      raise "Token authority bearer missing (DHAN_TOKEN_ACCESS_TOKEN)"
-    end
-
-    response = Faraday.get(token_url) do |req|
-      req.headers["Authorization"] = "Bearer #{authority_token}"
-    end
-
-    unless response.success?
-      raise "Token authority unreachable (status=#{response.status})"
-    end
-
-    data = JSON.parse(response.body)
-    token = data["access_token"].presence || data["accessToken"].presence
-    return token if token.present?
-
-    raise "Token authority response missing access_token"
-  end
-end
-
-def token_authority_url
-  raw_base = ENV["TRADER_API_BASE_URL"].to_s.strip
-  return nil if raw_base.blank?
-  return nil if raw_base.include?("<") || raw_base.include?(">")
-
-  uri = URI.parse(raw_base)
-  return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
-
-  "#{raw_base.chomp('/')}/auth/dhan/token"
-rescue URI::InvalidURIError
-  nil
-end
-
-def log_token_authority_fallback_once!(key:, message:)
-  return if Rails.cache.read(key)
-
-  Rails.logger.warn(message)
-  Rails.cache.write(key, true, expires_in: 10.minutes)
 end
