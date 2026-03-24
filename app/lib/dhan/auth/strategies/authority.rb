@@ -3,7 +3,7 @@
 module Dhan
   module Auth
     module Strategies
-      # Authority-server strategy (backward-compatible default).
+      # Authority-server strategy (optional).
       # Delegates token acquisition to an external authority server that
       # manages TOTP / OAuth on behalf of this app. Useful when a separate
       # service (e.g. algo_trading_api) owns the Dhan credentials.
@@ -19,7 +19,7 @@ module Dhan
           bearer    = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
 
           raise "Authority URL invalid/missing: set TRADER_API_BASE_URL" if token_url.blank?
-          raise "Authority bearer missing: set DHAN_TOKEN_ACCESS_TOKEN"   if bearer.blank?
+          raise "Authority bearer missing: set DHAN_TOKEN_ACCESS_TOKEN" if bearer.blank?
 
           response = Faraday.get(token_url) do |req|
             req.headers["Authorization"] = "Bearer #{bearer}"

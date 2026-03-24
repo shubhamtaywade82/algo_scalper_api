@@ -4,17 +4,17 @@
 # Only runs when ENABLE_TRADING_SERVICES=true (trading process, not web).
 #
 # Calls TokenManager.refresh! which uses the DHAN_AUTH_MODE strategy:
-#   authority  - fetch from external authority server (default)
-#   totp       - generate TOTP and login directly with Dhan
+#   totp       - generate TOTP and login directly with Dhan (default)
 #   manual     - read DHAN_ACCESS_TOKEN from ENV
 #   renew      - renew an existing DB token
+#   authority  - fetch from external authority server
 Rails.application.config.after_initialize do
   next if Rails.const_defined?(:Console)
   next if Rails.env.test?
   next if ENV["DISABLE_TRADING_SERVICES"] == "1"
   next unless ENV["ENABLE_TRADING_SERVICES"] == "true"
 
-  mode = ENV.fetch("DHAN_AUTH_MODE", "authority")
+  mode = ENV.fetch("DHAN_AUTH_MODE", "totp")
 
   begin
     token = Dhan::TokenManager.refresh!(force: false)

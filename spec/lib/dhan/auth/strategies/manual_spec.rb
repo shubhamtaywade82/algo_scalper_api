@@ -3,6 +3,8 @@
 require "rails_helper"
 
 RSpec.describe Dhan::Auth::Strategies::Manual do
+  include ActiveSupport::Testing::TimeHelpers
+
   subject(:strategy) { described_class.new }
 
   describe "#call" do

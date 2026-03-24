@@ -22,8 +22,8 @@ RSpec.describe Dhan::Auth::StrategyResolver do
     context "when DHAN_AUTH_MODE is not set" do
       before { stub_const("ENV", ENV.to_hash.except("DHAN_AUTH_MODE")) }
 
-      it "defaults to Authority strategy" do
-        expect(described_class.resolve).to be_a(Dhan::Auth::Strategies::Authority)
+      it "defaults to Totp strategy" do
+        expect(described_class.resolve).to be_a(Dhan::Auth::Strategies::Totp)
       end
     end
 

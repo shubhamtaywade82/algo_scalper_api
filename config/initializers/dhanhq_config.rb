@@ -106,7 +106,7 @@ client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
 DhanHQ.configuration.client_id = client_id if client_id
 
 # Route all token acquisition through TokenManager so the configured
-# DHAN_AUTH_MODE strategy (authority / totp / manual / renew) is used
+# DHAN_AUTH_MODE strategy (totp / manual / renew / authority) is used
 # consistently by both the gem client and the trading daemon.
 DhanHQ.configure do |config|
   config.access_token_provider = lambda do
@@ -114,7 +114,7 @@ DhanHQ.configure do |config|
   end
 
   config.on_token_expired = lambda do |_error|
-    Rails.logger.warn "[SCALPER] Token expired — forcing refresh via #{ENV.fetch('DHAN_AUTH_MODE', 'authority')} strategy"
+    Rails.logger.warn "[SCALPER] Token expired — forcing refresh via #{ENV.fetch('DHAN_AUTH_MODE', 'totp')} strategy"
     Rails.cache.delete("scalper:dhan_token")
     Dhan::TokenManager.clear_cache! if defined?(Dhan::TokenManager)
     Dhan::TokenManager.refresh!(force: true) if defined?(Dhan::TokenManager)

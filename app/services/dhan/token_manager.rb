@@ -4,10 +4,10 @@ module Dhan
   # Orchestrates Dhan access-token lifecycle for the trading daemon.
   #
   # Auth strategy is selected at runtime via DHAN_AUTH_MODE:
-  #   authority  - delegate to external authority server (default)
-  #   totp       - fully automated TOTP login
+  #   totp       - fully automated TOTP login (default)
   #   manual     - static DHAN_ACCESS_TOKEN from ENV
   #   renew      - extend an existing token via Dhan RenewToken API
+  #   authority  - delegate to external authority server (optional)
   #
   # All paths return a token string or nil; never raise outside #refresh!.
   class TokenManager
@@ -46,6 +46,7 @@ module Dhan
           strategy  = Dhan::Auth::StrategyResolver.resolve
           response  = strategy.call
 
+          pp response
           access_token = response[:access_token]
           expiry_time  = response[:expiry_time]
 
@@ -57,7 +58,7 @@ module Dhan
           access_token
         end
       rescue StandardError => e
-        Rails.logger.error("[DHAN] Token refresh failed (mode=#{ENV.fetch('DHAN_AUTH_MODE', 'authority')}): #{e.class} - #{e.message}")
+        Rails.logger.error("[DHAN] Token refresh failed (mode=#{ENV.fetch('DHAN_AUTH_MODE', 'totp')}): #{e.class} - #{e.message}")
         nil
       end
 
