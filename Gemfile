@@ -48,6 +48,9 @@ gem 'thruster', require: false
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
 gem 'DhanHQ', '2.7.0'
 
+# TOTP generation for Dhan TOTP auth strategy
+gem 'rotp', '~> 6.3'
+
 # Telegram bot for notifications
 gem 'telegram-bot-ruby', '~> 0.19'
 
