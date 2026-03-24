@@ -24,12 +24,14 @@ class PositionTracker < ApplicationRecord
   validates :security_id, presence: true
   validate :segment_must_be_tradable
 
+  ORPHANED_CLEAR_INTERVAL = 5.minutes
+
   # Callbacks
-  after_commit :register_in_index, on: %i[create update]
+  after_commit :register_in_index, on: %i[create update], if: :index_registration_relevant?
   after_commit :unregister_from_index, on: :destroy
   after_update_commit :refresh_index_if_relevant
   after_update_commit :cleanup_if_exited
-  after_create_commit :subscribe_to_feed
+  after_create_commit :subscribe_to_feed, if: :feed_subscription_relevant?
   after_destroy_commit :clear_redis_pnl_cache
   after_update_commit :clear_redis_cache_if_exited
   after_update_commit :analyze_trade_if_exited
@@ -61,112 +63,11 @@ class PositionTracker < ApplicationRecord
     end
 
     def paper_trading_stats_with_pct(date: nil)
-      # Filter by date if provided, otherwise use all exited positions
-      if date
-        date_start = date.beginning_of_day
-        date_end = date.end_of_day
-        exited = exited_paper.where(exited_at: date_start..date_end)
-      else
-        # Default: only today's exited positions
-        today_start = Time.zone.today.beginning_of_day
-        today_end = Time.zone.today.end_of_day
-        exited = exited_paper.where(exited_at: today_start..today_end)
-      end
-      active = paper.active
-      # Load once to avoid multiple queries (any? + count + iteration)
-      exited = exited.load
-      active = active.load
-
-      active_count = active.size
-      realized_pnl_rupees = exited.sum { |t| t.last_pnl_rupees.to_f }
-      # Use current_pnl_rupees for active positions (reads from Redis cache for live values)
-      unrealized_pnl_rupees = active.sum { |t| t.current_pnl_rupees.to_f }
-
-      total_pnl_rupees = realized_pnl_rupees + unrealized_pnl_rupees
-
-      # Calculate PnL percentages based on initial capital, not by summing individual trade percentages
-      initial_capital = Capital::Allocator.paper_trading_balance.to_f
-      realized_pnl_pct = initial_capital.positive? ? (realized_pnl_rupees / initial_capital * 100.0) : 0.0
-      unrealized_pnl_pct = initial_capital.positive? ? (unrealized_pnl_rupees / initial_capital * 100.0) : 0.0
-      total_pnl_pct = initial_capital.positive? ? (total_pnl_rupees / initial_capital * 100.0) : 0.0
-
-      # Calculate average per-trade percentages (for reference)
-      # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
-      avg_realized_pnl_pct = if exited.any?
-                               (exited.filter_map { |t| t.last_pnl_pct.to_f * 100.0 }.sum / exited.size.to_f).round(2)
-                             else
-                               0.0
-                             end
-      # current_pnl_pct returns decimal from Redis, convert to percentage for display
-      avg_unrealized_pnl_pct = if active.any?
-                                 (active.filter_map { |t| (t.current_pnl_pct || 0).to_f * 100.0 }.sum / active.size.to_f).round(2)
-                               else
-                                 0.0
-                               end
-
-      {
-        total_trades: exited.size,
-        active_positions: active_count,
-        total_pnl_rupees: total_pnl_rupees.round(2),
-        total_pnl_pct: total_pnl_pct.round(2),
-        realized_pnl_rupees: realized_pnl_rupees.round(2),
-        realized_pnl_pct: realized_pnl_pct.round(2),
-        unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
-        unrealized_pnl_pct: unrealized_pnl_pct.round(2),
-        win_rate: paper_win_rate(date: date, exited: exited),
-        avg_realized_pnl_pct: avg_realized_pnl_pct,
-        avg_unrealized_pnl_pct: avg_unrealized_pnl_pct,
-        winners: exited.count { |t| (t.last_pnl_rupees || 0).positive? },
-        losers: exited.count { |t| (t.last_pnl_rupees || 0).negative? },
-        is_blocked: Portfolio::DrawdownGuard.triggered?,
-        blocked_reason: Portfolio::DrawdownGuard.triggered? ? 'Drawdown Guard Active' : nil,
-        peak_pnl: Portfolio::PnlTracker.peak_pnl.to_f.round(2)
-      }
+      Positions::PaperStatsQuery.call(date: date)
     end
 
-    def paper_positions_details
-      paper.includes(:instrument).map do |t|
-        entry_price = t.entry_price.to_f
-        exit_price = t.last_pnl_rupees.present? && t.status == 'exited' ? t.exit_price.to_f : nil
-        current_price = exit_price || t.avg_price.to_f
-        side = t.side
-        qty = t.quantity.to_i
-        pnl_abs = t.last_pnl_rupees.to_f
-        # last_pnl_pct is stored as decimal (0.0573), convert to percentage for display
-        pnl_pct = if t.last_pnl_pct.present?
-                    t.last_pnl_pct.to_f * 100.0
-                  elsif entry_price.positive? && current_price.positive?
-                    if side == 'BUY'
-                      ((current_price - entry_price) / entry_price * 100.0)
-                    else
-                      ((entry_price - current_price) / entry_price * 100.0)
-                    end
-                  else
-                    0.0
-                  end
-
-        {
-          id: t.id,
-          order_no: t.order_no,
-          symbol: t.symbol,
-          side: side,
-          status: t.status,
-          quantity: qty,
-          entry_price: entry_price,
-          exit_price: exit_price,
-          avg_price: t.avg_price.to_f,
-          last_pnl_rupees: pnl_abs.round(2),
-          last_pnl_pct: pnl_pct.round(2),
-          high_water_mark_pnl: t.high_water_mark_pnl.to_f,
-          created_at: t.created_at&.strftime('%Y-%m-%d %H:%M'),
-          updated_at: t.updated_at&.strftime('%Y-%m-%d %H:%M'),
-          watchable_type: t.watchable_type,
-          segment: t.segment,
-          security_id: t.security_id,
-          paper: t.paper?,
-          unrealized?: t.status != 'exited'
-        }
-      end
+    def paper_positions_details(limit: Positions::PaperPositionsQuery::DEFAULT_LIMIT, offset: 0)
+      Positions::PaperPositionsQuery.call(limit: limit, offset: offset)
     end
 
     def total_paper_pnl
@@ -180,29 +81,11 @@ class PositionTracker < ApplicationRecord
     end
 
     def paper_win_rate(date: nil, exited: nil)
-      # Use preloaded collection when provided to avoid duplicate query
-      if !exited.nil? && exited.respond_to?(:size) && exited.respond_to?(:count)
-        return 0.0 if exited.empty?
+      return Positions::PaperStatsQuery.call(date: date)[:win_rate] if exited.nil?
 
-        winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
-        return (winners.to_f / exited.size * 100).round(2)
-      end
-
-      # Filter by date if provided, otherwise use today's exited positions
-      if date
-        date_start = date.beginning_of_day
-        date_end = date.end_of_day
-        exited = exited_paper.where(exited_at: date_start..date_end)
-      else
-        # Default: only today's exited positions
-        today_start = Time.zone.today.beginning_of_day
-        today_end = Time.zone.today.end_of_day
-        exited = exited_paper.where(exited_at: today_start..today_end)
-      end
-      exited = exited.load
       return 0.0 if exited.empty?
 
-      winners = exited.count { |t| (t.last_pnl_rupees || 0).positive? }
+      winners = exited.count { |tracker| (tracker.last_pnl_rupees || 0).positive? }
       (winners.to_f / exited.size * 100).round(2)
     end
 
@@ -235,26 +118,15 @@ class PositionTracker < ApplicationRecord
       }
     end
 
+    # rubocop:disable Rails/Delegate
     def clear_orphaned_redis_pnl!
-      return unless should_clear_orphaned?
-
-      cache = Live::RedisPnlCache.instance
-      # Only check active positions (most common case) - faster query
-      existing_ids = PositionTracker.active.pluck(:id).to_set(&:to_s)
-
-      cache.each_tracker_key do |_key, tracker_id|
-        next if existing_ids.include?(tracker_id)
-
-        Rails.logger.warn("[PositionTracker] Clearing orphaned Redis PnL cache for tracker #{tracker_id}")
-        cache.clear_tracker(tracker_id)
-      end
-
-      @last_clear = Time.current
+      Positions::IndexSync.clear_orphaned_redis_pnl!
     end
+    # rubocop:enable Rails/Delegate
 
     def should_clear_orphaned?
-      @last_clear ||= 5.minutes.ago
-      return true if Time.current - @last_clear >= 5.minutes
+      @last_clear ||= ORPHANED_CLEAR_INTERVAL.ago
+      return true if Time.current - @last_clear >= ORPHANED_CLEAR_INTERVAL
 
       false
     end
@@ -285,11 +157,11 @@ class PositionTracker < ApplicationRecord
   def mark_active!(avg_price:, quantity:)
     state_machine.transition_to!(:active)
 
-    price = avg_price.present? ? BigDecimal(avg_price.to_s) : nil
+    avg_price_bd = avg_price.present? ? BigDecimal(avg_price.to_s) : nil
     attrs = {
       status: :active,
-      avg_price: price,
-      entry_price: entry_price.presence || price,
+      avg_price: avg_price_bd,
+      entry_price: entry_price.presence || avg_price_bd,
       quantity: quantity
     }
 
@@ -298,17 +170,14 @@ class PositionTracker < ApplicationRecord
     subscribe
     broadcast_position_activated
 
-    # Initialize PnL in Redis (will be 0 initially since entry_price = avg_price)
-    # This ensures the position is tracked in Redis from the start
-    return if price.blank?
+    return if avg_price_bd.blank?
 
-    initial_pnl = BigDecimal(0)
     Live::RedisPnlCache.instance.store_pnl(
       tracker_id: id,
-      pnl: initial_pnl,
+      pnl: BigDecimal(0),
       pnl_pct: 0.0,
-      ltp: price,
-      hwm: initial_pnl,
+      ltp: avg_price_bd,
+      hwm: BigDecimal(0),
       timestamp: Time.current,
       tracker: self
     )
@@ -332,37 +201,7 @@ class PositionTracker < ApplicationRecord
   end
 
   def mark_exited!(exit_price: nil, exited_at: nil, exit_reason: nil)
-    state_machine.transition_to!(:exited)
-
-    # Persist final PnL from Redis cache to DB (force sync, no throttling)
-    persist_final_pnl_from_cache
-
-    exit_price = resolve_exit_price(exit_price)
-    metadata = prepare_exit_metadata(exit_reason)
-
-    update_exit_attributes(exit_price, exited_at, metadata)
-
-    # Record profit/loss in daily limits (after PnL is persisted)
-    record_daily_pnl
-
-    cleanup_exit_caches
-    unsubscribe
-    register_cooldown!
-
-    # Force final sync to DB (bypass throttling) to ensure final values are persisted
-    cache = Live::RedisPnlCache.instance.fetch_pnl(id)
-    if cache && cache[:pnl]
-      Live::RedisPnlCache.instance.sync_pnl_to_database(
-        id,
-        cache[:pnl],
-        cache[:pnl_pct],
-        cache[:hwm_pnl],
-        cache[:hwm_pnl_pct]
-      )
-    end
-
-    broadcast_position_exited
-    self
+    Positions::ExitFlow.call(tracker: self, exit_price: exit_price, exited_at: exited_at, exit_reason: exit_reason)
   end
 
   def hydrate_pnl_from_cache!
@@ -385,7 +224,11 @@ class PositionTracker < ApplicationRecord
     return BigDecimal(cache[:pnl].to_s) if cache && cache[:pnl]
 
     last_pnl_rupees || BigDecimal(0)
-  rescue StandardError
+  rescue Redis::BaseError => e
+    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
+    last_pnl_rupees || BigDecimal(0)
+  rescue StandardError => e
+    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
     last_pnl_rupees || BigDecimal(0)
   end
 
@@ -398,7 +241,11 @@ class PositionTracker < ApplicationRecord
     return BigDecimal(cache[:pnl_pct].to_s) if cache && cache[:pnl_pct]
 
     last_pnl_pct
-  rescue StandardError
+  rescue Redis::BaseError => e
+    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
+    last_pnl_pct
+  rescue StandardError => e
+    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
     last_pnl_pct
   end
 
@@ -410,20 +257,28 @@ class PositionTracker < ApplicationRecord
     return BigDecimal(cache[:hwm_pnl].to_s) if cache && cache[:hwm_pnl]
 
     high_water_mark_pnl || BigDecimal(0)
-  rescue StandardError
+  rescue Redis::BaseError => e
+    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
+    high_water_mark_pnl || BigDecimal(0)
+  rescue StandardError => e
+    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
     high_water_mark_pnl || BigDecimal(0)
   end
 
   # Get current high water mark percentage from Redis cache (preferred) or fallback to meta
   def current_hwm_pnl_pct
-    return meta_hash['hwm_pnl_pct'] if exited? # Exited positions: use meta (final value)
+    return BigDecimal(meta_hash['hwm_pnl_pct'].to_s) if exited? && meta_hash['hwm_pnl_pct'].present?
 
     cache = Live::RedisPnlCache.instance.fetch_pnl(id)
-    return cache[:hwm_pnl_pct].to_f if cache && cache[:hwm_pnl_pct]
+    return BigDecimal(cache[:hwm_pnl_pct].to_s) if cache && cache[:hwm_pnl_pct]
 
-    meta_hash['hwm_pnl_pct']
-  rescue StandardError
-    meta_hash['hwm_pnl_pct']
+    BigDecimal(meta_hash['hwm_pnl_pct'].to_s)
+  rescue Redis::BaseError => e
+    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
+    BigDecimal(meta_hash['hwm_pnl_pct'].to_s)
+  rescue StandardError => e
+    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
+    BigDecimal(meta_hash['hwm_pnl_pct'].to_s)
   end
 
   def update_pnl!(pnl, pnl_pct: nil)
@@ -460,48 +315,18 @@ class PositionTracker < ApplicationRecord
   end
 
   def lock_breakeven!
-    update!(meta: meta_hash.merge('breakeven_locked' => true))
+    Positions::MetaUpdater.new(tracker: self).update! do |meta|
+      meta['breakeven_locked'] = true
+      meta
+    end
   end
 
   def unsubscribe
-    return unless Live::MarketFeedHub.instance.running?
-
-    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    return unless segment_key && security_id
-
-    # Never unsubscribe from IDX_I (index feeds) - they're needed for signal generation
-    # and may be used by multiple positions
-    if segment_key == 'IDX_I'
-      Rails.logger.debug { "[PositionTracker] Skipping unsubscribe for IDX_I:#{security_id} (index feed must stay subscribed)" }
-      return
-    end
-
-    # Rails.logger.debug { "[PositionTracker] Unsubscribing from market feed: #{segment_key}:#{security_id}" }
-    Live::MarketFeedHub.instance.unsubscribe(segment: segment_key, security_id: security_id)
-
-    # Never unsubscribe from underlying instruments (especially IDX_I)
-    # They are needed for signal generation and may be used by other positions
-    # The underlying index feeds should remain subscribed at all times
+    Positions::FeedSubscription.unsubscribe(tracker: self)
   end
 
   def subscribe
-    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    return unless segment_key && security_id
-
-    hub = Live::MarketFeedHub.instance
-    # Ensure hub is running (will start if not running)
-    hub.start! unless hub.running?
-
-    # Check if already subscribed before calling hub
-    if hub.subscribed?(segment: segment_key, security_id: security_id)
-      Rails.logger.debug { "[PositionTracker] Already subscribed to #{segment_key}:#{security_id}, skipping" }
-      return { segment: segment_key, security_id: security_id, already_subscribed: true }
-    end
-
-    hub.subscribe(segment: segment_key, security_id: security_id)
-  rescue StandardError => e
-    Rails.logger.error("[PositionTracker] Failed to subscribe #{order_no}: #{e.message}")
-    nil
+    Positions::FeedSubscription.call(tracker: self)
   end
 
   def tradable
@@ -537,46 +362,17 @@ class PositionTracker < ApplicationRecord
   end
 
   def register_in_index
-    return unless active? && entry_price.present? && quantity.to_i.positive?
-
-    Live::PositionIndex.instance.add(metadata_for_index)
-  rescue StandardError => e
-    Rails.logger.warn("[PositionTracker] register_in_index failed for #{id}: #{e.message}")
+    Positions::IndexSync.new(tracker: self).register
   end
 
   def subscribe_to_feed
-    # Use same segment resolution logic as subscribe method
-    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    return unless segment_key && security_id
-
-    hub = Live::MarketFeedHub.instance
-    hub.start! unless hub.running?
-
-    # Check if already subscribed before calling hub
-    if hub.subscribed?(segment: segment_key, security_id: security_id)
-      Rails.logger.debug { "[PositionTracker] subscribe_to_feed: Already subscribed to #{segment_key}:#{security_id}, skipping" }
-    else
-      hub.subscribe(segment: segment_key, security_id: security_id)
-    end
-
-    Live::PositionIndex.instance.add(id: id, security_id: security_id, segment: segment_key, entry_price: entry_price,
-                                     quantity: quantity)
+    subscribe
+    register_in_index
   end
 
   def unregister_from_index
-    # Remove from in-memory index
-    Live::PositionIndex.instance.remove(id, security_id)
-
-    # Remove Redis tick cache
-    Live::RedisTickCache.instance.clear_tick(segment, security_id)
-
-    # Remove in-memory TickCache
-    Live::TickCache.delete(segment, security_id)
-
-    # Unsubscribe websocket feed
+    Positions::IndexSync.new(tracker: self).unregister
     unsubscribe
-  rescue StandardError => e
-    Rails.logger.warn("[PositionTracker] unregister_from_index failed for #{id}: #{e.message}")
   end
 
   def cleanup_if_exited
@@ -587,13 +383,7 @@ class PositionTracker < ApplicationRecord
   end
 
   def refresh_index_if_relevant
-    # If status, security_id, entry_price or quantity changed, update index
-    unless saved_change_to_status? || saved_change_to_security_id? || saved_change_to_entry_price? || saved_change_to_quantity?
-      return
-    end
-
-    unregister_from_index
-    register_in_index
+    Positions::IndexSync.new(tracker: self).refresh_if_relevant
   end
 
   def resolve_exit_price(exit_price)
@@ -672,11 +462,7 @@ class PositionTracker < ApplicationRecord
       self.high_water_mark_pnl = [current_hwm, hwm, pnl_value].max
 
       # Store hwm_pnl_pct in meta if available
-      if cache[:hwm_pnl_pct]
-        meta = meta_hash.dup
-        meta['hwm_pnl_pct'] = cache[:hwm_pnl_pct].to_f
-        self.meta = meta
-      end
+      persist_hwm_pnl_pct(cache[:hwm_pnl_pct])
     end
 
     # CRITICAL: Recalculate pnl_pct from final PnL + entry price, don't use Redis snapshot
@@ -686,10 +472,10 @@ class PositionTracker < ApplicationRecord
     quantity = (self.quantity || 0).to_i
     pnl_value = BigDecimal((last_pnl_rupees || cache[:pnl] || 0).to_s)
 
-    if entry_price.positive? && quantity.positive? && pnl_value != 0
+    if entry_price.positive? && quantity.positive?
       self.last_pnl_pct = pnl_value / (entry_price * quantity)
     else
-      self.last_pnl_pct = nil
+      self.last_pnl_pct = BigDecimal('0')
     end
   end
 
@@ -778,23 +564,17 @@ class PositionTracker < ApplicationRecord
     )
   end
 
-  # Record profit/loss in daily limits when position exits
-  def record_daily_pnl
-    return unless exited? && last_pnl_rupees.present?
+  def index_registration_relevant?
+    active? && entry_price.present? && quantity.to_i.positive?
+  end
 
-    index_key = meta&.dig('index_key') || instrument&.symbol_name || 'UNKNOWN'
-    pnl_amount = last_pnl_rupees.to_f
+  def feed_subscription_relevant?
+    Positions::FeedSubscription.segment_key_for(tracker: self).present? && security_id.present?
+  end
 
-    daily_limits = Live::DailyLimits.new
+  def persist_hwm_pnl_pct(value)
+    return if value.blank?
 
-    if pnl_amount.positive?
-      # Record profit
-      daily_limits.record_profit(index_key: index_key, amount: pnl_amount)
-    elsif pnl_amount.negative?
-      # Record loss (amount should be positive)
-      daily_limits.record_loss(index_key: index_key, amount: pnl_amount.abs)
-    end
-  rescue StandardError => e
-    Rails.logger.error("[PositionTracker] record_daily_pnl failed for #{order_no}: #{e.class} - #{e.message}")
+    self.meta = meta_hash.merge('hwm_pnl_pct' => value.to_f)
   end
 end
