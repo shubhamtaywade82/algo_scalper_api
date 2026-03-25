@@ -11,7 +11,7 @@ module Entries
     CONTINUATION_BODY_POSITION_MIN = 0.6
 
     class << self
-      def run_for(index_cfg:, instrument:, direction:, picks:, entry_metadata:, permission:)
+      def run_for(index_cfg:, instrument:, direction:, picks:, entry_metadata:, permission:, signal: nil)
         index_key = index_cfg[:key]
         timeframe = effective_timeframe(entry_metadata)
         unless timeframe
@@ -66,7 +66,7 @@ module Entries
             Rails.logger.info("[BOS_ENGINE] state #{index_key}: pullback bos_id=#{state[:bos_id]} retrace_pct=#{next_state[:pullback_retrace_pct]}")
           end
         when 'pullback'
-          outcome = handle_continuation(series, state, index_cfg, instrument, direction, picks, entry_metadata, permission, timeframe)
+          outcome = handle_continuation(series, state, index_cfg, instrument, direction, picks, entry_metadata, permission, timeframe, signal: signal)
           Rails.logger.info("[BOS_ENGINE] continuation #{index_key}: entered=#{outcome} bos_id=#{state[:bos_id]}") if outcome == true
           return outcome if outcome == true
         end
@@ -116,7 +116,7 @@ module Entries
         )
       end
 
-      def handle_continuation(series, state, index_cfg, instrument, direction, picks, entry_metadata, permission, timeframe)
+      def handle_continuation(series, state, index_cfg, instrument, direction, picks, entry_metadata, permission, timeframe, signal: nil)
         candles = series.candles
         current_idx = candles.size - 1
 
@@ -158,7 +158,7 @@ module Entries
             timeframe
           )
 
-          entered = attempt_entry(index_cfg, direction, picks, entry_metadata, permission)
+          entered = attempt_entry(index_cfg, direction, picks, entry_metadata, permission, signal: signal)
           consume_bos(index_cfg[:key], state[:bos_id])
           reset_state(index_cfg[:key], timeframe)
           return entered
@@ -170,7 +170,7 @@ module Entries
         false
       end
 
-      def attempt_entry(index_cfg, direction, picks, entry_metadata, permission)
+      def attempt_entry(index_cfg, direction, picks, entry_metadata, permission, signal: nil)
         picks.each do |pick|
           result = Entries::EntryGuard.try_enter(
             index_cfg: index_cfg,
@@ -178,7 +178,8 @@ module Entries
             direction: direction,
             scale_multiplier: 1,
             entry_metadata: entry_metadata,
-            permission: permission
+            permission: permission,
+            signal: signal
           )
           return true if result
         end
