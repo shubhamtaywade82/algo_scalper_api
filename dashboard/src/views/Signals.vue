@@ -16,7 +16,9 @@ const processedSignals = computed(() => {
     displayConfidence: String(sig.confidence_level || '').replace(/_/g, ' '),
     signalClass: getSignalClass(sig.direction),
     confidenceBars: Math.round((Number(sig.confidence_score) || 0) * 5),
-    confidenceClass: getConfidenceClass(sig.confidence_level)
+    confidenceClass: getConfidenceClass(sig.confidence_level),
+    entryOutcome: sig.metadata?.entry_outcome || 'pending',
+    entryBlockedReason: sig.metadata?.entry_blocked_reason || null
   }))
 })
 
@@ -50,6 +52,19 @@ function getConfidenceClass(level) {
   if (l.includes('low')) return 'bg-rose-400'
   return 'bg-gray-500'
 }
+
+function getEntryOutcomeStyle(outcome) {
+  switch (outcome) {
+    case 'entered':
+      return { cls: 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full', label: '● ENTERED' }
+    case 'blocked':
+      return { cls: 'text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full', label: '✗ BLOCKED' }
+    case 'skipped':
+      return { cls: 'text-gray-500 bg-gray-500/10 border border-gray-500/20 rounded-full', label: '◌ SKIPPED' }
+    default:
+      return { cls: 'text-gray-600', label: '— —' }
+  }
+}
 </script>
 
 <template>
@@ -71,6 +86,7 @@ function getConfidenceClass(level) {
               <th class="p-6 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5">Instrument</th>
               <th class="p-6 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5">Signal</th>
               <th class="p-6 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5">Strategy</th>
+              <th class="p-6 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5">Entry</th>
               <th class="p-6 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5">Analysis</th>
               <th class="p-6 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5 text-right">Confidence</th>
             </tr>
@@ -93,6 +109,14 @@ function getConfidenceClass(level) {
               </td>
               <td class="p-6">
                 <span class="text-[10px] font-black text-gray-300 uppercase tracking-wide bg-white/5 px-2 py-1 rounded">{{ sig.displayStrategy }}</span>
+              </td>
+              <td class="p-6">
+                <span
+                  :class="['px-3 py-1 text-[9px] font-black uppercase tracking-widest inline-block', getEntryOutcomeStyle(sig.entryOutcome).cls]"
+                  :title="sig.entryBlockedReason || ''"
+                >
+                  {{ getEntryOutcomeStyle(sig.entryOutcome).label }}
+                </span>
               </td>
               <td class="p-6">
                 <div class="flex items-center gap-3">
@@ -119,7 +143,7 @@ function getConfidenceClass(level) {
               </td>
             </tr>
             <tr v-if="processedSignals.length === 0">
-              <td colspan="6" class="p-20 text-center">
+              <td colspan="7" class="p-20 text-center">
                 <div class="flex flex-col items-center gap-4">
                   <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
                     <span class="text-gray-600">📭</span>
