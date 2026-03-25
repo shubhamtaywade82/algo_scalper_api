@@ -21,7 +21,7 @@ For every signal row in the Signal Intelligence table, show a compact badge indi
 | `entered` | Position successfully placed via `Orders::GatewayPaper` or `Orders::GatewayLive` |
 | `blocked` | Entry attempted but rejected by the guard pipeline or `EntryPolicy` |
 | `skipped` | Pre-conditions for entry not met; guard pipeline never reached |
-| `pending` | Signal created; BOS state machine waiting for pullback, or outcome not yet recorded |
+| `pending` | Signal created; BOS state machine waiting for pullback, or outcome not yet recorded. **Never written explicitly** — inferred client-side when `entry_outcome` key is absent from metadata. |
 
 ### `skipped` reasons (set in `Signal::Engine`)
 
@@ -58,22 +58,25 @@ No DB migration. Two keys are written into the existing `metadata` jsonb column 
 
 ### 1. `Signal::Engine#run_for` (alpha layer)
 
-- Capture the return value of `TradingSignal.create_from_analysis` into a local `signal` variable.
+- Capture the return value of `TradingSignal.create_from_analysis` into a local `signal` variable. `create_from_analysis` returns `nil` on `RecordInvalid`; all subsequent calls use safe navigation (`signal&.record_entry_outcome(...)`) so a nil signal silently no-ops — this is acceptable.
 - At each early-return point after signal creation, call a small private helper `record_signal_skip(signal, reason)` that merges `entry_outcome: "skipped"` and `entry_blocked_reason: reason` into the signal's metadata and saves.
+- `record_signal_skip` must be called **before** `Signal::StateTracker.reset` at each early-return point, so that a potential raise in `reset` does not prevent the outcome from being persisted.
+- `Signal::Engine` has many `StateTracker.reset` calls — most appear **before** `create_from_analysis`. Only the four early-return points **after** signal creation are instrumented; all pre-creation resets are out of scope.
 - Early-return points to instrument:
   - `expiry_blocked`
   - `expected_spot_move` nil/zero
   - `picks.blank?`
   - `mc_gate_blocked`
-- Pass `signal:` into both `EntryGuard.try_enter` and `BosEntryEngine.run_for`.
+- Pass `signal:` into both `EntryGuard.try_enter` (supertrend loop) and `BosEntryEngine.run_for`.
+- In the supertrend `picks.each` loop, only the **final outcome** is written to the signal: the first `entered` result breaks the loop and records `entered`; if all picks are blocked, the signal is updated with the last guard reason after the loop ends. Do not record intermediate blocked attempts.
 
 ### 2. `Entries::EntryGuard.try_enter` (alpha layer)
 
 - Add optional keyword argument `signal: nil`.
-- When `DrawdownGuard.triggered?` → call `signal&.record_entry_outcome("skipped", "drawdown guard active")`.
+- When `DrawdownGuard.triggered?` → call `signal&.record_entry_outcome("skipped", "drawdown_guard_active")` (underscores match existing structured log token).
 - When `entry_policy` not permitted → call `signal&.record_entry_outcome("blocked", policy.reasons.join("; "))`.
 - When guard pipeline returns blocked → call `signal&.record_entry_outcome("blocked", reason)`.
-- On successful order placement → call `signal&.record_entry_outcome("entered")`.
+- On successful order placement → call `signal&.record_entry_outcome("entered")` **after `mark_bos_consumed!`** and only when `tracker` is truthy (i.e., the same guard as `!!tracker` on the final return line). This ensures the signal is only marked `entered` when the full position lifecycle is confirmed, not merely when `PlaceOrderCommand` succeeds.
 
 ### 3. `TradingSignal` model (alpha layer)
 
@@ -88,9 +91,19 @@ def record_entry_outcome(outcome, reason = nil)
 end
 ```
 
+`compact` intentionally drops `"entry_blocked_reason"` when `reason` is `nil` (i.e., on `entered`). The method is last-write-wins — calling it a second time (e.g., `entered` overwriting a prior `blocked` from a failed pick attempt) is correct and expected behavior per the "only final outcome" rule in §1.
+
 ### 4. `Entries::BosEntryEngine` (alpha layer)
 
-- Accept and forward `signal:` kwarg to `EntryGuard.try_enter` calls.
+The `signal:` kwarg must be threaded through the full private call chain:
+
+```
+run_for(signal:) → handle_continuation(..., signal:) → attempt_entry(..., signal:) → EntryGuard.try_enter(signal:)
+```
+
+- `run_for` already uses keyword arguments — add `signal: nil` to its signature.
+- `handle_continuation` and `attempt_entry` use positional arguments today — add `signal: nil` as a trailing keyword arg to each (do not convert their positional args to kwargs).
+
 - BOS signals that go into the state machine waiting for a pullback keep `pending` (no explicit write needed — default when key is absent).
 
 ---
