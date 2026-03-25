@@ -29,6 +29,20 @@ trading_time_restrictions:
   #   - "10:30-11:30"  # Morning non-profitable period
   #   - "14:00-15:00"  # Afternoon non-profitable period
 
+midday_guard:
+  enabled: true
+  min_confidence: 0.7
+  min_adx: 20
+  block_after_time: "15:00"
+
+loss_streak_guard:
+  enabled: true
+  consecutive_losses_threshold: 2
+  cooldown_minutes: 30
+
+sizing:
+  post_1100_multiplier: 0.5
+
 feature_flags:
   enable_direction_before_chain: true
   enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
@@ -291,6 +305,9 @@ risk:
         - { min_profit: 0.15, drawdown: 0.10 }  # At +15%: tighten to 10%
         - { min_profit: 0.30, drawdown: 0.08 }  # At +30% (avg CE peak): 8%
         - { min_profit: 0.50, drawdown: 0.06 }  # At +50% (deep PE zone): 6%
+        - { min_profit: 0.75, drawdown: 0.04 }  # At +75%: tighten — gains can evaporate rapidly near expiry
+        - { min_profit: 1.00, drawdown: 0.03 }  # At +100%: very tight — option likely near peak, protect aggressively
+        - { min_profit: 1.50, drawdown: 0.02 }  # At +150%+: near-expiry gamma extreme — lock in immediately on any retreat
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile

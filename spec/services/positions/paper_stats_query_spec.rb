@@ -16,7 +16,8 @@ RSpec.describe Positions::PaperStatsQuery do
       allow(Live::RedisPnlCache).to receive(:instance).and_return(cache)
       allow(Capital::Allocator).to receive(:paper_trading_balance).and_return(1000)
       allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(false)
-      allow(Portfolio::PnlTracker).to receive(:peak_pnl).and_return(150)
+      allow(Portfolio::PaperPeakTracker).to receive(:observe!)
+      allow(Portfolio::PaperPeakTracker).to receive(:current_for).and_return(0.0)
     end
 
     it 'returns aggregated paper stats hash' do
@@ -25,6 +26,7 @@ RSpec.describe Positions::PaperStatsQuery do
       expect(result[:total_trades]).to eq(2)
       expect(result[:winners]).to eq(1)
       expect(result[:losers]).to eq(1)
+      expect(Portfolio::PaperPeakTracker).to have_received(:observe!)
     end
 
     def create_exited_tracker(pnl)

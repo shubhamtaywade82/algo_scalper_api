@@ -373,4 +373,68 @@ RSpec.describe Live::UnifiedExitChecker do
       end
     end
   end
+
+  describe '#percentage_pnl_exit_hit?' do
+    # Trailing arms at 10% activation. At 141% profit, trailing is always armed.
+    let(:snapshot_trailing_armed) { { pnl_pct: 1.4182, ltp: 669.0, pnl: 39_215.0, hwm_pnl: 39_215.0 } }
+    # At 22% profit with no HWM (trailing not yet armed — hwm_pnl = 0)
+    let(:snapshot_trailing_not_armed) { { pnl_pct: 0.22, ltp: 337.0, pnl: 6_035.0, hwm_pnl: 0.0 } }
+    let(:snapshot_below_target) { { pnl_pct: 0.15, ltp: 319.0, pnl: 4_235.0, hwm_pnl: 0.0 } }
+
+    let(:config_enabled) do
+      {
+        stop_loss: { type: 'static', value: 0.10 },
+        take_profit: 0.25,
+        trailing: { enabled: true, type: 'adaptive', activation_profit: 0.10, drop_threshold: 0.05 },
+        early_exit: { enabled: false, profit_threshold: 0.07 },
+        premium_momentum_failure: { enabled: false },
+        time_based: { enabled: false, exit_time: '15:20' }
+      }
+    end
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: { percentage_pnl_exit: { enabled: true, target_pct: 0.20 } },
+        exit: {}
+      })
+      allow(described_class).to receive(:exit_config).and_return(config_enabled)
+    end
+
+    context 'when trailing is armed (position rode to 141.82%)' do
+      it 'does NOT fire — trailing manages the position, runner is preserved' do
+        # trailing_armed? returns true because hwm_pnl > entry_value * activation (0.10)
+        # entry_value for tracker = 276.65 * 100 = 27_665; hwm = 39_215 > 2_766.5 → armed
+        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_armed)
+        expect(result).to be false
+      end
+    end
+
+    context 'when trailing is NOT armed and pnl exceeds target (trailing failed to engage)' do
+      it 'fires as a safety net' do
+        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_not_armed)
+        expect(result).to be true
+      end
+    end
+
+    context 'when pnl is below target' do
+      it 'does not fire' do
+        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_below_target)
+        expect(result).to be false
+      end
+    end
+
+    context 'when percentage_pnl_exit is disabled' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: { percentage_pnl_exit: { enabled: false, target_pct: 0.20 } },
+          exit: {}
+        })
+      end
+
+      it 'does not fire regardless of pnl_pct' do
+        result = described_class.send(:percentage_pnl_exit_hit?, tracker, snapshot_trailing_not_armed)
+        expect(result).to be false
+      end
+    end
+  end
 end

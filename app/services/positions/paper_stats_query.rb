@@ -7,11 +7,16 @@ module Positions
     end
 
     def call
+      total = total_pnl_rupees
+      Portfolio::PaperPeakTracker.observe!(total)
+      stored_peak = Portfolio::PaperPeakTracker.current_for
+      peak = [stored_peak, total].max
+
       {
         total_trades: exited_scope.count,
         active_positions: active_positions.size,
-        total_pnl_rupees: total_pnl_rupees.round(2),
-        total_pnl_pct: pnl_pct(total_pnl_rupees).round(2),
+        total_pnl_rupees: total.round(2),
+        total_pnl_pct: pnl_pct(total).round(2),
         realized_pnl_rupees: realized_pnl_rupees.round(2),
         realized_pnl_pct: pnl_pct(realized_pnl_rupees).round(2),
         unrealized_pnl_rupees: unrealized_pnl_rupees.round(2),
@@ -23,7 +28,7 @@ module Positions
         losers: losers_count,
         is_blocked: Portfolio::DrawdownGuard.triggered?,
         blocked_reason: Portfolio::DrawdownGuard.triggered? ? 'Drawdown Guard Active' : nil,
-        peak_pnl: Portfolio::PnlTracker.peak_pnl.to_f.round(2)
+        peak_pnl: peak.round(2)
       }
     end
 

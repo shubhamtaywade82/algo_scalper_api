@@ -74,6 +74,16 @@ module Live
           }
         end
 
+        # 3.5 Percentage PnL Exit (safety net — only when trailing failed to arm, works in tick-first mode)
+        if percentage_pnl_exit_hit?(tracker, snapshot)
+          return {
+            exit: true,
+            reason: "PERCENTAGE_PNL_EXIT (#{(pnl_pct * 100.0).round(2)}%)",
+            path: 'percentage_pnl_exit',
+            pnl_pct: (pnl_pct * 100.0).round(2)
+          }
+        end
+
         # 4. Premium Momentum Failure (if enabled)
         if premium_momentum_failure_hit?(tracker, snapshot)
           return {
@@ -171,6 +181,26 @@ module Live
         # Static stop loss (config value is DECIMAL, e.g. 0.12 for 12%)
         static_sl = config[:stop_loss][:value].to_f
         pnl_pct <= -static_sl
+      end
+
+      # Fires only when trailing has NOT armed — pure fallback for when trailing fails to engage.
+      # Once trailing is armed it manages the position; we must not cut the runner short here.
+      def percentage_pnl_exit_hit?(tracker, snapshot)
+        cfg = AlgoConfig.fetch.dig(:risk, :percentage_pnl_exit) || {}
+        return false unless cfg[:enabled]
+
+        target = cfg[:target_pct].to_f
+        return false unless target.positive?
+
+        pnl_pct = snapshot[:pnl_pct].to_f
+        return false unless pnl_pct >= target
+
+        # Suppress when trailing is already managing the position (same guard as profit_target_hit?)
+        return false if trailing_armed?(tracker, snapshot, exit_config)
+
+        true
+      rescue StandardError
+        false
       end
 
       def profit_target_hit?(tracker, snapshot)
