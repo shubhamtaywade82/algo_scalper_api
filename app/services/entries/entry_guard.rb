@@ -301,6 +301,7 @@ module Entries
         )
         !!tracker
       rescue StandardError => e
+        signal&.record_entry_outcome('blocked', "exception: #{e.class}")
         Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
         Observability::StructuredLog.error(
           event: 'entry_guard_exception',
