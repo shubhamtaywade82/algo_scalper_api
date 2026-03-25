@@ -218,6 +218,15 @@ risk:
     enabled: true
     target_pct: 0.20 # 20% safety net for options
 
+  # Underlying-context-aware trailing exit (tick-first path)
+  # Tightens or forces trailing exit when underlying structure/trend signals reversal.
+  # Only active when trailing is already armed (position profitable >= activation_pct).
+  underlying_context_exit:
+    enabled: true
+    trend_score_threshold: 15     # trend_score below this = weak trend
+    atr_ratio_threshold: 0.65     # atr_ratio below this AND falling = collapsing
+    tightening_multiplier: 0.5    # compress allowed_dd by this factor when weakening
+
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
 
