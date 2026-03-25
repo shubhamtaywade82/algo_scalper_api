@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # rubocop:disable Metrics/BlockNesting
 
 module Signal
@@ -1354,3 +1355,4 @@ module Signal
     end
   end
 end
+# rubocop:enable Metrics/BlockNesting
