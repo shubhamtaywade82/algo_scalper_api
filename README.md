@@ -8,7 +8,11 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 
 ### Key Capabilities
 
-- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation, market regime detection, and dynamic validation modes (balanced/conservative)
+- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation,
+  market regime detection, and dynamic validation modes (balanced/conservative).
+  Optional **market context** (`MarketContext::RegimeComposer`, chain signal extraction,
+  `Trading::MarketPermissionGate`) is configurable in `config/algo.yml` (`market_context`);
+  see `docs/trading/market_context_and_permission_gate.md`.
 - **Smart Money Concepts (SMC)** — Order block detection, FVG analysis, break-of-structure entries, institutional flow scoring
 - **Real-time WebSocket Hub** — DhanHQ tick ingestion with write-through Redis caching, automatic reconnection, and per-position subscription management
 - **Institutional Risk Management** — 15 exit rule engines: stop-loss, take-profit, trailing stops (tiered/direct/gamma-aware), peak drawdown, time-based, early trend failure, premium momentum failure, structure invalidation
@@ -31,7 +35,7 @@ Algo Scalper API automates the entire trade lifecycle — from signal identifica
 | Broker | DhanHQ v2 via `dhanhq` gem |
 | AI | OpenAI (optional) |
 | Notifications | Telegram Bot |
-| Frontend | Next.js dashboard (separate process) |
+| Frontend | Vue/Vite dashboard (separate process) |
 | Deployment | Kamal + Docker |
 
 ## Quick Start
@@ -64,7 +68,7 @@ This launches (via `Procfile.dev`):
 | `web` | `bin/rails server -p 3001` | Rails API server |
 | `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (all live services) |
 | `jobs` | `bin/jobs` | Solid Queue worker (SMC scanner, AI analysis, instrument sync) |
-| `dashboard` | `cd dashboard && npm run dev` | Next.js frontend |
+| `dashboard` | `cd dashboard && npm run dev` | Vue/Vite frontend |
 
 ### Other Commands
 
@@ -76,6 +80,32 @@ bin/brakeman --no-pager                    # security scan
 bin/jobs                                   # start Solid Queue worker standalone
 ```
 
+### Docker Compose (Rails + Vue/Vite)
+
+Use `docker-compose.yml` to run a containerized local stack with separate
+`web` and `jobs` containers, plus PostgreSQL, Redis, and a static dashboard.
+
+```bash
+cp .env.example .env
+# set RAILS_MASTER_KEY in .env
+docker compose build
+docker compose up -d
+docker compose ps
+```
+
+Endpoints:
+
+- Dashboard: `http://localhost:3000`
+- API health: `http://localhost/api/health`
+- Direct API: `http://localhost:80`
+
+Useful commands:
+
+```bash
+docker compose logs -f web jobs dashboard
+docker compose down --remove-orphans
+```
+
 ## Architecture
 
 ### Process Model
@@ -85,7 +115,7 @@ bin/jobs                                   # start Solid Queue worker standalone
 │ bin/dev (foreman)                                                │
 ├──────────────┬──────────────┬──────────────┬─────────────────────┤
 │ web          │ trading      │ jobs         │ dashboard           │
-│ Rails API    │ Daemon       │ Solid Queue  │ Next.js             │
+│ Rails API    │ Daemon       │ Solid Queue  │ Vue/Vite            │
 │ port 3001    │ 11 services  │ recurring    │ frontend            │
 │              │ in threads   │ tasks        │                     │
 └──────┬───────┴──────┬───────┴──────┬───────┴─────────────────────┘

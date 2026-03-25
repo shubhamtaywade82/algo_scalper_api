@@ -3,6 +3,8 @@
 Canonical reference for entry guards and exit rules as implemented in the codebase.  
 **Implementation:** `app/services/entries/entry_guard_pipeline.rb`, `app/services/entries/entry_guard.rb`, `app/services/live/unified_exit_checker.rb`, `app/services/live/risk_manager_service/runner.rb`, `app/services/live/risk_manager_service/exit_enforcement.rb`.
 
+**Optional pre-pipeline filter (signal path):** After strikes are qualified, `Signal::Engine` may run `MarketContext::RegimeComposer`, `Options::ChainSignalExtractor`, and `Trading::MarketPermissionGate` before building `entry_metadata` for `EntryGuard`. This is **not** part of `EntryGuardPipeline`; it is configured under `market_context` in `config/algo.yml`. See `docs/trading/market_context_and_permission_gate.md`.
+
 ---
 
 ## Entry Rules

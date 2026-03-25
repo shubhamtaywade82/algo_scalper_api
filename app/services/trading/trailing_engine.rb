@@ -43,6 +43,8 @@ module Trading
       config     = config_for_symbol
       profit_pct = (@ltp - @entry) / @entry
 
+      maybe_log_smc_exit_advisory
+
       # PHASE 3: High Watermark Trailing (Most aggressive locking)
       return trailing_stop(config) if profit_pct >= config[:activation_trigger]
 
@@ -64,6 +66,15 @@ module Trading
       end
     end
 
+    def maybe_log_smc_exit_advisory
+      instrument = @tracker.instrument
+      return unless instrument
+
+      Smc::Navigator.log_exit_advisory(tracker: @tracker, ltp: @ltp, instrument: instrument)
+    rescue StandardError => e
+      Rails.logger.error("[Trading::TrailingEngine] #{e.class} - #{e.message}")
+    end
+
     # Resolve config: algo.yml > hardcoded DEFAULTS
     def config_for_symbol
       yml = begin
@@ -74,9 +85,21 @@ module Trading
 
       key = symbol_key
       raw = yml&.[](key) || DEFAULTS[key]
+      raw = raw.transform_keys(&:to_sym)
+      merge_strategy_profile_override!(raw)
+    end
 
-      # Symbolize keys if loaded from YAML (string keys)
-      raw.transform_keys(&:to_sym)
+    def merge_strategy_profile_override!(base)
+      raw = @tracker.meta&.dig('strategy_profile') || @tracker.meta&.dig(:strategy_profile)
+      profile = raw&.to_sym
+      return base unless profile
+
+      overrides = AlgoConfig.fetch.dig(:risk, :institutional_trailing, :profiles, profile)
+      return base unless overrides.is_a?(Hash)
+
+      base.merge!(overrides.symbolize_keys)
+    rescue StandardError
+      base
     end
 
     def symbol_key

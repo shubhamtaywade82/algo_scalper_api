@@ -29,6 +29,20 @@ trading_time_restrictions:
   #   - "10:30-11:30"  # Morning non-profitable period
   #   - "14:00-15:00"  # Afternoon non-profitable period
 
+midday_guard:
+  enabled: true
+  min_confidence: 0.7
+  min_adx: 20
+  block_after_time: "15:00"
+
+loss_streak_guard:
+  enabled: true
+  consecutive_losses_threshold: 2
+  cooldown_minutes: 30
+
+sizing:
+  post_1100_multiplier: 0.5
+
 feature_flags:
   enable_direction_before_chain: true
   enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
@@ -160,8 +174,8 @@ indices:
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
-      primary_min_strength: 18 # 1m ADX threshold (strict filter for volatile Sensex)
-      confirmation_min_strength: 18 # 5m ADX threshold
+      primary_min_strength: 15 # 1m ADX threshold (loosened to allow more SENSEX signals)
+      confirmation_min_strength: 15 # 5m ADX threshold
 
     strategies:
       open_interest:
@@ -204,6 +218,15 @@ risk:
     enabled: true
     target_pct: 0.20 # 20% safety net for options
 
+  # Underlying-context-aware trailing exit (tick-first path)
+  # Tightens or forces trailing exit when underlying structure/trend signals reversal.
+  # Only active when trailing is already armed (position profitable >= activation_pct).
+  underlying_context_exit:
+    enabled: true
+    trend_score_threshold: 15     # trend_score below this = weak trend
+    atr_ratio_threshold: 0.65     # atr_ratio below this AND falling = collapsing
+    tightening_multiplier: 0.5    # compress allowed_dd by this factor when weakening
+
   # Hard rupee-based stops (HIGHEST PRIORITY - checked before %-based stops)
   # Perfect for scalping: fixed ₹1k SL + ₹2k TP per trade
 
@@ -231,6 +254,10 @@ risk:
       buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
       underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
       premium_drop_pct: 0.05     # Premium must drop 5%+ from peak
+    smc_navigator_exit:
+      enabled: false           # opt-in: enforce Navigator exit signals (CHoCH, liquidity sweep)
+      min_hold_seconds: 120    # no SMC navigator exit before position age >= this
+      min_confidence: 0.65     # minimum Navigator exit confidence to trigger
     premium_momentum_failure:
       enabled: true
       default_stall_minutes: 2
@@ -287,6 +314,9 @@ risk:
         - { min_profit: 0.15, drawdown: 0.10 }  # At +15%: tighten to 10%
         - { min_profit: 0.30, drawdown: 0.08 }  # At +30% (avg CE peak): 8%
         - { min_profit: 0.50, drawdown: 0.06 }  # At +50% (deep PE zone): 6%
+        - { min_profit: 0.75, drawdown: 0.04 }  # At +75%: tighten — gains can evaporate rapidly near expiry
+        - { min_profit: 1.00, drawdown: 0.03 }  # At +100%: very tight — option likely near peak, protect aggressively
+        - { min_profit: 1.50, drawdown: 0.02 }  # At +150%+: near-expiry gamma extreme — lock in immediately on any retreat
     banknifty:
       early_trigger: 0.06         # Phase 1: Survival (+6% profit → -15% SL)
       early_sl_offset: -0.15      # Wider SL — BN is more volatile
@@ -294,6 +324,18 @@ risk:
       activation_trigger: 0.25    # Phase 3: HWM Trailing at +25%
       trailing_distance: 0.35     # 35% from HWM (conservative — last-week-only trades)
 
+    # Overrides keyed by tracker.meta strategy_profile (Trading::StrategyProfileSelector).
+    # Merged on top of nifty/sensex/banknifty symbol profile.
+    profiles:
+      trend_aggressive: {}
+      trend_controlled:
+        trailing_distance: 0.06
+      range_stand_down:
+        trailing_distance: 0.04
+        activation_trigger: 0.12
+      stand_down:
+        trailing_distance: 0.03
+        activation_trigger: 0.10
 
   # Dynamic Trailing stops
   trailing:
@@ -595,6 +637,8 @@ position_sizing:
   # Underlying-aware exit thresholds
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
   underlying_atr_collapse_multiplier: 0.65 # Exit if ATR ratio < this value (falling volatility)
+  use_smc_bias_flip: false               # opt-in: exit when SMC bias flips against position direction
+  smc_bias_flip_trend_threshold: 40      # only exit on bias flip when trend_score is also below this
 
   daily_limits:
     enable: true
@@ -651,19 +695,49 @@ position_sizing:
 # If net PnL ever drops below the floor → ALL positions exit + new entries blocked.
 #
 # Floor is monotonic: it only moves up as PnL peaks climb.
-# Example: PnL peaks at ₹25k (past the ₹20k trigger):
-#   floor = ₹25k × 0.70 = ₹17.5k  (not just the static ₹14k)
+# Example: PnL peaks at ₹40k (past the ₹35k trigger, level 2 ratio):
+#   floor = ₹40k × 0.70 = ₹28k
 #
 # Set enabled: false to disable the entire engine without removing config.
 profit_lock:
   enabled: true
   levels:
-    - trigger: 10000   # ₹10k — Level 1
-      lock_ratio: 0.60 # floor = peak_pnl × 60%  (e.g. ₹10k peak → ₹6k floor)
-    - trigger: 20000   # ₹20k — Level 2
-      lock_ratio: 0.70 # floor = peak_pnl × 70%  (e.g. ₹20k peak → ₹14k floor)
-    - trigger: 30000   # ₹30k — Level 3
-      lock_ratio: 0.73 # floor = peak_pnl × 73%  (e.g. ₹30k peak → ₹21.9k floor)
+    - trigger: 20000   # ₹20k — Level 1
+      lock_ratio: 0.60 # floor = peak_pnl × 60%  (e.g. ₹20k peak → ₹12k floor)
+    - trigger: 35000   # ₹35k — Level 2
+      lock_ratio: 0.70 # floor = peak_pnl × 70%  (e.g. ₹35k peak → ₹24.5k floor)
+    - trigger: 50000   # ₹50k — Level 3
+      lock_ratio: 0.73 # floor = peak_pnl × 73%  (e.g. ₹50k peak → ₹36.5k floor)
+
+# ============================================
+# MARKET CONTEXT (regime snapshot + permission gate)
+# ============================================
+# Composes structure/volatility/participation with MarketRegimeDetector. When gate.enabled
+# is true, entries are blocked unless regime + chain signals pass thresholds.
+market_context:
+  enabled: false
+  regime_scoring:
+    weights:
+      trending_structure: 20
+      displacement: 20
+      vwap_not_chop: 15
+      strong_strength: 15
+      volatility_ok: 10
+      participation_high: 10
+      legacy_confidence: 10
+  chain_signal_extractor:
+    premium_move_pct_threshold: 3.0
+    near_expiry_penalty_days: 1
+  gate:
+    enabled: false
+    min_conviction_score: 70
+    min_chain_confidence: 40
+    allow_normal_participation: true
+    require_premium_expansion: false
+    require_smc_alignment: false   # opt-in: reject if SMC bias conflicts with final_direction
+  strategy_profiles:
+    aggressive_min_score: 80
+    controlled_min_score: 60
 
 # ============================================
 # SIGNAL SETTINGS
@@ -706,6 +780,14 @@ signals:
   # When enabled, requires SMC decision (call/put) to align with signal direction
   # Set to false to disable SMC decision alignment check (but keep permission checks)
   enable_smc_decision_alignment: true # Set to false to disable SMC decision alignment (default: true)
+
+  # SMC EventStore: persist every scan decision to smc_events for audit/replay
+  smc_event_store_publish: true
+
+  # SMC Navigator overlay (LTF tactical gate; additive to PermissionResolver — not a replacement)
+  enable_smc_navigator_overlay: false
+  smc_navigator_min_confidence: 0.6
+  smc_navigator_exit_advisory: true
 
   # DirectionGate Configuration
   # DirectionGate blocks trades that go against the market regime:
@@ -869,6 +951,7 @@ telegram:
   notify_pnl_milestones: true # Send notifications for PnL milestones (10%, 20%, etc.)
   pnl_milestones: [10, 20, 30, 50, 100] # PnL percentage milestones to notify
   notify_risk_alerts: true # Send risk alert notifications
+  notify_daily_profit_target: true # Telegram when global daily profit cap is hit (entries blocked)
   include_stats_on_exit: true # Include trading stats summary in exit notifications
   notify_stats_at_market_close: true # Send daily trading stats at end of market session (3:30 PM IST)
   # SMC Alert Settings

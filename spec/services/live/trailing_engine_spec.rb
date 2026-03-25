@@ -179,6 +179,6 @@ RSpec.describe Live::TrailingEngine do
       last_updated_at: Time.current
     }
 
-    Positions::ActiveCache::PositionData.new(defaults.merge(overrides))
+    Positions::PositionData.new(defaults.merge(overrides))
   end
 end

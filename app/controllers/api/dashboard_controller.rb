@@ -15,7 +15,8 @@ module Api
         recent_signals: TradingSignal.order(created_at: :desc).limit(10).as_json(methods: [:confidence_level]),
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
-          ws_order_update: Live::OrderUpdateHub.instance.running?
+          ws_order_update: Live::OrderUpdateHub.instance.running?,
+          pnl_updater_running: Live::PnlUpdaterService.instance.running?
         ),
         config: {
           risk: AlgoConfig.fetch[:risk].slice(:sl_pct, :tp_pct, :hard_rupee_sl, :profit_floor, :trailing),

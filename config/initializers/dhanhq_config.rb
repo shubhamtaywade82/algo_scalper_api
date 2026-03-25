@@ -88,16 +88,16 @@ skip_ws = Rails.env.test? ||
 
 Rails.application.configure do
   config.x.dhanhq = ActiveSupport::InheritableOptions.new(
-    enabled: !Rails.env.test? && !skip_ws,  # Disable in test environment or script mode
-    ws_enabled: !skip_ws,  # Disable WebSocket in test environment or script mode
-    order_ws_enabled: !skip_ws,  # Disable order WebSocket in test environment or script mode
-    enable_order_logging: ENV["ENABLE_ORDER"] == "true",  # Order payload logging
+    enabled: !Rails.env.test? && !skip_ws, # Disable in test environment or script mode
+    ws_enabled: !skip_ws, # Disable WebSocket in test environment or script mode
+    order_ws_enabled: !skip_ws, # Disable order WebSocket in test environment or script mode
+    enable_order_logging: ENV["ENABLE_ORDER"] == "true", # Order payload logging
     ws_mode: (ENV["DHANHQ_WS_MODE"] || "quote").to_sym,
-    ws_watchlist: ENV["DHANHQ_WS_WATCHLIST"],
-    order_ws_url: ENV["DHANHQ_WS_ORDER_URL"],
-    ws_user_type: ENV["DHANHQ_WS_USER_TYPE"],
-    partner_id: ENV["DHANHQ_PARTNER_ID"],
-    partner_secret: ENV["DHANHQ_PARTNER_SECRET"]
+    ws_watchlist: ENV.fetch("DHANHQ_WS_WATCHLIST", nil),
+    order_ws_url: ENV.fetch("DHANHQ_WS_ORDER_URL", nil),
+    ws_user_type: ENV.fetch("DHANHQ_WS_USER_TYPE", nil),
+    partner_id: ENV.fetch("DHANHQ_PARTNER_ID", nil),
+    partner_secret: ENV.fetch("DHANHQ_PARTNER_SECRET", nil)
   )
 end
 
@@ -105,89 +105,18 @@ end
 client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
 DhanHQ.configuration.client_id = client_id if client_id
 
-# Inject access token from DB so the gem always uses the latest valid token.
-# No refresh API exists; token must be renewed via /auth/dhan/login when expired.
+# Route all token acquisition through TokenManager so the configured
+# DHAN_AUTH_MODE strategy (totp / manual / renew / authority) is used
+# consistently by both the gem client and the trading daemon.
 DhanHQ.configure do |config|
   config.access_token_provider = lambda do
-    fetch_authority_token!
+    Dhan::TokenManager.current_token!
   end
 
   config.on_token_expired = lambda do |_error|
-    Rails.logger.warn "[SCALPER] Token expired, clearing cache..."
+    Rails.logger.warn "[SCALPER] Token expired — forcing refresh via #{ENV.fetch('DHAN_AUTH_MODE', 'totp')} strategy"
     Rails.cache.delete("scalper:dhan_token")
     Dhan::TokenManager.clear_cache! if defined?(Dhan::TokenManager)
+    Dhan::TokenManager.refresh!(force: true) if defined?(Dhan::TokenManager)
   end
-end
-
-def fetch_authority_token!
-  Rails.cache.fetch("scalper:dhan_token", expires_in: 60.seconds) do
-    token_url = token_authority_url
-    authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
-
-    if token_url.present? && authority_token.present?
-      begin
-        response = Faraday.get(token_url) do |req|
-          req.headers["Authorization"] = "Bearer #{authority_token}"
-        end
-
-        if response.success?
-          data = JSON.parse(response.body)
-          token = data["access_token"].presence || data["accessToken"].presence
-          return token if token.present?
-        end
-
-        Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
-      rescue StandardError => e
-        Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
-      end
-    elsif token_url.present?
-      log_token_authority_fallback_once!(
-        key: "scalper:token_authority_missing_bearer",
-        message: "[SCALPER] Token authority token missing (DHAN_TOKEN_ACCESS_TOKEN), trying TOTP refresh..."
-      )
-    else
-      log_token_authority_fallback_once!(
-        key: "scalper:token_authority_invalid_url",
-        message: "[SCALPER] Token authority URL invalid/missing (TRADER_API_BASE_URL), trying TOTP refresh..."
-      )
-    end
-
-    # Second fallback: TOTP auto-refresh via Dhan::TokenManager (requires DHAN_PIN + DHAN_TOTP_SECRET)
-    if defined?(Dhan::TokenManager)
-      totp_token = Dhan::TokenManager.current_token
-      if totp_token.present?
-        Rails.logger.info "[SCALPER] Token refreshed via TOTP auto-refresh"
-        return totp_token
-      end
-    end
-
-    # Final fallback: static ENV token
-    env_token = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
-    if env_token.present?
-      Rails.logger.warn "[SCALPER] Falling back to static ENV['DHAN_ACCESS_TOKEN'] (may be expired)"
-      return env_token
-    end
-
-    raise "Token authority unreachable, TOTP refresh failed, and no ENV['DHAN_ACCESS_TOKEN'] found"
-  end
-end
-
-def token_authority_url
-  raw_base = ENV["TRADER_API_BASE_URL"].to_s.strip
-  return nil if raw_base.blank?
-  return nil if raw_base.include?("<") || raw_base.include?(">")
-
-  uri = URI.parse(raw_base)
-  return nil unless uri.is_a?(URI::HTTP) && uri.host.present?
-
-  "#{raw_base.chomp('/')}/auth/dhan/token"
-rescue URI::InvalidURIError
-  nil
-end
-
-def log_token_authority_fallback_once!(key:, message:)
-  return if Rails.cache.read(key)
-
-  Rails.logger.warn(message)
-  Rails.cache.write(key, true, expires_in: 10.minutes)
 end

@@ -64,7 +64,10 @@ module Orders
         return true if response[:paper] == true
 
         success_value = response[:success]
-        success_value == true || success_value == 1 || success_value.to_s.casecmp('true').zero?
+        success_value == true ||
+          success_value == 1 ||
+          (success_value.is_a?(Numeric) && success_value.zero?) ||
+          success_value.to_s.casecmp('true').zero?
       end
     end
   end

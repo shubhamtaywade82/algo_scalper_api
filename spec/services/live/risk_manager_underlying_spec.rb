@@ -23,7 +23,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
     )
   end
   let(:position_data) do
-    Positions::ActiveCache::PositionData.new(
+    Positions::PositionData.new(
       tracker_id: tracker.id,
       security_id: tracker.security_id,
       segment: tracker.segment,
@@ -42,6 +42,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
     allow(Positions::ActiveCache).to receive(:instance).and_return(active_cache)
     allow(active_cache).to receive_messages(get_by_tracker_id: position_data, all_positions: [position_data])
     allow(PositionTracker).to receive(:active).and_return(PositionTracker.where(id: tracker.id))
+    allow(Positions::ActivePositionsCache.instance).to receive(:active_trackers).and_return([tracker])
 
     # Mock pnl_snapshot to return valid data
     allow(service).to receive(:pnl_snapshot).with(tracker).and_return({
@@ -50,6 +51,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
       ltp: BigDecimal('110.0'),
       hwm_pnl: BigDecimal('250.0')
     })
+    allow(service).to receive(:risk_config).and_return({})
 
     # Stub MarketFeedHub globally to prevent WebSocket subscription errors
     allow(Live::MarketFeedHub).to receive(:instance).and_return(
@@ -94,7 +96,7 @@ RSpec.describe Live::RiskManagerService, 'Underlying and Structure Exits' do
     end
 
     it 'delegates to TrailingEngine' do
-      expect(@trailing_engine).to receive(:process_tick).with(position_data, exit_engine: exit_engine).and_return({ exit_triggered: false })
+      expect(@trailing_engine).to receive(:process_tick).with(position_data, exit_engine: exit_engine, tracker: tracker).and_return({ exit_triggered: false })
 
       service.send(:enforce_dynamic_trailing_stops, exit_engine: exit_engine)
     end

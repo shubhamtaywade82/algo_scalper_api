@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algo-scalper.local/schemas/smc_trading_signal.json",
+  "title": "SMC Trading Signal",
+  "type": "object",
+  "required": ["meta", "market", "structure", "zones", "signals", "decision", "execution"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["version", "timestamp", "correlation_id"],
+      "properties": {
+        "version": { "type": "string", "enum": ["1.0"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "correlation_id": { "type": "string", "minLength": 4 }
+      },
+      "additionalProperties": false
+    },
+    "market": {
+      "type": "object",
+      "required": ["symbol", "timeframe", "ltp", "volume"],
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "enum": ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX"]
+        },
+        "timeframe": { "type": "string", "enum": ["5m", "15m"] },
+        "ltp": { "type": "number" },
+        "volume": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "structure": {
+      "type": "object",
+      "required": ["trend", "bos", "choch", "swing_points"],
+      "properties": {
+        "trend": { "type": "string", "enum": ["bullish", "bearish", "neutral"] },
+        "bos": {
+          "type": "object",
+          "required": ["active", "level"],
+          "properties": {
+            "active": { "type": "boolean" },
+            "level": { "type": ["number", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "choch": {
+          "type": "object",
+          "required": ["active", "level"],
+          "properties": {
+            "active": { "type": "boolean" },
+            "level": { "type": ["number", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "swing_points": {
+          "type": "object",
+          "required": ["hh", "hl", "lh", "ll"],
+          "properties": {
+            "hh": { "type": ["number", "null"] },
+            "hl": { "type": ["number", "null"] },
+            "lh": { "type": ["number", "null"] },
+            "ll": { "type": ["number", "null"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "zones": {
+      "type": "object",
+      "required": ["premium", "discount", "equilibrium", "location"],
+      "properties": {
+        "premium": {
+          "type": ["object", "null"],
+          "required": ["low", "high"],
+          "properties": {
+            "low": { "type": "number" },
+            "high": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "discount": {
+          "type": ["object", "null"],
+          "required": ["low", "high"],
+          "properties": {
+            "low": { "type": "number" },
+            "high": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "equilibrium": { "type": ["number", "null"] },
+        "location": {
+          "type": "string",
+          "enum": ["premium", "discount", "equilibrium"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "signals": {
+      "type": "object",
+      "required": ["liquidity", "displacement", "volume", "mtf"],
+      "properties": {
+        "liquidity": {
+          "type": "object",
+          "required": ["type", "level", "strength"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["sweep_high", "sweep_low", "none"]
+            },
+            "level": { "type": ["number", "null"] },
+            "strength": { "type": ["number", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "displacement": {
+          "type": "object",
+          "required": ["bullish", "bearish", "atr", "body"],
+          "properties": {
+            "bullish": { "type": "boolean" },
+            "bearish": { "type": "boolean" },
+            "atr": { "type": "number" },
+            "body": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "volume": {
+          "type": "object",
+          "required": ["spike", "ratio"],
+          "properties": {
+            "spike": { "type": "boolean" },
+            "ratio": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "mtf": {
+          "type": "object",
+          "required": ["bias", "valid"],
+          "properties": {
+            "bias": { "type": "string", "enum": ["bullish", "bearish", "neutral"] },
+            "valid": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": ["action", "confidence", "reason"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["BUY_CE", "BUY_PE", "NO_TRADE"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "discount_sweep_disp_vol",
+            "premium_sweep_disp_vol",
+            "no_mtf_alignment",
+            "no_liquidity_event",
+            "no_displacement",
+            "low_volume",
+            "mid_range",
+            "insufficient_rr"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "required": ["valid", "instrument", "order"],
+      "properties": {
+        "valid": { "type": "boolean" },
+        "instrument": {
+          "type": ["object", "null"],
+          "properties": {
+            "security_id": { "type": "string" },
+            "strike": { "type": "number" },
+            "type": { "type": "string", "enum": ["CE", "PE"] },
+            "expiry": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "order": {
+          "type": ["object", "null"],
+          "properties": {
+            "entry_price": { "type": ["number", "null"] },
+            "stop_loss": { "type": ["number", "null"] },
+            "target": { "type": ["number", "null"] },
+            "rr": { "type": ["number", "null"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

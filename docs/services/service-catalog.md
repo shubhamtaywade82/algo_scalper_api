@@ -8,6 +8,10 @@ Comprehensive list of major service classes in the Algo Scalper API trading syst
 | :--- | :--- | :--- |
 | `Signal::Scheduler` | `app/services/signal/scheduler.rb` | Orchestrates 30-second index scans and dispatches work to `Signal::Engine`. |
 | `Signal::Engine` | `app/services/signal/engine.rb` | Runs Supertrend/ADX/SMC-based analysis and produces structured signal results per index. |
+| `MarketContext::RegimeComposer` | `app/services/market_context/regime_composer.rb` | Composes `MarketRegimeDetector` with structure/volatility/participation into a `RegimeSnapshot` and conviction score (optional; gated by `config/algo.yml` `market_context.enabled`). |
+| `Options::ChainSignalExtractor` | `app/services/options/chain_signal_extractor.rb` | Derives chain confirmation from raw `chain_data` + `FlowAnalyzer` history (optional gate input). |
+| `Trading::MarketPermissionGate` | `app/services/trading/market_permission_gate.rb` | Optional hard entry filter after strike qualification (`market_context.gate.enabled`). |
+| `Trading::StrategyProfileSelector` | `app/services/trading/strategy_profile_selector.rb` | Maps regime snapshot to `strategy_profile` for metadata and trailing overrides. |
 | `Signal::TrendScorer` | `app/services/signal/trend_scorer.rb` | Computes multi-timeframe trend scores (0–21) used for dynamic risk allocation. |
 | `Entries::EntryGuard` | `app/services/entries/entry_guard.rb` | Enforces the 10-guard entry pipeline (circuit breaker, cooldown, exposure, limits) before any trade. |
 | `Options::ChainAnalyzer` | `app/services/options/chain_analyzer.rb` | Analyzes live option chains, scores strikes (liquidity, OI, spread, IV), and selects ATM±1 candidates. |

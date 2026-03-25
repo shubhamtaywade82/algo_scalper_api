@@ -57,7 +57,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
     it 'returns the bullish candle before a bearish impulse' do
       series = build(:candle_series, :five_minute)
       series.add_candle(build(:candle, open: 100, high: 102, low: 99, close: 101)) # bullish OB
-      series.add_candle(build(:candle, open: 101, high: 101, low: 97, close: 98))   # bearish impulse
+      series.add_candle(build(:candle, open: 101, high: 101, low: 97, close: 98)) # bearish impulse
       series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))
       series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))
       series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))
@@ -67,7 +67,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       bearish_ob = detector.bearish
 
       expect(bearish_ob).not_to be_nil
-      expect(bearish_ob[:bias]).to eq(:bullish)
+      expect(bearish_ob[:bias]).to eq(:bearish)
       expect(bearish_ob[:high]).to eq(102)
       expect(bearish_ob[:low]).to eq(99)
     end
@@ -85,6 +85,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
   end
 
   describe '#to_h' do
+    # rubocop:disable RSpec/MultipleExpectations -- hash contract snapshot
     it 'serializes bullish order block' do
       series = build(:candle_series, :five_minute)
       timestamp = Time.zone.now
@@ -102,7 +103,9 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       expect(result[:bullish][:low]).to eq(104)
       expect(result[:bearish]).to be_nil
     end
+    # rubocop:enable RSpec/MultipleExpectations
 
+    # rubocop:disable RSpec/MultipleExpectations -- hash contract snapshot
     it 'serializes bearish order block' do
       series = build(:candle_series, :five_minute)
       timestamp = Time.zone.now
@@ -120,6 +123,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
       expect(result[:bearish][:low]).to eq(99)
       expect(result[:bullish]).to be_nil
     end
+    # rubocop:enable RSpec/MultipleExpectations
 
     it 'returns nil for both when no order blocks found' do
       series = build(:candle_series, :five_minute)

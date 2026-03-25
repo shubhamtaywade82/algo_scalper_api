@@ -27,6 +27,19 @@ The core brain of the system. It analyzes technical indicators (Supertrend, ADX,
 **Used by:**
 - `Signal::Scheduler`
 
+### Market context (optional)
+
+When `market_context.enabled` is true in `config/algo.yml`, after qualified option `picks` exist, `Signal::Engine` calls `evaluate_market_context_for_entry` (private helper in `app/services/signal/engine.rb`):
+
+| Component | File | Role |
+|-----------|------|------|
+| `MarketContext::RegimeComposer` | `app/services/market_context/regime_composer.rb` | Builds `RegimeSnapshot` using `MarketRegimeDetector` + structure/volatility/participation analyzers. |
+| `Options::ChainSignalExtractor` | `app/services/options/chain_signal_extractor.rb` | Chain-side confirmation (flow, PCR, premium expansion vs cache). |
+| `Trading::MarketPermissionGate` | `app/services/trading/market_permission_gate.rb` | Optional hard gate when `market_context.gate.enabled` is true. |
+| `Trading::StrategyProfileSelector` | `app/services/trading/strategy_profile_selector.rb` | Maps snapshot → `strategy_profile` symbol stored in `entry_metadata` and tracker `meta`. |
+
+**Docs:** `docs/trading/market_context_and_permission_gate.md`
+
 ---
 
 ## Signal::Scheduler

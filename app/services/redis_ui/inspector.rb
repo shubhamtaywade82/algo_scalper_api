@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-module Redis
+module RedisUi
+  # Read-only Redis key browser for dev dashboard (does not shadow the redis gem's Redis class).
   class Inspector
     DEFAULT_PAGE_SIZE = 100
 
@@ -85,4 +86,3 @@ module Redis
     end
   end
 end
-

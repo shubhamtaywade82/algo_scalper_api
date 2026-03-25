@@ -78,6 +78,7 @@ RSpec.describe Smc::Detectors::Liquidity do
   describe '#to_h' do
     it 'serializes liquidity state' do
       series = instance_double(CandleSeries)
+      allow(series).to receive(:candles).and_return([])
       allow(series).to receive(:recent_highs).with(5).and_return([])
       allow(series).to receive(:recent_lows).with(5).and_return([])
       allow(series).to receive_messages(liquidity_grab_up?: true, liquidity_grab_down?: false, highs: [100.0, 102.0],

@@ -54,6 +54,13 @@ development:
     priority: 20
     description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
 
+  public_ip_log:
+    class: PublicIpLogJob
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 25
+    description: "Persists public IP last-seen (throttled); dashboard no longer writes public_ip_logs"
+
 production:
   instruments_import:
     class: InstrumentsImportJob
@@ -109,3 +116,10 @@ production:
     queue_name: background
     priority: 20
     description: "Auto-syncs local public IP with Dhan whitelisting slots when cooldown expires"
+
+  public_ip_log:
+    class: PublicIpLogJob
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 25
+    description: "Persists public IP last-seen (throttled); dashboard polling does not write public_ip_logs"

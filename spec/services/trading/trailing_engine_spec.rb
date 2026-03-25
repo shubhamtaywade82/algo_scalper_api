@@ -307,4 +307,38 @@ RSpec.describe Trading::TrailingEngine do
       expect(engine.call).to be_within(0.01).of(73.68)
     end
   end
+
+  context 'when tracker meta has strategy_profile trend_controlled' do
+    let(:symbol) { 'NIFTY24MAR22000CE' }
+    let(:segment) { 'NSE_FNO' }
+    let(:ltp) { 120.0 }
+
+    before do
+      tracker.update!(meta: tracker.meta.merge('strategy_profile' => 'trend_controlled'))
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          institutional_trailing: {
+            session_aware: false,
+            expiry_day_tightening: 0.60,
+            nifty: {
+              early_trigger: 0.05,
+              early_sl_offset: -0.12,
+              breakeven_trigger: 0.157,
+              activation_trigger: 0.20,
+              trailing_distance: 0.386
+            },
+            sensex: Trading::TrailingEngine::DEFAULTS[:sensex],
+            banknifty: Trading::TrailingEngine::DEFAULTS[:banknifty],
+            profiles: {
+              trend_controlled: { trailing_distance: 0.06 }
+            }
+          }
+        }
+      })
+    end
+
+    it 'merges profile trailing_distance into symbol config' do
+      expect(engine.call).to be_within(0.01).of(112.8)
+    end
+  end
 end

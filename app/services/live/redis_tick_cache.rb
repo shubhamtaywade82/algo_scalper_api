@@ -7,6 +7,7 @@ module Live
     include Singleton
 
     PREFIX = 'tick'
+    TICK_TTL_SECONDS = 3600
 
     # Store a tick as a hash under tick:<SEG>:<SID>
     # data is a hash of symbol/string keys -> values
@@ -33,6 +34,7 @@ module Live
       # hmset expects a flat array: key1, val1, key2, val2...
       args = merged.flat_map { |k, v| [k.to_s, v.to_s] }
       redis.hmset(key, *args)
+      redis.expire(key, TICK_TTL_SECONDS)
 
       # return symbolized/casted form for convenience
       symbolize_and_cast(merged)
