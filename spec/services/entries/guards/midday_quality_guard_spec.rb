@@ -77,5 +77,18 @@ RSpec.describe Entries::Guards::MiddayQualityGuard do
         expect(result).to include(blocked: /midday quality gate blocked/)
       end
     end
+
+    context 'when regime_confidence is 0 but ta_confidence is high' do
+      it 'falls back to ta_confidence' do
+        allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-24 11:30:00 IST'))
+        context[:entry_metadata][:regime_confidence] = 0
+        context[:entry_metadata][:ta_confidence] = 0.85
+        context[:entry_metadata][:market_context_conviction] = nil
+
+        result = described_class.call(context)
+
+        expect(result).to eq(Entries::EntryGuardPipeline::PASS)
+      end
+    end
   end
 end

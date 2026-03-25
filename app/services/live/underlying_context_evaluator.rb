@@ -57,13 +57,13 @@ module Live
       index_key = tracker.meta&.dig('index_key')
 
       OpenStruct.new(
-        tracker_id:             tracker.id,
-        index_key:              index_key,
-        underlying_symbol:      index_key,            # fallback in UnderlyingMonitor#determine_index_cfg
-        underlying_segment:     pos_data&.underlying_segment,
+        tracker_id: tracker.id,
+        index_key: index_key,
+        underlying_symbol: index_key, # fallback in UnderlyingMonitor#determine_index_cfg
+        underlying_segment: pos_data&.underlying_segment,
         underlying_security_id: pos_data&.underlying_security_id,
-        position_direction:     resolve_position_direction(tracker, pos_data),
-        underlying_ltp:         nil                   # UnderlyingMonitor fetches via TickQuery
+        position_direction: resolve_position_direction(tracker, pos_data),
+        underlying_ltp: nil # UnderlyingMonitor fetches via TickQuery
       )
     end
 
@@ -103,9 +103,9 @@ module Live
     def underlying_context_cfg
       cfg = AlgoConfig.fetch.dig(:risk, :underlying_context_exit) || {}
       {
-        enabled:               cfg.fetch(:enabled, true),
+        enabled: cfg.fetch(:enabled, true),
         trend_score_threshold: cfg.fetch(:trend_score_threshold, 15).to_f,
-        atr_ratio_threshold:   cfg.fetch(:atr_ratio_threshold, 0.65).to_f,
+        atr_ratio_threshold: cfg.fetch(:atr_ratio_threshold, 0.65).to_f,
         tightening_multiplier: cfg.fetch(:tightening_multiplier, 0.5).to_f
       }
     rescue StandardError

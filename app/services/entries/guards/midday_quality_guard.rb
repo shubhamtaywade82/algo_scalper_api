@@ -84,8 +84,25 @@ module Entries
 
         def confidence_value(context)
           metadata = context[:entry_metadata] || {}
-          candidate = metadata[:market_context_conviction] || metadata[:regime_confidence] || metadata[:ta_confidence]
-          normalize_confidence(candidate)
+          market_context = metadata[:market_context_conviction]
+          regime_confidence = metadata[:regime_confidence]
+          ta_confidence = metadata[:ta_confidence]
+
+          candidates = [market_context, regime_confidence, ta_confidence]
+          non_nil_candidates = candidates.compact
+          return nil if non_nil_candidates.empty?
+
+          first_non_nil = candidates.find { |v| !v.nil? }
+
+          # Edge case: some signals store `regime_confidence: 0` to mean "not computed".
+          # If the first non-nil candidate is 0 and a later candidate is non-zero, use the later one.
+          if first_non_nil.to_f.zero?
+            later_non_zero =
+              candidates.drop_while { |v| v.nil? || v.to_f.zero? }.first
+            return normalize_confidence(later_non_zero) if later_non_zero.present?
+          end
+
+          normalize_confidence(first_non_nil)
         end
 
         def normalize_confidence(value)

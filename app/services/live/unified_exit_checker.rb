@@ -9,6 +9,7 @@ module Live
     class << self
       include Live::UnderlyingLtpResolver
       include Live::StructureInvalidationEvaluator
+      include Live::UnderlyingContextEvaluator
 
       # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
@@ -94,8 +95,18 @@ module Live
           }
         end
 
-        # 5. Trailing Stop (if enabled)
-        if trailing_stop_hit?(tracker, snapshot)
+        # 5. Trailing Stop — underlying-context-aware
+        underlying_ctx = evaluate_underlying_context(tracker, snapshot)
+        if underlying_ctx[:action] == :exit
+          return {
+            exit: true,
+            reason: underlying_ctx[:reason],
+            path: 'underlying_context_exit',
+            pnl_pct: (pnl_pct * 100.0).round(2)
+          }
+        end
+
+        if trailing_stop_hit?(tracker, snapshot, tightening_multiplier: underlying_ctx[:multiplier])
           return {
             exit: true,
             reason: 'TRAILING_STOP',
@@ -220,7 +231,7 @@ module Live
         true
       end
 
-      def trailing_stop_hit?(tracker, snapshot)
+      def trailing_stop_hit?(tracker, snapshot, tightening_multiplier: 1.0)
         config = exit_config
         return false unless config[:trailing][:enabled]
 
@@ -246,7 +257,8 @@ module Live
 
           return true if adaptive_tiers.is_a?(Array) &&
                          adaptive_tiers.any? &&
-                         adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers)
+                         adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers,
+                                                 tightening_multiplier: tightening_multiplier)
 
           # 1. Resolve price history from ActiveCache for Gamma detection
           pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
@@ -653,17 +665,17 @@ module Live
         activation = trailing_cfg[:activation_profit].to_f
         return false unless activation.positive?
 
-        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
-        return false unless entry_value.positive?
-
         hwm = snapshot[:hwm_pnl].to_f
         return false unless hwm.positive?
+
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false unless entry_value.positive?
 
         peak_profit_pct = hwm / entry_value
         peak_profit_pct >= activation
       end
 
-      def adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers)
+      def adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers, tightening_multiplier: 1.0)
         allowed_dd = Positions::TrailingConfig.adaptive_drawdown_for_peak(peak_profit_pct, adaptive_tiers)
         return false unless allowed_dd && peak_profit_pct.positive?
 
@@ -671,13 +683,17 @@ module Live
         pnl_value = snapshot[:pnl].to_f
         return false unless hwm.positive?
 
+        multiplier = tightening_multiplier || 1.0
+        effective_allowed_dd = allowed_dd * multiplier.to_f
+
         # Convert fractional drop from HWM into profit-percent scale for comparison with allowed_dd
         drop_from_peak_pct = (hwm - pnl_value) / hwm * peak_profit_pct
-        return false unless drop_from_peak_pct >= allowed_dd
+        return false unless drop_from_peak_pct >= effective_allowed_dd
 
         Rails.logger.info(
           "[UnifiedExitChecker] ADAPTIVE_TRAILING hit for #{tracker.order_no}: " \
-          "drop=#{(drop_from_peak_pct * 100).round(2)}% >= allowed=#{(allowed_dd * 100).round(2)}%"
+          "drop=#{(drop_from_peak_pct * 100).round(2)}% >= allowed=#{(effective_allowed_dd * 100).round(2)}% " \
+          "(multiplier=#{multiplier.to_f})"
         )
         true
       end
