@@ -100,4 +100,11 @@ class TradingSignal < ApplicationRecord
   def avoid?
     direction == DIRECTIONS[:avoid]
   end
+
+  def record_entry_outcome(outcome, reason = nil)
+    update(metadata: (metadata || {}).merge(
+      'entry_outcome' => outcome,
+      'entry_blocked_reason' => reason
+    ).compact)
+  end
 end
