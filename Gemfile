@@ -46,7 +46,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ', '2.7.0'
+gem 'DhanHQ', '2.8.0'
 
 # TOTP generation for Dhan TOTP auth strategy
 gem 'rotp', '~> 6.3'
@@ -59,7 +59,7 @@ gem 'telegram-bot-ruby', '~> 0.19'
 gem 'ruby-openai', '~> 8.0', group: %i[development test]
 
 # openai-ruby (official) - used in production
-gem 'openai', '~> 0.55', group: :production
+gem 'openai', '~> 0.56', group: :production
 
 gem 'ollama-client', '~> 1.1'
 
@@ -77,7 +77,7 @@ group :development, :test do
   gem 'brakeman', require: false
 
   # Code quality and style enforcement
-  gem 'rubocop', '~> 1.85', require: false
+  gem 'rubocop', '~> 1.86', require: false
   gem 'rubocop-factory_bot', '~> 2.28', require: false
   gem 'rubocop-performance', '~> 1.21', require: false
   gem 'rubocop-rails', '~> 2.23', require: false
