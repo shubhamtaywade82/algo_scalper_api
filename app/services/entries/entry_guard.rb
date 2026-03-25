@@ -19,7 +19,7 @@ module Entries
         @entry_guard_pipeline ||= EntryGuardPipeline.new
       end
 
-      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil)
+      def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil)
         # Global Profit Protection Check
         if Portfolio::DrawdownGuard.triggered?
           Observability::StructuredLog.info(
@@ -32,6 +32,7 @@ module Entries
               reason: 'drawdown_guard_active'
             }
           )
+          signal&.record_entry_outcome('skipped', 'drawdown_guard_active')
           return false
         end
 
@@ -58,6 +59,7 @@ module Entries
               reasons: entry_policy.reasons
             }
           )
+          signal&.record_entry_outcome('blocked', entry_policy.reasons.join('; '))
           return false
         end
 
@@ -82,6 +84,7 @@ module Entries
               reason: reason.to_s
             }
           )
+          signal&.record_entry_outcome('blocked', reason.to_s)
           return false
         end
 
@@ -271,6 +274,7 @@ module Entries
                   end
 
         mark_bos_consumed!(index_cfg: index_cfg, bos_context: bos_context) if tracker
+        signal&.record_entry_outcome('entered') if tracker
 
         Rails.logger.info("[EntryGuard] Successfully placed order #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]}")
         Observability::StructuredLog.info(
