@@ -490,7 +490,7 @@ module Signal
           smc_permission: permission.to_s
         }
 
-        TradingSignal.create_from_analysis(
+        signal = TradingSignal.create_from_analysis(
           index_key: index_cfg[:key],
           direction: final_direction.to_s,
           timeframe: effective_timeframe,
@@ -506,6 +506,7 @@ module Signal
         # ===== EXIT IF BLOCKED BY OPTIONS BEHAVIOR =====
         if expiry_blocked
           Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
+          record_signal_skip(signal, 'expiry midday decay')
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
@@ -529,6 +530,7 @@ module Signal
 
         unless expected_spot_move&.positive?
           Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
+          record_signal_skip(signal, 'missing ATR')
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
@@ -546,6 +548,7 @@ module Signal
 
         if picks.blank?
           Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
+          record_signal_skip(signal, 'no suitable strikes')
           return
         end
 
@@ -561,6 +564,7 @@ module Signal
           smc_decision: smc_decision
         )
         if mc_gate_blocked
+          record_signal_skip(signal, 'market context gate')
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
@@ -592,7 +596,8 @@ module Signal
               direction: final_direction,
               scale_multiplier: 1,
               entry_metadata: entry_metadata,
-              permission: execution_permission
+              permission: execution_permission,
+              signal: signal
             )
             break if entered
           end
@@ -603,7 +608,8 @@ module Signal
             direction: final_direction,
             picks: picks,
             entry_metadata: entry_metadata,
-            permission: execution_permission
+            permission: execution_permission,
+            signal: signal
           )
         end
 
@@ -1338,6 +1344,12 @@ module Signal
 
         Rails.logger.info("[Signal] 🚀 Using optimized ADX min for #{instrument.symbol_name} @ #{interval}: #{optimized_min}")
         optimized_min
+      end
+
+      private
+
+      def record_signal_skip(signal, reason)
+        signal&.record_entry_outcome('skipped', reason)
       end
     end
   end
