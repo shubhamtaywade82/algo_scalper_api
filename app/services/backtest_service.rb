@@ -19,6 +19,8 @@ class BacktestService
       raise "Instrument #{symbol} not found"
     end
 
+    @option_sim = Backtest::OptionTradeSimulator.new(instrument: @instrument)
+
     instrument_event('instrument_ready', instrument_code: @instrument.instrument_code, segment: @instrument.segment)
     instrument_event('initialized', strategy: strategy_name)
   end
@@ -149,7 +151,7 @@ class BacktestService
       candle = series.candles[i]
 
       if open_position
-        exit_result = check_exit(open_position, candle, i, series)
+        exit_result = option_check_exit(open_position, candle, i, series)
         if exit_result
           @results << exit_result
           open_position = nil
@@ -159,7 +161,7 @@ class BacktestService
 
       if open_position.nil?
         signal = strategy.generate_signal(i)
-        open_position = enter_position(signal, candle, i) if signal
+        open_position = option_enter_position(signal, candle, i) if signal
       end
 
       i += 1
@@ -168,150 +170,24 @@ class BacktestService
     return unless open_position
 
     last_candle = series.candles.last
-    exit_result = force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
+    exit_result = option_force_exit(open_position, last_candle, series.candles.size - 1, 'end_of_data')
     @results << exit_result
   end
 
-  def enter_position(signal, candle, index)
-    option_data = fetch_option_series(signal[:type], candle.timestamp)
-    return if option_data.blank?
-
-    entry_premium = fetch_premium_price(option_data, candle.timestamp)
-
-    position = {
-      signal_type: signal[:type],
-      entry_index: index,
-      entry_time: candle.timestamp,
-      entry_price: entry_premium,
-      option_data: option_data,
-      stop_loss: calculate_stop_loss(entry_premium, signal[:type]),
-      target: calculate_target(entry_premium, signal[:type])
-    }
-
-    instrument_event('trade.entered', position)
+  def option_enter_position(signal, candle, index)
+    position = @option_sim.enter_position(signal, candle, index)
+    instrument_event('trade.entered', position) if position
     position
   end
 
-  # removed duplicate check_exit (option-premium based) to avoid method redefinition
-
-  # ------------------------- NEW METHODS --------------------------
-
-  def fetch_option_series(type, date)
-    fetcher = Options::ExpiredFetcher.call(symbol: @instrument.symbol_name, expiry_flag: 'WEEK', date: date)
-    fetcher[type]
-  rescue StandardError => e
-    Rails.logger.error("[Backtest] fetch_option_series failed: #{e.message}")
-    []
+  def option_check_exit(position, candle, index, series)
+    result = @option_sim.check_exit(position, candle, index, series)
+    instrument_event('trade.exit_evaluated', result) if result
+    result
   end
 
-  def fetch_premium_price(option_data, ts)
-    # get closest timestamp bar
-    return 0.0 if option_data.blank?
-
-    bar = option_data.min_by { |b| (b[:timestamp] - ts).abs }
-    bar[:close].to_f
-  end
-
-  def calculate_stop_loss(entry_price, signal_type)
-    if signal_type == :ce
-      entry_price * 0.70 # -30%
-    else
-      entry_price * 1.30 # +30% (for PE, price going up is a loss)
-    end
-  end
-
-  def calculate_target(entry_price, signal_type)
-    if signal_type == :ce
-      entry_price * 1.50 # +50%
-    else
-      entry_price * 0.50 # -50% (for PE, price going down is profit)
-    end
-  end
-
-  def check_exit(position, candle, index, _series)
-    current_price = fetch_premium_price(position[:option_data], candle.timestamp)
-    entry_price = position[:entry_price]
-    signal_type = position[:signal_type]
-
-    # Calculate P&L %
-    pnl_percent = if signal_type == :ce
-                    ((current_price - entry_price) / entry_price * 100)
-                  else # :pe
-                    ((entry_price - current_price) / entry_price * 100)
-                  end
-
-    # Check target hit
-    target_hit =
-      (signal_type == :ce && current_price >= position[:target]) ||
-      (signal_type == :pe && current_price <= position[:target])
-    return build_exit_result(position, candle, index, pnl_percent, 'target') if target_hit
-
-    # Check stop loss
-    stop_loss_hit =
-      (signal_type == :ce && current_price <= position[:stop_loss]) ||
-      (signal_type == :pe && current_price >= position[:stop_loss])
-    return build_exit_result(position, candle, index, pnl_percent, 'stop_loss') if stop_loss_hit
-
-    # Activate trailing stop at 40% profit
-    if pnl_percent >= 40 && !position[:trailing_activated]
-      position[:trailing_activated] = true
-      position[:trailing_stop] = current_price * (signal_type == :ce ? 0.90 : 1.10) # Trail by 10%
-    end
-
-    # Update trailing stop
-    if position[:trailing_activated]
-      if signal_type == :ce
-        new_trailing = current_price * 0.90
-        position[:trailing_stop] = [position[:trailing_stop], new_trailing].max
-
-        # Check trailing stop hit
-        if current_price <= position[:trailing_stop]
-          return build_exit_result(position, candle, index, pnl_percent, 'trailing_stop')
-        end
-      else # :pe
-        new_trailing = current_price * 1.10
-        position[:trailing_stop] = [position[:trailing_stop], new_trailing].min
-
-        # Check trailing stop hit
-        if current_price >= position[:trailing_stop]
-          return build_exit_result(position, candle, index, pnl_percent, 'trailing_stop')
-        end
-      end
-    end
-
-    # Time-based exit (3:20 PM)
-    if candle.timestamp.hour >= 15 && candle.timestamp.min >= 20
-      return build_exit_result(position, candle, index, pnl_percent, 'time_exit')
-    end
-
-    nil # No exit
-  end
-
-  def force_exit(position, candle, index, reason)
-    current_price = candle.close
-    entry_price = position[:entry_price]
-    signal_type = position[:signal_type]
-
-    pnl_percent = if signal_type == :ce
-                    ((current_price - entry_price) / entry_price * 100)
-                  else
-                    ((entry_price - current_price) / entry_price * 100)
-                  end
-
-    build_exit_result(position, candle, index, pnl_percent, reason)
-  end
-
-  def build_exit_result(position, candle, index, pnl_percent, exit_reason)
-    result = {
-      signal_type: position[:signal_type],
-      entry_time: position[:entry_time],
-      entry_price: position[:entry_price],
-      exit_time: candle.timestamp,
-      exit_price: candle.close,
-      pnl_percent: pnl_percent.round(2),
-      exit_reason: exit_reason,
-      bars_held: index - position[:entry_index]
-    }
+  def option_force_exit(position, candle, index, reason)
+    result = @option_sim.force_exit(position, candle, index, reason)
     instrument_event('trade.exit_evaluated', result)
     result
   end

@@ -1,57 +1,35 @@
 # frozen_string_literal: true
 
-# Boot-time safety: ensure a valid Dhan token exists for long-running services.
-# Uses ENV-based secrets (via dotenv in dev/test) and persists token in DB.
+# Boot-time token prefetch for the trading daemon.
+# Only runs when ENABLE_TRADING_SERVICES=true (trading process, not web).
 #
-# Only run in the trading daemon process (ENABLE_TRADING_SERVICES=true).
-# The web process must not block boot on token refresh; it gets the token
-# lazily via the access_token_provider lambda when an API call needs it.
+# Calls TokenManager.refresh! which uses the DHAN_AUTH_MODE strategy:
+#   totp       - generate TOTP and login directly with Dhan (default)
+#   manual     - read DHAN_ACCESS_TOKEN from ENV
+#   renew      - renew an existing DB token
+#   authority  - fetch from external authority server
 Rails.application.config.after_initialize do
   next if Rails.const_defined?(:Console)
   next if Rails.env.test?
-  next if ENV['DISABLE_TRADING_SERVICES'] == '1'
-  next unless ENV['ENABLE_TRADING_SERVICES'] == 'true'
+  next if ENV["DISABLE_TRADING_SERVICES"] == "1"
+  next unless ENV["ENABLE_TRADING_SERVICES"] == "true"
 
-  # Eager prefetch when token authority is configured (fail fast with clear error)
-  base_url = ENV['TRADER_API_BASE_URL'].to_s.strip
-  bearer = ENV['DHAN_TOKEN_ACCESS_TOKEN'].presence
+  mode = ENV.fetch("DHAN_AUTH_MODE", "totp")
 
-  if base_url.present? && bearer.present?
-    provider = DhanHQ.configuration.access_token_provider
-    if provider.respond_to?(:call)
-      begin
-        provider.call
-        Rails.logger.info('[SCALPER] Dhan token prefetched from authority server')
-      rescue StandardError => e
-        Rails.logger.error(
-          "[SCALPER] Dhan token authority fetch failed: #{e.message}. " \
-          "Check TRADER_API_BASE_URL and DHAN_TOKEN_ACCESS_TOKEN and that the authority server is running."
-        )
-      end
+  begin
+    token = Dhan::TokenManager.refresh!(force: false)
+    if token.present?
+      Rails.logger.info("[SCALPER] Dhan token prefetched via #{mode} strategy")
+    else
+      Rails.logger.error(
+        "[SCALPER] Dhan token prefetch returned nil (mode=#{mode}). " \
+        "Check DHAN_AUTH_MODE and required ENV vars for the chosen strategy."
+      )
     end
-  else
-    hint_key = 'scalper:dhan_authority_hint_shown'
-    unless Rails.cache.read(hint_key)
-      msg = if bearer.present?
-        "[SCALPER] To fetch Dhan token from your authority server, set TRADER_API_BASE_URL in .env " \
-        "(base URL of the API that serves /auth/dhan/token). See .env.example."
-      elsif base_url.present?
-        "[SCALPER] To fetch Dhan token from your authority server, set DHAN_TOKEN_ACCESS_TOKEN in .env " \
-        "(Bearer token you use in Postman for /auth/dhan/token). See .env.example."
-      else
-        "[SCALPER] To fetch Dhan token from an authority server (e.g. algo_trading_api), set TRADER_API_BASE_URL " \
-        "and DHAN_TOKEN_ACCESS_TOKEN in .env. See .env.example."
-      end
-      Rails.logger.warn(msg)
-      Rails.cache.write(hint_key, true, expires_in: 1.hour)
-    end
+  rescue StandardError => e
+    Rails.logger.error(
+      "[SCALPER] Dhan token prefetch failed (mode=#{mode}): #{e.message}. " \
+      "Verify DHAN_AUTH_MODE and the required ENV vars are set correctly."
+    )
   end
-
-  # Only bootstrap if TOTP refresh is configured
-  client_id_present = ENV['CLIENT_ID'].present? || ENV['DHAN_CLIENT_ID'].present?
-  required = %w[DHAN_PIN DHAN_TOTP_SECRET]
-  next unless client_id_present && required.all? { |key| ENV[key].present? }
-
-  Dhan::TokenManager.current_token! if defined?(Dhan::TokenManager)
 end
-

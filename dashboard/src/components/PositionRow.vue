@@ -1,5 +1,5 @@
 <script setup>
-import { toRef } from 'vue'
+import { computed, toRef } from 'vue'
 import { useFlash } from '../composables/useFlash'
 
 const props = defineProps({
@@ -8,6 +8,7 @@ const props = defineProps({
 
 const ltpRef = toRef(props.pos, 'ltp')
 const pnlRef = toRef(props.pos, 'pnl')
+const isStale = computed(() => props.pos?.stale === true)
 
 const { flashClass: ltpFlash } = useFlash(ltpRef)
 const { flashClass: pnlFlash } = useFlash(pnlRef)
@@ -62,8 +63,21 @@ function dirIcon(dir) {
     </td>
     <td class="px-4 py-5 text-right text-gray-400 text-data font-medium">{{ pos.quantity }}</td>
     <td class="px-4 py-5 text-right text-gray-500 text-data text-xs">{{ inr(pos.entry_price) }}</td>
-    <td :class="['px-4 py-5 text-right text-white font-black text-data transition-all duration-300 rounded-lg', ltpFlash]">
-      {{ inr(pos.ltp) }}
+    <td
+      :class="[
+        'px-4 py-5 text-right text-white font-black text-data transition-all duration-300 rounded-lg',
+        isStale ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20' : ltpFlash
+      ]"
+    >
+      <div class="flex items-center justify-end gap-2">
+        <span>{{ inr(pos.ltp) }}</span>
+        <span
+          v-if="isStale"
+          class="text-[9px] font-black text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md"
+        >
+          STALE
+        </span>
+      </div>
     </td>
     <td :class="['px-4 py-5 text-right font-black text-data text-sm transition-all duration-300 rounded-lg', pnlClass(pos.pnl), pnlFlash]">
       {{ sign(pos.pnl) }}₹{{ inr(pos.pnl) }}

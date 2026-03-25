@@ -39,7 +39,13 @@ module Risk
       payload = { at: Time.current, reason: reason.to_s }
       Rails.cache.write(TRIP_CACHE_KEY, payload, expires_in: ttl)
       Rails.logger.error("[CircuitBreaker] *** TRIPPED *** reason=#{reason.inspect} ttl=#{ttl}")
-      status
+      current_status = status
+      begin
+        ActionCable.server.broadcast('dashboard', { type: 'circuit_breaker' }.merge(current_status))
+      rescue StandardError => e
+        Rails.logger.warn("[CircuitBreaker] broadcast failed: #{e.message}")
+      end
+      current_status
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] trip! failed: #{e.message}")
       raise
@@ -50,6 +56,12 @@ module Risk
     def reset!
       Rails.cache.delete(TRIP_CACHE_KEY)
       Rails.logger.info('[CircuitBreaker] Reset — trading re-enabled')
+      current_status = status
+      begin
+        ActionCable.server.broadcast('dashboard', { type: 'circuit_breaker' }.merge(current_status))
+      rescue StandardError => e
+        Rails.logger.warn("[CircuitBreaker] broadcast failed: #{e.message}")
+      end
       true
     rescue StandardError => e
       Rails.logger.error("[CircuitBreaker] reset! failed: #{e.message}")

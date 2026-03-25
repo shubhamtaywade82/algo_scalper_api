@@ -167,4 +167,52 @@ RSpec.describe Entries::StructureDetector do
       end
     end
   end
+
+  describe '.choch?' do
+    context 'with nil candles' do
+      it 'returns :neutral' do
+        expect(described_class.choch?(nil)).to eq(:neutral)
+      end
+    end
+
+    context 'with zero lookback' do
+      it 'returns :neutral' do
+        candles = [build(:candle), build(:candle), build(:candle)]
+        expect(described_class.choch?(candles, lookback_minutes: 0)).to eq(:neutral)
+      end
+    end
+
+    context 'when Smc detector returns bullish hash' do
+      it 'returns :bullish' do
+        candles = [build(:candle), build(:candle), build(:candle)]
+        detector = instance_double(Smc::Detectors::Structure, choch?: { type: :bullish })
+
+        allow(Smc::Detectors::Structure).to receive(:new).and_return(detector)
+
+        expect(described_class.choch?(candles, lookback_minutes: 3)).to eq(:bullish)
+      end
+    end
+
+    context 'when Smc detector returns bearish hash' do
+      it 'returns :bearish' do
+        candles = [build(:candle), build(:candle), build(:candle)]
+        detector = instance_double(Smc::Detectors::Structure, choch?: { type: :bearish })
+
+        allow(Smc::Detectors::Structure).to receive(:new).and_return(detector)
+
+        expect(described_class.choch?(candles, lookback_minutes: 3)).to eq(:bearish)
+      end
+    end
+
+    context 'when Smc detector returns false' do
+      it 'returns :neutral' do
+        candles = [build(:candle), build(:candle), build(:candle)]
+        detector = instance_double(Smc::Detectors::Structure, choch?: false)
+
+        allow(Smc::Detectors::Structure).to receive(:new).and_return(detector)
+
+        expect(described_class.choch?(candles, lookback_minutes: 3)).to eq(:neutral)
+      end
+    end
+  end
 end

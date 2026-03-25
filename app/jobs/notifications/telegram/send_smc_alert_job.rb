@@ -86,6 +86,10 @@ module Notifications
             }
           }
 
+          # Enrich with outputs from LTF engines (Displacement, Volume, Zone, Navigator).
+          # These run in the background job so the scanner thread stays fast.
+          details_data[:ltf_engines] = build_ltf_enrichment(instrument, ltf_series, decision)
+
           Rails.logger.debug { "[SendSmcAlertJob] Fetching AI analysis for #{instrument.symbol_name}..." }
 
           # Use AiAnalyzer with pre-fetched data and single-pass analysis
@@ -159,6 +163,56 @@ module Notifications
         else
           Rails.logger.warn("[SendSmcAlertJob] AI analysis is empty or nil for #{instrument.symbol_name}")
         end
+      end
+
+      # Runs DisplacementEngine, VolumeEngine, ZoneEngine, and Navigator on the current LTF series.
+      # Returns a hash that is merged into the AI prompt via initial_data[:ltf_engines].
+      def build_ltf_enrichment(instrument, ltf_series, decision)
+        price = instrument.ltp&.to_f || instrument.latest_ltp&.to_f
+        direction = decision.to_sym == :call ? :bullish : :bearish
+
+        displacement = Smc::DisplacementEngine.new(ltf_series).call
+        volume = Smc::VolumeEngine.new(ltf_series).call
+        zone = Smc::ZoneEngine.new(ltf_series).call(price: price)
+
+        navigator = if price&.positive?
+                      Smc::Navigator.evaluate_entry(
+                        price: price,
+                        direction: direction,
+                        instrument: instrument
+                      )
+                    end
+
+        atr = displacement.atr.to_f
+        body = displacement.body.to_f
+
+        {
+          displacement: {
+            bullish: displacement.bullish,
+            bearish: displacement.bearish,
+            body: body.round(2),
+            atr: atr.round(2),
+            body_atr_ratio: atr.positive? ? (body / atr).round(3) : 0.0
+          },
+          volume: {
+            spike: volume.spike,
+            ratio: volume.ratio.round(3),
+            current: volume.current.to_i,
+            avg: volume.avg.round(2)
+          },
+          zone: {
+            location: zone[:location]&.to_s,
+            equilibrium: zone[:equilibrium]&.round(2)
+          },
+          navigator: navigator ? {
+            allow: navigator.allow,
+            reason: navigator.reason.to_s,
+            confidence: navigator.confidence.round(3)
+          } : nil
+        }
+      rescue StandardError => e
+        Rails.logger.warn("[SendSmcAlertJob] LTF enrichment failed: #{e.class} - #{e.message}")
+        {}
       end
     end
   end

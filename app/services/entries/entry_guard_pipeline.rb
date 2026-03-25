@@ -30,14 +30,17 @@ module Entries
         Guards::CircuitBreakerGuard,
         Guards::BosContractGuard,
         Guards::TimeRegimeGuard,
+        Guards::MiddayQualityGuard,
         Guards::BankniftyLastWeekGuard,
         Guards::EdgeFailureGuard,
+        Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
         Guards::InstrumentLookupGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
-        Guards::LtpResolutionGuard
+        Guards::LtpResolutionGuard,
+        Guards::SmcNavigatorGuard
       ]
     end
   end

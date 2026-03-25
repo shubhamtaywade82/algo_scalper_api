@@ -110,6 +110,7 @@ RSpec.describe Portfolio::DrawdownGuard do
   describe '.reset_day!' do
     before do
       allow(Portfolio::PnlTracker).to receive(:reset_day!)
+      allow(Portfolio::PaperPeakTracker).to receive(:reset_day!)
     end
 
     it 'deletes both guard keys' do
@@ -121,6 +122,7 @@ RSpec.describe Portfolio::DrawdownGuard do
     it 'also resets PnlTracker state' do
       allow(redis).to receive(:del)
       expect(Portfolio::PnlTracker).to receive(:reset_day!)
+      expect(Portfolio::PaperPeakTracker).to receive(:reset_day!)
       described_class.reset_day!
     end
   end

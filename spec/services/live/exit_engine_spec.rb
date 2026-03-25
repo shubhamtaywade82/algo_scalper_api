@@ -148,6 +148,17 @@ RSpec.describe Live::ExitEngine do
         expect(router).not_to have_received(:exit_market)
       end
 
+      it 'retries broker exit when exit intent is stale' do
+        stale_at = Time.current - described_class::EXIT_INTENT_RETRY_AFTER_SECONDS - 1
+        tracker.update!(exit_requested_at: stale_at, exit_coid: nil)
+
+        engine.execute_exit(tracker, 'stop_loss')
+
+        tracker.reload
+        expect(tracker.exit_coid).to be_present
+        expect(router).to have_received(:exit_market).with(tracker, client_order_id: tracker.exit_coid)
+      end
+
       it 'returns exit_already_requested when exit is already sent to broker' do
         tracker.update!(exit_sent_at: Time.current, exit_coid: 'AS-EXIT-SENT')
 

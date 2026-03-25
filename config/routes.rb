@@ -17,6 +17,7 @@ Rails.application.routes.draw do
     get :health, to: "health#show"
     post :test_broadcast, to: "test#broadcast"
     get :dashboard, to: "dashboard#show"
+    get "public_ip/audit", to: "public_ip#audit"
     get :positions, to: "positions#index"
 
     # Live AI analysis dashboard
