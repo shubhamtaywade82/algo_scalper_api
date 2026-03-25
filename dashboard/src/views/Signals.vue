@@ -18,7 +18,9 @@ const processedSignals = computed(() => {
     confidenceBars: Math.round((Number(sig.confidence_score) || 0) * 5),
     confidenceClass: getConfidenceClass(sig.confidence_level),
     entryOutcome: sig.metadata?.entry_outcome || 'pending',
-    entryBlockedReason: sig.metadata?.entry_blocked_reason || null
+    entryBlockedReason: sig.metadata?.entry_blocked_reason || null,
+    entryOutcomeCls: getEntryOutcomeStyle(sig.metadata?.entry_outcome || 'pending').cls,
+    entryOutcomeLabel: getEntryOutcomeStyle(sig.metadata?.entry_outcome || 'pending').label
   }))
 })
 
@@ -112,10 +114,10 @@ function getEntryOutcomeStyle(outcome) {
               </td>
               <td class="p-6">
                 <span
-                  :class="['px-3 py-1 text-[9px] font-black uppercase tracking-widest inline-block', getEntryOutcomeStyle(sig.entryOutcome).cls]"
+                  :class="['px-3 py-1 text-[9px] font-black uppercase tracking-widest inline-block', sig.entryOutcomeCls]"
                   :title="sig.entryBlockedReason || ''"
                 >
-                  {{ getEntryOutcomeStyle(sig.entryOutcome).label }}
+                  {{ sig.entryOutcomeLabel }}
                 </span>
               </td>
               <td class="p-6">
