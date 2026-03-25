@@ -144,7 +144,7 @@ RSpec.describe Live::UnderlyingContextEvaluator do
       end
     end
 
-    context 'when UnderlyingMonitor returns nil / raises' do
+    context 'when UnderlyingMonitor returns nil' do
       before { allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(nil) }
 
       it 'returns :hold with multiplier 1.0' do
@@ -167,7 +167,7 @@ RSpec.describe Live::UnderlyingContextEvaluator do
         result = host.evaluate_underlying_context(tracker, snapshot_armed)
         expect(result[:action]).to eq(:exit)
         expect(result[:reason]).to include('UNDERLYING_STRUCTURE_BREAK')
-        expect(result[:multiplier]).to be_nil.or be_a(Numeric) # multiplier irrelevant on :exit
+        expect(result[:multiplier]).to eq(1.0)
       end
     end
 
@@ -252,6 +252,27 @@ RSpec.describe Live::UnderlyingContextEvaluator do
       it 'returns :hold — smc_bias_flip is excluded from this evaluator' do
         result = host.evaluate_underlying_context(tracker, snapshot_armed)
         expect(result[:action]).to eq(:hold)
+      end
+    end
+
+    context 'when ActiveCache provides pos_data with position_direction' do
+      let(:pos_data) do
+        double(
+          underlying_segment:     'IDX_I',
+          underlying_security_id: '51',
+          position_direction:     'long_ce'
+        )
+      end
+
+      before do
+        allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).with(42).and_return(pos_data)
+        allow(Live::UnderlyingMonitor).to receive(:evaluate).and_return(bos_break_against_long)
+      end
+
+      it 'uses pos_data.position_direction to detect BOS break correctly' do
+        result = host.evaluate_underlying_context(tracker, snapshot_armed)
+        expect(result[:action]).to eq(:exit)
+        expect(result[:reason]).to include('UNDERLYING_STRUCTURE_BREAK')
       end
     end
 
