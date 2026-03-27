@@ -33,7 +33,7 @@ function saveRunningPeak(n) {
 }
 
 export default function Dashboard() {
-  const { balance, stats, open, closed, circuitBreaker, positionsConnected, positionsStale, fetchPositions } = useDashboardContext()
+  const { balance, stats, open, circuitBreaker, positionsConnected, positionsStale, fetchPositions } = useDashboardContext()
 
   const [runningPeakPnl, setRunningPeakPnl] = createSignal(loadRunningPeak())
 
@@ -74,7 +74,7 @@ export default function Dashboard() {
           wsStale={positionsStale()}
           onPositionExited={fetchPositions}
         />
-        <ClosedTrades positions={closed()} />
+        <ClosedTrades />
       </div>
     </div>
   )

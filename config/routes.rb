@@ -19,6 +19,7 @@ Rails.application.routes.draw do
     get :dashboard, to: "dashboard#show"
     get "public_ip/audit", to: "public_ip#audit"
     get :positions, to: "positions#index"
+    get :signals,   to: "signals#index"
 
     # Live AI analysis dashboard
     get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
