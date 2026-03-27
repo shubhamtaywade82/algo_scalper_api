@@ -92,7 +92,21 @@ export function useDashboard(onPositionChange) {
       setIndices(current)
     }
 
-    if (data.system) setSystem(data.system)
+    if (data.system) {
+      // pnl_updater_running and ws_order_update are checked via in-process .running?
+      // in the web process — they are always false there. Only the WS heartbeat
+      // (type: "stats") comes from the trading process and has the real values.
+      // Preserve those fields across REST polls so they don't flicker to false.
+      const fromWs = !!data.type
+      setSystem(prev => {
+        const next = { ...prev, ...data.system }
+        if (!fromWs) {
+          next.pnl_updater_running = prev.pnl_updater_running
+          next.ws_order_update     = prev.ws_order_update
+        }
+        return next
+      })
+    }
     if (data.public_ipv4) setPublicIpv4(data.public_ipv4)
     if (data.public_ipv6) setPublicIpv6(data.public_ipv6)
     if (data.registered_ips !== undefined) setRegisteredIps(data.registered_ips)

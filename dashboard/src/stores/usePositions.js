@@ -45,11 +45,33 @@ export function usePositions() {
     try {
       const res = await fetch('/api/positions')
       const data = await res.json()
-      setOpen(data.open || [])
+      // Merge server data with any live WS fields already applied (ltp, pnl, ltp_stale).
+      // This prevents the periodic poll from overwriting fresher WS values.
+      setOpen(prev => {
+        const prevById = Object.fromEntries(prev.map(p => [p.id, p]))
+        return (data.open || []).map(serverPos => {
+          const live = prevById[serverPos.id]
+          if (!live) return serverPos
+          // Server data wins for stable fields; keep live WS fields if they are fresher
+          return { ...serverPos, ...pickLiveFields(live) }
+        })
+      })
       setClosed(data.closed || [])
     } catch (e) {
       console.error('[Positions] fetch failed:', e)
     }
+  }
+
+  // Only carry forward the real-time fields that WS updates provide.
+  // Everything else is authoritative from the server.
+  function pickLiveFields(pos) {
+    const live = {}
+    if (pos.ltp != null)       live.ltp       = pos.ltp
+    if (pos.pnl != null)       live.pnl       = pos.pnl
+    if (pos.pnl_pct != null)   live.pnl_pct   = pos.pnl_pct
+    if (pos.hwm_pnl != null)   live.hwm_pnl   = pos.hwm_pnl
+    if (pos.ltp_stale != null) live.ltp_stale = pos.ltp_stale
+    return live
   }
 
   function applyPnlUpdate(update) {
@@ -70,11 +92,15 @@ export function usePositions() {
   onMount(() => {
     fetchPositions()
 
+    // Periodic backfill: catches new positions opened, exited, or any WS gaps.
+    backfillTimer = setInterval(() => fetchPositions(), BACKFILL_INTERVAL_MS)
+
     subscription = cable.subscriptions.create('PositionsChannel', {
       connected() {
         console.log('✅ [WS:Positions] Connected')
         setConnected(true)
         markFresh()
+        fetchPositions() // sync on reconnect
       },
       received(data) {
         // ANY incoming data marks fresh and applies update instantly
