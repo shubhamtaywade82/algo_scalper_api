@@ -1,5 +1,5 @@
 import { createMemo } from 'solid-js'
-import { Show, For } from 'solid-js'
+import { Show, Index } from 'solid-js'
 import PositionRow from './PositionRow'
 
 export default function OpenPositions(props) {
@@ -54,9 +54,9 @@ export default function OpenPositions(props) {
               </tr>
             </thead>
             <tbody class="divide-y divide-white/5">
-              <For each={props.positions || []}>
+              <Index each={props.positions || []}>
                 {(pos) => <PositionRow pos={pos} />}
-              </For>
+              </Index>
             </tbody>
           </table>
         </div>
