@@ -34,6 +34,7 @@ midday_guard:
   min_confidence: 0.7
   min_adx: 20
   block_after_time: "15:00"
+  trending_adx_bypass: 28    # skip guard entirely when ADX >= this (trending market)
 
 loss_streak_guard:
   enabled: true
