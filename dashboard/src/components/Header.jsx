@@ -100,9 +100,11 @@ export default function Header(props) {
           <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${props.system?.pnl_updater_running ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-gray-700'}`}></div>
           <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">PNL UPDATER</span>
         </div>
-        <div class={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-500 ${props.connected ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
-          <span class={`w-2 h-2 rounded-full ${props.connected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`}></span>
-          <span class="font-black tracking-[0.1em]">{props.connected ? 'CONNECTED' : 'DISCONNECTED'}</span>
+        <div class={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-500 ${props.connected ? (props.isStale ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400') : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+          <span class={`w-2 h-2 rounded-full ${props.connected ? (props.isStale ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400 animate-pulse') : 'bg-rose-500'}`}></span>
+          <span class="font-black tracking-[0.1em]">
+            {!props.connected ? 'DISCONNECTED' : (props.isStale ? 'STALE' : 'CONNECTED')}
+          </span>
         </div>
       </div>
     </header>

@@ -15,6 +15,32 @@ export function usePositions() {
   let staleTimer = null
   let backfillTimer = null
 
+  function markFresh() {
+    setIsStale(false)
+    setLastMessageAt(new Date().toISOString())
+    clearTimeout(staleTimer)
+    staleTimer = setTimeout(() => setIsStale(true), WS_STALE_AFTER_MS)
+  }
+
+  function clearStaleTimer() {
+    clearTimeout(staleTimer)
+  }
+
+  function stopBackfill() {
+    clearInterval(backfillTimer)
+  }
+
+  function applyPnlStale(data) {
+    if (!data?.id) return
+    setOpen(prev => {
+      const idx = prev.findIndex(p => Number(p.id) === Number(data.id))
+      if (idx === -1) return prev
+      const next = [...prev]
+      next[idx] = { ...next[idx], ltp_stale: true }
+      return next
+    })
+  }
+
   async function fetchPositions() {
     try {
       const res = await fetch('/api/positions')
@@ -27,8 +53,13 @@ export function usePositions() {
   }
 
   function applyPnlUpdate(update) {
+    if (!update) return
     setOpen(prev => {
-      const idx = prev.findIndex(p => Number(p.id) === Number(update.id))
+      // Robust matching: ID first, then Symbol fallback
+      const idx = prev.findIndex(p => 
+        (update.id && Number(p.id) === Number(update.id)) || 
+        (update.symbol && p.symbol === update.symbol)
+      )
       if (idx === -1) return prev
       const next = [...prev]
       next[idx] = { ...next[idx], ...update }
@@ -36,68 +67,23 @@ export function usePositions() {
     })
   }
 
-  function applyPnlStale(staleEvent) {
-    setOpen(prev => {
-      const idx = prev.findIndex(p => Number(p.id) === Number(staleEvent.id))
-      if (idx === -1) return prev
-      const next = [...prev]
-      next[idx] = { ...next[idx], ltp_stale: true }
-      return next
-    })
-  }
-
-  function clearStaleTimer() {
-    if (staleTimer) { clearTimeout(staleTimer); staleTimer = null }
-  }
-
-  function stopBackfill() {
-    if (backfillTimer) { clearInterval(backfillTimer); backfillTimer = null }
-  }
-
-  function startBackfill() {
-    if (backfillTimer) return
-    fetchPositions()
-    backfillTimer = setInterval(fetchPositions, BACKFILL_INTERVAL_MS)
-  }
-
-  function scheduleStaleCheck() {
-    clearStaleTimer()
-    staleTimer = setTimeout(() => {
-      if (!connected()) return
-      setIsStale(true)
-      startBackfill()
-    }, WS_STALE_AFTER_MS)
-  }
-
-  function markFresh() {
-    setLastMessageAt(new Date().toISOString())
-    setIsStale(false)
-    stopBackfill()
-    scheduleStaleCheck()
-  }
-
   onMount(() => {
     fetchPositions()
 
     subscription = cable.subscriptions.create('PositionsChannel', {
       connected() {
+        console.log('✅ [WS:Positions] Connected')
         setConnected(true)
         markFresh()
-        fetchPositions()
-      },
-      disconnected() {
-        setConnected(false)
-        setIsStale(true)
-        clearStaleTimer()
-        startBackfill()
       },
       received(data) {
-        if (data.type === 'pnl_update') {
-          applyPnlUpdate(data)
-          markFresh()
-        } else if (data.type === 'pnl_stale') {
+        // ANY incoming data marks fresh and applies update instantly
+        console.debug('⚡ [WS:Positions] Update:', data)
+        markFresh()
+        if (data.type === 'pnl_stale') {
           applyPnlStale(data)
-          markFresh()
+        } else {
+          applyPnlUpdate(data)
         }
       }
     })

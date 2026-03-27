@@ -1,11 +1,13 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import cable from '../cable'
 
-const POLL_INTERVAL_MS = 30000
+const POLL_INTERVAL_MS = 10000
+const WS_STALE_AFTER_MS = 5000
 
 export function useDashboard(onPositionChange) {
   const [mode, setMode] = createSignal('paper')
   const [connected, setConnected] = createSignal(false)
+  const [isStale, setIsStale] = createSignal(true)
   const [stats, setStats] = createSignal({
     total_trades: 0,
     active_positions: 0,
@@ -29,12 +31,53 @@ export function useDashboard(onPositionChange) {
 
   let subscription = null
   let pollTimer = null
+  let staleTimer = null
+
+  async function fetchInitial() {
+    try {
+      const res = await fetch('/api/dashboard')
+      if (!res.ok) return
+      applyData(await res.json())
+    } catch (e) {
+      console.error('[Dashboard] fetch failed:', e)
+    }
+  }
+
+  function markFresh() {
+    setIsStale(false)
+    clearTimeout(staleTimer)
+    staleTimer = setTimeout(() => setIsStale(true), WS_STALE_AFTER_MS)
+  }
 
   function applyData(data) {
-    if (data.mode != null) setMode(data.mode)
+    if (!data) return
+    console.debug('📊 [Dashboard:applyData] Processing:', data)
+    
+    // Core stats
+    if (data.mode !== undefined) setMode(data.mode)
     if (data.balance) setBalance(data.balance)
     if (data.today) setStats(data.today)
-    if (data.indices) setIndices(data.indices)
+    else if (data.stats) setStats(data.stats)
+    else if (data.today_stats) setStats(data.today_stats)
+
+    // Flat index updates or nested updates
+    const current = { ...indices() }
+    let changed = false
+    
+    // Search top-level AND nested under 'indices' or 'market_indices'
+    const sources = [data, data.indices, data.market_indices].filter(Boolean)
+    
+    for (const src of sources) {
+      if (src.nifty) { current.nifty = src.nifty; changed = true }
+      if (src.banknifty) { current.banknifty = src.banknifty; changed = true }
+      if (src.sensex) { current.sensex = src.sensex; changed = true }
+    }
+
+    if (changed) {
+      console.debug('📈 [Dashboard:Indices] Updated:', current)
+      setIndices(current)
+    }
+
     if (data.system) setSystem(data.system)
     if (data.public_ipv4) setPublicIpv4(data.public_ipv4)
     if (data.public_ipv6) setPublicIpv6(data.public_ipv6)
@@ -42,17 +85,8 @@ export function useDashboard(onPositionChange) {
     if (data.circuit_breaker) setCircuitBreaker(data.circuit_breaker)
     if (data.recent_signals) setRecentSignals(data.recent_signals)
     if (data.config) setConfig(data.config)
-    if (data.timestamp) setLastUpdated(data.timestamp)
-  }
-
-  async function fetchInitial() {
-    try {
-      const res = await fetch('/api/dashboard')
-      const data = await res.json()
-      applyData(data)
-    } catch (e) {
-      console.error('[Dashboard] fetch failed:', e)
-    }
+    
+    setLastUpdated(data.timestamp || new Date().toISOString())
   }
 
   onMount(() => {
@@ -61,15 +95,16 @@ export function useDashboard(onPositionChange) {
 
     subscription = cable.subscriptions.create('DashboardChannel', {
       connected() {
+        console.log('✅ [WS:Dashboard] Connected')
         setConnected(true)
-      },
-      disconnected() {
-        setConnected(false)
+        markFresh()
       },
       received(data) {
-        if (data.type === 'stats') {
-          applyData(data)
-        } else if (data.type === 'position_activated' || data.type === 'position_exited') {
+        console.debug('⚡ [WS:Dashboard] Update:', data)
+        markFresh()
+        applyData(data)
+        
+        if (data.type === 'position_activated' || data.type === 'position_exited') {
           onPositionChange?.()
           fetchInitial()
         } else if (data.type === 'circuit_breaker') {
@@ -82,7 +117,8 @@ export function useDashboard(onPositionChange) {
   onCleanup(() => {
     subscription?.unsubscribe()
     clearInterval(pollTimer)
+    clearTimeout(staleTimer)
   })
 
-  return { mode, connected, stats, balance, indices, system, publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config }
+  return { mode, connected, isStale, stats, balance, indices, system, publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config }
 }

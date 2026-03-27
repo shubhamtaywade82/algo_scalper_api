@@ -1,7 +1,8 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
+import cable from '../cable'
 
 const INDICES = ['NIFTY', 'SENSEX', 'BANKNIFTY']
-const POLL_INTERVAL_MS = 30000
+const POLL_INTERVAL_MS = 10000
 
 export function useAnalysis() {
   // Per-index state maps: { NIFTY: signal, SENSEX: signal, BANKNIFTY: signal }
@@ -18,6 +19,23 @@ export function useAnalysis() {
   const [snapshotError, setSnapshotError] = createSignal(null)
 
   let pollTimer = null
+  let subscription = null
+
+  function applyWsUpdate(data) {
+    if (!data) return
+    
+    // Check if packet contains index-specific analysis data
+    INDICES.forEach(idx => {
+      const key = idx.toLowerCase()
+      const analysisData = data[idx] || data[key] || (data.indices && (data.indices[idx] || data.indices[key]))
+      
+      if (analysisData && typeof analysisData === 'object' && analysisData.ltp) {
+        console.debug(`⚡ [Analysis:WS] Update for ${idx}:`, analysisData)
+        const [, setData] = liveData[idx]
+        setData(prev => ({ ...prev, ...analysisData }))
+      }
+    })
+  }
 
   async function fetchOne(index) {
     const [, setData] = liveData[index]
@@ -79,9 +97,17 @@ export function useAnalysis() {
   onMount(() => {
     fetchAll()
     pollTimer = setInterval(fetchAll, POLL_INTERVAL_MS)
+
+    subscription = cable.subscriptions.create('DashboardChannel', {
+      connected() { console.log('✅ [Analysis:WS] Connected') },
+      received(data) { applyWsUpdate(data) }
+    })
   })
 
-  onCleanup(() => clearInterval(pollTimer))
+  onCleanup(() => {
+    clearInterval(pollTimer)
+    subscription?.unsubscribe()
+  })
 
   return {
     INDICES,

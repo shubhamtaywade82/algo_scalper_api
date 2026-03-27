@@ -22,13 +22,13 @@ function AppShell(props) {
   } = usePositions()
 
   const {
-    mode, connected, stats, balance, indices, system,
+    mode, connected, isStale: dashboardStale, stats, balance, indices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, config
   } = useDashboard(() => fetchPositions())
 
   const ctx = {
-    mode, connected, stats, balance, indices, system,
+    mode, connected, dashboardStale, stats, balance, indices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, config,
     open, closed,
@@ -44,6 +44,7 @@ function AppShell(props) {
           indices={indices()}
           system={system()}
           connected={connected()}
+          isStale={dashboardStale()}
         />
         <main class="p-6 max-w-screen-2xl mx-auto pb-20">
           {props.children}
