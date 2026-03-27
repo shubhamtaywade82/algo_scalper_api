@@ -47,7 +47,7 @@ class AiTechnicalAnalysisJob < ApplicationJob
     self.class.chdir_mutex.synchronize do
       Dir.chdir(Rails.root) do
         # Set environment variable and execute command
-        result = system({ 'STREAM' => 'true' }, "bundle exec rake 'ai:technical_analysis[\"#{query}\"]'")
+        result = system({ 'STREAM' => 'true' }, "bundle exec rake 'ai:technical_analysis[#{query}]'")
 
         if result
           Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")

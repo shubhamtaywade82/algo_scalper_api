@@ -237,7 +237,7 @@ namespace :ai do
           if telegram_enabled
             # Skip verbose agent logs (intent, symbol, tool calls, agent status)
             # Match patterns at start of line or anywhere in chunk
-            if chunk.to_s.match?(/🔍 \[Intent\]|📊 \[Symbol\]|🔧 \[Tool\]|✅ \[Tool\]|⚠️  \[Agent\]|📝 \[Agent\]|💭 \[Agent\]|📋 \[Tool\]|⚙️  \[Tool\]|⏹️  \[Agent\]/)
+            if chunk.to_s.match?(/\[Agent\]|\[Tool\]|\[Intent\]|\[Symbol\]/)
               next
             end
 
@@ -256,18 +256,8 @@ namespace :ai do
       if telegram_enabled && telegram_analysis_buffer.present?
         # Clean up the buffer - remove any remaining verbose logs
         cleaned_buffer = telegram_analysis_buffer.dup
-        # Remove all verbose log patterns (comprehensive cleanup)
-        cleaned_buffer.gsub!(/🔍 \[Intent\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/📊 \[Symbol\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/🔧 \[Tool\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/✅ \[Tool\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/⚠️  \[Agent\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/📝 \[Agent\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/💭 \[Agent\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/⚙️  \[Tool\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/⏹️  \[Agent\][^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/📋 \[Tool\] Result:[^\n]*\n?/, '')
-        cleaned_buffer.gsub!(/📋 \[Tool\] Result:\s*\n/, '')
+        # Remove all verbose agent/tool log lines — matches any line tagged with [Agent], [Tool], [Intent], or [Symbol]
+        cleaned_buffer.gsub!(/^[^\n]*\[(?:Agent|Tool|Intent|Symbol)\][^\n]*\n?/, '')
         # Remove JSON tool call results
         cleaned_buffer.gsub!(/\{"tool"[^}]*\}[^\n]*\n?/, '')
         cleaned_buffer.gsub!(/\{"name"[^}]*\}[^\n]*\n?/, '')
