@@ -296,7 +296,7 @@ module Signal
             adx_value: primary_analysis[:adx_value],
             regime_confidence: regime_result&.[](:confidence)
           }
-          context = Context::Builder.call(market: market, indicators: indicators, regime_state: regime_state)
+          context = Context::Builder.call(market: market, indicators: indicators, regime_state: regime_state, index_key: index_cfg[:key])
           unless context.tradable?
             Rails.logger.info(
               "[Signal] TradingContext BLOCKED #{index_cfg[:key]}: day_type=#{context.day_type} session=#{context.session} " \

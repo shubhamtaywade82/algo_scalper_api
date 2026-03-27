@@ -147,13 +147,14 @@ module Trading
       end
     end
 
-    # Expiry-day (Thursday) auto-tightening: historical data shows -99.96% max losses
-    # on Thursday afternoons. Trail at a fraction of normal distance.
+    # Expiry-day auto-tightening: historical data shows -99.96% max losses on expiry afternoons.
+    # Uses the actual expiry_list from the instrument so holiday shifts are handled correctly.
     def expiry_day_factor
       return 1.0 unless expiry_day_tightening_enabled?
 
-      today = Time.current.in_time_zone('Asia/Kolkata').to_date
-      return expiry_tightening_ratio if today.wday == 4 # Thursday
+      index_key = @tracker.meta&.[]('index_key') || @tracker.meta&.[](:index_key)
+      return 1.0 if index_key.blank?
+      return expiry_tightening_ratio if Market::ExpiryChecker.expiry_today?(index_key)
 
       1.0
     end

@@ -543,21 +543,61 @@ module Entries
         last.present? && (Time.current - last) < cooldown
       end
 
-      # BANKNIFTY trades only in the last week before monthly expiry (last Thursday of month).
-      # Returns true if today is within 7 calendar days of the last Thursday.
-      def banknifty_last_week?
-        today    = Time.zone.today
+      # BANKNIFTY trades only in the last week before monthly expiry.
+      # Uses instrument expiry_list to find the actual monthly expiry date (holiday-aware).
+      # Falls back to last-Thursday-of-month calculation only when expiry_list is unavailable.
+      # Returns true if today is within 7 calendar days of the nearest upcoming monthly expiry.
+      def banknifty_last_week?(instrument: nil)
+        today          = Time.zone.today
+        monthly_expiry = banknifty_monthly_expiry(instrument, today)
+        return false unless monthly_expiry
+
+        days_to_expiry = (monthly_expiry - today).to_i
+        result = days_to_expiry.between?(0, 6)
+        Rails.logger.debug { "[EntryGuard] banknifty_last_week? monthly_expiry=#{monthly_expiry} days_to_expiry=#{days_to_expiry} result=#{result}" }
+        result
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] banknifty_last_week? error: #{e.message}")
+        false
+      end
+
+      # Finds the nearest upcoming BANKNIFTY monthly expiry.
+      # Monthly expiry = the last expiry date within each calendar month from expiry_list.
+      # Falls back to last-Thursday heuristic when expiry_list is absent.
+      def banknifty_monthly_expiry(instrument, today)
+        expiry_list = instrument&.expiry_list&.compact
+        if expiry_list.present?
+          parsed = expiry_list.filter_map do |raw|
+            case raw
+            when Date then raw
+            when String then Date.parse(raw) rescue nil
+            when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
+            end
+          end.sort
+
+          # Monthly expiry = the last (latest) expiry date within each calendar month
+          monthly_expiries = parsed
+            .group_by { |d| [d.year, d.month] }
+            .map { |_, dates| dates.max }
+            .sort
+
+          nearest = monthly_expiries.find { |d| d >= today }
+          if nearest
+            Rails.logger.debug { "[EntryGuard] banknifty_monthly_expiry from expiry_list: #{nearest}" }
+            return nearest
+          end
+          Rails.logger.warn('[EntryGuard] banknifty_monthly_expiry: expiry_list present but no future expiry found, falling back to heuristic')
+        end
+
+        # Fallback: last Thursday of month (may be inaccurate around public holidays)
+        Rails.logger.debug { '[EntryGuard] banknifty_monthly_expiry: using last-Thursday heuristic (no expiry_list)' }
         last_day = today.end_of_month
         last_thu = last_day - ((last_day.wday - 4) % 7).days
-        # If last_thu falls before today (we've passed expiry this month), check next month
         if last_thu < today
           last_day = (today + 1.month).end_of_month
           last_thu = last_day - ((last_day.wday - 4) % 7).days
         end
-        (last_thu - today).to_i.between?(0, 6)
-      rescue StandardError => e
-        Rails.logger.error("[EntryGuard] banknifty_last_week? error: #{e.message}")
-        false
+        last_thu
       end
 
       def weekly_contract?(pick:, index_cfg:)
