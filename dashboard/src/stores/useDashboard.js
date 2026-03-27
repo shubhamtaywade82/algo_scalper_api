@@ -1,7 +1,8 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import cable from '../cable'
 
-const POLL_INTERVAL_MS = 10000
+const POLL_STALE_MS   = 2000   // when WS is stale or not yet delivering
+const POLL_LIVE_MS    = 15000  // when WS heartbeats are arriving
 const WS_STALE_AFTER_MS = 5000
 
 export function useDashboard(onPositionChange) {
@@ -46,7 +47,20 @@ export function useDashboard(onPositionChange) {
   function markFresh() {
     setIsStale(false)
     clearTimeout(staleTimer)
-    staleTimer = setTimeout(() => setIsStale(true), WS_STALE_AFTER_MS)
+    staleTimer = setTimeout(() => {
+      setIsStale(true)
+      schedulePoll() // WS went stale — switch to fast poll immediately
+    }, WS_STALE_AFTER_MS)
+    schedulePoll() // WS is live — reschedule at slow interval
+  }
+
+  function schedulePoll() {
+    clearTimeout(pollTimer)
+    const delay = isStale() ? POLL_STALE_MS : POLL_LIVE_MS
+    pollTimer = setTimeout(() => {
+      fetchInitial()
+      schedulePoll()
+    }, delay)
   }
 
   function applyData(data) {
@@ -91,7 +105,7 @@ export function useDashboard(onPositionChange) {
 
   onMount(() => {
     fetchInitial()
-    pollTimer = setInterval(fetchInitial, POLL_INTERVAL_MS)
+    schedulePoll()
 
     subscription = cable.subscriptions.create('DashboardChannel', {
       connected() {
@@ -116,7 +130,7 @@ export function useDashboard(onPositionChange) {
 
   onCleanup(() => {
     subscription?.unsubscribe()
-    clearInterval(pollTimer)
+    clearTimeout(pollTimer)
     clearTimeout(staleTimer)
   })
 
