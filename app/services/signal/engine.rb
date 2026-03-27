@@ -486,6 +486,8 @@ module Signal
           state_count: state_snapshot[:count],
           state_multiplier: state_snapshot[:multiplier],
           original_timeframe: primary_tf,
+          # Signal Indicators (needed by guards e.g. MiddayQualityGuard trending bypass)
+          adx_value: primary_analysis[:adx_value],
           # SMC/Permission integration
           smc_decision: smc_decision.to_s,
           smc_permission: permission.to_s
