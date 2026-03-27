@@ -1,15 +1,15 @@
-import { ref, onMounted, onUnmounted } from 'vue'
+import { createSignal, onMount, onCleanup } from 'solid-js'
 import cable from '../cable'
 
 const WS_STALE_AFTER_MS = 3000
 const BACKFILL_INTERVAL_MS = 5000
 
 export function usePositions() {
-  const open = ref([])
-  const closed = ref([])
-  const connected = ref(false)
-  const isStale = ref(true)
-  const lastMessageAt = ref(null)
+  const [open, setOpen] = createSignal([])
+  const [closed, setClosed] = createSignal([])
+  const [connected, setConnected] = createSignal(false)
+  const [isStale, setIsStale] = createSignal(true)
+  const [lastMessageAt, setLastMessageAt] = createSignal(null)
 
   let subscription = null
   let staleTimer = null
@@ -19,38 +19,39 @@ export function usePositions() {
     try {
       const res = await fetch('/api/positions')
       const data = await res.json()
-      open.value = data.open || []
-      closed.value = data.closed || []
+      setOpen(data.open || [])
+      setClosed(data.closed || [])
     } catch (e) {
       console.error('[Positions] fetch failed:', e)
     }
   }
 
-  // Replace the whole object at the index so Vue's reactivity picks up the change
   function applyPnlUpdate(update) {
-    const idx = open.value.findIndex(p => Number(p.id) === Number(update.id))
-    if (idx === -1) return
-    open.value[idx] = { ...open.value[idx], ...update }
+    setOpen(prev => {
+      const idx = prev.findIndex(p => Number(p.id) === Number(update.id))
+      if (idx === -1) return prev
+      const next = [...prev]
+      next[idx] = { ...next[idx], ...update }
+      return next
+    })
   }
 
   function applyPnlStale(staleEvent) {
-    const idx = open.value.findIndex(p => Number(p.id) === Number(staleEvent.id))
-    if (idx === -1) return
-    open.value[idx] = { ...open.value[idx], ltp_stale: true }
+    setOpen(prev => {
+      const idx = prev.findIndex(p => Number(p.id) === Number(staleEvent.id))
+      if (idx === -1) return prev
+      const next = [...prev]
+      next[idx] = { ...next[idx], ltp_stale: true }
+      return next
+    })
   }
 
   function clearStaleTimer() {
-    if (staleTimer) {
-      clearTimeout(staleTimer)
-      staleTimer = null
-    }
+    if (staleTimer) { clearTimeout(staleTimer); staleTimer = null }
   }
 
   function stopBackfill() {
-    if (backfillTimer) {
-      clearInterval(backfillTimer)
-      backfillTimer = null
-    }
+    if (backfillTimer) { clearInterval(backfillTimer); backfillTimer = null }
   }
 
   function startBackfill() {
@@ -62,33 +63,31 @@ export function usePositions() {
   function scheduleStaleCheck() {
     clearStaleTimer()
     staleTimer = setTimeout(() => {
-      if (!connected.value) return
-      isStale.value = true
+      if (!connected()) return
+      setIsStale(true)
       startBackfill()
     }, WS_STALE_AFTER_MS)
   }
 
   function markFresh() {
-    lastMessageAt.value = new Date().toISOString()
-    isStale.value = false
+    setLastMessageAt(new Date().toISOString())
+    setIsStale(false)
     stopBackfill()
     scheduleStaleCheck()
   }
 
-  onMounted(() => {
+  onMount(() => {
     fetchPositions()
 
-    // WS-first: realtime updates via ActionCable. Polling is fallback only when stale/disconnected.
     subscription = cable.subscriptions.create('PositionsChannel', {
       connected() {
-        connected.value = true
+        setConnected(true)
         markFresh()
-        // Backfill list once on (re)connect for safety.
         fetchPositions()
       },
       disconnected() {
-        connected.value = false
-        isStale.value = true
+        setConnected(false)
+        setIsStale(true)
         clearStaleTimer()
         startBackfill()
       },
@@ -104,7 +103,7 @@ export function usePositions() {
     })
   })
 
-  onUnmounted(() => {
+  onCleanup(() => {
     subscription?.unsubscribe()
     clearStaleTimer()
     stopBackfill()
