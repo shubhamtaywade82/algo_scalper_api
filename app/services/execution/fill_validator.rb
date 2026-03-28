@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Execution
   class FillValidator
     def self.valid?(order_response)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Analytics
   class Metrics
     def initialize(trades, equity_curve)

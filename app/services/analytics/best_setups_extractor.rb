@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Analytics
   class BestSetupsExtractor
     TOP_PERCENT = 0.2

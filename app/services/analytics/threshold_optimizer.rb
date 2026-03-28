@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Analytics
   class ThresholdOptimizer
     SCORE_RANGE = (40..90).step(5)

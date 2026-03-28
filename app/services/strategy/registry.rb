@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Strategy
   class Registry
     def self.resolve(context)

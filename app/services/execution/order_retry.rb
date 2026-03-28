@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Execution
   class OrderRetry
     MAX_RETRIES = 3

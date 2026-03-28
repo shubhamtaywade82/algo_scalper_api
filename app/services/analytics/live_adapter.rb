@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Analytics
   class LiveAdapter
     UPDATE_INTERVAL = 60 * 60 # 1 hour
