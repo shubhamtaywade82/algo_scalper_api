@@ -7,7 +7,7 @@ module Api
     ALLOWED_SORT_COLS = %w[signal_timestamp confidence_score adx_value index_key direction created_at].freeze
 
     def index
-      scope = TradingSignal.all
+      scope = TradingSignal.order(signal_timestamp: :desc).limit(100)
       scope = apply_filters(scope)
       total = scope.count
       scope = apply_sort(scope)

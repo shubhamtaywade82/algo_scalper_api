@@ -23,13 +23,17 @@ module Entries
           return EntryGuardPipeline::PASS if exposure_ok?(
             instrument: instrument,
             side: side,
-            max_same_side: index_cfg[:max_same_side]
+            max_same_side: index_cfg[:max_same_side],
+            context: context
           )
 
           { blocked: "exposure limit for #{index_cfg[:key]} (#{side})" }
         end
 
-        def exposure_ok?(instrument:, side:, max_same_side:)
+        def exposure_ok?(instrument:, side:, max_same_side:, context: nil)
+          cache_key = "exposure_check_#{instrument.id}_#{side}"
+          return context[cache_key] if context&.key?(cache_key)
+
           max_allowed = max_same_side.to_i
           max_allowed = 1 if max_allowed <= 0
 
@@ -39,7 +43,10 @@ module Entries
           ).limit(max_allowed + 1)
           current_count = active_positions.count
 
-          return false if current_count >= max_allowed
+          if current_count >= max_allowed
+            context[cache_key] = false if context
+            return false
+          end
 
           if current_count == 1
             first_position = active_positions.first
@@ -51,10 +58,15 @@ module Entries
               first_position.reload
             end
 
-            return false unless pyramiding_allowed?(first_position)
+            unless pyramiding_allowed?(first_position)
+              context[cache_key] = false if context
+              return false
+            end
           end
 
-          true
+          result = true
+          context[cache_key] = result if context
+          result
         end
 
         private

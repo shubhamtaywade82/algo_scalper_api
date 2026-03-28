@@ -6,23 +6,157 @@ module Signal
   class Engine
     class << self
       def run_for(index_cfg, regime_state: nil)
-        # Skip signal generation if market is closed (after 3:30 PM IST)
-        if defined?(TradingSession::Service) && TradingSession::Service.respond_to?(:market_closed?) && TradingSession::Service.market_closed?
-          Rails.logger.debug { "[Signal] Market closed - skipping analysis for #{index_cfg[:key]}" }
-          return
-        end
+        return unless tradable_session?(index_cfg)
 
-        Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for #{index_cfg[:key]} (IDX_I) --------------------------------------------------------")
-
-        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-        unless instrument
-          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
-          return
-        end
+        instrument = fetch_instrument(index_cfg)
+        return unless instrument
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
         run_mode = AlgoConfig.run_mode
         exit_testing_mode = run_mode == 'exit_testing'
+
+        # Initialize analysis context
+        context = initialize_analysis_context(signals_cfg, exit_testing_mode)
+        entry_primary = context[:entry_primary]
+        primary_tf = context[:primary_tf]
+        enable_confirmation = context[:enable_confirmation]
+        confirmation_tf = context[:confirmation_tf]
+
+        if entry_primary == 'supertrend'
+          result = execute_supertrend_only_flow(index_cfg, instrument, signals_cfg, primary_tf)
+        else
+          result = execute_standard_analysis_flow(index_cfg, instrument, signals_cfg, primary_tf, confirmation_tf, exit_testing_mode)
+        end
+
+        return unless result
+
+        final_direction = result[:direction]
+        primary_analysis = result[:primary_analysis]
+        confirmation_analysis = result[:confirmation_analysis]
+        primary_series = result[:primary_series]
+        ta_result = result[:ta_result]
+        regime_result = result[:regime_result]
+        regime = result[:regime]
+        validation_result = result[:validation_result]
+        effective_validation_mode = result[:effective_validation_mode]
+
+        # 5. Trading Context Gate
+        if trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, exit_testing_mode, signals_cfg)
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
+        # 6. Entry Quality Filter
+        quality_result = evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime, exit_testing_mode)
+        unless quality_result[:pass]
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
+        # 7. Institutional and Permission Gates
+        gate_results = execute_execution_gates(index_cfg, instrument, primary_series, final_direction, signals_cfg, exit_testing_mode)
+        return unless gate_results
+
+        permission = gate_results[:permission]
+        smc_decision = gate_results[:smc_decision]
+        momentum_score = gate_results[:momentum_score]
+
+        # 8. Persistence Pre-checks
+        state_snapshot = Signal::StateTracker.record(
+          index_key: index_cfg[:key],
+          direction: final_direction,
+          candle_timestamp: primary_analysis[:last_candle_timestamp],
+          config: signals_cfg
+        )
+
+        # 9. Options Analysis
+        options_analysis = execute_options_analysis(index_cfg, instrument, final_direction, primary_series, effective_validation_mode)
+
+        # 10. Metadata Building
+        diagnostic_metadata = build_diagnostic_metadata(
+          index_cfg: index_cfg,
+          final_direction: final_direction,
+          primary_analysis: primary_analysis,
+          confirmation_analysis: confirmation_analysis,
+          regime: regime,
+          regime_result: regime_result,
+          ta_result: ta_result,
+          options_analysis: options_analysis,
+          validation_result: validation_result,
+          state_snapshot: state_snapshot,
+          effective_validation_mode: effective_validation_mode,
+          signals_cfg: signals_cfg,
+          primary_tf: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_tf: confirmation_tf,
+          enable_confirmation: enable_confirmation,
+          smc_decision: smc_decision,
+          permission: permission
+        )
+
+        # 11. Create Signal
+        signal = TradingSignal.create_from_analysis(
+          index_key: index_cfg[:key],
+          direction: final_direction.to_s,
+          timeframe: effective_timeframe,
+          supertrend_value: primary_analysis[:supertrend][:last_value],
+          adx_value: primary_analysis[:adx_value],
+          candle_timestamp: primary_analysis[:last_candle_timestamp],
+          confidence_score: calculate_confidence_score(
+            primary_analysis: primary_analysis,
+            confirmation_analysis: confirmation_analysis,
+            validation_result: validation_result
+          ),
+          metadata: diagnostic_metadata
+        )
+
+        # 12. Option Pick and Market Context Gate
+        gate_result = execute_entry_gate(
+          index_cfg: index_cfg, instrument: instrument, signal: signal,
+          final_direction: final_direction, primary_series: primary_series,
+          options_analysis: options_analysis, momentum_score: momentum_score,
+          permission: permission, smc_decision: smc_decision
+        )
+        return unless gate_result
+
+        # 13. Trigger Entry
+        trigger_entry_flow(
+          index_cfg: index_cfg, instrument: instrument, signal: signal,
+          picks: gate_result[:picks], final_direction: final_direction,
+          primary_series: primary_series, primary_tf: primary_tf,
+          entry_primary: entry_primary, exit_testing_mode: exit_testing_mode,
+          diagnostic_metadata: diagnostic_metadata,
+          quality_result: quality_result,
+          market_context_extra: gate_result[:market_context_extra],
+          execution_permission: gate_result[:execution_permission]
+        )
+      rescue StandardError => e
+        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
+        Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
+        Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
+      end
+
+      private
+
+      def tradable_session?(index_cfg)
+        if defined?(TradingSession::Service) && TradingSession::Service.respond_to?(:market_closed?) && TradingSession::Service.market_closed?
+          Rails.logger.debug { "[Signal] Market closed - skipping analysis for #{index_cfg[:key]}" }
+          return false
+        end
+
+        Rails.logger.info("\n\n[Signal] ----------------------------------------------------- Starting analysis for #{index_cfg[:key]} (IDX_I) --------------------------------------------------------")
+        true
+      end
+
+      def fetch_instrument(index_cfg)
+        instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
+        unless instrument
+          Rails.logger.error("[Signal] Could not find instrument for #{index_cfg[:key]}")
+        end
+        instrument
+      end
+
+      def initialize_analysis_context(signals_cfg, exit_testing_mode)
         entry_primary = if exit_testing_mode
                           'supertrend_adx'
                         else
@@ -31,596 +165,346 @@ module Signal
 
         primary_tf = exit_testing_mode ? '1m' : (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         enable_confirmation = exit_testing_mode ? false : signals_cfg.fetch(:enable_confirmation_timeframe, true)
-        confirmation_tf = if enable_confirmation && signals_cfg[:confirmation_timeframe].present?
-                            signals_cfg[:confirmation_timeframe].to_s
-                          end
+        confirmation_tf = (signals_cfg[:confirmation_timeframe].to_s if enable_confirmation && signals_cfg[:confirmation_tf].present?)
 
-        # Initialize diagnostic variables to prevent NoMethodError in cross-strategy metadata building
-        ta_result = nil
-        regime_result = { regime: 'UNKNOWN', confidence: 0, metrics: {} }
-        regime = 'UNKNOWN'
+        {
+          entry_primary: entry_primary,
+          primary_tf: primary_tf,
+          enable_confirmation: enable_confirmation,
+          confirmation_tf: confirmation_tf
+        }
+      end
 
-        if entry_primary == 'supertrend'
-          # ===== SUPERTREND-ONLY ENTRY (entry_strategy.primary: supertrend) =====
-          # Direction from SupertrendTrend (flip only). No Index TA, no strategy recs,
-          # no confirmation TF, no DirectionGate, no ADX/trend_confirmation in validation.
-          use_strategy_recommendations = true
-          strategy_recommendation = { strategy_name: 'supertrend_trend', recommended: true }
-          effective_timeframe = primary_tf
-
-          supertrend_cfg = signals_cfg[:supertrend]
-          unless supertrend_cfg
-            Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
-            return
-          end
-
-          primary_analysis = analyze_timeframe(
-            index_cfg: index_cfg,
-            instrument: instrument,
-            timeframe: primary_tf,
-            supertrend_cfg: supertrend_cfg,
-            adx_min_strength: 0
-          )
-          unless primary_analysis[:status] == :ok
-            Rails.logger.warn("[Signal] Primary timeframe analysis unavailable for #{index_cfg[:key]}: #{primary_analysis[:message]}")
-            Signal::StateTracker.reset(index_cfg[:key])
-            return
-          end
-
-          trend_direction = SupertrendTrend.direction(
-            series: primary_analysis[:series],
-            supertrend_result: primary_analysis[:supertrend]
-          )
-          if trend_direction == :none
-            Rails.logger.info("[Signal] SupertrendTrend :none — no trade for #{index_cfg[:key]}")
-            Signal::StateTracker.reset(index_cfg[:key])
-            return
-          end
-
-          final_direction = trend_direction == :long ? :bullish : :bearish
-          confirmation_analysis = nil
-          primary_series = primary_analysis[:series]
-          validation_result = comprehensive_validation(
-            index_cfg, final_direction, primary_series,
-            primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
-            supertrend_only: true
-          )
-
-          # Collect diagnostics for Supertrend mode
-          ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
-          ta_days_back = signals_cfg[:ta_days_back] || 30
-          index_symbol = index_cfg[:key].to_s.downcase.to_sym
-          ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
-          ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
-          ta_result = ta_analysis[:success] ? ta_analyzer.result : nil
-
-          regime_result = MarketRegimeDetector.new(primary_analysis[:series]).detect
-          regime = regime_result[:regime]
-        else
-          # ===== INDEX TECHNICAL ANALYSIS STEP (DIAGNOSTICS & OPTIONAL FILTER) =====
-          # Always performed for diagnostics. Filter is optional via signals.enable_index_ta_filter.
-          enable_index_ta_filter = signals_cfg.fetch(:enable_index_ta_filter, false)
-          ta_min_confidence = signals_cfg[:ta_min_confidence] || 0.6
-
-          index_symbol = index_cfg[:key].to_s.downcase.to_sym
-          ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
-          ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
-
-          if ta_analysis[:success] && ta_analyzer.success?
-            ta_result = ta_analyzer.result
-            Rails.logger.info(
-              "[Signal] Index TA for #{index_cfg[:key]}: signal=#{ta_result[:signal]}, " \
-              "confidence=#{ta_result[:confidence].round(2)}, bias=#{ta_result.dig(:bias_summary, :summary, :bias)}"
-            )
-
-            # Only block if filter is explicitly enabled (default is now false for diagnostics)
-            if enable_index_ta_filter && (ta_result[:signal] == :neutral || ta_result[:confidence] < ta_min_confidence)
-              Rails.logger.info(
-                "[Signal] Skipping signal generation for #{index_cfg[:key]} (TA Filter ACTIVE): " \
-                "TA signal=#{ta_result[:signal]}, confidence=#{ta_result[:confidence].round(2)}"
-              )
-              return
-            end
-          else
-            Rails.logger.warn("[Signal] Index TA failed for #{index_cfg[:key]}: #{ta_analyzer.error}")
-          end
-
-          primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
-          enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
-          confirmation_tf = (signals_cfg[:confirmation_timeframe].presence&.to_s if enable_confirmation)
-
-          # Check if strategy-based recommendations are enabled
-          use_strategy_recommendations = exit_testing_mode ? false : signals_cfg.fetch(:use_strategy_recommendations, false)
-
-          # Rails.logger.debug { "[Signal] Primary timeframe: #{primary_tf}, confirmation timeframe: #{confirmation_tf || 'none'} (enabled: #{enable_confirmation})" }
-
-          # Get strategy recommendation if enabled - use best strategy for this index
-          strategy_recommendation = nil
-          effective_timeframe = primary_tf
-          if use_strategy_recommendations
-            # Get best strategy for this index (across all timeframes)
-            strategy_recommendation = StrategyRecommender.best_for_index(symbol: index_cfg[:key])
-            if strategy_recommendation && strategy_recommendation[:recommended]
-              # Use the recommended strategy's timeframe instead of config timeframe
-              effective_timeframe = "#{strategy_recommendation[:interval]}m"
-              Rails.logger.info("[Signal] Using recommended strategy for #{index_cfg[:key]}: #{strategy_recommendation[:strategy_name]} (#{strategy_recommendation[:interval]}min) - Expectancy: #{strategy_recommendation[:expectancy]}% | Switching timeframe from #{primary_tf} to #{effective_timeframe}")
-            elsif strategy_recommendation
-              Rails.logger.warn("[Signal] Strategy recommendation found for #{index_cfg[:key]} but not recommended (negative expectancy: #{strategy_recommendation[:expectancy]}%) - falling back to Supertrend+ADX")
-              strategy_recommendation = nil
-            else
-              Rails.logger.warn("[Signal] No strategy recommendation found for #{index_cfg[:key]} - falling back to Supertrend+ADX")
-            end
-          end
-
-          # Use strategy-based analysis if recommendation is available and enabled
-          if use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
-            primary_analysis = analyze_with_recommended_strategy(
-              index_cfg: index_cfg,
-              instrument: instrument,
-              timeframe: effective_timeframe,
-              strategy_recommendation: strategy_recommendation
-            )
-          else
-            # Fallback to traditional Supertrend + ADX analysis
-            supertrend_cfg = signals_cfg[:supertrend]
-            unless supertrend_cfg
-              Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
-              return
-            end
-
-            adx_cfg = signals_cfg[:adx] || {}
-            enable_adx_filter = signals_cfg.fetch(:enable_adx_filter, true)
-            # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-            adx_min_strength = enable_adx_filter ? adx_cfg[:min_strength] : 0
-
-            primary_analysis = analyze_timeframe(
-              index_cfg: index_cfg,
-              instrument: instrument,
-              timeframe: primary_tf,
-              supertrend_cfg: supertrend_cfg,
-              adx_min_strength: adx_min_strength
-            )
-          end
-
-          unless primary_analysis[:status] == :ok
-            Rails.logger.warn("[Signal] Primary timeframe analysis unavailable for #{index_cfg[:key]}: #{primary_analysis[:message]}")
-            Signal::StateTracker.reset(index_cfg[:key])
-            return
-          end
-
-          final_direction = primary_analysis[:direction]
-          confirmation_analysis = nil
-
-          # Skip confirmation timeframe when using strategy recommendations
-          # (strategies were backtested as standalone systems)
-          if confirmation_tf.present? && !(use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended])
-            mode_config = get_validation_mode_config
-            # Only apply ADX filter if enabled, otherwise use 0 to bypass filter
-            confirmation_adx_min = if enable_adx_filter
-                                     mode_config[:adx_confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]
-                                   else
-                                     0
-                                   end
-
-            confirmation_analysis = analyze_timeframe(
-              index_cfg: index_cfg,
-              instrument: instrument,
-              timeframe: confirmation_tf,
-              supertrend_cfg: supertrend_cfg,
-              adx_min_strength: confirmation_adx_min
-            )
-
-            unless confirmation_analysis[:status] == :ok
-              Rails.logger.warn("[Signal] Confirmation timeframe analysis unavailable for #{index_cfg[:key]}: #{confirmation_analysis[:message]}")
-              Signal::StateTracker.reset(index_cfg[:key])
-              return
-            end
-
-            final_direction = multi_timeframe_direction(primary_analysis[:direction], confirmation_analysis[:direction])
-            # Rails.logger.info("[Signal] Multi-timeframe decision for #{index_cfg[:key]}: primary=#{primary_analysis[:direction]} confirmation=#{confirmation_analysis[:direction]} final=#{final_direction}")
-          elsif confirmation_tf.present? && use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
-            Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using strategy recommendation: #{strategy_recommendation[:strategy_name]})")
-          end
-
-          if final_direction == :avoid
-            if use_strategy_recommendations && strategy_recommendation && strategy_recommendation[:recommended]
-              Rails.logger.info("[Signal] NOT proceeding for #{index_cfg[:key]}: #{strategy_recommendation[:strategy_name]} did not generate a signal (conditions not met)")
-            else
-              Rails.logger.info("[Signal] NOT proceeding for #{index_cfg[:key]}: multi-timeframe bias mismatch or weak trend")
-            end
-            Signal::StateTracker.reset(index_cfg[:key])
-            return
-          end
-
-          primary_series = primary_analysis[:series]
-          if exit_testing_mode
-            regime_result = { regime: 'EXIT_TESTING', confidence: 0, metrics: {} }
-            regime = regime_result[:regime]
-            effective_validation_mode = 'exit_testing'
-            validation_result = { valid: true, reason: 'Exit-testing mode: 1m Supertrend+ADX only' }
-            Rails.logger.info("[Signal] Exit-testing mode active for #{index_cfg[:key]}: forcing 1m Supertrend+ADX only.")
-          else
-            # ===== MARKET REGIME & DIRECTION GATE =====
-            # Always compute regime for diagnostics. Filter via signals.enable_direction_gate.
-            regime_result = MarketRegimeDetector.new(primary_series).detect
-            regime = regime_result[:regime]
-
-            # DYNAMIC VALIDATION MODE: Use conservative mode in ranging/choppy markets
-            # NOTE: Use local variable — do NOT mutate signals_cfg (it's a cached AlgoConfig reference)
-            effective_validation_mode = if %w[RANGING CHOPPY].include?(regime)
-                                          Rails.logger.info("[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} due to #{regime} regime")
-                                          'conservative'
-                                        else
-                                          signals_cfg[:validation_mode]
-                                        end
-
-            enable_direction_gate = signals_cfg.fetch(:enable_direction_gate, false)
-
-            if enable_direction_gate
-              trade_side = final_direction == :bullish ? :CE : :PE
-
-              # Hard block for non-trending markets as per options buying requirements
-              if %w[RANGING CHOPPY INSUFFICIENT_DATA].include?(regime)
-                Rails.logger.info(
-                  "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Market is #{regime}. Skipping to avoid theta decay."
-                )
-                Signal::StateTracker.reset(index_cfg[:key])
-                return
-              end
-
-              # Verify alignment with expected trade direction
-              aligned = (regime == 'TRENDING_UP' && trade_side == :CE) ||
-                        (regime == 'TRENDING_DOWN' && trade_side == :PE)
-
-              unless aligned
-                Rails.logger.info(
-                  "[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Counter-trend trade. #{trade_side} requested vs #{regime}."
-                )
-                Signal::StateTracker.reset(index_cfg[:key])
-                return
-              end
-              Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} in #{regime}" }
-            end
-
-            validation_result = comprehensive_validation(index_cfg, final_direction, primary_series,
-                                                         primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
-                                                         validation_mode: effective_validation_mode)
-          end
+      def execute_supertrend_only_flow(index_cfg, instrument, signals_cfg, primary_tf)
+        supertrend_cfg = signals_cfg[:supertrend]
+        unless supertrend_cfg
+          Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
+          return
         end
 
-        # ===== TRADING CONTEXT GATE (day_type / session / regime / score / stability) =====
-        enable_trading_context_gate = signals_cfg.fetch(:enable_trading_context_gate, true)
-        if enable_trading_context_gate && regime_state && !exit_testing_mode
-          market = primary_series
-          indicators = {
-            adx_value: primary_analysis[:adx_value],
-            regime_confidence: regime_result&.[](:confidence)
-          }
-          context = Context::Builder.call(market: market, indicators: indicators, regime_state: regime_state, index_key: index_cfg[:key])
-          unless context.tradable?
-            Rails.logger.info(
-              "[Signal] TradingContext BLOCKED #{index_cfg[:key]}: day_type=#{context.day_type} session=#{context.session} " \
-              "regime=#{context.regime} score=#{context.score} stability=#{context.stability} (not tradable)"
-            )
-            Signal::StateTracker.reset(index_cfg[:key])
-            return
-          end
-          Rails.logger.debug(
-            "[Signal] TradingContext PASSED #{index_cfg[:key]}: #{context.day_type}/#{context.session}/#{context.regime} " \
-            "score=#{context.score} stability=#{context.stability}"
-          )
-        end
-        # ===== END TRADING CONTEXT GATE =====
-
-        unless validation_result[:valid]
-          Rails.logger.warn("[Signal] NOT proceeding for #{index_cfg[:key]}: #{validation_result[:reason]}")
+        primary_analysis = analyze_timeframe(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          timeframe: primary_tf,
+          supertrend_cfg: supertrend_cfg,
+          adx_min_strength: 0
+        )
+        unless primary_analysis[:status] == :ok
+          Rails.logger.warn("[Signal] Primary timeframe analysis unavailable for #{index_cfg[:key]}: #{primary_analysis[:message]}")
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
 
-        # ===== ENTRY QUALITY FILTER =====
-        # Skipped in exit_testing mode — free entries are required to test exit logic.
-        quality_result = if exit_testing_mode?
-                           Rails.logger.info("[Signal] Exit-testing mode: skipping EntryQualityFilter for #{index_cfg[:key]}")
-                           { pass: true, score: 0, breakdown: {}, reject_reason: nil }
-                         else
-                           Signal::EntryQualityFilter.evaluate(
-                             series: primary_series,
-                             supertrend_result: primary_analysis[:supertrend],
-                             adx_value: primary_analysis[:adx_value],
-                             direction: final_direction,
-                             regime: regime,
-                             index_key: index_cfg[:key]
-                           )
-                         end
-        unless quality_result[:pass]
-          Rails.logger.info("[Signal] EntryQualityFilter REJECTED #{index_cfg[:key]} #{final_direction}: " \
-                            "#{quality_result[:reject_reason]} (score=#{quality_result[:score]})")
+        trend_direction = SupertrendTrend.direction(
+          series: primary_analysis[:series],
+          supertrend_result: primary_analysis[:supertrend]
+        )
+        if trend_direction == :none
+          Rails.logger.info("[Signal] SupertrendTrend :none — no trade for #{index_cfg[:key]}")
           Signal::StateTracker.reset(index_cfg[:key])
           return
         end
-        Rails.logger.info("[Signal] EntryQualityFilter PASSED #{index_cfg[:key]} #{final_direction} " \
-                          "score=#{quality_result[:score]} #{quality_result[:breakdown]}") unless exit_testing_mode?
-        # ===== END ENTRY QUALITY FILTER =====
 
-        permission = :exit_testing
-        smc_decision = final_direction == :bullish ? :call : :put
+        final_direction = trend_direction == :long ? :bullish : :bearish
+        primary_series = primary_analysis[:series]
+        validation_result = comprehensive_validation(
+          index_cfg, final_direction, primary_series,
+          primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
+          supertrend_only: true
+        )
 
-        if exit_testing_mode?
-          Rails.logger.info("[Signal] Exit-testing mode: skipping entry filter, permission/SMC gating, and momentum validation.")
-        else
-          # ===== INSTITUTIONAL ENTRY FILTER (Structure + Liquidity + Volatility) =====
-          filter = Entries::EntryFilterEngine.new(series: primary_series, symbol: index_cfg[:key])
-          unless filter.valid_entry?(direction: final_direction)
-            Rails.logger.warn("[Signal] EntryFilterEngine BLOCKED #{index_cfg[:key]}: Missing Structure/Liquidity/Volatility alignment")
-            Signal::StateTracker.reset(index_cfg[:key])
-            return
-          end
-          Rails.logger.info("[Signal] EntryFilterEngine PASSED for #{index_cfg[:key]}")
-          # ===== END INSTITUTIONAL ENTRY FILTER =====
+        # Collect diagnostics
+        ta_result = perform_diagnostic_ta(index_cfg, signals_cfg)
+        regime_result = MarketRegimeDetector.new(primary_series).detect
 
-          Rails.logger.info("[Signal] Proceeding with #{final_direction} signal for #{index_cfg[:key]}")
-
-          # ===== PERMISSION RESOLUTION (HARD) =====
-          permission = Trading::PermissionResolver.resolve(symbol: index_cfg[:key], instrument: instrument)
-          if permission == :blocked
-            Rails.logger.info("[Signal] PermissionResolver BLOCKED #{index_cfg[:key]} - no trade")
-            Signal::StateTracker.reset(index_cfg[:key])
-            return
-          end
-          # ===== END PERMISSION RESOLUTION =====
-
-          # ===== SMC DECISION ALIGNMENT (HARD FILTER) =====
-          enable_smc_permission = signals_cfg.fetch(:enable_smc_avrz_permission, true)
-          enable_smc_alignment = signals_cfg.fetch(:enable_smc_decision_alignment, true)
-
-          if enable_smc_permission && enable_smc_alignment
-            smc_decision = get_smc_decision(index_cfg, instrument, signals_cfg, final_direction)
-            unless smc_decision_aligned?(smc_decision, final_direction)
-              Rails.logger.info(
-                "[Signal] SMC Decision BLOCKED #{index_cfg[:key]}: " \
-                "signal=#{final_direction}, smc=#{smc_decision} (misaligned or no_trade)"
-              )
-              Signal::StateTracker.reset(index_cfg[:key])
-              return
-            end
-            Rails.logger.info("[Signal] SMC Decision CONFIRMED #{index_cfg[:key]}: #{smc_decision} aligns with #{final_direction}")
-          else
-            smc_decision = final_direction == :bullish ? :call : :put
-            Rails.logger.debug { "[Signal] SMC Decision alignment check SKIPPED for #{index_cfg[:key]} (SMC+AVRZ disabled)" }
-          end
-          # ===== END SMC DECISION ALIGNMENT =====
-
-          # ===== MOMENTUM VALIDATION =====
-          momentum_result = Signal::MomentumValidator.validate(
-            instrument: instrument,
-            series: primary_series,
-            direction: final_direction
-          )
-          momentum_score = momentum_result.score
-          Rails.logger.info("[Signal] Momentum Score for #{index_cfg[:key]}: #{momentum_score}/3")
-          # ===== END MOMENTUM VALIDATION =====
-        end
-
-        # Get state snapshot first for signal persistence
-        state_snapshot = Signal::StateTracker.record(
-          index_key: index_cfg[:key],
+        {
           direction: final_direction,
-          candle_timestamp: primary_analysis[:last_candle_timestamp],
-          config: signals_cfg
-        )
-
-        # Persist signal with confidence score
-        confidence_score = calculate_confidence_score(
           primary_analysis: primary_analysis,
-          confirmation_analysis: confirmation_analysis,
-          validation_result: validation_result
-        )
+          confirmation_analysis: nil,
+          primary_series: primary_series,
+          ta_result: ta_result,
+          regime_result: regime_result,
+          regime: regime_result[:regime],
+          validation_result: validation_result,
+          effective_validation_mode: nil
+        }
+      end
 
-        # Build clear entry path identifier for tracking and analysis
-        entry_path = build_entry_path_identifier(
-          strategy_recommendation: strategy_recommendation,
-          use_strategy_recommendations: use_strategy_recommendations,
+      def perform_diagnostic_ta(index_cfg, signals_cfg)
+        ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
+        ta_days_back = signals_cfg[:ta_days_back] || 30
+        index_symbol = index_cfg[:key].to_s.downcase.to_sym
+        ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
+        ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
+        ta_analysis[:success] ? ta_analyzer.result : nil
+      end
+
+      def execute_standard_analysis_flow(index_cfg, instrument, signals_cfg, primary_tf, confirmation_tf, exit_testing_mode)
+        # 1. Index TA Step
+        ta_result = perform_standard_ta(index_cfg, signals_cfg)
+        return unless ta_result || !signals_cfg.fetch(:enable_index_ta_filter, false)
+
+        # 2. Strategy Recommendation
+        strategy_recommendation = resolve_strategy_recommendation(index_cfg, signals_cfg, primary_tf, exit_testing_mode)
+        effective_timeframe = strategy_recommendation[:effective_timeframe]
+
+        # 3. Analyze Timeframes
+        analysis = analyze_primary_and_confirmation(
+          index_cfg: index_cfg,
+          instrument: instrument,
+          signals_cfg: signals_cfg,
           primary_tf: primary_tf,
           effective_timeframe: effective_timeframe,
           confirmation_tf: confirmation_tf,
-          enable_confirmation: enable_confirmation
+          strategy_recommendation: strategy_recommendation[:recommendation]
         )
+        return unless analysis
 
-        # ===== OPTIONS BEHAVIOR ANALYSIS =====
-        # 1. Expiry Day Session Filter
-        expiry_blocked = expiry_trade_allowed?(index_cfg[:key]) == false
+        final_direction = analysis[:final_direction]
+        primary_series = analysis[:primary_analysis][:series]
 
-        # 2. Gamma Ramp Detection & Volatility Proxy
-        expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
-        chain_data = instrument.fetch_option_chain(expiry_date)
-
-        gamma_pressure_result = if chain_data
-                                  detector = Options::GammaRampDetector.new(
-                                    index_key: index_cfg[:key],
-                                    expiry_date: expiry_date,
-                                    chain_data: chain_data
-                                  )
-                                  {
-                                    score: detector.gamma_pressure_score(direction: final_direction),
-                                    strike: detector.ramp_strike(direction: final_direction)&.dig(:strike)
-                                  }
-                                else
-                                  { score: 0.0, strike: nil }
-                                end
-
-        iv_rank_result = validate_iv_rank(index_cfg, primary_series, effective_validation_mode)
-        theta_risk_result = validate_theta_risk(index_cfg, final_direction, effective_validation_mode)
-        # ===== END OPTIONS BEHAVIOR ANALYSIS =====
-
-        # Prepare enriched diagnostic diagnostic_metadata payload
-        diagnostic_metadata = {
-          # Market State Diagnostics
-          regime: regime,
-          regime_confidence: regime_result&.[](:confidence) || 0,
-          regime_metrics: regime_result&.[](:metrics) || {},
-          # Multi-Timeframe Diagnostics
-          ta_signal: ta_result&.dig(:signal),
-          ta_confidence: ta_result&.dig(:confidence),
-          ta_bias: ta_result&.dig(:bias_summary, :summary, :bias),
-          mtf_rsi: ta_result&.dig(:indicators)&.transform_values { |v| v[:rsi] },
-          mtf_macd: ta_result&.dig(:indicators)&.transform_values { |v| v[:macd] },
-          mtf_atr: ta_result&.dig(:indicators)&.transform_values { |v| v[:atr] },
-          # Options Behavior / Greeks
-          gamma_pressure: gamma_pressure_result&.dig(:score),
-          gamma_ramp_strike: gamma_pressure_result&.dig(:strike),
-          iv_rank_proxy: iv_rank_result&.dig(:iv_rank_proxy),
-          theta_risk_score: theta_risk_result&.dig(:risk_score),
-          expiry_blocked: expiry_blocked,
-          # Execution Context
-          entry_path: entry_path,
-          strategy: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
-          strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx',
-          primary_timeframe: primary_tf,
-          effective_timeframe: effective_timeframe,
-          confirmation_timeframe: confirmation_tf,
-          confirmation_enabled: enable_confirmation,
-          confirmation_direction: confirmation_analysis&.dig(:direction),
-          validation_mode: effective_validation_mode || signals_cfg[:validation_mode] || 'balanced',
-          validation_passed: validation_result[:valid],
-          state_count: state_snapshot[:count],
-          state_multiplier: state_snapshot[:multiplier],
-          original_timeframe: primary_tf,
-          # Signal Indicators (needed by guards e.g. MiddayQualityGuard trending bypass)
-          adx_value: primary_analysis[:adx_value],
-          # SMC/Permission integration
-          smc_decision: smc_decision.to_s,
-          smc_permission: permission.to_s
-        }
-
-        signal = TradingSignal.create_from_analysis(
-          index_key: index_cfg[:key],
-          direction: final_direction.to_s,
-          timeframe: effective_timeframe,
-          supertrend_value: primary_analysis[:supertrend][:last_value],
-          adx_value: primary_analysis[:adx_value],
-          candle_timestamp: primary_analysis[:last_candle_timestamp],
-          confidence_score: confidence_score,
-          metadata: diagnostic_metadata
-        )
-
-        # Rails.logger.info("[Signal] Signal state for #{index_cfg[:key]}: count=#{state_snapshot[:count]} multiplier=#{state_snapshot[:multiplier]}")
-
-        # ===== EXIT IF BLOCKED BY OPTIONS BEHAVIOR =====
-        if expiry_blocked
-          Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
-          record_signal_skip(signal, 'expiry midday decay')
-          Signal::StateTracker.reset(index_cfg[:key])
-          return
-        end
-
-        # ===== END OPTIONS BEHAVIOR ANALYSIS =====
-
-        # ===== STRIKE QUALIFICATION LAYER (HARD GATE) =====
-        # First point where we have:
-        # - symbol (index_cfg[:key])
-        # - side (from final_direction)
-        # - permission (from PermissionResolver)
-        # - option chain (fetched inside ChainAnalyzer)
-        # - expected spot move (ATR-derived from series)
-        expected_spot_move =
-          begin
-            atr = primary_series.atr(14)
-            atr&.to_f
-          rescue StandardError
-            nil
-          end
-
-        unless expected_spot_move&.positive?
-          Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
-          record_signal_skip(signal, 'missing ATR')
-          Signal::StateTracker.reset(index_cfg[:key])
-          return
-        end
-
-        execution_permission = effective_execution_permission(permission)
-
-        picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
-          index_cfg: index_cfg,
-          direction: final_direction,
-          permission: execution_permission,
-          expected_spot_move: expected_spot_move,
-          momentum_score: momentum_score
-        )
-        # ===== END STRIKE QUALIFICATION LAYER =====
-
-        if picks.blank?
-          Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
-          record_signal_skip(signal, 'no suitable strikes')
-          return
-        end
-
-        Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
-
-        market_context_extra, mc_gate_blocked = evaluate_market_context_for_entry(
-          index_cfg: index_cfg,
-          primary_series: primary_series,
-          expiry_date: expiry_date,
-          chain_data: chain_data,
-          final_direction: final_direction,
-          pick: picks.first,
-          smc_decision: smc_decision
-        )
-        if mc_gate_blocked
-          record_signal_skip(signal, 'market context gate')
-          Signal::StateTracker.reset(index_cfg[:key])
-          return
-        end
-
-        # Prepare entry metadata to pass to EntryGuard
-        supertrend_direct_entry = (entry_primary == 'supertrend') || exit_testing_mode?
-        entry_metadata = diagnostic_metadata.merge(market_context_extra).merge(
-          entry_contract: supertrend_direct_entry ? 'supertrend_machine_v1' : 'bos_machine_v1',
-          permission: execution_permission,
-          entry_quality_score: quality_result[:score],
-          entry_quality_breakdown: quality_result[:breakdown]
-        )
-
-        if supertrend_direct_entry
-          # Supertrend-only mode: enter directly on signal without BOS pullback wait.
-          # Add stub BOS fields required by EntryGuard's contract check.
-          Rails.logger.info("[Signal] Exit-testing mode: using direct EntryGuard path (no BOS state machine).") if exit_testing_mode?
-          entry_metadata.merge!(
-            bos_id: "st_#{index_cfg[:key]}_#{Time.current.to_i}",
-            bos_timeframe: primary_tf,
-            bos_origin_price: primary_series.candles.last&.close,
-            bos_level: primary_series.candles.last&.close,
-            entry_underlying_price: primary_series.candles.last&.close
-          )
-          picks.each do |pick|
-            entered = Entries::EntryGuard.try_enter(
-              index_cfg: index_cfg,
-              pick: pick,
-              direction: final_direction,
-              scale_multiplier: 1,
-              entry_metadata: entry_metadata,
-              permission: execution_permission,
-              signal: signal
-            )
-            break if entered
-          end
+        # 4. Regime and Validation
+        if exit_testing_mode
+          regime_result = { regime: 'EXIT_TESTING', confidence: 0, metrics: {} }
+          effective_validation_mode = 'exit_testing'
+          validation_result = { valid: true, reason: 'Exit-testing mode: 1m Supertrend+ADX only' }
         else
-          Entries::BosEntryEngine.run_for(
-            index_cfg: index_cfg,
-            instrument: instrument,
-            direction: final_direction,
-            picks: picks,
-            entry_metadata: entry_metadata,
-            permission: execution_permission,
-            signal: signal
+          regime_result = MarketRegimeDetector.new(primary_series).detect
+          regime = regime_result[:regime]
+
+          effective_validation_mode = (signals_cfg[:validation_mode] if %w[RANGING CHOPPY].exclude?(regime)) || 'conservative'
+          if %w[RANGING CHOPPY].include?(regime)
+            Rails.logger.info("[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} due to #{regime} regime")
+          end
+
+          if direction_gate_blocked?(index_cfg, signals_cfg, final_direction, regime)
+            Signal::StateTracker.reset(index_cfg[:key])
+            return
+          end
+
+          validation_result = comprehensive_validation(
+            index_cfg, final_direction, primary_series,
+            analysis[:primary_analysis][:supertrend], { value: analysis[:primary_analysis][:adx_value] },
+            validation_mode: effective_validation_mode
           )
         end
 
-        # Rails.logger.info("[Signal] Completed analysis for #{index_cfg[:key]}")
-      rescue StandardError => e
-        Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
-        Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
-        Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
+        {
+          direction: final_direction,
+          primary_analysis: analysis[:primary_analysis],
+          confirmation_analysis: analysis[:confirmation_analysis],
+          primary_series: primary_series,
+          ta_result: ta_result,
+          regime_result: regime_result,
+          regime: regime_result[:regime],
+          validation_result: validation_result,
+          effective_validation_mode: effective_validation_mode
+        }
+      end
+
+      def perform_standard_ta(index_cfg, signals_cfg)
+        enable_index_ta_filter = signals_cfg.fetch(:enable_index_ta_filter, false)
+        ta_min_confidence = signals_cfg[:ta_min_confidence] || 0.6
+        ta_timeframes = signals_cfg[:ta_timeframes] || [5, 15, 60]
+        ta_days_back = signals_cfg[:ta_days_back] || 30
+
+        index_symbol = index_cfg[:key].to_s.downcase.to_sym
+        ta_analyzer = IndexTechnicalAnalyzer.new(index_symbol)
+        ta_analysis = ta_analyzer.call(timeframes: ta_timeframes, days_back: ta_days_back)
+
+        if ta_analysis[:success] && ta_analyzer.success?
+          result = ta_analyzer.result
+          Rails.logger.info(
+            "[Signal] Index TA for #{index_cfg[:key]}: signal=#{result[:signal]}, " \
+            "confidence=#{result[:confidence].round(2)}, bias=#{result.dig(:bias_summary, :summary, :bias)}"
+          )
+
+          if enable_index_ta_filter && (result[:signal] == :neutral || result[:confidence] < ta_min_confidence)
+            Rails.logger.info(
+              "[Signal] Skipping signal generation for #{index_cfg[:key]} (TA Filter ACTIVE): " \
+              "TA signal=#{result[:signal]}, confidence=#{result[:confidence].round(2)}"
+            )
+            return nil
+          end
+          result
+        else
+          Rails.logger.warn("[Signal] Index TA failed for #{index_cfg[:key]}: #{ta_analyzer.error}")
+          nil
+        end
+      end
+
+      def resolve_strategy_recommendation(index_cfg, signals_cfg, primary_tf, exit_testing_mode)
+        use_strategy_recommendations = exit_testing_mode ? false : signals_cfg.fetch(:use_strategy_recommendations, false)
+        recommendation = nil
+        effective_timeframe = primary_tf
+
+        if use_strategy_recommendations
+          recommendation = StrategyRecommender.best_for_index(symbol: index_cfg[:key])
+          if recommendation && recommendation[:recommended]
+            effective_timeframe = "#{recommendation[:interval]}m"
+            Rails.logger.info("[Signal] Using recommended strategy for #{index_cfg[:key]}: #{recommendation[:strategy_name]} (#{recommendation[:interval]}min) - Expectancy: #{recommendation[:expectancy]}% | Switching timeframe from #{primary_tf} to #{effective_timeframe}")
+          elsif recommendation
+            Rails.logger.warn("[Signal] Strategy recommendation found for #{index_cfg[:key]} but not recommended (negative expectancy: #{recommendation[:expectancy]}%) - falling back to Supertrend+ADX")
+            recommendation = nil
+          else
+            Rails.logger.warn("[Signal] No strategy recommendation found for #{index_cfg[:key]} - falling back to Supertrend+ADX")
+          end
+        end
+
+        { recommendation: recommendation, effective_timeframe: effective_timeframe }
+      end
+
+      def analyze_primary_and_confirmation(index_cfg:, instrument:, signals_cfg:, primary_tf:, effective_timeframe:, confirmation_tf:, strategy_recommendation:)
+        primary_analysis = if multi_indicator_enabled?(index_cfg, signals_cfg)
+                             analyze_with_multi_indicators(
+                               index_cfg: index_cfg,
+                               instrument: instrument,
+                               timeframe: primary_tf,
+                               signals_cfg: signals_cfg
+                             )
+                           elsif strategy_recommendation
+                             analyze_with_recommended_strategy(
+                               index_cfg: index_cfg, instrument: instrument,
+                               timeframe: effective_timeframe, strategy_recommendation: strategy_recommendation
+                             )
+                           else
+                             supertrend_cfg = signals_cfg[:supertrend]
+                             adx_cfg = signals_cfg[:adx] || {}
+                             adx_min = signals_cfg.fetch(:enable_adx_filter, true) ? adx_cfg[:min_strength] : 0
+
+                             analyze_timeframe(
+                               index_cfg: index_cfg, instrument: instrument,
+                               timeframe: primary_tf, supertrend_cfg: supertrend_cfg, adx_min_strength: adx_min
+                             )
+                           end
+
+        unless primary_analysis[:status] == :ok
+          Rails.logger.warn("[Signal] Primary timeframe analysis unavailable for #{index_cfg[:key]}: #{primary_analysis[:message]}")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        final_direction = primary_analysis[:direction]
+        confirmation_analysis = nil
+
+        if should_perform_confirmation?(confirmation_tf, signals_cfg, strategy_recommendation)
+          mode_config = get_validation_mode_config
+          adx_cfg = signals_cfg[:adx] || {}
+          confirmation_adx_min = signals_cfg.fetch(:enable_adx_filter, true) ? (mode_config[:adx_confirmation_min_strength] || adx_cfg[:confirmation_min_strength] || adx_cfg[:min_strength]) : 0
+
+          confirmation_analysis = analyze_timeframe(
+            index_cfg: index_cfg, instrument: instrument, timeframe: confirmation_tf,
+            supertrend_cfg: signals_cfg[:supertrend], adx_min_strength: confirmation_adx_min
+          )
+
+          if confirmation_analysis[:status] == :ok
+            final_direction = multi_timeframe_direction(primary_analysis[:direction], confirmation_analysis[:direction])
+          else
+            Rails.logger.warn("[Signal] Confirmation timeframe analysis unavailable for #{index_cfg[:key]}: #{confirmation_analysis[:message]}")
+            Signal::StateTracker.reset(index_cfg[:key])
+            return nil
+          end
+        elsif confirmation_tf.present? && strategy_recommendation
+          Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using strategy recommendation: #{strategy_recommendation[:strategy_name]})")
+        end
+
+        if final_direction == :avoid
+          log_avoid_reason(index_cfg, strategy_recommendation)
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        { final_direction: final_direction, primary_analysis: primary_analysis, confirmation_analysis: confirmation_analysis }
+      end
+
+      def should_perform_confirmation?(confirmation_tf, signals_cfg, strategy_recommendation)
+        confirmation_tf.present? && !strategy_recommendation && !multi_indicator_enabled?(nil, signals_cfg)
+      end
+
+      def log_avoid_reason(index_cfg, strategy_recommendation)
+        if strategy_recommendation
+          Rails.logger.info("[Signal] NOT proceeding for #{index_cfg[:key]}: #{strategy_recommendation[:strategy_name]} did not generate a signal (conditions not met)")
+        else
+          Rails.logger.info("[Signal] NOT proceeding for #{index_cfg[:key]}: multi-timeframe bias mismatch or weak trend")
+        end
+      end
+
+      def direction_gate_blocked?(index_cfg, signals_cfg, final_direction, regime)
+        return false unless signals_cfg.fetch(:enable_direction_gate, false)
+
+        trade_side = final_direction == :bullish ? :CE : :PE
+
+        if %w[RANGING CHOPPY INSUFFICIENT_DATA].include?(regime)
+          Rails.logger.info("[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Market is #{regime}. Skipping to avoid theta decay.")
+          return true
+        end
+
+        aligned = (regime == 'TRENDING_UP' && trade_side == :CE) || (regime == 'TRENDING_DOWN' && trade_side == :PE)
+        unless aligned
+          Rails.logger.info("[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Counter-trend trade. #{trade_side} requested vs #{regime}.")
+          return true
+        end
+
+        Rails.logger.debug { "[Signal] DirectionGate ALLOWED #{index_cfg[:key]}: #{trade_side} in #{regime}" }
+        false
+      end
+
+      def multi_indicator_enabled?(_index_cfg, signals_cfg)
+        signals_cfg.fetch(:use_multi_indicator_strategy, false) && signals_cfg[:indicators].present?
+      end
+
+      def analyze_with_multi_indicators(index_cfg:, instrument:, timeframe:, signals_cfg:)
+        indicator_configs = signals_cfg[:indicators] || []
+        enabled_indicators = indicator_configs.select { |i| i[:enabled] }
+
+        return { status: :error, message: "No enabled indicators" } if enabled_indicators.empty?
+
+        # Prepare indicator configs with per-index overrides if needed
+        prepared_indicators = enabled_indicators.map do |ind|
+          if ind[:type] == "adx" && (thresholds = index_cfg[:adx_thresholds])
+            ind = ind.deep_dup
+            ind[:config][:min_strength] = thresholds[:primary_min_strength] if thresholds[:primary_min_strength]
+          end
+          ind
+        end
+
+        series = instrument.candle_series(timeframe: timeframe)
+        return { status: :no_data, message: "No candle data for #{timeframe}" } unless series
+
+        begin
+          strategy = MultiIndicatorStrategy.new(
+            series: series,
+            indicators: prepared_indicators,
+            confirmation_mode: signals_cfg[:confirmation_mode],
+            min_confidence: signals_cfg[:min_confidence]
+          )
+
+          signal = strategy.generate_signal(series.size - 1)
+
+          # Map MultiIndicatorStrategy result to Engine's expected format
+          direction = signal ? (signal[:type] == :ce ? :bullish : :bearish) : :avoid
+
+          # Extract important indicator values for metadata/logic
+          st_indicator = strategy.indicators.find { |i| i.is_a?(Indicators::SupertrendIndicator) }
+          adx_indicator = strategy.indicators.find { |i| i.is_a?(Indicators::AdxIndicator) }
+
+          st_result = st_indicator&.calculate_at(series.size - 1)
+          adx_result = adx_indicator&.calculate_at(series.size - 1)
+
+          {
+            status: :ok,
+            direction: direction,
+            series: series,
+            supertrend: st_result,
+            adx_value: adx_result&.dig(:value),
+            confluence: signal&.dig(:confluence),
+            confidence: signal&.dig(:confidence),
+            last_candle_timestamp: series.last.timestamp
+          }
+        rescue StandardError => e
+          Rails.logger.error("[Signal] Multi-indicator analysis failed: #{e.message}")
+          { status: :error, message: e.message }
+        end
       end
 
       def analyze_timeframe(index_cfg:, instrument:, timeframe:, supertrend_cfg:, adx_min_strength:)

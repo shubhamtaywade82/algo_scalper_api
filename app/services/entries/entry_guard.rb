@@ -107,6 +107,10 @@ module Entries
         "#{index_cfg[:key]}_#{pick[:symbol]}_#{Time.current.to_i}"
       end
 
+      def find_instrument(index_cfg)
+        Instrument.find_by(security_id: index_cfg[:sid], segment: index_cfg[:segment])
+      end
+
       def extract_order_no(response)
         return response[:order_id] || response['order_id'] if response.is_a?(Hash)
         response

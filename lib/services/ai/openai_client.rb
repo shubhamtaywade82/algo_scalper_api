@@ -567,6 +567,7 @@ module Services
         OpenAI.configure do |config|
           config.access_token = api_key
           config.log_errors = Rails.env.development?
+          config.request_timeout = 30
         end
 
         @client = OpenAI::Client.new
@@ -585,7 +586,7 @@ module Services
           end
         end
 
-        @client = OpenAI::Client.new(api_key: api_key)
+        @client = OpenAI::Client.new(api_key: api_key, request_timeout: 30)
       end
 
       # Ollama initialization (local/network Ollama instance)
