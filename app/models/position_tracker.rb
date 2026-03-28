@@ -223,13 +223,10 @@ class PositionTracker < ApplicationRecord
     cache = Live::RedisPnlCache.instance.fetch_pnl(id)
     return BigDecimal(cache[:pnl].to_s) if cache && cache[:pnl]
 
-    last_pnl_rupees || BigDecimal(0)
-  rescue Redis::BaseError => e
-    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
-    last_pnl_rupees || BigDecimal(0)
+    last_pnl_rupees || zero_bd
   rescue StandardError => e
-    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
-    last_pnl_rupees || BigDecimal(0)
+    log_pnl_cache_error(e)
+    last_pnl_rupees || zero_bd
   end
 
   # Get current PnL percentage from Redis cache (preferred) or fallback to DB
@@ -241,11 +238,8 @@ class PositionTracker < ApplicationRecord
     return BigDecimal(cache[:pnl_pct].to_s) if cache && cache[:pnl_pct]
 
     last_pnl_pct
-  rescue Redis::BaseError => e
-    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
-    last_pnl_pct
   rescue StandardError => e
-    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
+    log_pnl_cache_error(e)
     last_pnl_pct
   end
 
@@ -256,13 +250,10 @@ class PositionTracker < ApplicationRecord
     cache = Live::RedisPnlCache.instance.fetch_pnl(id)
     return BigDecimal(cache[:hwm_pnl].to_s) if cache && cache[:hwm_pnl]
 
-    high_water_mark_pnl || BigDecimal(0)
-  rescue Redis::BaseError => e
-    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
-    high_water_mark_pnl || BigDecimal(0)
+    high_water_mark_pnl || zero_bd
   rescue StandardError => e
-    Rails.logger.error("[PositionTracker] #{e.class} - #{e.message}")
-    high_water_mark_pnl || BigDecimal(0)
+    log_pnl_cache_error(e)
+    high_water_mark_pnl || zero_bd
   end
 
   # Get current high water mark percentage from Redis cache (preferred) or fallback to meta
@@ -355,6 +346,15 @@ class PositionTracker < ApplicationRecord
 
   private
 
+  # Avoid repeating BigDecimal(0) literal — single definition, clear intent.
+  def zero_bd
+    BigDecimal(0)
+  end
+
+  # DRY the repeated Redis/cache error logging pattern.
+  def log_pnl_cache_error(error)
+    Rails.logger.error("[PositionTracker] #{error.class} - #{error.message}")
+  end
   def analyze_trade_if_exited
     return unless saved_change_to_status? && exited?
 
