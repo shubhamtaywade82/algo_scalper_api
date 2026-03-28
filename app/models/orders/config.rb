@@ -2,7 +2,7 @@
 
 module Orders
   class Config
-    attr_accessor :gateway
+    attr_reader :gateway
 
     def initialize(gateway:)
       @gateway = gateway
