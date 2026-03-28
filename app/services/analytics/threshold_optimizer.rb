@@ -34,7 +34,7 @@ module Analytics
     def compute(trades)
       return { win_rate: 0, expectancy: 0 } if trades.empty?
 
-      wins = trades.select { |t| t[:pnl] > 0 }
+      wins = trades.select { |t| t[:pnl].positive? }
       losses = trades.select { |t| t[:pnl] <= 0 }
 
       total = trades.size

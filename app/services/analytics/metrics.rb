@@ -25,12 +25,12 @@ module Analytics
     end
 
     def win_rate
-      return 0 if total_trades == 0
+      return 0 if total_trades.zero?
       wins.size.to_f / total_trades
     end
 
     def wins
-      @trades.select { |t| t[:pnl] > 0 }
+      @trades.select { |t| t[:pnl].positive? }
     end
 
     def losses

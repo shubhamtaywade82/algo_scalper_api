@@ -29,9 +29,9 @@ module Api
     # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted.
     # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
     def update_bulk
-      raw = params.require(:settings).permit!.to_h
-      allowed_keys = PERMITTED_SETTINGS_KEYS.map(&:to_s)
-      new_config = raw.slice(*allowed_keys).deep_symbolize_keys
+      # Permit only the explicitly whitelisted top-level keys — never use permit!
+      raw = params.expect(settings: [*PERMITTED_SETTINGS_KEYS]).to_h
+      new_config = raw.deep_symbolize_keys
 
       Setting.put('algo_config_overrides', new_config.to_json)
       AlgoConfig.reset!
@@ -49,7 +49,7 @@ module Api
       if result[:success]
         render json: { success: true, flag: result[:flag] }
       else
-        render json: { success: false, error: result[:error] }, status: :unprocessable_entity
+        render json: { success: false, error: result[:error] }, status: :unprocessable_content
       end
     rescue StandardError => e
       render json: { success: false, error: e.message }, status: :internal_server_error

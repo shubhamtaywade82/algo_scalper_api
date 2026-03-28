@@ -65,6 +65,9 @@ module Backtest
       service
     end
 
+    # Standard entry-point alias — prefer `.call` across all service objects
+    singleton_class.send(:alias_method, :call, :run)
+
     def execute
       Rails.logger.info("[SignalBacktest] Starting signal generator backtest for #{instrument.symbol_name}")
       $stdout.puts "[SignalBacktest] Starting backtest for #{instrument.symbol_name}..."

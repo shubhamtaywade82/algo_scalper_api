@@ -36,11 +36,11 @@ module Analytics
     end
 
     def compute(trades)
-      wins = trades.select { |t| t[:pnl] > 0 }
+      wins = trades.select { |t| t[:pnl].positive? }
       losses = trades.select { |t| t[:pnl] <= 0 }
 
       total = trades.size
-      return {} if total == 0
+      return {} if total.zero?
 
       avg_win = wins.sum { |t| t[:pnl] } / (wins.size.nonzero? || 1).to_f
       avg_loss = losses.sum { |t| t[:pnl] }.abs / (losses.size.nonzero? || 1).to_f
@@ -48,7 +48,7 @@ module Analytics
       {
         total: total,
         win_rate: wins.size.to_f / total,
-        expectancy: (wins.size.to_f / total * avg_win) - ((1 - wins.size.to_f / total) * avg_loss)
+        expectancy: (wins.size.to_f / total * avg_win) - ((1 - (wins.size.to_f / total)) * avg_loss)
       }
     end
   end
