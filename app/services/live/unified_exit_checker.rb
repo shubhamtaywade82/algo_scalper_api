@@ -10,6 +10,7 @@ module Live
       include Live::UnderlyingLtpResolver
       include Live::StructureInvalidationEvaluator
       include Live::UnderlyingContextEvaluator
+      include SessionDetector
 
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
       def check_exit_conditions(tracker)
@@ -180,6 +181,34 @@ module Live
         exit_time && Time.current >= exit_time
       end
 
+      def premium_momentum_failure_hit?(tracker, snapshot)
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}
+        return false unless cfg[:enabled]
+        return false unless tracker.created_at
+
+        current_ltp = snapshot[:ltp].to_f
+        current_ltp = tracker.entry_price.to_f if current_ltp <= 0
+
+        meta = tracker.meta || {}
+        peak = meta['peak_premium'].to_f
+        last_peak_at = meta['peak_premium_at'] ? Time.zone.parse(meta['peak_premium_at']) : tracker.created_at
+
+        if current_ltp > peak
+          meta['peak_premium'] = current_ltp
+          meta['peak_premium_at'] = Time.current.iso8601
+          tracker.update_column(:meta, meta) if tracker.respond_to?(:update_column)
+          return false
+        end
+
+        # Only fires on losing positions (PnL <= 0)
+        return false if snapshot[:pnl_pct].to_f.positive?
+
+        stall_minutes = resolve_stall_minutes(tracker)
+        elapsed_since_peak = (Time.current - last_peak_at) / 60.0
+
+        elapsed_since_peak >= stall_minutes
+      end
+
       def seconds_below_entry(tracker)
         cache_key = "position:below_entry:#{tracker.id}"
         cached = Rails.cache.read(cache_key)
@@ -304,6 +333,28 @@ module Live
         pct = (AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation, :buffer_pct) || 0.002).to_f
         buffer = (level * pct).abs
         direction == 'long_pe' ? underlying_ltp > level + buffer : (direction == 'long_ce' ? underlying_ltp < level - buffer : false)
+      end
+
+      private
+
+      def resolve_stall_minutes(tracker)
+        pmf_cfg = AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}
+        default_stall = 3
+
+        index_key = tracker.meta&.dig('index_key')
+        base = if index_key
+                 pmf_cfg.dig(:index_overrides, index_key.to_sym, :stall_minutes) ||
+                   pmf_cfg[:default_stall_minutes] || default_stall
+               else
+                 pmf_cfg[:default_stall_minutes] || default_stall
+               end
+
+        session = detect_current_session
+        additive = session ? (pmf_cfg.dig(:session_overrides, session, :stall_minutes_add) || 0) : 0
+
+        (base.to_f + additive.to_f).to_i
+      rescue StandardError
+        3
       end
     end
   end

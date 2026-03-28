@@ -2,6 +2,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Jobs::PublicIpLogJob do
+RSpec.describe PublicIpLogJob do
   pending "add some examples to (or delete) #{__FILE__}"
 end

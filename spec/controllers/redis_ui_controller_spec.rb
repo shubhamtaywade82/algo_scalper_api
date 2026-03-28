@@ -2,6 +2,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Controllers::RedisUiController do
+RSpec.describe RedisUiController do
   pending "add some examples to (or delete) #{__FILE__}"
 end

@@ -25,6 +25,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Models::TradeAnalytic do
+RSpec.describe TradeAnalytic do
   pending "add some examples to (or delete) #{__FILE__}"
 end

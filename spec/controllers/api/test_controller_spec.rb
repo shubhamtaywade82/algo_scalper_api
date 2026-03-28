@@ -2,6 +2,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Controllers::Api::TestController do
+RSpec.describe Api::TestController do
   pending "add some examples to (or delete) #{__FILE__}"
 end

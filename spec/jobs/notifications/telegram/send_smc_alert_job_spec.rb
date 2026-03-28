@@ -2,6 +2,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Jobs::Notifications::Telegram::SendSmcAlertJob do
+RSpec.describe Notifications::Telegram::SendSmcAlertJob do
   pending "add some examples to (or delete) #{__FILE__}"
 end

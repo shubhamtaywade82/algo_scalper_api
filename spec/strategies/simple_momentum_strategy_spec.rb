@@ -2,6 +2,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Strategies::SimpleMomentumStrategy do
+RSpec.describe SimpleMomentumStrategy do
   pending "add some examples to (or delete) #{__FILE__}"
 end

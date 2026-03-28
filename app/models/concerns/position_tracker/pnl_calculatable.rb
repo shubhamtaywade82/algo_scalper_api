@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module PositionTracker
+class PositionTracker < ApplicationRecord
   module PnlCalculatable
     extend ActiveSupport::Concern
 

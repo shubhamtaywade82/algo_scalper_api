@@ -2,6 +2,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Controllers::SmcController do
+RSpec.describe SmcController do
   pending "add some examples to (or delete) #{__FILE__}"
 end

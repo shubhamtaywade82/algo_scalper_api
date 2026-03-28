@@ -23,6 +23,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Models::WatchlistItem do
+RSpec.describe WatchlistItem do
   pending "add some examples to (or delete) #{__FILE__}"
 end

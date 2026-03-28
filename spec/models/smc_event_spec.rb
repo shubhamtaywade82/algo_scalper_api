@@ -2,6 +2,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Models::SmcEvent do
+RSpec.describe SmcEvent do
   pending "add some examples to (or delete) #{__FILE__}"
 end

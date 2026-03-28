@@ -17,6 +17,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Models::Setting do
+RSpec.describe Setting do
   pending "add some examples to (or delete) #{__FILE__}"
 end

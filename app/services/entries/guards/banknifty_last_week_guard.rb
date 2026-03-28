@@ -7,7 +7,7 @@ module Entries
         def call(context)
           key = context[:index_cfg][:key].to_s
           return EntryGuardPipeline::PASS unless key == 'BANKNIFTY'
-          return EntryGuardPipeline::PASS if EntryGuard.banknifty_last_week?(instrument: context[:instrument])
+          return EntryGuardPipeline::PASS if banknifty_last_week?(instrument: context[:instrument])
 
           { blocked: 'BANKNIFTY entry only in last week before monthly expiry' }
         end

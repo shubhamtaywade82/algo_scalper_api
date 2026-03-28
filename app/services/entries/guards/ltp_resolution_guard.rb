@@ -25,7 +25,7 @@ module Entries
           ltp = tick&.ltp
 
           unless fresh_tick?(tick, max_age_seconds)
-            resolved = EntryGuard.resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)
+            resolved = resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)
             tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
             source = 'forced_refresh'
             ltp = tick&.ltp || resolved
@@ -64,6 +64,35 @@ module Entries
           return false unless tick&.ltp&.to_f&.positive?
 
           tick_age_seconds(tick) <= max_age_seconds
+        end
+
+        def resolve_entry_ltp(instrument:, pick:, index_cfg:)
+          segment = pick[:segment] || index_cfg[:segment]
+          security_id = pick[:security_id]
+          return nil unless segment.present? && security_id.present?
+
+          # Strategy 1: WebSocket subscription + TickCache
+          if Live::MarketFeedHub.instance.running? && Live::MarketFeedHub.instance.connected?
+            begin
+              Live::MarketFeedHub.instance.subscribe(segment: segment, security_id: security_id)
+              3.times do
+                cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+                return cached_tick.ltp if cached_tick&.ltp&.to_f&.positive?
+                sleep(0.05)
+              end
+            rescue StandardError
+            end
+          end
+
+          # Strategy 2: REST API fallback
+          derivative = Derivative.find_by(id: pick[:derivative_id]) if pick[:derivative_id].present?
+          if derivative
+            api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+            return BigDecimal(api_ltp.to_s) if api_ltp.present?
+          end
+
+          api_ltp = instrument.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+          BigDecimal(api_ltp.to_s) if api_ltp.present?
         end
 
         def tick_age_seconds(tick)

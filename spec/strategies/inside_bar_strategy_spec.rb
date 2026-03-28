@@ -2,6 +2,6 @@
 
 require 'rails_helper'
 
-RSpec.describe Strategies::InsideBarStrategy do
+RSpec.describe InsideBarStrategy do
   pending "add some examples to (or delete) #{__FILE__}"
 end
