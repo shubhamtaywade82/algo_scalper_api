@@ -115,9 +115,8 @@ module Live
       # Concurrency lock: don't process if this tracker is already being analyzed
       # in the main monitor_loop or another event thread.
       @active_enforcements ||= Concurrent::Map.new
-      return if @active_enforcements[tracker_id]
+      return if @active_enforcements.put_if_absent(tracker_id, true)
 
-      @active_enforcements[tracker_id] = true
       begin
         @last_realtime_tick_at = Time.current
 

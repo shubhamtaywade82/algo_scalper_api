@@ -3,6 +3,16 @@
 require 'rails_helper'
 
 RSpec.describe Live::UnifiedExitChecker do
+  include ActiveSupport::Testing::TimeHelpers
+  let(:mock_instrument) do
+    instance_double(
+      Instrument,
+      symbol_name: 'NIFTY',
+      candle_series: double(candles: []),
+      adx: 25.0
+    )
+  end
+
   let(:tracker) do
     instance_double(
       PositionTracker,
@@ -10,14 +20,23 @@ RSpec.describe Live::UnifiedExitChecker do
       active?: true,
       entry_price: 200.0,
       quantity: 50,
-      high_water_mark_pnl: 0.0,
       current_pnl_pct: 0.0,
       meta: {},
-      order_no: 'ORD-1'
+      order_no: 'ORD-1',
+      symbol: 'NIFTY24MAR22000CE',
+      instrument: mock_instrument,
+      watchable: nil,
+      side: 'long_ce',
+      created_at: 10.minutes.ago,
+      last_pnl_rupees: 0.0,
+      high_water_mark_pnl: 0.0
     )
   end
 
   before do
+    Live::UnifiedExitChecker.instance_variable_set(:@exit_config, nil)
+    Live::UnifiedExitChecker.instance_variable_set(:@exit_config_expires_at, nil)
+
     allow(AlgoConfig).to receive(:fetch).and_return({
       position_sizing: {
         drawdown: {
@@ -696,6 +715,123 @@ RSpec.describe Live::UnifiedExitChecker do
       it 'does not call UnderlyingMonitor.evaluate' do
         described_class.check_exit_conditions(tracker)
         expect(Live::UnderlyingMonitor).not_to have_received(:evaluate)
+      end
+    end
+  end
+
+  describe 'Portfolio Floor Breach' do
+    it 'exits immediately when portfolio floor is breached' do
+      allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(true)
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.01 })
+      
+      result = described_class.check_exit_conditions(tracker)
+      expect(result).not_to be_nil
+      expect(result[:reason]).to eq('PORTFOLIO_FLOOR_BREACH')
+      expect(result[:path]).to eq('profit_lock')
+    end
+  end
+
+  describe 'Early Trend Failure' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        exit: { early_exit: { enabled: true, profit_threshold: 0.07 } },
+        risk: { 
+          exits: { 
+            premium_momentum_failure: { enabled: false },
+            smc_navigator_exit: { enabled: false },
+            structure_invalidation: { enabled: false }
+          }
+        }
+      })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.02 })
+    end
+
+    it 'triggers when EarlyTrendFailure service returns true' do
+      allow(Live::EarlyTrendFailure).to receive(:early_trend_failure?).and_return(true)
+      
+      result = described_class.check_exit_conditions(tracker)
+      expect(result[:reason]).to eq('EARLY_TREND_FAILURE')
+    end
+  end
+
+  describe 'Premium Momentum Failure' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: { 
+          exits: { 
+            premium_momentum_failure: { enabled: true },
+            smc_navigator_exit: { enabled: false },
+            structure_invalidation: { enabled: false }
+          }
+        },
+        exit: { early_exit: { enabled: false } }
+      })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.05, ltp: 150.0 })
+    end
+
+    it 'triggers when PremiumMomentumFailureRule evaluates to exit' do
+      rule_result = double(exit?: true)
+      allow_any_instance_of(Risk::Rules::PremiumMomentumFailureRule).to receive(:evaluate).and_return(rule_result)
+      
+      result = described_class.check_exit_conditions(tracker)
+      expect(result[:reason]).to eq('PREMIUM_MOMENTUM_FAILURE')
+    end
+  end
+
+  describe 'SMC Navigator Exit' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: { 
+          exits: { 
+            smc_navigator_exit: { enabled: true, min_hold_seconds: 0, min_confidence: 0.6 },
+            premium_momentum_failure: { enabled: false },
+            structure_invalidation: { enabled: false }
+          }
+        },
+        exit: { early_exit: { enabled: false } }
+      })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.05, ltp: 150.0 })
+    end
+
+    it 'triggers when Smc::Navigator suggests exit with high confidence' do
+      nav_result = double(suggest_exit?: true, confidence: 0.8, reason: 'LTF_CHOCH')
+      allow(Smc::Navigator).to receive(:evaluate_exit).and_return(nav_result)
+      
+      result = described_class.check_exit_conditions(tracker)
+      expect(result[:reason]).to include('SMC_NAVIGATOR_EXIT')
+    end
+  end
+
+  describe 'Time-Based Exit' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        exit: { 
+          time_based: { enabled: true, exit_time: '15:20' },
+          early_exit: { enabled: false },
+          trailing: { enabled: false }
+        },
+        risk: {
+          exits: { 
+            premium_momentum_failure: { enabled: false },
+            smc_navigator_exit: { enabled: false },
+            structure_invalidation: { enabled: false }
+          }
+        }
+      })
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.05 })
+    end
+
+    it 'triggers when current time is past exit time' do
+      travel_to(Time.zone.parse('15:21')) do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result[:reason]).to eq('TIME_BASED')
+      end
+    end
+
+    it 'does not trigger before exit time' do
+      travel_to(Time.zone.parse('15:19')) do
+        result = described_class.check_exit_conditions(tracker)
+        expect(result).to be_nil
       end
     end
   end

@@ -9,134 +9,46 @@ module Live
     class << self
       include Live::UnderlyingLtpResolver
       include Live::StructureInvalidationEvaluator
-      include Live::UnderlyingContextEvaluator
-
-      # Check all exit conditions and return first match
+      include Live::UnderlyingContextEvaluator      # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
       def check_exit_conditions(tracker)
         snapshot = pnl_snapshot(tracker)
         return nil unless snapshot
 
-        # snapshot[:pnl_pct] is decimal (e.g. 0.05 for 5%)
-        pnl_pct = snapshot[:pnl_pct].to_f
+        # Build context for the rule engine
+        # We wrap snapshot in OpenStruct to support dot notation in rules
+        position_data = OpenStruct.new(snapshot)
+        position_data.current_ltp = snapshot[:ltp]
+        position_data.pnl_pct = snapshot[:pnl_pct]
 
-        # Priority order (first match wins)
+        context = Risk::Rules::RuleContext.new(
+          position: position_data,
+          tracker: tracker,
+          risk_config: AlgoConfig.fetch[:risk] || {}
+        )
 
-        # 0. Portfolio Floor Breach (highest priority — overrides all per-position logic)
-        if portfolio_floor_breach?
-          return {
-            exit: true,
-            reason: 'PORTFOLIO_FLOOR_BREACH',
-            path: 'profit_lock',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
+        # Evaluate through the shared rule engine
+        result = rule_engine.evaluate(context)
+        
+        return nil unless result.exit?
 
-        # 1. Early Trend Failure (if enabled and applicable)
-        if early_exit_triggered?(tracker, snapshot)
-          return {
-            exit: true,
-            reason: 'EARLY_TREND_FAILURE',
-            path: 'early_trend_failure',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        # 2. Loss Limit (stop loss)
-        if loss_limit_hit?(tracker, snapshot)
-          return {
-            exit: true,
-            reason: 'STOP_LOSS',
-            path: 'stop_loss',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        # 2.5 Emergency: profitable position flipped to loss
-        if emergency_peak_loss_exit_triggered?(tracker)
-          entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
-          peak_pct = tracker.high_water_mark_pnl.to_f / entry_value
-          current_pct = tracker.current_pnl_pct.to_f
-          return {
-            exit: true,
-            reason: "EMERGENCY_PEAK_LOSS (peak: #{(peak_pct * 100).round(2)}%, current: #{(current_pct * 100).round(2)}%)",
-            path: 'emergency_peak_loss',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        # 3. Profit Target (take profit)
-        if profit_target_hit?(tracker, snapshot)
-          return {
-            exit: true,
-            reason: 'TAKE_PROFIT',
-            path: 'take_profit',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        # 3.5 Percentage PnL Exit (safety net — only when trailing failed to arm, works in tick-first mode)
-        if percentage_pnl_exit_hit?(tracker, snapshot)
-          return {
-            exit: true,
-            reason: "PERCENTAGE_PNL_EXIT (#{(pnl_pct * 100.0).round(2)}%)",
-            path: 'percentage_pnl_exit',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        # 4. Premium Momentum Failure (if enabled)
-        if premium_momentum_failure_hit?(tracker, snapshot)
-          return {
-            exit: true,
-            reason: 'PREMIUM_MOMENTUM_FAILURE',
-            path: 'premium_momentum_failure',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        # 5. Trailing Stop — underlying-context-aware
-        underlying_ctx = evaluate_underlying_context(tracker, snapshot)
-        if underlying_ctx[:action] == :exit
-          return {
-            exit: true,
-            reason: underlying_ctx[:reason],
-            path: 'underlying_context_exit',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        if trailing_stop_hit?(tracker, snapshot, tightening_multiplier: underlying_ctx[:multiplier])
-          return {
-            exit: true,
-            reason: 'TRAILING_STOP',
-            path: 'trailing_stop',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        # 6. Structure Invalidation (options-aware dual condition)
-        si_result = check_structure_invalidation(tracker, snapshot)
-        return si_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if si_result
-
-        # 6.5 SMC Navigator Exit (LTF CHoCH / liquidity sweep against position)
-        smc_nav_result = check_smc_navigator_exit(tracker, snapshot)
-        return smc_nav_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if smc_nav_result
-
-        # 7. Time-Based Exit (if configured)
-        if time_based_exit?(tracker)
-          return {
-            exit: true,
-            reason: 'TIME_BASED',
-            path: 'time_based',
-            pnl_pct: (pnl_pct * 100.0).round(2)
-          }
-        end
-
-        nil # No exit needed
+        # Map RuleResult back to the legacy hash format for compatibility
+        {
+          exit: true,
+          reason: result.reason,
+          path: result.metadata[:path] || result.rule_name,
+          pnl_pct: (snapshot[:pnl_pct].to_f * 100.0).round(2)
+        }
       end
 
       private
+
+      def rule_engine
+        # Do not cache the engine in tests to avoid state leakage across mocks
+        Risk::Rules::RuleFactory.create_engine(
+          risk_config: AlgoConfig.fetch[:risk] || {}
+        )
+      end
 
       def pnl_snapshot(tracker)
         Live::RedisPnlCache.instance.fetch_pnl(tracker.id)

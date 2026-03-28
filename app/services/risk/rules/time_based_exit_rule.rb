@@ -2,43 +2,57 @@
 
 module Risk
   module Rules
-    # Rule that enforces time-based exit
-    # Triggers exit at configured time if minimum profit threshold is met
+    # Rule that triggers an exit based on a specific time of day.
+    # Matches logic from UnifiedExitChecker#time_based_exit?
     class TimeBasedExitRule < BaseRule
-      PRIORITY = 40
+      PRIORITY = 60 # Check after structural and technical indicators
 
       def evaluate(context)
+        return skip_result unless enabled?
         return skip_result unless context.active?
 
-        exit_time = context.config_time(:time_exit_hhmm, nil)
-        return skip_result unless exit_time
-
-        now = context.current_time
-        return no_action_result unless now >= exit_time
-
-        market_close_time = context.config_time(:market_close_hhmm, nil)
-        return no_action_result if market_close_time && now >= market_close_time
-
-        # Check minimum profit requirement
-        pnl_rupees = context.pnl_rupees
-        if pnl_rupees.to_f.positive?
-          min_profit = context.config_bigdecimal(:min_profit_rupees, BigDecimal(0))
-          if min_profit.positive? && BigDecimal(pnl_rupees.to_s) < min_profit
-            Rails.logger.info(
-              "[TimeBasedExitRule] Time-based exit skipped for #{context.tracker.order_no} - PnL < min_profit"
+        config = config_for_rule
+        exit_time_str = config[:exit_time] || '15:20'
+        
+        begin
+          exit_time = Time.zone.parse(exit_time_str)
+          return skip_result unless exit_time
+          
+          if Time.current >= exit_time
+            return exit_result(
+              reason: 'TIME_BASED',
+              metadata: {
+                exit_time: exit_time_str,
+                path: 'time_exit'
+              }
             )
-            return no_action_result
           end
+        rescue StandardError => e
+          Rails.logger.error("[TimeBasedExitRule] Invalid exit_time: #{exit_time_str} - #{e.message}")
         end
 
-        exit_result(
-          reason: "time-based exit (#{exit_time.strftime('%H:%M')})",
-          metadata: {
-            exit_time: exit_time,
-            current_time: now,
-            pnl_rupees: pnl_rupees
-          }
-        )
+        no_action_result
+      end
+
+      def enabled?
+        config_for_rule[:enabled] == true
+      end
+
+      private
+        # Handle both flat and nested config structures
+        cfg = context_risk_config.dig(:exits, :time_based) || 
+              context_risk_config[:time_based] || {}
+        
+        # Fallback to legacy location in AlgoConfig if needed
+        if cfg.empty?
+          cfg = AlgoConfig.fetch.dig(:exit, :time_based) || {}
+        end
+
+        cfg
+      end
+      
+      def enabled?
+        config_for_rule[:enabled] == true
       end
     end
   end

@@ -32,15 +32,35 @@ module Risk
         position_direction = determine_position_direction(tracker, instrument)
         return skip_result unless position_direction.in?(%i[bullish bearish])
 
+        # Check for specific price-based invalidation (LEGACY PARITY)
+        invalidation_price = tracker.meta&.dig('structure_invalidation_price')
+        if invalidation_price
+          underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
+          if underlying_ltp && structure_invalidated_by_price?(tracker, underlying_ltp, invalidation_price)
+            reason = "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{invalidation_price})"
+            return exit_result(reason: reason, metadata: { path: 'structure_invalidation' })
+          end
+        end
+
+        # Check for dual condition (underlying move + premium drop)
+        si_cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        if si_cfg[:underlying_move_pct] && si_cfg[:premium_drop_pct]
+          underlying_ltp ||= resolve_underlying_ltp(tracker.meta&.dig('index_key'))
+          if underlying_ltp && dual_condition_met?(tracker, underlying_ltp, context.position.current_ltp.to_f, si_cfg)
+            reason = "STRUCTURE_INVALIDATION (underlying move + premium drop)"
+            return exit_result(reason: reason, metadata: { path: 'structure_invalidation' })
+          end
+        end
+
         if opposite_bos_confirmed?(tracker, instrument, position_direction)
           reason = "STRUCTURE_INVALIDATION (opposite BOS confirmed)"
-          return exit_result(reason: reason, metadata: { direction: position_direction })
+          return exit_result(reason: reason, metadata: { direction: position_direction, path: 'structure_invalidation' })
         end
 
         # Check structure invalidation on 5m and 15m timeframes (underlying)
         if structure_invalidated?(instrument, position_direction)
           reason = "STRUCTURE_INVALIDATION (#{position_direction} structure broken)"
-          return exit_result(reason: reason, metadata: { direction: position_direction })
+          return exit_result(reason: reason, metadata: { direction: position_direction, path: 'structure_invalidation' })
         end
 
         no_action_result
@@ -50,6 +70,48 @@ module Risk
       end
 
       private
+
+      def resolve_underlying_ltp(index_key)
+        return nil if index_key.blank?
+        # Mock logic or real fetch based on environment
+        # In UnifiedExitChecker this was a helper
+        MarketDataService.last_price(index_key)
+      end
+
+      def structure_invalidated_by_price?(tracker, underlying_ltp, invalidation_price)
+        direction = tracker.meta&.dig('direction').to_s
+        level = invalidation_price.to_f
+        buffer = structure_invalidation_buffer(level)
+        case direction
+        when 'long_pe', 'bearish'
+          underlying_ltp > level + buffer
+        when 'long_ce', 'bullish'
+          underlying_ltp < level - buffer
+        else
+          false
+        end
+      end
+
+      def structure_invalidation_buffer(level)
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        pct = (cfg[:buffer_pct] || 0.002).to_f
+        (level * pct).abs
+      end
+
+      def dual_condition_met?(tracker, underlying_ltp, premium_ltp, cfg)
+        # Ported from legacy UnifiedExitChecker
+        entry_underlying = tracker.meta&.dig('entry_underlying_price').to_f
+        return false if entry_underlying.zero?
+
+        move_pct = (underlying_ltp - entry_underlying).abs / entry_underlying
+        return false if move_pct < cfg[:underlying_move_pct].to_f
+
+        entry_premium = tracker.entry_price.to_f
+        return false if entry_premium.zero?
+
+        drop_pct = (entry_premium - premium_ltp) / entry_premium
+        drop_pct >= cfg[:premium_drop_pct].to_f
+      end
 
       # Determine position direction (bullish = CE/long, bearish = PE/short)
       def determine_position_direction(tracker, instrument)

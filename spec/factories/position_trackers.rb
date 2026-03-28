@@ -65,6 +65,20 @@ FactoryBot.define do
       high_water_mark_pnl { BigDecimal('25500.00') }
     end
 
+    trait :in_profit do
+      profitable # Composed trait
+    end
+
+    trait :at_sl do
+      last_pnl_rupees { BigDecimal('-1500.00') }
+      last_pnl_pct { BigDecimal('-6.0') }
+    end
+
+    trait :trailing do
+      status { 'active' }
+      meta { { 'trailing_stop_price' => BigDecimal('25100.00').to_f, 'be_set' => true } }
+    end
+
     trait :losing do
       last_pnl_rupees { BigDecimal('-12500.00') }
       last_pnl_pct { BigDecimal('-20.0') }
@@ -98,6 +112,7 @@ FactoryBot.define do
       last_pnl_rupees { BigDecimal('250.00') }
       last_pnl_pct { BigDecimal('6.67') }
     end
+
     trait :paper do
       paper { true }
     end

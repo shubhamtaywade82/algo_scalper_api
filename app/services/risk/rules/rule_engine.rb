@@ -41,9 +41,12 @@ module Risk
 
           begin
             result = rule.evaluate(context)
-            next if result.skip?
+            
+            # If we should continue (no_action or skip), move to next rule
+            next if result.skip? || result.continue?
 
-            # First non-skip result wins (exit or no_action)
+            # Attach rule name for traceability before returning
+            result.rule_name = rule.name
             return result
           rescue StandardError => e
             Rails.logger.error(

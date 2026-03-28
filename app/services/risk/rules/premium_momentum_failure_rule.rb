@@ -35,7 +35,9 @@ module Risk
         if current_ltp > peak
           meta['peak_premium'] = current_ltp
           meta['peak_premium_at'] = Time.current.iso8601
-          tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+          # Use update_column for performance to skip validations/callbacks
+          # respond_to? check is to handle instance_doubles in tests
+          tracker.update_column(:meta, meta) if tracker.respond_to?(:update_column)
           return no_action_result
         end
 
