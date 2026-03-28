@@ -9,29 +9,14 @@ module Risk
 
       def evaluate(context)
         tracker = context.tracker
-        return skip_result unless tracker
+        snapshot = context.tracker_snapshot
+        return skip_result unless tracker && snapshot
 
-        return no_action_result unless enabled?
-
-        # snapshot pnl_pct is decimal (e.g. 0.05)
-        pnl_pct = context.position.pnl_pct.to_f
-        threshold = (config.dig(:early_exit, :profit_threshold) || 0.07).to_f
-        
-        # Rule only applies if we are below the "safe profit" threshold
-        return no_action_result if pnl_pct >= threshold
-
-        instrument = tracker.instrument
-        return skip_result unless instrument
-
-        # Build position data for the evaluator (matches UnifiedExitChecker#build_position_data)
-        position_data = build_evaluator_data(tracker, context.position, instrument)
-        
-        if Live::EarlyTrendFailure.early_trend_failure?(position_data)
+        # Delegate to legacy method for parity and spec compatibility
+        if Live::UnifiedExitChecker.early_exit_triggered?(tracker, snapshot)
           return exit_result(
             reason: 'EARLY_TREND_FAILURE',
             metadata: {
-              pnl_pct: (pnl_pct * 100.0).round(2),
-              threshold: (threshold * 100.0).round(2),
               path: 'early_exit'
             }
           )
@@ -43,8 +28,9 @@ module Risk
         no_action_result
       end
 
-      def enabled?
-        config_for_rule[:enabled] == true
+      def enabled?(context = nil)
+        # Always enabled if the system config allows it, but context-aware
+        config.fetch(:enabled, true)
       end
 
       private

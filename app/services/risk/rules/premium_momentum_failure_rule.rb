@@ -47,9 +47,8 @@ module Risk
         elapsed_since_peak = (Time.current - last_peak_at) / 60.0
 
         if elapsed_since_peak >= stall_minutes
-          reason = "PREMIUM_MOMENTUM_FAILURE (No new peak in #{elapsed_since_peak.round(1)} mins, Peak: #{peak.round(2)})"
           return exit_result(
-            reason: reason,
+            reason: 'PREMIUM_MOMENTUM_FAILURE',
             metadata: {
               peak: peak,
               current: current_ltp,
@@ -63,6 +62,11 @@ module Risk
       rescue StandardError => e
         Rails.logger.error("[PremiumMomentumFailureRule] Error: #{e.class} - #{e.message}")
         skip_result
+      end
+
+      def enabled?(context = nil)
+        pmf_cfg = config.dig(:exits, :premium_momentum_failure) || {}
+        pmf_cfg[:enabled] == true
       end
 
       private

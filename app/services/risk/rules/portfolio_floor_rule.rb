@@ -9,8 +9,8 @@ module Risk
       PRIORITY = 0 # Highest priority - overrides all other logic
 
       def evaluate(context)
-        # Check global drawdown guard state
-        if Portfolio::DrawdownGuard.triggered?
+        # Delegate to legacy method for parity and spec compatibility
+        if Live::UnifiedExitChecker.portfolio_floor_breach?
           return exit_result(
             reason: 'PORTFOLIO_FLOOR_BREACH',
             metadata: {
@@ -26,7 +26,7 @@ module Risk
         no_action_result
       end
 
-      def enabled?
+      def enabled?(context = nil)
         # Always enabled if the guard is active
         true
       end

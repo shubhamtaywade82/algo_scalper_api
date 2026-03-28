@@ -21,61 +21,56 @@ module Risk
       PRIORITY = 20
 
       def evaluate(context)
-        return skip_result unless enabled?
-        return skip_result unless context.active?
-
         tracker = context.tracker
+        snapshot = context.tracker_snapshot
+        return skip_result unless tracker && snapshot
+
+        # Delegate to legacy method for parity and spec compatibility
+        # This covers the 'structure_invalidation_price' and 'dual_condition' checks
+        result = Live::UnifiedExitChecker.check_structure_invalidation(tracker, snapshot)
+        
+        if result && result[:exit]
+          return exit_result(
+            reason: result[:reason] || 'STRUCTURE_INVALIDATION',
+            metadata: {
+              path: 'structure_invalidation'
+            }
+          )
+        end
+
+        # Fallback to internal rules if legacy hasn't triggered yet
         instrument = tracker.instrument || tracker.watchable&.instrument
-        return skip_result unless instrument
+        return no_action_result unless instrument
 
-        # Get position direction from tracker metadata or instrument
         position_direction = determine_position_direction(tracker, instrument)
-        return skip_result unless position_direction.in?(%i[bullish bearish])
-
-        # Check for specific price-based invalidation (LEGACY PARITY)
-        invalidation_price = tracker.meta&.dig('structure_invalidation_price')
-        if invalidation_price
-          underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
-          if underlying_ltp && structure_invalidated_by_price?(tracker, underlying_ltp, invalidation_price)
-            reason = "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{invalidation_price})"
-            return exit_result(reason: reason, metadata: { path: 'structure_invalidation' })
-          end
-        end
-
-        # Check for dual condition (underlying move + premium drop)
-        si_cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
-        if si_cfg[:underlying_move_pct] && si_cfg[:premium_drop_pct]
-          underlying_ltp ||= resolve_underlying_ltp(tracker.meta&.dig('index_key'))
-          if underlying_ltp && dual_condition_met?(tracker, underlying_ltp, context.position.current_ltp.to_f, si_cfg)
-            reason = "STRUCTURE_INVALIDATION (underlying move + premium drop)"
-            return exit_result(reason: reason, metadata: { path: 'structure_invalidation' })
-          end
-        end
+        return no_action_result unless position_direction
 
         if opposite_bos_confirmed?(tracker, instrument, position_direction)
-          reason = "STRUCTURE_INVALIDATION (opposite BOS confirmed)"
-          return exit_result(reason: reason, metadata: { direction: position_direction, path: 'structure_invalidation' })
+          return exit_result(
+            reason: "STRUCTURE_INVALIDATION (opposite BOS confirmed)",
+            metadata: { direction: position_direction, path: 'structure_invalidation' }
+          )
         end
 
-        # Check structure invalidation on 5m and 15m timeframes (underlying)
+        # Multi-timeframe structure check
         if structure_invalidated?(instrument, position_direction)
-          reason = "STRUCTURE_INVALIDATION (#{position_direction} structure broken)"
-          return exit_result(reason: reason, metadata: { direction: position_direction, path: 'structure_invalidation' })
+          return exit_result(
+            reason: "STRUCTURE_INVALIDATION (#{position_direction} structure broken)",
+            metadata: { direction: position_direction, path: 'structure_invalidation' }
+          )
         end
 
         no_action_result
       rescue StandardError => e
         Rails.logger.error("[StructureInvalidationRule] Error: #{e.class} - #{e.message}")
-        skip_result
+        no_action_result
       end
 
       private
 
       def resolve_underlying_ltp(index_key)
-        return nil if index_key.blank?
-        # Mock logic or real fetch based on environment
-        # In UnifiedExitChecker this was a helper
-        MarketDataService.last_price(index_key)
+        # Use existing module logic to fetch LTP
+        Live::UnifiedExitChecker.resolve_underlying_ltp(index_key)
       end
 
       def structure_invalidated_by_price?(tracker, underlying_ltp, invalidation_price)

@@ -9,28 +9,16 @@ module Risk
 
       def evaluate(context)
         tracker = context.tracker
-        return skip_result unless tracker
+        snapshot = context.tracker_snapshot
+        return skip_result unless tracker && snapshot
 
-        # snapshot ltp is needed
-        ltp = context.position.current_ltp.to_f
-        return no_action_result unless ltp.positive?
-
-        # Gating: Enabled? and Min Hold Time?
-        return no_action_result unless smc_navigator_enabled?
-        return no_action_result unless min_hold_elapsed?(tracker)
-
-        instrument = tracker.instrument
-        return skip_result unless instrument
-
-        # Run SMC Navigator analysis
-        result = Smc::Navigator.evaluate_exit(tracker: tracker, ltp: ltp, instrument: instrument)
+        # Delegate to legacy method for parity and spec compatibility
+        result = Live::UnifiedExitChecker.check_smc_navigator_exit(tracker, snapshot)
         
-        # Check if exit is suggested and confidence meets threshold
-        if result.suggest_exit? && result.confidence >= min_confidence
+        if result && result[:exit]
           return exit_result(
-            reason: "SMC_NAVIGATOR_EXIT (#{result.reason})",
+            reason: result[:reason] || 'SMC_NAVIGATOR_EXIT',
             metadata: {
-              confidence: result.confidence.round(2),
               path: 'smc_navigator'
             }
           )
@@ -42,7 +30,8 @@ module Risk
         no_action_result
       end
 
-      def enabled?
+      def enabled?(context = nil)
+        # Delegate enabled check to the legacy checker's internal toggle
         smc_navigator_enabled?
       end
 

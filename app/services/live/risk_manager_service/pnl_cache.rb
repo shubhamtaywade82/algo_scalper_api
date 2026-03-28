@@ -44,7 +44,6 @@ module Live
 
       # Returns a cached pnl snapshot for tracker (expects Redis cache to be maintained elsewhere)
       def pnl_snapshot(tracker)
-        @redis_pnl_cache ||= {}
         @redis_pnl_cache[tracker.id] ||= Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
       rescue StandardError => e
         Rails.logger.error("[RiskManager] pnl_snapshot error for #{tracker.id}: #{e.class} - #{e.message}")

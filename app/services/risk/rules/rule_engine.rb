@@ -37,7 +37,7 @@ module Risk
         return RuleResult.skip unless context.active?
 
         @rules.each do |rule|
-          next unless rule.enabled?
+          next unless rule.enabled?(context)
 
           begin
             result = rule.evaluate(context)
@@ -62,9 +62,10 @@ module Risk
       end
 
       # Get enabled rules
+      # @param context [RuleContext] Optional context
       # @return [Array<BaseRule>] Array of enabled rules
-      def enabled_rules
-        @rules.select(&:enabled?)
+      def enabled_rules(context = nil)
+        @rules.select { |r| r.enabled?(context) }
       end
 
       # Get rule by class
