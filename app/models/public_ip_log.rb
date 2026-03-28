@@ -31,7 +31,7 @@ class PublicIpLog < ApplicationRecord
     end
 
     log.last_seen_at = Time.current
-    log.save if log.changed?
+    log.save! if log.changed?
     log
   end
 end

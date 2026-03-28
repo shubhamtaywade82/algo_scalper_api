@@ -25,7 +25,7 @@ module AutoExp
         metrics[:win_rate],
         status,
         description,
-        Time.now.strftime("%Y-%m-%d %H:%M:%S")
+        Time.current.strftime("%Y-%m-%d %H:%M:%S")
       ].join("\t")
 
       File.open(FILE, "a") { |f| f.puts(line) }

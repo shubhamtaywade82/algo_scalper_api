@@ -76,7 +76,7 @@ module Backtest
 
       timestamps.each_with_index.map do |ts, i|
         # Normalize timestamp (can be epoch or string)
-        timestamp = ts.is_a?(Numeric) ? Time.at(ts) : Time.parse(ts.to_s)
+        timestamp = ts.is_a?(Numeric) ? Time.at(ts) : Time.zone.parse(ts.to_s)
 
         {
           timestamp: timestamp,

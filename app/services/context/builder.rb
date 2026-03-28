@@ -24,7 +24,7 @@ module Context
 
       # Generic fallback when no index context is available (e.g. Strategy::Orchestrator).
       # Thursday covers NIFTY weekly expiry — callers that need precision should pass index_key.
-      Date.today.thursday?
+      Time.zone.today.thursday?
     end
   end
 end

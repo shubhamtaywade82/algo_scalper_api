@@ -36,7 +36,7 @@ module Dhan
           body = parse_json_body!(response.body)
           token, expiry_raw = extract_totp_credentials!(body)
 
-          normalize_response(token: token, expiry: Time.parse(expiry_raw))
+          normalize_response(token: token, expiry: Time.zone.parse(expiry_raw))
         end
 
         private

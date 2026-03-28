@@ -102,7 +102,7 @@ class TradingSignal < ApplicationRecord
   end
 
   def record_entry_outcome(outcome, reason = nil)
-    update(metadata: (metadata || {}).merge(
+    update!(metadata: (metadata || {}).merge(
       'entry_outcome' => outcome,
       'entry_blocked_reason' => reason
     ).compact)
