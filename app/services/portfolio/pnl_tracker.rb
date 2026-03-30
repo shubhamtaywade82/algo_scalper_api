@@ -45,19 +45,22 @@ module Portfolio
         return unless enabled?
 
         r = redis
-        return unless r
+        unless r
+          Rails.logger.error("[Portfolio::PnlTracker] mark_realized: Redis client not available")
+          return
+        end
 
         # Idempotency check: only add to realized total once per tracker per session.
         # Redis SADD returns 1 if element added, 0 if already present.
         # In Ruby, 0 is truthy, so we must check specifically for 1.
         added = r.sadd(KEY_REALIZED_TRACKERS, tracker_id.to_s)
         if added != 1 && added != true
-          Rails.logger.debug("[Portfolio::PnlTracker] Skip mark_realized: tracker=#{tracker_id} already counted today")
+          Rails.logger.debug("[Portfolio::PnlTracker] Skip mark_realized: tracker=#{tracker_id} already counted today (added=#{added.inspect})")
           return
         end
         r.expire(KEY_REALIZED_TRACKERS, TTL)
 
-        r.incrbyfloat(KEY_REALIZED, pnl.to_f)
+        new_total = r.incrbyfloat(KEY_REALIZED, pnl.to_f)
         r.expire(KEY_REALIZED, TTL)
 
         # Remove from unrealized — position is now closed
@@ -65,7 +68,7 @@ module Portfolio
 
         Rails.logger.info(
           "[Portfolio::PnlTracker] Realized tracker=#{tracker_id}: " \
-          "₹#{pnl.round(2)} | Total realized: ₹#{realized_pnl.round(2)}"
+          "₹#{pnl.round(2)} | Total realized: ₹#{new_total.to_f.round(2)}"
         )
       rescue StandardError => e
         log_error('mark_realized', e)
@@ -182,7 +185,11 @@ module Portfolio
       end
 
       def redis
-        @redis ||= Redis.new(url: REDIS_URL)
+        @redis ||= begin
+          r = Redis.new(url: REDIS_URL)
+          Rails.logger.info("[Portfolio::PnlTracker] Initialized Redis client for process #{Process.pid}")
+          r
+        end
       rescue StandardError => e
         Rails.logger.error("[Portfolio::PnlTracker] Redis init error: #{e.message}")
         nil

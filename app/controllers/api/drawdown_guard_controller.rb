@@ -3,6 +3,10 @@
 module Api
   class DrawdownGuardController < ApplicationController
     def reset
+      Rails.logger.info(
+        "[DrawdownGuardController] Reset requested: " \
+        "IP=#{request.remote_ip}, UserAgent=#{request.user_agent}"
+      )
       Portfolio::DrawdownGuard.reset_day!
       
       # Clear the PnL tracker peak as well so it can start fresh
@@ -10,6 +14,7 @@ module Api
 
       render json: { success: true, message: 'Drawdown guard reset successfully. Trading resumed.' }
     rescue StandardError => e
+      Rails.logger.error("[DrawdownGuardController] Reset failed: #{e.message}")
       render json: { success: false, error: e.message }, status: :internal_server_error
     end
   end

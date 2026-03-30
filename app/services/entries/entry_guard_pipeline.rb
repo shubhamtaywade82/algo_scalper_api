@@ -30,14 +30,15 @@ module Entries
         Guards::DrawdownGuard,
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
-        Guards::TimeRegimeGuard,
-        Guards::MiddayQualityGuard,
+        Guards::MiddayQualityGuard,          # ADX >= 28 bypass covers all power-trend cases
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
-        Guards::InstrumentLookupGuard,
+        Guards::InstrumentLookupGuard,       # sets context[:instrument] — required by EPT guard
         Guards::LtpResolutionGuard,
+        Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
+        Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block
         Guards::BankniftyLastWeekGuard,
         Guards::WeeklyExpiryGuard,
         Guards::BosStructureGuard,
