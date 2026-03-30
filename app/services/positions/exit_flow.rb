@@ -10,6 +10,7 @@ module Positions
     end
 
     def call
+      tracker.reload
       tracker.with_lock do
         tracker.reload
         return tracker if tracker.exited?

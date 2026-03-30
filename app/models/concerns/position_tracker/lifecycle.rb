@@ -48,6 +48,21 @@ class PositionTracker < ApplicationRecord
       Positions::ExitFlow.call(tracker: self, exit_price: exit_price, exited_at: exited_at, exit_reason: exit_reason)
     end
 
+    def cleanup_exit_caches
+      Live::PositionIndex.instance.remove(id, security_id)
+      Live::RedisPnlCache.instance.clear_tracker(id)
+      Live::RedisTickCache.instance.clear_tick(segment, security_id)
+      Live::TickCache.delete(segment, security_id)
+    end
+
+    def prepare_exit_metadata(exit_reason)
+      exit_reason ||= meta.is_a?(Hash) ? meta['exit_reason'] : nil
+      metadata = meta.is_a?(Hash) ? meta.dup : {}
+      metadata['exit_reason'] = exit_reason if exit_reason.present?
+      metadata['exit_triggered_at'] ||= Time.current
+      metadata
+    end
+
     private
 
     def analyze_trade_if_exited
@@ -73,14 +88,6 @@ class PositionTracker < ApplicationRecord
       tick&.ltp
     end
 
-    def prepare_exit_metadata(exit_reason)
-      exit_reason ||= meta.is_a?(Hash) ? meta['exit_reason'] : nil
-      metadata = meta.is_a?(Hash) ? meta.dup : {}
-      metadata['exit_reason'] = exit_reason if exit_reason.present?
-      metadata['exit_triggered_at'] ||= Time.current
-      metadata
-    end
-
     def update_exit_attributes(exit_price, exited_at, metadata)
       attrs = {
         status: :exited,
@@ -94,13 +101,6 @@ class PositionTracker < ApplicationRecord
       }.compact
 
       update!(attrs)
-    end
-
-    def cleanup_exit_caches
-      Live::PositionIndex.instance.remove(id, security_id)
-      Live::RedisPnlCache.instance.clear_tracker(id)
-      Live::RedisTickCache.instance.clear_tick(segment, security_id)
-      Live::TickCache.delete(segment, security_id)
     end
 
     def register_cooldown!
