@@ -111,6 +111,29 @@ module Entries
         Instrument.find_by(security_id: index_cfg[:sid], segment: index_cfg[:segment])
       end
 
+      def cooldown_active_for_index?(index_key, cooldown)
+        return false if index_key.blank? || cooldown <= 0
+
+        last = Rails.cache.read("reentry:index:#{index_key}")
+        last.present? && (Time.current - last) < cooldown
+      end
+
+      # BANKNIFTY trades only in the last week before monthly expiry.
+      # Uses instrument expiry_list to find the actual monthly expiry date (holiday-aware).
+      # Falls back to last-Thursday-of-month calculation only when expiry_list is unavailable.
+      # Returns true if today is within 7 calendar days of the nearest upcoming monthly expiry.
+      def banknifty_last_week?(instrument: nil)
+        today          = Time.zone.today
+        monthly_expiry = banknifty_monthly_expiry(instrument, today)
+        return false unless monthly_expiry
+
+        days_to_expiry = (monthly_expiry - today).to_i
+        days_to_expiry.between?(0, 6)
+      rescue StandardError => e
+        Rails.logger.error("[EntryGuard] banknifty_last_week? error: #{e.message}")
+        false
+      end
+
       def extract_order_no(response)
         return response[:order_id] || response['order_id'] if response.is_a?(Hash)
         response
@@ -129,6 +152,36 @@ module Entries
       end
 
       private
+
+      def banknifty_monthly_expiry(instrument, today)
+        expiry_list = instrument&.expiry_list&.compact
+        if expiry_list.present?
+          parsed = expiry_list.filter_map do |raw|
+            case raw
+            when Date then raw
+            when String then Date.parse(raw) rescue nil
+            when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
+            end
+          end.sort
+
+          monthly_expiries = parsed
+            .group_by { |d| [d.year, d.month] }
+            .map { |_, dates| dates.max }
+            .sort
+
+          nearest = monthly_expiries.find { |d| d >= today }
+          return nearest if nearest
+        end
+
+        # Fallback: last Thursday of month
+        last_day = today.end_of_month
+        last_thu = last_day - ((last_day.wday - 4) % 7).days
+        if last_thu < today
+          last_day = (today + 1.month).end_of_month
+          last_thu = last_day - ((last_day.wday - 4) % 7).days
+        end
+        last_thu
+      end
 
       def build_base_meta(index_cfg:, pick:, direction:)
         {
