@@ -39,6 +39,9 @@ module Signal
         regime = result[:regime]
         validation_result = result[:validation_result]
         effective_validation_mode = result[:effective_validation_mode]
+        effective_timeframe = result[:effective_timeframe] || primary_tf
+        strategy_recommendation = result[:strategy_recommendation]
+        use_strategy_recommendations = result[:use_strategy_recommendations] || false
 
         # 5. Trading Context Gate
         if trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, exit_testing_mode, signals_cfg)
@@ -91,7 +94,9 @@ module Signal
           confirmation_tf: confirmation_tf,
           enable_confirmation: enable_confirmation,
           smc_decision: smc_decision,
-          permission: permission
+          permission: permission,
+          strategy_recommendation: strategy_recommendation,
+          use_strategy_recommendations: use_strategy_recommendations
         )
 
         # 11. Create Signal
@@ -298,7 +303,10 @@ module Signal
           regime_result: regime_result,
           regime: regime_result[:regime],
           validation_result: validation_result,
-          effective_validation_mode: effective_validation_mode
+          effective_validation_mode: effective_validation_mode,
+          effective_timeframe: effective_timeframe,
+          strategy_recommendation: strategy_recommendation[:recommendation],
+          use_strategy_recommendations: !exit_testing_mode && signals_cfg.fetch(:use_strategy_recommendations, false)
         }
       end
 
@@ -1116,6 +1124,8 @@ module Signal
       end
 
       def expiry_trade_allowed?(symbol)
+        return true if exit_testing_mode?
+
         expiry_model = "Strategies::ExpiryModel".safe_constantize
         return true unless expiry_model
 
@@ -1237,6 +1247,285 @@ module Signal
 
       def record_signal_skip(signal, reason)
         signal&.record_entry_outcome('skipped', reason)
+      end
+
+      # =====================================================================
+      # Pipeline stage methods extracted from run_for
+      # =====================================================================
+
+      def trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, exit_testing_mode, signals_cfg)
+        return false unless signals_cfg.fetch(:enable_trading_context_gate, true)
+        return false if !regime_state || exit_testing_mode
+
+        indicators = {
+          adx_value: primary_analysis[:adx_value],
+          regime_confidence: regime_result&.[](:confidence)
+        }
+        context = Context::Builder.call(
+          market: primary_series,
+          indicators: indicators,
+          regime_state: regime_state,
+          index_key: index_cfg[:key]
+        )
+        unless context.tradable?
+          Rails.logger.info(
+            "[Signal] TradingContext BLOCKED #{index_cfg[:key]}: day_type=#{context.day_type} session=#{context.session} " \
+            "regime=#{context.regime} score=#{context.score} stability=#{context.stability} (not tradable)"
+          )
+          return true
+        end
+        Rails.logger.debug do
+          "[Signal] TradingContext PASSED #{index_cfg[:key]}: #{context.day_type}/#{context.session}/#{context.regime} " \
+          "score=#{context.score} stability=#{context.stability}"
+        end
+        false
+      end
+
+      def evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime, exit_testing_mode)
+        if exit_testing_mode
+          Rails.logger.info("[Signal] Exit-testing mode: skipping EntryQualityFilter for #{index_cfg[:key]}")
+          return { pass: true, score: 0, breakdown: {}, reject_reason: nil }
+        end
+
+        quality_result = Signal::EntryQualityFilter.evaluate(
+          series: primary_series,
+          supertrend_result: primary_analysis[:supertrend],
+          adx_value: primary_analysis[:adx_value],
+          direction: final_direction,
+          regime: regime,
+          index_key: index_cfg[:key]
+        )
+        unless quality_result[:pass]
+          Rails.logger.info(
+            "[Signal] EntryQualityFilter REJECTED #{index_cfg[:key]} #{final_direction}: " \
+            "#{quality_result[:reject_reason]} (score=#{quality_result[:score]})"
+          )
+        end
+        quality_result
+      end
+
+      def execute_execution_gates(index_cfg, instrument, primary_series, final_direction, signals_cfg, exit_testing_mode)
+        permission = :exit_testing
+        smc_decision = final_direction == :bullish ? :call : :put
+
+        if exit_testing_mode
+          Rails.logger.info("[Signal] Exit-testing mode: skipping entry filter, permission/SMC gating, and momentum validation.")
+          return { permission: permission, smc_decision: smc_decision, momentum_score: nil }
+        end
+
+        filter = Entries::EntryFilterEngine.new(series: primary_series, symbol: index_cfg[:key])
+        unless filter.valid_entry?(direction: final_direction)
+          Rails.logger.warn("[Signal] EntryFilterEngine BLOCKED #{index_cfg[:key]}: Missing Structure/Liquidity/Volatility alignment")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+        Rails.logger.info("[Signal] EntryFilterEngine PASSED for #{index_cfg[:key]}")
+
+        permission = Trading::PermissionResolver.resolve(symbol: index_cfg[:key], instrument: instrument)
+        if permission == :blocked
+          Rails.logger.info("[Signal] PermissionResolver BLOCKED #{index_cfg[:key]} - no trade")
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        enable_smc_permission = signals_cfg.fetch(:enable_smc_avrz_permission, true)
+        enable_smc_alignment  = signals_cfg.fetch(:enable_smc_decision_alignment, true)
+
+        if enable_smc_permission && enable_smc_alignment
+          smc_decision = get_smc_decision(index_cfg, instrument, signals_cfg, final_direction)
+          unless smc_decision_aligned?(smc_decision, final_direction)
+            Rails.logger.info(
+              "[Signal] SMC Decision BLOCKED #{index_cfg[:key]}: " \
+              "signal=#{final_direction}, smc=#{smc_decision} (misaligned or no_trade)"
+            )
+            Signal::StateTracker.reset(index_cfg[:key])
+            return nil
+          end
+          Rails.logger.info("[Signal] SMC Decision CONFIRMED #{index_cfg[:key]}: #{smc_decision} aligns with #{final_direction}")
+        else
+          smc_decision = final_direction == :bullish ? :call : :put
+        end
+
+        momentum_result = Signal::MomentumValidator.validate(
+          instrument: instrument,
+          series: primary_series,
+          direction: final_direction
+        )
+        Rails.logger.info("[Signal] Momentum Score for #{index_cfg[:key]}: #{momentum_result.score}/3")
+
+        { permission: permission, smc_decision: smc_decision, momentum_score: momentum_result.score }
+      end
+
+      def execute_options_analysis(index_cfg, instrument, final_direction, primary_series, effective_validation_mode)
+        expiry_blocked = expiry_trade_allowed?(index_cfg[:key]) == false
+        expiry_date    = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
+        chain_data     = instrument.fetch_option_chain(expiry_date)
+
+        gamma_pressure_result = if chain_data
+                                  detector = Options::GammaRampDetector.new(
+                                    index_key: index_cfg[:key],
+                                    expiry_date: expiry_date,
+                                    chain_data: chain_data
+                                  )
+                                  {
+                                    score: detector.gamma_pressure_score(direction: final_direction),
+                                    strike: detector.ramp_strike(direction: final_direction)&.dig(:strike)
+                                  }
+                                else
+                                  { score: 0.0, strike: nil }
+                                end
+
+        iv_rank_result    = validate_iv_rank(index_cfg, primary_series, effective_validation_mode)
+        theta_risk_result = validate_theta_risk(index_cfg, final_direction, effective_validation_mode)
+
+        {
+          gamma_pressure: gamma_pressure_result,
+          iv_rank: iv_rank_result,
+          theta_risk: theta_risk_result,
+          expiry_blocked: expiry_blocked,
+          expiry_date: expiry_date,
+          chain_data: chain_data
+        }
+      end
+
+      def build_diagnostic_metadata(index_cfg:, final_direction:, primary_analysis:, confirmation_analysis:,
+                                    regime:, regime_result:, ta_result:, options_analysis:,
+                                    validation_result:, state_snapshot:, effective_validation_mode:,
+                                    signals_cfg:, primary_tf:, effective_timeframe:, confirmation_tf:,
+                                    enable_confirmation:, smc_decision:, permission:,
+                                    strategy_recommendation: nil, use_strategy_recommendations: false)
+        Signal::MetadataBuilder.build(
+          index_cfg: index_cfg,
+          final_direction: final_direction,
+          primary_analysis: primary_analysis,
+          confirmation_analysis: confirmation_analysis,
+          regime: regime,
+          regime_result: regime_result,
+          ta_result: ta_result,
+          options_analysis: options_analysis,
+          validation_result: validation_result,
+          state_snapshot: state_snapshot,
+          effective_validation_mode: effective_validation_mode,
+          signals_cfg: signals_cfg,
+          primary_tf: primary_tf,
+          effective_timeframe: effective_timeframe,
+          confirmation_tf: confirmation_tf,
+          enable_confirmation: enable_confirmation,
+          smc_decision: smc_decision,
+          permission: permission,
+          strategy_name: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
+          strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx'
+        )
+      end
+
+      def execute_entry_gate(index_cfg:, instrument:, signal:, final_direction:, primary_series:,
+                             options_analysis:, momentum_score:, permission:, smc_decision:)
+        expiry_blocked = options_analysis[:expiry_blocked]
+        expiry_date    = options_analysis[:expiry_date]
+        chain_data     = options_analysis[:chain_data]
+
+        if expiry_blocked
+          Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
+          record_signal_skip(signal, 'expiry midday decay')
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        expected_spot_move = begin
+          atr = primary_series.atr(14)
+          atr&.to_f
+        rescue StandardError
+          nil
+        end
+
+        unless expected_spot_move&.positive?
+          Rails.logger.info("[Signal] Missing expected_spot_move (ATR) -> BLOCK #{index_cfg[:key]}")
+          record_signal_skip(signal, 'missing ATR')
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        execution_permission = effective_execution_permission(permission)
+
+        picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
+          index_cfg: index_cfg,
+          direction: final_direction,
+          permission: execution_permission,
+          expected_spot_move: expected_spot_move,
+          momentum_score: momentum_score
+        )
+
+        if picks.blank?
+          Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
+          record_signal_skip(signal, 'no suitable strikes')
+          return nil
+        end
+
+        Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
+
+        market_context_extra, mc_gate_blocked = evaluate_market_context_for_entry(
+          index_cfg: index_cfg,
+          primary_series: primary_series,
+          expiry_date: expiry_date,
+          chain_data: chain_data,
+          final_direction: final_direction,
+          pick: picks.first,
+          smc_decision: smc_decision
+        )
+
+        if mc_gate_blocked
+          record_signal_skip(signal, 'market context gate')
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        { picks: picks, market_context_extra: market_context_extra, execution_permission: execution_permission }
+      end
+
+      def trigger_entry_flow(index_cfg:, instrument:, signal:, picks:, final_direction:,
+                             primary_series:, primary_tf:, entry_primary:, exit_testing_mode:,
+                             diagnostic_metadata:, quality_result:, market_context_extra:, execution_permission:)
+        supertrend_direct_entry = (entry_primary == 'supertrend') || exit_testing_mode
+
+        entry_metadata = diagnostic_metadata.merge(market_context_extra).merge(
+          entry_contract: supertrend_direct_entry ? 'supertrend_machine_v1' : 'bos_machine_v1',
+          permission: execution_permission,
+          entry_quality_score: quality_result[:score],
+          entry_quality_breakdown: quality_result[:breakdown]
+        )
+
+        if supertrend_direct_entry
+          Rails.logger.info("[Signal] Exit-testing mode: using direct EntryGuard path (no BOS state machine).") if exit_testing_mode
+          entry_metadata.merge!(
+            bos_id: "st_#{index_cfg[:key]}_#{Time.current.to_i}",
+            bos_timeframe: primary_tf,
+            bos_origin_price: primary_series.candles.last&.close,
+            bos_level: primary_series.candles.last&.close,
+            entry_underlying_price: primary_series.candles.last&.close
+          )
+          picks.each do |pick|
+            entered = Entries::EntryGuard.try_enter(
+              index_cfg: index_cfg,
+              pick: pick,
+              direction: final_direction,
+              scale_multiplier: 1,
+              entry_metadata: entry_metadata,
+              permission: execution_permission,
+              signal: signal
+            )
+            break if entered
+          end
+        else
+          Entries::BosEntryEngine.run_for(
+            index_cfg: index_cfg,
+            instrument: instrument,
+            direction: final_direction,
+            picks: picks,
+            entry_metadata: entry_metadata,
+            permission: execution_permission,
+            signal: signal
+          )
+        end
       end
     end
   end

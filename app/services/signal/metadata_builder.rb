@@ -18,9 +18,9 @@ module Signal
           ta_signal: params[:ta_result]&.dig(:signal),
           ta_confidence: params[:ta_result]&.dig(:confidence),
           ta_bias: params[:ta_result]&.dig(:bias_summary, :summary, :bias),
-          mtf_rsi: params[:ta_result]&.dig(:indicators)&.transform_values { |v| v[:rsi] },
-          mtf_macd: params[:ta_result]&.dig(:indicators)&.transform_values { |v| v[:macd] },
-          mtf_atr: params[:ta_result]&.dig(:indicators)&.transform_values { |v| v[:atr] },
+          mtf_rsi: params[:ta_result]&.dig(:indicators, :indicators)&.transform_values { |v| v[:rsi] },
+          mtf_macd: params[:ta_result]&.dig(:indicators, :indicators)&.transform_values { |v| v[:macd] },
+          mtf_atr: params[:ta_result]&.dig(:indicators, :indicators)&.transform_values { |v| v[:atr] },
 
           # Options Behavior / Greeks
           gamma_pressure: options_analysis&.dig(:gamma_pressure, :score),

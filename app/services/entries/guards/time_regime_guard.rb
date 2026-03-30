@@ -5,6 +5,8 @@ module Entries
     class TimeRegimeGuard
       class << self
         def call(context)
+          return EntryGuardPipeline::PASS if AlgoConfig.run_mode == 'exit_testing'
+
           if time_regime_allows_entry?(
             index_cfg: context[:index_cfg],
             pick: context[:pick],
