@@ -67,6 +67,53 @@ class PositionTracker < ApplicationRecord
       Live::RedisPnlCache.instance.clear_tracker(id)
     end
 
+    def fetch_ltp_from_cache
+      seg = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
+      tick = Live::TickQuery.for_security(segment: seg, security_id: security_id)
+      tick&.ltp
+    end
+
+    def prepare_exit_metadata(exit_reason)
+      exit_reason ||= meta.is_a?(Hash) ? meta['exit_reason'] : nil
+      metadata = meta.is_a?(Hash) ? meta.dup : {}
+      metadata['exit_reason'] = exit_reason if exit_reason.present?
+      metadata['exit_triggered_at'] ||= Time.current
+      metadata
+    end
+
+    def update_exit_attributes(exit_price, exited_at, metadata)
+      attrs = {
+        status: :exited,
+        exit_price: exit_price,
+        exited_at: exited_at || Time.current,
+        last_pnl_rupees: last_pnl_rupees,
+        last_pnl_pct: last_pnl_pct,
+        high_water_mark_pnl: high_water_mark_pnl,
+        exit_reason: metadata['exit_reason'],
+        meta: metadata
+      }.compact
+
+      update!(attrs)
+    end
+
+    def cleanup_exit_caches
+      Live::PositionIndex.instance.remove(id, security_id)
+      Live::RedisPnlCache.instance.clear_tracker(id)
+      Live::RedisTickCache.instance.clear_tick(segment, security_id)
+      Live::TickCache.delete(segment, security_id)
+    end
+
+    def register_cooldown!
+      return if symbol.blank?
+
+      Rails.cache.write("reentry:#{symbol}", Time.current, expires_in: 8.hours)
+
+      idx_key = meta&.dig('index_key')
+      return if idx_key.blank?
+
+      Rails.cache.write("reentry:index:#{idx_key}", Time.current, expires_in: 8.hours)
+    end
+
     def initialize_extremes_in_meta
       return if entry_price.blank?
 
