@@ -25,7 +25,7 @@ A new service that:
 - Streaming support for real-time responses
 - Tool result caching within conversation
 
-### 2. Updated: `OpenAIClient`
+### 2. Updated: `OllamaClient`
 
 **File**: `lib/services/ai/openai_client.rb`
 

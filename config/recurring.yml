@@ -17,6 +17,13 @@ development:
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
 
+  portfolio_reset:
+    class: PortfolioResetJob
+    schedule: at 9:15am every day
+    queue_name: background
+    priority: 1
+    description: "Daily portfolio PnL reset (realized, peak, floor, level) before market open"
+
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob
     schedule: at 9:15am every day
@@ -68,6 +75,13 @@ production:
     queue_name: background
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
+
+  portfolio_reset:
+    class: PortfolioResetJob
+    schedule: at 9:15am every weekday
+    queue_name: background
+    priority: 1
+    description: "Daily portfolio PnL reset (realized, peak, floor, level) before market open"
 
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob

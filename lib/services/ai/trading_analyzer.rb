@@ -20,7 +20,7 @@ module Services
       end
 
       def initialize
-        @client = Services::Ai::OpenaiClient.instance
+        @client = Services::Ai::OllamaClient.instance
       end
 
       def analyze_trading_day(date: Time.zone.today, stream: false)

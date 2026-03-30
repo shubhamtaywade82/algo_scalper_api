@@ -100,7 +100,7 @@ ai:
 ### Basic Chat Completion
 
 ```ruby
-client = Services::Ai::OpenaiClient.instance
+client = Services::Ai::OllamaClient.instance
 
 response = client.chat(
   messages: [
@@ -170,11 +170,11 @@ bundle exec rake ai:test
 
 ### Services
 
-1. **`Services::Ai::OpenaiClient`**
+1. **`Services::Ai::OllamaClient`**
    - Abstraction layer for both OpenAI gems
    - Provides unified interface
    - Handles provider selection and initialization
-   - Note: Class name is `OpenaiClient` (not `OpenAIClient`) to match Zeitwerk conventions
+   - Note: Class name is `OllamaClient` (not `OllamaClient`) to match Zeitwerk conventions
 
 2. **`Services::Ai::TradingAnalyzer`**
    - Trading-specific AI analysis
@@ -250,7 +250,7 @@ All errors are logged with context for debugging.
 ### Custom Analysis
 
 ```ruby
-client = Services::Ai::OpenaiClient.instance
+client = Services::Ai::OllamaClient.instance
 
 if client.enabled?
   response = client.chat(
@@ -278,7 +278,7 @@ end
 # In a service or controller
 stats = PositionTracker.paper_trading_stats_with_pct(date: Time.zone.today)
 
-if Services::Ai::OpenaiClient.instance.enabled?
+if Services::Ai::OllamaClient.instance.enabled?
   analysis = Services::Ai::TradingAnalyzer.analyze_trading_day(date: Time.zone.today)
 
   if analysis
@@ -292,7 +292,7 @@ end
 
 ### Client Not Enabled
 
-**Problem**: `Services::Ai::OpenaiClient.instance.enabled?` returns false
+**Problem**: `Services::Ai::OllamaClient.instance.enabled?` returns false
 
 **Solutions**:
 1. Check if API key is set: `echo $OPENAI_API_KEY`

@@ -7,7 +7,7 @@ module Services
     # Thin wrapper around Ollama::Client for trading AI analysis.
     # Provides serialized request queuing, model auto-selection, and a
     # stable interface (chat / generate / chat_stream) for the rest of the app.
-    class OpenaiClient
+    class OllamaClient
       class << self
         def instance
           @instance ||= new
@@ -68,10 +68,10 @@ module Services
         names = @client.list_model_names
         @available_models = names
         self.class.set_cached_models(base_url, names)
-        Rails.logger.info("[OpenAIClient] Found #{names.count} Ollama models: #{names.join(', ')}")
+        Rails.logger.info("[OllamaClient] Found #{names.count} Ollama models: #{names.join(', ')}")
         names
       rescue StandardError => e
-        Rails.logger.error("[OpenAIClient] Error fetching Ollama models: #{e.class} - #{e.message}")
+        Rails.logger.error("[OllamaClient] Error fetching Ollama models: #{e.class} - #{e.message}")
         []
       end
 
@@ -100,10 +100,10 @@ module Services
         if explicit
           if @available_models&.include?(explicit)
             @selected_model = explicit
-            Rails.logger.info("[OpenAIClient] Using explicitly set model: #{explicit}")
+            Rails.logger.info("[OllamaClient] Using explicitly set model: #{explicit}")
             return explicit
           else
-            Rails.logger.warn("[OpenAIClient] OLLAMA_MODEL=#{explicit} not found in available models — falling back to auto-selection")
+            Rails.logger.warn("[OllamaClient] OLLAMA_MODEL=#{explicit} not found in available models — falling back to auto-selection")
           end
         end
 
@@ -124,7 +124,7 @@ module Services
         selected ||= @available_models.first
 
         @selected_model = selected
-        Rails.logger.info("[OpenAIClient] Auto-selected model: #{selected}")
+        Rails.logger.info("[OllamaClient] Auto-selected model: #{selected}")
         selected
       end
 
@@ -159,7 +159,7 @@ module Services
 
         tools ? result : (result.is_a?(Hash) ? (result[:content] || result['content']).to_s : result.to_s)
       rescue StandardError => e
-        Rails.logger.error("[OpenAIClient] Chat error: #{e.class} - #{e.message}")
+        Rails.logger.error("[OllamaClient] Chat error: #{e.class} - #{e.message}")
         nil
       end
 
@@ -194,11 +194,11 @@ module Services
           )
 
           elapsed = Time.current - stream_start
-          Rails.logger.debug { "[OpenAIClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
+          Rails.logger.debug { "[OllamaClient] Stream completed in #{elapsed.round(2)}s (#{chunk_count} chunks)" }
           response
         end
       rescue Ollama::TimeoutError, Ollama::Error => e
-        Rails.logger.error("[OpenAIClient] Chat stream error: #{e.class} - #{e.message}")
+        Rails.logger.error("[OllamaClient] Chat stream error: #{e.class} - #{e.message}")
         nil
       end
 
@@ -219,7 +219,7 @@ module Services
           )
         end
       rescue StandardError => e
-        Rails.logger.error("[OpenAIClient] Generate error: #{e.class} - #{e.message}")
+        Rails.logger.error("[OllamaClient] Generate error: #{e.class} - #{e.message}")
         nil
       end
 
@@ -233,7 +233,7 @@ module Services
         return false if AlgoConfig.fetch.dig(:ai, :enabled) == false
 
         unless ollama_base_url.present?
-          Rails.logger.warn('[OpenAIClient] Ollama base URL not configured (OLLAMA_HOST_URL or OLLAMA_BASE_URL)')
+          Rails.logger.warn('[OllamaClient] Ollama base URL not configured (OLLAMA_HOST_URL or OLLAMA_BASE_URL)')
           return false
         end
 
@@ -253,10 +253,10 @@ module Services
         config.strict_json = false
 
         @client = Ollama::Client.new(config: config)
-        Rails.logger.info("[OpenAIClient] Connected to Ollama at #{ollama_base_url}")
-        Rails.logger.info("[OpenAIClient] Initialized with provider: ollama")
+        Rails.logger.info("[OllamaClient] Connected to Ollama at #{ollama_base_url}")
+        Rails.logger.info("[OllamaClient] Initialized with provider: ollama")
       rescue StandardError => e
-        Rails.logger.error("[OpenAIClient] Failed to initialize: #{e.class} - #{e.message}")
+        Rails.logger.error("[OllamaClient] Failed to initialize: #{e.class} - #{e.message}")
         @enabled = false
       end
 
@@ -296,7 +296,7 @@ module Services
         rescue Ollama::TimeoutError, Ollama::HTTPError => e
           raise unless attempt < max_attempts
 
-          Rails.logger.warn("[OpenAIClient] Retrying (#{attempt}/#{max_attempts}) after #{e.class}: #{e.message}")
+          Rails.logger.warn("[OllamaClient] Retrying (#{attempt}/#{max_attempts}) after #{e.class}: #{e.message}")
           sleep(3)
           retry
         end
@@ -356,9 +356,9 @@ module Services
                         Rails.application.config.ai_intent_logger
 
         if logger
-          logger.info("[OpenAIClient] Sending prompt to #{model} (~#{token_count} tokens)")
+          logger.info("[OllamaClient] Sending prompt to #{model} (~#{token_count} tokens)")
         else
-          Rails.logger.info("[OpenAIClient] Sending prompt to #{model} (~#{token_count} tokens)")
+          Rails.logger.info("[OllamaClient] Sending prompt to #{model} (~#{token_count} tokens)")
         end
       end
     end

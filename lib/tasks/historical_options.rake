@@ -435,7 +435,7 @@ namespace :options do
 
       # ── AI Insights via Ollama ────────────────────────────────────────────────
       begin
-        ai_client = Services::Ai::OpenaiClient.instance
+        ai_client = Services::Ai::OllamaClient.instance
         if ai_client.enabled?
           puts "\n  #{B}🤖 AI Insights (Ollama — #{ai_client.selected_model})#{Z}"
           puts "  Analysing patterns to recommend trailing stop & exit strategy..."
