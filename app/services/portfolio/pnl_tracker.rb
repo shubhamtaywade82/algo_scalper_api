@@ -47,8 +47,11 @@ module Portfolio
         r = redis
         return unless r
 
-        # Idempotency check: only add to realized total once per tracker per session
-        unless r.sadd(KEY_REALIZED_TRACKERS, tracker_id.to_s)
+        # Idempotency check: only add to realized total once per tracker per session.
+        # Redis SADD returns 1 if element added, 0 if already present.
+        # In Ruby, 0 is truthy, so we must check specifically for 1.
+        added = r.sadd(KEY_REALIZED_TRACKERS, tracker_id.to_s)
+        if added != 1 && added != true
           Rails.logger.debug("[Portfolio::PnlTracker] Skip mark_realized: tracker=#{tracker_id} already counted today")
           return
         end
