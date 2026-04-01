@@ -10,7 +10,8 @@ module Entries
       contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
       sl_decimal = supertrend_sl_decimal
       premium_r = entry_price.to_f * sl_decimal
-      entry_risk_rupees = premium_r * quantity.to_i
+      qty_int = SafeNumeric.to_non_negative_integer(quantity)
+      entry_risk_rupees = premium_r * qty_int
 
       if contract == SUPERTREND_CONTRACT
         origin_price = nil
@@ -29,7 +30,7 @@ module Entries
       meta_hash[:peak_premium_at] = Time.current.iso8601
       meta_hash[:entry_risk_rupees] = entry_risk_rupees
       meta_hash[:premium_stop_price] = premium_stop
-      meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
+      meta_hash[:initial_sl_pct] = safe_initial_sl_pct(premium_r, entry_price.to_f)
       meta_hash[:premium_target_price] = premium_target
       meta_hash[:entry_underlying_price] = entry_underlying_price
       meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
@@ -53,6 +54,13 @@ module Entries
       value.positive? ? value : 0.12
     rescue StandardError
       0.12
+    end
+
+    def self.safe_initial_sl_pct(premium_r, entry_price_f)
+      return 0.0 unless entry_price_f.finite? && entry_price_f.positive?
+
+      ratio = premium_r / entry_price_f * 100.0
+      ratio.finite? ? ratio.round(2) : 0.0
     end
   end
 end

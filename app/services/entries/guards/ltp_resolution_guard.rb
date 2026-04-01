@@ -32,7 +32,7 @@ module Entries
           end
 
           unless fresh_tick?(tick, max_age_seconds)
-            age_ms = (tick_age_seconds(tick) * 1000.0).round
+            age_ms = age_ms_rounded(tick)
             Rails.logger.warn(
               "[EntryGuard] BLOCKED #{index_cfg[:key]} #{pick[:symbol]}: fresh_ltp_unavailable " \
               "(segment=#{segment}, security_id=#{security_id}, ltp=#{ltp.inspect}, tick_age_ms=#{age_ms}, max_age_s=#{max_age_seconds})"
@@ -40,10 +40,11 @@ module Entries
             return { blocked: "fresh_ltp_unavailable for #{index_cfg[:key]}: #{pick[:symbol]}" }
           end
 
-          age_ms = (tick_age_seconds(tick) * 1000.0).round
+          age_ms = age_ms_rounded(tick)
+          ltp_label = format_ltp(tick&.ltp)
           Rails.logger.info(
             "[EntryGuard] Fresh entry LTP selected #{index_cfg[:key]} #{pick[:symbol]}: " \
-            "security_id=#{security_id}, ltp=#{tick.ltp.to_f.round(2)}, source=#{source}, tick_age_ms=#{age_ms}"
+            "security_id=#{security_id}, ltp=#{ltp_label}, source=#{source}, tick_age_ms=#{age_ms}"
           )
 
           context[:ltp] = tick.ltp
@@ -109,6 +110,21 @@ module Entries
           (Time.current - tick_time).to_f
         rescue StandardError
           Float::INFINITY
+        end
+
+        # NaN/Inf * 1000 then .round can raise FloatDomainError on some Ruby builds.
+        def age_ms_rounded(tick)
+          raw = tick_age_seconds(tick) * 1000.0
+          return 0 unless raw.finite?
+
+          raw.round
+        rescue FloatDomainError, RangeError
+          0
+        end
+
+        def format_ltp(ltp)
+          f = ltp&.to_f
+          f&.finite? ? f.round(2) : ltp.inspect
         end
       end
     end

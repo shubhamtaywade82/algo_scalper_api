@@ -21,14 +21,21 @@ module Entries
       end
 
       def call
+        ltp_f = @ltp.to_f
+        unless ltp_f.finite? && ltp_f.positive?
+          return { blocked: "invalid_entry_ltp for #{@index_cfg[:key]}: #{@ltp.inspect}" }
+        end
+
         symbol = @index_cfg[:key].to_s.upcase
         permission_sym = (@permission || @entry_metadata&.dig(:permission) || :scale_ready).to_sym
-        
+
         profile = Trading::InstrumentExecutionProfile.for(symbol)
         return { blocked: 'execution_only_blocked_by_profile' } if execution_only_blocked?(profile, permission_sym)
 
         lot_size = Trading::LotCalculator.lot_size_for(symbol)
-        permission_cap = profile[:max_lots_by_permission][permission_sym].to_i
+        permission_cap = SafeNumeric.to_non_negative_integer(
+          profile[:max_lots_by_permission][permission_sym]
+        )
 
         cap_lots = Trading::CapitalAllocator.max_lots(
           premium: @ltp.to_f,
@@ -45,7 +52,8 @@ module Entries
         )
 
         quantity_by_cap = cap_lots * lot_size
-        quantity = [quantity_by_allocator.to_i, quantity_by_cap.to_i].min
+        allocator_qty = SafeNumeric.to_non_negative_integer(quantity_by_allocator)
+        quantity = [allocator_qty, quantity_by_cap].min
         quantity = (quantity / lot_size) * lot_size # ensure lot-aligned
 
         if quantity < lot_size

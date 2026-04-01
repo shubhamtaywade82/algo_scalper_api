@@ -56,7 +56,10 @@ module Entries
         true
       rescue StandardError => e
         signal&.record_entry_outcome('blocked', "exception: #{e.class}")
-        Rails.logger.error("EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+        bt = e.backtrace&.first(12)&.join("\n")
+        msg = "EntryGuard failed for #{index_cfg[:key]}: #{e.class} - #{e.message}"
+        msg = "#{msg}\n#{bt}" if bt.present?
+        Rails.logger.error(msg)
         false
       end
 

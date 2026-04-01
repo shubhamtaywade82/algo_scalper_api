@@ -19,7 +19,7 @@ module Policies
   class RiskPolicy < BasePolicy
     def initialize(index_key:, proposed_qty:, entry_price:, lot_size: 1)
       @index_key    = index_key.to_s
-      @proposed_qty = proposed_qty.to_i
+      @proposed_qty = SafeNumeric.to_non_negative_integer(proposed_qty)
       @entry_price  = entry_price.to_f
       @lot_size     = [lot_size.to_i, 1].max
       @violations   = nil
