@@ -48,7 +48,7 @@ expiry_week_power_trend:
   entry_end: "13:45"       # End of optimal entry window (before gamma session)
 
 loss_streak_guard:
-  enabled: true
+  enabled: false
   consecutive_losses_threshold: 2
   cooldown_minutes: 30
 
