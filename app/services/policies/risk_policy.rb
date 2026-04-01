@@ -21,7 +21,7 @@ module Policies
       @index_key    = index_key.to_s
       @proposed_qty = SafeNumeric.to_non_negative_integer(proposed_qty)
       @entry_price  = entry_price.to_f
-      @lot_size     = [lot_size.to_i, 1].max
+      @lot_size     = [SafeNumeric.to_non_negative_integer(lot_size), 1].max
       @violations   = nil
     end
 

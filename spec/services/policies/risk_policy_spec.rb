@@ -49,6 +49,22 @@ RSpec.describe Policies::RiskPolicy do
     end
   end
 
+  context 'when lot_size is NaN' do
+    subject(:policy) do
+      described_class.new(
+        index_key: 'NIFTY',
+        proposed_qty: 50,
+        entry_price: 250.0,
+        lot_size: Float::NAN
+      )
+    end
+
+    it 'coerces lot_size to at least 1 without raising' do
+      expect { policy.permitted? }.not_to raise_error
+      expect(policy).to be_permitted
+    end
+  end
+
   context 'when circuit breaker is tripped' do
     before { allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(true) }
 
