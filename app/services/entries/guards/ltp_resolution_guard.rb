@@ -21,37 +21,63 @@ module Entries
           end
 
           tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-          source = 'tick_cache'
-          ltp = tick&.ltp
+          resolution = empty_resolution
 
           unless fresh_tick?(tick, max_age_seconds)
-            resolved = resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)
+            resolution = resolve_entry_ltp(
+              instrument: instrument,
+              pick: pick,
+              index_cfg: index_cfg,
+              max_age_seconds: max_age_seconds
+            )
             tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-            source = 'forced_refresh'
-            ltp = tick&.ltp || resolved
           end
 
-          unless fresh_tick?(tick, max_age_seconds)
-            age_ms = age_ms_rounded(tick)
-            Rails.logger.warn(
-              "[EntryGuard] BLOCKED #{index_cfg[:key]} #{pick[:symbol]}: fresh_ltp_unavailable " \
-              "(segment=#{segment}, security_id=#{security_id}, ltp=#{ltp.inspect}, tick_age_ms=#{age_ms}, max_age_s=#{max_age_seconds})"
-            )
-            return { blocked: "fresh_ltp_unavailable for #{index_cfg[:key]}: #{pick[:symbol]}" }
+          if fresh_tick?(tick, max_age_seconds)
+            log_entry_ltp_selected(index_cfg, pick, security_id, tick.ltp, 'tick_cache', tick)
+            context[:ltp] = tick.ltp
+            return EntryGuardPipeline::PASS
+          end
+
+          if resolution[:transport] == :websocket_fresh && resolution[:ltp].to_f.positive?
+            log_entry_ltp_selected(index_cfg, pick, security_id, resolution[:ltp], 'websocket_fresh', tick)
+            context[:ltp] = resolution[:ltp]
+            return EntryGuardPipeline::PASS
+          end
+
+          if rest_snapshot?(resolution) && resolution[:ltp].to_f.positive?
+            log_entry_ltp_selected(index_cfg, pick, security_id, resolution[:ltp], resolution[:transport].to_s, tick)
+            context[:ltp] = resolution[:ltp]
+            return EntryGuardPipeline::PASS
           end
 
           age_ms = age_ms_rounded(tick)
-          ltp_label = format_ltp(tick&.ltp)
+          ltp_probe = tick&.ltp || resolution[:ltp]
+          Rails.logger.warn(
+            "[EntryGuard] BLOCKED #{index_cfg[:key]} #{pick[:symbol]}: fresh_ltp_unavailable " \
+            "(segment=#{segment}, security_id=#{security_id}, ltp=#{ltp_probe.inspect}, tick_age_ms=#{age_ms}, max_age_s=#{max_age_seconds})"
+          )
+          { blocked: "fresh_ltp_unavailable for #{index_cfg[:key]}: #{pick[:symbol]}" }
+        end
+
+        private
+
+        def empty_resolution
+          { ltp: nil, transport: :none }
+        end
+
+        def rest_snapshot?(resolution)
+          %i[rest_derivative rest_instrument].include?(resolution[:transport])
+        end
+
+        def log_entry_ltp_selected(index_cfg, pick, security_id, ltp, source, tick_for_age)
+          age_ms = age_ms_rounded(tick_for_age)
+          ltp_label = format_ltp(ltp)
           Rails.logger.info(
             "[EntryGuard] Fresh entry LTP selected #{index_cfg[:key]} #{pick[:symbol]}: " \
             "security_id=#{security_id}, ltp=#{ltp_label}, source=#{source}, tick_age_ms=#{age_ms}"
           )
-
-          context[:ltp] = tick.ltp
-          EntryGuardPipeline::PASS
         end
-
-        private
 
         def entry_ltp_max_age_seconds
           cfg = AlgoConfig.fetch
@@ -67,33 +93,44 @@ module Entries
           tick_age_seconds(tick) <= max_age_seconds
         end
 
-        def resolve_entry_ltp(instrument:, pick:, index_cfg:)
+        # Returns { ltp: BigDecimal|nil, transport: :websocket_fresh | :rest_derivative | :rest_instrument | :none }
+        def resolve_entry_ltp(instrument:, pick:, index_cfg:, max_age_seconds:)
           segment = pick[:segment] || index_cfg[:segment]
           security_id = pick[:security_id]
-          return nil unless segment.present? && security_id.present?
+          return empty_resolution unless segment.present? && security_id.present?
 
-          # Strategy 1: WebSocket subscription + TickCache
+          # Strategy 1: WebSocket subscription + TickCache (only trust ticks that pass fresh_tick?)
           if Live::MarketFeedHub.instance.running? && Live::MarketFeedHub.instance.connected?
             begin
               Live::MarketFeedHub.instance.subscribe(segment: segment, security_id: security_id)
-              3.times do
-                cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-                return cached_tick.ltp if cached_tick&.ltp&.to_f&.positive?
+              15.times do
                 sleep(0.05)
+                cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+                next unless cached_tick&.ltp&.to_f&.positive?
+                next unless fresh_tick?(cached_tick, max_age_seconds)
+
+                return { ltp: BigDecimal(cached_tick.ltp.to_s), transport: :websocket_fresh }
               end
             rescue StandardError
+              nil
             end
           end
 
-          # Strategy 2: REST API fallback
+          # Strategy 2: REST snapshot — valid entry price even when tick cache timestamp is stale
           derivative = Derivative.find_by(id: pick[:derivative_id]) if pick[:derivative_id].present?
           if derivative
             api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
-            return BigDecimal(api_ltp.to_s) if api_ltp.present?
+            if api_ltp.present?
+              return { ltp: BigDecimal(api_ltp.to_s), transport: :rest_derivative }
+            end
           end
 
           api_ltp = instrument.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
-          BigDecimal(api_ltp.to_s) if api_ltp.present?
+          if api_ltp.present?
+            return { ltp: BigDecimal(api_ltp.to_s), transport: :rest_instrument }
+          end
+
+          empty_resolution
         end
 
         def tick_age_seconds(tick)

@@ -15,35 +15,58 @@ RSpec.describe Entries::Guards::LtpResolutionGuard do
 
   it 'uses fresh tick cache LTP for entry even when pick contains ltp' do
     allow(Live::TickQuery).to receive(:for_security).and_return(build_tick(ltp: '102.5', age_seconds: 0.2))
-    allow(Entries::EntryGuard).to receive(:resolve_entry_ltp)
+    allow(described_class).to receive(:resolve_entry_ltp)
 
     result = described_class.call(context)
 
     expect(result).to eq(Entries::EntryGuardPipeline::PASS)
     expect(context[:ltp]).to eq(BigDecimal('102.5'))
-    expect(Entries::EntryGuard).not_to have_received(:resolve_entry_ltp)
+    expect(described_class).not_to have_received(:resolve_entry_ltp)
   end
 
-  it 'uses forced refresh path when initial tick is stale and accepts fresh refreshed tick' do
+  it 'accepts tick after forced refresh when subscribe yields no fresh tick but cache updates' do
+    allow(described_class).to receive(:resolve_entry_ltp).and_return({ ltp: nil, transport: :none })
     allow(Live::TickQuery).to receive(:for_security).and_return(
       build_tick(ltp: '99.0', age_seconds: 5.0),
       build_tick(ltp: '101.0', age_seconds: 0.1)
     )
-    allow(Entries::EntryGuard).to receive(:resolve_entry_ltp).and_return(BigDecimal('101.0'))
 
     result = described_class.call(context)
 
     expect(result).to eq(Entries::EntryGuardPipeline::PASS)
     expect(context[:ltp]).to eq(BigDecimal('101.0'))
-    expect(Entries::EntryGuard).to have_received(:resolve_entry_ltp).once
   end
 
-  it 'blocks entry when no fresh tick is available after forced refresh' do
-    allow(Live::TickQuery).to receive(:for_security).and_return(
-      build_tick(ltp: '99.0', age_seconds: 6.0),
-      build_tick(ltp: '99.0', age_seconds: 6.0)
+  it 'accepts REST snapshot when tick cache stays stale' do
+    allow(described_class).to receive(:resolve_entry_ltp).and_return(
+      { ltp: BigDecimal('250.45'), transport: :rest_derivative }
     )
-    allow(Entries::EntryGuard).to receive(:resolve_entry_ltp).and_return(BigDecimal('100.0'))
+    stale = build_tick(ltp: '99.0', age_seconds: 6.0)
+    allow(Live::TickQuery).to receive(:for_security).and_return(stale, stale)
+
+    result = described_class.call(context)
+
+    expect(result).to eq(Entries::EntryGuardPipeline::PASS)
+    expect(context[:ltp]).to eq(BigDecimal('250.45'))
+  end
+
+  it 'accepts websocket_fresh resolution when re-read tick lags' do
+    allow(described_class).to receive(:resolve_entry_ltp).and_return(
+      { ltp: BigDecimal('180.25'), transport: :websocket_fresh }
+    )
+    stale = build_tick(ltp: '99.0', age_seconds: 6.0)
+    allow(Live::TickQuery).to receive(:for_security).and_return(stale, stale)
+
+    result = described_class.call(context)
+
+    expect(result).to eq(Entries::EntryGuardPipeline::PASS)
+    expect(context[:ltp]).to eq(BigDecimal('180.25'))
+  end
+
+  it 'blocks entry when no fresh tick and no usable resolution' do
+    allow(described_class).to receive(:resolve_entry_ltp).and_return({ ltp: nil, transport: :none })
+    stale = build_tick(ltp: '99.0', age_seconds: 6.0)
+    allow(Live::TickQuery).to receive(:for_security).and_return(stale, stale)
 
     result = described_class.call(context)
 
