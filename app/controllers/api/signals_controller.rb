@@ -2,6 +2,10 @@
 
 module Api
   class SignalsController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!
+
     PER_PAGE_DEFAULT = 25
     PER_PAGE_MAX     = 100
     ALLOWED_SORT_COLS = %w[signal_timestamp confidence_score adx_value index_key direction created_at].freeze

@@ -2,13 +2,17 @@
 
 module Api
   class DrawdownGuardController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_operator_token!
+
     def reset
       Rails.logger.info(
         "[DrawdownGuardController] Reset requested: " \
         "IP=#{request.remote_ip}, UserAgent=#{request.user_agent}"
       )
       Portfolio::DrawdownGuard.reset_day!
-      
+
       # Clear the PnL tracker peak as well so it can start fresh
       Portfolio::PnlTracker.reset_day!
 

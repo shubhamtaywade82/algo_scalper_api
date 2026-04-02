@@ -243,6 +243,6 @@ PATCH /api/settings/bulk              # Bulk update settings
 GET  /api/circuit_breaker             # Circuit breaker status
 POST /api/circuit_breaker/trip        # Trip (emergency halt)
 DELETE /api/circuit_breaker/trip      # Reset
-GET  /smc/decision                    # SMC analytics decision
+GET  /api/smc/decision                # SMC analytics decision (legacy GET /smc/decision → 301)
 POST /cable                           # ActionCable (positions, dashboard channels)
 ```

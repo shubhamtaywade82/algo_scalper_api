@@ -2,6 +2,11 @@
 
 module Api
   class AnalysisController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!, only: %i[show historical]
+    before_action :authenticate_operator_token!, only: %i[ai_snapshot]
+
     # GET /api/analysis/:index_key
     # Always returns instantly from cache. Triggers background refresh if stale.
     def show

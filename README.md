@@ -348,9 +348,15 @@ PATCH /api/settings/bulk              # Bulk update settings
 GET  /api/circuit_breaker             # Circuit breaker status
 POST /api/circuit_breaker/trip        # Trip circuit breaker (emergency halt)
 DELETE /api/circuit_breaker/trip      # Reset circuit breaker
-GET  /smc/decision                    # SMC analytics decision
+GET  /api/smc/decision                # SMC analytics decision (namespaced API)
+GET  /smc/decision                    # Legacy URL → 301 redirect to /api/smc/decision
 POST /cable                           # ActionCable WebSocket (positions, dashboard channels)
 ```
+
+### OpenAPI (RSwag)
+
+- Spec file: `swagger/v1/swagger.yaml` (regenerate with `bundle exec rake rswag:specs:swaggerize`).
+- Swagger UI: `/api-docs` when mounted (development/test by default; in production set `ENABLE_SWAGGER_UI=true`).
 
 ## Database Schema
 

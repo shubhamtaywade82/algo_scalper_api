@@ -2,6 +2,10 @@
 
 module Api
   class DashboardController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!
+
     def show
       ip_info = Dhan::IpService.fetch_ip_info
       render json: {
