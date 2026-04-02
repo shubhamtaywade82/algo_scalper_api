@@ -72,7 +72,7 @@ module Ai
           JSON:
         PROMPT
 
-        response = Services::Ai::OpenaiClient.new.generate(prompt: prompt)
+        response = Services::Ai::OllamaClient.new.generate(prompt: prompt)
         
         # Robust parsing: find the first { and last }
         json_match = response.match(/\{.*\}/m)

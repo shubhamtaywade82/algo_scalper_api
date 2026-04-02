@@ -43,7 +43,7 @@ module Services
       end
 
       def initialize
-        @client = Services::Ai::OpenaiClient.instance
+        @client = Services::Ai::OllamaClient.instance
         @tools = build_tools_registry
         @tool_cache = {} # Cache tool results within conversation
         @index_config_cache = nil # Cache index configs

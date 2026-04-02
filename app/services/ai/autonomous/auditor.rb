@@ -136,8 +136,9 @@ module Ai
         peak    = 0.0
         max_dd  = 0.0
 
-        scope.order(:exited_at).pluck(:last_pnl_rupees).each do |pnl|
-          balance += pnl.to_f
+        scope.order(:exited_at).find_each(batch_size: 1000) do |tracker|
+          pnl = tracker.last_pnl_rupees.to_f
+          balance += pnl
           peak     = balance if balance > peak
           dd       = peak - balance
           max_dd   = dd if dd > max_dd
@@ -151,10 +152,10 @@ module Ai
         captured  = 0.0
         available = 0.0
 
-        analytics.pluck(:exit_price, :entry_price, :max_favorable_excursion).each do |exit_p, entry_p, mfe|
-          pnl = exit_p.to_f - entry_p.to_f
+        analytics.find_each(batch_size: 1000) do |analytic|
+          pnl = analytic.exit_price.to_f - analytic.entry_price.to_f
           captured  += pnl if pnl.positive?
-          available += mfe.to_f if mfe.to_f.positive?
+          available += analytic.max_favorable_excursion.to_f if analytic.max_favorable_excursion.to_f.positive?
         end
 
         return 0.0 if available.zero?

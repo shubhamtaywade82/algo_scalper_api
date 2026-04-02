@@ -36,8 +36,19 @@ midday_guard:
   block_after_time: "15:00"
   trending_adx_bypass: 28    # skip guard entirely when ADX >= this (trending market)
 
-loss_streak_guard:
+# Expiry-week power trend mode: detects and holds high-conviction directional entries
+# during the final week before monthly expiry when ADX confirms a power trend.
+# Pattern: BANKNIFTY ADX=53 or NIFTY ADX=40+ locked since morning → enter 12:00-13:45
+# → ride afternoon gamma explosion. Near-ATM options can return 3-6x on a 0.8-1.4% spot move.
+expiry_week_power_trend:
   enabled: true
+  adx_min: 40              # Power trend minimum (ADX >= 40 = confirmed strong trend)
+  expiry_days_max: 5       # Only within 5 calendar days of monthly expiry
+  entry_start: "12:00"     # Start of optimal entry window (after morning volatility)
+  entry_end: "13:45"       # End of optimal entry window (before gamma session)
+
+loss_streak_guard:
+  enabled: false
   consecutive_losses_threshold: 2
   cooldown_minutes: 30
 

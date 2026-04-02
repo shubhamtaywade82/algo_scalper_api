@@ -25,14 +25,14 @@ module Entries
           ltp = tick&.ltp
 
           unless fresh_tick?(tick, max_age_seconds)
-            resolved = EntryGuard.resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)
+            resolved = resolve_entry_ltp(instrument: instrument, pick: pick, index_cfg: index_cfg)
             tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
             source = 'forced_refresh'
             ltp = tick&.ltp || resolved
           end
 
           unless fresh_tick?(tick, max_age_seconds)
-            age_ms = (tick_age_seconds(tick) * 1000.0).round
+            age_ms = age_ms_rounded(tick)
             Rails.logger.warn(
               "[EntryGuard] BLOCKED #{index_cfg[:key]} #{pick[:symbol]}: fresh_ltp_unavailable " \
               "(segment=#{segment}, security_id=#{security_id}, ltp=#{ltp.inspect}, tick_age_ms=#{age_ms}, max_age_s=#{max_age_seconds})"
@@ -40,10 +40,11 @@ module Entries
             return { blocked: "fresh_ltp_unavailable for #{index_cfg[:key]}: #{pick[:symbol]}" }
           end
 
-          age_ms = (tick_age_seconds(tick) * 1000.0).round
+          age_ms = age_ms_rounded(tick)
+          ltp_label = format_ltp(tick&.ltp)
           Rails.logger.info(
             "[EntryGuard] Fresh entry LTP selected #{index_cfg[:key]} #{pick[:symbol]}: " \
-            "security_id=#{security_id}, ltp=#{tick.ltp.to_f.round(2)}, source=#{source}, tick_age_ms=#{age_ms}"
+            "security_id=#{security_id}, ltp=#{ltp_label}, source=#{source}, tick_age_ms=#{age_ms}"
           )
 
           context[:ltp] = tick.ltp
@@ -66,6 +67,35 @@ module Entries
           tick_age_seconds(tick) <= max_age_seconds
         end
 
+        def resolve_entry_ltp(instrument:, pick:, index_cfg:)
+          segment = pick[:segment] || index_cfg[:segment]
+          security_id = pick[:security_id]
+          return nil unless segment.present? && security_id.present?
+
+          # Strategy 1: WebSocket subscription + TickCache
+          if Live::MarketFeedHub.instance.running? && Live::MarketFeedHub.instance.connected?
+            begin
+              Live::MarketFeedHub.instance.subscribe(segment: segment, security_id: security_id)
+              3.times do
+                cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+                return cached_tick.ltp if cached_tick&.ltp&.to_f&.positive?
+                sleep(0.05)
+              end
+            rescue StandardError
+            end
+          end
+
+          # Strategy 2: REST API fallback
+          derivative = Derivative.find_by(id: pick[:derivative_id]) if pick[:derivative_id].present?
+          if derivative
+            api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+            return BigDecimal(api_ltp.to_s) if api_ltp.present?
+          end
+
+          api_ltp = instrument.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+          BigDecimal(api_ltp.to_s) if api_ltp.present?
+        end
+
         def tick_age_seconds(tick)
           return Float::INFINITY unless tick&.timestamp
 
@@ -80,6 +110,21 @@ module Entries
           (Time.current - tick_time).to_f
         rescue StandardError
           Float::INFINITY
+        end
+
+        # NaN/Inf * 1000 then .round can raise FloatDomainError on some Ruby builds.
+        def age_ms_rounded(tick)
+          raw = tick_age_seconds(tick) * 1000.0
+          return 0 unless raw.finite?
+
+          raw.round
+        rescue FloatDomainError, RangeError
+          0
+        end
+
+        def format_ltp(ltp)
+          f = ltp&.to_f
+          f&.finite? ? f.round(2) : ltp.inspect
         end
       end
     end

@@ -343,7 +343,7 @@ curl http://localhost:11434/api/tags
 
 **Check 3: Model Available**
 ```ruby
-Services::Ai::OpenaiClient.instance.enabled?
+Services::Ai::OllamaClient.instance.enabled?
 ```
 
 ---

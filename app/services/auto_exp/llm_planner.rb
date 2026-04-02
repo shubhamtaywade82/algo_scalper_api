@@ -27,7 +27,7 @@ module AutoExp
     }.freeze
 
     def initialize
-      @client = Services::Ai::OpenaiClient.instance
+      @client = Services::Ai::OllamaClient.instance
     end
 
     def propose(results:, config:)

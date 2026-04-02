@@ -26,7 +26,7 @@ The `TradingSystem::Supervisor` registers these services:
 **❌ AI services are NOT registered in the supervisor.**
 
 ### AI Services (On-Demand Only)
-- `Services::Ai::OpenaiClient` - HTTP client (singleton, no threads)
+- `Services::Ai::OllamaClient` - HTTP client (singleton, no threads)
 - `Services::Ai::TechnicalAnalysisAgent` - Called on-demand via rake tasks
 - `Services::Ai::TradingAnalyzer` - Called on-demand via rake tasks
 

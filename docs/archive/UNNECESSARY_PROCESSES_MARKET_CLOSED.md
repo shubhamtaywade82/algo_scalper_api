@@ -20,7 +20,7 @@ When starting the app with `bin/dev` while the market is closed, several unneces
 **Evidence from Logs**:
 ```
 [AgentRunner] Calling tool: compute_indicators with args: {:instrument_id=>104624, :timeframes=>["5m", "15m"]}
-[OpenAIClient] Sending prompt to llama3.2:3b
+[OllamaClient] Sending prompt to llama3.2:3b
 [AgentRunner] Intent resolved: options_buying, symbol: NIFTY, confidence: 0.8
 ```
 
@@ -192,7 +192,7 @@ After applying fixes, verify logs show:
 
 And no more:
 - `[AgentRunner]` calls
-- `[OpenAIClient]` API calls
+- `[OllamaClient]` API calls
 - Repeated `paper_trading_stats_with_pct` queries
 
 ---

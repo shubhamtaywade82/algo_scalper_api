@@ -9,7 +9,7 @@ module Ai
     # - Current AlgoConfig snapshot (SL, TP, trailing, ADX thresholds, regime multipliers)
     # - Dataset meta summary (win rate, exit breakdown)
     #
-    # Returns a prompt string suitable for Services::Ai::OpenaiClient#generate.
+    # Returns a prompt string suitable for Services::Ai::OllamaClient#generate.
     class PromptBuilder
       def self.call(dataset:)
         new(dataset: dataset).call

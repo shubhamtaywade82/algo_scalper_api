@@ -2,6 +2,10 @@
 
 module Api
   class PositionsController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!
+
     ALLOWED_SORT_COLS = %w[exited_at last_pnl_rupees entry_price symbol side quantity].freeze
 
     def index

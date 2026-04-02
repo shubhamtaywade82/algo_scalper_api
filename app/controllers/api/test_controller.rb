@@ -2,6 +2,10 @@
 
 module Api
   class TestController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :ensure_test_broadcast_allowed!
+
     def broadcast
       tick_data = {
         segment: params[:segment] || 'IDX_I',
@@ -19,6 +23,21 @@ module Api
         message: 'Test tick stored in TickCache',
         data: tick_data
       }
+    end
+
+    private
+
+    def ensure_test_broadcast_allowed!
+      return if Rails.env.local?
+
+      expected = ENV['API_OPERATOR_TOKEN'].presence
+      unless expected
+        Rails.logger.warn('[Api::TestController] test_broadcast blocked outside development (set API_OPERATOR_TOKEN)')
+        render json: { error: 'forbidden' }, status: :forbidden
+        return
+      end
+
+      authenticate_operator_token!
     end
   end
 end

@@ -373,7 +373,7 @@ docker exec -it ollama ollama run llama3.2:3b <<< "Analyze NIFTY"
 ### Basic Usage
 
 ```ruby
-client = Services::AI::OpenAIClient.instance
+client = Services::AI::OllamaClient.instance
 
 # Model is auto-selected (best available), or specify explicitly
 response = client.chat(
@@ -690,7 +690,7 @@ curl http://192.168.1.100:11434/api/tags
 
 ```ruby
 # In Rails console
-client = Services::AI::OpenAIClient.instance
+client = Services::AI::OllamaClient.instance
 puts "Provider: #{client.provider}"  # Should show "ollama"
 puts "Enabled: #{client.enabled?}"   # Should show true
 
@@ -707,7 +707,7 @@ puts response
 # With OLLAMA_BASE_URL=http://192.168.1.11:11434
 # (OLLAMA_MODEL is optional - system auto-selects best model)
 
-client = Services::AI::OpenAIClient.instance
+client = Services::AI::OllamaClient.instance
 # => Provider: ollama, Enabled: true
 
 # Check available and selected models

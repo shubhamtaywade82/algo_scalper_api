@@ -43,4 +43,11 @@ RSpec.describe 'GET /api/dashboard', type: :request do
     body = JSON.parse(response.body)
     expect(body['system']['pnl_updater_running']).to eq(false)
   end
+
+  it 'includes subscribed_indices as an array' do
+    get '/api/dashboard'
+    expect(response).to have_http_status(:ok)
+    body = JSON.parse(response.body)
+    expect(body['subscribed_indices']).to eq([])
+  end
 end

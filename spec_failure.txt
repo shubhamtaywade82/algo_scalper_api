@@ -1,0 +1,28 @@
+Run options: include {:locations=>{"./spec/services/live/unified_exit_checker_spec.rb"=>[770]}}
+F
+
+Failures:
+
+  1) Live::UnifiedExitChecker Premium Momentum Failure triggers when PremiumMomentumFailureRule evaluates to exit
+     Failure/Error: expect(result[:reason]).to eq('PREMIUM_MOMENTUM_FAILURE')
+
+     NoMethodError:
+       undefined method `[]' for nil
+     # ./spec/services/live/unified_exit_checker_spec.rb:776:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/webmock-3.26.2/lib/webmock/rspec.rb:39:in `block (2 levels) in <top (required)>'
+     # ./spec/support/database_cleaner.rb:60:in `block (3 levels) in <top (required)>'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/strategy.rb:30:in `cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:34:in `block (2 levels) in cleaning'
+     # /home/nemesis/.rvm/gems/ruby-3.3.4/gems/database_cleaner-core-2.0.1/lib/database_cleaner/cleaners.rb:35:in `cleaning'
+     # ./spec/support/database_cleaner.rb:59:in `block (2 levels) in <top (required)>'
+
+Finished in 0.24639 seconds (files took 2.96 seconds to load)
+1 example, 1 failure
+
+Failed examples:
+
+rspec ./spec/services/live/unified_exit_checker_spec.rb:770 # Live::UnifiedExitChecker Premium Momentum Failure triggers when PremiumMomentumFailureRule evaluates to exit
+
+Coverage report generated for RSpec to /home/nemesis/project/trading-workspace/algo_scalper_api/coverage.
+Line Coverage: 3.57% (1345 / 37695)
+Stopped processing SimpleCov as a previous error not related to SimpleCov has been detected

@@ -3,6 +3,10 @@
 module Api
   # On-demand public IP audit (same as {PublicIpLogJob}). Prefer the recurring job for normal use.
   class PublicIpController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_operator_token!
+
     def audit
       info = Dhan::IpService.audit_public_ips!
       render json: {

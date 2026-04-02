@@ -9,11 +9,11 @@ Rails.application.config.after_initialize do
 
   begin
     # Access the class to trigger autoloading
-    client_class = Services::Ai::OpenaiClient
+    client_class = Services::Ai::OllamaClient
     if client_class.instance.enabled?
-      Rails.logger.info("[AI] OpenAI client initialized with provider: #{client_class.instance.provider}")
+      Rails.logger.info("[AI] Ollama client initialized with provider: #{client_class.instance.provider}")
     else
-      Rails.logger.info('[AI] OpenAI client disabled or not configured')
+      Rails.logger.info('[AI] Ollama client disabled or not configured')
     end
   rescue NameError, LoadError => e
     # Module not available or not loaded yet - this is OK if AI is disabled

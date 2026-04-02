@@ -2,6 +2,10 @@
 
 module Api
   class HealthController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!
+
     def show
       market_feed_status = Live::MarketFeedHub.instance.health_status
       order_update_status = Live::OrderUpdateHub.instance.respond_to?(:health_status) ? Live::OrderUpdateHub.instance.health_status : {}

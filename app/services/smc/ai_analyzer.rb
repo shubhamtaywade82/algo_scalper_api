@@ -7,7 +7,7 @@ module Smc
     def initialize(instrument, initial_data:)
       @instrument = instrument
       @initial_data = initial_data
-      @ai_client = Services::Ai::OpenaiClient.instance
+      @ai_client = Services::Ai::OllamaClient.instance
       @model = select_model
       @prefetched_data = {}
     end

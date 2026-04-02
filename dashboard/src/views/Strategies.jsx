@@ -1,9 +1,10 @@
 import { createMemo } from 'solid-js'
-import { For } from 'solid-js'
+import { For, Show } from 'solid-js'
 import { useDashboardContext } from '../context/DashboardContext'
+import { expiryBadgeMeta } from '../lib/expiryBadge'
 
 export default function Strategies() {
-  const { indices, config } = useDashboardContext()
+  const { subscribedIndices, config } = useDashboardContext()
 
   const riskParameters = createMemo(() => {
     const r = config()?.risk || {}
@@ -27,11 +28,7 @@ export default function Strategies() {
     ]
   })
 
-  const indicesList = createMemo(() => {
-    const val = indices()
-    if (Array.isArray(val)) return val
-    return Object.values(val).filter(i => i && i.key)
-  })
+  const indicesList = createMemo(() => subscribedIndices() || [])
 
   return (
     <div class="space-y-6">
@@ -48,12 +45,25 @@ export default function Strategies() {
           {(idx) => (
             <div class="glass glass-hover p-6 rounded-2xl flex flex-col gap-4 group overflow-hidden relative min-h-[160px]">
               <div class="absolute top-0 right-0 w-32 h-32 bg-primary-500/5 blur-3xl group-hover:bg-primary-500/10 transition-colors"></div>
-              <div class="flex items-center justify-between relative z-10">
-                <div class="flex flex-col">
+              <div class="flex items-center justify-between relative z-10 gap-2">
+                <div class="flex flex-col min-w-0">
                   <span class="text-xl font-black text-white tracking-tight">{idx.key}</span>
                   <span class="text-xs font-bold text-gray-500 uppercase tracking-widest mt-0.5">{idx.timeframe} Interval</span>
+                  {(() => {
+                    const b = expiryBadgeMeta(idx)
+                    return (
+                      <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span class={`text-[9px] font-black uppercase tracking-tight px-2 py-0.5 rounded border ${b.className}`}>
+                          {b.text}
+                        </span>
+                        <Show when={b.sub}>
+                          <span class="text-[9px] font-bold text-gray-600">{b.sub}</span>
+                        </Show>
+                      </div>
+                    )
+                  })()}
                 </div>
-                <div class="px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20">
+                <div class="px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 shrink-0">
                   <span class="text-xs font-black text-primary-400 uppercase tracking-tighter">{idx.strategy}</span>
                 </div>
               </div>

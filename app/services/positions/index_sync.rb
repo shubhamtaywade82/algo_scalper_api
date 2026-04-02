@@ -101,7 +101,7 @@ module Positions
       private
 
       def redis_client
-        Live::RedisPnlCache.instance.send(:redis)
+        Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
       end
     end
   end

@@ -2,12 +2,16 @@
 
 module Api
   class SignalsController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!
+
     PER_PAGE_DEFAULT = 25
     PER_PAGE_MAX     = 100
     ALLOWED_SORT_COLS = %w[signal_timestamp confidence_score adx_value index_key direction created_at].freeze
 
     def index
-      scope = TradingSignal.all
+      scope = TradingSignal.order(signal_timestamp: :desc).limit(100)
       scope = apply_filters(scope)
       total = scope.count
       scope = apply_sort(scope)

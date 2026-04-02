@@ -2,6 +2,11 @@
 
 module Api
   class AnalysisController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!, only: %i[show historical]
+    before_action :authenticate_operator_token!, only: %i[ai_snapshot]
+
     # GET /api/analysis/:index_key
     # Always returns instantly from cache. Triggers background refresh if stale.
     def show
@@ -77,7 +82,7 @@ module Api
 
       latest_run = CalibrationRun.where(symbol: index_key).order(created_at: :desc).first
 
-      client = Services::Ai::OpenaiClient.instance
+      client = Services::Ai::OllamaClient.instance
       unless client.enabled?
         return render json: { error: 'AI service not configured' }, status: :service_unavailable
       end
@@ -92,7 +97,7 @@ module Api
 
       ai_response = client.chat(messages: messages, temperature: 0.3)
 
-      # OpenaiClient#chat rescues all StandardError internally and returns nil on failure.
+      # OllamaClient#chat rescues all StandardError internally and returns nil on failure.
       # Treat nil as a service failure — exception-based rescues below are defense-in-depth only.
       if ai_response.nil?
         return render json: { error: 'AI service unavailable' }, status: :service_unavailable

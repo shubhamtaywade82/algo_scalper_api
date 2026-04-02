@@ -30,8 +30,8 @@ This document provides a high-level overview of the Algorithmic Scalper API arch
 ```
 
 - **Web Process**: Handles API requests, dashboard data, ActionCable WebSocket broadcasts. Does NOT run trading services.
-- **Trading Daemon**: Started via `rake trading:daemon`. Initializes the Supervisor, boots all services, and maintains the trading loop. If market is closed at boot, only the WebSocket feed starts.
-- **Job Worker**: Solid Queue worker for recurring tasks (instrument sync, SMC scanner, AI analysis) and one-off jobs.
+- **Trading Daemon**: Started via `rake trading:daemon`. Initializes the Supervisor, boots all 11 services, and maintains the trading loop. If market is closed at boot, only the WebSocket feed starts.
+- **Job Worker**: Solid Queue worker for recurring tasks (instrument sync, SMC scanner, AI analysis) and one-off jobs. Uses Solid Queue — NOT Sidekiq.
 - **Dashboard**: Next.js frontend (separate, unrelated to Rails).
 
 ## The Supervisor Registry
@@ -41,11 +41,11 @@ The `TradingSystem::Supervisor` (built by `lib/trading_system/bootstrap.rb`) coo
 | # | Service ID | Implementation Class | Cadence | Responsibility |
 |---|:-----------|:---------------------|:--------|:---------------|
 | 1 | `:market_feed` | `Live::MarketFeedHubService` | Event-driven | DhanHQ WebSocket tick ingestion, subscription management |
-| 2 | `:signal_scheduler` | `Signal::Scheduler` | 30s per cycle | Signal generation for configured indices by expiry proximity |
+| 2 | `:signal_scheduler` | `Signal::Scheduler` | 30s per cycle | Signal generation for configured indices |
 | 3 | `:risk_manager` | `Live::RiskManagerService` | 5s loop + per-tick | PnL monitoring, exit rule enforcement, circuit breaker |
 | 4 | `:position_heartbeat` | `TradingSystem::PositionHeartbeat` | 10s | Position state health reporting |
 | 5 | `:order_router` | `TradingSystem::OrderRouter` | On-demand | Unified exit order routing (paper/live) |
-| 6 | `:paper_pnl_refresher` | `Live::PaperPnlRefresher` | 1s | Simulated PnL updates in paper mode |
+| 6 | `:paper_pnl_refresher` | `Live::PaperPnlRefresher` | 1s | Simulated PnL updates in paper mode only |
 | 7 | `:exit_manager` | `Live::ExitEngine` | On-demand | Single source of truth for all exit placement |
 | 8 | `:active_cache` | `Positions::ActiveCacheService` | On-demand | In-memory + Redis position state cache |
 | 9 | `:reconciliation` | `Live::ReconciliationService` | 30s | Broker/DB state synchronization |
@@ -60,7 +60,10 @@ Configured in `config/recurring.yml`, executed by the `jobs` process:
 |-----|---------|---------|
 | `InstrumentsImportJob` | Daily at 8:45 AM | DhanHQ instrument master CSV sync (ensures Derivative records exist) |
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection for all indices |
-| `AiTechnicalAnalysisJob` | Every 15 min (market hours) | AI-powered multi-timeframe analysis (NIFTY + SENSEX) |
+| `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered multi-timeframe analysis via Ollama |
+| `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered multi-timeframe analysis via Ollama |
+
+Run `rails solid_queue:load_recurring` after changing `config/recurring.yml`.
 
 ## Startup Sequence
 
@@ -91,7 +94,7 @@ graph TD
     SS[Signal::Scheduler] -->|30s| SE[Signal::Engine]
     TC -->|TickQuery| SE
     SE -->|Signal| EG[Entries::EntryGuard]
-    EG -->|10-guard pipeline| CA[Capital::Allocator]
+    EG -->|20-guard pipeline| CA[Capital::Allocator]
     CA -->|Sized order| GW[Orders::Gateway Paper/Live]
     GW -->|API call| DH[DhanHQ API]
 
@@ -121,9 +124,9 @@ DhanHQ WebSocket tick event
     → Batch DB load (1 query for all trackers in batch)
     → TickQuery.for_security → TickCache.fetch → Redis
     → Compute: gross_pnl = (ltp - entry_price) * qty
-    → BrokerFeeCalculator.net_pnl (deduct ₹20/order)
+    → BrokerFeeCalculator.net_pnl (deduct fees)
     → Compute: pnl_pct = (ltp - entry_price) / entry_price (DECIMAL)
-    → Update HWM: max(redis_hwm, current_pnl) — continuous, no 30s lag
+    → Update HWM: max(redis_hwm, current_pnl) — continuous, no lag
     → RedisPnlCache.store_pnl (→ sync_pnl_to_database_throttled every 30s)
     → EventBus.publish(:ltp, { tracker_id, ltp, pnl, pnl_pct, hwm })
     → ActionCable broadcast to "positions" channel
@@ -153,7 +156,9 @@ EventBus :ltp event
 ### Slow Path (5-second enforcement loop)
 ```
 RiskManagerService#run_enforcement_cycle
+  → Circuit breaker check → force_close_all! if tripped
   → PositionTracker.active.find_each
+    → advance_trade_state_for (init → validated → expansion)
     → enforce_premium_r_stop_for
     → enforce_dynamic_trailing_stops_for → TrailingEngine.process_tick
     → enforce_profit_floor_for
@@ -162,7 +167,7 @@ RiskManagerService#run_enforcement_cycle
     → enforce_rr_profit_booking_for
     → enforce_percentage_pnl_exit_for
     → enforce_time_stop_for
-    → enforce_time_based_exit_for (15:20 default)
+    → enforce_time_based_exit_for (default: 15:20)
 ```
 
 ## Paper vs Live Trading
@@ -173,18 +178,34 @@ RiskManagerService#run_enforcement_cycle
 | Market data | Real DhanHQ WebSocket | Real DhanHQ WebSocket |
 | Option chain | Real DhanHQ API (`DhanAdapter`) | Real DhanHQ API (`DhanAdapter`) |
 | Orders | Simulated (`GatewayPaper`) | Real DhanHQ API (`GatewayLive`) |
-| Order gate | N/A | Requires `dhanhq.enable_orders: true` |
+| Order gate | N/A | Requires `dhanhq.enable_orders: true` AND `PLACE_ORDER=true` |
 | PnL | Real LTP-based | Real LTP-based |
 | Fills | Synthetic (immediate) | DhanHQ WebSocket updates |
 | Wallet | Simulated balance from config | Real funds API |
 
+## Run Modes
+
+Set `run_mode` in `config/algo.yml` or override with `RUN_MODE` env var. Profile files at `config/profiles/<mode>.yml` provide partial YAML overrides merged on top of `algo.yml`.
+
+| Mode | Purpose |
+|------|---------|
+| `production` | Full guards, conservative entries (no overrides) |
+| `exit_testing` | Frequent entries to test SL/TP/trailing/time-stop rules |
+| `entry_testing` | Relaxed SMC/validation/ADX gates to verify entry pipeline |
+
 ## Configuration
 
-All trading parameters in `config/algo.yml` (838 lines). Runtime overrides via DB `settings` table (deep-merged with 30s cache via `AlgoConfig.fetch`).
+All trading parameters in `config/algo.yml`. Runtime overrides via DB `settings` table (deep-merged with 30s cache via `AlgoConfig.fetch`). `AlgoConfig.run_mode` returns the active run mode.
 
-**Key sections**: `paper_trading`, `dhanhq`, `indices` (per-index config), `trade_limits`, `risk`, `position_sizing`, `signals`, `chain_analyzer`, `broker_fees`, `telegram`, `ai`.
+**Key sections**: `paper_trading`, `run_mode`, `dhanhq`, `indices` (per-index config), `trade_limits`, `risk`, `position_sizing`, `signals`, `chain_analyzer`, `expiry_week_power_trend`, `broker_fees`, `telegram`, `ai`.
 
-All percentage values use DECIMAL format (0.12 = 12%).
+All percentage values use **DECIMAL format** (0.12 = 12%).
+
+## AI Layer
+
+AI analysis uses a local Ollama server via the `ollama-client` gem (`~> 1.1`). The `lib/services/ai/ollama_client.rb` wrapper provides chat, generate, and streaming interfaces. OpenAI / ruby-openai gems have been removed.
+
+ENV: `OLLAMA_MODEL` (default: `llama3.2:3b`), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: `http://localhost:11434`), `OLLAMA_TIMEOUT` (default: 120s).
 
 ## Token Management
 
@@ -222,6 +243,6 @@ PATCH /api/settings/bulk              # Bulk update settings
 GET  /api/circuit_breaker             # Circuit breaker status
 POST /api/circuit_breaker/trip        # Trip (emergency halt)
 DELETE /api/circuit_breaker/trip      # Reset
-GET  /smc/decision                    # SMC analytics decision
+GET  /api/smc/decision                # SMC analytics decision (legacy GET /smc/decision → 301)
 POST /cable                           # ActionCable (positions, dashboard channels)
 ```

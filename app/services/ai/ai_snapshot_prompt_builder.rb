@@ -7,7 +7,7 @@ module Ai
   # All params are optional; the prompt degrades gracefully with nil inputs.
   #
   # Returns an Array of { role: String, content: String } hashes
-  # for direct use with Services::Ai::OpenaiClient.instance.chat(messages: [...])
+  # for direct use with Services::Ai::OllamaClient.instance.chat(messages: [...])
   class AiSnapshotPromptBuilder
     SYSTEM_PROMPT = <<~SYSTEM.strip
       You are a concise intraday options trading assistant for Indian index markets.

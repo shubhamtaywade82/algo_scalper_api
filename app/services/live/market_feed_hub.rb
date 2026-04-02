@@ -379,110 +379,74 @@ module Live
     end
 
     def handle_tick(tick)
-      # Update connection health indicators
+      ltp = tick[:ltp].to_f
+      security_id = tick[:security_id].to_s
+
+      # 1. Connection & Health
+      update_connection_state!
+
+      # 2. Market Caches
+      update_market_caches!(tick, ltp)
+
+      # 3. Notifications & Callbacks
+      notify_subscribers!(tick)
+
+      # 4. PnL & Position Tracking
+      update_pnl_caches!(security_id, ltp)
+    end
+
+    def update_connection_state!
       was_connected = @connection_state == :connected
       @last_tick_at = Time.current
       @connection_state = :connected
 
-      # If we just reconnected (was not connected, now connected), resubscribe all active positions
       resubscribe_active_positions_after_reconnect unless was_connected
 
-      # Update FeedHealthService
       begin
         Live::FeedHealthService.instance.mark_success!(:ticks)
         Live::SystemStatusCache.instance.report_heartbeat(:ws_market_feed)
       rescue StandardError
         nil
       end
+    end
 
-      # puts tick  # Uncomment only for debugging - very noisy!
-      # Log every tick (segment:security_id and LTP) for verification during development
-      # # Rails.logger.info("[WS tick] #{tick[:segment]}:#{tick[:security_id]} ltp=#{tick[:ltp]} kind=#{tick[:kind]}")
+    def update_market_caches!(tick, ltp)
+      # TickCache handles both ticker (LTP) and prev_close ticks
+      Live::TickCache.put(tick) if ltp.positive? || tick[:prev_close].to_f.positive?
 
-      # Store in in-memory cache (primary)
-      # Update TickCache for both ticker (with LTP) and prev_close (with prev_close) ticks
-      # TickCache.put() handles merging of both types
-      Live::TickCache.put(tick) if tick[:ltp].to_f.positive? || tick[:prev_close].to_f.positive?
+      return unless ltp.positive?
 
-      # Integrated Institutional Market Data Cache
-      if tick[:ltp].to_f.positive?
-        # Resolve symbol if possible, or use security_id
-        symbol = tick[:symbol] || tick[:security_id]
+      symbol = tick[:symbol] || tick[:security_id]
+      is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
+      MarketData::MarketCache.update_ltp(symbol, ltp, is_index: is_index)
 
-        # Check if it's an index or an option
-        is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
-        MarketData::MarketCache.update_ltp(symbol, tick[:ltp], is_index: is_index)
+      return unless tick[:oi].present? || tick[:volume].present?
 
-        # If it's an option (OI/Volume present), update option data
-        if tick[:oi].present? || tick[:volume].present?
-          MarketData::MarketCache.update_option_data(symbol, {
-            oi: tick[:oi],
-            volume: tick[:volume],
-            ltp: tick[:ltp],
-            timestamp: Time.current
-          })
-        end
-      end
+      MarketData::MarketCache.update_option_data(symbol, {
+        oi: tick[:oi],
+        volume: tick[:volume],
+        ltp: ltp,
+        timestamp: Time.current
+      })
+    end
 
-      # # puts Live::TickQuery.for_security(segment: tick[:segment], security_id: tick[:security_id])&.ltp
-      # # Store in Redis for PnL tracking (secondary)
-      # # Only store if we have valid segment, security_id, and LTP
-      # if tick[:segment].present? && tick[:security_id].present? && tick[:ltp].present? && tick[:ltp].to_f.positive?
-      #   begin
-      #     if tick[:ltp].present? && tick[:ltp].to_f.positive?
-      #       Live::RedisPnlCache.instance.store_tick(
-      #         segment: tick[:segment],
-      #         security_id: tick[:security_id].to_s,
-      #         ltp: tick[:ltp],
-      #         timestamp: Time.current
-      #       )
-      #     end
-      #   rescue StandardError => e
-      #     Rails.logger.debug { "[MarketFeedHub] Failed to store tick in Redis: #{e.message}" } if defined?(Rails.logger)
-      #   end
-      # end
-
+    def notify_subscribers!(tick)
       ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
+      @callbacks.each { |callback| safe_invoke(callback, tick) }
+    end
 
-      @callbacks.each do |callback|
-        safe_invoke(callback, tick)
-      end
-      # begin
-      #   trackers = PositionTracker.active.where(security_id: tick[:security_id].to_s)
-      #   trackers.each do |t|
-      #     next unless t.entry_price && t.quantity
-      #     pnl = (tick[:ltp].to_f - t.entry_price.to_f) * t.quantity
-      #     pnl_pct = (tick[:ltp].to_f - t.entry_price.to_f) / t.entry_price.to_f
-      #     Live::RedisPnlCache.instance.store_pnl(
-      #       tracker_id: t.id,
-      #       pnl: pnl,
-      #       pnl_pct: pnl_pct,
-      #       ltp: tick[:ltp],
-      #       hwm: [t.high_water_mark_pnl.to_f, pnl].max,
-      #       timestamp: Time.current
-      #     )
-      #   end
-      # rescue => e
-      #   Rails.logger.error("[MarketFeedHub] Failed to live-update Redis PnL: #{e.message}")
-      # end
-      # fast-path: drop empty/invalid ticks
-      return unless tick[:ltp].to_f.positive? && tick[:security_id].present?
+    def update_pnl_caches!(security_id, ltp)
+      return unless ltp.positive? && security_id.present?
 
-      # get in-memory trackers snapshot (array of metadata)
-      trackers = Live::PositionIndex.instance.trackers_for(tick[:security_id].to_s)
-      if trackers.empty?
-        # nothing to do for this security
-        return
-      end
+      trackers = Live::PositionIndex.instance.trackers_for(security_id)
+      return if trackers.empty?
 
-      # For each metadata push minimal payload (last-wins)
       trackers.each do |meta|
-        # defensive checks
         next unless meta[:entry_price] && meta[:quantity] && meta[:quantity].to_i.positive?
 
         Live::PnlUpdaterService.instance.cache_intermediate_pnl(
           tracker_id: meta[:id],
-          ltp: tick[:ltp]
+          ltp: ltp
         )
       end
     end

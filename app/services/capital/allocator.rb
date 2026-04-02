@@ -92,8 +92,14 @@ module Capital
       end
 
       def valid_for_allocation?(index_cfg, entry_price, derivative_lot_size, capital_available)
+        return log_and_return_false("[Capital] Invalid capital snapshot for #{index_cfg[:key]}") unless finite_money?(capital_available)
+
+        entry_f = entry_price.to_f
+        unless entry_f.finite? && entry_f.positive?
+          return log_and_return_false("[Capital] Invalid entry price for #{index_cfg[:key]}: #{entry_price}")
+        end
+
         return log_and_return_false("[Capital] Available capital is zero for #{index_cfg[:key]}") if capital_available.zero?
-        return log_and_return_false("[Capital] Invalid entry price for #{index_cfg[:key]}: #{entry_price}") if entry_price.to_f <= 0
 
         lot_size = derivative_lot_size.to_i
         return log_and_return_false("[Capital] Invalid lot size for #{index_cfg[:key]}: #{lot_size}") if lot_size <= 0
@@ -273,8 +279,8 @@ module Capital
                  end
 
         Rails.logger.info(
-          "[Allocator] index:#{index_key} lot_cost:₹#{cost_per_lot.round(2)} " \
-          "capital:₹#{capital_available_f.round(2)} qty:#{final_quantity} reason:#{reason}"
+          "[Allocator] index:#{index_key} lot_cost:₹#{format_money(cost_per_lot)} " \
+          "capital:₹#{format_money(capital_available_f)} qty:#{final_quantity} reason:#{reason}"
         )
       end
 
@@ -283,6 +289,10 @@ module Capital
       def calculate_rupee_based_quantity(entry_price:, derivative_lot_size:, capital_available:, multiplier:)
         sizing_cfg = position_sizing_config
         return 0 unless sizing_cfg && sizing_cfg[:enabled]
+
+        entry_bd = BigDecimal(entry_price.to_s)
+        return 0 unless entry_bd.finite? && entry_bd.positive?
+        return 0 unless finite_money?(capital_available)
 
         risk_rupees = BigDecimal((sizing_cfg[:risk_rupees] || 1000).to_s)
         index_key = @index_key || 'UNKNOWN'
@@ -338,12 +348,15 @@ module Capital
         final_quantity = [final_quantity, lot_size].max
 
         # Log breakdown
+        alloc_pct_f = alloc_pct.to_f
+        pct_label = alloc_pct_f.finite? ? alloc_pct_f.round(0).to_i : 'n/a'
+        buy_value = entry_price.to_f * final_quantity
         Rails.logger.info(
           "[Allocator] RUPEES_BASED index:#{index_key} risk:₹#{risk_rupees} " \
           "fees:₹#{broker_fees} net_risk:₹#{net_risk_rupees} " \
           "stop_dist:₹#{stop_distance_rupees} risk_per_lot:₹#{risk_per_lot} " \
-          "max_lots:#{max_lots_by_risk} alloc_cap:#{max_lots_by_alloc}(#{(alloc_pct * 100).round(0)}%) " \
-          "qty:#{final_quantity} buy_value:₹#{(entry_price.to_f * final_quantity).round(2)}"
+          "max_lots:#{max_lots_by_risk} alloc_cap:#{max_lots_by_alloc}(#{pct_label}%) " \
+          "qty:#{final_quantity} buy_value:₹#{format_money(buy_value)}"
         )
 
         final_quantity
@@ -358,6 +371,18 @@ module Capital
         AlgoConfig.fetch[:position_sizing]
       rescue StandardError
         nil
+      end
+
+      def finite_money?(value)
+        case value
+        when BigDecimal then value.finite?
+        else value.to_f.finite?
+        end
+      end
+
+      def format_money(value)
+        f = value.to_f
+        f.finite? ? format('%.2f', f) : 'n/a'
       end
     end
   end
