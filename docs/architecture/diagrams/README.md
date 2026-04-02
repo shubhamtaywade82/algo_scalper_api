@@ -8,6 +8,7 @@ This folder contains system diagrams for the Algo Scalper API: C4 levels, high-l
 |---------|------|-------------|
 | **Complete set** | [complete-system-diagrams.md](complete-system-diagrams.md) | C4 Level 1–4, high-level process, signal→exit flow, tick/PnL data flow, entry pipeline, exit flow |
 | **Legacy signal flow** | [legacy_diagrams.md](legacy_diagrams.md) | ASCII signal/scheduler and indicator flows (historical) |
+| **Trading modes** | [../../diagrams/trading-modes.md](../../diagrams/trading-modes.md) | Run profiles, paper vs live, `PLACE_ORDER`, daemon flags (Mermaid) |
 
 ## C4 Model (in complete-system-diagrams.md)
 

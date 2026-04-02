@@ -8,7 +8,8 @@ paper_trading:
 # Run mode: which profile to merge on top of base config (before DB overrides).
 # production = real flow (default). exit_testing = frequent entries to test exits. entry_testing = relaxed guards to test entries.
 # Override with ENV RUN_MODE=exit_testing (or entry_testing, production).
-run_mode: exit_testing
+# Default production for paper/live evaluation; use exit_testing only to stress-test exit plumbing.
+run_mode: production
 
 # Realtime execution controls (tick-first architecture)
 realtime:
