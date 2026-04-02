@@ -23,9 +23,9 @@ gem 'solid_cache'
 gem 'solid_queue'
 
 gem 'concurrent-ruby'
+gem 'json', '>= 2.19.2'
 gem 'redis'
 gem 'ruby-technical-analysis'
-gem 'sidekiq'
 gem 'technical-analysis'
 
 gem 'whenever', require: false

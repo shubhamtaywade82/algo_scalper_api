@@ -2,7 +2,8 @@
 # frozen_string_literal: true
 
 require 'csv'
-require 'open-uri'
+require 'net/http'
+require 'uri'
 
 class InstrumentsImporter
   CSV_URL         = 'https://images.dhan.co/api-data/api-scrip-master-detailed.csv'
@@ -40,7 +41,7 @@ class InstrumentsImporter
       end
 
       # Rails.logger.info 'Downloading fresh CSV from Dhan…'
-      csv_text = URI.open(CSV_URL, &:read) # rubocop:disable Security/Open
+      csv_text = download_csv(CSV_URL)
 
       CACHE_PATH.dirname.mkpath
       File.write(CACHE_PATH, csv_text)
@@ -55,6 +56,21 @@ class InstrumentsImporter
       CACHE_PATH.read
     end
     private :fetch_csv_with_cache # keep helper private
+
+    def download_csv(url_string)
+      uri = URI.parse(url_string)
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = uri.scheme == 'https'
+      http.open_timeout = 15
+      http.read_timeout = 120
+      path = uri.request_uri.presence || '/'
+      request = Net::HTTP::Get.new(path)
+      response = http.request(request)
+      raise "HTTP #{response.code} fetching instruments CSV" unless response.is_a?(Net::HTTPSuccess)
+
+      response.body
+    end
+    private :download_csv
 
     def import_from_csv(csv_content)
       instruments_rows, derivatives_rows = build_batches(csv_content)
