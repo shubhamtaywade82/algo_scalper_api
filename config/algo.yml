@@ -1,6 +1,9 @@
 paper_trading:
   enabled: true
   balance: 100000
+  # Wallet realized PnL: cumulative = all-time paper exits (carry capital day to day).
+  # daily = only exits on the current calendar day (legacy ₹1L + today’s closes).
+  realized_scope: cumulative
 
 # Run mode: which profile to merge on top of base config (before DB overrides).
 # production = real flow (default). exit_testing = frequent entries to test exits. entry_testing = relaxed guards to test entries.
