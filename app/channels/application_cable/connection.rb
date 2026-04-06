@@ -24,10 +24,13 @@ module ApplicationCable
         false
       end
 
-      provided = request.params[:token].presence || bearer_token_from_header
-      provided.present? &&
-        expected.bytesize == provided.bytesize &&
-        ActiveSupport::SecurityUtils.secure_compare(provided, expected)
+      provided_raw = request.params[:token].presence || bearer_token_from_header
+      provided = provided_raw.to_s
+      expected_str = expected.to_s
+      return false if provided.blank?
+
+      provided.bytesize == expected_str.bytesize &&
+        ActiveSupport::SecurityUtils.secure_compare(provided, expected_str)
     end
 
     def bearer_token_from_header

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # rubocop:disable Metrics/BlockNesting
 
 require 'bigdecimal'
@@ -693,8 +694,6 @@ module Options
         end
 
         normalized_permission = permission.to_s.downcase.to_sym
-        normalized_permission = :scale_ready if normalized_permission == :exit_testing
-        exit_testing_mode = AlgoConfig.run_mode == 'exit_testing'
         expected_move = expected_spot_move.to_f
         unless expected_move.positive?
           Rails.logger.info("[Options] Expected move unavailable -> BLOCK #{index_cfg[:key]}") if defined?(Rails)
@@ -839,42 +838,31 @@ module Options
         # Institutional Rule: If no good strike exists (score too low) -> skip trade
         # Threshold 140 (scaled score: institutional base + acceleration + ATM bonus)
         if leg[:score] < 140.0
-          if exit_testing_mode
-            Rails.logger.info(
-              "[Options] Exit-testing mode: bypassing low-score gate for #{index_cfg[:key]} " \
-              "(#{leg[:score].round(2)} < 140.0)"
-            ) if defined?(Rails)
-          else
-            if defined?(Rails)
-              Rails.logger.warn("[Options] Best strike for #{index_cfg[:key]} rejected due to low score: #{leg[:score].round(2)} < 140.0")
-            end
-            return []
+          if defined?(Rails)
+            Rails.logger.warn("[Options] Best strike for #{index_cfg[:key]} rejected due to low score: #{leg[:score].round(2)} < 140.0")
           end
+          return []
         end
 
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
-        if exit_testing_mode
-          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
-        else
-          validator = Options::StrikeQualification::ExpectedMoveValidator.new
-          validation = validator.call(
-            index_key: index_cfg[:key],
-            strike_type: used_strike_type,
-            permission: normalized_permission,
-            expected_spot_move: expected_move,
-            option_ltp: pick[:ltp]
-          )
+        validator = Options::StrikeQualification::ExpectedMoveValidator.new
+        validation = validator.call(
+          index_key: index_cfg[:key],
+          strike_type: used_strike_type,
+          permission: normalized_permission,
+          expected_spot_move: expected_move,
+          option_ltp: pick[:ltp]
+        )
 
-          unless validation[:ok]
-            if defined?(Rails)
-              Rails.logger.info(
-                "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
-              )
-            end
-            return []
+        unless validation[:ok]
+          if defined?(Rails)
+            Rails.logger.info(
+              "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
+            )
           end
+          return []
         end
 
         [pick]
@@ -1543,3 +1531,4 @@ module Options
     end
   end
 end
+# rubocop:enable Metrics/BlockNesting

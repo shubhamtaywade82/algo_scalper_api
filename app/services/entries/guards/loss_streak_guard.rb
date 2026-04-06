@@ -69,12 +69,22 @@ module Entries
         end
 
         def recent_positions(index_key)
-          PositionTracker.paper
-                         .where(status: :exited)
-                         .where("meta->>'index_key' = ?", index_key)
-                         .where(exited_at: Time.zone.today.all_day)
-                         .order(exited_at: :desc)
-                         .limit(loss_threshold)
+          position_scope
+            .where(status: :exited)
+            .where("meta->>'index_key' = ?", index_key)
+            .where(exited_at: Time.zone.today.all_day)
+            .order(exited_at: :desc)
+            .limit(loss_threshold)
+        end
+
+        def position_scope
+          paper_trading_mode? ? PositionTracker.paper : PositionTracker.live
+        end
+
+        def paper_trading_mode?
+          AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+        rescue StandardError
+          false
         end
 
         def loss_exit?(position)

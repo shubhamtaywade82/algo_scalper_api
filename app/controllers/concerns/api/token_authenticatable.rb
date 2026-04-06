@@ -49,10 +49,12 @@ module Api
     end
 
     def token_matches?(provided, expected)
-      provided.present? &&
-        expected.present? &&
-        provided.bytesize == expected.bytesize &&
-        ActiveSupport::SecurityUtils.secure_compare(provided, expected)
+      p = provided.to_s
+      e = expected.to_s
+      p.present? &&
+        e.present? &&
+        p.bytesize == e.bytesize &&
+        ActiveSupport::SecurityUtils.secure_compare(p, e)
     end
 
     def api_token_optional_when_unset?

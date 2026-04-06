@@ -281,6 +281,8 @@ For live order placement, also set `PLACE_ORDER=true` in the environment. This i
 
 Both modes use **real DhanHQ WebSocket data** for market ticks.
 
+Signals, guards, strike qualification, and risk rules use the **same logic** in paper and live. The only intentional differences are **order execution** (simulated fills and `GatewayPaper` wallet math vs DhanHQ orders and real balances) and **broker position sync** (live reconciles to DhanHQ positions; paper stays on `PositionTracker` + ticks).
+
 | Aspect | Paper Mode | Live Mode |
 |--------|-----------|-----------|
 | Market data | Real WebSocket ticks | Real WebSocket ticks |
@@ -289,18 +291,6 @@ Both modes use **real DhanHQ WebSocket data** for market ticks.
 | PnL tracking | Real LTP-based | Real LTP-based |
 | Order updates | Synthetic | DhanHQ WebSocket |
 | Wallet | Simulated balance | Real funds API |
-
-## Run Modes
-
-Set in `config/algo.yml` (`run_mode:`) or override with `RUN_MODE` env var:
-
-| Mode | Purpose |
-|------|---------|
-| `production` | Full guards active, conservative entries |
-| `exit_testing` | Frequent entries to test exit rules (bypasses most entry guards) |
-| `entry_testing` | Relaxed guards to verify the entry pipeline |
-
-Profile overrides live in `config/profiles/<run_mode>.yml`. **Current default:** `run_mode: exit_testing` (paper trading mode).
 
 ## Environment Variables
 
@@ -315,7 +305,6 @@ Profile overrides live in `config/profiles/<run_mode>.yml`. **Current default:**
 | `REDIS_URL` | Optional | Redis connection (default: redis://127.0.0.1:6379/0) |
 | `DATABASE_URL` | Optional | PostgreSQL connection |
 | `RAILS_ENV` | Optional | Rails environment |
-| `RUN_MODE` | Optional | Override run_mode from config |
 | `OLLAMA_MODEL` | Optional | Ollama model name (default: llama3.2:3b) |
 | `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` | Optional | Ollama server URL (default: http://localhost:11434) |
 | `OLLAMA_TIMEOUT` | Optional | Ollama request timeout in seconds (default: 120) |
@@ -380,7 +369,6 @@ All trading parameters live in `config/algo.yml`. Key sections:
 | Section | Purpose |
 |---------|---------|
 | `paper_trading` | Paper/live mode toggle and simulated balance |
-| `run_mode` | Runtime profile (`production`, `exit_testing`, `entry_testing`) |
 | `dhanhq` | Broker settings (`enable_orders` safety gate) |
 | `indices` | Per-index config: segment, SID, capital allocation, ADX thresholds, trailing tiers |
 | `trade_limits` | Global daily limits |

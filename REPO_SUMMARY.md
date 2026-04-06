@@ -130,14 +130,7 @@ When `market_context.enabled: true` in `config/algo.yml`:
 
 Next.js dashboard that consumes API endpoints (positions, PnL, indices). Runs as a separate process via `Procfile.dev`.
 
-### 2.14 `config/profiles/`
-
-Profile YAML files for run mode overrides:
-- `production.yml` — no overrides (base `algo.yml` is production-safe).
-- `exit_testing.yml` — more frequent entries, relaxed guards for testing exit logic.
-- `entry_testing.yml` — relaxed SMC/validation/ADX gates for testing entry pipeline.
-
-### 2.15 `docs/`
+### 2.14 `docs/`
 
 Architecture diagrams and narrative docs:
 - `docs/architecture/` — system overview, component map, execution flow, WebSocket feed.
@@ -151,8 +144,7 @@ Architecture diagrams and narrative docs:
 
 ## 3. Modes and Configuration
 
-- **Paper vs Live**: Controlled via `config/algo.yml` → `paper_trading.enabled` and `dhanhq.enable_orders`. Also requires `PLACE_ORDER=true` env var for live orders. Gateway selected at boot: paper → `Orders::GatewayPaper`, live → `Orders::GatewayLive`. Both modes use real WebSocket and option chain data.
-- **Run Modes**: `run_mode: production | exit_testing | entry_testing` in `algo.yml` or `RUN_MODE=` env var. Profile files in `config/profiles/` provide partial YAML overrides. **Current default state:** `run_mode: exit_testing`.
+- **Paper vs Live**: Controlled via `config/algo.yml` → `paper_trading.enabled` and `dhanhq.enable_orders`. Also requires `PLACE_ORDER=true` env var for live orders. Gateway selected at boot: paper → `Orders::GatewayPaper`, live → `Orders::GatewayLive`. Both modes use real WebSocket and option chain data. Tuning is via `algo.yml` and DB overrides only (no separate run-mode profiles).
 - **All percentage config values use DECIMAL format** (0.12 = 12%, not 12.0).
 - **Typed Settings**: `AlgoSetting` + `Setting` model + `config/algo.yml` drive feature flags, ADX thresholds, risk limits, time restrictions. `AlgoConfig.fetch` has a 30s cache with DB deep-merge.
 
@@ -219,7 +211,6 @@ Run by `Entries::EntryGuardPipeline#run`. First block wins. Current order:
 ```bash
 ./bin/dev                                                              # web + trading + jobs + dashboard
 ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon           # trading daemon standalone
-RUN_MODE=exit_testing ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 bin/jobs                                                               # Solid Queue worker standalone
 bundle exec rspec                                                       # test suite
 bundle exec rubocop                                                     # style/lint

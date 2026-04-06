@@ -7,6 +7,7 @@ RSpec.describe Entries::Guards::LossStreakGuard do
     let(:context) { { index_cfg: { key: 'NIFTY' } } }
     let(:config) do
       {
+        paper_trading: { enabled: true },
         loss_streak_guard: {
           enabled: true,
           consecutive_losses_threshold: 2,
@@ -87,6 +88,48 @@ RSpec.describe Entries::Guards::LossStreakGuard do
         result = described_class.call(context)
 
         expect(result).to include(blocked: 'loss-streak cooldown active for NIFTY')
+      end
+    end
+
+    context 'when live trading and consecutive loss exits reach threshold' do
+      let(:context) { { index_cfg: { key: 'SENSEX' } } }
+
+      let(:config) do
+        {
+          paper_trading: { enabled: false },
+          loss_streak_guard: {
+            enabled: true,
+            consecutive_losses_threshold: 2,
+            cooldown_minutes: 30
+          }
+        }
+      end
+
+      before do
+        create(
+          :position_tracker,
+          :exited,
+          segment: 'NSE_FNO',
+          last_pnl_rupees: BigDecimal('-1200'),
+          exit_reason: 'STOP_LOSS (Sub-second Trigger)',
+          exited_at: 1.minute.ago,
+          meta: { index_key: 'SENSEX' }
+        )
+        create(
+          :position_tracker,
+          :exited,
+          segment: 'NSE_FNO',
+          last_pnl_rupees: BigDecimal('-800'),
+          exit_reason: 'PREMIUM_MOMENTUM_FAILURE (Sub-second Trigger)',
+          exited_at: Time.current,
+          meta: { index_key: 'SENSEX' }
+        )
+      end
+
+      it 'blocks using live position history' do
+        result = described_class.call(context)
+
+        expect(result).to include(blocked: 'loss-streak cooldown triggered for SENSEX')
       end
     end
   end

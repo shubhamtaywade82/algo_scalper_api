@@ -153,33 +153,13 @@ module Options
         bid = data['top_bid_price']&.to_f
         ask = data['top_ask_price']&.to_f
 
-        # Check if strike exists in chain (basic presence check)
-        # If strike exists but has no LTP, it might be market closed - be more lenient
-        strike_exists = !data.empty?
-
-        # For paper trading or when market might be closed, be more lenient
-        # Allow if strike exists in chain, even if LTP/OI are 0 (will use bid/ask or fallback)
-        paper_trading = AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-
-        # In paper mode, if strike exists in chain, allow it even with 0 LTP/OI
-        # EntryGuard will resolve LTP from REST API if needed
-        if paper_trading && strike_exists && (ltp.nil? || ltp.zero?)
-          Rails.logger.debug { "[StrikeSelector] Paper mode: Allowing strike #{strike} #{side} with 0 LTP (will resolve via API)" }
-          return true
-        end
-
-        # Standard liquidity checks (for live trading or when LTP is available)
+        # Same liquidity gates for paper and live (both use live Dhan chain data).
         unless ltp&.positive?
           Rails.logger.debug { "[StrikeSelector] Strike #{strike} #{side} has invalid LTP: #{ltp.inspect}" }
           return false
         end
 
-        # OI check - be lenient if OI is 0 but strike exists (might be new contract)
         unless oi&.positive?
-          if paper_trading && strike_exists
-            Rails.logger.debug { "[StrikeSelector] Paper mode: Allowing strike #{strike} #{side} with 0 OI" }
-            return true
-          end
           Rails.logger.debug { "[StrikeSelector] Strike #{strike} #{side} has invalid OI: #{oi.inspect}" }
           return false
         end

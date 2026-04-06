@@ -8,28 +8,16 @@ RSpec.describe Signal::Scheduler do
 
   describe '#process_index' do
     before do
-      allow(scheduler).to receive(:evaluate_supertrend_signal).and_return(signal)
-      allow(scheduler).to receive(:process_signal)
+      allow(Signal::Engine).to receive(:run_for)
     end
 
-    context 'when evaluate_supertrend_signal returns nil' do
-      let(:signal) { nil }
+    it 'delegates to Signal::Engine.run_for with regime state' do
+      scheduler.send(:process_index, index_cfg)
 
-      it 'does not invoke process_signal' do
-        scheduler.send(:process_index, index_cfg)
-        expect(scheduler).not_to have_received(:process_signal)
-      end
-    end
-
-    context 'when a signal is returned' do
-      let(:signal) do
-        { segment: 'NSE_FNO', security_id: '123', meta: { candidate_symbol: 'TEST', direction: :bullish } }
-      end
-
-      it 'passes signal to process_signal' do
-        scheduler.send(:process_index, index_cfg)
-        expect(scheduler).to have_received(:process_signal).with(index_cfg, signal)
-      end
+      expect(Signal::Engine).to have_received(:run_for).with(
+        index_cfg,
+        regime_state: instance_of(Market::RegimeState)
+      )
     end
   end
 
@@ -56,10 +44,12 @@ RSpec.describe Signal::Scheduler do
           segment: 'NSE_FNO',
           security_id: 12_345,
           symbol: 'NIFTY24FEB20000CE',
-          lot_size: 50
+          lot_size: 50,
+          ltp: nil
         ),
         direction: :bullish,
-        scale_multiplier: 1
+        scale_multiplier: 1,
+        permission: :scale_ready
       )
     end
   end

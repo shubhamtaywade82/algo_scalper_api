@@ -5,7 +5,6 @@ module Entries
     class TimeRegimeGuard
       class << self
         def call(context)
-          return EntryGuardPipeline::PASS if AlgoConfig.run_mode == 'exit_testing'
           return EntryGuardPipeline::PASS if context[:expiry_power_trend]
 
           if time_regime_allows_entry?(
