@@ -42,11 +42,7 @@ module Smc
     end
 
     def select_model
-      if @ai_client.provider == :ollama
-        @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
-      else
-        'gpt-4o'
-      end
+      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
     end
 
     # Pre-fetch all required data upfront to avoid redundant API calls

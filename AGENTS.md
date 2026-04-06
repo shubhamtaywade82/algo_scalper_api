@@ -12,7 +12,7 @@
   - `app/domain/` for value objects (`MarketTick`)
 - Library and infrastructure code in `lib/`:
   - `lib/trading_system/` — daemon, bootstrap, supervisor (trading process lifecycle)
-  - `lib/services/ai/` — OpenAI client and technical analysis agent
+  - `lib/services/ai/` — Ollama client (`ollama-client`) and technical analysis agent
   - `lib/notifications/` — Telegram notifier
   - `lib/tasks/` — rake tasks (`trading:daemon`, `solid_queue:load_recurring`, `ai:technical_analysis`)
 - Tests in `spec/` (models, services, integration, smoke, support, VCR cassettes).

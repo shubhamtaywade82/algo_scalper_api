@@ -12,7 +12,7 @@ This folder contains system diagrams for the Algo Scalper API: C4 levels, high-l
 
 ## C4 Model (in complete-system-diagrams.md)
 
-- **Level 1 — System Context:** Users and external systems (Trader, DhanHQ, Telegram, optional Authority server, OpenAI).
+- **Level 1 — System Context:** Users and external systems (Trader, DhanHQ, Telegram, optional Authority server, Ollama).
 - **Level 2 — Containers:** Web, Trading Daemon, Jobs, Dashboard, PostgreSQL, Redis, and external systems.
 - **Level 3 — Components:** Inside Trading Daemon (Supervisor + 11 services) and Web (API, ActionCable).
 - **Level 4 — Code:** Sample code-level diagram (EntryGuardPipeline and guard classes).

@@ -33,14 +33,10 @@ module Services
           PROMPT
 
           # Single LLM call - NO tool calls
-          model = if @client.provider == :ollama
-                    if @client.respond_to?(:preferred_text_model)
-                      @client.preferred_text_model(default: 'llama3.1:8b')
-                    else
-                      ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
-                    end
+          model = if @client.respond_to?(:preferred_text_model)
+                    @client.preferred_text_model(default: 'llama3.1:8b')
                   else
-                    'gpt-4o'
+                    ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
                   end
 
           begin

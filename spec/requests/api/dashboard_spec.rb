@@ -50,4 +50,50 @@ RSpec.describe 'GET /api/dashboard', type: :request do
     body = JSON.parse(response.body)
     expect(body['subscribed_indices']).to eq([])
   end
+
+  context 'when SMC confluence digest is enabled' do
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: { sl_pct: 0.02, tp_pct: 0.04, hard_rupee_sl: 500, profit_floor: 0.01, trailing: {} },
+        signals: {
+          enable_adx_filter: true,
+          adx: {},
+          enable_direction_gate: false,
+          enable_smc_confluence_digest: true,
+          entry_strategy: { primary: 'supertrend' },
+          primary_timeframe: '1m'
+        },
+        trading_time_restrictions: {}
+      })
+      allow(IndexConfigLoader).to receive(:load_indices).and_return(
+        [{ key: 'NIFTY', sid: '26000', segment: 'IDX_I' }]
+      )
+      allow(Live::TickCache).to receive(:ltp).and_return(24_500.0)
+      chain = double('chain') # rubocop:disable RSpec/VerifiedDoubles
+      allow(Derivative).to receive(:options).and_return(chain)
+      allow(chain).to receive_messages(where: chain, minimum: nil)
+      allow(AnalysisStore).to receive(:read).with('NIFTY', :smc).and_return(
+        data: {
+          decision: 'call',
+          'smc_confluence_ltf_summary' => {
+            'long_score' => 4,
+            'short_score' => 1,
+            'long_signal' => true,
+            'short_signal' => false,
+            'structure_bias' => 1
+          }
+        },
+        validity: { fresh: true }
+      )
+    end
+
+    it 'includes smc_confluence_ltf from analysis store on subscribed_indices' do
+      get '/api/dashboard'
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      row = body['subscribed_indices'].find { |r| r['key'] == 'NIFTY' }
+      expect(row['smc_confluence_ltf']['long_score']).to eq(4)
+      expect(row['smc_confluence_ltf']['long_signal']).to be(true)
+    end
+  end
 end
