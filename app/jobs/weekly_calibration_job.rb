@@ -19,7 +19,9 @@ class WeeklyCalibrationJob < ApplicationJob
       run = Options::AutoCalibrator.call(symbol: sym, weeks: weeks)
       if run
         run.propose_config!
-        Options::CalibrationNotifier.notify(sym, run)
+        apply_result = Options::CalibrationAutoApplier.call(run: run, source: :historical)
+        run.reload
+        Options::CalibrationNotifier.notify(sym, run, auto_apply_result: apply_result)
       else
         Options::CalibrationNotifier.notify_error(
           sym,

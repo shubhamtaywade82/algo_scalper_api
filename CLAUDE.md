@@ -11,7 +11,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - Solid Cable (ActionCable WebSocket backend)
 - Solid Cache (Rails.cache backend)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
-- Optional: OpenAI for AI technical analysis
+- Optional: Ollama (local LLM via `ollama-client`) for AI technical analysis
 - Optional: Telegram Bot for notifications
 
 ## Commands

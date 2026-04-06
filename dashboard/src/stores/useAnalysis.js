@@ -10,13 +10,15 @@ export function useAnalysis() {
   const loading   = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
   const errors    = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
 
-  // Historical / snapshot are still per-selected-index (on-demand, not auto-polled)
-  const [activeIndex, setActiveIndex] = createSignal(null) // which index has expanded historical/snapshot
+  // Historical / snapshot follow the selected Analysis tab (auto-loaded once per index per visit)
+  const [activeIndex, setActiveIndex] = createSignal(null)
   const [historicalData, setHistoricalData] = createSignal(null)
   const [historicalLoading, setHistoricalLoading] = createSignal(false)
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
   const [snapshotData, setSnapshotData]   = createSignal(null)
   const [snapshotError, setSnapshotError] = createSignal(null)
+  const [autoHistoricalLoadedForIndex, setAutoHistoricalLoadedForIndex] = createSignal({})
+  const [autoSnapshotLoadedForIndex, setAutoSnapshotLoadedForIndex] = createSignal({})
 
   let pollTimer = null
   let subscription = null
@@ -55,8 +57,13 @@ export function useAnalysis() {
     }
   }
 
-  function fetchAll() {
-    INDICES.forEach(idx => fetchOne(idx))
+  /** @param {string[] | undefined} keys when set, only those in INDICES are polled */
+  function fetchAll(keys) {
+    const list =
+      Array.isArray(keys) && keys.length > 0
+        ? keys.filter((k) => INDICES.includes(k))
+        : INDICES
+    list.forEach((idx) => fetchOne(idx))
   }
 
   async function fetchHistorical(index, weeks = 8) {
@@ -74,6 +81,24 @@ export function useAnalysis() {
     }
   }
 
+  function ensureAutoLoadedDetails(index, { skipAiSnapshot = false } = {}) {
+    if (!index || !INDICES.includes(index)) return
+
+    const histDone = autoHistoricalLoadedForIndex()
+    if (!histDone[index]) {
+      setAutoHistoricalLoadedForIndex({ ...histDone, [index]: true })
+      void fetchHistorical(index)
+    }
+
+    if (skipAiSnapshot) return
+
+    const snapDone = autoSnapshotLoadedForIndex()
+    if (!snapDone[index]) {
+      setAutoSnapshotLoadedForIndex({ ...snapDone, [index]: true })
+      void fetchAiSnapshot(index)
+    }
+  }
+
   async function fetchAiSnapshot(index) {
     setActiveIndex(index)
     setSnapshotLoading(true)
@@ -83,7 +108,8 @@ export function useAnalysis() {
       const res = await fetch(`/api/analysis/${index}/ai_snapshot`, { method: 'POST' })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || `HTTP ${res.status}`)
+        const msg = data.message || data.error || `HTTP ${res.status}`
+        throw new Error(msg)
       }
       const data = await res.json()
       setSnapshotData(data.snapshot)
@@ -118,6 +144,7 @@ export function useAnalysis() {
     fetchAll,
     fetchHistorical,
     fetchAiSnapshot,
+    ensureAutoLoadedDetails,
     activeIndex,
     historicalData,
     historicalLoading,

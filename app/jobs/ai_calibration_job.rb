@@ -3,8 +3,8 @@
 # Solid Queue background job for AI-driven trading calibration.
 #
 # Runs the Ai::Calibration::Runner pipeline for one or all symbols.
-# Produces a CalibrationRun record — does NOT auto-apply changes.
-# A human must inspect the proposed_patch and call run.apply!() to activate.
+# Produces a CalibrationRun record. Optional auto-apply via
+# calibration.auto_apply in config/algo.yml (see Options::CalibrationAutoApplier).
 #
 # Usage:
 #   AiCalibrationJob.perform_later                   # all symbols, 30 days
@@ -30,9 +30,14 @@ class AiCalibrationJob < ApplicationJob
       run = Ai::Calibration::Runner.call(symbol: sym, days: days)
 
       if run
+        apply_result = Options::CalibrationAutoApplier.call(run: run, source: :ai)
+        run.reload
+        Options::CalibrationNotifier.notify_auto_apply_followup(
+          symbol: sym, run: run, auto_apply_result: apply_result
+        )
         Rails.logger.info(
-          "[AiCalibrationJob] #{sym}: CalibrationRun ##{run.id} created. " \
-          "Review with: CalibrationRun.find(#{run.id}).proposed_patch"
+          "[AiCalibrationJob] #{sym}: CalibrationRun ##{run.id} " \
+          "(applied_at=#{run.applied_at.present?})"
         )
       else
         Rails.logger.info("[AiCalibrationJob] #{sym}: No actionable calibration produced")

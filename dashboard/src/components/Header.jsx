@@ -3,7 +3,7 @@ import { Show } from 'solid-js'
 import { A } from '@solidjs/router'
 import { useDashboardContext } from '../context/DashboardContext'
 import { useFlash } from '../stores/useFlash'
-import { expiryBadgeMeta, subscribedRowByKey } from '../lib/expiryBadge'
+import { confluenceLtfCompact, expiryBadgeMeta, subscribedRowByKey } from '../lib/expiryBadge'
 
 function inr(val) {
   if (val == null) return '—'
@@ -58,6 +58,14 @@ export default function Header(props) {
                   <Show when={b.sub}>
                     <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
                   </Show>
+                  <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}>
+                    <span
+                      class="text-[7px] font-mono text-gray-500 tracking-tight mt-0.5"
+                      title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
+                    >
+                      {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}
+                    </span>
+                  </Show>
                 </div>
               )
             })()}
@@ -77,6 +85,14 @@ export default function Header(props) {
                   <Show when={b.sub}>
                     <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
                   </Show>
+                  <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}>
+                    <span
+                      class="text-[7px] font-mono text-gray-500 tracking-tight mt-0.5"
+                      title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
+                    >
+                      {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}
+                    </span>
+                  </Show>
                 </div>
               )
             })()}
@@ -95,6 +111,14 @@ export default function Header(props) {
                   </span>
                   <Show when={b.sub}>
                     <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
+                  </Show>
+                  <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}>
+                    <span
+                      class="text-[7px] font-mono text-gray-500 tracking-tight mt-0.5"
+                      title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
+                    >
+                      {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}
+                    </span>
                   </Show>
                 </div>
               )

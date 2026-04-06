@@ -42,11 +42,7 @@ module Smc
     end
 
     def select_model
-      if @ai_client.provider == :ollama
-        @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
-      else
-        'gpt-4o'
-      end
+      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
     end
 
     # Pre-fetch all required data upfront to avoid redundant API calls
@@ -518,6 +514,8 @@ module Smc
         prompt_parts << ''
       end
 
+      append_tick_ai_extras(prompt_parts)
+
       # Add option chain data if available
       if @prefetched_data[:option_chain]&.dig(:options)&.any?
         prompt_parts << build_option_chain_section(@prefetched_data[:option_chain], atm_strike, trend_direction)
@@ -557,6 +555,34 @@ module Smc
       prompt_parts << initial_analysis_instructions
 
       prompt_parts.join("\n")
+    end
+
+    def append_tick_ai_extras(prompt_parts)
+      if @initial_data[:tick_trigger].present?
+        prompt_parts << '**TICK TRIGGER (rising-edge SMC confluence):**'
+        prompt_parts << json_pretty(@initial_data[:tick_trigger])
+        prompt_parts << ''
+      end
+
+      if @initial_data[:index_ta].present?
+        prompt_parts << '**INDEX TECHNICAL ANALYSIS:**'
+        prompt_parts << json_pretty(@initial_data[:index_ta])
+        prompt_parts << ''
+      end
+
+      return if @initial_data[:smc_confluence_mtf].blank?
+
+      prompt_parts << '**SMC CONFLUENCE MTF DIGEST (full JSON):**'
+      prompt_parts << json_pretty(@initial_data[:smc_confluence_mtf])
+      prompt_parts << ''
+    end
+
+    def json_pretty(obj)
+      return obj.to_s unless obj.is_a?(Hash) || obj.is_a?(Array)
+
+      JSON.pretty_generate(obj.deep_stringify_keys)
+    rescue StandardError
+      obj.to_json
     end
 
     def determine_trend_direction

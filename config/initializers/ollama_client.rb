@@ -1,10 +1,14 @@
 # frozen_string_literal: true
 
-# Configure the ollama-client gem for cloud or local Ollama.
+# Configure the ollama-client gem defaults. Runtime target (local vs cloud) is chosen from
+# +ai.ollama_use_cloud+ in AlgoConfig (dashboard Settings → AI); see Services::Ai::OllamaClient.
 #
 # Environment variables (same as ollama_agent):
-#   OLLAMA_BASE_URL  — Ollama endpoint, e.g. https://ollama.com (cloud) or http://localhost:11434 (local)
-#   OLLAMA_API_KEY   — Required for Ollama Cloud; omit for local instances
+#   OLLAMA_LOCAL_URL — Optional; local daemon when ollama_use_cloud is false
+#   OLLAMA_CLOUD_URL — Optional; cloud API when ollama_use_cloud is true
+#   OLLAMA_BASE_URL  — Fallback URL for both modes if the specific URL above is unset
+#   OLLAMA_HOST_URL  — Legacy local/LAN URL (local mode)
+#   OLLAMA_API_KEY   — Required when ollama_use_cloud is true (Ollama Cloud)
 #   OLLAMA_MODEL     — Default model name (e.g. "llama3.2:3b" or a cloud model slug)
 #   OLLAMA_TIMEOUT   — Request timeout in seconds (default: 30)
 #

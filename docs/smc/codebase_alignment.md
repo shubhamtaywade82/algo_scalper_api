@@ -1,4 +1,4 @@
-# Event-Based SMC — Codebase Alignment
+# SMC — Codebase Alignment
 
 This document describes how **Smart Money Concepts (SMC)** and related
 structure logic are implemented in `algo_scalper_api`, and how that compares
@@ -136,5 +136,5 @@ under `namespace :api`). Other REST APIs use `/api/*` per project standards.
   holds last analyzer JSON; full “unmitigated zone” lifecycle is not isolated as
   its own service.
 
-Use this file as the **source of truth** for file paths and behavior until a
-dedicated event layer is added.
+Use this document as the **source of truth** for SMC file paths and runtime
+behavior until a dedicated event layer is added.

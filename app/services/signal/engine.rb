@@ -63,6 +63,7 @@ module Signal
         permission = gate_results[:permission]
         smc_decision = gate_results[:smc_decision]
         momentum_score = gate_results[:momentum_score]
+        smc_confluence_ltf_summary = gate_results[:smc_confluence_ltf_summary]
 
         # 8. Persistence Pre-checks
         state_snapshot = Signal::StateTracker.record(
@@ -95,6 +96,7 @@ module Signal
           enable_confirmation: enable_confirmation,
           smc_decision: smc_decision,
           permission: permission,
+          smc_confluence_ltf_summary: smc_confluence_ltf_summary,
           strategy_recommendation: strategy_recommendation,
           use_strategy_recommendations: use_strategy_recommendations
         )
@@ -1385,6 +1387,17 @@ module Signal
           smc_decision = final_direction == :bullish ? :call : :put
         end
 
+        ltf_confluence_snap = fetch_ltf_confluence_snapshot_if_needed(
+          instrument: instrument,
+          signals_cfg: signals_cfg
+        )
+        return nil if blocked_by_smc_confluence_gate?(
+          index_cfg: index_cfg,
+          final_direction: final_direction,
+          signals_cfg: signals_cfg,
+          snap: ltf_confluence_snap
+        )
+
         momentum_result = Signal::MomentumValidator.validate(
           instrument: instrument,
           series: primary_series,
@@ -1392,7 +1405,41 @@ module Signal
         )
         Rails.logger.info("[Signal] Momentum Score for #{index_cfg[:key]}: #{momentum_result.score}/3")
 
-        { permission: permission, smc_decision: smc_decision, momentum_score: momentum_result.score }
+        gate_result_hash(
+          permission: permission,
+          smc_decision: smc_decision,
+          momentum_score: momentum_result.score,
+          signals_cfg: signals_cfg,
+          ltf_confluence_snap: ltf_confluence_snap
+        )
+      end
+
+      def fetch_ltf_confluence_snapshot_if_needed(instrument:, signals_cfg:)
+        digest = signals_cfg.fetch(:enable_smc_confluence_digest, false)
+        gating = signals_cfg.fetch(:enable_smc_confluence_gating, false)
+        return nil unless digest || gating
+
+        Smc::Confluence::LtfSnapshot.fetch(instrument: instrument, signals_cfg: signals_cfg)
+      end
+
+      def blocked_by_smc_confluence_gate?(index_cfg:, final_direction:, signals_cfg:, snap:)
+        return false unless signals_cfg.fetch(:enable_smc_confluence_gating, false)
+        return false if Smc::Confluence::LtfSnapshot.gate_passes?(final_direction, snap)
+
+        Rails.logger.info(
+          "[Signal] SMC Confluence gate BLOCKED #{index_cfg[:key]}: " \
+          "direction=#{final_direction} (LTF Pine confluence signal not confirmed)"
+        )
+        Signal::StateTracker.reset(index_cfg[:key])
+        true
+      end
+
+      def gate_result_hash(permission:, smc_decision:, momentum_score:, signals_cfg:, ltf_confluence_snap:)
+        out = { permission: permission, smc_decision: smc_decision, momentum_score: momentum_score }
+        if signals_cfg.fetch(:enable_smc_confluence_digest, false) && ltf_confluence_snap
+          out[:smc_confluence_ltf_summary] = ltf_confluence_snap[:summary]
+        end
+        out
       end
 
       def execute_options_analysis(index_cfg, instrument, final_direction, primary_series, effective_validation_mode)
@@ -1432,6 +1479,7 @@ module Signal
                                     validation_result:, state_snapshot:, effective_validation_mode:,
                                     signals_cfg:, primary_tf:, effective_timeframe:, confirmation_tf:,
                                     enable_confirmation:, smc_decision:, permission:,
+                                    smc_confluence_ltf_summary: nil,
                                     strategy_recommendation: nil, use_strategy_recommendations: false)
         Signal::MetadataBuilder.build(
           index_cfg: index_cfg,
@@ -1452,6 +1500,7 @@ module Signal
           enable_confirmation: enable_confirmation,
           smc_decision: smc_decision,
           permission: permission,
+          smc_confluence_ltf_summary: smc_confluence_ltf_summary,
           strategy_name: strategy_recommendation&.dig(:strategy_name) || 'supertrend_adx',
           strategy_mode: use_strategy_recommendations ? 'recommended' : 'supertrend_adx'
         )
