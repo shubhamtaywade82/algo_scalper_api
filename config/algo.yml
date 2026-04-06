@@ -996,6 +996,9 @@ telegram:
 # AI Integration Configuration
 ai:
   enabled: true # Set to true to enable AI integration
+  # Dashboard / DB override (Settings → AI): false = local Ollama, true = Ollama Cloud.
+  # URLs and secrets still come from ENV (see comments below).
+  ollama_use_cloud: true
   # Timeout settings (in seconds):
   # - OLLAMA_HOST_URL: Remote Ollama server URL (e.g., http://192.168.0.200:11434)
   #   Alternative to OLLAMA_BASE_URL (both are supported)
@@ -1008,8 +1011,10 @@ ai:
   #   Useful for long streaming responses. Set higher if you experience timeouts.
   # Provider: Ollama only (`ollama-client` gem). There is no OpenAI/ruby-openai integration.
   # Ollama Configuration:
-  #   - OLLAMA_BASE_URL: Base URL of Ollama server (e.g., http://192.168.1.11:11434)
-  #   - OLLAMA_API_KEY: Optional API key (default: 'ollama')
+  #   - OLLAMA_LOCAL_URL: Optional; used when ollama_use_cloud is false (overrides HOST/BASE fallbacks)
+  #   - OLLAMA_CLOUD_URL: Optional; used when ollama_use_cloud is true (else OLLAMA_BASE_URL, else ollama.com)
+  #   - OLLAMA_HOST_URL / OLLAMA_BASE_URL: Fallback for local mode (see OllamaClient)
+  #   - OLLAMA_API_KEY: Required when ollama_use_cloud is true (Ollama Cloud Bearer token)
   #   - OLLAMA_MODEL: Optional - explicitly set model (e.g., 'phi3:mini', 'llama3')
   #     If not set, system automatically fetches available models and selects the best one
   #

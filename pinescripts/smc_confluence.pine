@@ -1,0 +1,1481 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © shubhamtaywade82
+
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © shubhamtaywade82
+
+// ============================================================
+// SMC Confluence Engine [nemesis] — Crypto Futures Edition
+// Pine Script v6 | strategy() | overlay=true
+// Alerts: use alert() + “Call alert() on events”; alertcondition() is ignored in strategies.
+// Optional LuxAlgo-inspired modes (original implementation; reference only):
+//   — Pivot vs swing-leg + IDM + trailing BOS
+//   — MSB momentum Z-score, multi-OB pool + quality / HPZ
+//   — Structure-bound liquidity sweeps, internal structure, EQH/EQL, FVG, premium/equilibrium/discount zones
+//   — Optional KNN Supertrend (logic adapted from LuxAlgo “KNN Supertrend Horizon”, CC BY-NC-SA 4.0)
+// ============================================================
+// 5-LAYER STACK:
+//   Layer 1 — Smart Money Concepts (BOS, CHoCH, OB, Liquidity)
+//   Layer 2 — Market Structure (HH/HL/LH/LL swing labels)
+//   Layer 3 — Auto Trendlines (break + retest detection)
+//   Layer 4 — Session High/Low (PDH/PDL + session ranges)
+//   Layer 5 — Volume Profile (POC, VAH, VAL per session)
+//
+// SIGNAL ENGINE:
+//   LONG:  Sell-side liq sweep → CHoCH up → price returns to
+//          bullish OB → near POC/VAL → trendline retest up
+//   SHORT: Buy-side liq sweep → CHoCH down → price returns to
+//          bearish OB → near POC/VAH → trendline retest down
+//
+// SIGNAL QUALITY SCORE (0–6):
+//   +1  CHoCH confirmed
+//   +1  OB tap (price inside order block zone)
+//   +1  Liquidity sweep preceded CHoCH
+//   +1  Near POC / Value Area edge
+//   +1  Session level confluence (near PDH/PDL/session range)
+//   +1  Trendline break + retest aligned
+// ============================================================
+
+//@version=6
+strategy(
+     title         = "SMC Confluence Engine [nemesis] STRATEGY 2",
+     shorttitle    = "SMC Strat2",
+     overlay       = true,
+     initial_capital = 200000,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 10,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.04,
+     calc_on_every_tick = true,
+     max_boxes_count = 500,
+     max_lines_count = 500,
+     max_labels_count = 500,
+     max_bars_back = 2001
+)
+
+// ════════════════════════════════════════════════════════════
+// ░░  INPUTS
+// ════════════════════════════════════════════════════════════
+
+// ── Layer 1: SMC ──────────────────────────────────────────
+grp_smc = "🧠 SMC Settings"
+structure_mode = input.string("Pivot", "Structure mode", options=["Pivot", "LuxAlgo (IDM + trail)"], group=grp_smc, tooltip="Pivot: classic pivot BOS/CHoCH. LuxAlgo: swing-leg CHoCH, inducement (IDM), trailing extremes, then BOS.")
+smc_swing    = input.int(10,   "Swing Length (BOS/CHoCH)", minval=3, maxval=50,  group=grp_smc)
+idm_len      = input.int(3,    "IDM / internal swing (Lux mode)", minval=2, maxval=20, group=grp_smc, tooltip="Short swing length for inducement; used when Structure mode = LuxAlgo.")
+use_msb_zscore = input.bool(false, "MSB / break Z-score filter", group=grp_smc, tooltip="When on, structure breaks require momentum Z-score vs 50-bar stats (Toolkit-style).")
+msb_zscore   = input.float(0.5, "MSB Z-score threshold", minval=0.1, step=0.1, group=grp_smc)
+ob_body_pct  = input.float(0.3,"OB Min Body %",            minval=0.05,step=0.05,group=grp_smc,     tooltip="Impulse candle that creates OB must have body >= this % of price.")
+ob_expire    = input.int(50,   "OB Expires (bars)",        minval=5, maxval=300, group=grp_smc)
+ob_scan_bars = input.int(10,   "OB scan bars (opposite candle)", minval=1, maxval=30, group=grp_smc, tooltip="Search backward up to N bars for last opposite-color candle before the break.")
+liq_lookback = input.int(20,   "Liquidity Swing Lookback", minval=5, maxval=100, group=grp_smc)
+liq_rolling  = input.bool(true, "Rolling high/low liquidity sweeps", group=grp_smc)
+liq_struct   = input.bool(false, "Structure-bound sweeps (trailing max/min)", group=grp_smc, tooltip="After CHoCH, trail highs/lows and flag wick beyond trail + close back inside (LuxAlgo-style).")
+liq_wick_pct = input.float(0.1,"Sweep Min Wick %",        minval=0.02,step=0.02,group=grp_smc,     tooltip="Wick must pierce beyond swing by this % to count as a liquidity sweep.")
+show_ob      = input.bool(true,"Show Order Block Boxes",  group=grp_smc)
+show_bos     = input.bool(true,"Show BOS/CHoCH Labels",   group=grp_smc)
+show_liq     = input.bool(true,"Show Liquidity Sweeps",   group=grp_smc)
+
+grp_obp = "🧱 OB pool (Toolkit-style)"
+use_ob_pool  = input.bool(false, "Use multi-OB pool", group=grp_obp, tooltip="Track multiple order blocks with quality %, HPZ, mitigation, overlap filter.")
+ob_max_n     = input.int(10, "Max active OBs", minval=1, maxval=50, group=grp_obp)
+ob_hpz_at    = input.float(80, "HPZ quality ≥", minval=50, maxval=99, group=grp_obp)
+ob_hide_ov   = input.bool(false, "Hide overlapping new OBs", group=grp_obp)
+ob_extend_br = input.bool(false, "Extend mitigated OBs briefly", group=grp_obp)
+ob_hist_mode = input.string("Historical", "OB display", options=["Historical", "Present"], group=grp_obp, tooltip="Present: delete graphics when mitigated.")
+ob_mit_wick  = input.bool(true, "Mitigate OB on wick (Low/High)", group=grp_obp, tooltip="If off, mitigation uses close through the zone.")
+
+grp_int = "🔹 Internal / SMC+"
+show_internal = input.bool(false, "Show internal BOS/CHoCH", group=grp_int, tooltip="Faster pivot length; separate mini structure labels.")
+internal_len  = input.int(5, "Internal pivot length", minval=2, maxval=25, group=grp_int)
+show_eqhl     = input.bool(false, "Equal highs / lows (EQH/EQL)", group=grp_int)
+eqhl_thresh   = input.float(0.15, "EQH/EQL threshold × ATR(200)", minval=0.02, step=0.02, group=grp_int)
+show_fvg      = input.bool(false, "Fair value gaps (3-bar)", group=grp_int)
+fvg_extend    = input.int(5, "FVG extend right (bars)", minval=0, maxval=50, group=grp_int)
+show_pd_zone  = input.bool(false, "Premium / equilibrium / discount zones", group=grp_int, tooltip="LuxAlgo-style 3 bands on lookback high/low: top 5% premium, bottom 5% discount, middle equilibrium (same geometry as LuxAlgo Smart Money Concepts zones).")
+pd_lookback   = input.int(50, "Zone range lookback (bars)", minval=20, maxval=200, group=grp_int)
+pd_zone_labels= input.bool(true, "PD zone labels", group=grp_int)
+pd_col_prem   = input.color(#f23645, "Premium zone color", group=grp_int)
+pd_col_eq     = input.color(#787b86, "Equilibrium zone color", group=grp_int)
+pd_col_disc   = input.color(#089981, "Discount zone color", group=grp_int)
+
+// ── Layer 2: Market Structure ─────────────────────────────
+grp_ms = "📐 Market Structure"
+ms_swing     = input.int(10,   "Structure Swing Length",  minval=3, maxval=30, group=grp_ms)
+show_ms      = input.bool(true,"Show HH/HL/LH/LL Labels", group=grp_ms)
+show_ms_line = input.bool(true,"Show Structure Lines",    group=grp_ms)
+
+// ── Layer 3: Trendlines ───────────────────────────────────
+grp_tl = "📏 Trendlines"
+tl_pivot_len = input.int(10,   "Trendline Pivot Length",  minval=3, maxval=30, group=grp_tl)
+tl_max       = input.int(3,    "Max Active Trendlines",   minval=1, maxval=5,  group=grp_tl)
+tl_retest_pct= input.float(0.15,"Retest Zone %",          minval=0.02,step=0.02,group=grp_tl,     tooltip="Price within this % of trendline counts as a retest.")
+show_tl      = input.bool(true,"Show Trendlines",         group=grp_tl)
+show_tl_break= input.bool(true,"Show Break/Retest Labels",group=grp_tl)
+
+// ── Layer 4: Session Levels ───────────────────────────────
+grp_sess = "🕐 Session Levels"
+show_pdh_pdl = input.bool(true,"Show PDH / PDL",          group=grp_sess)
+show_sess_hl = input.bool(true,"Show Session High/Low",   group=grp_sess)
+sess_liq_pct = input.float(0.1,"Session Level Sweep %",   minval=0.02,step=0.02,group=grp_sess)
+asia_sess    = input.session("0000-0800","Asia Session",   group=grp_sess)
+london_sess  = input.session("0800-1600","London Session", group=grp_sess)
+ny_sess      = input.session("1300-2100","NY Session",     group=grp_sess)
+
+// ── Layer 5: Volume Profile ───────────────────────────────
+grp_vp = "📊 Volume Profile"
+vp_bars      = input.int(100,  "Volume Profile Lookback", minval=20,maxval=500, group=grp_vp)
+vp_rows      = input.int(24,   "Profile Rows",            minval=10,maxval=50,  group=grp_vp)
+poc_zone_pct = input.float(0.2,"POC Proximity %",         minval=0.05,step=0.05,group=grp_vp)
+show_vp      = input.bool(true,"Show POC/VAH/VAL Lines",  group=grp_vp)
+
+// ── Signal Engine ─────────────────────────────────────────
+grp_sig = "🚀 Signal Engine"
+min_score    = input.int(3,    "Min Score for Signal (0–6)",minval=0,maxval=6, group=grp_sig)
+sig_cooldown = input.int(5,    "Signal Cooldown (bars)",   minval=1,maxval=30, group=grp_sig)
+show_signals = input.bool(true,"Show Entry Signals",       group=grp_sig)
+show_score   = input.bool(true,"Show Score on Label",      group=grp_sig)
+
+grp_risk = "🛡 Risk (strategy)"
+atr_mult_sl = input.float(1.5, "SL ATR Multiplier", group=grp_risk)
+atr_mult_tp = input.float(3.0, "TP ATR Multiplier", group=grp_risk)
+
+grp_alert = "🔔 Alerts (strategy)"
+enable_runtime_alerts = input.bool(false, "Call alert() on events", group=grp_alert, tooltip="TradingView ignores alertcondition() in strategies. Turn this on, add a chart alert whose condition is “alert() function calls only”, then pick which calls to include in the alert dialog.")
+alert_timing = input.string("Bar close", "alert() timing", options=["Bar close", "Once per bar (any tick)"], group=grp_alert)
+
+// ── Visuals ───────────────────────────────────────────────
+grp_vis = "🎨 Visuals"
+bull_col     = input.color(#00c4ff,"Bullish Color", group=grp_vis)
+bear_col     = input.color(#ff3d3d,"Bearish Color", group=grp_vis)
+show_dash    = input.bool(true,"Show Dashboard",    group=grp_vis)
+
+grp_st = "📈 Supertrend"
+st_mode = input.string("Classic", "Mode", options=["Classic", "KNN (LuxAlgo-style)"], group=grp_st, tooltip="Classic: split bull/bear ST lines. KNN: filters ST direction with k-nearest neighbors on RSI + ATR% features (CPU-heavy).")
+st_classic_factor = input.float(3.0, "Classic: ST factor", minval=0.01, step=0.1, group=grp_st)
+st_classic_atr    = input.int(10, "Classic: ATR length", minval=1, group=grp_st)
+
+grp_st_ml = "📈 KNN ST — ML"
+knn_neighbors = input.int(10, "K-Neighbors", minval=1, maxval=50, group=grp_st_ml)
+knn_window    = input.int(500, "Search window", minval=100, maxval=2000, group=grp_st_ml)
+knn_st_atr    = input.int(10, "ST ATR length", minval=1, group=grp_st_ml)
+knn_st_factor = input.float(3.0, "ST factor", minval=0.01, step=0.1, group=grp_st_ml)
+
+grp_st_filt = "📈 KNN ST — filter"
+knn_smooth_src  = input.bool(true, "Smooth price (HMA)", group=grp_st_filt)
+knn_hma_len       = input.int(10, "Smoothing length", minval=1, group=grp_st_filt)
+knn_ml_buffer_pct = input.float(5.0, "ML confidence buffer %", minval=0.0, maxval=20.0, step=0.5, group=grp_st_filt)
+knn_prob_ema      = input.int(20, "Prob EMA (smoothness)", minval=1, group=grp_st_filt)
+knn_vibrancy      = input.float(1.5, "Vibrancy", minval=1.0, maxval=3.0, step=0.1, group=grp_st_filt)
+
+grp_st_sig = "📈 KNN ST — rejection orbs"
+show_st_bubbles = input.bool(false, "Show rejection orbs", group=grp_st_sig, tooltip="Uses many labels per signal; keep off for performance.")
+knn_rej_mult      = input.float(1.5, "Min wick vs body", minval=1.0, maxval=5.0, step=0.1, group=grp_st_sig)
+knn_bubble_gap    = input.int(5, "Min gap (bars)", minval=1, maxval=20, group=grp_st_sig)
+
+grp_st_vis = "📈 KNN ST — visuals"
+show_st_glow_chars = input.bool(true, "Direction plot chars", group=grp_st_vis)
+knn_grad_candles   = input.bool(false, "KNN gradient candles", group=grp_st_vis, tooltip="When on, replaces structure_bias bar colors with ML gradient.")
+st_bull_knn_col = input.color(#089981, "KNN uptrend color", group=grp_st_vis)
+st_bear_knn_col = input.color(#f23645, "KNN downtrend color", group=grp_st_vis)
+string ST_BAR_CHAR = "▬▬▬▬▬▬▬▬▬▬"
+
+// ════════════════════════════════════════════════════════════
+// ░░  BASE INDICATORS
+// ════════════════════════════════════════════════════════════
+atr14    = ta.atr(14)
+atr200   = ta.atr(200)
+vol_sma  = ta.sma(volume, 20)
+is_new_day = timeframe.change("1D")
+
+price_change = ta.change(close)
+avg_change   = ta.sma(price_change, 50)
+std_change   = ta.stdev(price_change, 50)
+momentum_z   = std_change > 0 ? (price_change - avg_change) / std_change : 0.0
+vol_pct_rank = ta.percentrank(volume, 100)
+
+use_lux = structure_mode == "LuxAlgo (IDM + trail)"
+z_bull_ok = not use_msb_zscore or momentum_z > msb_zscore
+z_bear_ok = not use_msb_zscore or momentum_z < -msb_zscore
+
+// ════════════════════════════════════════════════════════════
+// ░░  LUX SWING LEG (two functions — Pine var in UDF is one static per function)
+// ════════════════════════════════════════════════════════════
+swings_main_len() =>
+    var int os_m = 0
+    var int topx_m = na
+    var int btmx_m = na
+    int len = smc_swing
+    upper = ta.highest(high, len)
+    lower = ta.lowest(low, len)
+    os_m := high[len] > upper ? 0 : low[len] < lower ? 1 : os_m[1]
+    top = os_m == 0 and os_m[1] != 0 ? high[len] : na
+    topx_m := os_m == 0 and os_m[1] != 0 ? bar_index[len] : topx_m
+    btm = os_m == 1 and os_m[1] != 1 ? low[len] : na
+    btmx_m := os_m == 1 and os_m[1] != 1 ? bar_index[len] : btmx_m
+    [top, topx_m, btm, btmx_m]
+
+swings_idm_len() =>
+    var int os_i = 0
+    var int topx_i = na
+    var int btmx_i = na
+    int len = idm_len
+    upper = ta.highest(high, len)
+    lower = ta.lowest(low, len)
+    os_i := high[len] > upper ? 0 : low[len] < lower ? 1 : os_i[1]
+    top = os_i == 0 and os_i[1] != 0 ? high[len] : na
+    topx_i := os_i == 0 and os_i[1] != 0 ? bar_index[len] : topx_i
+    btm = os_i == 1 and os_i[1] != 1 ? low[len] : na
+    btmx_i := os_i == 1 and os_i[1] != 1 ? bar_index[len] : btmx_i
+    [top, topx_i, btm, btmx_i]
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 1A — PIVOT SWING (pivot mode)
+// ════════════════════════════════════════════════════════════
+ph = ta.pivothigh(high, smc_swing, smc_swing)
+pl = ta.pivotlow(low,   smc_swing, smc_swing)
+
+var float last_ph = na
+var float last_pl = na
+var int   last_ph_bar = -999
+var int   last_pl_bar = -999
+var int   ph_age = 0
+var int   pl_age = 0
+
+ph_age := ph_age + 1
+pl_age := pl_age + 1
+
+if not na(ph)
+    last_ph := ph
+    last_ph_bar := bar_index - smc_swing
+    ph_age := 0
+
+if not na(pl)
+    last_pl := pl
+    last_pl_bar := bar_index - smc_swing
+    pl_age := 0
+
+ph_valid = not na(last_ph) and ph_age <= ob_expire
+pl_valid = not na(last_pl) and pl_age <= ob_expire
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 1B — LUXALGO STATE (swing-leg + IDM + BOS)
+// ════════════════════════════════════════════════════════════
+[top_l, topx_l, btm_l, btmx_l] = swings_main_len()
+[stop_l, stopx_l, sbtm_l, sbtmx_l] = swings_idm_len()
+
+var int lux_os = 0
+var bool lux_top_crossed = false
+var bool lux_btm_crossed = false
+var float lux_max = na
+var float lux_min = na
+var int lux_max_x1 = na
+var int lux_min_x1 = na
+var float lux_topy = na
+var float lux_btmy = na
+var bool lux_stop_crossed = false
+var bool lux_sbtm_crossed = false
+var float lux_stopy_hold = na
+var float lux_sbtmy_hold = na
+
+if not na(top_l)
+    lux_topy := top_l
+    lux_top_crossed := false
+if not na(btm_l)
+    lux_btmy := btm_l
+    lux_btm_crossed := false
+
+if not na(stop_l)
+    lux_stopy_hold := stop_l
+if not na(sbtm_l)
+    lux_sbtmy_hold := sbtm_l
+
+if close > lux_topy and not lux_top_crossed and not na(lux_topy)
+    lux_os := 1
+    lux_top_crossed := true
+if close < lux_btmy and not lux_btm_crossed and not na(lux_btmy)
+    lux_os := 0
+    lux_btm_crossed := true
+
+lux_choch_flip = lux_os != lux_os[1]
+
+if lux_choch_flip
+    lux_max := high
+    lux_min := low
+    lux_max_x1 := bar_index
+    lux_min_x1 := bar_index
+    lux_stop_crossed := false
+    lux_sbtm_crossed := false
+
+if low < lux_sbtmy_hold and not lux_sbtm_crossed and lux_os == 1 and not na(lux_sbtmy_hold) and lux_sbtmy_hold != lux_btmy
+    lux_sbtm_crossed := true
+
+lux_bos_bull_bar = close > lux_max and lux_sbtm_crossed and lux_os == 1 and not na(lux_max)
+if lux_bos_bull_bar
+    lux_sbtm_crossed := false
+
+if high > lux_stopy_hold and not lux_stop_crossed and lux_os == 0 and not na(lux_stopy_hold) and lux_stopy_hold != lux_topy
+    lux_stop_crossed := true
+
+lux_bos_bear_bar = close < lux_min and lux_stop_crossed and lux_os == 0 and not na(lux_min)
+if lux_bos_bear_bar
+    lux_stop_crossed := false
+
+lux_max := math.max(high, nz(lux_max, high))
+lux_min := math.min(low, nz(lux_min, low))
+if lux_max > nz(lux_max[1], lux_max)
+    lux_max_x1 := bar_index
+if lux_min < nz(lux_min[1], lux_min)
+    lux_min_x1 := bar_index
+
+lux_bos_bull_evt = lux_bos_bull_bar and not lux_bos_bull_bar[1]
+lux_bos_bear_evt = lux_bos_bear_bar and not lux_bos_bear_bar[1]
+
+lux_choch_bull_raw = lux_choch_flip and lux_os == 1
+lux_choch_bear_raw = lux_choch_flip and lux_os == 0
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 1C — PIVOT BOS / CHoCH + MERGE
+// ════════════════════════════════════════════════════════════
+var int structure_bias = 0
+
+bos_bull_pv = ph_valid and close > last_ph and close[1] <= last_ph and z_bull_ok
+bos_bear_pv = pl_valid and close < last_pl and close[1] >= last_pl and z_bear_ok
+choch_bull_pv = bos_bull_pv and structure_bias == -1
+choch_bear_pv = bos_bear_pv and structure_bias == 1
+
+if not use_lux
+    if bos_bull_pv or choch_bull_pv
+        structure_bias := 1
+    if bos_bear_pv or choch_bear_pv
+        structure_bias := -1
+else
+    structure_bias := lux_os == 1 ? 1 : -1
+
+lux_choch_bull = lux_choch_bull_raw
+lux_choch_bear = lux_choch_bear_raw
+lux_bos_bull_f = lux_bos_bull_evt and z_bull_ok
+lux_bos_bear_f = lux_bos_bear_evt and z_bear_ok
+
+choch_bull = use_lux ? lux_choch_bull : choch_bull_pv
+choch_bear = use_lux ? lux_choch_bear : choch_bear_pv
+bos_bull   = use_lux ? (lux_bos_bull_f or lux_choch_bull) : bos_bull_pv
+bos_bear   = use_lux ? (lux_bos_bear_f or lux_choch_bear) : bos_bear_pv
+
+bos_bull_lbl = use_lux ? lux_bos_bull_f : (bos_bull_pv and not choch_bull_pv)
+bos_bear_lbl = use_lux ? lux_bos_bear_f : (bos_bear_pv and not choch_bear_pv)
+
+// ── BOS / CHoCH visuals: CHoCH solid, BOS dashed ──────────
+var int last_bos_bull_lbl = -999
+var int last_bos_bear_lbl = -999
+int     bos_label_gap     = math.max(3, smc_swing)
+
+if show_bos
+    if choch_bull
+        _b1   = use_lux ? math.max(nz(topx_l, bar_index - 100), bar_index - 100) : math.max(last_ph_bar, bar_index - 100)
+        _y1   = use_lux ? nz(lux_topy, last_ph) : last_ph
+        _mid1 = math.round((_b1 + bar_index) / 2)
+        line.new(_b1, _y1, bar_index, _y1, color = color.new(bull_col, 0), width = 1, style = line.style_solid)
+        label.new(_mid1, _y1, "CHoCH", style = label.style_none, textcolor = color.new(bull_col, 0), size = size.small, yloc = yloc.price)
+        last_bos_bull_lbl := bar_index
+    if choch_bear
+        _b2   = use_lux ? math.max(nz(btmx_l, bar_index - 100), bar_index - 100) : math.max(last_pl_bar, bar_index - 100)
+        _y2   = use_lux ? nz(lux_btmy, last_pl) : last_pl
+        _mid2 = math.round((_b2 + bar_index) / 2)
+        line.new(_b2, _y2, bar_index, _y2, color = color.new(bear_col, 0), width = 1, style = line.style_solid)
+        label.new(_mid2, _y2, "CHoCH", style = label.style_none, textcolor = color.new(bear_col, 0), size = size.small, yloc = yloc.price)
+        last_bos_bear_lbl := bar_index
+    if bos_bull_lbl and (bar_index - last_bos_bull_lbl) >= bos_label_gap
+        _b3   = use_lux ? math.max(nz(lux_max_x1, bar_index - 100), bar_index - 100) : math.max(last_ph_bar, bar_index - 100)
+        _y3   = use_lux ? nz(lux_max, last_ph) : last_ph
+        _mid3 = math.round((_b3 + bar_index) / 2)
+        line.new(_b3, _y3, bar_index, _y3, color = color.new(bull_col, 50), width = 1, style = line.style_dashed)
+        label.new(_mid3, _y3, "BOS", style = label.style_none, textcolor = color.new(bull_col, 20), size = size.small, yloc = yloc.price)
+        last_bos_bull_lbl := bar_index
+    if bos_bear_lbl and (bar_index - last_bos_bear_lbl) >= bos_label_gap
+        _b4   = use_lux ? math.max(nz(lux_min_x1, bar_index - 100), bar_index - 100) : math.max(last_pl_bar, bar_index - 100)
+        _y4   = use_lux ? nz(lux_min, last_pl) : last_pl
+        _mid4 = math.round((_b4 + bar_index) / 2)
+        line.new(_b4, _y4, bar_index, _y4, color = color.new(bear_col, 50), width = 1, style = line.style_dashed)
+        label.new(_mid4, _y4, "BOS", style = label.style_none, textcolor = color.new(bear_col, 20), size = size.small, yloc = yloc.price)
+        last_bos_bear_lbl := bar_index
+
+// ════════════════════════════════════════════════════════════
+// ░░  TRAILING EXTREMES (structure-bound liquidity)
+// ════════════════════════════════════════════════════════════
+var float sw_trail_max = na
+var float sw_trail_min = na
+var int   sw_trail_max_x = na
+var int   sw_trail_min_x = na
+
+if choch_bull or choch_bear
+    sw_trail_max := high
+    sw_trail_min := low
+    sw_trail_max_x := bar_index
+    sw_trail_min_x := bar_index
+else
+    sw_trail_max := math.max(high, nz(sw_trail_max, high))
+    sw_trail_min := math.min(low, nz(sw_trail_min, low))
+    if sw_trail_max > nz(sw_trail_max[1], sw_trail_max)
+        sw_trail_max_x := bar_index
+    if sw_trail_min < nz(sw_trail_min[1], sw_trail_min)
+        sw_trail_min_x := bar_index
+
+struct_liq_sweep_bull = liq_struct and structure_bias == 1 and not na(sw_trail_max) and high > sw_trail_max and close < sw_trail_max and bar_index - nz(sw_trail_max_x, bar_index) > 1
+struct_liq_sweep_bear = liq_struct and structure_bias == -1 and not na(sw_trail_min) and low < sw_trail_min and close > sw_trail_min and bar_index - nz(sw_trail_min_x, bar_index) > 1
+
+// ════════════════════════════════════════════════════════════
+// ░░  OB SCAN + IMPULSE
+// ════════════════════════════════════════════════════════════
+impulse_body_pct = math.abs(close - open) / close * 100
+
+scan_bear_candle_idx(int mx) =>
+    int found = na
+    for i = 1 to mx
+        if close[i] < open[i]
+            found := i
+            break
+    na(found) ? 1 : found
+
+scan_bull_candle_idx(int mx) =>
+    int found = na
+    for i = 1 to mx
+        if close[i] > open[i]
+            found := i
+            break
+    na(found) ? 1 : found
+
+bull_break_evt = choch_bull or (use_lux ? lux_bos_bull_f : (bos_bull_pv and not choch_bull_pv))
+bear_break_evt = choch_bear or (use_lux ? lux_bos_bear_f : (bos_bear_pv and not choch_bear_pv))
+
+// ════════════════════════════════════════════════════════════
+// ░░  OB POOL (UDT)
+// ════════════════════════════════════════════════════════════
+type ConfluenceOb
+    box   bx
+    label qlab
+    line  poc_line
+    float top
+    float bot
+    float q
+    bool  is_bull
+    bool  mit
+    int   mit_bar
+    bool  hpz
+    int   left_x
+
+var array<ConfluenceOb> ob_pool = array.new<ConfluenceOb>()
+
+ob_quality_now() =>
+    math.min(100.0, math.abs(momentum_z) * 20.0 + vol_pct_rank * 0.5)
+
+ob_overlaps(float t, float b) =>
+    bool hit = false
+    if ob_hide_ov and ob_pool.size() > 0
+        for i = 0 to ob_pool.size() - 1
+            o = ob_pool.get(i)
+            if not o.mit and ((t <= o.top and t >= o.bot) or (b <= o.top and b >= o.bot))
+                hit := true
+                break
+    hit
+
+push_ob_pool(bool bull, int ob_idx, float qscr) =>
+    float t = high[ob_idx]
+    float b = low[ob_idx]
+    if ob_overlaps(t, b)
+        0
+    else
+        int lx = bar_index - ob_idx
+        float poc = (t + b) / 2.0
+        bool hpz = qscr >= ob_hpz_at
+        color bc = bull ? bull_col : bear_col
+        color edge = hpz ? color.new(bc, 30) : color.new(bc, 60)
+        color fill = hpz ? color.new(bc, 75) : color.new(bc, 85)
+        box nb = show_ob and use_ob_pool ? box.new(lx, t, bar_index + 15, b, border_color = edge, bgcolor = fill, border_width = 1, border_style = hpz ? line.style_dashed : line.style_solid) : na
+        line pl = show_ob and use_ob_pool ? line.new(lx, poc, bar_index + 15, poc, color = color.new(bc, 50), width = 1, style = line.style_dashed) : na
+        label lb = show_ob and use_ob_pool ? label.new(bar_index + 18, poc, str.tostring(qscr, "#") + "%", color = color.new(bc, 100), textcolor = hpz ? color.yellow : bc, style = label.style_none, size = size.tiny, textalign = text.align_left) : na
+        ConfluenceOb rec = ConfluenceOb.new(nb, lb, pl, t, b, qscr, bull, false, 0, hpz, lx)
+        ob_pool.push(rec)
+        1
+
+if use_ob_pool and bull_break_evt and impulse_body_pct >= ob_body_pct
+    int ix = scan_bear_candle_idx(ob_scan_bars)
+    push_ob_pool(true, ix, ob_quality_now())
+
+if use_ob_pool and bear_break_evt and impulse_body_pct >= ob_body_pct
+    int iy = scan_bull_candle_idx(ob_scan_bars)
+    push_ob_pool(false, iy, ob_quality_now())
+
+// Manage pool: extend, mitigate, trim
+if use_ob_pool and ob_pool.size() > 0
+    int mit_count = 0
+    for j = ob_pool.size() - 1 to 0
+        o = ob_pool.get(j)
+        if not o.mit
+            if not na(o.bx)
+                o.bx.set_right(bar_index + 15)
+            if not na(o.qlab)
+                o.qlab.set_x(bar_index + 18)
+            if not na(o.poc_line)
+                o.poc_line.set_x2(bar_index + 15)
+            bool crossed = o.is_bull ? (ob_mit_wick ? low < o.bot : close < o.bot) : (ob_mit_wick ? high > o.top : close > o.top)
+            if crossed
+                bool present = ob_hist_mode == "Present"
+                if present
+                    if not na(o.bx)
+                        o.bx.delete()
+                    if not na(o.qlab)
+                        o.qlab.delete()
+                    if not na(o.poc_line)
+                        o.poc_line.delete()
+                    ob_pool.set(j, ConfluenceOb.new(na, na, na, o.top, o.bot, o.q, o.is_bull, true, bar_index, o.hpz, o.left_x))
+                else
+                    if not na(o.bx)
+                        o.bx.set_bgcolor(color.new(color.gray, 90))
+                        o.bx.set_border_color(color.new(color.gray, 70))
+                    if not na(o.qlab)
+                        o.qlab.set_textcolor(color.new(color.gray, 50))
+                    if not na(o.poc_line)
+                        o.poc_line.set_color(color.new(color.gray, 80))
+                    if not na(o.bx)
+                        o.bx.set_right(bar_index)
+                    if not na(o.qlab)
+                        o.qlab.set_x(bar_index)
+                    if not na(o.poc_line)
+                        o.poc_line.set_x2(bar_index)
+                    ob_pool.set(j, ConfluenceOb.new(o.bx, o.qlab, o.poc_line, o.top, o.bot, o.q, o.is_bull, true, bar_index, o.hpz, o.left_x))
+        else
+            mit_count += 1
+            bool ext = ob_extend_br and mit_count <= 2 and (bar_index - o.mit_bar <= 50)
+            if ob_hist_mode == "Present"
+                if not na(o.bx)
+                    o.bx.delete()
+                if not na(o.qlab)
+                    o.qlab.delete()
+                if not na(o.poc_line)
+                    o.poc_line.delete()
+            else if ext
+                if not na(o.bx)
+                    o.bx.set_right(bar_index + 15)
+                if not na(o.qlab)
+                    o.qlab.set_x(bar_index + 18)
+                if not na(o.poc_line)
+                    o.poc_line.set_x2(bar_index + 15)
+            else
+                if not na(o.bx)
+                    o.bx.set_right(o.mit_bar)
+                if not na(o.qlab)
+                    o.qlab.set_x(o.mit_bar)
+                if not na(o.poc_line)
+                    o.poc_line.set_x2(o.mit_bar)
+
+if use_ob_pool
+    int trim_n = ob_pool.size() - ob_max_n
+    if trim_n > 0
+        for _t = 0 to trim_n - 1
+            old = ob_pool.shift()
+            if not na(old.bx)
+                old.bx.delete()
+            if not na(old.qlab)
+                old.qlab.delete()
+            if not na(old.poc_line)
+                old.poc_line.delete()
+
+in_bull_ob_pool = false
+in_bear_ob_pool = false
+if use_ob_pool and ob_pool.size() > 0
+    for k = 0 to ob_pool.size() - 1
+        o2 = ob_pool.get(k)
+        if not o2.mit
+            if o2.is_bull and low <= o2.top and high >= o2.bot
+                in_bull_ob_pool := true
+            if not o2.is_bull and high >= o2.bot and low <= o2.top
+                in_bear_ob_pool := true
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 1C — LEGACY SINGLE ORDER BLOCKS
+// ════════════════════════════════════════════════════════════
+var float bull_ob_hi  = na
+var float bull_ob_lo  = na
+var int   bull_ob_bar = -999
+var int   bull_ob_age = 0
+var float bear_ob_hi  = na
+var float bear_ob_lo  = na
+var int   bear_ob_bar = -999
+var int   bear_ob_age = 0
+
+bull_ob_age := bull_ob_age + 1
+bear_ob_age := bear_ob_age + 1
+
+if not use_ob_pool and bull_break_evt and impulse_body_pct >= ob_body_pct
+    int bi = scan_bear_candle_idx(ob_scan_bars)
+    bull_ob_hi  := high[bi]
+    bull_ob_lo  := low[bi]
+    bull_ob_bar := bar_index - bi
+    bull_ob_age := 0
+
+if not use_ob_pool and bear_break_evt and impulse_body_pct >= ob_body_pct
+    int bj = scan_bull_candle_idx(ob_scan_bars)
+    bear_ob_hi  := high[bj]
+    bear_ob_lo  := low[bj]
+    bear_ob_bar := bar_index - bj
+    bear_ob_age := 0
+
+bull_ob_valid = not use_ob_pool and not na(bull_ob_hi) and bull_ob_age <= ob_expire and close >= bull_ob_lo * 0.998
+bear_ob_valid = not use_ob_pool and not na(bear_ob_hi) and bear_ob_age <= ob_expire and close <= bear_ob_hi * 1.002
+
+in_bull_ob_legacy = bull_ob_valid and low  <= bull_ob_hi and high >= bull_ob_lo
+in_bear_ob_legacy = bear_ob_valid and high >= bear_ob_lo and low  <= bear_ob_hi
+
+in_bull_ob = use_ob_pool ? in_bull_ob_pool : in_bull_ob_legacy
+in_bear_ob = use_ob_pool ? in_bear_ob_pool : in_bear_ob_legacy
+
+var box bull_ob_box = na
+var box bear_ob_box = na
+
+if show_ob and not use_ob_pool and bull_ob_valid and not na(bull_ob_hi)
+    box.delete(bull_ob_box)
+    bull_ob_box := box.new(bull_ob_bar, bull_ob_hi, bar_index, bull_ob_lo, border_color=color.new(bull_col, 20), bgcolor=color.new(bull_col, 85), border_width=1)
+
+if show_ob and not use_ob_pool and bear_ob_valid and not na(bear_ob_hi)
+    box.delete(bear_ob_box)
+    bear_ob_box := box.new(bear_ob_bar, bear_ob_hi, bar_index, bear_ob_lo, border_color=color.new(bear_col, 20), bgcolor=color.new(bear_col, 85), border_width=1)
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 1D — LIQUIDITY SWEEPS
+// ════════════════════════════════════════════════════════════
+liq_hi = ta.highest(high, liq_lookback)
+liq_lo = ta.lowest(low,   liq_lookback)
+
+liq_sweep_bull_roll = liq_rolling and low < liq_lo[1] - liq_lo[1] * (liq_wick_pct/100) and close > liq_lo[1]
+liq_sweep_bear_roll = liq_rolling and high > liq_hi[1] + liq_hi[1] * (liq_wick_pct/100) and close < liq_hi[1]
+
+liq_sweep_bull = liq_sweep_bull_roll or struct_liq_sweep_bull
+liq_sweep_bear = liq_sweep_bear_roll or struct_liq_sweep_bear
+
+var int last_bull_sweep_bar  = -999
+var int last_bear_sweep_bar  = -999
+var int last_liq_bull_lbl    = -999
+var int last_liq_bear_lbl    = -999
+int     liq_label_gap        = math.max(3, smc_swing)
+
+if liq_sweep_bull
+    last_bull_sweep_bar := bar_index
+if liq_sweep_bear
+    last_bear_sweep_bar := bar_index
+
+recent_bull_sweep = (bar_index - last_bull_sweep_bar) <= smc_swing * 2
+recent_bear_sweep = (bar_index - last_bear_sweep_bar) <= smc_swing * 2
+
+if show_liq and liq_sweep_bull and (bar_index - last_liq_bull_lbl) >= liq_label_gap
+    label.new(bar_index, low, "•", style=label.style_none, textcolor=color.new(color.purple, 0), size=size.normal)
+    label.new(bar_index, low - atr14 * 0.3, struct_liq_sweep_bull ? "Sell-side (struct)" : "Sell-side", style=label.style_none, textcolor=color.new(color.purple, 30), size=size.small)
+    last_liq_bull_lbl := bar_index
+
+if show_liq and liq_sweep_bear and (bar_index - last_liq_bear_lbl) >= liq_label_gap
+    label.new(bar_index, high, "•", style=label.style_none, textcolor=color.new(color.orange, 0), size=size.normal)
+    label.new(bar_index, high + atr14 * 0.3, struct_liq_sweep_bear ? "Buy-side (struct)" : "Buy-side", style=label.style_none, textcolor=color.new(color.orange, 30), size=size.small)
+    last_liq_bear_lbl := bar_index
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 2 — MARKET STRUCTURE (HH / HL / LH / LL)
+// ════════════════════════════════════════════════════════════
+ms_ph = ta.pivothigh(high, ms_swing, ms_swing)
+ms_pl = ta.pivotlow(low,   ms_swing, ms_swing)
+
+var float prev_ms_ph = na
+var float prev_ms_pl = na
+
+ms_hh = not na(ms_ph) and not na(prev_ms_ph) and ms_ph > prev_ms_ph
+ms_lh = not na(ms_ph) and not na(prev_ms_ph) and ms_ph < prev_ms_ph
+ms_hl = not na(ms_pl) and not na(prev_ms_pl) and ms_pl > prev_ms_pl
+ms_ll = not na(ms_pl) and not na(prev_ms_pl) and ms_pl < prev_ms_pl
+
+var float last_ms_ph_val = na
+var float last_ms_pl_val = na
+var int   last_ms_ph_bar = -999
+var int   last_ms_pl_bar = -999
+
+if not na(ms_ph)
+    prev_ms_ph := last_ms_ph_val
+    last_ms_ph_val := ms_ph
+    last_ms_ph_bar := bar_index - ms_swing
+
+if not na(ms_pl)
+    prev_ms_pl := last_ms_pl_val
+    last_ms_pl_val := ms_pl
+    last_ms_pl_bar := bar_index - ms_swing
+
+// Structure labels — bare text, no background box, minimum gap enforced
+var int last_ms_lbl_bar = -999
+int     ms_label_gap    = math.max(3, ms_swing)
+
+if show_ms and (bar_index - ms_swing - last_ms_lbl_bar) >= ms_label_gap
+    if ms_hh
+        label.new(bar_index - ms_swing, ms_ph, "HH",
+             style=label.style_none, textcolor=color.new(bull_col, 20),
+             size=size.small, yloc=yloc.abovebar)
+        last_ms_lbl_bar := bar_index - ms_swing
+    if ms_lh
+        label.new(bar_index - ms_swing, ms_ph, "LH",
+             style=label.style_none, textcolor=color.new(bear_col, 20),
+             size=size.small, yloc=yloc.abovebar)
+        last_ms_lbl_bar := bar_index - ms_swing
+    if ms_hl
+        label.new(bar_index - ms_swing, ms_pl, "HL",
+             style=label.style_none, textcolor=color.new(bull_col, 20),
+             size=size.small, yloc=yloc.belowbar)
+        last_ms_lbl_bar := bar_index - ms_swing
+    if ms_ll
+        label.new(bar_index - ms_swing, ms_pl, "LL",
+             style=label.style_none, textcolor=color.new(bear_col, 20),
+             size=size.small, yloc=yloc.belowbar)
+        last_ms_lbl_bar := bar_index - ms_swing
+
+// Structure bias from HH/HL vs LH/LL
+var int ms_trend = 0   // 1 = uptrend, -1 = downtrend
+if ms_hh or ms_hl
+    ms_trend := 1
+if ms_lh or ms_ll
+    ms_trend := -1
+
+// Structure lines (connect swing pivots)
+var line ms_ph_line = na
+var line ms_pl_line = na
+
+if show_ms_line
+    if not na(ms_ph)
+        line.delete(ms_ph_line)
+        ms_ph_line := line.new(bar_index - ms_swing - ms_swing, nz(prev_ms_ph, ms_ph),
+             bar_index - ms_swing, ms_ph,
+             color=color.new(bear_col, 50), width=1, style=line.style_dashed)
+    if not na(ms_pl)
+        line.delete(ms_pl_line)
+        ms_pl_line := line.new(bar_index - ms_swing - ms_swing, nz(prev_ms_pl, ms_pl),
+             bar_index - ms_swing, ms_pl,
+             color=color.new(bull_col, 50), width=1, style=line.style_dashed)
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 2B — INTERNAL BOS / CHoCH (faster pivots)
+// ════════════════════════════════════════════════════════════
+iph = ta.pivothigh(high, internal_len, internal_len)
+ipl = ta.pivotlow(low,   internal_len, internal_len)
+
+var float ilast_ph = na
+var float ilast_pl = na
+var int   ilast_ph_bar = -999
+var int   ilast_pl_bar = -999
+var int   ibias = 0
+
+if not na(iph)
+    ilast_ph := iph
+    ilast_ph_bar := bar_index - internal_len
+if not na(ipl)
+    ilast_pl := ipl
+    ilast_pl_bar := bar_index - internal_len
+
+iph_ok = not na(ilast_ph)
+ipl_ok = not na(ilast_pl)
+
+ibos_bull = iph_ok and close > ilast_ph and close[1] <= ilast_ph and z_bull_ok
+ibos_bear = ipl_ok and close < ilast_pl and close[1] >= ilast_pl and z_bear_ok
+ichoch_bull = ibos_bull and ibias == -1
+ichoch_bear = ibos_bear and ibias == 1
+
+if ibos_bull or ichoch_bull
+    ibias := 1
+if ibos_bear or ichoch_bear
+    ibias := -1
+
+var int last_ilbl = -999
+int igap = math.max(2, internal_len)
+
+if show_internal
+    if ichoch_bull and (bar_index - last_ilbl) >= igap
+        _ix = math.max(ilast_ph_bar, bar_index - 80)
+        line.new(_ix, ilast_ph, bar_index, ilast_ph, color=color.new(bull_col, 40), width=1, style=line.style_solid)
+        label.new(math.round((_ix + bar_index) / 2), ilast_ph, "iCHoCH", style=label.style_none, textcolor=color.new(bull_col, 0), size=size.tiny, yloc=yloc.price)
+        last_ilbl := bar_index
+    if ichoch_bear and (bar_index - last_ilbl) >= igap
+        _iy = math.max(ilast_pl_bar, bar_index - 80)
+        line.new(_iy, ilast_pl, bar_index, ilast_pl, color=color.new(bear_col, 40), width=1, style=line.style_solid)
+        label.new(math.round((_iy + bar_index) / 2), ilast_pl, "iCHoCH", style=label.style_none, textcolor=color.new(bear_col, 0), size=size.tiny, yloc=yloc.price)
+        last_ilbl := bar_index
+    if ibos_bull and not ichoch_bull and (bar_index - last_ilbl) >= igap
+        _iz = math.max(ilast_ph_bar, bar_index - 80)
+        line.new(_iz, ilast_ph, bar_index, ilast_ph, color=color.new(bull_col, 60), width=1, style=line.style_dashed)
+        label.new(math.round((_iz + bar_index) / 2), ilast_ph, "iBOS", style=label.style_none, textcolor=color.new(bull_col, 30), size=size.tiny, yloc=yloc.price)
+        last_ilbl := bar_index
+    if ibos_bear and not ichoch_bear and (bar_index - last_ilbl) >= igap
+        _iw = math.max(ilast_pl_bar, bar_index - 80)
+        line.new(_iw, ilast_pl, bar_index, ilast_pl, color=color.new(bear_col, 60), width=1, style=line.style_dashed)
+        label.new(math.round((_iw + bar_index) / 2), ilast_pl, "iBOS", style=label.style_none, textcolor=color.new(bear_col, 30), size=size.tiny, yloc=yloc.price)
+        last_ilbl := bar_index
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 2C — EQH / EQL (structure pivots)
+// ════════════════════════════════════════════════════════════
+if show_eqhl and not na(ms_ph) and not na(prev_ms_ph) and math.abs(ms_ph - prev_ms_ph) < eqhl_thresh * atr200
+    label.new(bar_index - ms_swing, ms_ph, "EQH", style=label.style_none, textcolor=color.new(bear_col, 0), size=size.tiny, yloc=yloc.abovebar)
+
+if show_eqhl and not na(ms_pl) and not na(prev_ms_pl) and math.abs(ms_pl - prev_ms_pl) < eqhl_thresh * atr200
+    label.new(bar_index - ms_swing, ms_pl, "EQL", style=label.style_none, textcolor=color.new(bull_col, 0), size=size.tiny, yloc=yloc.belowbar)
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 2D — FAIR VALUE GAPS (simple 3-bar)
+// ════════════════════════════════════════════════════════════
+bull_fvg = low > high[2] and high[1] > low[1]
+bear_fvg = high < low[2] and low[1] < high[1]
+
+if show_fvg and bull_fvg
+    box.new(bar_index - 2, low, bar_index + fvg_extend, high[2], bgcolor=color.new(bull_col, 88), border_color=color.new(bull_col, 50), border_width=1)
+
+if show_fvg and bear_fvg
+    box.new(bar_index - 2, high, bar_index + fvg_extend, low[2], bgcolor=color.new(bear_col, 88), border_color=color.new(bear_col, 50), border_width=1)
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 2E — PREMIUM / EQUILIBRIUM / DISCOUNT (LuxAlgo-style bands)
+// ════════════════════════════════════════════════════════════
+// Geometry from LuxAlgo drawPremiumDiscountZones(): range = lookback high/low vs their trailing swing.
+pd_hi = ta.highest(high, pd_lookback)
+pd_lo = ta.lowest(low, pd_lookback)
+float pd_t = pd_hi
+float pd_b = pd_lo
+float pd_prem_top = pd_t
+float pd_prem_bot = 0.95 * pd_t + 0.05 * pd_b
+float pd_eq_top = 0.525 * pd_t + 0.475 * pd_b
+float pd_eq_bot = 0.525 * pd_b + 0.475 * pd_t
+float pd_disc_top = 0.95 * pd_b + 0.05 * pd_t
+float pd_disc_bot = pd_b
+
+// Disjoint classification by equilibrium band (matches ICT-style “above/below equilibrium”)
+in_pd_equilibrium = close >= pd_eq_bot and close <= pd_eq_top
+in_pd_premium = close > pd_eq_top
+in_pd_discount = close < pd_eq_bot
+in_premium = in_pd_premium
+in_discount = in_pd_discount
+
+var box pd_box_prem = na
+var box pd_box_eq = na
+var box pd_box_disc = na
+var label pd_lbl_prem = na
+var label pd_lbl_eq = na
+var label pd_lbl_disc = na
+
+if show_pd_zone and barstate.islast and pd_t != pd_b
+    int pd_left = bar_index - pd_lookback
+    int pd_right = bar_index + 10
+    box.delete(pd_box_prem)
+    box.delete(pd_box_eq)
+    box.delete(pd_box_disc)
+    label.delete(pd_lbl_prem)
+    label.delete(pd_lbl_eq)
+    label.delete(pd_lbl_disc)
+    pd_box_prem := box.new(pd_left, pd_prem_top, pd_right, pd_prem_bot, bgcolor=color.new(pd_col_prem, 82), border_color=color.new(pd_col_prem, 55), border_width=1)
+    pd_box_eq := box.new(pd_left, pd_eq_top, pd_right, pd_eq_bot, bgcolor=color.new(pd_col_eq, 82), border_color=color.new(pd_col_eq, 55), border_width=1)
+    pd_box_disc := box.new(pd_left, pd_disc_top, pd_right, pd_disc_bot, bgcolor=color.new(pd_col_disc, 82), border_color=color.new(pd_col_disc, 55), border_width=1)
+    if pd_zone_labels
+        int mid_x = math.round(0.5 * (pd_left + pd_right))
+        pd_lbl_prem := label.new(mid_x, pd_prem_top, "Premium", color=color(na), textcolor=pd_col_prem, style=label.style_label_down, size=size.tiny, yloc=yloc.price)
+        pd_lbl_eq := label.new(pd_right, math.avg(pd_eq_top, pd_eq_bot), "Equilibrium", color=color(na), textcolor=pd_col_eq, style=label.style_label_left, size=size.tiny, yloc=yloc.price)
+        pd_lbl_disc := label.new(mid_x, pd_disc_bot, "Discount", color=color(na), textcolor=pd_col_disc, style=label.style_label_up, size=size.tiny, yloc=yloc.price)
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 3 — AUTO TRENDLINES
+// ════════════════════════════════════════════════════════════
+tl_ph = ta.pivothigh(high, tl_pivot_len, tl_pivot_len)
+tl_pl = ta.pivotlow(low,   tl_pivot_len, tl_pivot_len)
+
+var float tl_ph1 = na
+var int   tl_ph1_bar = -999
+var float tl_ph2 = na
+var int   tl_ph2_bar = -999
+var float tl_pl1 = na
+var int   tl_pl1_bar = -999
+var float tl_pl2 = na
+var int   tl_pl2_bar = -999
+
+if not na(tl_ph)
+    tl_ph2 := tl_ph1
+    tl_ph2_bar := tl_ph1_bar
+    tl_ph1 := tl_ph
+    tl_ph1_bar := bar_index - tl_pivot_len
+
+if not na(tl_pl)
+    tl_pl2 := tl_pl1
+    tl_pl2_bar := tl_pl1_bar
+    tl_pl1 := tl_pl
+    tl_pl1_bar := bar_index - tl_pivot_len
+
+// Trendline projected value at current bar
+tl_bear_slope = not na(tl_ph1) and not na(tl_ph2) and tl_ph1_bar != tl_ph2_bar ?
+     (tl_ph1 - tl_ph2) / (tl_ph1_bar - tl_ph2_bar) : na
+tl_bull_slope = not na(tl_pl1) and not na(tl_pl2) and tl_pl1_bar != tl_pl2_bar ?
+     (tl_pl1 - tl_pl2) / (tl_pl1_bar - tl_pl2_bar) : na
+
+tl_bear_val = not na(tl_bear_slope) ?
+     tl_ph1 + tl_bear_slope * (bar_index - tl_ph1_bar) : na
+tl_bull_val = not na(tl_bull_slope) ?
+     tl_pl1 + tl_bull_slope * (bar_index - tl_pl1_bar) : na
+
+// Trendline break detection
+tl_bear_break = not na(tl_bear_val) and close > tl_bear_val and close[1] <= tl_bear_val[1]
+tl_bull_break = not na(tl_bull_val) and close < tl_bull_val and close[1] >= tl_bull_val[1]
+
+// Retest detection — one-shot per break
+var bool tl_bear_broken   = false
+var bool tl_bull_broken   = false
+var bool tl_bear_retested = false
+var bool tl_bull_retested = false
+var int  tl_bear_break_bar = -999
+var int  tl_bull_break_bar = -999
+
+if not na(tl_ph)
+    tl_bear_broken   := false
+    tl_bear_retested := false
+    tl_bear_break_bar := -999
+
+if not na(tl_pl)
+    tl_bull_broken   := false
+    tl_bull_retested := false
+    tl_bull_break_bar := -999
+
+if tl_bear_break
+    tl_bear_broken   := true
+    tl_bear_retested := false
+    tl_bear_break_bar := bar_index
+if tl_bull_break
+    tl_bull_broken   := true
+    tl_bull_retested := false
+    tl_bull_break_bar := bar_index
+
+tl_bear_retest = tl_bear_broken and not tl_bear_retested and not na(tl_bear_val) and
+                 (bar_index - tl_bear_break_bar) > 1 and
+                 math.abs(close - tl_bear_val) / close * 100 <= tl_retest_pct and
+                 close > tl_bear_val
+
+tl_bull_retest = tl_bull_broken and not tl_bull_retested and not na(tl_bull_val) and
+                 (bar_index - tl_bull_break_bar) > 1 and
+                 math.abs(close - tl_bull_val) / close * 100 <= tl_retest_pct and
+                 close < tl_bull_val
+
+if tl_bear_retest
+    tl_bear_retested := true
+if tl_bull_retest
+    tl_bull_retested := true
+
+// Draw trendlines
+var line tl_bear_line = na
+var line tl_bull_line = na
+
+if show_tl
+    if not na(tl_ph1) and not na(tl_ph2)
+        line.delete(tl_bear_line)
+        tl_bear_line := line.new(tl_ph2_bar, tl_ph2, bar_index, tl_bear_val,
+             color=color.new(bear_col, 30), width=1,
+             style=tl_bear_broken ? line.style_dashed : line.style_solid,
+             extend=extend.right)
+    if not na(tl_pl1) and not na(tl_pl2)
+        line.delete(tl_bull_line)
+        tl_bull_line := line.new(tl_pl2_bar, tl_pl2, bar_index, tl_bull_val,
+             color=color.new(bull_col, 30), width=1,
+             style=tl_bull_broken ? line.style_dashed : line.style_solid,
+             extend=extend.right)
+
+// TL break/retest — dot + text anchored to TL value (no floating boxes)
+if show_tl_break
+    if tl_bear_break
+        label.new(bar_index, tl_bear_val, "◆  Break",
+             style=label.style_none, textcolor=color.new(bull_col, 0),
+             size=size.small, yloc=yloc.belowbar)
+    if tl_bull_break
+        label.new(bar_index, tl_bull_val, "◆  Break",
+             style=label.style_none, textcolor=color.new(bear_col, 0),
+             size=size.small, yloc=yloc.abovebar)
+    if tl_bear_retest
+        label.new(bar_index, tl_bear_val, "●  Retest",
+             style=label.style_none, textcolor=color.new(bull_col, 0),
+             size=size.small, yloc=yloc.belowbar)
+    if tl_bull_retest
+        label.new(bar_index, tl_bull_val, "●  Retest",
+             style=label.style_none, textcolor=color.new(bear_col, 0),
+             size=size.small, yloc=yloc.abovebar)
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 4 — SESSION HIGH / LOW + PDH / PDL
+// ════════════════════════════════════════════════════════════
+var float day_high = high
+var float day_low  = low
+var float pdh      = na
+var float pdl      = na
+
+if is_new_day
+    pdh := day_high
+    pdl := day_low
+    day_high := high
+    day_low  := low
+else
+    day_high := math.max(day_high, high)
+    day_low  := math.min(day_low,  low)
+
+in_asia   = not na(time(timeframe.period, asia_sess))
+in_london = not na(time(timeframe.period, london_sess))
+in_ny     = not na(time(timeframe.period, ny_sess))
+
+var float asia_hi   = na
+var float asia_lo   = na
+var float london_hi = na
+var float london_lo = na
+var float ny_hi     = na
+var float ny_lo     = na
+var bool  was_asia   = false
+var bool  was_london = false
+var bool  was_ny     = false
+
+if in_asia
+    asia_hi := na(asia_hi) or was_asia == false ? high : math.max(asia_hi, high)
+    asia_lo := na(asia_lo) or was_asia == false ? low  : math.min(asia_lo, low)
+    was_asia := true
+else if was_asia
+    was_asia := false
+
+if in_london
+    london_hi := na(london_hi) or was_london == false ? high : math.max(london_hi, high)
+    london_lo := na(london_lo) or was_london == false ? low  : math.min(london_lo, low)
+    was_london := true
+else if was_london
+    was_london := false
+
+if in_ny
+    ny_hi := na(ny_hi) or was_ny == false ? high : math.max(ny_hi, high)
+    ny_lo := na(ny_lo) or was_ny == false ? low  : math.min(ny_lo, low)
+    was_ny := true
+else if was_ny
+    was_ny := false
+
+var line pdh_line = na
+var line pdl_line = na
+
+if show_pdh_pdl and not na(pdh) and barstate.islast
+    line.delete(pdh_line)
+    line.delete(pdl_line)
+    pdh_line := line.new(bar_index - 50, pdh, bar_index + 20, pdh,
+         color=color.new(bear_col, 20), width=1, style=line.style_dotted,
+         extend=extend.right)
+    pdl_line := line.new(bar_index - 50, pdl, bar_index + 20, pdl,
+         color=color.new(bull_col, 20), width=1, style=line.style_dotted,
+         extend=extend.right)
+
+pdh_sweep     = not na(pdh) and high > pdh * (1 + sess_liq_pct/100) and close < pdh
+pdl_sweep     = not na(pdl) and low  < pdl * (1 - sess_liq_pct/100) and close > pdl
+near_pdh      = not na(pdh) and math.abs(close - pdh) / close * 100 <= sess_liq_pct
+near_pdl      = not na(pdl) and math.abs(close - pdl) / close * 100 <= sess_liq_pct
+near_sess_hi  = (not na(asia_hi) and math.abs(close - asia_hi) / close * 100 <= sess_liq_pct) or(not na(london_hi) and math.abs(close - london_hi) / close * 100 <= sess_liq_pct)
+near_sess_lo  = (not na(asia_lo) and math.abs(close - asia_lo) / close * 100 <= sess_liq_pct) or(not na(london_lo) and math.abs(close - london_lo) / close * 100 <= sess_liq_pct)
+
+sess_level_bull = near_pdl or near_sess_lo or pdl_sweep
+sess_level_bear = near_pdh or near_sess_hi or pdh_sweep
+
+// ════════════════════════════════════════════════════════════
+// ░░  LAYER 5 — VOLUME PROFILE (POC / VAH / VAL)
+// ════════════════════════════════════════════════════════════
+vp_high  = ta.highest(high, vp_bars)
+vp_low   = ta.lowest(low,   vp_bars)
+vp_range = vp_high - vp_low
+bucket_size = vp_range / vp_rows
+
+var float poc      = na
+var float vah      = na
+var float val_line = na
+var float max_vol_price = na
+var float max_vol       = 0.0
+
+if bar_index >= vp_bars
+    max_vol       := 0.0
+    max_vol_price := close
+    for i = 0 to vp_bars - 1
+        if volume[i] > max_vol
+            max_vol       := volume[i]
+            max_vol_price := (high[i] + low[i] + close[i]) / 3.0
+    poc := max_vol_price
+
+    float vwap_sum  = 0.0
+    float vol_total = 0.0
+    float vwsum2    = 0.0
+    for i = 0 to vp_bars - 1
+        float tp = (high[i] + low[i] + close[i]) / 3.0
+        vwap_sum  += tp * volume[i]
+        vol_total += volume[i]
+        vwsum2    += tp * tp * volume[i]
+    float vwap_val = vol_total > 0 ? vwap_sum / vol_total : close
+    float variance = vol_total > 0 ? vwsum2 / vol_total - vwap_val * vwap_val : 0.0
+    float sigma    = variance > 0 ? math.sqrt(variance) : atr14
+    vah      := vwap_val + sigma
+    val_line := vwap_val - sigma
+
+near_poc = not na(poc)      and math.abs(close - poc)      / close * 100 <= poc_zone_pct
+near_vah = not na(vah)      and math.abs(close - vah)      / close * 100 <= poc_zone_pct
+near_val = not na(val_line) and math.abs(close - val_line) / close * 100 <= poc_zone_pct
+vp_bull_conf = near_poc or near_val
+vp_bear_conf = near_poc or near_vah
+
+var line poc_line  = na
+var line vah_line  = na
+var line val_line2 = na
+
+if show_vp and not na(poc) and barstate.islast
+    line.delete(poc_line)
+    line.delete(vah_line)
+    line.delete(val_line2)
+    poc_line  := line.new(bar_index - vp_bars, poc,      bar_index, poc,
+         color=color.new(color.yellow, 20), width=2, style=line.style_solid)
+    vah_line  := line.new(bar_index - vp_bars, vah,      bar_index, vah,
+         color=color.new(bear_col, 40), width=1, style=line.style_dashed)
+    val_line2 := line.new(bar_index - vp_bars, val_line, bar_index, val_line,
+         color=color.new(bull_col, 40), width=1, style=line.style_dashed)
+
+// ════════════════════════════════════════════════════════════
+// ░░  SIGNAL ENGINE — 3-LAYER CONFLUENCE
+// ════════════════════════════════════════════════════════════
+long_s1 = choch_bull          ? 1 : 0   // CHoCH (mandatory trigger)
+long_s2 = in_bull_ob          ? 1 : 0   // OB tap
+long_s3 = recent_bull_sweep   ? 1 : 0   // Liq sweep
+long_s4 = vp_bull_conf        ? 1 : 0   // Volume profile
+long_s5 = sess_level_bull     ? 1 : 0   // Session level
+long_s6 = tl_bear_retest      ? 1 : 0   // TL retest
+
+short_s1 = choch_bear         ? 1 : 0
+short_s2 = in_bear_ob         ? 1 : 0
+short_s3 = recent_bear_sweep  ? 1 : 0
+short_s4 = vp_bear_conf       ? 1 : 0
+short_s5 = sess_level_bear    ? 1 : 0
+short_s6 = tl_bull_retest     ? 1 : 0
+
+long_score  = long_s1  + long_s2  + long_s3  + long_s4  + long_s5  + long_s6
+short_score = short_s1 + short_s2 + short_s3 + short_s4 + short_s5 + short_s6
+
+var int last_sig_bar = -999
+cooldown_ok = (bar_index - last_sig_bar) >= sig_cooldown
+
+long_signal  = long_s1  == 1 and long_score  >= min_score and cooldown_ok
+short_signal = short_s1 == 1 and short_score >= min_score and cooldown_ok
+
+if long_signal or short_signal
+    last_sig_bar := bar_index
+
+// ════════════════════════════════════════════════════════════
+// ░░ STRATEGY ENTRIES
+// ════════════════════════════════════════════════════════════
+
+// Only trade high conviction
+trade_long  = long_signal  and long_score  >= 1
+trade_short = short_signal and short_score >= 1
+
+// // Long Entry
+// if long_signal
+//     strategy.entry("LONG", strategy.long)
+
+// // Short Entry
+// if short_signal
+//     strategy.entry("SHORT", strategy.short)
+
+if trade_long and strategy.position_size <= 0
+    strategy.entry("LONG", strategy.long)
+
+if trade_short and strategy.position_size >= 0
+    strategy.entry("SHORT", strategy.short)
+
+// ════════════════════════════════════════════════════════════
+// ░░  SIGNAL LABELS
+// ════════════════════════════════════════════════════════════
+score_breakdown_long() =>
+    "CHoCH" + (long_s2==1?" OB":"") + (long_s3==1?" LIQ":"") +(long_s4==1?" VP":"") + (long_s5==1?" SESS":"") + (long_s6==1?" TL":"")
+
+score_breakdown_short() =>
+    "CHoCH" + (short_s2==1?" OB":"") + (short_s3==1?" LIQ":"") +(short_s4==1?" VP":"") + (short_s5==1?" SESS":"") + (short_s6==1?" TL":"")
+
+if show_signals and long_signal
+    _sz  = long_score >= 5 ? size.normal : size.normal
+    _col = long_score >= 5 ? color.new(bull_col, 0) : color.new(bull_col, 25)
+    _txt = "▲ LONG" +       (show_score ? " [" + str.tostring(long_score) + "/6]" : "") +       "\n" + score_breakdown_long()
+    label.new(bar_index, low - atr14 * 1.2, _txt,
+         style=label.style_label_up, color=_col,
+         textcolor=color.white, size=_sz)
+
+if show_signals and short_signal
+    _sz  = short_score >= 5 ? size.normal : size.normal
+    _col = short_score >= 5 ? color.new(bear_col, 0) : color.new(bear_col, 25)
+    _txt = "▼ SHORT" +       (show_score ? " [" + str.tostring(short_score) + "/6]" : "") +       "\n" + score_breakdown_short()
+    label.new(bar_index, high + atr14 * 1.2, _txt,
+         style=label.style_label_down, color=_col,
+         textcolor=color.white, size=_sz)
+
+// ════════════════════════════════════════════════════════════
+// ░░  KNN SUPERTREND (LuxAlgo-style, CC BY-NC-SA — adapted)
+// ════════════════════════════════════════════════════════════
+st_knn = st_mode == "KNN (LuxAlgo-style)"
+
+format_dyn_vol(float vol) =>
+    vol >= 1000000000 ? str.format("{0,number,#.##}B", vol / 1000000000) :
+     vol >= 1000000 ? str.format("{0,number,#.##}M", vol / 1000000) :
+     vol >= 1000 ? str.format("{0,number,#.#}K", vol / 1000) :
+     str.tostring(vol, "#")
+
+bubble_size_from_vol() =>
+    float avg_v = ta.sma(volume, 100)
+    float std_v = ta.stdev(volume, 100)
+    float zv = (volume - avg_v) / nz(std_v, 1.0)
+    int(math.max(8, math.min(30, 14 + (zv * 2))))
+
+render_st_orb(int bar_x, float y_ctr, string txt, int base_sz, color theme_c, float gap, bool is_bull) =>
+    label.new(bar_x, y_ctr - (gap * 1.5), style=label.style_circle, color=color.new(color.black, 80), size=base_sz + 2, yloc=yloc.price)
+    label.new(bar_x, y_ctr, style=label.style_circle, color=color.new(theme_c, 70), size=base_sz + 1, yloc=yloc.price)
+    label.new(bar_x, y_ctr, style=label.style_circle, color=color.new(theme_c, 15), size=base_sz, yloc=yloc.price)
+    label.new(bar_x, y_ctr + (gap * 0.5), style=label.style_circle, color=color.new(color.white, 85), size=int(base_sz * 0.7), yloc=yloc.price)
+    label.new(bar_x, y_ctr + gap, style=label.style_circle, color=color.new(color.white, 40), size=int(base_sz * 0.2), yloc=yloc.price)
+    float ly = is_bull ? y_ctr - (gap * 8.0) : y_ctr + (gap * 8.0)
+    label.new(bar_x, ly, text=txt, style=is_bull ? label.style_label_up : label.style_label_down, color=color.new(color.black, 40), textcolor=color.white, size=size.small, yloc=yloc.price)
+
+float knn_src = knn_smooth_src ? ta.hma(close, knn_hma_len) : close
+float knn_f1 = ta.rsi(knn_src, 14)
+float knn_f2 = (ta.atr(14) / knn_src) * 100
+[knn_st_val, knn_st_dir] = ta.supertrend(knn_st_factor, knn_st_atr)
+int knn_target_trend = knn_st_dir < 0 ? 1 : -1
+
+var float knn_ml_prob = 50.0
+if st_knn and bar_index > knn_window
+    float bull_votes = 0.0
+    float bear_votes = 0.0
+    array<float> dists = array.new_float(0)
+    for i = 1 to knn_window
+        float di = math.sqrt(math.pow(knn_f1 - knn_f1[i], 2) + math.pow(knn_f2 - knn_f2[i], 2))
+        array.push(dists, di)
+    array<float> sorted_d = array.copy(dists)
+    array.sort(sorted_d)
+    int th_i = math.min(knn_neighbors - 1, array.size(sorted_d) - 1)
+    float dist_th = array.get(sorted_d, th_i)
+    for j = 0 to array.size(dists) - 1
+        if array.get(dists, j) <= dist_th
+            if knn_target_trend[j + 1] > 0
+                bull_votes += 1
+            else
+                bear_votes += 1
+    float vote_sum = bull_votes + bear_votes
+    knn_ml_prob := vote_sum > 0 ? (bull_votes / vote_sum) * 100 : nz(knn_ml_prob[1], 50.0)
+
+float knn_smooth_prob = ta.ema(knn_ml_prob, knn_prob_ema)
+
+var bool knn_ml_bull = false
+if st_knn
+    if knn_smooth_prob > 50 + knn_ml_buffer_pct
+        knn_ml_bull := true
+    else if knn_smooth_prob < 50 - knn_ml_buffer_pct
+        knn_ml_bull := false
+
+float knn_intensity = knn_ml_bull ? (knn_smooth_prob - 50) * 2 : (50 - knn_smooth_prob) * 2
+float knn_glow_pow = math.pow(math.max(0, knn_intensity) / 100, knn_vibrancy) * 100
+color knn_bull_glow = color.from_gradient(knn_glow_pow, 0, 100, color.new(st_bull_knn_col, 100), color.new(st_bull_knn_col, 75))
+color knn_bear_glow = color.from_gradient(knn_glow_pow, 0, 100, color.new(st_bear_knn_col, 100), color.new(st_bear_knn_col, 75))
+color knn_candle_bull = color.from_gradient(knn_glow_pow, 0, 100, color.new(st_bull_knn_col, 85), color.new(st_bull_knn_col, 20))
+color knn_candle_bear = color.from_gradient(knn_glow_pow, 0, 100, color.new(st_bear_knn_col, 85), color.new(st_bear_knn_col, 20))
+
+float st_atr_ref = ta.atr(14)
+float st_body = math.abs(close - open)
+float st_upper_wick = high - math.max(open, close)
+float st_lower_wick = math.min(open, close) - low
+var int last_st_bubble_bar = 0
+
+bool knn_bear_rej = st_knn and not knn_ml_bull and high > knn_st_val and close < knn_st_val and st_upper_wick > st_body * knn_rej_mult and (bar_index - last_st_bubble_bar >= knn_bubble_gap)
+bool knn_bull_rej = st_knn and knn_ml_bull and low < knn_st_val and close > knn_st_val and st_lower_wick > st_body * knn_rej_mult and (bar_index - last_st_bubble_bar >= knn_bubble_gap)
+
+if show_st_bubbles and st_knn and knn_bull_rej
+    float stem = st_atr_ref * 1.5
+    float ogap = st_atr_ref * 0.05
+    line.new(bar_index, low, bar_index, low - stem, color=color.new(st_bull_knn_col, 60), style=line.style_dashed)
+    render_st_orb(bar_index, low - stem, format_dyn_vol(volume), bubble_size_from_vol(), st_bull_knn_col, ogap, true)
+    last_st_bubble_bar := bar_index
+
+if show_st_bubbles and st_knn and knn_bear_rej
+    float stem2 = st_atr_ref * 1.5
+    float ogap2 = st_atr_ref * 0.05
+    line.new(bar_index, high, bar_index, high + stem2, color=color.new(st_bear_knn_col, 60), style=line.style_dashed)
+    render_st_orb(bar_index, high + stem2, format_dyn_vol(volume), bubble_size_from_vol(), st_bear_knn_col, ogap2, false)
+    last_st_bubble_bar := bar_index
+
+// ════════════════════════════════════════════════════════════
+// ░░  PLOTS
+// ════════════════════════════════════════════════════════════
+[st_cl, st_cd] = ta.supertrend(st_classic_factor, st_classic_atr)
+
+color knn_st_line_col = st_knn ? (knn_ml_bull ? color.new(st_bull_knn_col, 60) : color.new(st_bear_knn_col, 60)) : color.new(color.gray, 100)
+plot(st_knn ? knn_st_val : na, "ST KNN line", knn_st_line_col, 2, plot.style_linebr)
+
+plot(not st_knn and st_cd < 0 ? st_cl : na, "ST Bull (classic)",
+     color=color.new(bull_col, 50), linewidth=1, style=plot.style_linebr)
+plot(not st_knn and st_cd > 0 ? st_cl : na, "ST Bear (classic)",
+     color=color.new(bear_col, 50), linewidth=1, style=plot.style_linebr)
+
+plotchar(show_st_glow_chars and st_knn and knn_ml_bull, "ST KNN bull char", ST_BAR_CHAR, location.bottom, knn_bull_glow, size=size.large)
+plotchar(show_st_glow_chars and st_knn and not knn_ml_bull, "ST KNN bear char", ST_BAR_CHAR, location.top, knn_bear_glow, size=size.large)
+
+bgcolor(structure_bias ==  1 ? color.new(bull_col, 97) :
+        structure_bias == -1 ? color.new(bear_col, 97) : na,
+        title="Structure Bias BG")
+
+barcolor(knn_grad_candles and st_knn ? (knn_ml_bull ? knn_candle_bull : knn_candle_bear) :
+         structure_bias ==  1 ? color.new(bull_col, 60) :
+         structure_bias == -1 ? color.new(bear_col, 60) : na)
+
+// ════════════════════════════════════════════════════════════
+// ░░ RISK MANAGEMENT
+// ════════════════════════════════════════════════════════════
+
+long_sl = close - atr14 * atr_mult_sl
+long_tp = close + atr14 * atr_mult_tp
+
+short_sl = close + atr14 * atr_mult_sl
+short_tp = close - atr14 * atr_mult_tp
+
+// Apply exits
+strategy.exit("LONG EXIT", from_entry="LONG", stop=long_sl, limit=long_tp)
+strategy.exit("SHORT EXIT", from_entry="SHORT", stop=short_sl, limit=short_tp)
+
+// ════════════════════════════════════════════════════════════
+// ░░  DASHBOARD
+// ════════════════════════════════════════════════════════════
+var table dash = table.new(position.top_right, 3, 17,
+     bgcolor=color.new(#0d0d0d, 5),
+     border_color=color.new(#2a2a2a, 30), border_width=1,
+     frame_color=color.new(#3a3a3a, 20), frame_width=1)
+
+dc(c, r, t, bg, tc) =>
+    table.cell(dash, c, r, t, bgcolor=bg, text_color=tc, text_size=size.small)
+
+if show_dash and barstate.islast
+    pos = color.new(#00c87a, 20)
+    neg = color.new(#ff3d3d, 20)
+    neu = color.new(#3a3a3a, 40)
+    hd  = color.new(#1a1a2e, 10)
+    wht = color.white
+
+    dc(0, 0, "SMC CONFLUENCE ENGINE", hd,  wht)
+    dc(1, 0, "BULL",                  hd,  wht)
+    dc(2, 0, "BEAR",                  hd,  wht)
+
+    dc(0, 1, "📐 SMC Bias",    neu, wht)
+    dc(1, 1, structure_bias ==  1 ? "BULL ✓" : "—", structure_bias ==  1 ? pos : neu, wht)
+    dc(2, 1, structure_bias == -1 ? "BEAR ✓" : "—", structure_bias == -1 ? neg : neu, wht)
+
+    dc(0, 2, "🔄 CHoCH",       neu, wht)
+    dc(1, 2, choch_bull ? "ACTIVE ✓" : "—", choch_bull ? pos : neu, wht)
+    dc(2, 2, choch_bear ? "ACTIVE ✓" : "—", choch_bear ? neg : neu, wht)
+
+    dc(0, 3, "🟦 Order Block", neu, wht)
+    dc(1, 3, in_bull_ob ? "IN ZONE ✓" : "—", in_bull_ob ? pos : neu, wht)
+    dc(2, 3, in_bear_ob ? "IN ZONE ✓" : "—", in_bear_ob ? neg : neu, wht)
+
+    dc(0, 4, "💧 Liq Sweep",   neu, wht)
+    dc(1, 4, recent_bull_sweep ? "RECENT ✓" : "—", recent_bull_sweep ? pos : neu, wht)
+    dc(2, 4, recent_bear_sweep ? "RECENT ✓" : "—", recent_bear_sweep ? neg : neu, wht)
+
+    dc(0, 5, "📊 Vol Profile", neu, wht)
+    dc(1, 5, near_val ? "VAL ✓" : near_poc ? "POC ✓" : "—",
+             (near_val or near_poc) ? pos : neu, wht)
+    dc(2, 5, near_vah ? "VAH ✓" : near_poc ? "POC ✓" : "—",
+             (near_vah or near_poc) ? neg : neu, wht)
+
+    dc(0, 6, "🕐 Session Lvl", neu, wht)
+    dc(1, 6, sess_level_bull ? "CONF ✓" : "—", sess_level_bull ? pos : neu, wht)
+    dc(2, 6, sess_level_bear ? "CONF ✓" : "—", sess_level_bear ? neg : neu, wht)
+
+    dc(0, 7, "📏 Trendline",   neu, wht)
+    dc(1, 7, tl_bear_retest ? "RETEST ✓" : tl_bear_break ? "BREAK" : "—",
+             tl_bear_retest ? pos : neu, wht)
+    dc(2, 7, tl_bull_retest ? "RETEST ✓" : tl_bull_break ? "BREAK" : "—",
+             tl_bull_retest ? neg : neu, wht)
+
+    dc(0, 8, "📐 MS Trend",    neu, wht)
+    dc(1, 8, ms_trend ==  1 ? "UP ✓" : "—",   ms_trend ==  1 ? pos : neu, wht)
+    dc(2, 8, ms_trend == -1 ? "DOWN ✓" : "—", ms_trend == -1 ? neg : neu, wht)
+
+    dc(0, 9, "⭐ Score",        hd,  wht)
+    dc(1, 9, str.tostring(long_score)  + "/6",
+             long_score  >= 4 ? pos : long_score  >= 2 ? color.new(color.orange, 30) : neu, wht)
+    dc(2, 9, str.tostring(short_score) + "/6",
+             short_score >= 4 ? neg : short_score >= 2 ? color.new(color.orange, 30) : neu, wht)
+
+    dc(0,10, "🚀 SIGNAL",      hd,  wht)
+    dc(1,10, long_signal  ? "▲ LONG"  : "—",
+             long_signal  ? (long_score  >= 5 ? pos : color.new(bull_col, 40)) : neu, wht)
+    dc(2,10, short_signal ? "▼ SHORT" : "—",
+             short_signal ? (short_score >= 5 ? neg : color.new(bear_col, 40)) : neu, wht)
+
+    dc(0,11, "📌 PDH / PDL",   neu, wht)
+    dc(1,11, not na(pdh) ? str.tostring(math.round(pdh, 2)) : "—", neu, wht)
+    dc(2,11, not na(pdl) ? str.tostring(math.round(pdl, 2)) : "—", neu, wht)
+
+    dc(0,12, "📊 POC / VAH/VAL", neu, wht)
+    dc(1,12, not na(poc) ? str.tostring(math.round(poc, 2)) : "—", neu, wht)
+    dc(2,12, not na(vah) ? str.tostring(math.round(vah, 2)) + "/" +         (not na(val_line) ? str.tostring(math.round(val_line, 2)) : "—") : "—", neu, wht)
+
+    dc(0,13, "📈 ATR14",       neu, wht)
+    dc(1,13, str.tostring(math.round(atr14, 4)), neu, wht)
+    dc(2,13, volume > vol_sma * 1.5 ? "HIGH VOL ⚡" : "Normal",
+             volume > vol_sma * 1.5 ? pos : neu, wht)
+
+    int hpz_n = 0
+    if use_ob_pool and ob_pool.size() > 0
+        for zi = 0 to ob_pool.size() - 1
+            zn = ob_pool.get(zi)
+            if zn.hpz and not zn.mit
+                hpz_n += 1
+
+    dc(0,14, "⚙ Mode / Z",     neu, wht)
+    dc(1,14, use_lux ? "Lux IDM" : "Pivot", neu, wht)
+    dc(2,14, use_msb_zscore ? str.tostring(momentum_z, "#.##") : "Z off",
+             use_msb_zscore ? (momentum_z > msb_zscore ? pos : momentum_z < -msb_zscore ? neg : neu) : neu, wht)
+
+    dc(0,15, "📦 HPZ / PD",    neu, wht)
+    dc(1,15, use_ob_pool ? str.tostring(hpz_n) + " HPZ" : "OB pool off", hpz_n > 0 ? pos : neu, wht)
+    string pd_dash_txt = not show_pd_zone ? "—" : in_pd_discount ? "Discount" : in_pd_equilibrium ? "Equilibrium" : in_pd_premium ? "Premium" : "—"
+    color pd_dash_col = not show_pd_zone ? neu : in_pd_discount ? pos : in_pd_equilibrium ? color.new(color.gray, 20) : in_pd_premium ? neg : neu
+    dc(2,15, pd_dash_txt, pd_dash_col, wht)
+
+    dc(0,16, "📈 Supertrend", neu, wht)
+    if st_mode == "KNN (LuxAlgo-style)"
+        dc(1,16, knn_ml_bull ? "KNN bull" : "KNN bear", knn_ml_bull ? pos : neg, wht)
+        dc(2,16, str.tostring(knn_smooth_prob, "#.#") + "% ML", neu, wht)
+    else
+        dc(1,16, "Classic", neu, wht)
+        dc(2,16, str.tostring(st_classic_factor, "#.#") + " / " + str.tostring(st_classic_atr) + " ATR", neu, wht)
+
+// ════════════════════════════════════════════════════════════
+// ░░  RUNTIME ALERTS (strategies: alertcondition() has no effect)
+// ════════════════════════════════════════════════════════════
+alert_freq_rt = alert_timing == "Bar close" ? alert.freq_once_per_bar_close : alert.freq_once_per_bar
+
+alert_msg_suffix() =>
+    " | " + syminfo.ticker + " @ " + str.tostring(close, format.mintick)
+
+if enable_runtime_alerts
+    if long_signal
+        if long_score >= 5
+            alert("🔥 HIGH CONVICTION LONG (5+)" + alert_msg_suffix(), alert_freq_rt)
+        else
+            alert("▲ LONG Signal (SMC-CE)" + alert_msg_suffix(), alert_freq_rt)
+    if short_signal
+        if short_score >= 5
+            alert("🔥 HIGH CONVICTION SHORT (5+)" + alert_msg_suffix(), alert_freq_rt)
+        else
+            alert("▼ SHORT Signal (SMC-CE)" + alert_msg_suffix(), alert_freq_rt)
+    if liq_sweep_bull
+        alert("💧 Sell-side liquidity swept" + alert_msg_suffix(), alert_freq_rt)
+    if liq_sweep_bear
+        alert("💧 Buy-side liquidity swept" + alert_msg_suffix(), alert_freq_rt)
+    if choch_bull
+        alert("🔄 CHoCH bullish" + alert_msg_suffix(), alert_freq_rt)
+    if choch_bear
+        alert("🔄 CHoCH bearish" + alert_msg_suffix(), alert_freq_rt)
+    if pdh_sweep
+        alert("⚠ PDH swept" + alert_msg_suffix(), alert_freq_rt)
+    if pdl_sweep
+        alert("⚠ PDL swept" + alert_msg_suffix(), alert_freq_rt)
