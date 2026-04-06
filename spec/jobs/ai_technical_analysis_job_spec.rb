@@ -30,5 +30,14 @@ RSpec.describe AiTechnicalAnalysisJob do
 
       expect(Rails.logger).to have_received(:error).at_least(:once)
     end
+
+    it 'raises when IndexConfigLoader returns no indices' do
+      allow(IndexConfigLoader).to receive(:load_indices).and_return([])
+
+      expect { described_class.new.send(:validate_index_key!, 'NIFTY') }.to raise_error(
+        ArgumentError,
+        /No indices loaded from IndexConfigLoader/
+      )
+    end
   end
 end

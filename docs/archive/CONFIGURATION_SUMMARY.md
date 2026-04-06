@@ -15,6 +15,7 @@ All configuration values are now properly sourced from `config/algo.yml` with EN
 ## Paper/Live Mode
 
 **Configuration:** `config/algo.yml`
+
 ```yaml
 paper_trading:
   enabled: true  # true = paper trading, false = live trading
@@ -22,6 +23,7 @@ paper_trading:
 ```
 
 **Code:** `config/initializers/orders_gateway.rb`
+
 - ✅ Reads from `AlgoConfig.fetch.dig(:paper_trading, :enabled)`
 - ✅ No ENV variable needed
 - ✅ No hardcoded values
@@ -29,6 +31,7 @@ paper_trading:
 ## Indicator Thresholds
 
 **Configuration:** `config/algo.yml`
+
 ```yaml
 signals:
   indicator_preset: moderate  # loose, moderate, tight, production
@@ -41,6 +44,7 @@ signals:
 ## Risk Management
 
 **Configuration:** `config/algo.yml`
+
 ```yaml
 risk:
   sl_pct: 0.30
@@ -55,6 +59,7 @@ risk:
 ## Watchlist
 
 **Configuration:** `config/algo.yml`
+
 ```yaml
 watchlist: []  # Array of "SEGMENT:SECURITY_ID" strings
 ```
@@ -64,16 +69,17 @@ watchlist: []  # Array of "SEGMENT:SECURITY_ID" strings
 ## ENV Variables (Security Only)
 
 ### Required (Security)
+
 - ✅ `CLIENT_ID` / `DHAN_CLIENT_ID` - API credentials
 - ✅ `ACCESS_TOKEN` / `DHAN_ACCESS_TOKEN` - API credentials
 
 ### Infrastructure (Acceptable)
+
 - `REDIS_URL` - Infrastructure
 - `RAILS_ENV` - Rails environment
 - `RAILS_MASTER_KEY` - Encrypted credentials
 - `BACKTEST_MODE` - Runtime flag
 - `SCRIPT_MODE` - Runtime flag
-- `DISABLE_TRADING_SERVICES` - Runtime flag
 
 ## Files Modified
 

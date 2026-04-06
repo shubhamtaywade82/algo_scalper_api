@@ -26,7 +26,6 @@ RSpec.describe TradingSystem::Daemon do
     supervisor.register(:reconciliation, reconciliation)
 allow(ENV).to receive(:[]).and_call_original
     allow(ENV).to receive(:[]).with('ENABLE_TRADING_SERVICES').and_return('true')
-    allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return(nil)
     allow(ENV).to receive(:[]).with('BACKTEST_MODE').and_return(nil)
     allow(ENV).to receive(:[]).with('SCRIPT_MODE').and_return(nil)
 

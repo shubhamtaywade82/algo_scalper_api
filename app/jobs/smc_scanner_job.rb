@@ -15,11 +15,9 @@ class SmcScannerJob < ApplicationJob
     log_market_closed_status if TradingSession::Service.market_closed?
 
     indices = IndexConfigLoader.load_indices
-    filtered_indices = filter_indices_by_expiry(indices)
-    Rails.logger.info("[SmcScannerJob] Scanning #{filtered_indices.size} indices...")
+    indices_with_instruments = build_indices_with_instruments(indices)
+    Rails.logger.info("[SmcScannerJob] Scanning #{indices_with_instruments.size} indices...")
 
-    indices_with_instruments = fetch_instruments(filtered_indices)
-    
     success_count = 0
     error_count = 0
 
@@ -45,16 +43,46 @@ class SmcScannerJob < ApplicationJob
     end
   end
 
-  def fetch_instruments(indices)
+  # One DB lookup per index: load instrument once, then apply expiry filter.
+  def build_indices_with_instruments(indices)
+    return [] if indices.empty?
+
+    max_days = max_expiry_days
     indices.filter_map do |idx_cfg|
-      instrument = Instrument.find_by_sid_and_segment(security_id: idx_cfg[:sid].to_s, segment_code: idx_cfg[:segment])
-      
-      if instrument
-        [idx_cfg, instrument]
-      else
+      instrument = Instrument.find_by_sid_and_segment(
+        security_id: idx_cfg[:sid].to_s,
+        segment_code: idx_cfg[:segment]
+      )
+      unless instrument
         Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
-        nil
+        next
       end
+
+      days = calculate_days_to_expiry(instrument)
+      if days > max_days
+        Rails.logger.info("[SmcScannerJob] Skipping #{idx_cfg[:key]}: expiry in #{days} days (> #{max_days})")
+        next
+      end
+
+      [idx_cfg, instrument]
+    end
+  rescue StandardError => e
+    Rails.logger.error("[SmcScannerJob] Error building index list: #{e.message}")
+    indices_without_expiry_filter(indices)
+  end
+
+  def indices_without_expiry_filter(indices)
+    indices.filter_map do |idx_cfg|
+      instrument = Instrument.find_by_sid_and_segment(
+        security_id: idx_cfg[:sid].to_s,
+        segment_code: idx_cfg[:segment]
+      )
+      unless instrument
+        Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
+        next
+      end
+
+      [idx_cfg, instrument]
     end
   end
 
@@ -82,33 +110,12 @@ class SmcScannerJob < ApplicationJob
   def process_ai_analysis(engine, idx_cfg, decision)
     Rails.logger.info("[SmcScannerJob] Getting AI analysis for #{idx_cfg[:key]}...")
     ai_analysis = engine.analyze_with_ai
-    
+
     if ai_analysis.present?
       send_ai_analysis_telegram_notification(idx_cfg[:key], decision, ai_analysis)
     else
       Rails.logger.warn("[SmcScannerJob] AI analysis empty for #{idx_cfg[:key]}")
     end
-  end
-
-  def filter_indices_by_expiry(indices)
-    return indices if indices.empty?
-
-    max_days = max_expiry_days
-    indices.select do |idx_cfg|
-      instrument = Instrument.find_by_sid_and_segment(security_id: idx_cfg[:sid].to_s, segment_code: idx_cfg[:segment])
-      next true unless instrument
-
-      days = calculate_days_to_expiry(instrument)
-      if days > max_days
-        Rails.logger.info("[SmcScannerJob] Skipping #{idx_cfg[:key]}: expiry in #{days} days (> #{max_days})")
-        false
-      else
-        true
-      end
-    end
-  rescue StandardError => e
-    Rails.logger.error("[SmcScannerJob] Error filtering: #{e.message}")
-    indices
   end
 
   def calculate_days_to_expiry(instrument)
@@ -121,7 +128,11 @@ class SmcScannerJob < ApplicationJob
       when Date then raw
       when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
       when String
-        Date.parse(raw) rescue nil
+        begin
+          Date.parse(raw)
+        rescue ArgumentError, TypeError
+          nil
+        end
       end
     end
 

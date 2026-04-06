@@ -14,12 +14,14 @@ This document covers deployment setup and operational procedures for the Algo Sc
 ## Infrastructure Requirements
 
 ### PostgreSQL
+
 - 14+ recommended
 - Ensure `pg_hba.conf` allows connections from the application server
 - All Solid Queue job tables live here (no separate Redis-based job queue)
 - Run `rails db:migrate` after every deploy
 
 ### Redis
+
 - Enable persistence (`appendonly yes`) to prevent loss of circuit breaker state and PnL caches during restarts
 - Redis keys used:
   - Tick cache: `segment:security_id` (TTL-based)
@@ -28,10 +30,12 @@ This document covers deployment setup and operational procedures for the Algo Sc
   - Position HWM: per tracker ID
 
 ### DhanHQ API Access
+
 - Production server IP must be whitelisted if DhanHQ requires IP-based security
 - TOTP credentials required for token auto-refresh: `DHAN_PIN`, `DHAN_TOTP_SECRET`
 
 ### WSL2 (Development on Windows)
+
 - Default WSL2 memory limit is 8 GB even on 32 GB systems
 - Set `memory=16GB` in `~/.wslconfig` to prevent OOM kills of the trading daemon
 
@@ -60,7 +64,6 @@ This document covers deployment setup and operational procedures for the Algo Sc
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ENABLE_TRADING_SERVICES` | — | Set to `"true"` to start trading daemon |
-| `DISABLE_TRADING_SERVICES` | — | Set to `"1"` to disable (overrides ENABLE) |
 | `RUN_MODE` | from algo.yml | Override run_mode: `production`, `exit_testing`, `entry_testing` |
 | `RAILS_ENV` | `development` | Rails environment |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Ollama model for AI analysis |
@@ -146,6 +149,7 @@ RAILS_ENV=production bundle exec rails solid_queue:start
 ### Graceful Shutdown
 
 The trading daemon handles `SIGINT` and `SIGTERM` for graceful `stop_all`:
+
 - Stops `Signal::Scheduler` (no new entries)
 - Waits for in-flight PnL flushes
 - Stops all 11 supervised services in reverse order
@@ -153,10 +157,12 @@ The trading daemon handles `SIGINT` and `SIGTERM` for graceful `stop_all`:
 ### Restarting After Config Changes
 
 `AlgoConfig.fetch` has a 30-second in-process cache. For `config/algo.yml` changes:
+
 - DB `settings` table overrides take effect within 30 seconds (no restart needed)
 - Direct `algo.yml` changes require trading daemon restart
 
 For `config/recurring.yml` changes:
+
 ```bash
 rails solid_queue:load_recurring
 # Restart jobs process
@@ -201,6 +207,7 @@ GET /api/health
 ```
 
 Returns system health including:
+
 - Trading daemon status
 - WebSocket feed health
 - Circuit breaker status
@@ -218,6 +225,7 @@ Returns system health including:
 ### Telegram Alerts
 
 If configured (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`):
+
 - Circuit breaker trips
 - Daily stats at market close
 - PnL milestones

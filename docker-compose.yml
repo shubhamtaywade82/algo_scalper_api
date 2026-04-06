@@ -30,7 +30,6 @@ services:
       RAILS_LOG_TO_STDOUT: "true"
       DATABASE_URL: postgres://postgres:postgres@db:5432/algo_scalper_api_development
       REDIS_URL: redis://redis:6379/0
-      DISABLE_TRADING_SERVICES: "1"
     depends_on:
       db:
         condition: service_healthy
@@ -51,7 +50,6 @@ services:
       RAILS_LOG_TO_STDOUT: "true"
       DATABASE_URL: postgres://postgres:postgres@db:5432/algo_scalper_api_development
       REDIS_URL: redis://redis:6379/0
-      DISABLE_TRADING_SERVICES: "1"
     depends_on:
       db:
         condition: service_healthy

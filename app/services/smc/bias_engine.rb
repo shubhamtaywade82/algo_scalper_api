@@ -216,6 +216,7 @@ module Smc
         instrument_id: @instrument.id,
         decision: decision.to_s,
         contexts: {
+          decision: decision.to_s,
           htf: htf.to_h,
           mtf: mtf.to_h,
           ltf: ltf.to_h

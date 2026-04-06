@@ -83,7 +83,6 @@ DhanHQ.logger = DhanhqFilteredLogger.new(DhanHQ.logger) unless DhanHQ.logger.is_
 skip_ws = Rails.env.test? ||
           ENV['BACKTEST_MODE'] == '1' ||
           ENV['SCRIPT_MODE'] == '1' ||
-          ENV['DISABLE_TRADING_SERVICES'] == '1' ||
           ($PROGRAM_NAME.include?('runner') if defined?($PROGRAM_NAME))
 
 Rails.application.configure do

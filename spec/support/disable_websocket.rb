@@ -7,9 +7,6 @@
 RSpec.configure do |config|
   # Disable WebSocket connections globally for all tests
   config.before(:suite) do
-    # Ensure trading services are disabled
-    ENV['DISABLE_TRADING_SERVICES'] = '1'
-
     # Remove credentials to prevent WebSocket initialization
     # (MarketFeedHub.enabled? checks for credentials)
     ENV.delete('DHAN_CLIENT_ID')

@@ -33,4 +33,16 @@ RSpec.describe Ai::GenerativeAiMarketGate do
       expect(described_class.skip?(force: false)).to be false
     end
   end
+
+  describe '.skip_explanation' do
+    it 'includes flag and market_closed state' do
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        { ai: { skip_generative_ai_when_market_closed: true } }
+      )
+      allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
+
+      expect(described_class.skip_explanation).to include('skip_generative_ai_when_market_closed=true')
+      expect(described_class.skip_explanation).to include('market_closed=true')
+    end
+  end
 end

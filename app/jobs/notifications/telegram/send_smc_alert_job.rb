@@ -117,6 +117,14 @@ module Notifications
       end
 
       def build_reasons(contexts, decision:)
+        context_decision = contexts[:decision]
+        if context_decision.present? && context_decision.to_s.casecmp(decision.to_s) != 0
+          Rails.logger.warn(
+            "[SendSmcAlertJob] decision/context mismatch: job_decision=#{decision.inspect} " \
+            "contexts[:decision]=#{context_decision.inspect}"
+          )
+        end
+
         htf_context = contexts[:htf] || {}
         mtf_context = contexts[:mtf] || {}
         ltf_context = contexts[:ltf] || {}

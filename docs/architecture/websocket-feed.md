@@ -82,8 +82,8 @@ MarketFeedHub#handle_tick(raw_tick)
 
 There is no `DHANHQ_WS_ENABLED` toggle: the tick feed starts whenever
 `Live::MarketFeedHub#enabled?` passes (Dhan credentials present, and not
-`BACKTEST_MODE=1`, `SCRIPT_MODE=1`, `DISABLE_TRADING_SERVICES=1`, or
-`rails runner`). In `RAILS_ENV=test`, `config/environments/test.rb` disables
+`BACKTEST_MODE=1`, `SCRIPT_MODE=1`, or `rails runner`). In `RAILS_ENV=test`,
+`config/environments/test.rb` disables
 `config.x.dhanhq` WebSocket flags and tests stub the clients.
 
 `Live::OrderUpdateHub` starts only in live mode (not paper); see

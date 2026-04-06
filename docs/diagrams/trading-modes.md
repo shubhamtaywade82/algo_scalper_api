@@ -131,7 +131,7 @@ behaviour (see `lib/trading_system/daemon.rb`, `Live::MarketFeedHub`).
 flowchart TD
   subgraph guard [Process guards]
     E1[ENABLE_TRADING_SERVICES=true] --> D[trading:daemon / supervisor]
-    E2{BACKTEST_MODE or SCRIPT_MODE or DISABLE_TRADING_SERVICES?} -->|blocks| NOSTART[Trading brain services not started / feed limited]
+    E2{BACKTEST_MODE or SCRIPT_MODE?} -->|blocks| NOSTART[Trading brain services not started / feed limited]
   end
 
   D --> MF[MarketFeedHub — ticks]

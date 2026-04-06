@@ -69,14 +69,20 @@ class AnalysisJob < ApplicationJob
     end
 
     # AI Analysis (slowest — do last, with timeout)
-    if stale.include?(:ai) && !Ai::GenerativeAiMarketGate.skip?(force: false)
-      data = safe_compute("#{index_key}:ai") do
-        Timeout.timeout(AI_TIMEOUT) do
-          engine = Smc::BiasEngine.new(instrument, delay_seconds: 0.5)
-          engine.analyze_with_ai
+    if stale.include?(:ai)
+      if Ai::GenerativeAiMarketGate.skip?(force: false)
+        Rails.logger.info(
+          "[AnalysisJob] #{index_key}: skipping AI refresh (#{Ai::GenerativeAiMarketGate.skip_explanation})"
+        )
+      else
+        data = safe_compute("#{index_key}:ai") do
+          Timeout.timeout(AI_TIMEOUT) do
+            engine = Smc::BiasEngine.new(instrument, delay_seconds: 0.5)
+            engine.analyze_with_ai
+          end
         end
+        AnalysisStore.write(index_key, :ai, data)
       end
-      AnalysisStore.write(index_key, :ai, data)
     end
   end
 

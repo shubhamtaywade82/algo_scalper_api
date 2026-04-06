@@ -33,14 +33,19 @@ module Api
     # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted.
     # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
     def update_bulk
-      # Permit only the explicitly whitelisted top-level keys — never use permit!
-      raw = params.expect(settings: [*PERMITTED_SETTINGS_KEYS]).to_h
+      # Permit only the explicitly whitelisted top-level keys under `settings` — never use permit!
+      # rubocop:disable Rails/StrongParametersExpect -- require+permit keeps nesting and bad_request handling explicit
+      raw = params.require(:settings).permit(*PERMITTED_SETTINGS_KEYS).to_h
+      # rubocop:enable Rails/StrongParametersExpect
       new_config = raw.deep_symbolize_keys
 
       Setting.put('algo_config_overrides', new_config.to_json)
       AlgoConfig.reset!
 
       render json: { success: true, message: "Algo settings updated successfully" }
+    rescue ActionController::ParameterMissing => e
+      Rails.logger.warn("[SettingsController] update_bulk missing params: #{e.message}")
+      render json: { error: e.message }, status: :bad_request
     rescue StandardError => e
       Rails.logger.error("[SettingsController] update_bulk error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error

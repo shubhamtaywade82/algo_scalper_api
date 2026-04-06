@@ -23,7 +23,6 @@ RSpec.describe Live::MarketFeedHub do
     allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
     allow(ENV).to receive(:[]).with('CLIENT_ID').and_return(nil)
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
-    allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return(nil)
     allow(ENV).to receive(:[]).with('BACKTEST_MODE').and_return(nil)
     allow(ENV).to receive(:[]).with('SCRIPT_MODE').and_return(nil)
     allow(ENV).to receive(:[]).and_call_original

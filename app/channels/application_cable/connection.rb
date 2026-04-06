@@ -16,7 +16,13 @@ module ApplicationCable
 
     def dashboard_token_valid?
       expected = ENV['API_DASHBOARD_TOKEN'].presence
-      return true if expected.blank?
+      if expected.blank?
+        # Fail closed whenever the app considers itself production (including stubs in specs).
+        return false if Rails.env.production?
+        return true if Rails.env.local?
+
+        false
+      end
 
       provided = request.params[:token].presence || bearer_token_from_header
       provided.present? &&

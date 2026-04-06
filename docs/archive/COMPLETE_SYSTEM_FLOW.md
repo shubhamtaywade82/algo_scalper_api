@@ -1,7 +1,7 @@
 # Complete System Flow: From Initializer to Exit/EOD
 
 **Last Updated:** 2025-01-16 - Added TrendScorer toggle, market close checks, Redis UI
-**Repository:** https://github.com/shubhamtaywade82/algo_scalper_api/tree/new_trailing
+**Repository:** <https://github.com/shubhamtaywade82/algo_scalper_api/tree/new_trailing>
 
 ---
 
@@ -57,7 +57,6 @@
 │    - Rails.env.test?                                        │
 │    - Rails::Console defined                                 │
 │    - BACKTEST_MODE=1 or SCRIPT_MODE=1                      │
-│    - DISABLE_TRADING_SERVICES=1                            │
 │    - Not a web process (puma/rails server)                 │
 └───────────────────────┬─────────────────────────────────────┘
                         │
@@ -804,6 +803,7 @@ MarketFeedHub.handle_tick()
 **File:** `app/services/live/risk_manager_service.rb`
 **Thread:** `risk-manager`
 **Frequency:**
+
 - Active positions: 500ms (`loop_interval_active`)
 - No positions (demand-driven): 5000ms (`loop_interval_idle`)
 
@@ -1133,6 +1133,7 @@ MarketFeedHub.handle_tick()
   - Continues heartbeat if positions exist
 
 **Supervisor Initialization:**
+
 - If market closed on startup: Only starts `MarketFeedHub` (WebSocket only)
 - If market open on startup: Starts all services
 
@@ -1156,6 +1157,7 @@ MarketFeedHub.handle_tick()
 **Feature Flag:** `enable_demand_driven_services`
 
 **When Enabled:**
+
 - **RiskManagerService:** Sleeps 5000ms when `ActiveCache.empty?`
 - **PaperPnlRefresher:** Sleeps idle_interval when `ActiveCache.empty?`
 - Both services wake up on `positions.added` / `positions.removed` events
@@ -1192,11 +1194,13 @@ ActiveSupport::Notifications.subscribe('positions.removed') { wake_up! }
 **TTL:** None (persistent)
 
 **Writers:**
+
 - `PnlUpdaterService` (batch writes every 250ms)
 - `PaperPnlRefresher` (direct writes every 1s)
 - `RiskManagerService.update_paper_positions_pnl()` (every 1 minute)
 
 **Readers:**
+
 - `RiskManagerService.sync_position_pnl_from_redis()`
 - `RiskManagerService.ensure_all_positions_in_redis()`
 
@@ -1218,9 +1222,11 @@ ActiveSupport::Notifications.subscribe('positions.removed') { wake_up! }
 **TTL:** 24 hours
 
 **Writers:**
+
 - `MarketFeedHub.handle_tick()` (every tick)
 
 **Readers:**
+
 - `RiskManagerService.get_paper_ltp()` (fallback)
 - `ActiveCache.ensure_position_snapshot()` (fallback)
 
@@ -1241,10 +1247,12 @@ ActiveSupport::Notifications.subscribe('positions.removed') { wake_up! }
 **TTL:** 7 days
 
 **Writers:**
+
 - `ActiveCache.handle_tick()` (when peak updated)
 - `ActiveCache.add_position()` (on entry)
 
 **Readers:**
+
 - `ActiveCache.add_position()` (on entry, reload peaks)
 - `ActiveCache.reload_peaks()` (on startup)
 
@@ -1279,17 +1287,20 @@ MARKET_CLOSE_MINUTE = 30
 ### 12.2 Session Check Usage
 
 **EntryGuard:**
+
 ```ruby
 session_check = TradingSession::Service.entry_allowed?
 return false unless session_check[:allowed]
 ```
 
 **Signal::Scheduler:**
+
 ```ruby
 return if TradingSession::Service.market_closed?
 ```
 
 **RiskManagerService:**
+
 ```ruby
 if TradingSession::Service.market_closed?
   active_count = PositionTracker.active.count
@@ -1301,6 +1312,7 @@ end
 ```
 
 **Session End Exit:**
+
 ```ruby
 session_check = TradingSession::Service.should_force_exit?
 return unless session_check[:should_exit]
@@ -1471,6 +1483,7 @@ return unless session_check[:should_exit]
 ### 13.2 Features
 
 **Key Browsing:**
+
 - Pattern-based search (e.g., `pnl:*`, `tick:*`, `*`)
 - Database selection (0-15)
 - Pagination support (SCAN cursor-based)
@@ -1478,6 +1491,7 @@ return unless session_check[:should_exit]
 - TTL display
 
 **Live Tables:**
+
 - **PnL Keys Table:** Auto-refreshes every 2 seconds
   - Displays: Key, PnL (₹), PnL %, LTP, HWM, Updated, Actions
   - Color-coded: Green for positive, red for negative
@@ -1489,6 +1503,7 @@ return unless session_check[:should_exit]
   - Displays: Key, Type, Size/Count, TTL, Actions
 
 **Key Operations:**
+
 - View key details (modal popup with full value)
 - Delete keys (with confirmation)
 - Redis server info display
@@ -1496,10 +1511,12 @@ return unless session_check[:should_exit]
 ### 13.3 Security
 
 **Access Control:**
+
 - Only available in `Rails.env.development?`
 - Returns 403 Forbidden in production
 
 **Implementation:**
+
 ```ruby
 before_action :ensure_development
 
@@ -1512,6 +1529,7 @@ end
 ### 13.4 Configuration
 
 **Routes (development only):**
+
 ```ruby
 if Rails.env.development?
   get 'redis_ui', to: 'redis_ui#index'
@@ -1522,7 +1540,9 @@ end
 ```
 
 **ActionView Requirement:**
+
 - Conditionally enabled in `config/application.rb`:
+
   ```ruby
   require "action_view/railtie" if Rails.env.development?
   ```
@@ -1531,4 +1551,4 @@ end
 
 **Document Version:** 2.1
 **Last Updated:** 2025-01-16 - Added TrendScorer toggle, market close checks, Redis UI
-**Repository:** https://github.com/shubhamtaywade82/algo_scalper_api/tree/new_trailing
+**Repository:** <https://github.com/shubhamtaywade82/algo_scalper_api/tree/new_trailing>

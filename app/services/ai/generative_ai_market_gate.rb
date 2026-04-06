@@ -24,5 +24,13 @@ module Ai
     rescue StandardError
       false
     end
+
+    # Human-readable context for logs when +skip?+ is true (avoid silent job skips).
+    def self.skip_explanation
+      closed = TradingSession::Service.market_closed?
+      "skip_generative_ai_when_market_closed=#{flag_enabled?}, market_closed=#{closed}"
+    rescue StandardError => e
+      "gate state unavailable (#{e.class}: #{e.message})"
+    end
   end
 end

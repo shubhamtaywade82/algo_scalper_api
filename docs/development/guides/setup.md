@@ -26,7 +26,6 @@ DHAN_TOTP_SECRET="base32-totp-secret"
 
 # Trading Daemon Control
 ENABLE_TRADING_SERVICES=true                   # required for trading daemon
-# DISABLE_TRADING_SERVICES=1                   # force-disable trading services if set
 
 # Jobs Control (Solid Queue worker)
 ENABLE_JOBS=true                              # controls the jobs process invoked via ./bin/dev

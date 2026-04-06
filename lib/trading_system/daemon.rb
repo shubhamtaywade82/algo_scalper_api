@@ -44,7 +44,6 @@ module TradingSystem
     def enabled?(allow_in_test:)
       return false if Rails.env.test? && !allow_in_test
       return false if ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1'
-      return false if ENV['DISABLE_TRADING_SERVICES'] == '1'
 
       ENV['ENABLE_TRADING_SERVICES'].to_s == 'true'
     end
