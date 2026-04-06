@@ -22,9 +22,11 @@ module Smc
         { interval: ltf_interval_from(signals_cfg), last: nil, summary: nil, error: e.message }
       end
 
-      # @param snap [Hash] from {.fetch}
+      # @param snap [Hash, nil] from {.fetch}
       # @return [Boolean] true when gate passes or data missing (fail-open)
       def gate_passes?(final_direction, snap)
+        return true if snap.nil?
+
         last = snap[:last]
         return true if last.nil?
 

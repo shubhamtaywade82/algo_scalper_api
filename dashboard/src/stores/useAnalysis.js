@@ -57,8 +57,13 @@ export function useAnalysis() {
     }
   }
 
-  function fetchAll() {
-    INDICES.forEach(idx => fetchOne(idx))
+  /** @param {string[] | undefined} keys when set, only those in INDICES are polled */
+  function fetchAll(keys) {
+    const list =
+      Array.isArray(keys) && keys.length > 0
+        ? keys.filter((k) => INDICES.includes(k))
+        : INDICES
+    list.forEach((idx) => fetchOne(idx))
   }
 
   async function fetchHistorical(index, weeks = 8) {

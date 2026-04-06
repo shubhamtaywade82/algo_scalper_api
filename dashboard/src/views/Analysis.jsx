@@ -22,7 +22,7 @@ function watchlistTabKeys(subscribedRows) {
 export default function Analysis() {
   const dashCtx = useDashboardContext()
   const {
-    INDICES, liveData, isLoading, getError,
+    liveData, isLoading, getError,
     fetchOne, fetchAll, fetchHistorical, fetchAiSnapshot, ensureAutoLoadedDetails,
     activeIndex, historicalData, historicalLoading,
     snapshotLoading, snapshotData, snapshotError,
@@ -45,7 +45,7 @@ export default function Analysis() {
     ensureAutoLoadedDetails(idx, { skipAiSnapshot: gated })
   })
 
-  const anyLoading = createMemo(() => INDICES.some((idx) => isLoading(idx)))
+  const tabLoading = createMemo(() => tabKeys().some((idx) => isLoading(idx)))
 
   const panelData = createMemo(() => {
     const idx = selectedTab()
@@ -64,11 +64,11 @@ export default function Analysis() {
       <div class="flex items-center justify-between flex-wrap gap-4">
         <h2 class="text-xs font-black uppercase tracking-widest text-gray-400">Market Analysis</h2>
         <button
-          onClick={() => fetchAll()}
-          disabled={anyLoading()}
+          onClick={() => fetchAll(tabKeys())}
+          disabled={tabLoading()}
           class="px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest glass border border-white/10 text-gray-400 hover:text-white hover:border-primary-500/30 transition-all duration-300 disabled:opacity-40"
         >
-          {anyLoading() ? '↻ Loading...' : '↻ Refresh All'}
+          {tabLoading() ? '↻ Loading...' : '↻ Refresh All'}
         </button>
       </div>
 

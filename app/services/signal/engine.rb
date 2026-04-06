@@ -1387,24 +1387,16 @@ module Signal
           smc_decision = final_direction == :bullish ? :call : :put
         end
 
-        ltf_confluence_snap = nil
-        if signals_cfg.fetch(:enable_smc_confluence_digest, false) ||
-           signals_cfg.fetch(:enable_smc_confluence_gating, false)
-          ltf_confluence_snap = Smc::Confluence::LtfSnapshot.fetch(
-            instrument: instrument,
-            signals_cfg: signals_cfg
-          )
-        end
-
-        if signals_cfg.fetch(:enable_smc_confluence_gating, false) &&
-           !Smc::Confluence::LtfSnapshot.gate_passes?(final_direction, ltf_confluence_snap)
-          Rails.logger.info(
-            "[Signal] SMC Confluence gate BLOCKED #{index_cfg[:key]}: " \
-            "direction=#{final_direction} (LTF Pine confluence signal not confirmed)"
-          )
-          Signal::StateTracker.reset(index_cfg[:key])
-          return nil
-        end
+        ltf_confluence_snap = fetch_ltf_confluence_snapshot_if_needed(
+          instrument: instrument,
+          signals_cfg: signals_cfg
+        )
+        return nil if blocked_by_smc_confluence_gate?(
+          index_cfg: index_cfg,
+          final_direction: final_direction,
+          signals_cfg: signals_cfg,
+          snap: ltf_confluence_snap
+        )
 
         momentum_result = Signal::MomentumValidator.validate(
           instrument: instrument,
@@ -1413,7 +1405,37 @@ module Signal
         )
         Rails.logger.info("[Signal] Momentum Score for #{index_cfg[:key]}: #{momentum_result.score}/3")
 
-        out = { permission: permission, smc_decision: smc_decision, momentum_score: momentum_result.score }
+        gate_result_hash(
+          permission: permission,
+          smc_decision: smc_decision,
+          momentum_score: momentum_result.score,
+          signals_cfg: signals_cfg,
+          ltf_confluence_snap: ltf_confluence_snap
+        )
+      end
+
+      def fetch_ltf_confluence_snapshot_if_needed(instrument:, signals_cfg:)
+        digest = signals_cfg.fetch(:enable_smc_confluence_digest, false)
+        gating = signals_cfg.fetch(:enable_smc_confluence_gating, false)
+        return nil unless digest || gating
+
+        Smc::Confluence::LtfSnapshot.fetch(instrument: instrument, signals_cfg: signals_cfg)
+      end
+
+      def blocked_by_smc_confluence_gate?(index_cfg:, final_direction:, signals_cfg:, snap:)
+        return false unless signals_cfg.fetch(:enable_smc_confluence_gating, false)
+        return false if Smc::Confluence::LtfSnapshot.gate_passes?(final_direction, snap)
+
+        Rails.logger.info(
+          "[Signal] SMC Confluence gate BLOCKED #{index_cfg[:key]}: " \
+          "direction=#{final_direction} (LTF Pine confluence signal not confirmed)"
+        )
+        Signal::StateTracker.reset(index_cfg[:key])
+        true
+      end
+
+      def gate_result_hash(permission:, smc_decision:, momentum_score:, signals_cfg:, ltf_confluence_snap:)
+        out = { permission: permission, smc_decision: smc_decision, momentum_score: momentum_score }
         if signals_cfg.fetch(:enable_smc_confluence_digest, false) && ltf_confluence_snap
           out[:smc_confluence_ltf_summary] = ltf_confluence_snap[:summary]
         end

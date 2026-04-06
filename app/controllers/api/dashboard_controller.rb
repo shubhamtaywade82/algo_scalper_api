@@ -25,7 +25,10 @@ module Api
         ),
         config: {
           risk: AlgoConfig.fetch[:risk].slice(:sl_pct, :tp_pct, :hard_rupee_sl, :profit_floor, :trailing),
-          signals: AlgoConfig.fetch[:signals].slice(:enable_adx_filter, :adx, :enable_direction_gate),
+          signals: (AlgoConfig.fetch[:signals] || {}).slice(
+            :enable_adx_filter, :adx, :enable_direction_gate,
+            :enable_smc_confluence_digest, :enable_smc_confluence_gating, :smc_confluence_intervals
+          ).compact,
           time_restrictions: AlgoConfig.fetch[:trading_time_restrictions],
           market_session: {
             current: Live::TimeRegimeService.instance.current_regime,

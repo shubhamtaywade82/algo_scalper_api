@@ -42,6 +42,10 @@ RSpec.describe Smc::Confluence::LtfSnapshot do
   end
 
   describe '.gate_passes?' do
+    it 'returns true when snap is nil (fail-open)' do
+      expect(described_class.gate_passes?(:bullish, nil)).to be(true)
+    end
+
     it 'returns true when last is nil (fail-open)' do
       expect(described_class.gate_passes?(:bullish, { last: nil })).to be(true)
     end
