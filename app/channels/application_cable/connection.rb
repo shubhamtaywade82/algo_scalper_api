@@ -21,7 +21,7 @@ module ApplicationCable
         return false if Rails.env.production?
         return true if Rails.env.local?
 
-        false
+        return false
       end
 
       provided_raw = cable_dashboard_token.presence || bearer_token_from_header
