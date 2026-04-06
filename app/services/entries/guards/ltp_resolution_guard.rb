@@ -4,6 +4,7 @@ module Entries
   module Guards
     class LtpResolutionGuard
       DEFAULT_ENTRY_LTP_MAX_AGE_SECONDS = 2.0
+      WS_FRESH_TICK_POLL_ATTEMPTS = 40
 
       class << self
         def call(context)
@@ -103,7 +104,7 @@ module Entries
           if Live::MarketFeedHub.instance.running? && Live::MarketFeedHub.instance.connected?
             begin
               Live::MarketFeedHub.instance.subscribe(segment: segment, security_id: security_id)
-              15.times do
+              WS_FRESH_TICK_POLL_ATTEMPTS.times do
                 sleep(0.05)
                 cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
                 next unless cached_tick&.ltp&.to_f&.positive?
@@ -119,13 +120,21 @@ module Entries
           # Strategy 2: REST snapshot — valid entry price even when tick cache timestamp is stale
           derivative = Derivative.find_by(id: pick[:derivative_id]) if pick[:derivative_id].present?
           if derivative
-            api_ltp = derivative.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+            api_ltp = derivative.fetch_ltp_from_api_for_segment(
+              segment: segment,
+              security_id: security_id,
+              skip_tick_cache: true
+            )
             if api_ltp.present?
               return { ltp: BigDecimal(api_ltp.to_s), transport: :rest_derivative }
             end
           end
 
-          api_ltp = instrument.fetch_ltp_from_api_for_segment(segment: segment, security_id: security_id)
+          api_ltp = instrument.fetch_ltp_from_api_for_segment(
+            segment: segment,
+            security_id: security_id,
+            skip_tick_cache: true
+          )
           if api_ltp.present?
             return { ltp: BigDecimal(api_ltp.to_s), transport: :rest_instrument }
           end

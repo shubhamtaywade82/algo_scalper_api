@@ -76,6 +76,27 @@ RSpec.describe InstrumentHelpers, type: :concern do
     end
   end
 
+  describe '#fetch_ltp_from_api_for_segment' do
+    it 'hits REST when skip_tick_cache is true even if tick cache has a value' do
+      allow(hub).to receive_messages(running?: true, connected?: true)
+      stale_tick = instance_double(MarketTick, ltp: BigDecimal('99.0'))
+      allow(Live::TickQuery).to receive(:for_security).and_return(stale_tick)
+      allow(DhanHQ::Models::MarketFeed).to receive(:ltp).with({ 'NSE_FNO' => [12_345] }).and_return({
+        'status' => 'success',
+        'data' => { 'NSE_FNO' => { '12345' => { 'last_price' => 188.25 } } }
+      })
+
+      result = instrument.fetch_ltp_from_api_for_segment(
+        segment: 'NSE_FNO',
+        security_id: '12345',
+        skip_tick_cache: true
+      )
+
+      expect(result).to eq(188.25)
+      expect(DhanHQ::Models::MarketFeed).to have_received(:ltp)
+    end
+  end
+
   describe '#default_client_order_id' do
     it 'builds a deterministic prefix with side and security_id' do
       travel_to Time.zone.parse('2025-01-15 10:30:00') do
@@ -125,7 +146,7 @@ RSpec.describe InstrumentHelpers, type: :concern do
       allow(Live::RedisPnlCache.instance).to receive(:clear_tick)
     end
 
-    it 'creates an active position tracker' do
+    it 'creates an active position tracker' do # rubocop:disable RSpec/MultipleExpectations
       expect do
         instrument.after_order_track!(
           instrument: instrument,

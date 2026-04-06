@@ -261,7 +261,8 @@ module Signal
           primary_tf: primary_tf,
           effective_timeframe: effective_timeframe,
           confirmation_tf: confirmation_tf,
-          strategy_recommendation: strategy_recommendation[:recommendation]
+          strategy_recommendation: strategy_recommendation[:recommendation],
+          exit_testing_mode: exit_testing_mode
         )
         return unless analysis
 
@@ -362,7 +363,7 @@ module Signal
         { recommendation: recommendation, effective_timeframe: effective_timeframe }
       end
 
-      def analyze_primary_and_confirmation(index_cfg:, instrument:, signals_cfg:, primary_tf:, effective_timeframe:, confirmation_tf:, strategy_recommendation:)
+      def analyze_primary_and_confirmation(index_cfg:, instrument:, signals_cfg:, primary_tf:, effective_timeframe:, confirmation_tf:, strategy_recommendation:, exit_testing_mode: false)
         primary_analysis = if multi_indicator_enabled?(index_cfg, signals_cfg)
                              analyze_with_multi_indicators(
                                index_cfg: index_cfg,
@@ -416,13 +417,51 @@ module Signal
           Rails.logger.info("[Signal] Skipping confirmation timeframe for #{index_cfg[:key]} (using strategy recommendation: #{strategy_recommendation[:strategy_name]})")
         end
 
-        if final_direction == :avoid
-          log_avoid_reason(index_cfg, strategy_recommendation)
-          Signal::StateTracker.reset(index_cfg[:key])
-          return nil
+        direction_outcome = resolve_final_trade_direction(
+          index_cfg: index_cfg,
+          final_direction: final_direction,
+          primary_analysis: primary_analysis,
+          strategy_recommendation: strategy_recommendation,
+          exit_testing_mode: exit_testing_mode
+        )
+        return nil unless direction_outcome[:ok]
+
+        { final_direction: direction_outcome[:direction], primary_analysis: primary_analysis, confirmation_analysis: confirmation_analysis }
+      end
+
+      # Exit-testing needs entries even when 1m Supertrend+ADX says :avoid (e.g. neutral trend).
+      def resolve_final_trade_direction(index_cfg:, final_direction:, primary_analysis:, strategy_recommendation:, exit_testing_mode:)
+        if final_direction != :avoid
+          return { ok: true, direction: final_direction }
         end
 
-        { final_direction: final_direction, primary_analysis: primary_analysis, confirmation_analysis: confirmation_analysis }
+        if exit_testing_mode && primary_analysis[:status] == :ok
+          forced = exit_testing_fallback_direction(primary_analysis[:series], index_cfg)
+          if forced
+            Rails.logger.warn(
+              "[Signal] Exit-testing: overriding :avoid with #{forced} for #{index_cfg[:key]} " \
+              '(last candle body / doji tie-break)'
+            )
+            return { ok: true, direction: forced }
+          end
+        end
+
+        log_avoid_reason(index_cfg, strategy_recommendation)
+        Signal::StateTracker.reset(index_cfg[:key])
+        { ok: false, direction: nil }
+      end
+
+      def exit_testing_fallback_direction(series, index_cfg)
+        candle = series&.candles&.last
+        return nil unless candle
+        return nil unless candle.respond_to?(:close) && candle.respond_to?(:open)
+
+        close = candle.close.to_f
+        open = candle.open.to_f
+        return :bullish if close > open
+        return :bearish if close < open
+
+        index_cfg[:key].to_s.sum.even? ? :bullish : :bearish
       end
 
       def should_perform_confirmation?(confirmation_tf, signals_cfg, strategy_recommendation)

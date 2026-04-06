@@ -121,6 +121,20 @@ RSpec.describe Signal::Engine, 'exit_testing mode pipeline' do
 
         described_class.run_for(index_cfg)
       end
+
+      it 'overrides primary :avoid using last candle body so exit-testing can still enter' do
+        bullish_last = build(:candle_series, :five_minute, :with_candles)
+        avoid_primary = primary_analysis.merge(direction: :avoid, series: bullish_last)
+
+        allow(described_class).to receive(:analyze_timeframe).and_return(avoid_primary)
+        allow(Options::ChainAnalyzer).to receive(:pick_strikes_with_qualification).and_return([])
+
+        described_class.run_for(index_cfg)
+
+        last_signal = TradingSignal.order(created_at: :desc).first
+        expect(last_signal).to be_present
+        expect(last_signal.direction).to eq('bullish')
+      end
     end
   end
 end
