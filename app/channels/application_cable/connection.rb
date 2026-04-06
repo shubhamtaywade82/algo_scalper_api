@@ -24,13 +24,22 @@ module ApplicationCable
         false
       end
 
-      provided_raw = request.params[:token].presence || bearer_token_from_header
+      provided_raw = cable_dashboard_token.presence || bearer_token_from_header
       provided = provided_raw.to_s
       expected_str = expected.to_s
       return false if provided.blank?
 
       provided.bytesize == expected_str.bytesize &&
         ActiveSupport::SecurityUtils.secure_compare(provided, expected_str)
+    end
+
+    def cable_dashboard_token
+      # Prefer explicit query access: some Cable/proxy stacks expose QUERY_STRING more reliably
+      # than the merged params hash during the WebSocket handshake.
+      qp = request.query_parameters
+      qp['token'].presence || qp[:token].presence || request.params[:token].presence
+    rescue StandardError
+      request.params[:token].presence
     end
 
     def bearer_token_from_header

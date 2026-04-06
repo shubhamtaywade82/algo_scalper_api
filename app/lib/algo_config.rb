@@ -2,6 +2,7 @@
 
 class AlgoConfig
   CACHE_TTL = 30 # seconds
+  DEFAULT_RUN_MODE = 'production'
 
   class << self
     def fetch
@@ -30,6 +31,16 @@ class AlgoConfig
 
     def mode
       fetch[:mode]
+    end
+
+    # Active trading profile: +RUN_MODE+ env overrides +run_mode+ from merged YAML/DB config.
+    # Values are typically +production+, +exit_testing+, +entry_testing+ (see docs).
+    def run_mode
+      override = ENV['RUN_MODE'].to_s.strip.downcase.presence
+      return override if override.present?
+
+      v = fetch[:run_mode]
+      v.present? ? v.to_s.strip.downcase : DEFAULT_RUN_MODE
     end
 
     def reset!
