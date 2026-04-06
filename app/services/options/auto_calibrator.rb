@@ -63,7 +63,7 @@ module Options
         atm_stats: { ce: atm_result[:ce], pe: atm_result[:pe] },
         otm1_stats: otm1_result ? { ce: otm1_result[:ce], pe: otm1_result[:pe] } : nil,
         otm2_stats: otm2_result ? { ce: otm2_result[:ce], pe: otm2_result[:pe] } : nil
-      )
+      ).merge(weeks_available: expiry_dates.size)
 
       regime = Options::RegimeDetector.check(symbol: @symbol, combined_stats: combined_stats)
       patch  = Options::CalibrationConfigPatchBuilder.build(
@@ -194,6 +194,7 @@ module Options
       }
     end
 
+    # rubocop:disable Rails/Pluck -- candles is Array<Hash>, not ActiveRecord
     def cycle_stats(candles)
       entry   = candles.first[:open].to_f
       max_h   = candles.map { |c| c[:high] }.max.to_f
@@ -210,6 +211,7 @@ module Options
         post_peak_retrace: pct(pullback_l, max_h).round(2)
       }
     end
+    # rubocop:enable Rails/Pluck
 
     def session_breakdown(candles)
       SESSIONS.transform_values do |range|

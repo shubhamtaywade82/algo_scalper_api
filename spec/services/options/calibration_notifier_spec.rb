@@ -46,6 +46,40 @@ RSpec.describe Options::CalibrationNotifier do
       expect(telegram_client).to have_received(:send_message).with(a_string_including('Apply'))
     end
 
+    context 'when auto-apply was skipped and notify_on_skip is enabled' do
+      let(:base_config) { YAML.load_file(Rails.root.join('config/algo.yml')).deep_symbolize_keys }
+
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          base_config.deep_merge(calibration: { auto_apply: { notify_on_skip: true } })
+        )
+      end
+
+      it 'appends skip reason to the message' do
+        ar = Options::CalibrationAutoApplier::Result.new(false, 'cooldown: wait', false)
+        described_class.notify('NIFTY', run, auto_apply_result: ar)
+        expect(telegram_client).to have_received(:send_message)
+          .with(a_string_including('Auto-apply skipped').and(a_string_including('cooldown')))
+      end
+
+      it 'does not append when suppress_notification is set' do
+        ar = Options::CalibrationAutoApplier::Result.new(false, 'off', true)
+        described_class.notify('NIFTY', run, auto_apply_result: ar)
+        expect(telegram_client).to have_received(:send_message).with(
+          satisfy { |text| text.include?('Apply') && text.exclude?('Auto-apply skipped') }
+        )
+      end
+    end
+
+    context 'when run was auto-applied' do
+      before { run.update!(applied_at: Time.current, applied_by: 'auto_historical') }
+
+      it 'mentions auto-applied instead of manual Apply' do
+        described_class.notify('NIFTY', run)
+        expect(telegram_client).to have_received(:send_message).with(a_string_including('Auto-applied'))
+      end
+    end
+
     context 'when run is a regime shift' do
       let(:run) do
         CalibrationRun.create!(
@@ -65,6 +99,42 @@ RSpec.describe Options::CalibrationNotifier do
     it 'does not raise when Telegram fails' do
       allow(telegram_client).to receive(:send_message).and_raise(StandardError, 'network error')
       expect { described_class.notify('NIFTY', run) }.not_to raise_error
+    end
+  end
+
+  describe '.notify_auto_apply_followup' do
+    let(:telegram_client) { instance_double(Notifications::TelegramNotifier, send_message: true, enabled?: true) }
+    let(:base_config) { YAML.load_file(Rails.root.join('config/algo.yml')).deep_symbolize_keys }
+
+    before do
+      allow(Notifications::TelegramNotifier).to receive(:instance).and_return(telegram_client)
+    end
+
+    it 'sends applied confirmation when auto_apply is enabled' do
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        base_config.deep_merge(calibration: { auto_apply: { enabled: true } })
+      )
+      ar = Options::CalibrationAutoApplier::Result.new(true, nil, false)
+      described_class.notify_auto_apply_followup(symbol: 'NIFTY', run: run, auto_apply_result: ar)
+      expect(telegram_client).to have_received(:send_message).with(a_string_including('auto-applied'))
+    end
+
+    it 'sends skip reason when notify_on_skip and not suppressed' do
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        base_config.deep_merge(calibration: { auto_apply: { enabled: true, notify_on_skip: true } })
+      )
+      ar = Options::CalibrationAutoApplier::Result.new(false, 'paper mode required', false)
+      described_class.notify_auto_apply_followup(symbol: 'NIFTY', run: run, auto_apply_result: ar)
+      expect(telegram_client).to have_received(:send_message).with(a_string_including('paper mode'))
+    end
+
+    it 'does not send when auto_apply master is disabled' do
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        base_config.deep_merge(calibration: { auto_apply: { enabled: false } })
+      )
+      ar = Options::CalibrationAutoApplier::Result.new(true, nil, false)
+      described_class.notify_auto_apply_followup(symbol: 'NIFTY', run: run, auto_apply_result: ar)
+      expect(telegram_client).not_to have_received(:send_message)
     end
   end
 
