@@ -1,10 +1,14 @@
 paper_trading:
   enabled: true
   balance: 100000
+  # Wallet realized PnL: cumulative = all-time paper exits (carry capital day to day).
+  # daily = only exits on the current calendar day (legacy ₹1L + today’s closes).
+  realized_scope: cumulative
 
 # Run mode: which profile to merge on top of base config (before DB overrides).
 # production = real flow (default). exit_testing = frequent entries to test exits. entry_testing = relaxed guards to test entries.
 # Override with ENV RUN_MODE=exit_testing (or entry_testing, production).
+# Default production for paper/live evaluation; use exit_testing only to stress-test exit plumbing.
 run_mode: exit_testing
 
 # Realtime execution controls (tick-first architecture)
@@ -14,7 +18,8 @@ realtime:
   tick_stale_after_seconds: 3      # Consider feed stale after this many seconds without tick-driven PnL event
   min_enforcement_gap_ms: 250      # Debounce full rule-chain evaluation per tracker in event-driven path
   db_sync_interval_seconds: 30      # Throttled DB sync cadence for active positions
-  entry_ltp_max_age_seconds: 2      # Entry/re-entry requires tick timestamp within this window
+  # Option legs often lag the index; REST snapshot is accepted when ticks are stale (see LtpResolutionGuard).
+  entry_ltp_max_age_seconds: 10     # WebSocket tick must be at least this fresh when using cache path
 
 # Trading time restrictions based on profitability analysis
 # Use analyze_positions_by_time_intervals.rb to identify non-profitable periods

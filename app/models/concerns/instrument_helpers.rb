@@ -109,35 +109,13 @@ module InstrumentHelpers
   # Prioritizes WebSocket/TickCache to avoid API rate limits
   # @param segment [String] Exchange segment (e.g., "IDX_I", "NSE_FNO")
   # @param security_id [String, Integer] Security ID
+  # @param subscribe [Boolean] If true, subscribe and poll briefly when cache is empty
+  # @param skip_tick_cache [Boolean] If true, go straight to REST (used when WS ticks are known stale)
   # @return [Numeric, nil]
-  def fetch_ltp_from_api_for_segment(segment:, security_id:, subscribe: false)
-    hub = Live::MarketFeedHub.instance
-
-    # Strategy 1: Check WebSocket TickCache first (fastest, no API rate limits)
-    if hub.running? && hub.connected?
-      cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-      if cached_tick&.ltp&.to_f&.positive?
-        Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
-        return cached_tick.ltp.to_f
-      end
-
-      if subscribe
-        # If not in cache, try subscribing and waiting briefly for a tick
-        begin
-          hub.subscribe(segment: segment, security_id: security_id)
-          # Wait up to 200ms for tick to arrive
-          4.times do
-            sleep(0.05) # 50ms intervals
-            cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
-            if cached_tick&.ltp&.to_f&.positive?
-              Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
-              return cached_tick.ltp.to_f
-            end
-          end
-        rescue StandardError => e
-          Rails.logger.debug { "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API" }
-        end
-      end
+  def fetch_ltp_from_api_for_segment(segment:, security_id:, subscribe: false, skip_tick_cache: false)
+    unless skip_tick_cache
+      cached_ltp = ltp_from_tick_cache_or_subscribe(segment: segment, security_id: security_id, subscribe: subscribe)
+      return cached_ltp if cached_ltp.present?
     end
 
     # Strategy 2: REST API fallback (only if WebSocket unavailable or no tick received)
@@ -375,6 +353,41 @@ module InstrumentHelpers
   end
 
   private
+
+  def ltp_from_tick_cache_or_subscribe(segment:, security_id:, subscribe:)
+    hub = Live::MarketFeedHub.instance
+    return nil unless hub.running? && hub.connected?
+
+    cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+    if cached_tick&.ltp&.to_f&.positive?
+      Rails.logger.debug { "[InstrumentHelpers] Got LTP from TickCache for #{segment}:#{security_id}: ₹#{cached_tick.ltp}" }
+      return cached_tick.ltp.to_f
+    end
+
+    return nil unless subscribe
+
+    ltp_poll_tick_after_subscribe(hub: hub, segment: segment, security_id: security_id)
+  end
+
+  def ltp_poll_tick_after_subscribe(hub:, segment:, security_id:)
+    hub.subscribe(segment: segment, security_id: security_id)
+    4.times do
+      sleep(0.05)
+      cached_tick = Live::TickQuery.for_security(segment: segment, security_id: security_id)
+      next unless cached_tick&.ltp&.to_f&.positive?
+
+      Rails.logger.debug do
+        "[InstrumentHelpers] Got LTP from TickCache after subscription for #{segment}:#{security_id}: ₹#{cached_tick.ltp}"
+      end
+      return cached_tick.ltp.to_f
+    end
+    nil
+  rescue StandardError => e
+    Rails.logger.debug do
+      "[InstrumentHelpers] WebSocket subscription failed for #{segment}:#{security_id}: #{e.message}, falling back to API"
+    end
+    nil
+  end
 
   def resolve_instrument_code
     code = instrument_code.presence || instrument_type.presence

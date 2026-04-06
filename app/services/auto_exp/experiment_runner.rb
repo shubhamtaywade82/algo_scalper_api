@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
+require "open3"
 require "yaml"
-require "shellwords"
 require_relative "llm_planner"
 require_relative "config_applier"
 require_relative "backtest_executor"
@@ -96,18 +96,21 @@ module AutoExp
     private
 
     def commit(reason)
-      escaped_reason = Shellwords.escape("autoexp: #{reason}")
-      system("git add #{AutoExp::ConfigApplier::CONFIG_PATH}")
-      system("git commit -m #{escaped_reason} --no-verify")
+      cfg = AutoExp::ConfigApplier::CONFIG_PATH.to_s
+      root = Rails.root.to_s
+      message = "autoexp: #{reason}"
+      system('git', '-C', root, 'add', cfg)
+      system('git', '-C', root, 'commit', '-m', message, '--no-verify')
     end
 
     def revert
-      # Revert ONLY the config file to its state in HEAD
-      system("git checkout HEAD -- #{AutoExp::ConfigApplier::CONFIG_PATH}")
+      cfg = AutoExp::ConfigApplier::CONFIG_PATH.to_s
+      system('git', '-C', Rails.root.to_s, 'checkout', 'HEAD', '--', cfg)
     end
 
     def current_commit
-      `git rev-parse --short HEAD`.strip
+      out, = Open3.capture2('git', '-C', Rails.root.to_s, 'rev-parse', '--short', 'HEAD')
+      out.strip
     end
   end
 end

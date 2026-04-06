@@ -30,23 +30,22 @@ module Orders
     end
 
     # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
+    # cash = free balance (like broker available); utilized/exposure = premium tied in open legs.
     def wallet_snapshot
-      base = (AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000).to_f
+      cfg = paper_trading_config
+      base = (cfg[:balance] || 100_000).to_f
+      realized = paper_realized_rupees(cfg)
+      deployed = deployed_premium_rupees
+      unrealized = active_unrealized_rupees
 
-      # Realized P&L: today's closed paper positions only (daily paper session)
-      today = Time.zone.today
-      realized = PositionTracker.paper.exited
-                                .where(exited_at: today.all_day)
-                                .sum(:last_pnl_rupees).to_f
+      cash_raw = base + realized - deployed
+      cash = [cash_raw, 0.0].max.round(2)
+      mtm = unrealized.round(2)
+      utilized = deployed.round(2)
+      exposure = utilized
+      equity = (cash + utilized + mtm).round(2)
 
-      # Unrealized P&L: active positions read from Redis cache for live values
-      unrealized = PositionTracker.paper.active.sum { |t| t.current_pnl_rupees.to_f }
-
-      cash   = (base + realized).round(2)
-      mtm    = unrealized.round(2)
-      equity = (cash + mtm).round(2)
-
-      { cash: cash, equity: equity, mtm: mtm, exposure: 0, utilized: 0, margin: 0 }
+      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0 }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
       { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
@@ -81,6 +80,29 @@ module Orders
         trading_symbol: tracker.symbol,
         status: tracker.status
       }
+    end
+
+    private
+
+    def paper_trading_config
+      AlgoConfig.fetch[:paper_trading] || {}
+    end
+
+    def paper_realized_rupees(cfg)
+      scope = cfg[:realized_scope].to_s.strip.downcase
+      rel = PositionTracker.exited_paper
+      rel = rel.where(exited_at: Time.zone.today.all_day) if scope == 'daily'
+
+      rel.sum(:last_pnl_rupees).to_f
+    end
+
+    def deployed_premium_rupees
+      sql = 'ABS(COALESCE(entry_price, 0) * COALESCE(quantity, 0))'
+      PositionTracker.paper.active.sum(Arel.sql(sql)).to_f
+    end
+
+    def active_unrealized_rupees
+      PositionTracker.paper.active.sum { |t| t.current_pnl_rupees.to_f }
     end
   end
 end

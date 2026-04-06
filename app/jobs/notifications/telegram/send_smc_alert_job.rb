@@ -38,7 +38,7 @@ module Notifications
           end
         end
 
-        log_ai_analysis_status(instrument: instrument, ai_analysis: ai_analysis)
+        log_ai_analysis_status(instrument: instrument, ai_analysis: ai_analysis, decision: decision)
 
         # Build signal event
         signal = Smc::SignalEvent.new(
@@ -46,7 +46,7 @@ module Notifications
           decision: decision.to_sym,
           timeframe: '5m',
           price: price,
-          reasons: build_reasons(contexts),
+          reasons: build_reasons(contexts, decision: decision),
           ai_analysis: ai_analysis
         )
 
@@ -116,7 +116,7 @@ module Notifications
         false
       end
 
-      def build_reasons(contexts)
+      def build_reasons(contexts, decision:)
         htf_context = contexts[:htf] || {}
         mtf_context = contexts[:mtf] || {}
         ltf_context = contexts[:ltf] || {}
@@ -134,32 +134,57 @@ module Notifications
           end
         end
 
+        append_liquidity_reasons(reasons, htf_context[:liquidity], label: 'HTF')
+        append_liquidity_reasons(reasons, ltf_context[:liquidity], label: '5m')
+
         # Check for CHoCH in MTF swing structure
         if (mtf_context[:swing_structure] && mtf_context[:swing_structure][:choch]) ||
            (mtf_context[:structure] && mtf_context[:structure][:choch])
           reasons << '15m CHoCH detected'
         end
 
-        # Check for liquidity sweep in LTF
-        if ltf_context[:liquidity]
-          liq_data = ltf_context[:liquidity]
-          if liq_data[:sell_side_taken]
-            reasons << 'Liquidity sweep on 5m (sell-side)'
-          elsif liq_data[:buy_side_taken]
-            reasons << 'Liquidity sweep on 5m (buy-side)'
-          end
-        end
+        # MTF / LTF trend snapshot (helps explain no_trade when internal vs swing diverge)
+        append_trend_mismatch_hint(reasons, mtf_context, ltf_context)
 
-        reasons << 'AVRZ rejection confirmed'
+        # AVRZ is only evaluated for actionable signals; do not claim it on no_trade scans.
+        reasons << 'AVRZ rejection confirmed' if %w[call put].include?(decision.to_s)
 
         reasons
       end
 
-      def log_ai_analysis_status(instrument:, ai_analysis:)
+      def append_liquidity_reasons(reasons, liq_data, label:)
+        return unless liq_data
+
+        if liq_data[:sell_side_taken]
+          reasons << "Liquidity sweep on #{label} (sell-side)"
+        elsif liq_data[:buy_side_taken]
+          reasons << "Liquidity sweep on #{label} (buy-side)"
+        end
+      end
+
+      def append_trend_mismatch_hint(reasons, mtf_context, ltf_context)
+        mtf_swing = mtf_context[:swing_structure] || mtf_context[:structure]
+        mtf_int = mtf_context[:internal_structure]
+        if mtf_swing && mtf_int && mtf_swing[:trend] && mtf_int[:trend] &&
+           mtf_swing[:trend] != mtf_int[:trend]
+          reasons << "15m internal trend #{mtf_int[:trend]} vs swing trend #{mtf_swing[:trend]}"
+        end
+
+        ltf_swing = ltf_context[:swing_structure] || ltf_context[:structure]
+        ltf_int = ltf_context[:internal_structure]
+        if ltf_swing && ltf_int && ltf_swing[:trend] && ltf_int[:trend] &&
+           ltf_swing[:trend] != ltf_int[:trend]
+          reasons << "5m internal trend #{ltf_int[:trend]} vs swing trend #{ltf_swing[:trend]}"
+        end
+      end
+
+      def log_ai_analysis_status(instrument:, ai_analysis:, decision:)
         if ai_analysis.present?
           Rails.logger.info(
             "[SendSmcAlertJob] AI analysis received (#{ai_analysis.length} chars) for #{instrument.symbol_name}"
           )
+        elsif decision.to_s == 'no_trade'
+          Rails.logger.debug { "[SendSmcAlertJob] No AI run for no_trade (#{instrument.symbol_name})" }
         else
           Rails.logger.warn("[SendSmcAlertJob] AI analysis is empty or nil for #{instrument.symbol_name}")
         end

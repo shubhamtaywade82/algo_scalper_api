@@ -1,19 +1,22 @@
 # frozen_string_literal: true
 
-require 'English'
-require "json"
+require 'json'
+require 'open3'
 
 module AutoExp
   class BacktestExecutor
     SCRIPT = Rails.root.join("scripts/run_backtest.rb")
 
     def run
-      # Run the script using rails runner to ensure environment is loaded
-      # Capture stdout for the JSON metrics and ignore stderr (or handle separately)
-      output = `rails runner #{SCRIPT}`
+      output, status = Open3.capture2e(
+        Rails.root.join('bin/rails').to_s,
+        'runner',
+        SCRIPT.to_s,
+        chdir: Rails.root.to_s
+      )
 
-      unless $CHILD_STATUS.success? # rubocop:disable Style/GlobalVars
-        Rails.logger.error("[AutoExp] Backtest script failed with status #{$CHILD_STATUS.exitstatus}") # rubocop:disable Style/GlobalVars
+      unless status.success?
+        Rails.logger.error("[AutoExp] Backtest script failed with status #{status.exitstatus}")
         raise "Backtest failed"
       end
 

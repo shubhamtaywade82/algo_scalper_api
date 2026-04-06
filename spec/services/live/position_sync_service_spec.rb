@@ -99,9 +99,11 @@ RSpec.describe Live::PositionSyncService do
           allow(active_cache).to receive(:active_trackers).and_return([tracker])
         end
 
-        it 'marks them as exited' do
+        it 'marks them as exited with position_sync_orphaned reason' do
           service.sync_positions!
-          expect(tracker.reload.status).to eq('exited')
+          tracker.reload
+          expect(tracker.status).to eq('exited')
+          expect(tracker.meta['exit_reason']).to eq('position_sync_orphaned')
         end
       end
     end

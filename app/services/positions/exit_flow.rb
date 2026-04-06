@@ -2,6 +2,9 @@
 
 module Positions
   class ExitFlow < ApplicationService
+    # Used when no caller supplied a reason and meta has none (analytics / calibration).
+    FALLBACK_EXIT_REASON = 'EXIT_REASON_UNSPECIFIED'
+
     def initialize(tracker:, exit_price: nil, exited_at: nil, exit_reason: nil)
       @tracker = tracker
       @exit_price = exit_price
@@ -24,9 +27,10 @@ module Positions
         final_pnl_rupees = cache_data[:pnl] || tracker.last_pnl_rupees
         final_hwm_pnl = [tracker.high_water_mark_pnl.to_f, cache_data[:hwm_pnl].to_f, final_pnl_rupees.to_f].max
 
-        # 3. Build metadata
-        metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-        metadata["exit_reason"] = exit_reason || metadata["exit_reason"]
+        # 3. Build metadata (always persist a non-blank exit_reason for downstream analysis)
+        metadata = tracker.meta.is_a?(Hash) ? tracker.meta.deep_stringify_keys.dup : {}
+        resolved_reason = resolve_exit_reason_string(metadata)
+        metadata["exit_reason"] = resolved_reason
         metadata["exit_triggered_at"] ||= Time.current
         metadata["hwm_pnl_pct"] = cache_data[:hwm_pnl_pct] if cache_data[:hwm_pnl_pct]
 
@@ -37,7 +41,7 @@ module Positions
           exited_at: resolved_exited_at,
           last_pnl_rupees: final_pnl_rupees,
           high_water_mark_pnl: final_hwm_pnl,
-          exit_reason: metadata["exit_reason"],
+          exit_reason: resolved_reason,
           meta: metadata
         )
 
@@ -56,6 +60,16 @@ module Positions
     private
 
     attr_reader :tracker, :exit_price, :exited_at, :exit_reason
+
+    def resolve_exit_reason_string(metadata)
+      candidates = [
+        exit_reason,
+        metadata["exit_reason"],
+        metadata[:exit_reason]
+      ]
+      picked = candidates.filter_map { |v| v.to_s.strip.presence }.first
+      picked || FALLBACK_EXIT_REASON
+    end
 
     def resolved_exit_price
       price = exit_price || tracker.send(:fetch_ltp_from_cache)

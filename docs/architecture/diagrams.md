@@ -17,6 +17,9 @@ This document points to the **canonical diagram set** and keeps a few legacy dia
 
 **Index:** [diagrams/README.md](diagrams/README.md)
 
+**Trading modes (run profiles, paper/live, env flags):**
+[../diagrams/trading-modes.md](../diagrams/trading-modes.md)
+
 ---
 
 ## Quick reference (legacy)

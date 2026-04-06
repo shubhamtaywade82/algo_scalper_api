@@ -219,6 +219,7 @@ module Live
       unless final_pnl.present? && entry_price.present? && quantity.present? &&
              entry_price.to_f.positive? && quantity.to_i.positive?
         Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
+        ensure_exit_reason_on_meta!(tracker, reason)
         return reason
       end
 
@@ -241,6 +242,22 @@ module Live
       end
 
       tracker.exit_reason
+    end
+
+    def ensure_exit_reason_on_meta!(tracker, reason)
+      return if reason.blank?
+
+      tracker.reload
+      meta = tracker.meta.is_a?(Hash) ? tracker.meta.deep_dup : {}
+      meta = meta.deep_stringify_keys
+      current = meta['exit_reason'].to_s.strip.presence
+      return if current.present?
+
+      meta['exit_reason'] = reason.to_s
+      col = tracker.exit_reason.to_s.strip.presence || reason.to_s
+      tracker.update!(meta: meta, exit_reason: col)
+    rescue StandardError => e
+      Rails.logger.warn("[ExitEngine] ensure_exit_reason_on_meta! failed for #{tracker&.order_no}: #{e.class} - #{e.message}")
     end
 
     def classify_exit(final_pnl_pct_decimal)

@@ -77,5 +77,33 @@ RSpec.describe 'API token authentication' do
       expect(body['error']).to eq('settings_update_unconfigured')
     end
   end
+
+  describe 'production fail-closed API tokens' do
+    it 'returns 503 for dashboard routes when API_DASHBOARD_TOKEN is unset' do
+      allow(Rails.env).to receive(:production?).and_return(true)
+      previous = ENV.fetch('API_DASHBOARD_TOKEN', nil)
+      ENV.delete('API_DASHBOARD_TOKEN')
+
+      get '/api/health'
+
+      expect(response).to have_http_status(:service_unavailable)
+      expect(response.parsed_body['error']).to eq('api_token_unconfigured')
+    ensure
+      ENV['API_DASHBOARD_TOKEN'] = previous if previous
+    end
+
+    it 'returns 503 for operator routes when API_OPERATOR_TOKEN is unset' do
+      allow(Rails.env).to receive(:production?).and_return(true)
+      previous_o = ENV.fetch('API_OPERATOR_TOKEN', nil)
+      ENV.delete('API_OPERATOR_TOKEN')
+
+      get '/api/public_ip/audit'
+
+      expect(response).to have_http_status(:service_unavailable)
+      expect(response.parsed_body['error']).to eq('api_token_unconfigured')
+    ensure
+      ENV['API_OPERATOR_TOKEN'] = previous_o if previous_o
+    end
+  end
 end
 # rubocop:enable RSpec/DescribeClass

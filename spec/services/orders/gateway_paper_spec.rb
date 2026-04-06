@@ -56,10 +56,11 @@ RSpec.describe Orders::GatewayPaper do
     end
 
     it 'does not update tracker directly' do
-      expect(tracker).not_to receive(:mark_exited!)
+      allow(tracker).to receive(:mark_exited!)
 
       gateway.exit_market(tracker)
 
+      expect(tracker).not_to have_received(:mark_exited!)
       tracker.reload
       expect(tracker.status).to eq('active')
     end
@@ -101,7 +102,7 @@ RSpec.describe Orders::GatewayPaper do
 
     it 'logs errors when simulation fails' do
       allow(SecureRandom).to receive(:hex).and_raise(StandardError.new('RNG error'))
-      expect(Rails.logger).to receive(:error).with(/GatewayPaper.*place_market failed/)
+      allow(Rails.logger).to receive(:error)
 
       result = gateway.place_market(
         side: 'buy',
@@ -110,6 +111,7 @@ RSpec.describe Orders::GatewayPaper do
         qty: 50
       )
 
+      expect(Rails.logger).to have_received(:error).with(/GatewayPaper.*place_market failed/)
       expect(result).to include(success: false, paper: true)
       expect(result[:error]).to be_present
     end
@@ -164,14 +166,125 @@ RSpec.describe Orders::GatewayPaper do
   end
 
   describe '#wallet_snapshot' do
-    it 'returns wallet hash with configured balance' do
+    it 'returns unified wallet keys with configured balance when no positions' do
       result = gateway.wallet_snapshot
 
       expect(result).to eq(
         cash: 100_000,
         equity: 100_000,
         mtm: 0,
-        exposure: 0
+        exposure: 0,
+        utilized: 0,
+        margin: 0
+      )
+    end
+
+    it 'adds cumulative realized PnL from paper exits on prior days' do
+      create(:position_tracker, :option_position, :exited, paper: true,
+                                                           segment: 'NSE_FNO',
+                                                           order_no: 'PAPER-EXIT-PRIOR',
+                                                           exited_at: 2.days.ago,
+                                                           last_pnl_rupees: 5_000)
+
+      result = gateway.wallet_snapshot
+
+      expect(result).to eq(
+        cash: 105_000,
+        equity: 105_000,
+        mtm: 0,
+        exposure: 0,
+        utilized: 0,
+        margin: 0
+      )
+    end
+
+    it 'reduces cash and sets exposure to deployed premium for active paper legs' do
+      create(:position_tracker, :option_position, paper: true,
+                                                  segment: 'NSE_FNO',
+                                                  order_no: 'PAPER-ACTIVE-1',
+                                                  status: 'active',
+                                                  entry_price: 100.0,
+                                                  quantity: 50,
+                                                  last_pnl_rupees: 200)
+
+      result = gateway.wallet_snapshot
+
+      expect(result).to eq(
+        cash: 95_000,
+        equity: 100_200,
+        mtm: 200,
+        exposure: 5_000,
+        utilized: 5_000,
+        margin: 0
+      )
+    end
+
+    context 'when realized_scope is daily' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          { paper_trading: { balance: 100_000, realized_scope: 'daily' } }
+        )
+      end
+
+      it 'ignores exits before today for realized cash' do
+        create(:position_tracker, :option_position, :exited, paper: true,
+                                                             segment: 'NSE_FNO',
+                                                             order_no: 'PAPER-EXIT-YEST',
+                                                             exited_at: 1.day.ago,
+                                                             last_pnl_rupees: 7_000)
+
+        result = gateway.wallet_snapshot
+
+        expect(result).to eq(
+          cash: 100_000,
+          equity: 100_000,
+          mtm: 0,
+          exposure: 0,
+          utilized: 0,
+          margin: 0
+        )
+      end
+
+      it 'includes exits that exited today' do
+        create(:position_tracker, :option_position, :exited, paper: true,
+                                                             segment: 'NSE_FNO',
+                                                             order_no: 'PAPER-EXIT-TODAY',
+                                                             exited_at: Time.zone.now,
+                                                             last_pnl_rupees: 3_000)
+
+        result = gateway.wallet_snapshot
+
+        expect(result).to eq(
+          cash: 103_000,
+          equity: 103_000,
+          mtm: 0,
+          exposure: 0,
+          utilized: 0,
+          margin: 0
+        )
+      end
+    end
+
+    it 'clamps cash at zero when base plus realized is below deployed' do
+      create(:position_tracker, :option_position, paper: true,
+                                                  segment: 'NSE_FNO',
+                                                  order_no: 'PAPER-BIG-DEPLOY',
+                                                  status: 'active',
+                                                  entry_price: 10_000.0,
+                                                  quantity: 20,
+                                                  last_pnl_rupees: 0)
+
+      allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { balance: 50_000 } })
+
+      result = gateway.wallet_snapshot
+
+      expect(result).to eq(
+        cash: 0,
+        equity: 200_000,
+        mtm: 0,
+        exposure: 200_000,
+        utilized: 200_000,
+        margin: 0
       )
     end
 
@@ -180,8 +293,14 @@ RSpec.describe Orders::GatewayPaper do
 
       result = gateway.wallet_snapshot
 
-      expect(result[:cash]).to eq(100_000)
-      expect(result[:equity]).to eq(100_000)
+      expect(result).to eq(
+        cash: 100_000,
+        equity: 100_000,
+        mtm: 0,
+        exposure: 0,
+        utilized: 0,
+        margin: 0
+      )
     end
 
     it 'handles AlgoConfig.fetch errors gracefully' do
@@ -193,16 +312,19 @@ RSpec.describe Orders::GatewayPaper do
         cash: 100_000,
         equity: 100_000,
         mtm: 0,
-        exposure: 0
+        exposure: 0,
+        utilized: 0,
+        margin: 0
       )
     end
 
     it 'logs errors' do
+      allow(Rails.logger).to receive(:error)
       allow(AlgoConfig).to receive(:fetch).and_raise(StandardError.new('Config error'))
 
-      expect(Rails.logger).to receive(:error).with(/GatewayPaper.*wallet_snapshot failed/)
-
       gateway.wallet_snapshot
+
+      expect(Rails.logger).to have_received(:error).with(/GatewayPaper.*wallet_snapshot failed/)
     end
   end
 

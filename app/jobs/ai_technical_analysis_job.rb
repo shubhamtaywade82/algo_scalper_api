@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 # Job to execute AI technical analysis rake task
-require 'English'
+require 'open3'
+
 class AiTechnicalAnalysisJob < ApplicationJob
   queue_as :background
 
@@ -12,6 +13,7 @@ class AiTechnicalAnalysisJob < ApplicationJob
   end
 
   def perform(index_name)
+    index_key = validate_index_key!(index_name)
     market_closed = TradingSession::Service.market_closed?
 
     if market_closed
@@ -19,41 +21,46 @@ class AiTechnicalAnalysisJob < ApplicationJob
       target_date = next_trading_date.strftime('%Y-%m-%d')
       session = closed_market_session_label
       reason = 'overnight_research'
-      query = "OPTIONS buying intraday for next trading day (#{target_date}) in INDEX like #{index_name}"
+      query = "OPTIONS buying intraday for next trading day (#{target_date}) in INDEX like #{index_key}"
 
-      cache_key = "ai_tech_analysis:logged_closed:#{Time.zone.today}:#{index_name}"
+      cache_key = "ai_tech_analysis:logged_closed:#{Time.zone.today}:#{index_key}"
       first_log_for_today = Rails.cache.read(cache_key).nil?
       Rails.cache.write(cache_key, true, expires_in: 1.day) if first_log_for_today
 
       if first_log_for_today
         Rails.logger.info(
-          "[AiTechnicalAnalysisJob] Market closed - analyzing #{index_name} for next trading day " \
+          "[AiTechnicalAnalysisJob] Market closed - analyzing #{index_key} for next trading day " \
           "(reason=#{reason}, session=#{session}, target_date=#{target_date})"
         )
       else
         Rails.logger.debug do
-          "[AiTechnicalAnalysisJob] Market closed - analyzing #{index_name} " \
+          "[AiTechnicalAnalysisJob] Market closed - analyzing #{index_key} " \
             "(reason=#{reason}, session=#{session}, target_date=#{target_date})"
         end
       end
     else
-      query = "OPTIONS buying intraday in INDEX like #{index_name}"
-      Rails.logger.info("[AiTechnicalAnalysisJob] Running analysis for #{index_name} (current trading session)")
+      query = "OPTIONS buying intraday in INDEX like #{index_key}"
+      Rails.logger.info("[AiTechnicalAnalysisJob] Running analysis for #{index_key} (current trading session)")
     end
 
-    # Execute the rake task with STREAM environment variable
-    # Change to Rails root directory and execute
-    # Use mutex to serialize chdir operations (Dir.chdir is not thread-safe)
+    # Run rake in a subprocess with argv only (no shell). Pass the prompt via +QUERY+ (see
+    # +lib/tasks/ai_technical_analysis.rake+) so the task argument is static. Rake may call +exit+
+    # on failure; isolating in a child avoids killing the job worker.
+    env = { 'STREAM' => 'true', 'QUERY' => query }
     self.class.chdir_mutex.synchronize do
-      Dir.chdir(Rails.root) do
-        # Set environment variable and execute command
-        result = system({ 'STREAM' => 'true' }, "bundle exec rake 'ai:technical_analysis[#{query}]'")
+      output, status = Open3.capture2e(
+        env,
+        'bundle', 'exec', 'rake', 'ai:technical_analysis',
+        chdir: Rails.root.to_s
+      )
 
-        if result
-          Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_name}")
-        else
-          Rails.logger.error("[AiTechnicalAnalysisJob] Failed to execute for #{index_name} (exit code: #{$CHILD_STATUS.exitstatus})") # rubocop:disable Style/GlobalVars
-        end
+      if status.success?
+        Rails.logger.info("[AiTechnicalAnalysisJob] Successfully executed for #{index_key}")
+      else
+        Rails.logger.error(
+          "[AiTechnicalAnalysisJob] Failed for #{index_key} (exit=#{status.exitstatus}): " \
+          "#{output.to_s.truncate(800)}"
+        )
       end
     end
   rescue StandardError => e
@@ -63,6 +70,14 @@ class AiTechnicalAnalysisJob < ApplicationJob
   end
 
   private
+
+  def validate_index_key!(name)
+    key = name.to_s.upcase.strip
+    allowed = IndexConfigLoader.load_indices.to_set { |i| i[:key].to_s.upcase }
+    return key if allowed.include?(key)
+
+    raise ArgumentError, "[AiTechnicalAnalysisJob] Unknown index_name #{name.inspect} (allowed: #{allowed.to_a.sort.join(', ')})"
+  end
 
   def closed_market_session_label
     Live::TimeRegimeService.closed_session_label

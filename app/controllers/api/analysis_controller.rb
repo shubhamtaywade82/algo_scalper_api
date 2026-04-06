@@ -19,13 +19,7 @@ module Api
 
       # Trigger background refresh for stale components
       stale = AnalysisStore.stale_components(index_key)
-      if stale.any?
-        Thread.new do
-          Rails.application.executor.wrap do
-            AnalysisJob.perform_now(index_key, force: params[:force] == 'true')
-          end
-        end
-      end
+      AnalysisJob.perform_later(index_key, force: params[:force] == 'true') if stale.any?
 
       # Fast lookups (no cache needed — instant)
       ltp = Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)
@@ -51,8 +45,7 @@ module Api
         background_refresh: stale.any? ? { refreshing: stale, message: 'Background refresh triggered' } : nil
       }
     rescue StandardError => e
-      Rails.logger.error("[AnalysisController] show error: #{e.class} - #{e.message}")
-      render json: { error: 'internal_error', message: e.message }, status: :internal_server_error
+      render_analysis_internal_error('show', e)
     end
 
     # GET /api/analysis/:index_key/historical
@@ -65,8 +58,7 @@ module Api
 
       render json: result
     rescue StandardError => e
-      Rails.logger.error("[AnalysisController] historical error: #{e.class} - #{e.message}")
-      render json: { error: 'internal_error', message: e.message }, status: :internal_server_error
+      render_analysis_internal_error('historical', e)
     end
 
     # POST /api/analysis/:index_key/ai_snapshot
@@ -143,6 +135,15 @@ module Api
     rescue StandardError => e
       Rails.logger.warn("[AnalysisController] #{label} failed: #{e.class} - #{e.message}")
       nil
+    end
+
+    def render_analysis_internal_error(action_label, exception)
+      Rails.logger.error(
+        "[AnalysisController] #{action_label} error: #{exception.class} - #{exception.message}"
+      )
+      body = { error: 'internal_error' }
+      body[:message] = exception.message unless Rails.env.production?
+      render json: body, status: :internal_server_error
     end
   end
 end
