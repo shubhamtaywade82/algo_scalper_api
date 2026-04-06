@@ -29,8 +29,8 @@ module Entries
           return false unless regime_service.allow_new_trades?
           return false unless regime_service.allow_entries?(regime)
 
-          if regime == Live::TimeRegimeService::CLOSE_GAMMA
-            return false if Live::TimeRegimeService.instance.current_ist_time.strftime('%H:%M') >= '14:45'
+          if regime == Live::TimeRegimeService::CLOSE_GAMMA && regime_service.current_ist_time.strftime('%H:%M') >= '14:45'
+            return false
           end
 
           true

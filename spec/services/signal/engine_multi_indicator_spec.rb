@@ -60,6 +60,25 @@ RSpec.describe Signal::Engine, :vcr do
       }
     end
 
+    let(:mock_candles) do
+      base = 22_000.0
+      Array.new(50) do |i|
+        price = base + (i * 5.0) + rand(-10.0..10.0)
+        double("Candle#{i}",
+               open: price, high: price + 20, low: price - 20, close: price + 5,
+               volume: 100_000 + (i * 1000), timestamp: Time.current - (50 - i).minutes)
+      end
+    end
+    let(:mock_series) do
+      series = double('CandleSeries')
+      allow(series).to receive(:candles).and_return(mock_candles)
+      allow(series).to receive(:size).and_return(mock_candles.size)
+      allow(series).to receive(:last).and_return(mock_candles.last)
+      allow(series).to receive(:symbol).and_return('NIFTY')
+      allow(series).to receive(:interval).and_return('5')
+      series
+    end
+
     before do
       allow(AlgoConfig).to receive(:fetch).and_return({
                                                         signals: signals_cfg.merge(
@@ -70,6 +89,10 @@ RSpec.describe Signal::Engine, :vcr do
     end
 
     context 'when indicators are enabled' do
+      before do
+        allow(nifty_instrument).to receive(:candle_series).and_return(mock_series)
+      end
+
       it 'builds MultiIndicatorStrategy with configured indicators' do
         expect(MultiIndicatorStrategy).to receive(:new).with(
           hash_including(
@@ -200,6 +223,10 @@ RSpec.describe Signal::Engine, :vcr do
             primary_min_strength: 25
           }
         )
+      end
+
+      before do
+        allow(nifty_instrument).to receive(:candle_series).and_return(mock_series)
       end
 
       it 'updates ADX indicator config with per-index threshold' do

@@ -68,8 +68,8 @@ class HealthChecker
   def check_dhanhq_configuration
     check("DhanHQ Configuration") do
       # Support both naming conventions: CLIENT_ID/DHAN_CLIENT_ID and ACCESS_TOKEN/DHAN_ACCESS_TOKEN
-      client_id = ENV["DHAN_CLIENT_ID"] || ENV["CLIENT_ID"]
-      access_token = ENV["DHAN_ACCESS_TOKEN"] || ENV["ACCESS_TOKEN"]
+      client_id = ENV["DHAN_CLIENT_ID"] || ENV.fetch("CLIENT_ID", nil)
+      access_token = ENV["DHAN_ACCESS_TOKEN"] || ENV.fetch("ACCESS_TOKEN", nil)
 
       if client_id.blank? || access_token.blank?
         raise "Missing DhanHQ credentials. Set CLIENT_ID (or DHAN_CLIENT_ID) and ACCESS_TOKEN (or DHAN_ACCESS_TOKEN)"
@@ -84,17 +84,15 @@ class HealthChecker
   def check_instrument_data
     check("Instrument Data") do
       count = Instrument.count
-      if count == 0
+      if count.zero?
         warning("No instruments found. Run: bin/rails instruments:import")
         "No instruments (run import)"
-      else
+      elsif Instrument.column_names.include?("enabled")
         # Check if enabled column exists, if not just show total count
-        if Instrument.column_names.include?("enabled")
-          enabled_count = Instrument.enabled.count
+        enabled_count = Instrument.enabled.count
           "Found #{count} instruments (#{enabled_count} enabled)"
-        else
+      else
           "Found #{count} instruments"
-        end
       end
     end
   rescue StandardError => e
@@ -104,7 +102,7 @@ class HealthChecker
   def check_derivative_data
     check("Derivative Data") do
       count = Derivative.count
-      if count == 0
+      if count.zero?
         warning("No derivatives found. Instruments may need derivative data")
         "No derivatives found"
       else
@@ -139,10 +137,8 @@ class HealthChecker
 
       critical_files.each do |file|
         path = Rails.root.join(file)
-        if File.exist?(path)
-          unless File.readable?(path)
+        if File.exist?(path) && !File.readable?(path)
             raise "Cannot read #{file}"
-          end
         end
       end
 
@@ -157,7 +153,7 @@ class HealthChecker
       # Check available disk space (simplified check)
       if RUBY_PLATFORM.include?("linux")
         output = `df -h / 2>/dev/null | tail -1 | awk '{print $4}'`
-        if output && !output.empty?
+        if output.present?
           free_space = output.strip
           "Free space: #{free_space}"
         else
@@ -212,19 +208,15 @@ class HealthChecker
       ]
 
       missing_gems = critical_gems.select do |gem_name|
-        begin
-          gem(gem_name)
-          false
-        rescue Gem::LoadError
-          true
-        end
+        gem(gem_name)
+        false
+      rescue Gem::LoadError
+        true
       end
 
-      # Check DhanHQ client separately as it might be a git gem
       begin
-        # Try to access the DhanHQ classes directly since they're already loaded
-        DhanHQ::Models::Order
-        DhanHQ::WS::Client
+        DhanHQ::Models::Order # rubocop:disable Lint/Void
+        DhanHQ::WS::Client # rubocop:disable Lint/Void
       rescue NameError
         missing_gems << "dhanhq-client"
       end
@@ -250,8 +242,8 @@ class HealthChecker
         settings
       ]
 
-      missing_tables = critical_tables.select do |table|
-        !ActiveRecord::Base.connection.table_exists?(table)
+      missing_tables = critical_tables.reject do |table|
+        ActiveRecord::Base.connection.table_exists?(table)
       end
 
       if missing_tables.any?
@@ -269,15 +261,19 @@ class HealthChecker
       # Test basic model operations
       instrument = Instrument.first
       if instrument
-        # Test instrument methods
         instrument.exchange_segment
-        instrument.latest_ltp rescue nil
+        begin
+          instrument.latest_ltp
+        rescue StandardError # rubocop:disable Lint/SuppressedException
+        end
 
-        # Test derivative methods if available
         derivative = Derivative.first
         if derivative
           derivative.exchange_segment
-          derivative.subscribe rescue nil
+          begin
+            derivative.subscribe
+          rescue StandardError # rubocop:disable Lint/SuppressedException
+          end
         end
       end
 
@@ -289,19 +285,14 @@ class HealthChecker
 
   def check_services_functionality
     check("Services Functionality") do
-      # Test critical services can be instantiated
-      services = [
-        "Live::MarketFeedHub",
-        "Orders::Placer",
-        "Signal::Engine",
-      ]
+      %w[
+        Live::MarketFeedHub
+        Signal::Engine
+        Orders::Placer
+      ].each(&:constantize)
 
-      services.each do |service_name|
-        service_class = service_name.constantize
-        service_class.new rescue service_class.instance rescue nil
-      end
-
-      "Services can be instantiated"
+      Live::MarketFeedHub.instance
+      "Critical service classes loaded"
     end
   rescue StandardError => e
     error("Service functionality check failed: #{e.message}")

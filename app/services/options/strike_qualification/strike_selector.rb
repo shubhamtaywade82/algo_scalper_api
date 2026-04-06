@@ -67,13 +67,13 @@ module Options
         # Check if desired strike exists in chain before checking liquidity
         desired_strike_float = desired[:strike].to_f
         if available_strikes.include?(desired_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: desired[:strike], side: side_sym)
-            return ok(desired.merge(atm_strike: atm_strike))
+          return ok(desired.merge(atm_strike: atm_strike))
         end
 
         # Fallback to ATM if it exists in chain
         atm_strike_float = atm_strike.to_f
         if available_strikes.include?(atm_strike_float) && liquid_in_chain?(option_chain: option_chain, strike: atm_strike, side: side_sym)
-            return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
+          return ok(strike: atm_strike, strike_type: :ATM, atm_strike: atm_strike)
         end
 
         # Enhanced error reporting

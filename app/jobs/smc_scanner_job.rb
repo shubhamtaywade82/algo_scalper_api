@@ -154,13 +154,14 @@ class SmcScannerJob < ApplicationJob
   def send_ai_analysis_telegram_notification(index_key, decision, ai_analysis)
     return unless telegram_enabled?
 
+    safe_analysis = ERB::Util.html_escape(ai_analysis.to_s)
     message = <<~MESSAGE
-      🤖 <b>SMC AI Analysis: #{index_key}</b>
+      🤖 <b>SMC AI Analysis: #{ERB::Util.html_escape(index_key)}</b>
 
-      <b>Decision:</b> #{decision.to_s.upcase}
+      <b>Decision:</b> #{ERB::Util.html_escape(decision.to_s.upcase)}
 
       <b>AI Analysis:</b>
-      #{ai_analysis}
+      #{safe_analysis}
     MESSAGE
 
     TelegramNotifier.send_message(message, parse_mode: 'HTML')

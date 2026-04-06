@@ -469,7 +469,13 @@ module Signal
 
         return { status: :error, message: "No enabled indicators" } if enabled_indicators.empty?
 
-        # Prepare indicator configs with per-index overrides if needed
+        interval = normalize_interval(timeframe)
+        if interval.blank?
+          message = "Invalid timeframe '#{timeframe}'"
+          Rails.logger.error("[Signal] #{message} for #{index_cfg[:key]}")
+          return { status: :error, message: message }
+        end
+
         prepared_indicators = enabled_indicators.map do |ind|
           if ind[:type] == "adx" && (thresholds = index_cfg[:adx_thresholds])
             ind = ind.deep_dup
@@ -478,51 +484,43 @@ module Signal
           ind
         end
 
-        series = instrument.candle_series(timeframe: timeframe)
+        series = instrument.candle_series(interval: interval)
         return { status: :no_data, message: "No candle data for #{timeframe}" } unless series
 
-        begin
-          strategy = MultiIndicatorStrategy.new(
-            series: series,
-            indicators: prepared_indicators,
-            confirmation_mode: signals_cfg[:confirmation_mode],
-            min_confidence: signals_cfg[:min_confidence]
-          )
+        strategy = MultiIndicatorStrategy.new(
+          series: series,
+          indicators: prepared_indicators,
+          confirmation_mode: signals_cfg[:confirmation_mode],
+          min_confidence: signals_cfg[:min_confidence]
+        )
 
-          signal = strategy.generate_signal(series.size - 1)
+        signal = strategy.generate_signal(series.size - 1)
 
-          # Map MultiIndicatorStrategy result to Engine's expected format
-          direction = if signal
-                        if signal[:type] == :ce
-                          :bullish
-                        else
-                          :bearish
-                        end
-                      else
-                        :avoid
-                      end
+        direction = if signal
+                      signal[:type] == :ce ? :bullish : :bearish
+                    else
+                      :avoid
+                    end
 
-          # Extract important indicator values for metadata/logic
-          st_indicator = strategy.indicators.find { |i| i.is_a?(Indicators::SupertrendIndicator) }
-          adx_indicator = strategy.indicators.find { |i| i.is_a?(Indicators::AdxIndicator) }
+        st_indicator = strategy.indicators.find { |i| i.is_a?(Indicators::SupertrendIndicator) }
+        adx_indicator = strategy.indicators.find { |i| i.is_a?(Indicators::AdxIndicator) }
 
-          st_result = st_indicator&.calculate_at(series.size - 1)
-          adx_result = adx_indicator&.calculate_at(series.size - 1)
+        st_result = st_indicator&.calculate_at(series.size - 1)
+        adx_result = adx_indicator&.calculate_at(series.size - 1)
 
-          {
-            status: :ok,
-            direction: direction,
-            series: series,
-            supertrend: st_result,
-            adx_value: adx_result&.dig(:value),
-            confluence: signal&.dig(:confluence),
-            confidence: signal&.dig(:confidence),
-            last_candle_timestamp: series.last.timestamp
-          }
-        rescue StandardError => e
-          Rails.logger.error("[Signal] Multi-indicator analysis failed: #{e.message}")
-          { status: :error, message: e.message }
-        end
+        {
+          status: :ok,
+          direction: direction,
+          series: series,
+          supertrend: st_result,
+          adx_value: adx_result&.dig(:value),
+          confluence: signal&.dig(:confluence),
+          confidence: signal&.dig(:confidence),
+          last_candle_timestamp: series.last.timestamp
+        }
+      rescue StandardError => e
+        Rails.logger.error("[Signal] Multi-indicator analysis failed: #{e.message}")
+        { status: :error, message: e.message }
       end
 
       def analyze_timeframe(index_cfg:, instrument:, timeframe:, supertrend_cfg:, adx_min_strength:)
