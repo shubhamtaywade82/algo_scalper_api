@@ -16,6 +16,7 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
       regime: { data: { 'label' => 'trending' } }
     })
     allow(CalibrationRun).to receive(:where).and_return(CalibrationRun.none)
+    allow(Ai::GenerativeAiMarketGate).to receive(:skip?).and_return(false)
   end
 
   context 'when OllamaClient returns a response' do
@@ -71,6 +72,32 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
       expect(response).to have_http_status(:service_unavailable)
       json = response.parsed_body
       expect(json['error']).to include('not configured')
+    end
+  end
+
+  context 'when generative AI is market-gated' do
+    let(:client) do
+      instance_double(Services::Ai::OllamaClient, enabled?: true,
+                                                  chat: 'Should not run')
+    end
+
+    before do
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
+      allow(Ai::GenerativeAiMarketGate).to receive(:skip?) do |force: false|
+        force ? false : true
+      end
+    end
+
+    it 'returns 422 and does not call chat' do
+      post '/api/analysis/NIFTY/ai_snapshot'
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(client).not_to have_received(:chat)
+    end
+
+    it 'allows force=true to run chat' do
+      post '/api/analysis/NIFTY/ai_snapshot', params: { force: 'true' }
+      expect(response).to have_http_status(:ok)
+      expect(client).to have_received(:chat)
     end
   end
 

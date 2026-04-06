@@ -41,7 +41,8 @@ export default function Analysis() {
   createEffect(() => {
     const idx = selectedTab()
     if (!idx || isLoading(idx) || !liveData(idx)) return
-    ensureAutoLoadedDetails(idx)
+    const gated = liveData(idx).session?.generative_ai_gated === true
+    ensureAutoLoadedDetails(idx, { skipAiSnapshot: gated })
   })
 
   const anyLoading = createMemo(() => INDICES.some((idx) => isLoading(idx)))

@@ -28,11 +28,18 @@ module Api
         "meta->>'index_key' = ?", index_key
       ).count
 
+      market_closed = TradingSession::Service.market_closed?
+      generative_ai_gated = Ai::GenerativeAiMarketGate.skip?(force: false)
+
       render json: {
         index_key: index_key,
         symbol: instrument.symbol_name,
         ltp: ltp&.to_f,
         timestamp: Time.current.iso8601,
+        session: {
+          market_closed: market_closed,
+          generative_ai_gated: generative_ai_gated
+        },
         smc: stored[:smc]&.dig(:data),
         smc_validity: stored[:smc]&.dig(:validity),
         ai_analysis: stored[:ai]&.dig(:data),
@@ -77,6 +84,14 @@ module Api
       client = Services::Ai::OllamaClient.instance
       unless client.enabled?
         return render json: { error: 'AI service not configured' }, status: :service_unavailable
+      end
+
+      force = params[:force].to_s == 'true'
+      if Ai::GenerativeAiMarketGate.skip?(force: force)
+        return render json: {
+          error: 'market_closed',
+          message: 'Generative AI is paused while the market is closed (ai.skip_generative_ai_when_market_closed). Pass force=true to override.'
+        }, status: :unprocessable_content
       end
 
       messages = Ai::AiSnapshotPromptBuilder.build(

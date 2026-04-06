@@ -17,7 +17,8 @@ export function useAnalysis() {
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
   const [snapshotData, setSnapshotData]   = createSignal(null)
   const [snapshotError, setSnapshotError] = createSignal(null)
-  const [autoDetailsLoadedForIndex, setAutoDetailsLoadedForIndex] = createSignal({})
+  const [autoHistoricalLoadedForIndex, setAutoHistoricalLoadedForIndex] = createSignal({})
+  const [autoSnapshotLoadedForIndex, setAutoSnapshotLoadedForIndex] = createSignal({})
 
   let pollTimer = null
   let subscription = null
@@ -75,13 +76,22 @@ export function useAnalysis() {
     }
   }
 
-  function ensureAutoLoadedDetails(index) {
+  function ensureAutoLoadedDetails(index, { skipAiSnapshot = false } = {}) {
     if (!index || !INDICES.includes(index)) return
-    const done = autoDetailsLoadedForIndex()
-    if (done[index]) return
-    setAutoDetailsLoadedForIndex({ ...done, [index]: true })
-    void fetchHistorical(index)
-    void fetchAiSnapshot(index)
+
+    const histDone = autoHistoricalLoadedForIndex()
+    if (!histDone[index]) {
+      setAutoHistoricalLoadedForIndex({ ...histDone, [index]: true })
+      void fetchHistorical(index)
+    }
+
+    if (skipAiSnapshot) return
+
+    const snapDone = autoSnapshotLoadedForIndex()
+    if (!snapDone[index]) {
+      setAutoSnapshotLoadedForIndex({ ...snapDone, [index]: true })
+      void fetchAiSnapshot(index)
+    }
   }
 
   async function fetchAiSnapshot(index) {
@@ -93,7 +103,8 @@ export function useAnalysis() {
       const res = await fetch(`/api/analysis/${index}/ai_snapshot`, { method: 'POST' })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || `HTTP ${res.status}`)
+        const msg = data.message || data.error || `HTTP ${res.status}`
+        throw new Error(msg)
       }
       const data = await res.json()
       setSnapshotData(data.snapshot)

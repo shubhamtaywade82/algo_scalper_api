@@ -36,6 +36,7 @@ module Smc
       def handle_tick(tick)
         return unless @running
         return unless feature_enabled?
+        return if Ai::GenerativeAiMarketGate.skip?(force: false)
 
         sid = tick[:security_id].to_s
         return if sid.blank?

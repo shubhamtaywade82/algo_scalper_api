@@ -17,6 +17,7 @@ module Smc
       signals_cfg = AlgoConfig.fetch[:signals] || {}
       return unless signals_cfg[:tick_ai_analysis_enabled] == true
       return unless ai_enabled?
+      return if Ai::GenerativeAiMarketGate.skip?(force: false)
 
       intervals = signals_cfg[:smc_confluence_intervals] || {}
       htf = (intervals[:htf] || intervals['htf'] || BiasEngine::HTF_INTERVAL).to_s

@@ -32,7 +32,10 @@ RSpec.describe Smc::TickAiDigestJob do
   end
 
   before do
-    allow(AlgoConfig).to receive(:fetch).and_return({ signals: signals_cfg, ai: { enabled: true } })
+    allow(AlgoConfig).to receive(:fetch).and_return({
+      signals: signals_cfg,
+      ai: { enabled: true, skip_generative_ai_when_market_closed: false }
+    })
     allow(Services::Ai::OllamaClient.instance).to receive_messages(enabled?: true)
     allow(Smc::Confluence::MtfDigest).to receive(:build_from_instrument).and_return(digest)
     allow(Smc::TickAi::SnapshotStore).to receive(:write)
@@ -72,6 +75,22 @@ RSpec.describe Smc::TickAiDigestJob do
 
     described_class.perform_now(instrument_id: instrument.id, ltp: 24_000.0)
 
+    expect(Smc::AiAnalyzer).not_to have_received(:new)
+  end
+
+  it 'returns early when generative AI is market-gated' do
+    allow(AlgoConfig).to receive(:fetch).and_return({
+      signals: signals_cfg,
+      ai: { enabled: true, skip_generative_ai_when_market_closed: true }
+    })
+    allow(TradingSession::Service).to receive(:market_closed?).and_return(true)
+    prev_flags = Smc::TickAi::EdgeDetector::FLAG_KEYS.index_with { false }
+    allow(Smc::TickAi::SnapshotStore).to receive(:read).and_return(prev_flags)
+    allow(Smc::AiAnalyzer).to receive(:new)
+
+    described_class.perform_now(instrument_id: instrument.id, ltp: 24_000.0, tick_at: Time.current.iso8601)
+
+    expect(Smc::Confluence::MtfDigest).not_to have_received(:build_from_instrument)
     expect(Smc::AiAnalyzer).not_to have_received(:new)
   end
 end
