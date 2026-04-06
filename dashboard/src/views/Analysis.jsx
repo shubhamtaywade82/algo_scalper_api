@@ -23,7 +23,7 @@ export default function Analysis() {
   const dashCtx = useDashboardContext()
   const {
     INDICES, liveData, isLoading, getError,
-    fetchOne, fetchAll, fetchHistorical, fetchAiSnapshot,
+    fetchOne, fetchAll, fetchHistorical, fetchAiSnapshot, ensureAutoLoadedDetails,
     activeIndex, historicalData, historicalLoading,
     snapshotLoading, snapshotData, snapshotError,
   } = useAnalysis()
@@ -36,6 +36,12 @@ export default function Analysis() {
     const first = tabs[0] || DEFAULT_TAB_ORDER[0]
     const cur = selectedTab()
     if (!tabs.includes(cur)) setSelectedTab(first)
+  })
+
+  createEffect(() => {
+    const idx = selectedTab()
+    if (!idx || isLoading(idx) || !liveData(idx)) return
+    ensureAutoLoadedDetails(idx)
   })
 
   const anyLoading = createMemo(() => INDICES.some((idx) => isLoading(idx)))

@@ -31,6 +31,7 @@ module TradingSystem
       exit_engine = Live::ExitEngine.new(order_router: router)
 
       supervisor.register(:market_feed, feed)
+      supervisor.register(:tick_smc_ai, Smc::TickAi::AnalysisService.new)
       supervisor.register(:signal_scheduler, Signal::Scheduler.new)
       supervisor.register(:risk_manager, Live::RiskManagerService.new(exit_engine: exit_engine))
       supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)

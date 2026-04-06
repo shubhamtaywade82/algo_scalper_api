@@ -73,6 +73,35 @@
 - Never commit secrets; use `.env` (based on `.env.example`).
 - Validate with paper mode before live use.
 
+## HTTP Rate Limiting (Rack::Attack)
+
+- **Configuration:** `config/initializers/rack_attack.rb`. Uses `Rails.cache`
+  for throttle counters.
+- **Test:** Rack::Attack is **disabled** after boot (`Rack::Attack.enabled =
+  false`) so specs and CI are not throttled.
+- **Dev / production:** Enabled by default:
+  - `/api/*` — default **240 requests / 5 minutes** per IP.
+  - `POST /api/analysis/:id/ai_snapshot` — **12 / minute** per IP (separate
+    bucket).
+- **Tuning:** `RACK_ATTACK_API_LIMIT`, `RACK_ATTACK_API_PERIOD_SECONDS`,
+  `RACK_ATTACK_AI_LIMIT`, `RACK_ATTACK_AI_PERIOD_SECONDS` in `.env` (see
+  `.env.example`). Raise limits for load tests. Throttled clients get **429**
+  and JSON `{"error":"rate_limited"}`.
+- **Bypassed:** `/up`, `/.well-known/*`.
+
+## Tick SMC + TA AI (optional)
+
+- **Runs only in the trading daemon** (`ENABLE_TRADING_SERVICES=true`), not in
+  Puma. Registers an `on_tick` callback on `Live::MarketFeedHub` (see
+  `Smc::TickAi::AnalysisService` in `lib/trading_system/bootstrap.rb`).
+- **Requires:** Redis (`REDIS_URL`) for per-tick throttle + rising-edge snapshot;
+  Ollama when `ai.enabled`; Telegram env vars when `tick_ai_notify_telegram` is
+  true (`config/algo.yml` → `signals.tick_ai_*`).
+- **Behavior:** throttle (default 15s per index) → Solid Queue job → MTF
+  confluence digest → **rising-edge** LTF flags vs Redis → optional index TA →
+  `Smc::AiAnalyzer` → optional Telegram. Master switch:
+  `signals.tick_ai_analysis_enabled`.
+
 ## Agent-Specific Instructions
 - Use `rg --files` and `rg -n` for code discovery; avoid slower recursive search.
 - Keep change scope tight: do not refactor unrelated code.

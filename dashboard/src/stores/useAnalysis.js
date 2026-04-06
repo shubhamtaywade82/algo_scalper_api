@@ -10,13 +10,14 @@ export function useAnalysis() {
   const loading   = Object.fromEntries(INDICES.map(k => [k, createSignal(false)]))
   const errors    = Object.fromEntries(INDICES.map(k => [k, createSignal(null)]))
 
-  // Historical / snapshot are still per-selected-index (on-demand, not auto-polled)
-  const [activeIndex, setActiveIndex] = createSignal(null) // which index has expanded historical/snapshot
+  // Historical / snapshot follow the selected Analysis tab (auto-loaded once per index per visit)
+  const [activeIndex, setActiveIndex] = createSignal(null)
   const [historicalData, setHistoricalData] = createSignal(null)
   const [historicalLoading, setHistoricalLoading] = createSignal(false)
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
   const [snapshotData, setSnapshotData]   = createSignal(null)
   const [snapshotError, setSnapshotError] = createSignal(null)
+  const [autoDetailsLoadedForIndex, setAutoDetailsLoadedForIndex] = createSignal({})
 
   let pollTimer = null
   let subscription = null
@@ -74,6 +75,15 @@ export function useAnalysis() {
     }
   }
 
+  function ensureAutoLoadedDetails(index) {
+    if (!index || !INDICES.includes(index)) return
+    const done = autoDetailsLoadedForIndex()
+    if (done[index]) return
+    setAutoDetailsLoadedForIndex({ ...done, [index]: true })
+    void fetchHistorical(index)
+    void fetchAiSnapshot(index)
+  }
+
   async function fetchAiSnapshot(index) {
     setActiveIndex(index)
     setSnapshotLoading(true)
@@ -118,6 +128,7 @@ export function useAnalysis() {
     fetchAll,
     fetchHistorical,
     fetchAiSnapshot,
+    ensureAutoLoadedDetails,
     activeIndex,
     historicalData,
     historicalLoading,
