@@ -117,16 +117,11 @@ class HealthChecker
 
   def check_websocket_configuration
     check("WebSocket Configuration") do
-      ws_enabled = ENV["DHANHQ_WS_ENABLED"] != "false"
-      order_ws_enabled = ENV["DHANHQ_ORDER_WS_ENABLED"] != "false"
-
-      if ws_enabled && order_ws_enabled
-        "WebSocket and Order WebSocket enabled"
-      elsif ws_enabled
-        "WebSocket enabled, Order WebSocket disabled"
+      paper = AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      if paper
+        "Tick WebSocket runs when credentials are set; order WebSocket skipped (paper trading)"
       else
-        warning("WebSocket disabled - real-time data unavailable")
-        "WebSocket disabled"
+        "Tick and order WebSockets run when credentials are set (no DHANHQ_WS_ENABLED toggle)"
       end
     end
   rescue StandardError => e

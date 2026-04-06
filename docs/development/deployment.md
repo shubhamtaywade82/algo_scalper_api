@@ -59,7 +59,6 @@ This document covers deployment setup and operational procedures for the Algo Sc
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DHANHQ_WS_ENABLED` | auto | Enable DhanHQ WebSocket feed |
 | `ENABLE_TRADING_SERVICES` | — | Set to `"true"` to start trading daemon |
 | `DISABLE_TRADING_SERVICES` | — | Set to `"1"` to disable (overrides ENABLE) |
 | `RUN_MODE` | from algo.yml | Override run_mode: `production`, `exit_testing`, `entry_testing` |

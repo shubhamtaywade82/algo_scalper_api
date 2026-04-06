@@ -312,7 +312,6 @@ Profile overrides live in `config/profiles/<run_mode>.yml`. **Current default:**
 | `DHAN_TOTP_SECRET` | Recommended | For TOTP auto-refresh |
 | `ENABLE_TRADING_SERVICES` | Auto (Procfile) | Must be `"true"` for daemon |
 | `PLACE_ORDER` | Live only | Must be `"true"` to allow live broker order placement |
-| `DHANHQ_WS_ENABLED` | Optional | Enable WebSocket (defaults based on env) |
 | `REDIS_URL` | Optional | Redis connection (default: redis://127.0.0.1:6379/0) |
 | `DATABASE_URL` | Optional | PostgreSQL connection |
 | `RAILS_ENV` | Optional | Rails environment |
