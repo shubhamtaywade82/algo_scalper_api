@@ -42,7 +42,53 @@ class AlgoConfig
       @cache_expires_at = nil
     end
 
+    # Tick-triggered AI (+Smc::TickAi::AnalysisService+) or explicit event-driven mode.
+    # DB JSON overrides may store booleans as strings — treat "true" like true.
+    def event_driven_intraday_ai?
+      s = fetch[:signals] || {}
+      truthy_signal_flag?(s[:tick_ai_analysis_enabled]) ||
+        truthy_signal_flag?(s[:event_driven_ai_alerts])
+    rescue StandardError
+      false
+    end
+
+    # When true during open session, Solid Queue should not run 15m AI/SMC jobs; daemon tick path owns alerts.
+    def defer_scheduled_intraday_ai_jobs?
+      return false if market_closed_for_scheduling?
+
+      event_driven_intraday_ai?
+    rescue StandardError
+      false
+    end
+
+    def scheduled_ai_technical_analysis_job_deferred?
+      return false if ENV['SCHEDULED_AI_TECHNICAL_ANALYSIS'] == 'true'
+
+      defer_scheduled_intraday_ai_jobs?
+    end
+
+    def scheduled_smc_scanner_job_deferred?
+      return false if ENV['SCHEDULED_SMC_SCANNER'] == 'true'
+
+      defer_scheduled_intraday_ai_jobs?
+    end
+
+    # Suppress +BiasEngine#notify+ (SendSmcAlertJob) from periodic daemon scans when event-driven.
+    def suppress_smc_bias_notify_for_event_driven_ai?
+      defer_scheduled_intraday_ai_jobs?
+    end
+
+    def market_closed_for_scheduling?
+      TradingSession::Service.market_closed?
+    rescue StandardError
+      false
+    end
+
     private
+
+    def truthy_signal_flag?(val)
+      val == true || val.to_s.strip.casecmp('true').zero?
+    end
 
     # Custom deep merge to handle arrays of hashes (like the indices array where we match by :key)
     def deep_merge_hashes_with_arrays(base, overrides)

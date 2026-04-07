@@ -12,7 +12,10 @@ module Smc
       def start
         @running = true
         unless feature_enabled?
-          Rails.logger.info('[Smc::TickAi::AnalysisService] Disabled (signals.tick_ai_analysis_enabled)')
+          Rails.logger.info(
+            '[Smc::TickAi::AnalysisService] Disabled (set signals.event_driven_ai_alerts or ' \
+            'signals.tick_ai_analysis_enabled)'
+          )
           return
         end
 
@@ -28,9 +31,7 @@ module Smc
       private
 
       def feature_enabled?
-        AlgoConfig.fetch.dig(:signals, :tick_ai_analysis_enabled) == true
-      rescue StandardError
-        false
+        AlgoConfig.event_driven_intraday_ai?
       end
 
       def handle_tick(tick)

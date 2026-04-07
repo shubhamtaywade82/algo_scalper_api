@@ -10,6 +10,15 @@ class SmcScannerJob < ApplicationJob
   retry_on StandardError, wait: ->(executions) { 2**executions }, attempts: 3
 
   def perform
+    if AlgoConfig.scheduled_smc_scanner_job_deferred?
+      Rails.logger.info(
+        '[SmcScannerJob] Skipped intraday scheduled scan: event-driven AI ' \
+        '(event_driven_ai_alerts or tick_ai_analysis_enabled). Use trading daemon + tick path; ' \
+        'SCHEDULED_SMC_SCANNER=true forces this job.'
+      )
+      return
+    end
+
     Rails.logger.info('[SmcScannerJob] Starting SMC scan...')
 
     log_market_closed_status if TradingSession::Service.market_closed?

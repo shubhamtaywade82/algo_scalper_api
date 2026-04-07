@@ -25,6 +25,9 @@ exploratory:
     indicator_preset: loose
     min_confidence: 50
     enable_smc_confluence_gating: false
+    enable_institutional_filter: false
+  option_chain:
+    min_strike_score: 50.0
   midday_guard:
     enabled: false
   market_context:
@@ -57,6 +60,9 @@ selective:
     indicator_preset: tight
     min_confidence: 72
     enable_smc_confluence_gating: false
+    enable_institutional_filter: true
+  option_chain:
+    min_strike_score: 140.0
   midday_guard:
     enabled: true
     min_confidence: 0.78

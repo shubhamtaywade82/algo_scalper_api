@@ -836,9 +836,15 @@ signals:
     mtf: "15"
     ltf: "5"
 
+  # Event-driven intraday AI (see AlgoConfig.event_driven_intraday_ai?): tick throttle + defer 15m jobs.
+  # Optional second flag (both are OR’d). DB JSON may send "true" as a string — that still counts.
+  # event_driven_ai_alerts: true
+
   # Tick-triggered MTF SMC confluence + optional index TA → Ollama → Telegram (trading daemon only).
-  # Hot path: Redis throttle on tick; job: MtfDigest, rising-edge on LTF alignment flags, then AiAnalyzer.
-  tick_ai_analysis_enabled: false
+  # Hot path: Redis throttle on tick; job: TickAiDigestJob, rising-edge on LTF flags, then AiAnalyzer.
+  # When true (or event_driven_ai_alerts): open-session AiTechnicalAnalysisJob + SmcScannerJob skip;
+  # BiasEngine Telegram from the daemon SMC loop is suppressed (tick/SMC AI alerts only on edges).
+  tick_ai_analysis_enabled: true
   tick_ai_min_interval_seconds: 15
   tick_ai_include_index_ta: true
   tick_ai_notify_telegram: true

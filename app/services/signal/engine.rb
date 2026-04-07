@@ -1371,13 +1371,24 @@ module Signal
       end
 
       def execute_execution_gates(index_cfg, instrument, primary_series, final_direction, signals_cfg)
-        filter = Entries::EntryFilterEngine.new(series: primary_series, symbol: index_cfg[:key])
-        unless filter.valid_entry?(direction: final_direction)
-          Rails.logger.warn("[Signal] EntryFilterEngine BLOCKED #{index_cfg[:key]}: Missing Structure/Liquidity/Volatility alignment")
-          Signal::StateTracker.reset(index_cfg[:key])
-          return nil
+        if signals_cfg.fetch(:enable_institutional_filter, false)
+          filter = Entries::EntryFilterEngine.new(series: primary_series, symbol: index_cfg[:key])
+          unless filter.valid_entry?(direction: final_direction)
+            msg = "Missing Structure/Liquidity/Volatility alignment"
+            Rails.logger.warn("[Signal] EntryFilterEngine BLOCKED #{index_cfg[:key]}: #{msg}")
+            ActionCable.server.broadcast("dashboard", {
+              type: "toast",
+              level: "warning",
+              title: "Institutional Filter Blocked",
+              message: "#{index_cfg[:key]} #{final_direction}: #{msg}"
+            })
+            Signal::StateTracker.reset(index_cfg[:key])
+            return nil
+          end
+          Rails.logger.info("[Signal] EntryFilterEngine PASSED for #{index_cfg[:key]}")
+        else
+          Rails.logger.debug { "[Signal] EntryFilterEngine SKIPPED for #{index_cfg[:key]} (disabled in config)" }
         end
-        Rails.logger.info("[Signal] EntryFilterEngine PASSED for #{index_cfg[:key]}")
 
         permission = Trading::PermissionResolver.resolve(symbol: index_cfg[:key], instrument: instrument)
         if permission == :blocked
@@ -1646,6 +1657,12 @@ module Signal
         if picks.blank?
           Rails.logger.warn("[Signal] No suitable option strikes found for #{index_cfg[:key]} #{final_direction}")
           record_signal_skip(signal, 'no suitable strikes')
+          ActionCable.server.broadcast("dashboard", {
+            type: "toast",
+            level: "warning",
+            title: "Options Strike Blocked",
+            message: "No suitable option strikes found for #{index_cfg[:key]} #{final_direction}"
+          })
           return nil
         end
 

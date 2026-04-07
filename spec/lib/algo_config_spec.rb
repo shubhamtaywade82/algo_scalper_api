@@ -108,4 +108,16 @@ RSpec.describe AlgoConfig do
       expect(described_class.mode).to eq('paper')
     end
   end
+
+  describe '.event_driven_intraday_ai?' do
+    it 'treats string tick_ai_analysis_enabled from DB-style JSON as enabled' do
+      allow(described_class).to receive(:fetch).and_return({ signals: { tick_ai_analysis_enabled: 'true' } })
+      expect(described_class.event_driven_intraday_ai?).to be(true)
+    end
+
+    it 'is true when event_driven_ai_alerts is set' do
+      allow(described_class).to receive(:fetch).and_return({ signals: { event_driven_ai_alerts: true } })
+      expect(described_class.event_driven_intraday_ai?).to be(true)
+    end
+  end
 end

@@ -210,6 +210,13 @@ module Smc
     end
 
     def notify(decision, htf, mtf, ltf)
+      if AlgoConfig.suppress_smc_bias_notify_for_event_driven_ai?
+        Rails.logger.debug do
+          '[Smc::BiasEngine] Skipping Telegram notify — event-driven intraday AI (tick path) is active'
+        end
+        return
+      end
+
       # Enqueue background job for async AI analysis and Telegram notification
       # This prevents blocking the scanner rake task while AI fetches response
       Notifications::Telegram::SendSmcAlertJob.perform_later(

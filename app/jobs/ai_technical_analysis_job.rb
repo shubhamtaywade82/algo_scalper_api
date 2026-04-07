@@ -14,6 +14,16 @@ class AiTechnicalAnalysisJob < ApplicationJob
 
   def perform(index_name)
     index_key = validate_index_key!(index_name)
+
+    if AlgoConfig.scheduled_ai_technical_analysis_job_deferred?
+      Rails.logger.info(
+        "[AiTechnicalAnalysisJob] Skipped #{index_key}: event-driven intraday AI " \
+        '(signals.event_driven_ai_alerts or tick_ai_analysis_enabled). Trading daemon tick path ' \
+        'owns open-session alerts; SCHEDULED_AI_TECHNICAL_ANALYSIS=true forces this job.'
+      )
+      return
+    end
+
     market_closed = TradingSession::Service.market_closed?
 
     if market_closed

@@ -1,6 +1,7 @@
 import { Router, Route } from '@solidjs/router'
 import { Show, lazy } from 'solid-js'
 import { DashboardContext } from './context/DashboardContext'
+import { Toaster } from 'solid-toast'
 import { useDashboard } from './stores/useDashboard'
 import { usePositions } from './stores/usePositions'
 import Header from './components/Header'
@@ -39,6 +40,7 @@ function AppShell(props) {
   return (
     <DashboardContext.Provider value={ctx}>
       <div class="min-h-screen bg-transparent text-gray-100 font-sans selection:bg-primary-500/30">
+        <Toaster position="bottom-right" gutter={8} toastOptions={{ className: '!bg-gray-800 !text-gray-100 !border !border-white/10 !rounded-xl !shadow-2xl' }} />
         <Header
           mode={mode()}
           indices={indices()}

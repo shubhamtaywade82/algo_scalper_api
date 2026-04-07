@@ -835,11 +835,13 @@ module Options
 
         leg = legs.first
 
+        min_score = AlgoConfig.fetch.dig(:option_chain, :min_strike_score) || 140.0
+
         # Institutional Rule: If no good strike exists (score too low) -> skip trade
         # Threshold 140 (scaled score: institutional base + acceleration + ATM bonus)
-        if leg[:score] < 140.0
+        if leg[:score] < min_score
           if defined?(Rails)
-            Rails.logger.warn("[Options] Best strike for #{index_cfg[:key]} rejected due to low score: #{leg[:score].round(2)} < 140.0")
+            Rails.logger.warn("[Options] Best strike for #{index_cfg[:key]} rejected due to low score: #{leg[:score].round(2)} < #{min_score}")
           end
           return []
         end
