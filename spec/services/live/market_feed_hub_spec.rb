@@ -2,6 +2,7 @@
 
 require 'rails_helper'
 
+# rubocop:disable RSpec/VerifiedDoubles, RSpec/IdenticalEqualityAssertion, RSpec/MessageSpies
 RSpec.describe Live::MarketFeedHub do
   let(:hub) { described_class.instance }
   let(:ws_client) { double('DhanHQ::WS::Client') }
@@ -17,7 +18,7 @@ RSpec.describe Live::MarketFeedHub do
     hub.instance_variable_set(:@last_tick_at, nil)
     hub.instance_variable_set(:@watchdog_thread, nil)
     hub.instance_variable_set(:@restarting, false)
-    
+
     # Mock environment
     allow(ENV).to receive(:[]).with('DHAN_CLIENT_ID').and_return('test_client_id')
     allow(ENV).to receive(:[]).with('DHAN_ACCESS_TOKEN').and_return('test_access_token')
@@ -25,8 +26,9 @@ RSpec.describe Live::MarketFeedHub do
     allow(ENV).to receive(:[]).with('ACCESS_TOKEN').and_return(nil)
     allow(ENV).to receive(:[]).with('BACKTEST_MODE').and_return(nil)
     allow(ENV).to receive(:[]).with('SCRIPT_MODE').and_return(nil)
+    allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return(nil)
     allow(ENV).to receive(:[]).and_call_original
-    
+
     # Mock DhanHQ::WS::Client via build_client to be 100% sure we capture the calls
     allow(hub).to receive(:build_client).and_return(ws_client)
     allow(ws_client).to receive(:on).at_least(:once)
@@ -42,8 +44,7 @@ RSpec.describe Live::MarketFeedHub do
     # Prevent actual background threads or DB calls in unit tests
     allow(hub).to receive(:start_watchdog!)
     allow(hub).to receive(:subscribe_watchlist)
-    allow(hub).to receive(:load_watchlist).and_return([])
-    allow(hub).to receive(:enabled?).and_return(true)
+    allow(hub).to receive_messages(load_watchlist: [], enabled?: true)
   end
 
   after do
@@ -72,7 +73,7 @@ RSpec.describe Live::MarketFeedHub do
     context 'when enabled and not running' do
       it 'starts the WebSocket client and sets running to true' do
         result = hub.start!
-        
+
         expect(result).to be true
         expect(hub.running?).to be true
         expect(ws_client).to have_received(:start)
@@ -84,7 +85,7 @@ RSpec.describe Live::MarketFeedHub do
         hub.start!
         # Reset count for start check
         expect(ws_client).to have_received(:start).once
-        
+
         expect(hub.start!).to be true
         # Should still be once
         expect(ws_client).to have_received(:start).once
@@ -96,7 +97,7 @@ RSpec.describe Live::MarketFeedHub do
     it 'stops the client and resets state' do
       hub.start!
       hub.stop!
-      
+
       expect(hub.running?).to be false
       expect(hub.instance_variable_get(:@ws_client)).to be_nil
       expect(hub.instance_variable_get(:@subscribed_keys)).to be_empty
@@ -109,7 +110,7 @@ RSpec.describe Live::MarketFeedHub do
 
     it 'subscribes via WebSocket and tracks the key' do
       result = hub.subscribe(segment: 'NSE_FNO', security_id: '12345')
-      
+
       expect(result[:already_subscribed]).to be false
       expect(hub.subscribed?(segment: 'NSE_FNO', security_id: '12345')).to be true
       expect(ws_client).to have_received(:subscribe_one).with(segment: 'NSE_FNO', security_id: '12345')
@@ -118,7 +119,7 @@ RSpec.describe Live::MarketFeedHub do
     it 'skips if already subscribed' do
       hub.subscribe(segment: 'NSE_FNO', security_id: '12345')
       hub.subscribe(segment: 'NSE_FNO', security_id: '12345')
-      
+
       expect(ws_client).to have_received(:subscribe_one).once
     end
   end
@@ -128,7 +129,7 @@ RSpec.describe Live::MarketFeedHub do
       {
         segment: 'NSE_FNO',
         security_id: '12345',
-        ltp: 25200.5,
+        ltp: 25_200.5,
         kind: :ticker,
         ts: Time.current.to_i
       }
@@ -136,7 +137,7 @@ RSpec.describe Live::MarketFeedHub do
 
     before do
       hub.start!
-      
+
       # Mock dependencies called in handle_tick
       allow(Live::TickCache).to receive(:put)
       allow(Live::FeedHealthService.instance).to receive(:mark_success!)
@@ -180,4 +181,14 @@ RSpec.describe Live::MarketFeedHub do
       hub.send(:check_connection_health!)
     end
   end
+
+  describe 'operator disable flag' do
+    it 'reports disabled when DISABLE_TRADING_SERVICES=1' do
+      allow(hub).to receive(:enabled?).and_call_original
+      allow(ENV).to receive(:[]).with('DISABLE_TRADING_SERVICES').and_return('1')
+
+      expect(hub.send(:enabled?)).to be false
+    end
+  end
 end
+# rubocop:enable RSpec/VerifiedDoubles, RSpec/IdenticalEqualityAssertion, RSpec/MessageSpies

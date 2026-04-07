@@ -2,17 +2,27 @@
 
 module Domain
   class TradingContext
-    attr_reader :day_type, :session, :regime, :score, :stability
+    attr_reader :day_type, :session, :regime, :score, :stability, :strictness
 
-    def initialize(day_type:, session:, regime:, score:, stability: 0)
+    def initialize(day_type:, session:, regime:, score:, stability: 0, strictness: :strict)
       @day_type = day_type
       @session = session
       @regime = regime
       @score = score
       @stability = stability
+      @strictness = self.class.normalize_strictness(strictness)
+    end
+
+    def self.normalize_strictness(value)
+      sym = value&.to_s&.downcase&.to_sym || :strict
+      return sym if %i[strict relaxed].include?(sym)
+
+      :strict
     end
 
     def tradable?
+      return true if strictness == :relaxed
+
       return false if regime == :chop
       return false if score < min_score
       return false if stability < 3

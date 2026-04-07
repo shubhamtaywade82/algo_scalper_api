@@ -859,6 +859,11 @@ signals:
   # See docs/PERMISSION_SYSTEM_CONFIGURATION.md for details
   permission_mode: lenient # Options: strict, lenient, bypass (default: strict)
 
+  # Trading context gate: regime score, stability, and :chop blocking (see Domain::TradingContext).
+  # strict: production defaults; relaxed: allow signals on expiry/chop/low score (temporary / paper).
+  enable_trading_context_gate: true
+  trading_context_strictness: relaxed # strict | relaxed
+
   # Supertrend+ADX Strategy Configuration
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
@@ -938,7 +943,55 @@ signals:
     min_trend_score: 14
     mtf_enabled: true
 
+  # Presets for comprehensive_validation + options IV/theta thresholds (via effective_validation_mode).
+  validation_modes:
+    conservative:
+      adx_min_strength: 25
+      adx_confirmation_min_strength: 30
+      iv_rank_max: 0.6
+      iv_rank_min: 0.15
+      theta_risk_cutoff_hour: 14
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+    balanced:
+      adx_min_strength: 18
+      adx_confirmation_min_strength: 20
+      iv_rank_max: 0.8
+      iv_rank_min: 0.1
+      theta_risk_cutoff_hour: 14
+      theta_risk_cutoff_minute: 30
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+    aggressive:
+      adx_min_strength: 15
+      adx_confirmation_min_strength: 18
+      iv_rank_max: 0.9
+      iv_rank_min: 0.05
+      theta_risk_cutoff_hour: 15
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: false
+      require_iv_rank_check: true
+      require_theta_risk_check: false
+
   validation_mode: balanced
+
+  # When enabled, failed IV-rank / theta checks from options analysis block strike pick + entry.
+  # IV rank here is still the index candle volatility proxy (not option IV percentile).
+  options_analysis_gate:
+    enabled: false
+    block_on_iv_rank_failure: true
+    block_on_theta_risk_failure: true
+
+  # When true, comprehensive_validation failure stops the pipeline before context/quality gates.
+  halt_on_validation_failure: false
+
+  # Block new signals when nearest series expiry is too soon (0 = expiry day, 1 = tomorrow, etc.).
+  entry_dte_guard:
+    enabled: true
+    reject_when_days_to_expiry_lte: 0
 
   supertrend:
     period: 10

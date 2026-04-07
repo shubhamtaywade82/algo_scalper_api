@@ -116,10 +116,15 @@ class HealthChecker
   def check_websocket_configuration
     check("WebSocket Configuration") do
       paper = AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      if ENV["DISABLE_TRADING_SERVICES"] == "1"
+        warning("Trading services disabled via DISABLE_TRADING_SERVICES=1")
+        return "Tick and order WebSockets disabled by operator override"
+      end
+
       if paper
         "Tick WebSocket runs when credentials are set; order WebSocket skipped (paper trading)"
       else
-        "Tick and order WebSockets run when credentials are set (no DHANHQ_WS_ENABLED toggle)"
+        "Tick and order WebSockets run when credentials are set"
       end
     end
   rescue StandardError => e

@@ -2,7 +2,7 @@
 
 module Context
   class Builder
-    def self.call(market:, indicators:, regime_state:, index_key: nil)
+    def self.call(market:, indicators:, regime_state:, index_key: nil, strictness: :strict)
       regime_data = Market::RegimeScorer.new(
         market: market,
         indicators: indicators
@@ -15,7 +15,8 @@ module Context
         session: Market::SessionResolver.current,
         regime: state[:regime],
         score: regime_data[:score],
-        stability: state[:stability]
+        stability: state[:stability],
+        strictness: strictness
       )
     end
 

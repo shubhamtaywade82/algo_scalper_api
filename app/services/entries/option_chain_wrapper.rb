@@ -3,50 +3,28 @@
 module Entries
   # Wrapper for option chain data to provide No-Trade Engine methods
   class OptionChainWrapper
-    attr_reader :chain_data, :index_key
+    attr_reader :chain_data, :index_key, :spot_price
 
     def initialize(chain_data:, index_key:)
       @index_key = index_key.to_s.upcase
-      # Handle different data formats: { oc: {...} } or direct oc hash
-      @chain_data = if chain_data.is_a?(Hash) && chain_data.key?(:oc)
-                      chain_data[:oc]
-                    elsif chain_data.is_a?(Hash) && chain_data.key?('oc')
-                      chain_data['oc']
-                    else
-                      chain_data || {}
-                    end
+      source = chain_data.is_a?(Hash) ? chain_data : {}
+      @spot_price = extract_spot_price(source)
+      # Handle different data formats: { oc: {...} }, { "oc" => {...} }, or direct chain data
+      @chain_data = normalize_chain_data(source)
     end
 
     # Check if CE OI is rising
     # @return [Boolean]
     def ce_oi_rising?
-      return false unless chain_data.is_a?(Hash)
-
-      ce_strikes = extract_ce_strikes
-      return false if ce_strikes.size < 2
-
-      # Compare last 2 OI values (if available in cache/history)
-      # For now, use simple heuristic: check if ATM CE has OI
       atm_ce = find_atm_option(:ce)
-      return false unless atm_ce
-
-      # If we have historical data, compare; otherwise assume not rising
-      # This is a simplified check - in production, you'd track OI history
-      atm_ce['oi'].to_i.positive?
+      oi_rising?(atm_ce)
     end
 
     # Check if PE OI is rising
     # @return [Boolean]
     def pe_oi_rising?
-      return false unless chain_data.is_a?(Hash)
-
-      pe_strikes = extract_pe_strikes
-      return false if pe_strikes.size < 2
-
       atm_pe = find_atm_option(:pe)
-      return false unless atm_pe
-
-      atm_pe['oi'].to_i.positive?
+      oi_rising?(atm_pe)
     end
 
     # Get ATM IV
@@ -66,9 +44,14 @@ module Entries
     # Check if IV is falling
     # @return [Boolean]
     def iv_falling?
-      # Simplified check - in production, track IV history
-      # For now, return false (assume stable)
-      false
+      instruments = [find_atm_option(:ce), find_atm_option(:pe)].compact
+      return false if instruments.empty?
+
+      instruments.any? do |instrument|
+        current_iv = instrument_iv(instrument)
+        previous_iv = instrument_previous_iv(instrument)
+        current_iv && previous_iv && current_iv < previous_iv
+      end
     end
 
     # Check if spread is wide
@@ -107,31 +90,93 @@ module Entries
 
     private
 
-    def extract_ce_strikes
-      return [] unless chain_data.is_a?(Hash)
-
-      chain_data.select { |_k, v| v.is_a?(Hash) && v.key?('ce') }
+    def normalize_chain_data(source)
+      if source.key?(:oc)
+        source[:oc] || {}
+      elsif source.key?('oc')
+        source['oc'] || {}
+      else
+        source
+      end
     end
 
-    def extract_pe_strikes
-      return [] unless chain_data.is_a?(Hash)
-
-      chain_data.select { |_k, v| v.is_a?(Hash) && v.key?('pe') }
+    def extract_spot_price(source)
+      source[:last_price]&.to_f || source['last_price']&.to_f
     end
 
     def find_atm_option(type)
       return nil unless chain_data.is_a?(Hash)
 
-      # Find strike closest to current spot
-      # For simplicity, use first available strike with the type
-      chain_data.each_value do |strike_data|
+      strike_data = atm_strike_data
+      return nil unless strike_data.is_a?(Hash)
+
+      option = strike_data[type.to_s]
+      option if option.is_a?(Hash) && option_last_price(option).positive?
+    end
+
+    def atm_strike_data
+      structured = normalized_strike_rows
+      return nil if structured.empty?
+
+      target_strike = if spot_price&.positive?
+                        spot_price
+                      else
+                        synthetic_spot(structured)
+                      end
+
+      structured.min_by { |row| [(row[:strike] - target_strike).abs, row[:strike]] }&.dig(:data)
+    end
+
+    def normalized_strike_rows
+      chain_data.each_with_object([]) do |(strike_key, strike_data), rows|
         next unless strike_data.is_a?(Hash)
 
-        option = strike_data[type.to_s]
-        return option if option.is_a?(Hash) && option['last_price']&.to_f&.positive?
+        strike = Float(strike_key)
+        rows << { strike: strike, data: strike_data }
+      rescue ArgumentError, TypeError
+        next
       end
+    end
 
-      nil
+    def synthetic_spot(structured)
+      parity_candidates = structured.filter_map do |row|
+        ce = row[:data]['ce']
+        pe = row[:data]['pe']
+        next unless ce.is_a?(Hash) && pe.is_a?(Hash)
+
+        ce_ltp = option_last_price(ce)
+        pe_ltp = option_last_price(pe)
+        next unless ce_ltp.positive? && pe_ltp.positive?
+
+        { strike: row[:strike], parity_gap: (ce_ltp - pe_ltp).abs }
+      end
+      parity_candidate = parity_candidates.min_by { |row| [row[:parity_gap], row[:strike]] }
+
+      parity_candidate ? parity_candidate[:strike] : structured.min_by { |row| row[:strike] }[:strike]
+    end
+
+    def oi_rising?(instrument)
+      return false unless instrument.is_a?(Hash)
+
+      current_oi = instrument['oi'].to_i
+      previous_oi = instrument['previous_oi'].to_i
+      current_oi.positive? && previous_oi.positive? && current_oi > previous_oi
+    end
+
+    def instrument_iv(instrument)
+      raw = instrument['implied_volatility'] || instrument['iv']
+      value = raw&.to_f
+      value if value&.positive?
+    end
+
+    def instrument_previous_iv(instrument)
+      raw = instrument['previous_implied_volatility'] || instrument['previous_iv']
+      value = raw&.to_f
+      value if value&.positive?
+    end
+
+    def option_last_price(option)
+      option['last_price']&.to_f || option['ltp']&.to_f || 0.0
     end
   end
 end

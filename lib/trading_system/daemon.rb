@@ -44,6 +44,7 @@ module TradingSystem
     def enabled?(allow_in_test:)
       return false if Rails.env.test? && !allow_in_test
       return false if ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1'
+      return false if ENV['DISABLE_TRADING_SERVICES'] == '1'
 
       ENV['ENABLE_TRADING_SERVICES'].to_s == 'true'
     end
@@ -133,12 +134,11 @@ module TradingSystem
         begin
           @supervisor.stop_all
         rescue StandardError => e
-          # If we're here, we're likely outside trap context, but let's be safe
-          $stderr.puts "[TradingDaemon] stop_all failed: #{e.class} - #{e.message}"
+          warn "[TradingDaemon] stop_all failed: #{e.class} - #{e.message}"
         end
       end
     rescue StandardError => e
-      $stderr.puts "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
+      warn "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
     end
 
     def keep_process_alive!
@@ -153,4 +153,3 @@ module TradingSystem
     end
   end
 end
-

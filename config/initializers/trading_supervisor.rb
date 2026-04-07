@@ -12,7 +12,8 @@ if Rails.env.test? ||
    defined?(Rails::Console) ||
    (defined?(Rails::Generators) && Rails::Generators.const_defined?(:Base)) ||
    ENV['BACKTEST_MODE'] == '1' ||
-   ENV['SCRIPT_MODE'] == '1'
+   ENV['SCRIPT_MODE'] == '1' ||
+   ENV['DISABLE_TRADING_SERVICES'] == '1'
   return
 end
 
