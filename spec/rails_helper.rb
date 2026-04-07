@@ -26,6 +26,8 @@ end
 
 ENV['RAILS_ENV'] ||= 'test'
 ENV['DHANHQ_ENABLED'] ||= 'false'
+# Default specs to paper execution; examples that need live gateway set LIVE_TRADING explicitly.
+ENV['LIVE_TRADING'] ||= 'false'
 require File.expand_path('../config/environment', __dir__)
 abort('The Rails environment is running in production mode!') if Rails.env.production?
 require 'rspec/rails'

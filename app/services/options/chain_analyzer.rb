@@ -844,7 +844,7 @@ module Options
           return []
         end
 
-        pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
+        pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike, :prev_close)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
         validator = Options::StrikeQualification::ExpectedMoveValidator.new

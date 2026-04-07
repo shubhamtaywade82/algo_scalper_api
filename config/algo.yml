@@ -1,4 +1,6 @@
 # Paper vs live: same strategy/guards; only execution differs (GatewayPaper vs GatewayLive).
+# Effective mode is set by ENV LIVE_TRADING last-wins over YAML/DB: unset/false => paper (default for
+# ./bin/dev). LIVE_TRADING=true => live broker path (real money risk — also set dhanhq.enable_orders).
 paper_trading:
   enabled: true
   balance: 100000

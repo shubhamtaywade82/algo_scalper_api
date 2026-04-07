@@ -52,11 +52,13 @@ This file is a point-in-time snapshot. Re-read the referenced files before makin
 - No-trade protection is wired into the engine, but it is not active in production config until `enable_no_trade_engine` is turned on.
   - `config/algo.yml`
 - `Entries::OptionChainWrapper` is still heuristic-grade:
-  - `ce_oi_rising?` and `pe_oi_rising?` only check positive OI on a chosen option
-  - `iv_falling?` always returns `false`
-  - ATM lookup still returns the first priced option, not a true nearest strike
+  - improved from the earlier placeholder state, but still depends on single API snapshots rather than rolling strike history
+  - now uses `previous_oi`, `previous_implied_volatility`, and nearest strike from spot/parity
   - Verified in `app/services/entries/option_chain_wrapper.rb`
-- `Signal::MomentumValidator.check_premium_speed` still uses underlying/index candle closes from `series`, not the selected option premium.
+- `Signal::Engine.execute_entry_gate` now applies a post-pick option premium gate using selected option `ltp` versus `prev_close`.
+  - Verified in `app/services/signal/engine.rb`
+- `Signal::MomentumValidator.check_premium_speed` still uses underlying/index candle closes from `series` in the pre-pick path.
+  - The production-critical final gate is now contract-aware via `validate_option_pick`.
   - Verified in `app/services/signal/momentum_validator.rb`
 - Supertrend-only flow still does not carry a concrete validation mode, which keeps validation behavior less explicit on that path.
   - Verified in `app/services/signal/engine.rb`
@@ -64,6 +66,6 @@ This file is a point-in-time snapshot. Re-read the referenced files before makin
 ## Next Production Steps
 
 1. Turn on `signals.enable_no_trade_engine` only after a controlled paper-mode smoke pass.
-2. Replace `Entries::OptionChainWrapper` with strike-level rolling history for OI, IV, spread, and premium.
-3. Rewrite `Signal::MomentumValidator.check_premium_speed` to use selected option premium history.
+2. Replace `Entries::OptionChainWrapper` snapshot logic with strike-level rolling history for OI, IV, spread, and premium.
+3. Replace the remaining pre-pick `check_premium_speed` index-based heuristic with actual option premium history.
 4. Re-check expiry-day entry windows against NIFTY and SENSEX operating rules before enabling live order flow.

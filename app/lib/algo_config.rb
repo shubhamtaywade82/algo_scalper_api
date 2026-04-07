@@ -22,6 +22,8 @@ class AlgoConfig
         end
       end
 
+      apply_live_trading_env_override!(base_config)
+
       @cached_config = base_config
       @cache_expires_at = Time.current + CACHE_TTL
       @cached_config
@@ -72,6 +74,22 @@ class AlgoConfig
       end
 
       merged_arr
+    end
+
+    # LIVE_TRADING env is the single switch for real broker execution (see .env.example).
+    # When unset or false: paper_trading.enabled is forced true (simulated fills, GatewayPaper).
+    # When true: paper_trading.enabled is forced false (GatewayLive — still subject to dhanhq.enable_orders).
+    def apply_live_trading_env_override!(config)
+      paper = !live_trading_env_truthy?
+      config[:paper_trading] = (config[:paper_trading] || {}).merge(enabled: paper)
+    end
+
+    def live_trading_env_truthy?
+      v = ENV.fetch('LIVE_TRADING', nil)
+      return false if v.nil?
+      return false if v.to_s.strip.empty?
+
+      ActiveModel::Type::Boolean.new.cast(v)
     end
   end
 end

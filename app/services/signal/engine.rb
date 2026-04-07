@@ -1651,6 +1651,20 @@ module Signal
 
         Rails.logger.info("[Signal] Found #{picks.size} option picks for #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}")
 
+        premium_validation = Signal::MomentumValidator.validate_option_pick(
+          index_key: index_cfg[:key],
+          pick: picks.first,
+          direction: final_direction
+        )
+        unless premium_validation[:confirms]
+          Rails.logger.info(
+            "[Signal] Option premium momentum BLOCKED #{index_cfg[:key]}: #{premium_validation[:reason]}"
+          )
+          record_signal_skip(signal, 'option premium momentum')
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
         market_context_extra, mc_gate_blocked = evaluate_market_context_for_entry(
           index_cfg: index_cfg,
           primary_series: primary_series,

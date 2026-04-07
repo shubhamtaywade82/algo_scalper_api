@@ -24,6 +24,37 @@ RSpec.describe AlgoConfig do
       second = described_class.fetch
       expect(first).not_to equal(second)
     end
+
+    context 'when LIVE_TRADING env controls execution mode' do
+      around do |example|
+        prior = ENV.fetch('LIVE_TRADING', nil)
+        example.run
+        if prior.nil?
+          ENV.delete('LIVE_TRADING')
+        else
+          ENV['LIVE_TRADING'] = prior
+        end
+        described_class.reset!
+      end
+
+      it 'forces paper_trading.enabled true when LIVE_TRADING is unset' do
+        ENV.delete('LIVE_TRADING')
+        described_class.reset!
+        expect(described_class.fetch.dig(:paper_trading, :enabled)).to be(true)
+      end
+
+      it 'forces paper_trading.enabled true when LIVE_TRADING is false' do
+        ENV['LIVE_TRADING'] = 'false'
+        described_class.reset!
+        expect(described_class.fetch.dig(:paper_trading, :enabled)).to be(true)
+      end
+
+      it 'forces paper_trading.enabled false when LIVE_TRADING is true' do
+        ENV['LIVE_TRADING'] = 'true'
+        described_class.reset!
+        expect(described_class.fetch.dig(:paper_trading, :enabled)).to be(false)
+      end
+    end
   end
 
   describe '.mode' do
