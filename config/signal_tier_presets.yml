@@ -33,7 +33,7 @@ exploratory:
       enabled: false
   entry_quality:
     enforce: false
-    min_score: 45
+    min_score: 30
 
 standard: {}
 
