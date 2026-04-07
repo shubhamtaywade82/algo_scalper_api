@@ -1,0 +1,8 @@
+{
+  "ignored_warnings": [
+    {
+      "fingerprint": "d9cf81948118125db68a36734b03cc0a597adfc03cef44a221bcb37a22b7e540",
+      "note": "Open3.capture2e uses argv only (no shell). QUERY is a natural-language prompt for the rake task; index keys are validated against IndexConfigLoader before building the string."
+    }
+  ]
+}

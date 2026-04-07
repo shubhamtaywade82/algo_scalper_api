@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Strategy
   class Orchestrator
     def initialize(strategies:, portfolio_manager:)

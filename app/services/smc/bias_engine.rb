@@ -78,7 +78,7 @@ module Smc
 
       avrz = Avrz::Detector.new(ltf_series)
 
-      {
+      base = {
         decision: decision_value,
         timeframes: {
           htf: { interval: HTF_INTERVAL, context: htf.to_h },
@@ -86,9 +86,10 @@ module Smc
           ltf: { interval: LTF_INTERVAL, context: ltf.to_h, avrz: avrz.to_h }
         }
       }
+      merge_smc_confluence_mtf!(base, htf_series, mtf_series, ltf_series)
     end
 
-    # Analyze SMC/AVRZ data with AI (Ollama or OpenAI)
+    # Analyze SMC/AVRZ data with AI (Ollama)
     # Returns AI analysis of the market structure, liquidity, and trading bias
     # Uses AiAnalyzer with pre-fetched data and single-pass analysis
     def analyze_with_ai(stream: false, &)
@@ -105,7 +106,7 @@ module Smc
 
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true &&
-        Services::Ai::OpenaiClient.instance.enabled?
+        Services::Ai::OllamaClient.instance.enabled?
     rescue StandardError
       false
     end
@@ -148,6 +149,39 @@ module Smc
     rescue StandardError => e
       Rails.logger.error("[Smc::BiasEngine] #{e.class} - #{e.message}")
       series
+    end
+
+    def smc_confluence_digest_enabled?
+      AlgoConfig.fetch.dig(:signals, :enable_smc_confluence_digest) == true
+    rescue StandardError
+      false
+    end
+
+    # Uses HTF/MTF/LTF series already loaded for {BiasEngine} (same intervals as constants).
+    # For YAML-driven intervals see {Smc::Confluence::MtfDigest.build_from_instrument} (e.g. Scanner).
+    def merge_smc_confluence_mtf!(result, htf_series, mtf_series, ltf_series)
+      return result unless smc_confluence_digest_enabled?
+
+      tf = {
+        HTF_INTERVAL => Smc::Confluence::CandleRows.from_series(trim_series(htf_series, max_candles: HTF_CANDLES)),
+        MTF_INTERVAL => Smc::Confluence::CandleRows.from_series(trim_series(mtf_series, max_candles: MTF_CANDLES)),
+        LTF_INTERVAL => Smc::Confluence::CandleRows.from_series(trim_series(ltf_series, max_candles: LTF_CANDLES))
+      }
+      digest = Smc::Confluence::MtfDigest.from_timeframe_candles(
+        symbol: @instrument.symbol_name.to_s,
+        timeframe_candles: tf
+      )
+      result[:smc_confluence_mtf] = digest
+      ltf_key = LTF_INTERVAL.to_s
+      ltf_block = digest['timeframes']&.dig(ltf_key) || digest[:timeframes]&.dig(ltf_key)
+      result[:smc_confluence_ltf_summary] = ltf_block&.dig('confluence')&.slice(
+        'long_score', 'short_score', 'long_signal', 'short_signal', 'structure_bias'
+      )
+      result
+    rescue StandardError => e
+      Rails.logger.error("[Smc::BiasEngine] smc_confluence_mtf failed: #{e.class} - #{e.message}")
+      result[:smc_confluence_mtf_error] = e.message.to_s
+      result
     end
 
     def htf_bias_valid?(ctx)

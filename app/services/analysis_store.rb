@@ -27,7 +27,7 @@ class AnalysisStore
       entry = Rails.cache.read(cache_key(index_key, component))
       return nil unless entry
 
-      age = Time.current - Time.parse(entry[:computed_at])
+      age = Time.current - Time.zone.parse(entry[:computed_at].to_s)
       ttl = TTLS[component.to_sym] || 5.minutes
 
       {
@@ -76,7 +76,7 @@ class AnalysisStore
       entry = Rails.cache.read(cache_key(index_key, component))
       return true unless entry
 
-      age = Time.current - Time.parse(entry[:computed_at])
+      age = Time.current - Time.zone.parse(entry[:computed_at].to_s)
       ttl = TTLS[component.to_sym] || 5.minutes
       age >= ttl
     rescue StandardError

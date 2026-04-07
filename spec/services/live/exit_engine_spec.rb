@@ -409,4 +409,16 @@ RSpec.describe Live::ExitEngine do
       end
     end
   end
+
+  describe '#normalize_exit_reason_with_final_pnl' do
+    it 'backfills meta when final PnL inputs are incomplete' do
+      tracker.update!(last_pnl_rupees: nil, meta: {})
+
+      engine.send(:normalize_exit_reason_with_final_pnl, tracker, 'MANUAL_HALT')
+
+      tracker.reload
+      expect(tracker.meta['exit_reason']).to eq('MANUAL_HALT')
+      expect(tracker.exit_reason).to eq('MANUAL_HALT')
+    end
+  end
 end

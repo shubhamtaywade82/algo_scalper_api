@@ -22,14 +22,14 @@ flowchart LR
         DhanHQ[DhanHQ API<br/>Broker + Market Data]
         Telegram[Telegram<br/>Notifications]
         Authority[Authority Server<br/>Optional Token]
-        OpenAI[OpenAI<br/>Optional AI TA]
+        Ollama[Ollama<br/>Optional local LLM]
     end
 
     Trader -->|"Configures, monitors, dashboard"| API
     API -->|"Orders, option chain, WebSocket ticks"| DhanHQ
     API -->|"Alerts, PnL, daily stats"| Telegram
     API -.->|"Token (if configured)"| Authority
-    API -.->|"AI technical analysis"| OpenAI
+    API -.->|"AI technical analysis"| Ollama
 ```
 
 **Elements:**
@@ -37,7 +37,7 @@ flowchart LR
 - **DhanHQ:** Orders (REST), option chain, WebSocket market feed + order updates.
 - **Telegram:** Trade alerts, PnL milestones, daily stats, SMC signals.
 - **Authority server:** Optional; provides Dhan access token (`TRADER_API_BASE_URL/auth/dhan/token`).
-- **OpenAI:** Optional; used by `AiTechnicalAnalysisJob` for NIFTY/SENSEX.
+- **Ollama:** Optional local LLM (`ollama-client`); used by `AiTechnicalAnalysisJob` and related AI paths for NIFTY/SENSEX.
 
 ---
 

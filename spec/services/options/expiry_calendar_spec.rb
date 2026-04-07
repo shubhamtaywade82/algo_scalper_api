@@ -4,53 +4,82 @@ require 'rails_helper'
 
 RSpec.describe Options::ExpiryCalendar do
   describe '.windows' do
-    context 'for NIFTY (Thursday expiry)' do
-      it 'returns windows with Thursday expiry dates' do
-        windows = described_class.windows(symbol: 'NIFTY', weeks: 4)
-        expect(windows.size).to eq(4)
-        windows.each do |w|
-          expect(w[:expiry].wday).to eq(4), "expected Thursday, got #{w[:expiry].strftime('%A')}"
-        end
+    context 'with Thursday expiry dates (NIFTY-like)' do
+      # Real dates — no weekday assumptions, just actual data from DhanHQ
+      let(:expiry_dates) { ['2026-03-26', '2026-03-19', '2026-03-12'] } # Thursdays
+
+      it 'returns one window per expiry date, oldest first' do
+        windows = described_class.windows(expiry_dates: expiry_dates)
+        expect(windows.size).to eq(3)
+        expect(windows.map { |w| w[:expiry] }).to eq(expiry_dates.map { |d| Date.parse(d) }.sort)
       end
 
-      it 'each window spans 6 days ending on expiry (from = expiry - 6.days)' do
-        windows = described_class.windows(symbol: 'NIFTY', weeks: 2)
-        windows.each do |w|
-          expect(w[:to]).to eq(w[:expiry])
-          expect(w[:from]).to eq(w[:expiry] - 6.days)
-        end
+      it 'sets to: equal to the expiry date' do
+        windows = described_class.windows(expiry_dates: expiry_dates)
+        windows.each { |w| expect(w[:to]).to eq(w[:expiry]) }
       end
 
-      it 'returns windows in ascending order (oldest first)' do
-        windows = described_class.windows(symbol: 'NIFTY', weeks: 4)
-        dates = windows.pluck(:expiry)
-        expect(dates).to eq(dates.sort)
-      end
-    end
-
-    context 'for SENSEX (Friday expiry)' do
-      it 'returns windows with Friday expiry dates' do
-        windows = described_class.windows(symbol: 'SENSEX', weeks: 4)
+      it 'sets from: to Monday of the expiry week' do
+        windows = described_class.windows(expiry_dates: expiry_dates)
         windows.each do |w|
-          expect(w[:expiry].wday).to eq(5), "expected Friday, got #{w[:expiry].strftime('%A')}"
+          expect(w[:from].wday).to eq(1), "expected Monday, got #{w[:from].strftime('%A')}"
+          expect(w[:from]).to eq(w[:expiry] - (w[:expiry].wday - 1).days)
         end
       end
     end
 
-    context 'when run on the expiry day itself' do
-      it 'includes the current week as the most recent window' do
-        thursday = Date.new(2026, 3, 12) # A Thursday
-        allow(Time.zone).to receive(:today).and_return(thursday)
-        windows = described_class.windows(symbol: 'NIFTY', weeks: 1)
-        expect(windows.last[:expiry]).to eq(thursday)
+    context 'with Wednesday expiry dates (SENSEX-like)' do
+      let(:expiry_dates) { ['2026-03-25', '2026-03-18', '2026-03-11'] } # Wednesdays
+
+      it 'derives correct Monday-to-Wednesday windows without any weekday hardcoding' do
+        windows = described_class.windows(expiry_dates: expiry_dates)
+        windows.each do |w|
+          expect(w[:expiry].wday).to eq(3), "expected Wednesday"
+          expect(w[:from].wday).to eq(1), "expected Monday start"
+        end
       end
     end
 
-    context 'with an unknown symbol' do
+    context 'when a holiday shifts expiry (e.g. Wednesday instead of Thursday)' do
+      let(:expiry_dates) { ['2026-03-25'] } # Wednesday — holiday-shifted from Thursday
+
+      it 'uses the actual shifted date without assuming the usual weekday' do
+        windows = described_class.windows(expiry_dates: expiry_dates)
+        expect(windows.first[:expiry].wday).to eq(3) # Wednesday
+        expect(windows.first[:from].wday).to eq(1)   # still starts Monday
+      end
+    end
+
+    context 'with mixed Date, String, and Time inputs' do
+      let(:expiry_dates) do
+        [Date.new(2026, 3, 26), '2026-03-19', Time.zone.parse('2026-03-12 15:30')]
+      end
+
+      it 'coerces all types to Date' do
+        windows = described_class.windows(expiry_dates: expiry_dates)
+        expect(windows.size).to eq(3)
+        windows.each { |w| expect(w[:expiry]).to be_a(Date) }
+      end
+    end
+
+    context 'with duplicate or nil entries' do
+      let(:expiry_dates) { ['2026-03-26', '2026-03-26', nil, '2026-03-19'] }
+
+      it 'deduplicates and ignores nils' do
+        windows = described_class.windows(expiry_dates: expiry_dates)
+        expect(windows.size).to eq(2)
+      end
+    end
+
+    context 'with an empty array' do
+      it 'returns an empty array' do
+        expect(described_class.windows(expiry_dates: [])).to eq([])
+      end
+    end
+
+    context 'when called without expiry_dates keyword' do
       it 'raises ArgumentError' do
-        expect do
-          described_class.windows(symbol: 'UNKNOWN', weeks: 4)
-        end.to raise_error(ArgumentError, /unknown symbol/)
+        expect { described_class.windows(expiry_dates: nil) }.to raise_error(ArgumentError)
       end
     end
   end

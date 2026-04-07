@@ -1,0 +1,555 @@
+---
+openapi: 3.0.1
+info:
+  title: Algo Scalper API
+  version: 1.0.0
+  description: 'JSON API for the intraday options scalper. Optional auth: when `API_DASHBOARD_TOKEN`
+    or `API_OPERATOR_TOKEN` is set, send `Authorization: Bearer <token>` or `X-Api-Key`.
+    SMC with `ai=1` uses the operator tier when `API_OPERATOR_TOKEN` is set. OpenAPI
+    is generated from RSwag request specs (`bundle exec rake rswag:specs:swaggerize`).'
+paths:
+  "/api/settings/bulk":
+    patch:
+      tags:
+      - Settings
+      summary: Replace top-level algo overrides
+      description: Requires X-Settings-Update-Token when SETTINGS_UPDATE_TOKEN is
+        set. In production, SETTINGS_UPDATE_TOKEN must be configured or the server
+        returns 503.
+      parameters:
+      - name: X-Settings-Update-Token
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - settings
+              properties:
+                settings:
+                  type: object
+                  additionalProperties: true
+                  description: Keys must match SettingsController::PERMITTED_SETTINGS_KEYS
+      responses:
+        '200':
+          description: Overrides stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '401':
+          description: Invalid or missing token when required
+        '503':
+          description: SETTINGS_UPDATE_TOKEN not configured in production
+  "/up":
+    get:
+      summary: Rails process liveness
+      tags:
+      - Infrastructure
+      description: Used by load balancers; does not include trading cluster detail
+        (see /api/health).
+      responses:
+        '200':
+          description: process booted
+  "/api/health":
+    get:
+      summary: Trading cluster health
+      tags:
+      - Health
+      description: Requires Bearer or X-Api-Key when API_DASHBOARD_TOKEN is set.
+      responses:
+        '200':
+          description: health JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  mode:
+                    type: string
+                  active_positions:
+                    type: integer
+                  circuit_breaker:
+                    type: object
+                    additionalProperties: true
+                  websocket:
+                    type: object
+                    additionalProperties: true
+  "/api/dashboard":
+    get:
+      summary: Dashboard snapshot
+      tags:
+      - Dashboard
+      description: Requires Bearer or X-Api-Key when API_DASHBOARD_TOKEN is set.
+      responses:
+        '200':
+          description: dashboard JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  mode:
+                    type: string
+                  system:
+                    type: object
+                    additionalProperties: true
+                  circuit_breaker:
+                    type: object
+                    additionalProperties: true
+  "/api/positions":
+    get:
+      summary: Positions index
+      tags:
+      - Positions
+      parameters:
+      - name: date
+        in: query
+        required: false
+        description: Filter closed by exit date (YYYY-MM-DD)
+        schema:
+          type: string
+      - name: index_key
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: open and closed buckets
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  open:
+                    type: array
+                    items: {}
+                  closed:
+                    type: array
+                    items: {}
+                  available_dates:
+                    type: array
+                    items:
+                      type: string
+                  summary:
+                    type: object
+                    additionalProperties: true
+  "/api/signals":
+    get:
+      summary: Trading signals
+      tags:
+      - Signals
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: paginated signals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signals:
+                    type: array
+                    items: {}
+                  meta:
+                    type: object
+                    additionalProperties: true
+                required:
+                - signals
+                - meta
+  "/api/settings":
+    get:
+      summary: Full algo config (YAML merge + DB overrides)
+      tags:
+      - Settings
+      description: Requires dashboard token when API_DASHBOARD_TOKEN is set.
+      responses:
+        '200':
+          description: config envelope
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  config:
+                    type: object
+                    additionalProperties: true
+                required:
+                - success
+                - config
+  "/api/settings/update_ip":
+    post:
+      summary: Refresh Dhan-registered IP
+      tags:
+      - Settings
+      description: Requires operator token when API_OPERATOR_TOKEN is set.
+      responses:
+        '200':
+          description: success flag
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  flag:
+                    type: string
+                    nullable: true
+  "/api/calibration_runs":
+    get:
+      summary: List calibration runs
+      tags:
+      - Calibration
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: runs with snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+  "/api/calibration_runs/{id}":
+    get:
+      summary: Single calibration run
+      tags:
+      - Calibration
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: run
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  "/api/calibration_runs/{id}/apply":
+    post:
+      summary: Apply proposed patch to settings
+      tags:
+      - Calibration
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: applied
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  "/api/circuit_breaker":
+    get:
+      summary: Circuit breaker status
+      tags:
+      - CircuitBreaker
+      responses:
+        '200':
+          description: status
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  "/api/circuit_breaker/trip":
+    post:
+      summary: Trip breaker (halt trading)
+      tags:
+      - CircuitBreaker
+      parameters:
+      - name: X-Circuit-Breaker-Token
+        in: header
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+      security:
+      - circuitBreakerAuth: []
+      responses:
+        '200':
+          description: tripped
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  "/api/drawdown_guard/reset":
+    delete:
+      summary: Reset intraday drawdown guard
+      tags:
+      - Risk
+      description: Requires operator token when API_OPERATOR_TOKEN is set.
+      responses:
+        '200':
+          description: reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+  "/api/test_broadcast":
+    post:
+      summary: Inject a test tick into TickCache
+      tags:
+      - Debug
+      description: Allowed in development/test without operator token; in staging/production
+        requires API_OPERATOR_TOKEN.
+      responses:
+        '200':
+          description: tick written
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    additionalProperties: true
+  "/api/smc/decision":
+    get:
+      summary: SMC bias / structure
+      tags:
+      - SMC
+      parameters:
+      - name: security_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: segment
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: symbol_name
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: details
+        in: query
+        required: false
+        description: Set to 1 for extended structure payload
+        schema:
+          type: string
+      - name: ai
+        in: query
+        required: false
+        description: Set to 1 for optional AI attachment (operator token when API_OPERATOR_TOKEN
+          is set)
+        schema:
+          type: string
+      responses:
+        '200':
+          description: decision
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  ok:
+                    type: boolean
+                  decision:
+                    type: string
+        '422':
+          description: missing security_id or segment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+  "/api/analysis/{index_key}":
+    get:
+      summary: Cached analysis bundle
+      tags:
+      - Analysis
+      parameters:
+      - name: index_key
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: force
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: analysis JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  index_key:
+                    type: string
+                  ltp:
+                    type: number
+                    nullable: true
+  "/api/analysis/{index_key}/historical":
+    get:
+      summary: Historical options context
+      tags:
+      - Analysis
+      parameters:
+      - name: index_key
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: weeks
+        in: query
+        required: false
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: historical payload
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  "/api/analysis/{index_key}/ai_snapshot":
+    post:
+      summary: On-demand AI snapshot (sync)
+      tags:
+      - Analysis
+      parameters:
+      - name: index_key
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '503':
+          description: AI not configured or unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                required:
+                - error
+servers:
+- url: http://localhost:3001
+  description: Local web (see Procfile.dev / bin/rails server)
+- url: "/"
+  description: Same origin
+tags:
+- name: Infrastructure
+  description: Liveness and probes
+- name: Health
+  description: Cluster / feed health snapshot
+- name: Dashboard
+  description: Dashboard aggregate JSON
+- name: Positions
+  description: Open and closed positions
+- name: Signals
+  description: Trading signal history
+- name: SMC
+  description: Smart-money decision (cached candles)
+- name: Analysis
+  description: Analysis store and AI snapshot
+- name: Settings
+  description: Algo config read/update
+- name: Calibration
+  description: Calibration runs and apply
+- name: CircuitBreaker
+  description: Emergency trading halt
+- name: Risk
+  description: Drawdown guard reset
+- name: Debug
+  description: Development-oriented helpers
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Matches API_DASHBOARD_TOKEN or API_OPERATOR_TOKEN when configured
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Same secret as Bearer token alternative
+    settingsUpdateAuth:
+      type: apiKey
+      in: header
+      name: X-Settings-Update-Token
+      description: Required for PATCH /api/settings/bulk when SETTINGS_UPDATE_TOKEN
+        is set; required in production.
+    circuitBreakerAuth:
+      type: apiKey
+      in: header
+      name: X-Circuit-Breaker-Token
+      description: Must match CIRCUIT_BREAKER_TOKEN for trip/reset
+security: []
+consumes:
+- application/json
+produces:
+- application/json

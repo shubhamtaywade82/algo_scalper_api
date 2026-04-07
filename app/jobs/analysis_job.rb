@@ -69,7 +69,7 @@ class AnalysisJob < ApplicationJob
     end
 
     # AI Analysis (slowest — do last, with timeout)
-    if stale.include?(:ai)
+    if stale.include?(:ai) && !Ai::GenerativeAiMarketGate.skip?(force: false)
       data = safe_compute("#{index_key}:ai") do
         Timeout.timeout(AI_TIMEOUT) do
           engine = Smc::BiasEngine.new(instrument, delay_seconds: 0.5)

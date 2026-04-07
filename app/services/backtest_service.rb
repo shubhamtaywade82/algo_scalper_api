@@ -31,6 +31,9 @@ class BacktestService
     service
   end
 
+  # Standard entry-point alias — prefer `.call` across all service objects
+  singleton_class.send(:alias_method, :call, :run)
+
   def execute
     instrument_event('execute.start')
     Rails.logger.info("[Backtest] Starting backtest for #{instrument.symbol_name}")

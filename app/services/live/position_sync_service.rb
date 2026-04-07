@@ -163,7 +163,7 @@ module Live
 
       orphaned_trackers.each do |tracker|
         Rails.logger.warn("[PositionSync] Found orphaned tracker: #{tracker.order_no} - marking as exited")
-        tracker.mark_exited!
+        tracker.mark_exited!(exit_reason: 'position_sync_orphaned')
       end
 
       orphaned_trackers.size

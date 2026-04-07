@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Analytics
   class LiveAdapter
     UPDATE_INTERVAL = 60 * 60 # 1 hour
@@ -14,7 +16,7 @@ module Analytics
 
       {
         rules: rules,
-        updated_at: Time.now
+        updated_at: Time.current
       }
     end
 
@@ -23,7 +25,7 @@ module Analytics
     def should_update?
       return true unless @last_updated_at
 
-      Time.now - @last_updated_at >= UPDATE_INTERVAL
+      Time.current - @last_updated_at >= UPDATE_INTERVAL
     end
   end
 end

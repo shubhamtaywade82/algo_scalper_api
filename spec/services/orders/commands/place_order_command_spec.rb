@@ -96,6 +96,20 @@ RSpec.describe Orders::Commands::PlaceOrderCommand do
     end
   end
 
+  context 'when qty is NaN' do
+    subject(:command) { described_class.new(**default_params.merge(qty: Float::NAN)) }
+
+    it 'does not raise during initialization' do
+      expect { command }.not_to raise_error
+    end
+
+    it 'fails with invalid_quantity' do
+      result = command.call
+      expect(result).to be_failure
+      expect(result.reason).to eq('invalid_quantity')
+    end
+  end
+
   context 'when side is invalid' do
     subject(:command) { described_class.new(**default_params.merge(side: :sideways)) }
 

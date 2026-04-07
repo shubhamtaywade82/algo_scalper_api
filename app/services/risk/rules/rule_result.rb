@@ -6,6 +6,7 @@ module Risk
     # Indicates what action should be taken based on the rule evaluation
     class RuleResult
       attr_reader :action, :reason, :metadata
+      attr_accessor :rule_name
 
       # Action types
       EXIT = :exit

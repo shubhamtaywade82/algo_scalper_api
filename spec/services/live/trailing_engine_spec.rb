@@ -56,6 +56,41 @@ RSpec.describe Live::TrailingEngine do
 
       expect(result[:error]).to eq('Invalid position data')
     end
+
+    it 'applies direct trailing when enabled and SL improves' do
+      allow(Positions::TrailingConfig).to receive(:direct_trailing_enabled?).and_return(true)
+      # Entry 100, LTP 150. If direct trailing is 5% offset, new SL should be ~142.5.
+      # But calculate_direct_trailing_sl is what really matters.
+      allow(Positions::TrailingConfig).to receive(:calculate_direct_trailing_sl).and_return(140.0)
+      
+      position = build_position(current_ltp: 150.0, sl_price: 130.0)
+      result = engine.process_tick(position)
+
+      expect(result[:sl_updated]).to be true
+      expect(result[:new_sl_price]).to eq(140.0)
+    end
+
+    it 'applies tailored trailing for index positions' do
+      # NIFTY should trigger tailored trailing
+      position = build_position(underlying_symbol: 'NIFTY', current_ltp: 120.0, sl_price: 100.0)
+      
+      # Mock the analyzer/adjuster interaction
+      allow(Orders::Analyzer).to receive(:new).and_return(double(recommended_sl: 110.0))
+      allow(Orders::Adjuster).to receive(:adjust_sl).and_return(true)
+      
+      # Mock MFE engine for reason code
+      allow_any_instance_of(Orders::MfeExitEngine).to receive(:call).and_return(110.0)
+
+      result = engine.process_tick(position)
+
+      expect(result[:sl_updated]).to be true
+      expect(result[:reason]).to eq('sl_updated')
+      expect(Orders::Adjuster).to have_received(:adjust_sl).with(
+        tracker: tracker,
+        recommended_sl: 110.0,
+        reason: /mfe_retrace_trailing/
+      )
+    end
   end
 
   describe '#check_peak_drawdown' do
@@ -108,6 +143,17 @@ RSpec.describe Live::TrailingEngine do
         expect(exit_engine).to have_received(:execute_exit).once
       end
     end
+
+    it 'passes capital deployed to TrailingConfig' do
+      # Entry 100 * Qty 50 = 5000 capital
+      position = build_position(entry_price: 100.0, quantity: 50, peak_profit_pct: 0.10, pnl_pct: 0.05)
+      
+      expect(Positions::TrailingConfig).to receive(:peak_drawdown_triggered?).with(
+        0.10, 0.05, hash_including(_capital_deployed: 5000.0)
+      ).and_return(false)
+
+      engine.check_peak_drawdown(position, exit_engine)
+    end
   end
 
   describe '#check_peak_drawdown emergency exit' do
@@ -154,6 +200,21 @@ RSpec.describe Live::TrailingEngine do
 
       result = engine.check_peak_drawdown(position, exit_engine)
       expect(Live::ExitEngine).not_to have_received(:execute_exit)
+    end
+  end
+
+  describe '#update_peak persistence' do
+    it 'persists extremes to database when new peak is reached' do
+      # Entry 100, Current Profit 20%, Old Peak 10%
+      # Highest price = 100 * 1.2 = 120
+      position = build_position(entry_price: 100.0, peak_profit_pct: 0.10, pnl_pct: 0.20)
+      
+      # Should update meta in DB
+      expect(tracker).to receive(:update_column).with(
+        :meta, hash_including('highest_price' => 120.0)
+      )
+
+      engine.update_peak(position, tracker: tracker)
     end
   end
 

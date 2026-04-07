@@ -65,6 +65,9 @@ module Backtest
       service
     end
 
+    # Standard entry-point alias — prefer `.call` across all service objects
+    singleton_class.send(:alias_method, :call, :run)
+
     def execute
       Rails.logger.info("[SignalBacktest] Starting signal generator backtest for #{instrument.symbol_name}")
       $stdout.puts "[SignalBacktest] Starting backtest for #{instrument.symbol_name}..."
@@ -222,48 +225,51 @@ module Backtest
 
     def analyze_signals(series_1m, series_5m)
       last_5m_index = 0
-      i = 0
-      total_candles = series_1m.candles.size
+      candle_index = 0
+      candles = series_1m.candles # assign once — avoids repeated .candles calls
+      total_candles = candles.size
 
-      while i < total_candles
-        candle_1m = series_1m.candles[i]
+      while candle_index < total_candles
+        candle_1m = candles[candle_index]
         current_time = candle_1m.timestamp
 
         # Skip if outside trading hours
         unless trading_hours?(current_time)
-          i += 1
+          candle_index += 1
           next
         end
 
         # Generate signal
-        signal_result = generate_signal(series_1m, series_5m, i, current_time, last_5m_index)
+        signal_result = generate_signal(series_1m, series_5m, candle_index, current_time, last_5m_index)
         last_5m_index = signal_result[:last_5m_index] if signal_result && signal_result[:last_5m_index]
 
         if signal_result && signal_result[:signal]
+          direction = signal_result[:direction] # cache — used 4× below
           @signal_stats[:total_signals] += 1
-          @signal_stats[:bullish_signals] += 1 if signal_result[:direction] == :bullish
-          @signal_stats[:bearish_signals] += 1 if signal_result[:direction] == :bearish
+          @signal_stats[:bullish_signals] += 1 if direction == :bullish
+          @signal_stats[:bearish_signals] += 1 if direction == :bearish
 
           # Measure price movement after signal (next 10 candles or until end)
-          price_move = measure_price_movement(series_1m, i, signal_result[:direction])
+          price_move = measure_price_movement(series_1m, candle_index, direction)
           if price_move
+            profitable = price_move[:profitable] # cache — used 3× below
             @signal_stats[:signals_with_price_moves] += 1
-            @signal_stats[:profitable_signals] += 1 if price_move[:profitable]
-            @signal_stats[:losing_signals] += 1 unless price_move[:profitable]
+            @signal_stats[:profitable_signals] += 1 if profitable
+            @signal_stats[:losing_signals] += 1 unless profitable
 
             @results << {
               timestamp: current_time,
-              direction: signal_result[:direction],
+              direction: direction,
               confidence: signal_result[:confidence],
               adx_value: signal_result[:adx_value],
               price_move_pct: price_move[:move_pct],
-              profitable: price_move[:profitable],
+              profitable: profitable,
               candles_analyzed: price_move[:candles]
             }
           end
         end
 
-        i += 1
+        candle_index += 1
       end
     end
 

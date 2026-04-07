@@ -2,6 +2,9 @@
 
 module Positions
   class ExitFlow < ApplicationService
+    # Used when no caller supplied a reason and meta has none (analytics / calibration).
+    FALLBACK_EXIT_REASON = 'EXIT_REASON_UNSPECIFIED'
+
     def initialize(tracker:, exit_price: nil, exited_at: nil, exit_reason: nil)
       @tracker = tracker
       @exit_price = exit_price
@@ -10,15 +13,47 @@ module Positions
     end
 
     def call
-      tracker.state_machine.transition_to!(:exited)
-      persist_final_pnl_from_cache
-      update_exit_attributes
-      Positions::DailyPnlRecorder.call(tracker: tracker)
-      cleanup_exit_caches
-      Positions::FeedSubscription.unsubscribe(tracker: tracker)
-      register_cooldown!
-      sync_final_pnl_to_database
-      tracker.send(:broadcast_position_exited)
+      tracker.reload
+      tracker.with_lock do
+        tracker.reload
+        return tracker if tracker.exited?
+
+        tracker.state_machine.transition_to!(:exited)
+
+        # 1. Fetch final stats from cache (if any)
+        cache_data = Live::RedisPnlCache.instance.fetch_pnl(tracker.id) || {}
+
+        # 2. Build exit attributes without triggering persistence yet
+        final_pnl_rupees = cache_data[:pnl] || tracker.last_pnl_rupees
+        final_hwm_pnl = [tracker.high_water_mark_pnl.to_f, cache_data[:hwm_pnl].to_f, final_pnl_rupees.to_f].max
+
+        # 3. Build metadata (always persist a non-blank exit_reason for downstream analysis)
+        metadata = tracker.meta.is_a?(Hash) ? tracker.meta.deep_stringify_keys.dup : {}
+        resolved_reason = resolve_exit_reason_string(metadata)
+        metadata["exit_reason"] = resolved_reason
+        metadata["exit_triggered_at"] ||= Time.current
+        metadata["hwm_pnl_pct"] = cache_data[:hwm_pnl_pct] if cache_data[:hwm_pnl_pct]
+
+        # 4. Final update! (This is atomic)
+        tracker.update!(
+          status: :exited,
+          exit_price: resolved_exit_price,
+          exited_at: resolved_exited_at,
+          last_pnl_rupees: final_pnl_rupees,
+          high_water_mark_pnl: final_hwm_pnl,
+          exit_reason: resolved_reason,
+          meta: metadata
+        )
+
+        # 5. Post-exit side effects
+        Positions::DailyPnlRecorder.call(tracker: tracker)
+        cleanup_exit_caches
+        Positions::FeedSubscription.unsubscribe(tracker: tracker)
+        register_cooldown!
+        sync_final_pnl_to_database(cache_data)
+        tracker.send(:broadcast_position_exited)
+      end
+
       tracker
     end
 
@@ -26,27 +61,23 @@ module Positions
 
     attr_reader :tracker, :exit_price, :exited_at, :exit_reason
 
-    def persist_final_pnl_from_cache
-      tracker.send(:persist_final_pnl_from_cache)
-    end
-
-    def update_exit_attributes
-      tracker.send(:update_exit_attributes, resolved_exit_price, resolved_exited_at, exit_metadata)
+    def resolve_exit_reason_string(metadata)
+      candidates = [
+        exit_reason,
+        metadata["exit_reason"],
+        metadata[:exit_reason]
+      ]
+      picked = candidates.filter_map { |v| v.to_s.strip.presence }.first
+      picked || FALLBACK_EXIT_REASON
     end
 
     def resolved_exit_price
-      return @resolved_exit_price if defined?(@resolved_exit_price)
-
       price = exit_price || tracker.send(:fetch_ltp_from_cache)
-      @resolved_exit_price = price.present? ? BigDecimal(price.to_s) : nil
+      price.present? ? BigDecimal(price.to_s) : nil
     end
 
     def resolved_exited_at
       exited_at || Time.current
-    end
-
-    def exit_metadata
-      tracker.send(:prepare_exit_metadata, exit_reason)
     end
 
     def cleanup_exit_caches
@@ -57,8 +88,7 @@ module Positions
       tracker.send(:register_cooldown!)
     end
 
-    def sync_final_pnl_to_database
-      cache = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
+    def sync_final_pnl_to_database(cache)
       return unless cache && cache[:pnl]
 
       Live::RedisPnlCache.instance.sync_pnl_to_database(

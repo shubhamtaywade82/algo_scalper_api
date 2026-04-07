@@ -4,14 +4,18 @@ module Api
   # Algo config read/update API.
   # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
   class SettingsController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!, only: :index
+    before_action :authenticate_operator_token!, only: :update_ip
+    before_action :authenticate_settings!, only: :update_bulk
+
     # Top-level keys allowed for algo config overrides (must match config/algo.yml structure)
     PERMITTED_SETTINGS_KEYS = %i[
       paper_trading trading_time_restrictions feature_flags indices trade_limits
       broker_fees risk position_sizing signals chain_analyzer option_chain
       data_freshness watchlist telegram ai
     ].freeze
-
-    before_action :authenticate_settings!, only: :update_bulk
 
     # GET /api/settings
     def index
@@ -29,9 +33,9 @@ module Api
     # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted.
     # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
     def update_bulk
-      raw = params.require(:settings).permit!.to_h
-      allowed_keys = PERMITTED_SETTINGS_KEYS.map(&:to_s)
-      new_config = raw.slice(*allowed_keys).deep_symbolize_keys
+      # Permit only the explicitly whitelisted top-level keys — never use permit!
+      raw = params.expect(settings: [*PERMITTED_SETTINGS_KEYS]).to_h
+      new_config = raw.deep_symbolize_keys
 
       Setting.put('algo_config_overrides', new_config.to_json)
       AlgoConfig.reset!
@@ -49,7 +53,7 @@ module Api
       if result[:success]
         render json: { success: true, flag: result[:flag] }
       else
-        render json: { success: false, error: result[:error] }, status: :unprocessable_entity
+        render json: { success: false, error: result[:error] }, status: :unprocessable_content
       end
     rescue StandardError => e
       render json: { success: false, error: e.message }, status: :internal_server_error
@@ -58,6 +62,12 @@ module Api
     private
 
     def authenticate_settings!
+      if Rails.env.production? && ENV['SETTINGS_UPDATE_TOKEN'].blank?
+        Rails.logger.error('[SettingsController] SETTINGS_UPDATE_TOKEN must be set in production for bulk updates')
+        render json: { error: 'settings_update_unconfigured' }, status: :service_unavailable
+        return
+      end
+
       expected = ENV['SETTINGS_UPDATE_TOKEN'].presence
       return if expected.nil?
 

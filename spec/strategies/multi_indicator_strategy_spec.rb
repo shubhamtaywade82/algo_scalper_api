@@ -17,6 +17,9 @@ RSpec.describe MultiIndicatorStrategy do
   before do
     # Create enough candles for indicators
     50.times do |i|
+      if i == 0
+        puts "\nDEBUG: Candle init: #{Candle.instance_method(:initialize).source_location.inspect}\n"
+      end
       price = base_price + (i * 10)
       candle = Candle.new(
         timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,

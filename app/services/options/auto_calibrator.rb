@@ -32,16 +32,23 @@ module Options
         return nil
       end
 
-      unless Options::ExpiryCalendar::EXPIRY_WEEKDAY.key?(@symbol)
-        Rails.logger.warn("[AutoCalibrator] #{@symbol}: weekly expiry not supported — skipping calibration")
-        return nil
-      end
-
       @security_id = index_cfg[:sid].to_s
       # IndexConfigLoader returns IDX_I (spot segment); we need the FNO segment for ExpiredOptionsData.
       @segment     = @symbol == 'SENSEX' ? 'BSE_FNO' : 'NSE_FNO'
 
-      windows = Options::ExpiryCalendar.windows(symbol: @symbol, weeks: @weeks)
+      expiry_dates = historical_weekly_expiry_dates
+      if expiry_dates.empty?
+        Rails.logger.warn("[AutoCalibrator] #{@symbol}: no weekly expiry dates in DB — skipping calibration")
+        return nil
+      end
+
+      if expiry_dates.size < @weeks
+        Rails.logger.info(
+          "[AutoCalibrator] #{@symbol}: only #{expiry_dates.size} of #{@weeks} requested weeks available in DB"
+        )
+      end
+
+      windows = Options::ExpiryCalendar.windows(expiry_dates: expiry_dates)
 
       atm_result  = run_engine_for_strike('ATM', windows)
       otm1_result = run_engine_for_strike('ATM+1', windows)
@@ -56,7 +63,7 @@ module Options
         atm_stats: { ce: atm_result[:ce], pe: atm_result[:pe] },
         otm1_stats: otm1_result ? { ce: otm1_result[:ce], pe: otm1_result[:pe] } : nil,
         otm2_stats: otm2_result ? { ce: otm2_result[:ce], pe: otm2_result[:pe] } : nil
-      )
+      ).merge(weeks_available: expiry_dates.size)
 
       regime = Options::RegimeDetector.check(symbol: @symbol, combined_stats: combined_stats)
       patch  = Options::CalibrationConfigPatchBuilder.build(
@@ -81,6 +88,19 @@ module Options
     end
 
     private
+
+    # Past weekly expiry dates for this symbol from the Derivative table.
+    # InstrumentsImportJob upserts (never deletes), so historical records persist.
+    def historical_weekly_expiry_dates
+      Derivative.where(underlying_symbol: @symbol)
+                .where("expiry_flag ILIKE 'W%'")
+                .where(expiry_date: ..Time.zone.today)
+                .order(expiry_date: :desc)
+                .limit(@weeks)
+                .pluck(:expiry_date)
+                .uniq
+                .sort
+    end
 
     # Fetches OHLCV data for all windows for a given strike, builds
     # HistoricalCalibrationEngine-compatible rows, and runs the engine.
@@ -174,6 +194,7 @@ module Options
       }
     end
 
+    # rubocop:disable Rails/Pluck -- candles is Array<Hash>, not ActiveRecord
     def cycle_stats(candles)
       entry   = candles.first[:open].to_f
       max_h   = candles.map { |c| c[:high] }.max.to_f
@@ -190,6 +211,7 @@ module Options
         post_peak_retrace: pct(pullback_l, max_h).round(2)
       }
     end
+    # rubocop:enable Rails/Pluck
 
     def session_breakdown(candles)
       SESSIONS.transform_values do |range|

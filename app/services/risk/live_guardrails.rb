@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Risk
   class LiveGuardrails
     MAX_DAILY_DRAWDOWN = 0.05

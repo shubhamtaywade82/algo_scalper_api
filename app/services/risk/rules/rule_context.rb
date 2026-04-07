@@ -5,14 +5,15 @@ module Risk
     # Context object that provides all necessary data for rule evaluation
     # This encapsulates position data, tracker, config, and other context
     class RuleContext
-      attr_reader :position, :tracker, :risk_config, :current_time, :trading_session
+      attr_reader :position, :tracker, :risk_config, :current_time, :trading_session, :tracker_snapshot
 
-      def initialize(position:, tracker:, risk_config: {}, current_time: nil, trading_session: nil)
+      def initialize(position:, tracker:, risk_config: {}, current_time: nil, trading_session: nil, tracker_snapshot: nil)
         @position = position
         @tracker = tracker
         @risk_config = risk_config || {}
         @current_time = current_time || Time.current
         @trading_session = trading_session
+        @tracker_snapshot = tracker_snapshot
       end
 
       # Get PnL percentage from position

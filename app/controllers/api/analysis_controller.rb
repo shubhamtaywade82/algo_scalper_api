@@ -2,6 +2,11 @@
 
 module Api
   class AnalysisController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!, only: %i[show historical]
+    before_action :authenticate_operator_token!, only: %i[ai_snapshot]
+
     # GET /api/analysis/:index_key
     # Always returns instantly from cache. Triggers background refresh if stale.
     def show
@@ -14,13 +19,7 @@ module Api
 
       # Trigger background refresh for stale components
       stale = AnalysisStore.stale_components(index_key)
-      if stale.any?
-        Thread.new do
-          Rails.application.executor.wrap do
-            AnalysisJob.perform_now(index_key, force: params[:force] == 'true')
-          end
-        end
-      end
+      AnalysisJob.perform_later(index_key, force: params[:force] == 'true') if stale.any?
 
       # Fast lookups (no cache needed — instant)
       ltp = Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)
@@ -29,11 +28,18 @@ module Api
         "meta->>'index_key' = ?", index_key
       ).count
 
+      market_closed = TradingSession::Service.market_closed?
+      generative_ai_gated = Ai::GenerativeAiMarketGate.skip?(force: false)
+
       render json: {
         index_key: index_key,
         symbol: instrument.symbol_name,
         ltp: ltp&.to_f,
         timestamp: Time.current.iso8601,
+        session: {
+          market_closed: market_closed,
+          generative_ai_gated: generative_ai_gated
+        },
         smc: stored[:smc]&.dig(:data),
         smc_validity: stored[:smc]&.dig(:validity),
         ai_analysis: stored[:ai]&.dig(:data),
@@ -46,8 +52,7 @@ module Api
         background_refresh: stale.any? ? { refreshing: stale, message: 'Background refresh triggered' } : nil
       }
     rescue StandardError => e
-      Rails.logger.error("[AnalysisController] show error: #{e.class} - #{e.message}")
-      render json: { error: 'internal_error', message: e.message }, status: :internal_server_error
+      render_analysis_internal_error('show', e)
     end
 
     # GET /api/analysis/:index_key/historical
@@ -60,8 +65,7 @@ module Api
 
       render json: result
     rescue StandardError => e
-      Rails.logger.error("[AnalysisController] historical error: #{e.class} - #{e.message}")
-      render json: { error: 'internal_error', message: e.message }, status: :internal_server_error
+      render_analysis_internal_error('historical', e)
     end
 
     # POST /api/analysis/:index_key/ai_snapshot
@@ -77,9 +81,17 @@ module Api
 
       latest_run = CalibrationRun.where(symbol: index_key).order(created_at: :desc).first
 
-      client = Services::Ai::OpenaiClient.instance
+      client = Services::Ai::OllamaClient.instance
       unless client.enabled?
         return render json: { error: 'AI service not configured' }, status: :service_unavailable
+      end
+
+      force = params[:force].to_s == 'true'
+      if Ai::GenerativeAiMarketGate.skip?(force: force)
+        return render json: {
+          error: 'market_closed',
+          message: 'Generative AI is paused while the market is closed (ai.skip_generative_ai_when_market_closed). Pass force=true to override.'
+        }, status: :unprocessable_content
       end
 
       messages = Ai::AiSnapshotPromptBuilder.build(
@@ -92,7 +104,7 @@ module Api
 
       ai_response = client.chat(messages: messages, temperature: 0.3)
 
-      # OpenaiClient#chat rescues all StandardError internally and returns nil on failure.
+      # OllamaClient#chat rescues all StandardError internally and returns nil on failure.
       # Treat nil as a service failure — exception-based rescues below are defense-in-depth only.
       if ai_response.nil?
         return render json: { error: 'AI service unavailable' }, status: :service_unavailable
@@ -138,6 +150,15 @@ module Api
     rescue StandardError => e
       Rails.logger.warn("[AnalysisController] #{label} failed: #{e.class} - #{e.message}")
       nil
+    end
+
+    def render_analysis_internal_error(action_label, exception)
+      Rails.logger.error(
+        "[AnalysisController] #{action_label} error: #{exception.class} - #{exception.message}"
+      )
+      body = { error: 'internal_error' }
+      body[:message] = exception.message unless Rails.env.production?
+      render json: body, status: :internal_server_error
     end
   end
 end

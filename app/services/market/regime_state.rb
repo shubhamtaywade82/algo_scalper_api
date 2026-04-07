@@ -23,7 +23,7 @@ module Market
           @pending_count += 1
           if @pending_count >= MIN_STABILITY
             @current = new_regime
-            @last_flip_at = Time.now
+            @last_flip_at = Time.current
             @streak = MIN_STABILITY
             @pending_regime = nil
             @pending_count = 0
@@ -46,7 +46,7 @@ module Market
 
     def cooldown_active?
       return false unless @last_flip_at
-      Time.now - @last_flip_at < COOLDOWN
+      Time.current - @last_flip_at < COOLDOWN
     end
   end
 end

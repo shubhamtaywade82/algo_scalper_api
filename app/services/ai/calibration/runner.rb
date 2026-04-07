@@ -4,7 +4,7 @@ module Ai
   module Calibration
     # Orchestrates the full AI calibration pipeline:
     #
-    #   DatasetBuilder → PromptBuilder → OpenaiClient#generate
+    #   DatasetBuilder → PromptBuilder → OllamaClient#generate
     #     → ResultParser → BacktestValidator → ConfigApplier
     #
     # Usage:
@@ -47,7 +47,7 @@ module Ai
         # 2. Build prompt
         prompt = PromptBuilder.call(dataset: dataset)
 
-        # 3. Call Ollama via centralized OpenaiClient with schema-enforced output
+        # 3. Call Ollama via centralized OllamaClient with schema-enforced output
         raw = call_ai_generate(prompt)
 
         unless raw
@@ -104,7 +104,7 @@ module Ai
       private
 
       def call_ai_generate(prompt)
-        client = Services::Ai::OpenaiClient.instance
+        client = Services::Ai::OllamaClient.instance
         return nil unless client.enabled?
 
         schema_path = Rails.root.join('config', 'ai_calibration_schema.json')

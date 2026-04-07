@@ -35,29 +35,7 @@ module Strategies
     def self.expiry_day?(symbol)
       return false if symbol.blank?
 
-      sym = symbol.to_s.upcase
-      today = Time.current.in_time_zone('Asia/Kolkata').wday
-
-      # Indian Index Expiry Days:
-      # MIDCPNIFTY: Monday (1)
-      # FINNIFTY: Tuesday (2)
-      # BANKNIFTY: Wednesday (3)
-      # NIFTY: Thursday (4)
-      # SENSEX/BANKEX: Friday (5)
-
-      if sym.include?('SENSEX') || sym.include?('BANKEX')
-        today == 5
-      elsif sym.include?('NIFTY') && sym.exclude?('BANK') && sym.exclude?('FIN') && sym.exclude?('MIDCP')
-        today == 4
-      elsif sym.include?('BANKNIFTY')
-        today == 3
-      elsif sym.include?('FINNIFTY')
-        today == 2
-      elsif sym.include?('MIDCPNIFTY')
-        today == 1
-      else
-        false
-      end
+      Market::ExpiryChecker.expiry_today?(symbol)
     end
   end
 end

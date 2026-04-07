@@ -10,25 +10,19 @@ module Risk
       def evaluate(context)
         return skip_result unless context.active?
 
-        pnl_pct = context.pnl_pct
-        return skip_result if pnl_pct.nil?
+        if Live::UnifiedExitChecker.send(:loss_limit_hit?, context.tracker, context.tracker_snapshot)
+          pnl_pct = context.tracker_snapshot[:pnl_pct].to_f
 
-        sl_pct = context.config_bigdecimal(:sl_pct, BigDecimal(0))
-        return skip_result if sl_pct.zero?
+          return exit_result(
+            reason: 'STOP_LOSS',
+            metadata: {
+              path: 'stop_loss',
+              pnl_pct: (pnl_pct * 100.0).round(2)
+            }
+          )
+        end
 
-        # pnl_pct is stored as decimal (0.0573), sl_pct is also decimal (0.03)
-        # Compare directly without conversion
-        return no_action_result unless pnl_pct.to_f <= -sl_pct.to_f
-
-        # Convert to percentage for display
-        pnl_pct_display = (pnl_pct.to_f * 100.0).round(2)
-        exit_result(
-          reason: "SL HIT #{pnl_pct_display}%",
-          metadata: {
-            pnl_pct: pnl_pct,
-            sl_pct: sl_pct.to_f
-          }
-        )
+        no_action_result
       end
     end
   end

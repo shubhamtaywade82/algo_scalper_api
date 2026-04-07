@@ -11,7 +11,7 @@ Rails 8 API backend for **fully autonomous** intraday options scalping on Indian
 - Solid Cable (ActionCable WebSocket backend)
 - Solid Cache (Rails.cache backend)
 - DhanHQ v2 via `dhanhq` gem (broker API + WebSocket)
-- Optional: OpenAI for AI technical analysis
+- Optional: Ollama (local LLM via `ollama-client`) for AI technical analysis
 - Optional: Telegram Bot for notifications
 
 ## Commands
@@ -24,6 +24,7 @@ rails solid_queue:load_recurring       # populate recurring job schedule
 bundle exec rspec
 bundle exec rspec spec/path/file_spec.rb
 bundle exec rubocop
+bundle exec rake rswag:specs:swaggerize # regenerate swagger/v1/swagger.yaml from RSwag specs
 bin/brakeman --no-pager                # security scan
 ./bin/dev                              # start all processes (web + trading + jobs + dashboard)
 bin/jobs                               # start Solid Queue worker standalone

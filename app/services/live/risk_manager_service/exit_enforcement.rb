@@ -14,7 +14,7 @@ module Live
         end
       end
 
-      def enforce_dynamic_trailing_stops_for(tracker, exit_engine:, position_data: nil)
+      def enforce_dynamic_trailing_stops_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         # TrailingEngine handles its own checks but we can filter here for efficiency
         return unless tracker.trade_state == 'expansion' || tracker.be_set?
 
@@ -23,7 +23,7 @@ module Live
         return unless position_data
 
         # process_tick handles peak updates and SL adjustments
-        result = (@trailing_engine ||= Live::TrailingEngine.new).process_tick(position_data, exit_engine: exit_engine, tracker: tracker)
+        result = (@trailing_engine ||= Live::TrailingEngine.new).process_tick(position_data, exit_engine: exit_engine, tracker: tracker, pending_meta: pending_meta)
 
         if result[:exit_triggered]
           Rails.logger.info("[RiskManager] TrailingEngine triggered exit for #{tracker.order_no}: #{result[:reason]}")
@@ -42,7 +42,7 @@ module Live
         end
       end
 
-      def enforce_structure_invalidation_for(tracker, exit_engine:, position_data: nil)
+      def enforce_structure_invalidation_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
@@ -101,7 +101,7 @@ module Live
         end
       end
 
-      def enforce_premium_momentum_failure_for(tracker, exit_engine:, position_data: nil)
+      def enforce_premium_momentum_failure_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
@@ -137,7 +137,7 @@ module Live
         end
       end
 
-      def enforce_time_stop_for(tracker, exit_engine:, position_data: nil)
+      def enforce_time_stop_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
@@ -173,7 +173,7 @@ module Live
         end
       end
 
-      def enforce_rr_profit_booking_for(tracker, exit_engine:, position_data: nil)
+      def enforce_rr_profit_booking_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         cfg = rr_profit_booking_config
         target_rr = (cfg[:target_rr] || 2.0).to_f
 
@@ -226,7 +226,7 @@ module Live
         end
       end
 
-      def enforce_percentage_pnl_exit_for(tracker, exit_engine:, position_data: nil)
+      def enforce_percentage_pnl_exit_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
@@ -262,7 +262,7 @@ module Live
         end
       end
 
-      def enforce_profit_floor_for(tracker, exit_engine:, position_data: nil)
+      def enforce_profit_floor_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         cfg = profit_floor_config
         return unless cfg[:enabled]
 
@@ -288,18 +288,18 @@ module Live
 
         mark_breakeven_reached!(tracker, net_pnl, threshold_rupees: breakeven_at) if breakeven_at
         arm_profit_floor!(tracker, net_pnl, lock_rupees: lock_rupees) if lock_rupees
-
+ 
         # Ratchet the floor upward as HWM PnL grows (trailing floor).
         trail_pct = cfg[:trail_pct]
-        if trail_pct && tracker.profit_floor_rupees.present?
+        if trail_pct && (pending_meta || tracker.meta || {})['profit_floor_rupees'].present?
           hwm_pnl = safe_big_decimal(position_data.high_water_mark)
-          update_trailing_floor!(tracker, hwm_pnl, trail_pct: trail_pct)
+          update_trailing_floor!(tracker, hwm_pnl, trail_pct: trail_pct, pending_meta: pending_meta)
         end
-
-        floor = tracker.profit_floor_rupees
+ 
+        floor = (pending_meta || tracker.meta || {})['profit_floor_rupees'] || tracker.profit_floor_rupees
         return unless floor
 
-        if profit_floor_time_kill?(tracker, time_kill_minutes: time_kill_minutes)
+        if profit_floor_time_kill?(tracker, time_kill_minutes: time_kill_minutes, pending_meta: pending_meta)
           reason = "PROFIT_FLOOR_TIME_KILL (floor: ₹#{floor}, age_min: #{time_kill_minutes})"
           exit_path = 'profit_floor_time_kill'
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
@@ -328,22 +328,19 @@ module Live
         end
       end
 
-      def enforce_premium_r_stop_for(tracker, exit_engine:, position_data: nil)
+      def enforce_premium_r_stop_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
         # Skip R-stop when trailing system has taken ownership
         if trailing_armed_for?(tracker, position_data)
-          Rails.logger.debug do
-            "[RiskManager] PREMIUM_R_STOP suppressed for #{tracker.order_no} — trailing armed"
-          end
           return
         end
-
+ 
         ltp = position_data.current_ltp
         return unless ltp
-
-        premium_stop = tracker.meta&.dig('premium_stop_price')
+ 
+        premium_stop = (pending_meta || tracker.meta || {})['premium_stop_price']
         return unless premium_stop
 
         if ltp.to_f <= premium_stop.to_f
@@ -403,7 +400,7 @@ module Live
         Rails.logger.error("[RiskManager] enforce_time_based_exit error: #{e.class} - #{e.message}")
       end
 
-      def enforce_time_based_exit_for(tracker, exit_engine:, position_data: nil)
+      def enforce_time_based_exit_for(tracker, exit_engine:, position_data: nil, pending_meta: nil)
         risk = risk_config
         exit_time = parse_time_hhmm(risk[:time_exit_hhmm] || '15:20')
         return unless exit_time
@@ -441,16 +438,16 @@ module Live
         Rails.logger.error("[RiskManager] enforce_time_based_exit_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
       end
 
-      def advance_trade_state_for(tracker, position_data: nil)
+      def advance_trade_state_for(tracker, position_data: nil, pending_meta: nil)
         # Use passed position_data or fetch from ActiveCache if not provided
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
-
-        entry_risk_rupees = tracker.meta&.dig('entry_risk_rupees')
+ 
+        entry_risk_rupees = (pending_meta || tracker.meta || {})['entry_risk_rupees']
         risk_value = safe_big_decimal(entry_risk_rupees)
-
+ 
         # Ensure we always update peak trend score if possible
-        update_peak_trend_score(tracker, position_data)
+        update_peak_trend_score(tracker, position_data, pending_meta: pending_meta)
 
         return unless risk_value&.positive?
 
@@ -479,7 +476,7 @@ module Live
 
       private
 
-      def update_peak_trend_score(tracker, position_data)
+      def update_peak_trend_score(tracker, position_data, pending_meta: nil)
         # Use trend score from position_data if available (from ActiveCache)
         trend_score = position_data.respond_to?(:underlying_trend_score) ? position_data.underlying_trend_score : nil
         
@@ -506,10 +503,10 @@ module Live
           trend_score = val.to_f + momentum_score(series.candles)
         end
 
-        peak = (@pending_meta || tracker.meta || {})['peak_trend_score'] || 0
+        peak = (pending_meta || tracker.meta || {})['peak_trend_score'] || 0
         if trend_score > peak
-          if @pending_meta
-            @pending_meta['peak_trend_score'] = trend_score
+          if pending_meta
+            pending_meta['peak_trend_score'] = trend_score
           else
             meta = tracker.meta || {}
             meta['peak_trend_score'] = trend_score
@@ -542,24 +539,26 @@ module Live
         Rails.logger.error("[RiskManager] arm_profit_floor! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
 
-      def profit_floor_time_kill?(tracker, time_kill_minutes:)
+      def profit_floor_time_kill?(tracker, time_kill_minutes:, pending_meta: nil)
         return false unless time_kill_minutes
-        return false unless tracker.profit_floor_set_at
-
-        (Time.current - tracker.profit_floor_set_at) >= time_kill_minutes.minutes
+        
+        floor_set_at = (pending_meta || tracker.meta || {})['profit_floor_set_at'] || tracker.profit_floor_set_at
+        return false unless floor_set_at
+ 
+        (Time.current - floor_set_at) >= time_kill_minutes.minutes
       rescue StandardError
         false
       end
 
-      def update_trailing_floor!(tracker, hwm_pnl, trail_pct:)
+      def update_trailing_floor!(tracker, hwm_pnl, trail_pct:, pending_meta: nil)
         return unless hwm_pnl&.positive?
 
         dynamic_floor = (BigDecimal(hwm_pnl.to_s) * BigDecimal(trail_pct.to_s)).ceil
         current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
         return if dynamic_floor <= current_floor
 
-        if @pending_meta
-          @pending_meta['profit_floor_rupees'] = dynamic_floor.to_i
+        if pending_meta
+          pending_meta['profit_floor_rupees'] = dynamic_floor.to_i
         else
           meta = (tracker.meta || {}).stringify_keys
           meta['profit_floor_rupees'] = dynamic_floor.to_i

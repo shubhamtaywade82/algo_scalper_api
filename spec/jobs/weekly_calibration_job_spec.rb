@@ -4,11 +4,16 @@ require 'rails_helper'
 
 RSpec.describe WeeklyCalibrationJob do
   let(:mock_run) do
-    instance_double(CalibrationRun, propose_config!: nil)
+    r = instance_double(CalibrationRun, propose_config!: nil, id: 1, applied_at: nil)
+    allow(r).to receive(:reload).and_return(r)
+    r
   end
 
   before do
     allow(Options::AutoCalibrator).to receive(:call).and_return(mock_run)
+    allow(Options::CalibrationAutoApplier).to receive(:call).and_return(
+      Options::CalibrationAutoApplier::Result.new(false, nil, true)
+    )
     allow(Options::CalibrationNotifier).to receive(:notify)
     allow(Options::CalibrationNotifier).to receive(:notify_error)
   end
@@ -28,7 +33,14 @@ RSpec.describe WeeklyCalibrationJob do
 
       it 'notifies via CalibrationNotifier' do
         described_class.new.perform('NIFTY', 52)
-        expect(Options::CalibrationNotifier).to have_received(:notify).with('NIFTY', mock_run)
+        expect(Options::CalibrationNotifier).to have_received(:notify).with(
+          'NIFTY', mock_run, auto_apply_result: kind_of(Options::CalibrationAutoApplier::Result)
+        )
+      end
+
+      it 'attempts auto-apply after calibration' do
+        described_class.new.perform('NIFTY', 52)
+        expect(Options::CalibrationAutoApplier).to have_received(:call).with(run: mock_run, source: :historical)
       end
     end
 

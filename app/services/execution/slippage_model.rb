@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Execution
   class SlippageModel
     def self.apply(price:, side:)

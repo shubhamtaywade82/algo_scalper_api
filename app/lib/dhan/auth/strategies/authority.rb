@@ -34,7 +34,7 @@ module Dhan
           raise "Authority response missing access_token" if token.blank?
           raise "Authority response missing expires_at"   if expiry.blank?
 
-          normalize_response(token: token, expiry: Time.parse(expiry))
+          normalize_response(token: token, expiry: Time.zone.parse(expiry))
         end
 
         private

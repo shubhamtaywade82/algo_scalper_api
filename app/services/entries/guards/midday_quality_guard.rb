@@ -12,7 +12,9 @@ module Entries
         include BaseGuard
 
         def call(context)
+          return PASS if AlgoConfig.run_mode == 'exit_testing'
           return PASS unless config_enabled?
+          return PASS if trending?(context)
           return { blocked: "no new trades after #{block_after_time}" } if blocked_after_cutoff?
           return PASS if opening_window?
           return PASS unless midday_or_later_before_cutoff?
@@ -115,6 +117,16 @@ module Entries
         def adx_value(context)
           metadata = context[:entry_metadata] || {}
           context.dig(:pick, :adx_value) || metadata[:adx_value]
+        end
+
+        def trending?(context)
+          threshold = config[:trending_adx_bypass]
+          return false if threshold.nil?
+
+          adx = adx_value(context)
+          return false if adx.nil?
+
+          adx.to_f >= threshold.to_f
         end
       end
     end

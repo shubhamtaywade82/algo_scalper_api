@@ -2,6 +2,11 @@
 
 module Api
   class CalibrationRunsController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!, only: %i[index show]
+    before_action :authenticate_operator_token!, only: %i[apply]
+
     # GET /api/calibration_runs
     # Returns last N runs ordered by created_at desc, with current_snapshot.
     def index

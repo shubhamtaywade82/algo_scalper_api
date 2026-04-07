@@ -59,6 +59,9 @@ class BacktestServiceWithNoTradeEngine
     service
   end
 
+  # Standard entry-point alias — prefer `.call` across all service objects
+  singleton_class.send(:alias_method, :call, :run)
+
   def execute
     Rails.logger.info("[Backtest] Starting backtest with No-Trade Engine for #{instrument.symbol_name}")
     $stdout.puts "[Backtest] Starting backtest for #{instrument.symbol_name}..."
@@ -894,4 +897,4 @@ class BacktestServiceWithNoTradeEngine
   end
 end
 
-# rubocop:enable Style/GlobalVars, Rails/Output
+# rubocop:enable Style/GlobalVars, Rails/Output, Metrics/BlockNesting

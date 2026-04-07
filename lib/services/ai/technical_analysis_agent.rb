@@ -43,7 +43,7 @@ module Services
       end
 
       def initialize
-        @client = Services::Ai::OpenaiClient.instance
+        @client = Services::Ai::OllamaClient.instance
         @tools = build_tools_registry
         @tool_cache = {} # Cache tool results within conversation
         @index_config_cache = nil # Cache index configs
@@ -108,15 +108,10 @@ module Services
           ]
 
           # Auto-select model (prefer faster models for agent)
-          model = if @client.provider == :ollama
-                    # For agent, prefer faster models - llama3.1:8b is good balance
-                    if @client.respond_to?(:preferred_text_model)
-                      @client.preferred_text_model(default: 'llama3.1:8b')
-                    else
-                      ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
-                    end
+          model = if @client.respond_to?(:preferred_text_model)
+                    @client.preferred_text_model(default: 'llama3.1:8b')
                   else
-                    'gpt-4o'
+                    ENV['OLLAMA_MODEL'] || @client.selected_model || 'llama3.1:8b'
                   end
 
           # Execute conversation with function calling

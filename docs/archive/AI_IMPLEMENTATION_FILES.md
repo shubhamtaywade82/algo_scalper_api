@@ -13,7 +13,7 @@
      - Supports multiple providers: `ruby-openai`, `openai-ruby`, Ollama
      - Auto-detects and selects best Ollama model
      - Streaming support for chat completions
-     - Singleton pattern (`Services::Ai::OpenaiClient.instance`)
+     - Singleton pattern (`Services::Ai::OllamaClient.instance`)
    - **Methods**:
      - `chat(messages:, model:, temperature:)` - Non-streaming chat
      - `chat_stream(messages:, model:, temperature:, &block)` - Streaming chat
@@ -69,7 +69,7 @@
 
 ### 5. **config/initializers/ai_client.rb**
    - **Purpose**: Initialize AI client on application startup
-   - **Content**: Rails initializer that loads `Services::Ai::OpenaiClient` and logs status
+   - **Content**: Rails initializer that loads `Services::Ai::OllamaClient` and logs status
    - **Runs**: After Rails application initialization
 
 ### 6. **config/algo.yml**
@@ -188,7 +188,7 @@ User Query
     ↓
 TechnicalAnalysisAgent.analyze()
     ↓
-OpenaiClient.chat_stream() / chat()
+OllamaClient.chat_stream() / chat()
     ↓
 Ollama/OpenAI API
     ↓
@@ -247,7 +247,7 @@ Final Response
 ### Main Entry Points:
 1. **Technical Analysis**: `Services::Ai::TechnicalAnalysisAgent.analyze(query:, stream: false)`
 2. **Trading Analysis**: `Services::Ai::TradingAnalyzer.analyze_trading_day(date:, stream: false)`
-3. **Client Access**: `Services::Ai::OpenaiClient.instance`
+3. **Client Access**: `Services::Ai::OllamaClient.instance`
 
 ### Rake Task Commands:
 ```bash

@@ -16,13 +16,14 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
       regime: { data: { 'label' => 'trending' } }
     })
     allow(CalibrationRun).to receive(:where).and_return(CalibrationRun.none)
+    allow(Ai::GenerativeAiMarketGate).to receive(:skip?).and_return(false)
   end
 
-  context 'when OpenaiClient returns a response' do
+  context 'when OllamaClient returns a response' do
     before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: true,
+      client = instance_double(Services::Ai::OllamaClient, enabled?: true,
                                                            chat: 'Bullish outlook. Key level 22000.')
-      allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
     end
 
     it 'returns 200 with snapshot and generated_at' do
@@ -40,12 +41,12 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
     end
   end
 
-  # OpenaiClient#chat rescues all StandardError internally and returns nil on failure
+  # OllamaClient#chat rescues all StandardError internally and returns nil on failure
   # (timeouts, connection errors, etc.). This is the actual production failure path.
-  context 'when OpenaiClient returns nil (service failure / timeout)' do
+  context 'when OllamaClient returns nil (service failure / timeout)' do
     before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: true, chat: nil)
-      allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
+      client = instance_double(Services::Ai::OllamaClient, enabled?: true, chat: nil)
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
     end
 
     it 'returns 503' do
@@ -62,8 +63,8 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
 
   context 'when AI client is not enabled' do
     before do
-      client = instance_double(Services::Ai::OpenaiClient, enabled?: false)
-      allow(Services::Ai::OpenaiClient).to receive(:instance).and_return(client)
+      client = instance_double(Services::Ai::OllamaClient, enabled?: false)
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
     end
 
     it 'returns 503 without calling chat' do
@@ -71,6 +72,32 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
       expect(response).to have_http_status(:service_unavailable)
       json = response.parsed_body
       expect(json['error']).to include('not configured')
+    end
+  end
+
+  context 'when generative AI is market-gated' do
+    let(:client) do
+      instance_double(Services::Ai::OllamaClient, enabled?: true,
+                                                  chat: 'Should not run')
+    end
+
+    before do
+      allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
+      allow(Ai::GenerativeAiMarketGate).to receive(:skip?) do |force: false|
+        force ? false : true
+      end
+    end
+
+    it 'returns 422 and does not call chat' do
+      post '/api/analysis/NIFTY/ai_snapshot'
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(client).not_to have_received(:chat)
+    end
+
+    it 'allows force=true to run chat' do
+      post '/api/analysis/NIFTY/ai_snapshot', params: { force: 'true' }
+      expect(response).to have_http_status(:ok)
+      expect(client).to have_received(:chat)
     end
   end
 

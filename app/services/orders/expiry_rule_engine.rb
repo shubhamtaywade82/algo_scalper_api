@@ -25,28 +25,7 @@ module Orders
     private
 
     def expiry_day?
-      # In India, weekly options expire on different days depending on index:
-      # NIFTY: Thursday
-      # BANKNIFTY: Wednesday (mostly)
-      # FINNIFTY: Tuesday
-      # MIDCPNIFTY: Monday
-      # SENSEX: Friday
-
-      today = Time.current.in_time_zone('Asia/Kolkata').wday
-
-      if @symbol.include?('SENSEX') || @symbol.include?('BANKEX')
-        today == 5 # Friday
-      elsif @symbol.include?('NIFTY') && @symbol.exclude?('BANK') && @symbol.exclude?('FIN') && @symbol.exclude?('MIDCP')
-        today == 4 # Thursday
-      elsif @symbol.include?('BANKNIFTY')
-        today == 3 # Wednesday
-      elsif @symbol.include?('FINNIFTY')
-        today == 2 # Tuesday
-      elsif @symbol.include?('MIDCPNIFTY')
-        today == 1 # Monday
-      else
-        false
-      end
+      Market::ExpiryChecker.expiry_today?(@symbol)
     end
   end
 end

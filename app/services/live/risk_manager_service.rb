@@ -48,7 +48,9 @@ module Live
       @thread = nil
       @market_closed_checked = false # Track if we've already checked after market closed
       @watchdog_thread = nil # Initialize as nil, start watchdog only when service starts
-      @redis_pnl_cache = {}
+      @active_enforcements = Concurrent::Map.new
+      @last_realtime_eval_at = Concurrent::Map.new
+      @redis_pnl_cache = Concurrent::Map.new
       @cycle_tracker_map = nil
     end
 
@@ -114,10 +116,8 @@ module Live
 
       # Concurrency lock: don't process if this tracker is already being analyzed
       # in the main monitor_loop or another event thread.
-      @active_enforcements ||= Concurrent::Map.new
-      return if @active_enforcements[tracker_id]
+      return if @active_enforcements.put_if_absent(tracker_id, true)
 
-      @active_enforcements[tracker_id] = true
       begin
         @last_realtime_tick_at = Time.current
 
@@ -169,18 +169,14 @@ module Live
       gap = realtime_min_enforcement_gap_seconds
       return true if gap <= 0
 
-      @realtime_eval_mutex ||= Mutex.new
-      @last_realtime_eval_at ||= {}
       now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      last = @last_realtime_eval_at[tracker_id]
 
-      @realtime_eval_mutex.synchronize do
-        last = @last_realtime_eval_at[tracker_id]
-        if last.nil? || (now - last) >= gap
-          @last_realtime_eval_at[tracker_id] = now
-          true
-        else
-          false
-        end
+      if last.nil? || (now - last) >= gap
+        @last_realtime_eval_at[tracker_id] = now
+        true
+      else
+        false
       end
     end
 

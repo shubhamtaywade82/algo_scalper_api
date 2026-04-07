@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Analytics
   class ThresholdOptimizer
     SCORE_RANGE = (40..90).step(5)
@@ -32,7 +34,7 @@ module Analytics
     def compute(trades)
       return { win_rate: 0, expectancy: 0 } if trades.empty?
 
-      wins = trades.select { |t| t[:pnl] > 0 }
+      wins = trades.select { |t| t[:pnl].positive? }
       losses = trades.select { |t| t[:pnl] <= 0 }
 
       total = trades.size

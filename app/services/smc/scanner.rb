@@ -266,17 +266,19 @@ module Smc
       return unless event_store_enabled?
 
       price = instrument.ltp&.to_f || instrument.latest_ltp&.to_f || 0.0
+      payload = {
+        'index' => index_cfg[:key].to_s,
+        'decision' => decision.to_s,
+        'price' => price,
+        'scanned_at' => Time.current.iso8601
+      }
+      merge_scan_confluence_payload!(payload, index_cfg, instrument)
 
       EventStore::Publisher.publish!(
         stream: "smc:#{index_cfg[:key]}",
         event_type: 'bias_scan',
         correlation_id: SecureRandom.uuid,
-        payload: {
-          'index'       => index_cfg[:key].to_s,
-          'decision'    => decision.to_s,
-          'price'       => price,
-          'scanned_at'  => Time.current.iso8601
-        },
+        payload: payload,
         validate_contract: false
       )
     rescue StandardError => e
@@ -287,6 +289,26 @@ module Smc
       AlgoConfig.fetch.dig(:signals, :smc_event_store_publish) == true
     rescue StandardError
       false
+    end
+
+    def merge_scan_confluence_payload!(payload, _index_cfg, instrument)
+      return unless AlgoConfig.fetch.dig(:signals, :enable_smc_confluence_digest) == true
+
+      intervals = AlgoConfig.fetch.dig(:signals, :smc_confluence_intervals) || {}
+      htf = (intervals[:htf] || intervals['htf'] || Smc::BiasEngine::HTF_INTERVAL).to_s
+      mtf = (intervals[:mtf] || intervals['mtf'] || Smc::BiasEngine::MTF_INTERVAL).to_s
+      ltf = (intervals[:ltf] || intervals['ltf'] || Smc::BiasEngine::LTF_INTERVAL).to_s
+
+      digest = Smc::Confluence::MtfDigest.build_from_instrument(
+        instrument: instrument,
+        htf: htf,
+        mtf: mtf,
+        ltf: ltf,
+        sleep_between: DELAY_BETWEEN_CANDLE_FETCHES
+      )
+      payload['smc_confluence_mtf'] = digest
+    rescue StandardError => e
+      Rails.logger.error("[Smc::Scanner] smc_confluence_mtf for EventStore failed: #{e.class} - #{e.message}")
     end
   end
 end

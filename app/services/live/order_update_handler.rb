@@ -69,8 +69,9 @@ module Live
         # Use tracker lock to prevent race conditions with ExitEngine
         tracker.with_lock do
           if transaction_type == 'SELL'
-            # Use avg_price from order update as exit_price
-            tracker.mark_exited!(exit_price: avg_price)
+            # Use avg_price from order update as exit_price; preserve intent from ExitEngine meta when present
+            prior = tracker.meta.is_a?(Hash) ? tracker.meta['exit_reason'].to_s.strip.presence : nil
+            tracker.mark_exited!(exit_price: avg_price, exit_reason: prior || 'BROKER_TRADE_UPDATE_EXIT')
           else
             tracker.mark_active!(avg_price: avg_price, quantity: quantity)
           end

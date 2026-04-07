@@ -37,13 +37,16 @@ module Risk
         return RuleResult.skip unless context.active?
 
         @rules.each do |rule|
-          next unless rule.enabled?
+          next unless rule.enabled?(context)
 
           begin
             result = rule.evaluate(context)
-            next if result.skip?
+            
+            # If we should continue (no_action or skip), move to next rule
+            next if result.skip? || result.continue?
 
-            # First non-skip result wins (exit or no_action)
+            # Attach rule name for traceability before returning
+            result.rule_name = rule.name
             return result
           rescue StandardError => e
             Rails.logger.error(
@@ -59,9 +62,10 @@ module Risk
       end
 
       # Get enabled rules
+      # @param context [RuleContext] Optional context
       # @return [Array<BaseRule>] Array of enabled rules
-      def enabled_rules
-        @rules.select(&:enabled?)
+      def enabled_rules(context = nil)
+        @rules.select { |r| r.enabled?(context) }
       end
 
       # Get rule by class

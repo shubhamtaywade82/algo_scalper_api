@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import solid from 'vite-plugin-solid'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [vue(), tailwindcss()],
+  plugins: [solid(), tailwindcss()],
   server: {
     port: 5173,
     proxy: {
@@ -12,9 +12,10 @@ export default defineConfig({
         changeOrigin: true
       },
       '/cable': {
-        target: 'ws://127.0.0.1:3001',
+        target: 'http://127.0.0.1:3001',
         ws: true,
-        changeOrigin: true
+        changeOrigin: true,
+        secure: false
       }
     }
   }
