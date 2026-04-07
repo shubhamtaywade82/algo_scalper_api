@@ -2,6 +2,9 @@
 
 class AlgoConfig
   CACHE_TTL = 30 # seconds
+  ALLOWED_SIGNAL_TIERS = %i[exploratory standard selective].freeze
+  SIGNAL_TIER_PRESETS_PATH = 'config/signal_tier_presets.yml'
+
   class << self
     def fetch
       if @cached_config && @cache_expires_at && Time.current < @cache_expires_at
@@ -22,6 +25,7 @@ class AlgoConfig
         end
       end
 
+      apply_signal_tier_preset!(base_config)
       apply_live_trading_env_override!(base_config)
 
       @cached_config = base_config
@@ -74,6 +78,51 @@ class AlgoConfig
       end
 
       merged_arr
+    end
+
+    # Merges config/signal_tier_presets.yml overlay for exploratory | standard | selective.
+    # Tier resolution: ENV['SIGNAL_TIER'] (if valid) else signals.signal_tier else standard.
+    def apply_signal_tier_preset!(config)
+      tier = resolve_signal_tier(config)
+      preset = load_signal_tier_presets[tier.to_sym]
+      if preset.nil?
+        Rails.logger.warn("[AlgoConfig] Missing preset for signal_tier #{tier} in #{SIGNAL_TIER_PRESETS_PATH}")
+        return
+      end
+
+      return if preset.blank?
+
+      merged = deep_merge_hashes_with_arrays(config, preset)
+      config.replace(merged)
+      Rails.logger.debug { "[AlgoConfig] signal_tier=#{tier}" }
+    end
+
+    def resolve_signal_tier(config)
+      env_raw = ENV.fetch('SIGNAL_TIER', nil)
+      env_tier = env_raw.to_s.strip.downcase
+      if env_raw.present?
+        return env_tier if ALLOWED_SIGNAL_TIERS.include?(env_tier.to_sym)
+
+        Rails.logger.warn("[AlgoConfig] Invalid SIGNAL_TIER=#{env_raw.inspect}; using config or standard")
+      end
+
+      cfg_raw = config.dig(:signals, :signal_tier)
+      cfg_tier = cfg_raw.to_s.strip.downcase
+      return cfg_tier if cfg_raw.present? && ALLOWED_SIGNAL_TIERS.include?(cfg_tier.to_sym)
+
+      Rails.logger.warn("[AlgoConfig] Invalid signals.signal_tier=#{cfg_raw.inspect}; using standard") if cfg_raw.present?
+
+      'standard'
+    end
+
+    def load_signal_tier_presets
+      path = Rails.root.join(SIGNAL_TIER_PRESETS_PATH)
+      return {} unless File.exist?(path)
+
+      YAML.load_file(path).deep_symbolize_keys
+    rescue StandardError => e
+      Rails.logger.error("[AlgoConfig] Failed to load #{SIGNAL_TIER_PRESETS_PATH}: #{e.message}")
+      {}
     end
 
     # LIVE_TRADING env is the single switch for real broker execution (see .env.example).

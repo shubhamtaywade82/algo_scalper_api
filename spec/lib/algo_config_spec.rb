@@ -55,6 +55,51 @@ RSpec.describe AlgoConfig do
         expect(described_class.fetch.dig(:paper_trading, :enabled)).to be(false)
       end
     end
+
+    context 'when SIGNAL_TIER env applies exploratory preset' do
+      around do |example|
+        prior = ENV.fetch('SIGNAL_TIER', nil)
+        ENV['SIGNAL_TIER'] = 'exploratory'
+        example.run
+        if prior.nil?
+          ENV.delete('SIGNAL_TIER')
+        else
+          ENV['SIGNAL_TIER'] = prior
+        end
+        described_class.reset!
+      end
+
+      it 'relaxes direction gate and disables entry quality enforcement' do
+        described_class.reset!
+        cfg = described_class.fetch
+        expect(cfg.dig(:signals, :signal_tier)).to eq('exploratory')
+        expect(cfg.dig(:signals, :enable_direction_gate)).to be(false)
+        expect(cfg.dig(:entry_quality, :enforce)).to be(false)
+      end
+    end
+
+    context 'when SIGNAL_TIER env applies selective preset' do
+      around do |example|
+        prior = ENV.fetch('SIGNAL_TIER', nil)
+        ENV['SIGNAL_TIER'] = 'selective'
+        example.run
+        if prior.nil?
+          ENV.delete('SIGNAL_TIER')
+        else
+          ENV['SIGNAL_TIER'] = prior
+        end
+        described_class.reset!
+      end
+
+      it 'tightens validation and enables options analysis gate' do
+        described_class.reset!
+        cfg = described_class.fetch
+        expect(cfg.dig(:signals, :signal_tier)).to eq('selective')
+        expect(cfg.dig(:signals, :validation_mode)).to eq('conservative')
+        expect(cfg.dig(:signals, :options_analysis_gate, :enabled)).to be(true)
+        expect(cfg.dig(:signals, :halt_on_validation_failure)).to be(true)
+      end
+    end
   end
 
   describe '.mode' do
