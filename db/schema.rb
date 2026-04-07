@@ -23,6 +23,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_120000) do
     t.string "request_id"
     t.string "source", null: false
     t.datetime "updated_at", null: false
+    t.index ["changed_paths"], name: "index_algo_config_change_logs_on_paths", using: :gin
     t.index ["created_at"], name: "index_algo_config_change_logs_on_created_at"
     t.index ["source"], name: "index_algo_config_change_logs_on_source"
   end

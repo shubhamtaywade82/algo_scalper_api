@@ -6,7 +6,7 @@ class AlgoConfig
     module_function
 
     def deep_merge_hashes_with_arrays(base, overrides)
-      merged = base.dup
+      merged = base.deep_dup
 
       overrides.each do |key, val|
         if base[key].is_a?(Hash) && val.is_a?(Hash)
@@ -25,7 +25,7 @@ class AlgoConfig
       return override_arr unless base_arr.all? { |i| i.is_a?(Hash) && i[:key] } &&
                                  override_arr.all? { |i| i.is_a?(Hash) && i[:key] }
 
-      merged_arr = base_arr.map(&:dup)
+      merged_arr = base_arr.map(&:deep_dup)
 
       override_arr.each do |over_item|
         existing_idx = merged_arr.index { |b_item| b_item[:key] == over_item[:key] }

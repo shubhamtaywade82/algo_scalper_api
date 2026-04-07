@@ -9,11 +9,8 @@ class AlgoConfig
     SENSITIVE_KEY_PATTERN = /token|secret|password|api_key|access_token|client_secret|master_key/
 
     class << self
-      # Full mutable document (symbol keys) for +AlgoConfig.fetch+ — deep copy so tier/env overlays
-      # do not mutate the stored document in memory.
       def current_mutable_document
-        doc = load_or_bootstrap!
-        JSON.parse(JSON.generate(doc.deep_stringify_keys), symbolize_names: true)
+        load_or_bootstrap!.deep_dup
       end
 
       # Replace entire subtree for each present top-level key (PATCH /api/settings/bulk).
@@ -41,8 +38,24 @@ class AlgoConfig
           request_id: request_id,
           patch: { replace: patch_replace },
           changed_paths: paths,
-          metadata: metadata || {}
+          metadata: metadata
         )
+      end
+
+      # Re-seed from YAML + legacy overrides, replacing the existing document.
+      # Used by rake task and deployment scripts.
+      def force_bootstrap!(source: 'rake_bootstrap_document', actor: 'rake')
+        merged = build_bootstrap_document
+        persist!(
+          merged,
+          source: source,
+          actor: actor,
+          request_id: nil,
+          patch: { forced_bootstrap: true, legacy_merged: legacy_overrides_present? },
+          changed_paths: ['/__forced_bootstrap__'],
+          metadata: {}
+        )
+        merged
       end
 
       # Deep-merge a partial patch (e.g. CalibrationRun#proposed_patch) into the document.
@@ -62,7 +75,7 @@ class AlgoConfig
           request_id: request_id,
           patch: { deep_merge: redact_for_audit(sym_patch) },
           changed_paths: paths.presence || ['__deep_merge__'],
-          metadata: metadata || {}
+          metadata: metadata
         )
       end
 
@@ -70,27 +83,45 @@ class AlgoConfig
 
       def load_or_bootstrap!
         json = Setting.fetch(DOCUMENT_KEY, nil, ttl: AlgoConfig::CACHE_TTL)
-        if json.present?
-          parsed = JSON.parse(json, symbolize_names: true)
-          return parsed if parsed.is_a?(Hash)
+        return parse_document!(json) if json.present?
 
-          Rails.logger.warn('[AlgoConfig::DocumentStore] algo_config_document not a Hash; re-bootstrapping')
+        bootstrap_with_lock!
+      rescue ActiveRecord::StatementInvalid => e
+        Rails.logger.warn("[AlgoConfig::DocumentStore] DB not ready (#{e.class}); falling back to YAML seed")
+        yaml_seed_hash
+      end
+
+      def parse_document!(json)
+        parsed = JSON.parse(json, symbolize_names: true)
+        return parsed if parsed.is_a?(Hash)
+
+        Rails.logger.warn('[AlgoConfig::DocumentStore] algo_config_document not a Hash; re-bootstrapping')
+        bootstrap_with_lock!
+      end
+
+      def bootstrap_with_lock!
+        Setting.transaction do
+          existing = Setting.find_by(key: DOCUMENT_KEY)&.value
+          if existing.present?
+            parsed = JSON.parse(existing, symbolize_names: true)
+            return parsed if parsed.is_a?(Hash)
+          end
+
+          merged = build_bootstrap_document
+          persist!(
+            merged,
+            source: 'bootstrap_cutover',
+            actor: 'system',
+            request_id: nil,
+            patch: {
+              bootstrap: true,
+              legacy_algo_config_overrides_merged: legacy_overrides_present?
+            },
+            changed_paths: ['/__bootstrap__'],
+            metadata: {}
+          )
+          merged
         end
-
-        merged = build_bootstrap_document
-        persist!(
-          merged,
-          source: 'bootstrap_cutover',
-          actor: 'system',
-          request_id: nil,
-          patch: {
-            bootstrap: true,
-            legacy_algo_config_overrides_merged: legacy_overrides_present?
-          },
-          changed_paths: ['/__bootstrap__'],
-          metadata: {}
-        )
-        merged
       end
 
       def build_bootstrap_document
@@ -121,7 +152,7 @@ class AlgoConfig
           request_id: request_id,
           patch: patch.deep_stringify_keys,
           changed_paths: Array(changed_paths),
-          metadata: (metadata || {}).deep_stringify_keys
+          metadata: metadata.deep_stringify_keys
         )
         AlgoConfig.reset!
         Rails.logger.info(

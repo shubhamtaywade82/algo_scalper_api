@@ -59,6 +59,13 @@ RSpec.describe 'Api::Settings' do
       patch '/api/settings/bulk', params: {}
       expect(response).to have_http_status(:bad_request)
     end
+
+    it 'returns 422 when all settings keys are filtered out' do
+      patch '/api/settings/bulk', params: { settings: { bogus_key: { a: 1 } } }
+      expect(response).to have_http_status(:unprocessable_content)
+      json = response.parsed_body
+      expect(json['error']).to match(/No permitted/)
+    end
   end
 
   describe 'GET /api/settings/change_logs' do
@@ -73,13 +80,25 @@ RSpec.describe 'Api::Settings' do
       )
     end
 
-    it 'returns paginated change logs' do
+    it 'returns change logs with pagination metadata' do
       get '/api/settings/change_logs', params: { limit: 10 }
       expect(response).to have_http_status(:ok)
       json = response.parsed_body
       expect(json['success']).to be(true)
-      expect(json['change_logs']).to be_an(Array)
+      expect(json).to include('total' => a_kind_of(Integer), 'limit' => 10, 'offset' => 0)
+    end
+
+    it 'includes source in each change log entry' do
+      get '/api/settings/change_logs', params: { limit: 10 }
+      json = response.parsed_body
       expect(json['change_logs'].first['source']).to eq('test')
+    end
+
+    it 'clamps limit to valid range' do
+      get '/api/settings/change_logs', params: { limit: 999 }
+      expect(response).to have_http_status(:ok)
+      json = response.parsed_body
+      expect(json['limit']).to eq(200)
     end
   end
 end

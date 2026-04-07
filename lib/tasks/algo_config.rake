@@ -11,26 +11,7 @@ namespace :algo_config do
       next
     end
 
-    yaml_hash = YAML.load_file(Rails.root.join('config/algo.yml')).deep_symbolize_keys
-    legacy_raw = Setting.find_by(key: AlgoConfig::DocumentStore::LEGACY_OVERRIDES_KEY)&.value
-    doc =
-      if legacy_raw.present?
-        legacy = JSON.parse(legacy_raw, symbolize_names: true)
-        AlgoConfig::MergeUtil.deep_merge_hashes_with_arrays(yaml_hash, legacy)
-      else
-        yaml_hash
-      end
-
-    Setting.put(key, doc.deep_stringify_keys.to_json)
-    AlgoConfig.reset!
-    AlgoConfigChangeLog.create!(
-      source: 'rake_bootstrap_document',
-      actor: 'rake',
-      request_id: nil,
-      patch: { rake_bootstrap: true },
-      changed_paths: ['/__rake_bootstrap__'],
-      metadata: {}
-    )
+    doc = AlgoConfig::DocumentStore.force_bootstrap!
     puts "[algo_config:bootstrap_document] wrote #{key} (#{doc.keys.size} top-level keys)"
   end
 end

@@ -70,6 +70,7 @@ RSpec.describe 'Api::CalibrationRuns' do
     end
 
     after do
+      ENV.delete('API_OPERATOR_TOKEN')
       Setting.where(key: doc_key).delete_all
       AlgoConfigChangeLog.delete_all
       AlgoConfig.reset!

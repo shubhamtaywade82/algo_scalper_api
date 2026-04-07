@@ -42,15 +42,20 @@ module Api
       # rubocop:enable Rails/StrongParametersExpect
       new_config = raw.deep_symbolize_keys.compact
 
+      if new_config.blank?
+        render json: { success: false, error: 'No permitted settings keys provided' }, status: :unprocessable_content
+        return
+      end
+
       AlgoConfig::DocumentStore.apply_top_level_replacements!(
         new_config,
         source: 'api_settings_bulk',
-        actor: params[:actor].presence || 'api',
+        actor: 'api',
         request_id: request.request_id,
         metadata: { remote_ip: request.remote_ip }
       )
 
-      render json: { success: true, message: "Algo settings updated successfully" }
+      render json: { success: true, message: 'Algo settings updated successfully' }
     rescue ActionController::ParameterMissing => e
       Rails.logger.warn("[SettingsController] update_bulk missing params: #{e.message}")
       render json: { error: e.message }, status: :bad_request
@@ -59,14 +64,18 @@ module Api
       render json: { error: e.message }, status: :internal_server_error
     end
 
-    # GET /api/settings/change_logs — paginated audit trail (patch-only rows).
+    # GET /api/settings/change_logs — paginated audit trail.
     def change_logs
       limit = (params[:limit] || 50).to_i.clamp(1, 200)
       offset = [params[:offset].to_i, 0].max
+      total = AlgoConfigChangeLog.count
       rows = AlgoConfigChangeLog.recent_first.limit(limit).offset(offset)
 
       render json: {
         success: true,
+        total: total,
+        limit: limit,
+        offset: offset,
         change_logs: rows.as_json(only: %i[id source actor request_id patch changed_paths metadata created_at])
       }
     rescue StandardError => e
