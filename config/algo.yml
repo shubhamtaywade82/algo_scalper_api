@@ -67,7 +67,7 @@ feature_flags:
   auto_paper_on_insufficient_balance: false
 
 # Calibration: historical option behaviour (weekly) and optional AI trade-based patches.
-# Auto-apply merges proposed_patch into DB algo_config_overrides (same as POST …/apply).
+# Auto-apply merges proposed_patch into DB algo_config_document (same as POST …/apply).
 calibration:
   auto_apply:
     # Master switch. When false, runs only create CalibrationRun rows for manual review.

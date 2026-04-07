@@ -6,7 +6,7 @@ module Api
   class SettingsController < ApplicationController
     include Api::TokenAuthenticatable
 
-    before_action :authenticate_dashboard_token!, only: :index
+    before_action :authenticate_dashboard_token!, only: %i[index change_logs]
     before_action :authenticate_operator_token!, only: :update_ip
     before_action :authenticate_settings!, only: :update_bulk
 
@@ -16,6 +16,9 @@ module Api
       broker_fees risk position_sizing signals chain_analyzer option_chain
       data_freshness watchlist telegram ai
     ].freeze
+
+    # Strong params: allow arbitrary nested hashes under each whitelisted top-level key only.
+    PERMITTED_SETTINGS_STRUCTURE = PERMITTED_SETTINGS_KEYS.index_with { {} }.freeze
 
     # GET /api/settings
     def index
@@ -28,19 +31,24 @@ module Api
       render json: { error: e.message }, status: :internal_server_error
     end
 
-    # PATCH /api/settings
-    # Requires a param `settings` containing the full updated config object.
-    # Only top-level keys in PERMITTED_SETTINGS_KEYS are accepted.
+    # PATCH /api/settings/bulk
+    # Param +settings+: only PERMITTED_SETTINGS_KEYS. Each **present** key replaces that entire top-level subtree
+    # in +algo_config_document+; omitted keys are unchanged.
     # When SETTINGS_UPDATE_TOKEN is set, PATCH requires header X-Settings-Update-Token or param token.
     def update_bulk
-      # Permit only the explicitly whitelisted top-level keys under `settings` — never use permit!
+      # Permit only whitelisted top-level keys; each may carry a nested hash (full subtree replace).
       # rubocop:disable Rails/StrongParametersExpect -- require+permit keeps nesting and bad_request handling explicit
-      raw = params.require(:settings).permit(*PERMITTED_SETTINGS_KEYS).to_h
+      raw = params.require(:settings).permit(PERMITTED_SETTINGS_STRUCTURE).to_h
       # rubocop:enable Rails/StrongParametersExpect
-      new_config = raw.deep_symbolize_keys
+      new_config = raw.deep_symbolize_keys.compact
 
-      Setting.put('algo_config_overrides', new_config.to_json)
-      AlgoConfig.reset!
+      AlgoConfig::DocumentStore.apply_top_level_replacements!(
+        new_config,
+        source: 'api_settings_bulk',
+        actor: params[:actor].presence || 'api',
+        request_id: request.request_id,
+        metadata: { remote_ip: request.remote_ip }
+      )
 
       render json: { success: true, message: "Algo settings updated successfully" }
     rescue ActionController::ParameterMissing => e
@@ -48,6 +56,21 @@ module Api
       render json: { error: e.message }, status: :bad_request
     rescue StandardError => e
       Rails.logger.error("[SettingsController] update_bulk error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
+    # GET /api/settings/change_logs — paginated audit trail (patch-only rows).
+    def change_logs
+      limit = (params[:limit] || 50).to_i.clamp(1, 200)
+      offset = [params[:offset].to_i, 0].max
+      rows = AlgoConfigChangeLog.recent_first.limit(limit).offset(offset)
+
+      render json: {
+        success: true,
+        change_logs: rows.as_json(only: %i[id source actor request_id patch changed_paths metadata created_at])
+      }
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] change_logs error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error
     end
 
