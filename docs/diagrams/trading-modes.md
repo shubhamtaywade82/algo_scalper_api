@@ -1,50 +1,82 @@
 # Trading Modes Flow Diagrams
 
 Mermaid diagrams for how **automated trading modes** combine in Algo Scalper API. Modes are
-orthogonal: run profile (`RUN_MODE` + YAML profile), paper vs live gateway, live order safety
-(`PLACE_ORDER`), and daemon / safety environment flags.
+orthogonal: **effective algo config** (YAML + DB + signal tier + `LIVE_TRADING`), paper vs live
+gateway, live order safety (`PLACE_ORDER` + `dhanhq.enable_orders`), and daemon environment
+flags.
 
 See also: [Architecture diagrams index](../architecture/diagrams/README.md),
-`config/algo.yml`, `config/profiles/*.yml`, `app/lib/algo_config.rb`,
+`config/algo.yml`, `config/signal_tier_presets.yml`, `app/lib/algo_config.rb`,
 `app/services/signal/engine.rb`, `app/services/orders/gateway_factory.rb`.
 
 ---
 
-## Configuration Stack And Run Mode
+## Configuration Stack (Effective `AlgoConfig.fetch`)
 
-Effective algo config is built from base YAML, an optional profile keyed by `run_mode`, and DB
-overrides. `Signal::Engine` only special-cases `run_mode == exit_testing` in Ruby; `entry_testing`
-relies on merged YAML (relaxed thresholds, flags).
+Effective config is built in this order (each step deep-merges into the previous):
+
+1. `config/algo.yml`
+2. DB `settings.algo_config_overrides` (JSON)
+3. Overlay from `config/signal_tier_presets.yml` for the active tier
+4. `LIVE_TRADING` env forces `paper_trading.enabled` (see below)
 
 ```mermaid
 flowchart TB
   subgraph cfg [Config load — AlgoConfig.fetch]
-    A[config/algo.yml] --> M[Deep merge]
-    P["config/profiles/{run_mode}.yml\nproduction | exit_testing | entry_testing"] --> M
-    M --> D[(Settings: algo_config_overrides JSON)]
-    D --> C[Effective config + 30s cache]
+    A[config/algo.yml] --> M1[Deep merge]
+    D[(Settings: algo_config_overrides JSON)] --> M1
+    M1 --> M2[Deep merge signal tier preset]
+    T["config/signal_tier_presets.yml\nexploratory | standard | selective"] --> M2
+    M2 --> LT[LIVE_TRADING env → paper_trading.enabled]
+    LT --> C[Effective config + 30s cache]
   end
 
-  subgraph rm [Run mode resolution]
-    E["ENV RUN_MODE"] --> R{present?}
-    R -->|yes| RM[use ENV value]
-    R -->|no| Y[algo.yml run_mode]
-    Y --> RM
-    RM --> P
-  end
-
-  subgraph sig [Signal code branch]
-    RM --> SE["AlgoConfig.run_mode"]
-    SE --> X{run_mode == exit_testing?}
+  subgraph tier [Signal tier resolution]
+    E["ENV SIGNAL_TIER"] --> R{valid tier?}
+    R -->|yes| TI[use ENV]
+    R -->|no| Y[signals.signal_tier in merged YAML]
+    Y --> TI2{valid?}
+    TI2 -->|yes| TI
+    TI2 -->|no| STD[standard]
+    TI --> M2
+    STD --> M2
   end
 ```
 
 ---
 
-## Signal Engine: Exit Testing Vs Production And Entry Testing
+## LIVE_TRADING And Paper Vs Live Gateway
 
-`production` and `entry_testing` share the same pipeline; profile YAML differs.
-`exit_testing` forces a faster path (e.g. 1m primary, skips several gates).
+`LIVE_TRADING` is evaluated after tier merge. When unset or false, **`paper_trading.enabled` is
+forced true** (paper). When true, **`paper_trading.enabled` is forced false** (live gateway path).
+`dhanhq.enable_orders` and `PLACE_ORDER` still gate actual broker submission on live.
+
+```mermaid
+flowchart LR
+  subgraph boot [Rails boot]
+    F[Orders::GatewayFactory.build] --> Q{effective paper_trading.enabled == true?}
+    Q -->|yes| GP[GatewayPaper — synthetic fills at LTP]
+    Q -->|no| GL[GatewayLive — DhanHQ REST]
+  end
+
+  subgraph place [Each market order — GatewayLive only]
+    GL --> PL[Orders::Placer]
+    PL --> S1{dhanhq.enable_orders?}
+    S1 -->|no| DR[dry-run log]
+    S1 -->|yes| S2{PLACE_ORDER == true?}
+    S2 -->|no| DR
+    S2 -->|yes| API[DhanHQ API]
+    GP --> SIM[Simulated fill + local position updates]
+  end
+```
+
+---
+
+## Signal Engine: Single Pipeline
+
+There is **no** `run_mode` / `exit_testing` branch. Strategy and strictness come from merged YAML
+and tier preset (e.g. `signals.entry_strategy`, `signals.validation_modes`,
+`halt_on_validation_failure`, gates).
 
 ```mermaid
 flowchart TD
@@ -52,58 +84,22 @@ flowchart TD
   TRAD -->|no| STOP1[return]
   TRAD -->|yes| INST{Instrument ok?}
   INST -->|no| STOP1
-  INST -->|yes| RM{run_mode == exit_testing?}
-
-  subgraph exit_test [Exit testing path]
-    RM -->|yes| CTX1[Context: supertrend_adx on 1m, no confirmation TF]
-    CTX1 --> FLOW1[Standard / supertrend analysis flow]
-    FLOW1 --> V1[effective_validation_mode = exit_testing]
-    V1 --> TC1{Trading context gate?}
-    TC1 -->|blocked| STOP2[reset state, return]
-    TC1 -->|pass / skipped if no regime_state| EQ1[Entry quality: SKIPPED]
-    EQ1 --> EG1[Execution gates: SKIPPED — filter, permission, SMC, momentum]
-    EG1 --> OPT1[Options analysis]
-  end
-
-  subgraph normal [Production + entry_testing path]
-    RM -->|no| CTX2[Context from signals config + profile merge]
-    CTX2 --> FLOW2[Analysis flows per entry_primary]
-    FLOW2 --> V2[validation_mode from config / flow]
-    V2 --> TC2{Trading context gate enabled and blocked?}
-    TC2 -->|yes| STOP3[reset, return]
-    TC2 -->|no| EQ2[EntryQualityFilter]
-    EQ2 -->|fail| STOP3
-    EQ2 -->|pass| EG2[EntryFilterEngine + PermissionResolver + SMC + momentum]
-    EG2 -->|fail| STOP3
-    EG2 -->|pass| OPT2[Options analysis]
-  end
-
-  OPT1 --> META[Metadata + persist signal → downstream entries]
-  OPT2 --> META
-```
-
----
-
-## Order Execution: Paper Vs Live And Place Order Gate
-
-Gateway is chosen at boot (`Orders::GatewayFactory`). Live orders still require `PLACE_ORDER`
-(and `dhanhq.enable_orders` per deployment docs) or the placer dry-runs.
-
-```mermaid
-flowchart LR
-  subgraph boot [Rails boot]
-    F[Orders::GatewayFactory.build] --> Q{paper_trading.enabled == true?}
-    Q -->|yes| GP[GatewayPaper — synthetic fills at LTP]
-    Q -->|no| GL[GatewayLive — DhanHQ REST]
-  end
-
-  subgraph place [Each market order]
-    GL --> PL[Orders::Placer]
-    PL --> S{PLACE_ORDER == true?}
-    S -->|no| DR[dry-run log — no broker call]
-    S -->|yes| API[DhanHQ API]
-    GP --> SIM[Simulated fill + local position updates]
-  end
+  INST -->|yes| BR{entry_primary == supertrend?}
+  BR -->|yes| ST[supertrend-only flow + regime-based effective_validation_mode]
+  BR -->|no| STD2[standard / multi-indicator flow]
+  ST --> HALT{halt_on_validation_failure + validation failed?}
+  STD2 --> HALT
+  HALT -->|yes| RST[reset StateTracker, return]
+  HALT -->|no| TC[Trading context gate]
+  TC -->|blocked| RST
+  TC -->|pass| EQ[Entry quality filter]
+  EQ -->|fail| RST
+  EQ -->|pass| NT[No-trade gate + DTE guard]
+  NT -->|fail| RST
+  NT -->|pass| EG[Execution gates — SMC, momentum, etc.]
+  EG -->|fail| RST
+  EG -->|pass| OA[Options analysis + optional options_analysis_gate]
+  OA --> ENT[Entry gate + trigger_entry_flow]
 ```
 
 ---
@@ -136,7 +132,7 @@ flowchart TD
 
   D --> MF[MarketFeedHub — ticks]
   D --> SS[Signal::Scheduler ~30s]
-  SS --> SE[Signal::Engine — mode as above]
+  SS --> SE[Signal::Engine]
   SE --> EG[Entries::EntryGuard + guards pipeline]
   EG --> GW[Gateway Paper or Live]
   GW --> PT[PositionTracker + feed subscription]
@@ -148,12 +144,13 @@ flowchart TD
 
 ---
 
-## Profile Files Quick Reference
+## Signal Tier Quick Reference
 
-| Profile (`config/profiles/`) | Code path in `Signal::Engine` | Main intent |
-|------------------------------|--------------------------------|-------------|
-| `production.yml` | Full pipeline (same as base) | Default real / paper evaluation behaviour. |
-| `exit_testing.yml` | **`exit_testing` branch** + merged YAML | Many more entries; stress-test exits. |
-| `entry_testing.yml` | Full pipeline, relaxed merged YAML | More signals through guards; test entry path. |
+| Tier | Source | Intent |
+|------|--------|--------|
+| `exploratory` | `SIGNAL_TIER=exploratory` or `signals.signal_tier` | Overlay from preset YAML — most permissive for research/paper |
+| `standard` | Default when tier missing/invalid | Preset may be empty — behaviour matches `algo.yml` + DB as merged |
+| `selective` | `SIGNAL_TIER=selective` or YAML | Stricter overlay from preset (not a profit guarantee) |
 
-Set via `run_mode` in `config/algo.yml` or `ENV RUN_MODE` (see `.env.example`).
+Tier choice does **not** switch gateways; use **`LIVE_TRADING=true`** for live gateway selection
+at boot (restart required after change).

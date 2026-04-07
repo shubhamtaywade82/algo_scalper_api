@@ -71,16 +71,16 @@ bundle exec rspec spec/services/entries/guards/time_regime_guard_spec.rb
 
 ## Paper Trading Validation
 
-The primary validation approach is running in `paper_trading.enabled: true` mode with `run_mode: exit_testing` or `entry_testing`. All market data is real (live DhanHQ WebSocket); only order execution is simulated.
+The primary validation approach is running with **`LIVE_TRADING` unset or false** (paper gateway forced), optional **`SIGNAL_TIER=exploratory`** for a permissive preset overlay, and `dhanhq.enable_orders: false` / no `PLACE_ORDER` while you prove the stack. All market data is real (live DhanHQ WebSocket); order execution is simulated in paper mode.
 
 ### Quick Pre-Session Checks
 
 ```bash
-# Verify paper trading enabled
+# Verify base paper_trading block (effective mode also depends on LIVE_TRADING)
 grep -A 3 "paper_trading" config/algo.yml
 
-# Verify run mode
-grep "run_mode" config/algo.yml
+# Verify signal tier (env overrides signals.signal_tier)
+grep -A 2 "signal_tier" config/algo.yml
 
 # Verify risk parameters
 grep -A 10 "^risk:" config/algo.yml
@@ -223,22 +223,21 @@ Risk::CircuitBreaker.instance.reset!
 
 ---
 
-## Run Modes for Testing
+## Signal Tiers And Tuning (No `run_mode`)
 
-See `docs/development/testing_profiles.md` for full details.
+`RUN_MODE`, `exit_testing`, and `config/profiles/*.yml` are **removed**. See
+`docs/development/testing_profiles.md` for the historical note.
 
-| Mode | Purpose | How to enable |
-|------|---------|---------------|
-| `production` | Full guards, real conditions | `run_mode: production` or omit |
-| `exit_testing` | Many entries → test exit rules | `run_mode: exit_testing` or `RUN_MODE=exit_testing` |
-| `entry_testing` | Relaxed guards → test entry pipeline | `run_mode: entry_testing` or `RUN_MODE=entry_testing` |
+| Goal | What to use |
+|------|-------------|
+| More permissive signal YAML overlay | `SIGNAL_TIER=exploratory` or set `signals.signal_tier: exploratory` |
+| Match `algo.yml` as merged with DB only | `SIGNAL_TIER=standard` (default when tier invalid/missing) |
+| Stricter preset overlay | `SIGNAL_TIER=selective` |
+| Stress entry or exit plumbing | Tune `signals.*`, guards, and risk blocks in YAML or DB overrides — same code path for all |
 
 ```bash
-# Start in exit testing mode
-RUN_MODE=exit_testing ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
-
-# Start in entry testing mode
-RUN_MODE=entry_testing ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
+# Example: exploratory tier + paper gateway (LIVE_TRADING unset)
+SIGNAL_TIER=exploratory ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 ```
 
 ---

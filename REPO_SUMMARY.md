@@ -144,9 +144,10 @@ Architecture diagrams and narrative docs:
 
 ## 3. Modes and Configuration
 
-- **Paper vs Live**: Controlled via `config/algo.yml` → `paper_trading.enabled` and `dhanhq.enable_orders`. Also requires `PLACE_ORDER=true` env var for live orders. Gateway selected at boot: paper → `Orders::GatewayPaper`, live → `Orders::GatewayLive`. Both modes use real WebSocket and option chain data. Tuning is via `algo.yml` and DB overrides only (no separate run-mode profiles).
+- **Paper vs Live**: Effective `paper_trading.enabled` from `AlgoConfig.fetch`: `config/algo.yml` → DB `algo_config_overrides` → `config/signal_tier_presets.yml` (tier from `SIGNAL_TIER` or `signals.signal_tier`) → **`LIVE_TRADING` env** forces paper when unset/false. Live broker submission still needs `dhanhq.enable_orders: true` and `PLACE_ORDER=true`. Gateway selected at boot; restart after changing `LIVE_TRADING`.
+- **Signal tiers**: `exploratory` / `standard` / `selective` — YAML preset overlay only; not a second gateway switch.
 - **All percentage config values use DECIMAL format** (0.12 = 12%, not 12.0).
-- **Typed Settings**: `AlgoSetting` + `Setting` model + `config/algo.yml` drive feature flags, ADX thresholds, risk limits, time restrictions. `AlgoConfig.fetch` has a 30s cache with DB deep-merge.
+- **Typed Settings**: `AlgoSetting` + `Setting` model + `config/algo.yml` drive feature flags, ADX thresholds, risk limits, time restrictions. `AlgoConfig.fetch` has a 30s cache with the merge order above.
 
 ---
 

@@ -64,7 +64,8 @@ This document covers deployment setup and operational procedures for the Algo Sc
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ENABLE_TRADING_SERVICES` | — | Set to `"true"` to start trading daemon |
-| `RUN_MODE` | from algo.yml | Override run_mode: `production`, `exit_testing`, `entry_testing` |
+| `LIVE_TRADING` | — | Set `"true"` for live gateway path at boot; unset/false forces paper |
+| `SIGNAL_TIER` | `standard` (via YAML if unset) | `exploratory` / `standard` / `selective` — merges `config/signal_tier_presets.yml` |
 | `RAILS_ENV` | `development` | Rails environment |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Ollama model for AI analysis |
 | `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` | `http://localhost:11434` | Ollama server URL |
@@ -136,8 +137,8 @@ bin/rails server -p 3001
 # Trading daemon
 ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 
-# With run mode override
-RUN_MODE=production ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
+# Live gateway path (restart required); still needs dhanhq.enable_orders + PLACE_ORDER for broker
+LIVE_TRADING=true ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon
 
 # Solid Queue worker
 bin/jobs
@@ -170,13 +171,13 @@ rails solid_queue:load_recurring
 
 ## Pre-Live Checklist
 
-Before switching `paper_trading.enabled: false` in `config/algo.yml`:
+Before enabling live execution:
 
+- [ ] `LIVE_TRADING=true` in process environment (trading daemon restart after change)
 - [ ] DhanHQ credentials: `DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN`
 - [ ] TOTP credentials: `DHAN_PIN`, `DHAN_TOTP_SECRET`
 - [ ] Live order gate: `PLACE_ORDER=true` env var
 - [ ] Config gate: `dhanhq.enable_orders: true` in `config/algo.yml`
-- [ ] Run mode: `run_mode: production` in `config/algo.yml`
 - [ ] Instruments synced: `rails runner 'puts Derivative.count'` (should be > 0)
 - [ ] Database migrated: `rails db:migrate:status` (all up)
 - [ ] Redis running: `redis-cli ping` returns PONG

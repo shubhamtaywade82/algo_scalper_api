@@ -28,8 +28,12 @@ must always match current exchange and broker specifications.
 
 ## How This Relates to `algo_scalper_api`
 
+- **Runtime merge order**: `config/algo.yml` → DB `algo_config_overrides` →
+  `config/signal_tier_presets.yml` (tier from `SIGNAL_TIER` or `signals.signal_tier`) →
+  `LIVE_TRADING` forces `paper_trading.enabled`. See `app/lib/algo_config.rb`.
+- **Options + signal wiring snapshot**: [SYSTEM_STATE.md](./SYSTEM_STATE.md).
 - **Stable behaviour** comes from `app/services/options/`, `app/services/signal/`,
-  `app/services/entries/`, and `config/algo.yml`.
+  `app/services/entries/`, and effective config above.
 - Research may suggest **order flow / Level 3** style edges; only adopt what your
   **data feeds** actually provide.
 - After changing **calendar or sizing** assumptions, re-check **capital allocator**

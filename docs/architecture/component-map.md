@@ -152,8 +152,9 @@ graph TD
 
 ### Configuration Layers (merge order)
 1. `config/algo.yml` — base config
-2. `config/profiles/<run_mode>.yml` — run mode overrides
-3. DB `settings` table — hot config changes without restart (30s cache)
+2. DB `settings.algo_config_overrides` — hot config changes without daemon restart (30s cache)
+3. `config/signal_tier_presets.yml` — overlay for resolved `SIGNAL_TIER` / `signals.signal_tier`
+4. `LIVE_TRADING` env — forces `paper_trading.enabled` for gateway selection at boot
 
 ### Percentage Format
 All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` = 12%, `0.05` = 5%.

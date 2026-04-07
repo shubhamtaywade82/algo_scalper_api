@@ -174,7 +174,7 @@ RiskManagerService#run_enforcement_cycle
 
 | Aspect | Paper Mode | Live Mode |
 |--------|-----------|-----------|
-| Config | `paper_trading.enabled: true` | `paper_trading.enabled: false` |
+| Config | Effective `paper_trading.enabled: true` (default when `LIVE_TRADING` unset/false) | `LIVE_TRADING=true` → effective `paper_trading.enabled: false` |
 | Market data | Real DhanHQ WebSocket | Real DhanHQ WebSocket |
 | Option chain | Real DhanHQ API (`DhanAdapter`) | Real DhanHQ API (`DhanAdapter`) |
 | Orders | Simulated (`GatewayPaper`) | Real DhanHQ API (`GatewayLive`) |
@@ -183,21 +183,21 @@ RiskManagerService#run_enforcement_cycle
 | Fills | Synthetic (immediate) | DhanHQ WebSocket updates |
 | Wallet | Simulated balance from config | Real funds API |
 
-## Run Modes
+## Signal Tiers And Paper Override
 
-Set `run_mode` in `config/algo.yml` or override with `RUN_MODE` env var. Profile files at `config/profiles/<mode>.yml` provide partial YAML overrides merged on top of `algo.yml`.
-
-| Mode | Purpose |
-|------|---------|
-| `production` | Full guards, conservative entries (no overrides) |
-| `exit_testing` | Frequent entries to test SL/TP/trailing/time-stop rules |
-| `entry_testing` | Relaxed SMC/validation/ADX gates to verify entry pipeline |
+There is **no** `run_mode` or `config/profiles/*.yml`. Strictness overlays use
+**`config/signal_tier_presets.yml`** with tier `exploratory` | `standard` | `selective` (from
+`SIGNAL_TIER` env or `signals.signal_tier`). **`LIVE_TRADING`** env forces effective
+`paper_trading.enabled` after that merge (restart trading daemon to change gateway).
 
 ## Configuration
 
-All trading parameters in `config/algo.yml`. Runtime overrides via DB `settings` table (deep-merged with 30s cache via `AlgoConfig.fetch`). `AlgoConfig.run_mode` returns the active run mode.
+All trading parameters start in `config/algo.yml`. Runtime overrides via DB `settings` table
+(`algo_config_overrides`, deep-merged with 30s cache), then tier preset, then `LIVE_TRADING`.
 
-**Key sections**: `paper_trading`, `run_mode`, `dhanhq`, `indices` (per-index config), `trade_limits`, `risk`, `position_sizing`, `signals`, `chain_analyzer`, `expiry_week_power_trend`, `broker_fees`, `telegram`, `ai`.
+**Key sections**: `paper_trading`, `dhanhq`, `indices` (per-index config), `trade_limits`, `risk`,
+`position_sizing`, `signals` (includes `signal_tier`, `validation_modes`, gates), `chain_analyzer`,
+`expiry_week_power_trend`, `broker_fees`, `telegram`, `ai`.
 
 All percentage values use **DECIMAL format** (0.12 = 12%).
 

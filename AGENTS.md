@@ -42,12 +42,11 @@
 - The trading daemon only starts services when `ENABLE_TRADING_SERVICES=true` and market is open. If market is closed at boot, only the WebSocket feed starts.
 
 ## Paper vs Live Trading
-- Controlled by `config/algo.yml`: `paper_trading.enabled: true/false`
+- **Effective** `paper_trading.enabled` comes from `AlgoConfig.fetch`: `config/algo.yml` → DB `algo_config_overrides` → `config/signal_tier_presets.yml` (tier from `SIGNAL_TIER` or `signals.signal_tier`) → **`LIVE_TRADING` env** forces paper when unset/false, live when true
 - Both modes use real DhanHQ WebSocket data for market ticks
 - Paper mode: simulated fills via `Orders::GatewayPaper`
-- Live mode: real DhanHQ execution via `Orders::GatewayLive`
-- Additional safety gate for live: `dhanhq.enable_orders: true` in `algo.yml` (or `ENABLE_ORDER=true` env)
-- Gateway selected at boot time; switching requires restart
+- Live gateway path: `Orders::GatewayLive`; broker orders require `dhanhq.enable_orders: true` and `PLACE_ORDER=true`
+- Gateway selected at boot time; switching `LIVE_TRADING` or YAML paper flag requires **daemon restart**
 
 ## Coding Style & Naming Conventions
 - Ruby files start with `# frozen_string_literal: true`.

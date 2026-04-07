@@ -83,9 +83,11 @@ guards in `enabled?` are off. Order update WebSocket runs in live mode only
 
 ### Gateway Selection
 
-At boot, `Orders::GatewayFactory.build` selects:
-- `Orders::GatewayPaper` — if `config/algo.yml` → `paper_trading.enabled: true`
-- `Orders::GatewayLive` — if `paper_trading.enabled: false`
+At boot, `Orders::GatewayFactory.build` uses **effective** `paper_trading.enabled` from
+`AlgoConfig.fetch` (YAML + DB overrides + signal tier preset + **`LIVE_TRADING` env**):
+
+- `Orders::GatewayPaper` — when effective `paper_trading.enabled: true` (default when `LIVE_TRADING` is unset/false)
+- `Orders::GatewayLive` — when effective `paper_trading.enabled: false` (`LIVE_TRADING=true`)
 
 ### Live Order Safety Gates
 

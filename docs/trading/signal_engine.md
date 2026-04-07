@@ -2,148 +2,63 @@
 
 The Signal Engine is the central decision-making component that identifies trading opportunities based on market data, technical indicators, and market structure.
 
+Implementation: `Signal::Engine.run_for` in `app/services/signal/engine.rb`. Config is always the **effective** hash from `AlgoConfig.fetch` (YAML → DB `algo_config_overrides` → `config/signal_tier_presets.yml` → `LIVE_TRADING` paper flag).
+
 ## Core Architecture
 
-The engine runs as a series of numbered steps in `Signal::Engine.run_for(index_cfg)`. Each step can abort the pipeline and return nil (no trade). Steps are:
+The engine runs as a **single pipeline** (no `run_mode` / `exit_testing` branch). Numbered steps match the method body order in `run_for`:
 
 1. Market open check
 2. Instrument resolution
-3. Analysis context initialization
-4. Primary + optional confirmation analysis
-5. Trading context gate
-6. Entry quality filter
-7. Institutional and permission gates
-8. State snapshot (deduplication)
-9. Options analysis
-10. Diagnostic metadata build
-11. `TradingSignal` persistence
-12. Market context gate (optional)
-13. Entry trigger
+3. Analysis context initialization (`entry_primary`, timeframes)
+4. Primary path: **supertrend-only** (`execute_supertrend_only_flow`) or **standard** (`execute_standard_analysis_flow`)
+5. Optional early stop: `halt_on_validation_failure` when comprehensive validation failed
+6. Trading context gate
+7. Entry quality filter
+8. No-trade gate (`enable_no_trade_engine`) + nearest expiry + **`entry_dte_guard`**
+9. Execution gates (SMC, momentum, direction, confluence, etc.)
+10. `Signal::StateTracker.record` (deduplication)
+11. Options analysis (`execute_options_analysis`) + optional **`options_analysis_gate`**
+12. Diagnostic metadata build
+13. `TradingSignal` persistence
+14. `execute_entry_gate` (strike pick validation, optional market context, premium checks)
+15. `trigger_entry_flow` → `Entries::EntryGuard` / BOS engine
 
-## Step-by-Step Pipeline
+## Step Details
 
-### Step 1: Market Open Check
-```ruby
-TradingSession::Service.market_closed?
-```
-Returns immediately if market is closed. Market hours: 09:15-15:30 IST.
+### Analysis paths
 
-### Step 2: Instrument Resolution
-```ruby
-IndexInstrumentCache.instance.get_or_fetch(index_cfg)
-```
-Fetches the underlying index instrument (e.g., NIFTY 50 index instrument) from in-memory cache or DB.
+**Supertrend-only** (`entry_strategy.primary: supertrend`):
 
-### Step 3: Analysis Context Initialization
-```ruby
-entry_primary = signals_cfg.dig(:entry_strategy, :primary)  # 'supertrend', 'supertrend_adx', etc.
-primary_tf    = signals_cfg[:primary_timeframe]             # '5m' default
-confirmation_tf = signals_cfg[:confirmation_timeframe]      # '1m' default (if enabled)
-```
+- Candle series for `primary_timeframe`
+- `Indicators::Supertrend` direction (`:bullish` / `:bearish` / `:none`); nil direction aborts
+- Regime from merged config; **`effective_validation_mode`** is **conservative** when regime is RANGING or CHOPPY, else **`signals.validation_mode`** (e.g. balanced)
 
-**In `exit_testing` run mode**: Forces `supertrend_adx` on `1m`, no confirmation timeframe, bypasses quality gates.
+**Standard / legacy path** (other `entry_primary` values):
 
-### Step 4: Technical Analysis
+- Primary ± optional confirmation timeframes
+- Supertrend + ADX alignment, regime detection, comprehensive validation as implemented in `execute_standard_analysis_flow`
 
-**Supertrend-only flow** (`entry_primary == 'supertrend'`):
-- Fetches candle series for `primary_tf`
-- Computes `Indicators::Supertrend` direction (`:bullish` / `:bearish` / `:none`)
-- Returns nil if direction is `:none`
+### Trading context gate
 
-**Standard analysis flow** (all other entry strategies):
-- Fetches primary and optional confirmation candle series
-- Computes `Indicators::Supertrend` + `Indicators::ADX` for each timeframe
-- Multi-timeframe alignment: both timeframes must agree on direction
-- Regime detection: `Market::MarketRegimeResolver` classifies as TRENDING/RANGING/CHOPPY
-- TA filter: optional `IndexTechnicalAnalyzer` for additional technical context (gated by `signals.enable_index_ta_filter`)
+`trading_context_blocked?` — `Entries::EntryFilterEngine`, `Trading::PermissionResolver`, SMC alignment when enabled, using `trading_context_strictness` and related flags.
 
-### Step 5: Trading Context Gate
+### Entry quality filter
 
-```ruby
-trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, exit_testing_mode, signals_cfg)
-```
+`evaluate_entry_quality` — ADX strength, IV proxy, theta risk, and validation thresholds from **`signals.validation_modes`** keyed by `effective_validation_mode`.
 
-Checks:
-- `Entries::EntryFilterEngine` — structure/liquidity/volatility alignment
-- `Trading::PermissionResolver` — SMC + AVRZ permission gating
-- SMC decision alignment check (if `signals.enable_smc_decision_alignment: true`)
+### No-trade and DTE
 
-If blocked, `Signal::StateTracker.reset(index_cfg[:key])` and return nil.
+- `execute_no_trade_gate` — when `enable_no_trade_engine` is true, builds option context and may block
+- `entry_dte_guard` — blocks when `days_to_expiry <= reject_when_days_to_expiry_lte` (see `config/algo.yml`)
 
-### Step 6: Entry Quality Filter
+### Options analysis
 
-```ruby
-evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime, exit_testing_mode)
-```
+`Options::ChainAnalyzer.pick_strikes_with_qualification` with live `DhanAdapter`. When **`options_analysis_gate.enabled`**, failed IV-rank or theta checks from this stage can block picks per gate flags.
 
-In `exit_testing` mode: always passes.
+### Entry gate and market context
 
-Otherwise evaluates:
-- **ADX strength**: ADX must meet `min_adx` threshold for the index
-- **IV proxy check**: option chain IV must be within acceptable range
-- **Theta risk**: avoid high theta decay (near expiry)
-- **Validation mode**: `balanced` in trending regime, `conservative` in choppy regime (stricter thresholds)
-
-### Step 7: Institutional and Permission Gates
-
-```ruby
-execute_execution_gates(index_cfg, instrument, primary_series, final_direction, signals_cfg, exit_testing_mode)
-```
-
-- **SMC bias**: `Smc::BiasEngine.decision` for directional alignment
-- **Momentum scoring**: `Signal::MomentumValidator` computes 0-3 score from price action
-- Returns `{ permission:, smc_decision:, momentum_score: }`
-
-### Step 8: State Snapshot (Deduplication)
-
-```ruby
-Signal::StateTracker.record(index_key:, direction:, candle_timestamp:, config:)
-```
-
-Prevents duplicate signals for the same direction + candle timestamp. Returns a `state_snapshot` hash for metadata.
-
-### Step 9: Options Analysis
-
-```ruby
-execute_options_analysis(index_cfg, instrument, final_direction, primary_series, effective_validation_mode)
-```
-
-Calls `Options::ChainAnalyzer.pick_strikes_with_qualification`:
-- Fetches live option chain via `DhanAdapter` (always live, even in paper mode)
-- Scores ATM±1 strikes (liquidity, OI, spread, IV proxy)
-- Validates expected move via ATR
-- Returns ordered `picks` list
-
-If no strikes qualify, flow continues but entry may be blocked at guard level.
-
-### Step 10 + 11: Metadata Build + Signal Persistence
-
-Diagnostic metadata includes: index key, direction, ADX value, Supertrend value, regime, validation mode, timeframes, SMC decision, permission, momentum score, options analysis results, strategy recommendation.
-
-`TradingSignal.create_from_analysis(...)` persists the signal for audit/analysis.
-
-### Step 12: Market Context Gate (Optional)
-
-Only runs when `market_context.enabled: true` in `config/algo.yml` (default: false).
-
-```ruby
-evaluate_market_context_for_entry(index_cfg, instrument, picks, primary_series, signal)
-```
-
-- `MarketContext::RegimeComposer` builds `RegimeSnapshot` (structure, strength, volatility_state, participation, conviction_score)
-- `Options::ChainSignalExtractor` derives chain confirmation (PCR, flow, premium expansion)
-- `Trading::StrategyProfileSelector` sets `strategy_profile` in `entry_metadata`
-- If `market_context.gate.enabled: true`: `Trading::MarketPermissionGate` may block based on conviction/participation thresholds
-
-See `docs/trading/market_context_and_permission_gate.md` for full details.
-
-### Step 13: Entry Trigger
-
-```ruby
-trigger_entry_flow(index_cfg:, instrument:, signal:, picks:, final_direction:, ...)
-```
-
-Calls `Entries::EntryGuard.try_enter` or `Entries::BosEntryEngine` depending on entry strategy. The 20-guard pipeline runs here.
+`execute_entry_gate` runs after the signal row exists. Optional **market context** runs when `market_context.enabled: true`.
 
 ---
 
@@ -174,40 +89,52 @@ Calls `Entries::EntryGuard.try_enter` or `Entries::BosEntryEngine` depending on 
 
 ## Configuration
 
-Signal behavior is controlled via `config/algo.yml` under `signals:`:
+Signal behaviour is controlled under `signals:` in `config/algo.yml`, then tier preset, then DB overrides. Illustrative fragment (see repo file for full truth):
 
 ```yaml
 signals:
+  signal_tier: standard   # exploratory | standard | selective — merged with signal_tier_presets.yml
   entry_strategy:
-    primary: supertrend_adx   # 'supertrend', 'supertrend_adx', 'index_ta'
-  primary_timeframe: 5m
-  confirmation_timeframe: 1m
-  enable_confirmation_timeframe: true
-  validation_mode: balanced   # 'balanced' or 'conservative'
-  max_expiry_days: 7          # skip instruments with expiry > 7 days away
+    primary: supertrend   # supertrend | supertrend_adx | ...
+  primary_timeframe: "1m"
+  enable_confirmation_timeframe: false
 
-  # Optional gates (default true)
+  validation_mode: balanced
+  validation_modes:
+    conservative: { ... }
+    balanced: { ... }
+    aggressive: { ... }
+
+  options_analysis_gate:
+    enabled: false
+    block_on_iv_rank_failure: true
+    block_on_theta_risk_failure: true
+
+  halt_on_validation_failure: false
+
+  entry_dte_guard:
+    enabled: true
+    reject_when_days_to_expiry_lte: 0
+
+  enable_no_trade_engine: false
+  enable_direction_gate: true
   enable_smc_decision_alignment: true
-  enable_smc_avrz_permission: true
-
-  # Optional technical analysis filter (default false)
-  enable_index_ta_filter: false
-  ta_min_confidence: 0.6
+  enable_smc_avrz_permission: false
 ```
 
-Per-index ADX thresholds in `indices[].min_adx_entry` (default varies: NIFTY ~15, BANKNIFTY ~18).
+Per-index ADX thresholds live under `indices[].min_adx_entry` / `adx_thresholds` where present.
 
 ---
 
-## Run Mode Behavior
+## Signal tier (no run modes)
 
-| Mode | Entry strategy | Timeframe | Confirmation | Quality gates |
-|------|---------------|-----------|-------------|---------------|
-| `production` | From config | From config | From config | Full |
-| `exit_testing` | `supertrend_adx` (forced) | `1m` (forced) | Disabled | Most bypassed |
-| `entry_testing` | From config | From config | From config | Relaxed (lower ADX, no SMC) |
+| Tier | Resolution | Role |
+|------|------------|------|
+| `exploratory` | `SIGNAL_TIER` env or `signals.signal_tier` | Merges permissive overlay from `config/signal_tier_presets.yml` |
+| `standard` | Default when tier missing/invalid | Often empty preset — behaviour follows merged YAML |
+| `selective` | env or YAML | Stricter overlay from preset |
 
-Current default: `run_mode: exit_testing` in `config/algo.yml`.
+Tuning frequency of trades is done with **YAML / DB / tier**, not a separate engine branch. See `docs/development/testing_profiles.md`.
 
 ---
 
@@ -219,18 +146,23 @@ graph LR
     MC -- No --> End([Skip])
     MC -- Yes --> IR[Instrument Resolution]
     IR --> CTX[Analysis Context\nInit]
-    CTX --> TA[Technical Analysis\nSupertrend + ADX]
-    TA --> TCG{Trading Context\nGate}
-    TCG -- Block --> Reset([Reset StateTracker])
+    CTX --> TA[Supertrend or\nstandard flow]
+    TA --> HALT{halt_on_validation_failure?}
+    HALT -- Stop --> Reset([Reset StateTracker])
+    HALT -- Pass --> TCG{Trading Context\nGate}
+    TCG -- Block --> Reset
     TCG -- Pass --> QF{Entry Quality\nFilter}
     QF -- Fail --> End
-    QF -- Pass --> IG[Institutional Gates\nSMC + Momentum]
-    IG --> SS[State Snapshot\nDedup]
-    SS --> OA[Options Analysis\nStrike Selection]
+    QF -- Pass --> NT[No-trade +\nDTE guard]
+    NT -- Fail --> Reset
+    NT -- Pass --> IG[Execution gates\nSMC + momentum]
+    IG -- Fail --> Reset
+    IG -- Pass --> SS[State Snapshot\nDedup]
+    SS --> OA[Options analysis\n+ optional gate]
     OA --> SIG[TradingSignal.create]
-    SIG --> MCG{Market Context\nGate?}
-    MCG -- Blocked --> End
-    MCG -- Pass --> EG[Entries::EntryGuard\n20-guard pipeline]
+    SIG --> EG2[execute_entry_gate]
+    EG2 -- Blocked --> End
+    EG2 -- Pass --> EG[Entries::EntryGuard\n20-guard pipeline]
     EG -- Blocked --> End
     EG -- Pass --> ORD[Order Placement]
     ORD --> Final([PositionTracker active])

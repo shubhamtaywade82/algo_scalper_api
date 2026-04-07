@@ -164,18 +164,24 @@ Exit enforcement (5s loop):
 
 ## Paper vs Live Mode
 
-Controlled by `config/algo.yml`:
-- `paper_trading.enabled: true` → `Orders::GatewayPaper` (simulated fills, real data)
-- `paper_trading.enabled: false` → `Orders::GatewayLive` (real DhanHQ execution)
-- `dhanhq.enable_orders: true` must also be set for live orders (safety gate — without it, orders log as "dry-run")
+**Effective paper vs live** is determined after `AlgoConfig.fetch` merges:
 
-Both modes use real DhanHQ WebSocket data and real option chain API. Gateway is selected once at boot (`config/initializers/orders_gateway.rb`); switching requires restart.
+1. `config/algo.yml`
+2. DB `algo_config_overrides` (`settings` table)
+3. `config/signal_tier_presets.yml` for tier `exploratory` | `standard` | `selective` (from `SIGNAL_TIER` env or `signals.signal_tier`)
+4. **`LIVE_TRADING` env** — when unset/false, `paper_trading.enabled` is **forced true**; when true, forced false (overrides YAML for gateway selection)
+
+- `paper_trading.enabled: true` (effective) → `Orders::GatewayPaper` (simulated fills, real data)
+- `paper_trading.enabled: false` (effective) → `Orders::GatewayLive` (real DhanHQ execution path)
+- For actual broker submission on live: `dhanhq.enable_orders: true` **and** `PLACE_ORDER=true` (without these, live path still dry-runs in `Orders::Placer`)
+
+Both modes use real DhanHQ WebSocket data and real option chain API. Gateway is selected once at boot (`config/initializers/orders_gateway.rb`); switching effective mode requires restart.
 
 ## Config Format
 
 All percentage values in `config/algo.yml` use **DECIMAL format**: `0.12` means 12%, `0.05` means 5%. Never use whole-number percentages.
 
-`AlgoConfig.fetch` has a 30-second in-process cache with DB override support via the `settings` table (deep-merged on top of YAML).
+`AlgoConfig.fetch` has a 30-second in-process cache. Merge order: base YAML → DB overrides → signal tier preset → `LIVE_TRADING` paper override.
 
 ## Critical Rules
 
