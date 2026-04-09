@@ -1035,10 +1035,11 @@ chain_analyzer:
     volume: 0.15
 
 option_chain:
-  min_iv: 10
+  min_iv: 5.0          # Relaxed from 10 — LOW_VOL regime options often have IV < 10
   max_iv: 60
   min_oi: 50000
   max_spread_pct: 3.0
+  min_strike_score: 80.0  # PropStrikeSelector scores 0–1 (×100 = 0–100); 140 default was unreachable
 
 data_freshness:
   disable_ohlc_caching: false
