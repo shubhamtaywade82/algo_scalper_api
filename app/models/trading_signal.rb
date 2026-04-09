@@ -101,10 +101,14 @@ class TradingSignal < ApplicationRecord
     direction == DIRECTIONS[:avoid]
   end
 
-  def record_entry_outcome(outcome, reason = nil)
-    update!(metadata: (metadata || {}).merge(
+  def record_entry_outcome(outcome, reason = nil, extra_metadata: nil)
+    fragment = {
       'entry_outcome' => outcome,
       'entry_blocked_reason' => reason
-    ).compact)
+    }
+    if extra_metadata.is_a?(Hash) && extra_metadata.any?
+      fragment.merge!(extra_metadata.stringify_keys)
+    end
+    update!(metadata: (metadata || {}).merge(fragment).compact)
   end
 end

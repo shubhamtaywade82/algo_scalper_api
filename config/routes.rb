@@ -40,7 +40,8 @@ Rails.application.routes.draw do
     get    'settings',              to: 'settings#index'
     get    'settings/change_logs',  to: 'settings#change_logs'
     patch  'settings/bulk',         to: 'settings#update_bulk'
-    post   'settings/update_ip', to: 'settings#update_ip'
+    patch  'settings/deep_merge',   to: 'settings#update_deep_merge'
+    post   'settings/update_ip',    to: 'settings#update_ip'
 
     # Calibration runs — view and apply automated config patches
     resources :calibration_runs, only: %i[index show] do

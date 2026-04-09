@@ -53,7 +53,11 @@ RSpec.describe Signal::Engine do
           }
         )
         expect(blocked).to be(true)
-        expect(signal).to have_received(:record_entry_outcome).with('skipped', 'options analysis iv rank')
+        expect(signal).to have_received(:record_entry_outcome).with(
+          'skipped',
+          'options_analysis_iv_rank: IV Rank — Extreme volatility',
+          extra_metadata: { 'entry_skip_stage' => 'options_analysis', 'entry_skip_code' => 'iv_rank_failure' }
+        )
         expect(Signal::StateTracker).to have_received(:reset).with('NIFTY')
       end
     end
@@ -82,7 +86,11 @@ RSpec.describe Signal::Engine do
           }
         )
         expect(blocked).to be(true)
-        expect(signal).to have_received(:record_entry_outcome).with('skipped', 'options analysis theta risk')
+        expect(signal).to have_received(:record_entry_outcome).with(
+          'skipped',
+          'options_analysis_theta_risk: Theta Risk — Too close to close',
+          extra_metadata: { 'entry_skip_stage' => 'options_analysis', 'entry_skip_code' => 'theta_risk_failure' }
+        )
       end
     end
 

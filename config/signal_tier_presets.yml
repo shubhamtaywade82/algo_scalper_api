@@ -11,7 +11,6 @@ exploratory:
     validation_mode: aggressive
     permission_mode: lenient
     enable_direction_gate: false
-    enable_trading_context_gate: false
     trading_context_strictness: relaxed
     enable_no_trade_engine: false
     halt_on_validation_failure: false
@@ -26,9 +25,6 @@ exploratory:
     min_confidence: 50
     enable_smc_confluence_gating: false
     enable_institutional_filter: false
-    enable_option_premium_momentum_gate: false
-    enable_strike_score_floor_gate: false
-    enable_expected_move_strike_gate: false
   option_chain:
     min_strike_score: 50.0
   midday_guard:
@@ -64,9 +60,6 @@ selective:
     min_confidence: 72
     enable_smc_confluence_gating: false
     enable_institutional_filter: true
-    enable_option_premium_momentum_gate: true
-    enable_strike_score_floor_gate: true
-    enable_expected_move_strike_gate: true
   option_chain:
     min_strike_score: 140.0
   midday_guard:

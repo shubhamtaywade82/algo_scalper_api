@@ -8,7 +8,7 @@ module Api
 
     before_action :authenticate_dashboard_token!, only: %i[index change_logs]
     before_action :authenticate_operator_token!, only: :update_ip
-    before_action :authenticate_settings!, only: :update_bulk
+    before_action :authenticate_settings!, only: %i[update_bulk update_deep_merge]
 
     # Top-level keys allowed for algo config overrides (must match config/algo.yml structure)
     PERMITTED_SETTINGS_KEYS = %i[
@@ -64,6 +64,38 @@ module Api
       render json: { error: e.message }, status: :internal_server_error
     end
 
+    # PATCH /api/settings/deep_merge
+    # Param +patch+: a nested hash representing the subset of config to update.
+    # Applies deep merge so omitted keys are untouched.
+    def update_deep_merge
+      # Permit only whitelisted top-level keys allowing arbitrary sub-structures.
+      # rubocop:disable Rails/StrongParametersExpect
+      raw_patch = params.require(:patch).permit(PERMITTED_SETTINGS_STRUCTURE).to_h
+      # rubocop:enable Rails/StrongParametersExpect
+      patch_config = raw_patch.deep_symbolize_keys.compact
+
+      if patch_config.blank?
+        render json: { success: false, error: 'No permitted patch keys provided' }, status: :unprocessable_content
+        return
+      end
+
+      AlgoConfig::DocumentStore.apply_deep_merge_patch!(
+        patch_config,
+        source: 'api_settings_deep_merge',
+        actor: 'api',
+        request_id: request.request_id,
+        metadata: { remote_ip: request.remote_ip }
+      )
+
+      render json: { success: true, message: 'Settings modified successfully' }
+    rescue ActionController::ParameterMissing => e
+      Rails.logger.warn("[SettingsController] update_deep_merge missing params: #{e.message}")
+      render json: { error: e.message }, status: :bad_request
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] update_deep_merge error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
     # GET /api/settings/change_logs — paginated audit trail.
     def change_logs
       limit = (params[:limit] || 50).to_i.clamp(1, 200)
@@ -99,6 +131,8 @@ module Api
     private
 
     def authenticate_settings!
+      return if Rails.env.development?
+
       if Rails.env.production? && ENV['SETTINGS_UPDATE_TOKEN'].blank?
         Rails.logger.error('[SettingsController] SETTINGS_UPDATE_TOKEN must be set in production for bulk updates')
         render json: { error: 'settings_update_unconfigured' }, status: :service_unavailable

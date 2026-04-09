@@ -36,7 +36,7 @@ module Orchestration
         direction: direction
       )
 
-      picks = Options::ChainAnalyzer.pick_strikes_with_qualification(
+      strike_result = Options::ChainAnalyzer.pick_strikes_with_qualification(
         index_cfg: @index_cfg,
         direction: direction,
         permission: :scale_ready, # Default permission for runner
@@ -44,12 +44,13 @@ module Orchestration
         momentum_score: momentum_result.score
       )
 
-      if picks.blank?
-        Rails.logger.info("[StrategyRunner] #{@symbol} no qualifying strikes found")
+      if strike_result.picks.blank?
+        reason = strike_result.failure_reason.presence || 'no qualifying strikes'
+        Rails.logger.info("[StrategyRunner] #{@symbol} no qualifying strikes: #{reason}")
         return
       end
 
-      pick = picks.first
+      pick = strike_result.picks.first
       Rails.logger.info("[StrategyRunner] #{@symbol} Selected Strike: #{pick[:symbol]} (Score: #{pick[:score]})")
 
       # 4. Execution (Market Order)

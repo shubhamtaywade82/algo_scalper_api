@@ -12,10 +12,10 @@ RSpec.describe Signal::Engine do
         series.add_candle(
           Candle.new(
             timestamp: Time.zone.parse('2026-03-02 09:15') + i.minutes,
-            open: 100 + i * 0.2,
-            high: 102 + i * 0.2,
-            low: 99 + i * 0.2,
-            close: 101 + i * 0.2,
+            open: 100 + (i * 0.2),
+            high: 102 + (i * 0.2),
+            low: 99 + (i * 0.2),
+            close: 101 + (i * 0.2),
             volume: 500_000
           )
         )
@@ -35,7 +35,7 @@ RSpec.describe Signal::Engine do
     it 'returns empty extra when market_context is disabled' do
       allow(AlgoConfig).to receive(:fetch).and_return(market_context: { enabled: false })
 
-      extra, blocked = described_class.send(
+      extra, blocked, detail = described_class.send(
         :evaluate_market_context_for_entry,
         index_cfg: { key: 'NIFTY' },
         primary_series: series,
@@ -47,6 +47,7 @@ RSpec.describe Signal::Engine do
 
       expect(extra).to eq({})
       expect(blocked).to be false
+      expect(detail).to be_nil
     end
 
     it 'returns metadata and does not block when gate is off' do
@@ -57,7 +58,7 @@ RSpec.describe Signal::Engine do
         }
       )
 
-      extra, blocked = described_class.send(
+      extra, blocked, detail = described_class.send(
         :evaluate_market_context_for_entry,
         index_cfg: { key: 'NIFTY' },
         primary_series: series,
@@ -68,6 +69,7 @@ RSpec.describe Signal::Engine do
       )
 
       expect(blocked).to be false
+      expect(detail).to be_nil
       expect(extra[:strategy_profile]).to be_present
       expect(extra[:market_context_conviction]).to be_a(Integer)
     end
