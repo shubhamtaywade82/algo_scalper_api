@@ -835,11 +835,11 @@ module Options
 
         leg = legs.first
 
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
         min_score = AlgoConfig.fetch.dig(:option_chain, :min_strike_score) || 140.0
 
         # Institutional Rule: If no good strike exists (score too low) -> skip trade
-        # Threshold 140 (scaled score: institutional base + acceleration + ATM bonus)
-        if leg[:score] < min_score
+        if signals_cfg.fetch(:enable_strike_score_floor_gate, true) && leg[:score] < min_score
           if defined?(Rails)
             Rails.logger.warn("[Options] Best strike for #{index_cfg[:key]} rejected due to low score: #{leg[:score].round(2)} < #{min_score}")
           end
@@ -849,22 +849,24 @@ module Options
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike, :prev_close)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
-        validator = Options::StrikeQualification::ExpectedMoveValidator.new
-        validation = validator.call(
-          index_key: index_cfg[:key],
-          strike_type: used_strike_type,
-          permission: normalized_permission,
-          expected_spot_move: expected_move,
-          option_ltp: pick[:ltp]
-        )
+        if signals_cfg.fetch(:enable_expected_move_strike_gate, true)
+          validator = Options::StrikeQualification::ExpectedMoveValidator.new
+          validation = validator.call(
+            index_key: index_cfg[:key],
+            strike_type: used_strike_type,
+            permission: normalized_permission,
+            expected_spot_move: expected_move,
+            option_ltp: pick[:ltp]
+          )
 
-        unless validation[:ok]
-          if defined?(Rails)
-            Rails.logger.info(
-              "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
-            )
+          unless validation[:ok]
+            if defined?(Rails)
+              Rails.logger.info(
+                "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
+              )
+            end
+            return []
           end
-          return []
         end
 
         [pick]

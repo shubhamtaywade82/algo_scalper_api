@@ -27,6 +27,9 @@ RSpec.describe Signal::Engine do
         options_analysis_gate_blocks_entry?: false
       )
       allow(Signal::StateTracker).to receive(:reset)
+      merged = AlgoConfig.fetch.deep_dup
+      merged[:signals] = (merged[:signals] || {}).merge(enable_option_premium_momentum_gate: true)
+      allow(AlgoConfig).to receive(:fetch).and_return(merged)
     end
 
     it 'blocks when the selected option premium momentum fails validation' do
@@ -56,6 +59,28 @@ RSpec.describe Signal::Engine do
       allow(Signal::MomentumValidator).to receive(:validate_option_pick).and_return(
         { confirms: true, reason: 'Option premium speed 18.0% >= 8.0% threshold' }
       )
+
+      result = described_class.send(
+        :execute_entry_gate,
+        index_cfg: index_cfg,
+        instrument: instrument,
+        signal: signal,
+        final_direction: :bullish,
+        primary_series: primary_series,
+        options_analysis: options_analysis,
+        momentum_score: 2,
+        permission: :scale_ready,
+        smc_decision: :call
+      )
+
+      expect(result).to include(picks: [pick], execution_permission: :scale_ready)
+    end
+
+    it 'skips premium validation when enable_option_premium_momentum_gate is false' do
+      merged = AlgoConfig.fetch.deep_dup
+      merged[:signals] = (merged[:signals] || {}).merge(enable_option_premium_momentum_gate: false)
+      allow(AlgoConfig).to receive(:fetch).and_return(merged)
+      allow(Signal::MomentumValidator).to receive(:validate_option_pick).and_raise('should not run')
 
       result = described_class.send(
         :execute_entry_gate,
