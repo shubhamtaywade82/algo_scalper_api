@@ -29,9 +29,10 @@ module Options
 
     def strike_type
       return :skip if @momentum.nil?
-      return :atm if @momentum > 0.7
-      return :itm if @momentum > 0.4
+      return :atm if @momentum > 0.60  # score >= 2/3: strong momentum → ATM+OTM allowed
+      return :atm if @momentum > 0.25  # score >= 1/3: moderate momentum → ATM only (was :itm, now :atm)
 
+      # score == 0: no momentum confirmation → skip
       :skip
     end
 
