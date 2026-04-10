@@ -24,10 +24,8 @@ class CalibrationRun < ApplicationRecord
   scope :pending,  -> { where(applied_at: nil) }
   scope :applied,  -> { where.not(applied_at: nil) }
 
-  # Merges proposed_patch into algo_config_overrides and busts both caches.
-  # Uses Setting.put (not upsert) so Solid Cache entry for
-  # "setting:algo_config_overrides" is busted immediately.
-  # Calls AlgoConfig.reset! to bust the 30-second in-process config cache.
+  # Deep-merges proposed_patch into +settings.algo_config_document+ via
+  # +AlgoConfig::DocumentStore+ (Solid Cache bust via +Setting.put+, in-process cache via +AlgoConfig.reset!+).
   # Raises if already applied (idempotency guard).
   # Uses with_lock to prevent race conditions when multiple requests apply concurrently.
   def apply!(applied_by: 'api')
@@ -35,12 +33,13 @@ class CalibrationRun < ApplicationRecord
       reload
       raise 'already applied' if applied_at.present?
 
-      current = JSON.parse(Setting.find_by(key: 'algo_config_overrides')&.value || '{}')
-      # proposed_patch from JSONB is already string-keyed; deep_merge is safe
-      # (CalibrationConfigPatchBuilder never emits array-valued keys)
-      merged = current.deep_merge(proposed_patch)
-      Setting.put('algo_config_overrides', merged.to_json)
-      AlgoConfig.reset!
+      AlgoConfig::DocumentStore.apply_deep_merge_patch!(
+        proposed_patch,
+        source: 'calibration_apply',
+        actor: applied_by,
+        request_id: nil,
+        metadata: { calibration_run_id: id }
+      )
       update!(applied_at: Time.current, applied_by: applied_by)
     end
   end

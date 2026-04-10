@@ -11,7 +11,6 @@ exploratory:
     validation_mode: aggressive
     permission_mode: lenient
     enable_direction_gate: false
-    enable_trading_context_gate: false
     trading_context_strictness: relaxed
     enable_no_trade_engine: false
     halt_on_validation_failure: false

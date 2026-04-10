@@ -67,7 +67,7 @@ feature_flags:
   auto_paper_on_insufficient_balance: false
 
 # Calibration: historical option behaviour (weekly) and optional AI trade-based patches.
-# Auto-apply merges proposed_patch into DB algo_config_overrides (same as POST …/apply).
+# Auto-apply merges proposed_patch into DB algo_config_document (same as POST …/apply).
 calibration:
   auto_apply:
     # Master switch. When false, runs only create CalibrationRun rows for manual review.
@@ -877,6 +877,15 @@ signals:
   enable_trading_context_gate: true
   trading_context_strictness: relaxed # strict | relaxed
 
+  # Option pick must show favorable premium change vs prev_close (Signal::MomentumValidator).
+  enable_option_premium_momentum_gate: false
+
+  # After strike selection: PropStrike-style score floor (see option_chain.min_strike_score).
+  enable_strike_score_floor_gate: false
+
+  # After strike selection: expected-move vs premium hard check (ExpectedMoveValidator).
+  enable_expected_move_strike_gate: false
+
   # Supertrend+ADX Strategy Configuration
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
@@ -1035,10 +1044,11 @@ chain_analyzer:
     volume: 0.15
 
 option_chain:
-  min_iv: 10
+  min_iv: 5.0          # Relaxed from 10 — LOW_VOL regime options often have IV < 10
   max_iv: 60
   min_oi: 50000
   max_spread_pct: 3.0
+  min_strike_score: 80.0  # PropStrikeSelector scores 0–1 (×100 = 0–100); 140 default was unreachable
 
 data_freshness:
   disable_ohlc_caching: false

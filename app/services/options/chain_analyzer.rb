@@ -8,6 +8,13 @@ require 'active_support/core_ext/object/blank'
 
 module Options
   class ChainAnalyzer
+    # Result of {.pick_strikes_with_qualification}: non-empty +failure_code+ means hard-block with detail.
+    StrikePickResult = Struct.new(:picks, :failure_code, :failure_reason) do
+      def success?
+        picks.present?
+      end
+    end
+
     DEFAULT_DIRECTION = :bullish
 
     # === CONFIGURABLE BEHAVIOR STRATEGIES (Strategy pattern via config) ===
@@ -633,31 +640,32 @@ module Options
       #
       # IMPORTANT:
       # - This is additive and does NOT change existing pick_strikes behavior.
-      # - If qualification fails, it returns [] to HARD-BLOCK entry.
+      # - If qualification fails, returns StrikePickResult with empty picks and failure_reason.
       #
       # @param index_cfg [Hash] Index configuration
       # @param direction [Symbol] :bullish or :bearish
       # @param permission [Symbol] :execution_only, :scale_ready, :full_deploy
       # @param expected_spot_move [Float] Expected spot move in points (ATR-derived)
       # @param momentum_score [Integer] Momentum score (0-3)
-      # @return [Array<Hash>] Array with a single qualified pick, or [] if blocked
+      # @return [StrikePickResult] Single pick in +picks+ on success; +failure_code+ / +failure_reason+ when blocked
       def pick_strikes_with_qualification(index_cfg:, direction:, permission:, expected_spot_move:, momentum_score: nil)
+        key = index_cfg[:key]
         instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
         unless instrument
-          Rails.logger.warn("[Options] No instrument found for #{index_cfg[:key]}") if defined?(Rails)
-          return []
+          Rails.logger.warn("[Options] No instrument found for #{key}") if defined?(Rails)
+          return strike_pick_fail(code: 'no_instrument', reason: 'No instrument found for index', index_key: key)
         end
 
         expiry_list = instrument.expiry_list
         unless expiry_list&.any?
-          Rails.logger.warn("[Options] No expiry list available for #{index_cfg[:key]}") if defined?(Rails)
-          return []
+          Rails.logger.warn("[Options] No expiry list available for #{key}") if defined?(Rails)
+          return strike_pick_fail(code: 'no_expiry_list', reason: 'No expiry list available for index', index_key: key)
         end
 
         expiry_date = find_next_expiry(expiry_list)
         unless expiry_date
-          Rails.logger.warn("[Options] Could not determine next expiry for #{index_cfg[:key]}") if defined?(Rails)
-          return []
+          Rails.logger.warn("[Options] Could not determine next expiry for #{key}") if defined?(Rails)
+          return strike_pick_fail(code: 'next_expiry_unknown', reason: 'Could not determine next expiry', index_key: key)
         end
 
         chain_data = begin
@@ -665,56 +673,63 @@ module Options
         rescue StandardError => e
           if defined?(Rails)
             Rails.logger.warn(
-              "[Options] Could not fetch option chain for #{index_cfg[:key]} #{expiry_date}: #{e.class} - #{e.message}"
+              "[Options] Could not fetch option chain for #{key} #{expiry_date}: #{e.class} - #{e.message}"
             )
           end
           nil
         end
 
         unless chain_data && chain_data[:oc].is_a?(Hash)
+          hint = chain_data.present? ? 'present but invalid :oc' : 'nil chain_data'
           if defined?(Rails)
             Rails.logger.warn(
-              "[Options] No option chain data for #{index_cfg[:key]} #{expiry_date} " \
-              "(chain_data: #{chain_data.present? ? 'present but invalid' : 'nil'})"
+              "[Options] No option chain data for #{key} #{expiry_date} (chain_data: #{hint})"
             )
           end
-          return []
+          return strike_pick_fail(
+            code: 'chain_data_invalid',
+            reason: "No valid option chain data (#{hint}) for expiry #{expiry_date}",
+            index_key: key
+          )
         end
 
-        # Log chain data availability for debugging
         if chain_data[:oc].empty?
-          Rails.logger.warn("[Options] Option chain for #{index_cfg[:key]} #{expiry_date} is empty")
-          return []
+          Rails.logger.warn("[Options] Option chain for #{key} #{expiry_date} is empty") if defined?(Rails)
+          return strike_pick_fail(
+            code: 'empty_option_chain',
+            reason: "Option chain is empty for expiry #{expiry_date}",
+            index_key: key
+          )
         end
 
         spot = chain_data[:last_price]&.to_f
         unless spot&.positive?
-          Rails.logger.warn("[Options] No SPOT/last_price available for #{index_cfg[:key]}") if defined?(Rails)
-          return []
+          Rails.logger.warn("[Options] No SPOT/last_price available for #{key}") if defined?(Rails)
+          return strike_pick_fail(code: 'spot_unavailable', reason: 'No spot/last_price on chain', index_key: key)
         end
 
         normalized_permission = permission.to_s.downcase.to_sym
         expected_move = expected_spot_move.to_f
         unless expected_move.positive?
-          Rails.logger.info("[Options] Expected move unavailable -> BLOCK #{index_cfg[:key]}") if defined?(Rails)
-          return []
+          Rails.logger.info("[Options] Expected move unavailable -> BLOCK #{key}") if defined?(Rails)
+          return strike_pick_fail(
+            code: 'expected_move_non_positive',
+            reason: 'Expected spot move (ATR) is missing or non-positive',
+            index_key: key
+          )
         end
 
         side_sym = direction == :bullish ? :CE : :PE
         oc_side = direction == :bullish ? :ce : :pe
 
-        # Filter option chain to only include strikes that exist in database
-        # This ensures we only select strikes that have derivatives synced
         expiry_date_obj = Date.parse(expiry_date)
         option_type = side_sym.to_s
 
-        # Get all available strikes from database for this expiry and option type
         available_strikes_bd = instrument.derivatives.where(
           expiry_date: expiry_date_obj,
           option_type: option_type
         ).pluck(:strike_price).to_set { |sp| BigDecimal(sp.to_s) }
 
-        # Filter option chain to only include strikes that exist in database
         filtered_chain = chain_data[:oc].select do |strike_key, _strike_data|
           strike_float = strike_key.to_f
           strike_bd = BigDecimal(strike_float.to_s)
@@ -723,47 +738,48 @@ module Options
 
         if filtered_chain.empty?
           Rails.logger.warn(
-            "[Options] No option chain strikes match database derivatives for #{index_cfg[:key]} " \
+            "[Options] No option chain strikes match database derivatives for #{key} " \
             "expiry=#{expiry_date}, option_type=#{option_type}. " \
             "Chain has #{chain_data[:oc].size} strikes, DB has #{available_strikes_bd.size} derivatives. " \
             "Available DB strikes: #{available_strikes_bd.to_a.map(&:to_f).sort.first(10).inspect}"
           ) if defined?(Rails)
-          return []
+          return strike_pick_fail(
+            code: 'chain_db_mismatch',
+            reason: "No strikes match DB derivatives (chain #{chain_data[:oc].size} vs DB #{available_strikes_bd.size}) " \
+                    "expiry=#{expiry_date} #{option_type}",
+            index_key: key
+          )
         end
 
         if (filtered_chain.size < chain_data[:oc].size) && defined?(Rails)
           Rails.logger.debug(
             "[Options] Filtered option chain: #{chain_data[:oc].size} -> #{filtered_chain.size} strikes " \
-            "(only strikes with DB derivatives) for #{index_cfg[:key]}"
+            "(only strikes with DB derivatives) for #{key}"
           )
         end
 
-        # ===== INSTITUTIONAL FLOW & GAMMA ANALYSIS =====
         flow_analyzer = Options::FlowAnalyzer.new(
-          index_key: index_cfg[:key],
+          index_key: key,
           expiry_date: expiry_date,
           chain_data: chain_data
         )
         flow_results = flow_analyzer.strong_flow_strikes
 
         gamma_detector = Options::GammaRampDetector.new(
-          index_key: index_cfg[:key],
+          index_key: key,
           expiry_date: expiry_date,
           chain_data: chain_data
         )
         gamma_pressure = gamma_detector.gamma_pressure_score(direction: direction)
 
-        # Index prices for delta acceleration (last 2 close prices)
-        # Fallback to current spot if series unavailable
         index_series = instrument.candle_series(interval: '1')
         index_prices = index_series&.closes&.last(2) || [spot, spot]
 
         prop_selector = Options::PropStrikeSelector.new(spot: spot)
-        # ===== END INSTITUTIONAL FLOW & GAMMA ANALYSIS =====
 
         selector = Options::StrikeQualification::StrikeSelector.new
         selection = selector.call(
-          index_key: index_cfg[:key],
+          index_key: key,
           side: side_sym,
           permission: normalized_permission,
           spot: spot,
@@ -773,15 +789,17 @@ module Options
         )
 
         unless selection[:ok]
+          sel_reason = selection[:reason].presence || 'unknown'
           if defined?(Rails)
-            Rails.logger.info(
-              "[Options] StrikeSelector BLOCKED #{index_cfg[:key]}: #{selection[:reason]}"
-            )
+            Rails.logger.info("[Options] StrikeSelector BLOCKED #{key}: #{sel_reason}")
           end
-          return []
+          return strike_pick_fail(
+            code: 'strike_selector_blocked',
+            reason: "StrikeSelector: #{sel_reason}",
+            index_key: key
+          )
         end
 
-        # Try selected strike first, then fallback to ATM only.
         legs = filter_and_rank_from_instrument_data(
           chain_data[:oc],
           atm: spot,
@@ -803,7 +821,7 @@ module Options
           if defined?(Rails)
             Rails.logger.debug do
               "[Options] Selected strike #{selection[:strike]} (#{selection[:strike_type]}) not found, " \
-                "falling back to ATM #{selection[:atm_strike]} for #{index_cfg[:key]}"
+                "falling back to ATM #{selection[:atm_strike]} for #{key}"
             end
           end
           legs = filter_and_rank_from_instrument_data(
@@ -826,51 +844,72 @@ module Options
         if legs.blank?
           if defined?(Rails)
             Rails.logger.warn(
-              "[Options] No legs found after filtering for #{index_cfg[:key]} " \
+              "[Options] No legs found after filtering for #{key} " \
               "(strike: #{selection[:strike]}, type: #{used_strike_type}, side: #{oc_side})"
             )
           end
-          return []
+          return strike_pick_fail(
+            code: 'no_legs_after_filter',
+            reason: "No legs after filter (strike #{selection[:strike]}, type #{used_strike_type}, side #{oc_side})",
+            index_key: key
+          )
         end
 
         leg = legs.first
 
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
         min_score = AlgoConfig.fetch.dig(:option_chain, :min_strike_score) || 140.0
 
-        # Institutional Rule: If no good strike exists (score too low) -> skip trade
-        # Threshold 140 (scaled score: institutional base + acceleration + ATM bonus)
-        if leg[:score] < min_score
+        if signals_cfg.fetch(:enable_strike_score_floor_gate, true) && leg[:score] < min_score
           if defined?(Rails)
-            Rails.logger.warn("[Options] Best strike for #{index_cfg[:key]} rejected due to low score: #{leg[:score].round(2)} < #{min_score}")
+            Rails.logger.warn("[Options] Best strike for #{key} rejected due to low score: #{leg[:score].round(2)} < #{min_score}")
           end
-          return []
+          return strike_pick_fail(
+            code: 'strike_score_below_floor',
+            reason: "Strike score #{leg[:score].round(2)} below floor #{min_score}",
+            index_key: key
+          )
         end
 
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike, :prev_close)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
-        validator = Options::StrikeQualification::ExpectedMoveValidator.new
-        validation = validator.call(
-          index_key: index_cfg[:key],
-          strike_type: used_strike_type,
-          permission: normalized_permission,
-          expected_spot_move: expected_move,
-          option_ltp: pick[:ltp]
-        )
+        if signals_cfg.fetch(:enable_expected_move_strike_gate, true)
+          validator = Options::StrikeQualification::ExpectedMoveValidator.new
+          validation = validator.call(
+            index_key: key,
+            strike_type: used_strike_type,
+            permission: normalized_permission,
+            expected_spot_move: expected_move,
+            option_ltp: pick[:ltp]
+          )
 
-        unless validation[:ok]
-          if defined?(Rails)
-            Rails.logger.info(
-              "[Options] ExpectedMoveValidator BLOCKED #{index_cfg[:key]}: #{validation[:reason]}"
+          unless validation[:ok]
+            vm_reason = validation[:reason].presence || 'unknown'
+            if defined?(Rails)
+              Rails.logger.info("[Options] ExpectedMoveValidator BLOCKED #{key}: #{vm_reason}")
+            end
+            return strike_pick_fail(
+              code: 'expected_move_validator_blocked',
+              reason: "ExpectedMoveValidator: #{vm_reason}",
+              index_key: key
             )
           end
-          return []
         end
 
-        [pick]
+        StrikePickResult.new([pick], nil, nil)
       rescue StandardError => e
         Rails.logger.error("[Options] pick_strikes_with_qualification failed: #{e.class} - #{e.message}") if defined?(Rails)
-        []
+        StrikePickResult.new(
+          [],
+          'pick_strikes_exception',
+          "#{e.class}: #{e.message.to_s.truncate(500)}"
+        )
+      end
+
+      def strike_pick_fail(code:, reason:, index_key: nil)
+        suffix = index_key.present? ? " [#{index_key}]" : ''
+        StrikePickResult.new([], code.to_s, "#{reason}#{suffix}")
       end
 
       def find_next_expiry(expiry_list)
