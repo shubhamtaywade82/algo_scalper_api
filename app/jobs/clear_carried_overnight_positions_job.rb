@@ -38,11 +38,16 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
     result = exit_engine.execute_exit(tracker, REASON)
 
     if result[:reason] == 'exit_already_requested'
-      tracker.reload
-      return unless tracker.active? && tracker.exit_requested_at.present?
+      tracker.with_lock do
+        tracker.reload
+        unless tracker.active? && tracker.exit_requested_at.present?
+          return
+        end
 
-      Rails.logger.info("[ClearCarriedOvernightPositionsJob] #{tracker.order_no} stuck; clearing intent and retrying")
-      tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+        Rails.logger.info("[ClearCarriedOvernightPositionsJob] #{tracker.order_no} stuck; clearing intent and retrying")
+        # Intentional: bypass validations/callbacks for a narrow BTST clear retry path.
+        tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+      end
       tracker.reload
       result = exit_engine.execute_exit(tracker, REASON)
     end

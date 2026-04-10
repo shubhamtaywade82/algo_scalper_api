@@ -12,5 +12,9 @@ Rails.application.config.to_prepare do
   # Set structured config, not raw gateway
   Orders.config = Orders::Config.new(gateway: gateway)
 
-  Rails.logger.info("[Orders] Using #{gateway.class.name}")
+  paper = AlgoConfig.fetch.dig(:paper_trading, :enabled)
+  Rails.logger.info(
+    "[Orders] Using #{gateway.class.name} (paper_trading.enabled=#{paper}; " \
+    "set LIVE_TRADING=true for live broker execution)"
+  )
 end

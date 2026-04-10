@@ -42,3 +42,4 @@
 spec/failed_examples.txt
 dashboard/node_modules
 dashboard/dist
+dump.rdb

@@ -57,6 +57,7 @@ RSpec.describe Notifications::Telegram::SendSmcAlertJob do
   describe '#build_reasons (via send)' do
     it 'omits AVRZ for no_trade but still records LTF trend mismatch' do
       contexts = {
+        decision: 'no_trade',
         mtf: {
           swing_structure: { trend: :bullish },
           internal_structure: { trend: :bullish }
@@ -74,7 +75,7 @@ RSpec.describe Notifications::Telegram::SendSmcAlertJob do
     end
 
     it 'includes AVRZ for call decisions' do
-      contexts = { mtf: {}, ltf: {} }
+      contexts = { decision: 'call', mtf: {}, ltf: {} }
 
       reasons = job.send(:build_reasons, contexts, decision: 'call')
 

@@ -10,16 +10,23 @@ class SmcScannerJob < ApplicationJob
   retry_on StandardError, wait: ->(executions) { 2**executions }, attempts: 3
 
   def perform
+    if AlgoConfig.scheduled_smc_scanner_job_deferred?
+      Rails.logger.info(
+        '[SmcScannerJob] Skipped intraday scheduled scan: event-driven AI ' \
+        '(event_driven_ai_alerts or tick_ai_analysis_enabled). Use trading daemon + tick path; ' \
+        'SCHEDULED_SMC_SCANNER=true forces this job.'
+      )
+      return
+    end
+
     Rails.logger.info('[SmcScannerJob] Starting SMC scan...')
 
     log_market_closed_status if TradingSession::Service.market_closed?
 
     indices = IndexConfigLoader.load_indices
-    filtered_indices = filter_indices_by_expiry(indices)
-    Rails.logger.info("[SmcScannerJob] Scanning #{filtered_indices.size} indices...")
+    indices_with_instruments = build_indices_with_instruments(indices)
+    Rails.logger.info("[SmcScannerJob] Scanning #{indices_with_instruments.size} indices...")
 
-    indices_with_instruments = fetch_instruments(filtered_indices)
-    
     success_count = 0
     error_count = 0
 
@@ -45,16 +52,46 @@ class SmcScannerJob < ApplicationJob
     end
   end
 
-  def fetch_instruments(indices)
+  # One DB lookup per index: load instrument once, then apply expiry filter.
+  def build_indices_with_instruments(indices)
+    return [] if indices.empty?
+
+    max_days = max_expiry_days
     indices.filter_map do |idx_cfg|
-      instrument = Instrument.find_by_sid_and_segment(security_id: idx_cfg[:sid].to_s, segment_code: idx_cfg[:segment])
-      
-      if instrument
-        [idx_cfg, instrument]
-      else
+      instrument = Instrument.find_by_sid_and_segment(
+        security_id: idx_cfg[:sid].to_s,
+        segment_code: idx_cfg[:segment]
+      )
+      unless instrument
         Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
-        nil
+        next
       end
+
+      days = calculate_days_to_expiry(instrument)
+      if days > max_days
+        Rails.logger.info("[SmcScannerJob] Skipping #{idx_cfg[:key]}: expiry in #{days} days (> #{max_days})")
+        next
+      end
+
+      [idx_cfg, instrument]
+    end
+  rescue StandardError => e
+    Rails.logger.error("[SmcScannerJob] Error building index list: #{e.message}")
+    indices_without_expiry_filter(indices)
+  end
+
+  def indices_without_expiry_filter(indices)
+    indices.filter_map do |idx_cfg|
+      instrument = Instrument.find_by_sid_and_segment(
+        security_id: idx_cfg[:sid].to_s,
+        segment_code: idx_cfg[:segment]
+      )
+      unless instrument
+        Rails.logger.warn("[SmcScannerJob] Instrument not found for #{idx_cfg[:key]}")
+        next
+      end
+
+      [idx_cfg, instrument]
     end
   end
 
@@ -82,33 +119,12 @@ class SmcScannerJob < ApplicationJob
   def process_ai_analysis(engine, idx_cfg, decision)
     Rails.logger.info("[SmcScannerJob] Getting AI analysis for #{idx_cfg[:key]}...")
     ai_analysis = engine.analyze_with_ai
-    
+
     if ai_analysis.present?
       send_ai_analysis_telegram_notification(idx_cfg[:key], decision, ai_analysis)
     else
       Rails.logger.warn("[SmcScannerJob] AI analysis empty for #{idx_cfg[:key]}")
     end
-  end
-
-  def filter_indices_by_expiry(indices)
-    return indices if indices.empty?
-
-    max_days = max_expiry_days
-    indices.select do |idx_cfg|
-      instrument = Instrument.find_by_sid_and_segment(security_id: idx_cfg[:sid].to_s, segment_code: idx_cfg[:segment])
-      next true unless instrument
-
-      days = calculate_days_to_expiry(instrument)
-      if days > max_days
-        Rails.logger.info("[SmcScannerJob] Skipping #{idx_cfg[:key]}: expiry in #{days} days (> #{max_days})")
-        false
-      else
-        true
-      end
-    end
-  rescue StandardError => e
-    Rails.logger.error("[SmcScannerJob] Error filtering: #{e.message}")
-    indices
   end
 
   def calculate_days_to_expiry(instrument)
@@ -121,7 +137,11 @@ class SmcScannerJob < ApplicationJob
       when Date then raw
       when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
       when String
-        Date.parse(raw) rescue nil
+        begin
+          Date.parse(raw)
+        rescue ArgumentError, TypeError
+          nil
+        end
       end
     end
 
@@ -143,13 +163,14 @@ class SmcScannerJob < ApplicationJob
   def send_ai_analysis_telegram_notification(index_key, decision, ai_analysis)
     return unless telegram_enabled?
 
+    safe_analysis = ERB::Util.html_escape(ai_analysis.to_s)
     message = <<~MESSAGE
-      🤖 <b>SMC AI Analysis: #{index_key}</b>
+      🤖 <b>SMC AI Analysis: #{ERB::Util.html_escape(index_key)}</b>
 
-      <b>Decision:</b> #{decision.to_s.upcase}
+      <b>Decision:</b> #{ERB::Util.html_escape(decision.to_s.upcase)}
 
       <b>AI Analysis:</b>
-      #{ai_analysis}
+      #{safe_analysis}
     MESSAGE
 
     TelegramNotifier.send_message(message, parse_mode: 'HTML')

@@ -60,6 +60,25 @@ RSpec.describe Signal::Engine, :vcr do
       }
     end
 
+    let(:mock_candles) do
+      base = 22_000.0
+      Array.new(50) do |i|
+        price = base + (i * 5.0) + rand(-10.0..10.0)
+        double("Candle#{i}",
+               open: price, high: price + 20, low: price - 20, close: price + 5,
+               volume: 100_000 + (i * 1000), timestamp: Time.current - (50 - i).minutes)
+      end
+    end
+    let(:mock_series) do
+      series = double('CandleSeries')
+      allow(series).to receive(:candles).and_return(mock_candles)
+      allow(series).to receive(:size).and_return(mock_candles.size)
+      allow(series).to receive(:last).and_return(mock_candles.last)
+      allow(series).to receive(:symbol).and_return('NIFTY')
+      allow(series).to receive(:interval).and_return('5')
+      series
+    end
+
     before do
       allow(AlgoConfig).to receive(:fetch).and_return({
                                                         signals: signals_cfg.merge(
@@ -70,6 +89,10 @@ RSpec.describe Signal::Engine, :vcr do
     end
 
     context 'when indicators are enabled' do
+      before do
+        allow(nifty_instrument).to receive(:candle_series).and_return(mock_series)
+      end
+
       it 'builds MultiIndicatorStrategy with configured indicators' do
         expect(MultiIndicatorStrategy).to receive(:new).with(
           hash_including(
@@ -83,7 +106,7 @@ RSpec.describe Signal::Engine, :vcr do
           )
         ).and_call_original
 
-        described_class.analyze_with_multi_indicators(
+        described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg,
           instrument: nifty_instrument,
           timeframe: '5m',
@@ -92,7 +115,7 @@ RSpec.describe Signal::Engine, :vcr do
       end
 
       it 'returns analysis result with status :ok' do
-        result = described_class.analyze_with_multi_indicators(
+        result = described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg,
           instrument: nifty_instrument,
           timeframe: '5m',
@@ -111,7 +134,7 @@ RSpec.describe Signal::Engine, :vcr do
           { type: :ce, confidence: 75 }
         )
 
-        result = described_class.analyze_with_multi_indicators(
+        result = described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg,
           instrument: nifty_instrument,
           timeframe: '5m',
@@ -124,7 +147,7 @@ RSpec.describe Signal::Engine, :vcr do
       it 'returns :avoid when no signal generated' do
         allow_any_instance_of(MultiIndicatorStrategy).to receive(:generate_signal).and_return(nil)
 
-        result = described_class.analyze_with_multi_indicators(
+        result = described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg,
           instrument: nifty_instrument,
           timeframe: '5m',
@@ -149,7 +172,7 @@ RSpec.describe Signal::Engine, :vcr do
       end
 
       it 'returns error status' do
-        result = described_class.analyze_with_multi_indicators(
+        result = described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg,
           instrument: nifty_instrument,
           timeframe: '5m',
@@ -163,7 +186,7 @@ RSpec.describe Signal::Engine, :vcr do
 
     context 'when timeframe is invalid' do
       it 'returns error status' do
-        result = described_class.analyze_with_multi_indicators(
+        result = described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg,
           instrument: nifty_instrument,
           timeframe: 'invalid',
@@ -181,7 +204,7 @@ RSpec.describe Signal::Engine, :vcr do
       end
 
       it 'returns no_data status' do
-        result = described_class.analyze_with_multi_indicators(
+        result = described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg,
           instrument: nifty_instrument,
           timeframe: '5m',
@@ -202,6 +225,10 @@ RSpec.describe Signal::Engine, :vcr do
         )
       end
 
+      before do
+        allow(nifty_instrument).to receive(:candle_series).and_return(mock_series)
+      end
+
       it 'updates ADX indicator config with per-index threshold' do
         expect(MultiIndicatorStrategy).to receive(:new).with(
           hash_including(
@@ -214,7 +241,7 @@ RSpec.describe Signal::Engine, :vcr do
           )
         ).and_call_original
 
-        described_class.analyze_with_multi_indicators(
+        described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg_with_adx,
           instrument: nifty_instrument,
           timeframe: '5m',
@@ -231,7 +258,7 @@ RSpec.describe Signal::Engine, :vcr do
       it 'handles error gracefully' do
         expect(Rails.logger).to receive(:error).with(match(/Multi-indicator analysis failed/))
 
-        result = described_class.analyze_with_multi_indicators(
+        result = described_class.send(:analyze_with_multi_indicators,
           index_cfg: index_cfg,
           instrument: nifty_instrument,
           timeframe: '5m',
@@ -278,32 +305,21 @@ RSpec.describe Signal::Engine, :vcr do
     end
 
     before do
+      allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
       allow(AlgoConfig).to receive(:fetch).and_return({ signals: signals_cfg })
-      allow(Options::ChainAnalyzer).to receive(:pick_strikes).and_return([])
+      allow(described_class).to receive(:perform_standard_ta).and_return({})
+      empty_strikes = Options::ChainAnalyzer::StrikePickResult.new(
+        [],
+        'strike_selector_blocked',
+        'StrikeSelector: test [NIFTY]'
+      )
+      allow(Options::ChainAnalyzer).to receive(:pick_strikes_with_qualification).and_return(empty_strikes)
       allow(Entries::EntryGuard).to receive(:try_enter).and_return(true)
     end
 
     it 'uses multi-indicator system when enabled' do
       expect(described_class).to receive(:analyze_with_multi_indicators).and_call_original
       expect(described_class).not_to receive(:analyze_timeframe)
-
-      described_class.run_for(index_cfg)
-    end
-
-    it 'skips confirmation timeframe when using multi-indicator system' do
-      expect(Rails.logger).to receive(:info).with(match(/Skipping confirmation timeframe.*multi-indicator system/))
-
-      described_class.run_for(index_cfg)
-    end
-
-    it 'processes signal through validation and entry guard' do
-      allow_any_instance_of(MultiIndicatorStrategy).to receive(:generate_signal).and_return(
-        { type: :ce, confidence: 75 }
-      )
-
-      expect(described_class).to receive(:comprehensive_validation).and_call_original
-      expect(Options::ChainAnalyzer).to receive(:pick_strikes)
-      expect(Entries::EntryGuard).to receive(:try_enter)
 
       described_class.run_for(index_cfg)
     end

@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-04-06
+
+### Documentation — Align with AlgoConfig and signal engine (post run_mode removal)
+
+- **README.md**, **AGENTS.md**, **CLAUDE.md**, **REPO_SUMMARY.md** — Document merge order
+  (YAML → DB → `signal_tier_presets.yml` → `LIVE_TRADING`), `SIGNAL_TIER`, and live gates
+  (`dhanhq.enable_orders`, `PLACE_ORDER`).
+- **docs/development/guides/setup.md**, **docs/development/deployment.md**,
+  **docs/development/testing.md**, **docs/development/testing_profiles.md** — Remove stale
+  `RUN_MODE` / `exit_testing` / `config/profiles` instructions; replace with tier + env
+  guidance.
+- **docs/diagrams/trading-modes.md** — Rewritten for current `AlgoConfig.fetch` and single
+  `Signal::Engine` pipeline.
+- **docs/trading/signal_engine.md**, **docs/trading/trading-pipeline.md**,
+  **docs/services/signal_services.md**, **docs/architecture/execution-flow.md**,
+  **docs/architecture/system_overview.md**, **docs/architecture/component-map.md** —
+  Updated steps (halt, no-trade, DTE, `effective_validation_mode`, `options_analysis_gate`);
+  restored full guard/exit sections in execution-flow where needed.
+- **docs/integrations/dhanhq-api.md** — Gateway selection documents effective
+  `paper_trading.enabled`.
+- **docs/trading/entry_and_exit_rules.md** — Lunch relaxation note uses tiers/YAML, not
+  `exit_testing`.
+- **docs/options/SYSTEM_STATE.md**, **docs/options/README.md** — Refreshed against current
+  engine and config knobs.
+
 ## 2026-03-31
 
 ### Documentation — Comprehensive accuracy update (all docs rewritten)

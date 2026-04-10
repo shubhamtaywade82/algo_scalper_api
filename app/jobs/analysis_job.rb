@@ -22,7 +22,7 @@ class AnalysisJob < ApplicationJob
     indices = index_key ? [index_key.upcase] : all_index_keys
 
     indices.each do |key|
-      compute_for_index(key, force: force)
+      compute_for_index(key, job_force: force)
       sleep 1 # Rate limit between indices
     end
 
@@ -34,14 +34,14 @@ class AnalysisJob < ApplicationJob
 
   private
 
-  def compute_for_index(index_key, force: false)
+  def compute_for_index(index_key, job_force: false)
     instrument = find_instrument(index_key)
     unless instrument
       Rails.logger.warn("[AnalysisJob] Instrument not found for #{index_key}")
       return
     end
 
-    stale = force ? AnalysisStore::COMPONENTS : AnalysisStore.stale_components(index_key)
+    stale = job_force ? AnalysisStore::COMPONENTS : AnalysisStore.stale_components(index_key)
     return if stale.empty?
 
     Rails.logger.info("[AnalysisJob] #{index_key}: refreshing #{stale.join(', ')}")
@@ -69,14 +69,22 @@ class AnalysisJob < ApplicationJob
     end
 
     # AI Analysis (slowest — do last, with timeout)
-    if stale.include?(:ai) && !Ai::GenerativeAiMarketGate.skip?(force: false)
-      data = safe_compute("#{index_key}:ai") do
-        Timeout.timeout(AI_TIMEOUT) do
-          engine = Smc::BiasEngine.new(instrument, delay_seconds: 0.5)
-          engine.analyze_with_ai
+    if stale.include?(:ai)
+      if Ai::GenerativeAiMarketGate.skip?(force: job_force)
+        Rails.logger.info(
+          "[AnalysisJob] #{index_key}: skipping AI refresh (#{Ai::GenerativeAiMarketGate.skip_explanation})"
+        )
+        # Refresh store metadata so :ai is not stale forever (avoids log spam / perpetual refresh).
+        AnalysisStore.write(index_key, :ai, nil)
+      else
+        data = safe_compute("#{index_key}:ai") do
+          Timeout.timeout(AI_TIMEOUT) do
+            engine = Smc::BiasEngine.new(instrument, delay_seconds: 0.5)
+            engine.analyze_with_ai
+          end
         end
+        AnalysisStore.write(index_key, :ai, data)
       end
-      AnalysisStore.write(index_key, :ai, data)
     end
   end
 

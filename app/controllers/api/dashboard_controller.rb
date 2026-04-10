@@ -64,9 +64,13 @@ module Api
     end
 
     def subscribed_indices_payload
-      sorted_indices_with_strategy.map do |idx|
+      indices = sorted_indices_with_strategy
+      keys = indices.map { |idx| idx[:key].to_s.upcase }
+      expiry_by_key = nearest_listed_option_expiry_batch(keys)
+
+      indices.map do |idx|
         key = idx[:key].to_s.upcase
-        idx.merge(nearest_listed_option_expiry_fields(key)).merge(
+        idx.merge(expiry_by_key[key] || empty_nearest_option_expiry_fields).merge(
           smc_confluence_ltf: confluence_ltf_from_analysis_store(key)
         )
       end
@@ -86,20 +90,35 @@ module Api
       nil
     end
 
-    def nearest_listed_option_expiry_fields(index_key)
-      sym = index_key.to_s.upcase
-      nearest = Derivative.options
-                          .where(underlying_symbol: sym)
-                          .where(expiry_date: Time.zone.today..)
-                          .minimum(:expiry_date)
-      return { nearest_expiry: nil, days_to_expiry: nil, expiry_today: false } unless nearest
+    def empty_nearest_option_expiry_fields
+      { nearest_expiry: nil, days_to_expiry: nil, expiry_today: false }
+    end
 
-      days = (nearest - Time.zone.today).to_i
-      {
-        nearest_expiry: nearest.iso8601,
-        days_to_expiry: days,
-        expiry_today: !days.positive?
-      }
+    # One grouped query for all underlyings (avoids N+1 on dashboard).
+    def nearest_listed_option_expiry_batch(symbols)
+      syms = Array(symbols).map { |s| s.to_s.upcase }.uniq
+      return {} if syms.empty?
+
+      mins = Derivative.options
+                       .where(underlying_symbol: syms)
+                       .where(expiry_date: Time.zone.today..)
+                       .group(:underlying_symbol)
+                       .minimum(:expiry_date)
+
+      normalized = mins.transform_keys { |k| k.to_s.upcase }
+      today = Time.zone.today
+
+      syms.index_with do |sym|
+        nearest = normalized[sym]
+        next empty_nearest_option_expiry_fields unless nearest
+
+        days = (nearest - today).to_i
+        {
+          nearest_expiry: nearest.iso8601,
+          days_to_expiry: days,
+          expiry_today: !days.positive?
+        }
+      end
     end
 
     def resolve_strategy_name(signals_cfg, index_key)

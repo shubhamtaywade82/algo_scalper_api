@@ -8,7 +8,7 @@ RSpec.describe Signal::MetadataBuilder do
       { adx_value: 45.0, supertrend: { last_value: 22_500.0 }, direction: :bearish }
     end
 
-    let(:signals_cfg) { { validation_mode: 'exit_testing' } }
+    let(:signals_cfg) { { validation_mode: 'conservative' } }
 
     context 'when ta_result has nested indicators with timeframe data' do
       let(:ta_result) do
@@ -74,20 +74,20 @@ RSpec.describe Signal::MetadataBuilder do
       subject(:metadata) do
         described_class.build(
           primary_analysis: primary_analysis,
-          regime: 'EXIT_TESTING',
-          regime_result: { confidence: 0, metrics: {} },
+          regime: 'TRENDING_DOWN',
+          regime_result: { confidence: 0.8, metrics: {} },
           ta_result: nil,
           options_analysis: nil,
           validation_result: { valid: true },
           state_snapshot: { count: 1, multiplier: 1 },
-          effective_validation_mode: 'exit_testing',
+          effective_validation_mode: 'conservative',
           signals_cfg: signals_cfg,
           primary_tf: '1m',
           effective_timeframe: '1m',
           confirmation_tf: nil,
           enable_confirmation: false,
           smc_decision: :put,
-          permission: :exit_testing,
+          permission: :scale_ready,
           confirmation_analysis: nil
         )
       end

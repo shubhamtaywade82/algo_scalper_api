@@ -9,7 +9,7 @@ module Options
   # Only emits keys where the proposed value differs from the current active
   # config by ≥10%, to avoid noisy patches that change nothing meaningful.
   #
-  # Returns a string-keyed Hash safe for deep_merge into algo_config_overrides.
+  # Returns a string-keyed Hash safe for deep_merge into +algo_config_document+.
   # adaptive_drawdown is deliberately excluded — it is an array-of-hashes
   # that cannot be safely deep-merged with plain Hash#deep_merge.
   class CalibrationConfigPatchBuilder

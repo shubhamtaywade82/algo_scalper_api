@@ -11,7 +11,6 @@
 Rails.application.config.after_initialize do
   next if Rails.const_defined?(:Console)
   next if Rails.env.test?
-  next if ENV["DISABLE_TRADING_SERVICES"] == "1"
   next unless ENV["ENABLE_TRADING_SERVICES"] == "true"
 
   mode = ENV.fetch("DHAN_AUTH_MODE", "totp")

@@ -33,26 +33,26 @@ development:
 
   smc_scanner:
     class: SmcScannerJob
-    schedule: every 15 minutes
+    schedule: at 4:00pm every day
     queue_name: background
     priority: 10
-    description: "SMC + AVRZ scanner for all configured indices - runs every 15 minutes (aligns with 15m MTF candles)"
+    description: "SMC + AVRZ scanner for all configured indices - post-close scheduled run; intraday flow is event-driven from tick events"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
     args: ["NIFTY"]
-    schedule: every 15 minutes
+    schedule: at 4:00pm every day
     queue_name: background
     priority: 5
-    description: "AI technical analysis for NIFTY options buying intraday - runs every 15 minutes (aligns with SMC scanner)"
+    description: "AI technical analysis for NIFTY - post-close scheduled run; intraday flow is event-driven from tick events"
 
   ai_technical_analysis_sensex:
     class: AiTechnicalAnalysisJob
     args: ["SENSEX"]
-    schedule: every 15 minutes
+    schedule: at 4:00pm every day
     queue_name: background
     priority: 5
-    description: "AI technical analysis for SENSEX options buying intraday - runs every 15 minutes (aligns with SMC scanner)"
+    description: "AI technical analysis for SENSEX - post-close scheduled run; intraday flow is event-driven from tick events"
 
   dhan_auto_ip_sync:
     class: Dhan::AutoIpUpdaterJob
@@ -96,26 +96,26 @@ production:
 
   smc_scanner:
     class: SmcScannerJob
-    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    schedule: at 4:00pm every weekday
     queue_name: background
     priority: 10
-    description: "SMC + AVRZ scanner - market hours only, runs every 15 minutes (aligns with 15m MTF candles)"
+    description: "SMC + AVRZ scanner - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
 
   ai_technical_analysis_nifty:
     class: AiTechnicalAnalysisJob
     args: ["NIFTY"]
-    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    schedule: at 4:00pm every weekday
     queue_name: background
     priority: 5
-    description: "AI technical analysis for NIFTY - market hours only, runs every 15 minutes (aligns with SMC scanner)"
+    description: "AI technical analysis for NIFTY - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
 
   ai_technical_analysis_sensex:
     class: AiTechnicalAnalysisJob
     args: ["SENSEX"]
-    schedule: every 15 minutes between 9:15am and 3:30pm on weekdays
+    schedule: at 4:00pm every weekday
     queue_name: background
     priority: 5
-    description: "AI technical analysis for SENSEX - market hours only, runs every 15 minutes (aligns with SMC scanner)"
+    description: "AI technical analysis for SENSEX - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
 
   weekly_options_calibration:
     class: WeeklyCalibrationJob

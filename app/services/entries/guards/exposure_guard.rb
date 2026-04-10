@@ -82,22 +82,6 @@ module Entries
         def calculate_current_pnl(tracker)
           return unless tracker.entry_price.present? && tracker.quantity.present?
 
-          if tracker.paper?
-            ltp = get_paper_ltp_for_tracker(tracker)
-            return unless ltp
-
-            entry = BigDecimal(tracker.entry_price.to_s)
-            exit_price = BigDecimal(ltp.to_s)
-            qty = tracker.quantity.to_i
-            gross_pnl = (exit_price - entry) * qty
-            pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
-            pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : 0
-            hwm = [tracker.high_water_mark_pnl || 0, pnl].max
-
-            tracker.update!(last_pnl_rupees: pnl, last_pnl_pct: BigDecimal(pnl_pct.to_s), high_water_mark_pnl: hwm)
-            return
-          end
-
           pnl_cache = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)
           if pnl_cache && pnl_cache[:pnl]
             tracker.update!(
@@ -108,23 +92,25 @@ module Entries
             return
           end
 
-          tick = Live::TickQuery.for_security(
-            segment: tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment,
-            security_id: tracker.security_id
-          )
-          if tick
-            ltp = tick.ltp
-            entry = BigDecimal(tracker.entry_price.to_s)
-            qty = tracker.quantity.to_i
-            pnl = (ltp - entry) * qty
-            pnl_pct = entry.positive? ? ((ltp - entry) / entry) : nil
-            hwm = [tracker.high_water_mark_pnl || 0, pnl].max
+          ltp = resolve_ltp_for_exposure(tracker)
+          return unless ltp
 
-            tracker.update!(last_pnl_rupees: pnl, last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil, high_water_mark_pnl: hwm)
-          end
+          entry = BigDecimal(tracker.entry_price.to_s)
+          exit_price = BigDecimal(ltp.to_s)
+          qty = tracker.quantity.to_i
+          gross_pnl = (exit_price - entry) * qty
+          pnl = BrokerFeeCalculator.net_pnl(gross_pnl, is_exited: tracker.exited?)
+          pnl_pct = entry.positive? ? ((exit_price - entry) / entry) : nil
+          hwm = [tracker.high_water_mark_pnl || 0, pnl].max
+
+          tracker.update!(
+            last_pnl_rupees: pnl,
+            last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
+            high_water_mark_pnl: hwm
+          )
         end
 
-        def get_paper_ltp_for_tracker(tracker)
+        def resolve_ltp_for_exposure(tracker)
           segment = tracker.segment.presence || tracker.watchable&.exchange_segment || tracker.instrument&.exchange_segment
           security_id = tracker.security_id
           return nil unless segment.present? && security_id.present?

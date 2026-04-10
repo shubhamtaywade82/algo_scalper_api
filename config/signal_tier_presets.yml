@@ -1,0 +1,87 @@
+# Signal tier overlays (merged after algo.yml + DB overrides, before LIVE_TRADING env).
+# Set signals.signal_tier in algo.yml or SIGNAL_TIER env: exploratory | standard | selective
+#
+# exploratory — maximize candidate signals (paper / research); many gates off or relaxed.
+# standard    — empty overlay; use values from config/algo.yml as the baseline.
+# selective   — fewer, higher-bar entries; more gates on and stricter thresholds.
+
+exploratory:
+  signals:
+    signal_tier: exploratory
+    validation_mode: aggressive
+    permission_mode: lenient
+    enable_direction_gate: false
+    trading_context_strictness: relaxed
+    enable_no_trade_engine: false
+    halt_on_validation_failure: false
+    options_analysis_gate:
+      enabled: false
+      block_on_iv_rank_failure: true
+      block_on_theta_risk_failure: true
+    entry_dte_guard:
+      enabled: false
+      reject_when_days_to_expiry_lte: 1
+    indicator_preset: loose
+    min_confidence: 50
+    enable_smc_confluence_gating: false
+    enable_institutional_filter: false
+  option_chain:
+    min_strike_score: 50.0
+  midday_guard:
+    enabled: false
+  market_context:
+    enabled: false
+    gate:
+      enabled: false
+  entry_quality:
+    enforce: false
+    min_score: 30
+
+standard: {}
+
+selective:
+  signals:
+    signal_tier: selective
+    validation_mode: conservative
+    permission_mode: strict
+    enable_direction_gate: true
+    enable_trading_context_gate: true
+    trading_context_strictness: strict
+    enable_no_trade_engine: true
+    halt_on_validation_failure: true
+    options_analysis_gate:
+      enabled: true
+      block_on_iv_rank_failure: true
+      block_on_theta_risk_failure: true
+    entry_dte_guard:
+      enabled: true
+      reject_when_days_to_expiry_lte: 1
+    indicator_preset: tight
+    min_confidence: 72
+    enable_smc_confluence_gating: false
+    enable_institutional_filter: true
+  option_chain:
+    min_strike_score: 140.0
+  midday_guard:
+    enabled: true
+    min_confidence: 0.78
+    min_adx: 22
+    block_after_time: "15:00"
+    trending_adx_bypass: 30
+  market_context:
+    enabled: true
+    gate:
+      enabled: true
+      min_conviction_score: 78
+      min_chain_confidence: 48
+      allow_normal_participation: false
+      require_premium_expansion: true
+      require_smc_alignment: true
+  entry_quality:
+    enforce: true
+    min_score: 68
+    gates:
+      min_adx: 28
+      block_choppy_regime: true
+      min_body_ratio: 0.45
+      require_momentum_confirm: true

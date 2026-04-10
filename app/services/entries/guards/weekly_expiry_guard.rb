@@ -14,12 +14,11 @@ module Entries
         @index_cfg = context[:index_cfg]
         @pick = context[:pick]
         @is_supertrend = context[:is_supertrend] || context[:entry_metadata]&.dig(:entry_contract).to_s == Entries::EntryGuard::SUPERTREND_CONTRACT
-        @is_paper = context[:is_paper]
       end
 
       def call
-        return PASS if @is_supertrend || @is_paper
-        
+        return PASS if @is_supertrend
+
         symbol = @index_cfg[:key].to_s.upcase
         return PASS unless %w[NIFTY SENSEX].include?(symbol)
 

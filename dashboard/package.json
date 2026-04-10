@@ -10,7 +10,8 @@
   "dependencies": {
     "@rails/actioncable": "^8.0.0",
     "@solidjs/router": "^0.15.3",
-    "solid-js": "^1.9.3"
+    "solid-js": "^1.9.3",
+    "solid-toast": "^0.5.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.6",

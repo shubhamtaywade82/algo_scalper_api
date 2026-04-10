@@ -51,16 +51,19 @@ This PR successfully implements a comprehensive modular indicator system that re
 ### Configuration Compliance ✅
 
 **Paper/Live Mode:**
+
 - ✅ Configured via `algo.yml` → `paper_trading.enabled`
 - ✅ No ENV variable needed
 - ✅ Properly used in `orders_gateway.rb`
 
 **All Configuration Values:**
+
 - ✅ Prefer `algo.yml` over ENV
 - ✅ ENV fallback for testing only
 - ✅ Only `CLIENT_ID` and `ACCESS_TOKEN` are ENV (security)
 
 **Indicator Thresholds:**
+
 - ✅ `indicator_preset` in `algo.yml` (preferred)
 - ✅ `ENV['INDICATOR_PRESET']` as fallback
 - ✅ Threshold config system with presets
@@ -212,17 +215,20 @@ signals:
 ### ENV Variables ✅
 
 **Security (ENV only):**
+
 - ✅ `CLIENT_ID` / `DHAN_CLIENT_ID`
 - ✅ `ACCESS_TOKEN` / `DHAN_ACCESS_TOKEN`
 
 **Testing Fallback (algo.yml preferred):**
+
 - ✅ `INDICATOR_PRESET` - Fallback for testing
 - ✅ `ALLOC_PCT`, `RISK_PER_TRADE_PCT`, `DAILY_MAX_LOSS_PCT` - Fallback for testing
 - ✅ `DHANHQ_WS_WATCHLIST` - Fallback for testing
 
 **Infrastructure (Acceptable):**
+
 - ✅ `REDIS_URL`, `RAILS_ENV`, `RAILS_MASTER_KEY`
-- ✅ `BACKTEST_MODE`, `SCRIPT_MODE`, `DISABLE_TRADING_SERVICES`
+- ✅ `BACKTEST_MODE`, `SCRIPT_MODE`
 
 ---
 
@@ -256,6 +262,7 @@ signals:
 ### 1. CI Failures (Pre-existing)
 
 The CI failures are **NOT related to this PR**:
+
 - Lint errors in `candle_series.rb`, `candle.rb`, `calendar.rb` - Pre-existing
 - These files were not modified in this PR
 - Should be addressed in a separate PR
@@ -387,6 +394,7 @@ The implementation is solid, well-tested, and production-ready. The modular indi
 ## 📝 Files Changed Summary
 
 ### New Files (15)
+
 - `app/services/indicators/base_indicator.rb`
 - `app/services/indicators/supertrend_indicator.rb`
 - `app/services/indicators/adx_indicator.rb`
@@ -405,6 +413,7 @@ The implementation is solid, well-tested, and production-ready. The modular indi
 - Documentation files (6 MD files)
 
 ### Modified Files (4)
+
 - `app/strategies/supertrend_adx_strategy.rb` - Uses modular system internally
 - `app/services/signal/engine.rb` - Integrated multi-indicator system
 - `config/algo.yml` - Added indicator configuration

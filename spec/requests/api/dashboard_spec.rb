@@ -72,7 +72,7 @@ RSpec.describe 'GET /api/dashboard', type: :request do
       allow(Live::TickCache).to receive(:ltp).and_return(24_500.0)
       chain = double('chain') # rubocop:disable RSpec/VerifiedDoubles
       allow(Derivative).to receive(:options).and_return(chain)
-      allow(chain).to receive_messages(where: chain, minimum: nil)
+      allow(chain).to receive_messages(where: chain, group: chain, minimum: {})
       allow(AnalysisStore).to receive(:read).with('NIFTY', :smc).and_return(
         data: {
           decision: 'call',
@@ -126,7 +126,7 @@ RSpec.describe 'GET /api/dashboard', type: :request do
       allow(Live::TickCache).to receive(:ltp).and_return(24_500.0)
       chain = double('chain') # rubocop:disable RSpec/VerifiedDoubles
       allow(Derivative).to receive(:options).and_return(chain)
-      allow(chain).to receive_messages(where: chain, minimum: nil)
+      allow(chain).to receive_messages(where: chain, group: chain, minimum: {})
       allow(AnalysisStore).to receive(:read).with('NIFTY', :smc).and_return(
         data: {
           'smc_confluence_ltf_summary' => {

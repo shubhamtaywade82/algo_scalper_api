@@ -1,15 +1,12 @@
+# Paper vs live: same strategy/guards; only execution differs (GatewayPaper vs GatewayLive).
+# Effective mode is set by ENV LIVE_TRADING last-wins over YAML/DB: unset/false => paper (default for
+# ./bin/dev). LIVE_TRADING=true => live broker path (real money risk — also set dhanhq.enable_orders).
 paper_trading:
   enabled: true
   balance: 100000
   # Wallet realized PnL: cumulative = all-time paper exits (carry capital day to day).
   # daily = only exits on the current calendar day (legacy ₹1L + today’s closes).
   realized_scope: cumulative
-
-# Run mode: which profile to merge on top of base config (before DB overrides).
-# production = real flow (default). exit_testing = frequent entries to test exits. entry_testing = relaxed guards to test entries.
-# Override with ENV RUN_MODE=exit_testing (or entry_testing, production).
-# Default production for paper/live evaluation; use exit_testing only to stress-test exit plumbing.
-run_mode: exit_testing
 
 # Realtime execution controls (tick-first architecture)
 realtime:
@@ -70,7 +67,7 @@ feature_flags:
   auto_paper_on_insufficient_balance: false
 
 # Calibration: historical option behaviour (weekly) and optional AI trade-based patches.
-# Auto-apply merges proposed_patch into DB algo_config_overrides (same as POST …/apply).
+# Auto-apply merges proposed_patch into DB algo_config_document (same as POST …/apply).
 calibration:
   auto_apply:
     # Master switch. When false, runs only create CalibrationRun rows for manual review.
@@ -783,6 +780,11 @@ market_context:
 # SIGNAL SETTINGS
 # ============================================
 signals:
+  # exploratory = most permissive (research/paper). standard = use algo.yml as written (no tier overlay).
+  # selective = strict gates + higher quality bar (not a profit guarantee). Override: SIGNAL_TIER env.
+  # See config/signal_tier_presets.yml
+  signal_tier: exploratory
+
   # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path
   entry_strategy:
@@ -834,9 +836,15 @@ signals:
     mtf: "15"
     ltf: "5"
 
+  # Event-driven intraday AI (see AlgoConfig.event_driven_intraday_ai?): tick throttle + defer 15m jobs.
+  # Optional second flag (both are OR’d). DB JSON may send "true" as a string — that still counts.
+  # event_driven_ai_alerts: true
+
   # Tick-triggered MTF SMC confluence + optional index TA → Ollama → Telegram (trading daemon only).
-  # Hot path: Redis throttle on tick; job: MtfDigest, rising-edge on LTF alignment flags, then AiAnalyzer.
-  tick_ai_analysis_enabled: false
+  # Hot path: Redis throttle on tick; job: TickAiDigestJob, rising-edge on LTF flags, then AiAnalyzer.
+  # When true (or event_driven_ai_alerts): open-session AiTechnicalAnalysisJob + SmcScannerJob skip;
+  # BiasEngine Telegram from the daemon SMC loop is suppressed (tick/SMC AI alerts only on edges).
+  tick_ai_analysis_enabled: true
   tick_ai_min_interval_seconds: 15
   tick_ai_include_index_ta: true
   tick_ai_notify_telegram: true
@@ -863,6 +871,20 @@ signals:
   #   - bypass: Completely bypasses SMC+AVRZ checks - always returns execution_only (testing only!)
   # See docs/PERMISSION_SYSTEM_CONFIGURATION.md for details
   permission_mode: lenient # Options: strict, lenient, bypass (default: strict)
+
+  # Trading context gate: regime score, stability, and :chop blocking (see Domain::TradingContext).
+  # strict: production defaults; relaxed: allow signals on expiry/chop/low score (temporary / paper).
+  enable_trading_context_gate: true
+  trading_context_strictness: relaxed # strict | relaxed
+
+  # Option pick must show favorable premium change vs prev_close (Signal::MomentumValidator).
+  enable_option_premium_momentum_gate: false
+
+  # After strike selection: PropStrike-style score floor (see option_chain.min_strike_score).
+  enable_strike_score_floor_gate: false
+
+  # After strike selection: expected-move vs premium hard check (ExpectedMoveValidator).
+  enable_expected_move_strike_gate: false
 
   # Supertrend+ADX Strategy Configuration
   # By default: 1m Supertrend signal is enabled (no config needed)
@@ -943,7 +965,55 @@ signals:
     min_trend_score: 14
     mtf_enabled: true
 
+  # Presets for comprehensive_validation + options IV/theta thresholds (via effective_validation_mode).
+  validation_modes:
+    conservative:
+      adx_min_strength: 25
+      adx_confirmation_min_strength: 30
+      iv_rank_max: 0.6
+      iv_rank_min: 0.15
+      theta_risk_cutoff_hour: 14
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+    balanced:
+      adx_min_strength: 18
+      adx_confirmation_min_strength: 20
+      iv_rank_max: 0.8
+      iv_rank_min: 0.1
+      theta_risk_cutoff_hour: 14
+      theta_risk_cutoff_minute: 30
+      require_trend_confirmation: true
+      require_iv_rank_check: true
+      require_theta_risk_check: true
+    aggressive:
+      adx_min_strength: 15
+      adx_confirmation_min_strength: 18
+      iv_rank_max: 0.9
+      iv_rank_min: 0.05
+      theta_risk_cutoff_hour: 15
+      theta_risk_cutoff_minute: 0
+      require_trend_confirmation: false
+      require_iv_rank_check: true
+      require_theta_risk_check: false
+
   validation_mode: balanced
+
+  # When enabled, failed IV-rank / theta checks from options analysis block strike pick + entry.
+  # IV rank here is still the index candle volatility proxy (not option IV percentile).
+  options_analysis_gate:
+    enabled: false
+    block_on_iv_rank_failure: true
+    block_on_theta_risk_failure: true
+
+  # When true, comprehensive_validation failure stops the pipeline before context/quality gates.
+  halt_on_validation_failure: false
+
+  # Block new signals when nearest series expiry is too soon (0 = expiry day, 1 = tomorrow, etc.).
+  entry_dte_guard:
+    enabled: true
+    reject_when_days_to_expiry_lte: 0
 
   supertrend:
     period: 10
@@ -974,10 +1044,11 @@ chain_analyzer:
     volume: 0.15
 
 option_chain:
-  min_iv: 10
+  min_iv: 5.0          # Relaxed from 10 — LOW_VOL regime options often have IV < 10
   max_iv: 60
   min_oi: 50000
   max_spread_pct: 3.0
+  min_strike_score: 80.0  # PropStrikeSelector scores 0–1 (×100 = 0–100); 140 default was unreachable
 
 data_freshness:
   disable_ohlc_caching: false

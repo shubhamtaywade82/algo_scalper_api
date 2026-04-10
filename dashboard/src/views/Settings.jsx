@@ -43,14 +43,32 @@ export default function Settings() {
   }
 
   async function saveSettings() {
+    let token = localStorage.getItem('algo_settings_token')
+    if (!token) {
+      token = window.prompt("Enter Settings Update Token (from your .env file):")
+      if (token) {
+        localStorage.setItem('algo_settings_token', token)
+      } else {
+        showToast('Canceled: Token required', 'error')
+        return
+      }
+    }
+
     setSaving(true)
     try {
       const response = await fetch('/api/settings/bulk', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Settings-Update-Token': token
+        },
         body: JSON.stringify({ settings: configRoot() })
       })
       const data = await response.json()
+      if (response.status === 401) {
+        localStorage.removeItem('algo_settings_token')
+        throw new Error('Invalid token. Try again.')
+      }
       if (data.success) {
         showToast('Settings saved successfully (Overrides stored in DB)')
       } else {

@@ -363,7 +363,8 @@ module Live
 
     def enabled?
       # Disable in script/backtest mode
-      return false if ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1' || ENV['DISABLE_TRADING_SERVICES'] == '1'
+      return false if ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1'
+      return false if ENV['DISABLE_TRADING_SERVICES'] == '1'
       return false if defined?($PROGRAM_NAME) && $PROGRAM_NAME.include?('runner') # rubocop:disable Style/GlobalVars
 
       # Always enabled - just check for credentials

@@ -111,7 +111,7 @@ Started by `TradingSystem::Supervisor` (registered in `lib/trading_system/bootst
 | 3 | `Live::RiskManagerService` | 5s enforcement loop + per-tick EventBus |
 | 4 | `TradingSystem::PositionHeartbeat` | 10s |
 | 5 | `TradingSystem::OrderRouter` | On-demand |
-| 6 | `Live::PaperPnlRefresher` | 1s (paper mode only) |
+| 6 | `Live::PaperPnlRefresher` | 1s (refreshes paper trackers when present) |
 | 7 | `Live::ExitEngine` | On-demand |
 | 8 | `Positions::ActiveCacheService` | On-demand |
 | 9 | `Live::ReconciliationService` | 30s |
@@ -266,20 +266,27 @@ DhanHQ WebSocket tick
 
 ## Paper vs Live Trading
 
-Controlled by `config/algo.yml`:
+**Effective** paper vs live is resolved in `AlgoConfig.fetch` (30s cache):
+
+1. `config/algo.yml` (base)
+2. DB `settings` → `algo_config_overrides` (JSON, deep-merged)
+3. `config/signal_tier_presets.yml` for tier **`exploratory` | `standard` | `selective`** (from `SIGNAL_TIER` env or `signals.signal_tier`)
+4. **`LIVE_TRADING`** — when unset or false, **`paper_trading.enabled` is forced `true`**; when true, forced `false` (overrides YAML for gateway choice at boot)
 
 ```yaml
 paper_trading:
-  enabled: true    # true = paper (simulated fills), false = live (real DhanHQ orders)
+  enabled: true    # Base YAML; LIVE_TRADING=false keeps paper even if this were false
   balance: 100000  # simulated starting capital
 
 dhanhq:
-  enable_orders: true  # safety gate for DhanHQ order API
+  enable_orders: false  # must be true for live broker calls (with PLACE_ORDER=true)
 ```
 
-For live order placement, also set `PLACE_ORDER=true` in the environment. This is an additional safety gate in `Orders::Placer` that must be explicitly enabled.
+For **live broker** order placement: set `LIVE_TRADING=true`, `dhanhq.enable_orders: true`, and `PLACE_ORDER=true`. `Orders::Placer` dry-runs if either gate is off.
 
 Both modes use **real DhanHQ WebSocket data** for market ticks.
+
+Signals, guards, strike qualification, and risk rules use the **same logic** in paper and live. The only intentional differences are **order execution** (simulated fills and `GatewayPaper` wallet math vs DhanHQ orders and real balances) and **broker position sync** (live reconciles to DhanHQ positions; paper stays on `PositionTracker` + ticks).
 
 | Aspect | Paper Mode | Live Mode |
 |--------|-----------|-----------|
@@ -289,18 +296,6 @@ Both modes use **real DhanHQ WebSocket data** for market ticks.
 | PnL tracking | Real LTP-based | Real LTP-based |
 | Order updates | Synthetic | DhanHQ WebSocket |
 | Wallet | Simulated balance | Real funds API |
-
-## Run Modes
-
-Set in `config/algo.yml` (`run_mode:`) or override with `RUN_MODE` env var:
-
-| Mode | Purpose |
-|------|---------|
-| `production` | Full guards active, conservative entries |
-| `exit_testing` | Frequent entries to test exit rules (bypasses most entry guards) |
-| `entry_testing` | Relaxed guards to verify the entry pipeline |
-
-Profile overrides live in `config/profiles/<run_mode>.yml`. **Current default:** `run_mode: exit_testing` (paper trading mode).
 
 ## Environment Variables
 
@@ -312,11 +307,11 @@ Profile overrides live in `config/profiles/<run_mode>.yml`. **Current default:**
 | `DHAN_TOTP_SECRET` | Recommended | For TOTP auto-refresh |
 | `ENABLE_TRADING_SERVICES` | Auto (Procfile) | Must be `"true"` for daemon |
 | `PLACE_ORDER` | Live only | Must be `"true"` to allow live broker order placement |
-| `DHANHQ_WS_ENABLED` | Optional | Enable WebSocket (defaults based on env) |
+| `LIVE_TRADING` | Recommended | When unset/false: paper gateway forced. Set `"true"` only when intentionally going live |
+| `SIGNAL_TIER` | Optional | `exploratory` / `standard` / `selective` — merges `config/signal_tier_presets.yml` |
 | `REDIS_URL` | Optional | Redis connection (default: redis://127.0.0.1:6379/0) |
 | `DATABASE_URL` | Optional | PostgreSQL connection |
 | `RAILS_ENV` | Optional | Rails environment |
-| `RUN_MODE` | Optional | Override run_mode from config |
 | `OLLAMA_MODEL` | Optional | Ollama model name (default: llama3.2:3b) |
 | `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` | Optional | Ollama server URL (default: http://localhost:11434) |
 | `OLLAMA_TIMEOUT` | Optional | Ollama request timeout in seconds (default: 120) |
@@ -325,8 +320,9 @@ Profile overrides live in `config/profiles/<run_mode>.yml`. **Current default:**
 
 ### Live Trading Checklist
 
-Before switching `paper_trading.enabled: false`:
+Before live execution:
 
+- [ ] `LIVE_TRADING=true` in environment (and restart trading daemon so gateway picks live)
 - [ ] DhanHQ credentials set (`DHAN_CLIENT_ID`, `DHAN_ACCESS_TOKEN`)
 - [ ] TOTP credentials set (`DHAN_PIN`, `DHAN_TOTP_SECRET`) for token auto-refresh
 - [ ] `PLACE_ORDER=true` in environment
@@ -381,7 +377,6 @@ All trading parameters live in `config/algo.yml`. Key sections:
 | Section | Purpose |
 |---------|---------|
 | `paper_trading` | Paper/live mode toggle and simulated balance |
-| `run_mode` | Runtime profile (`production`, `exit_testing`, `entry_testing`) |
 | `dhanhq` | Broker settings (`enable_orders` safety gate) |
 | `indices` | Per-index config: segment, SID, capital allocation, ADX thresholds, trailing tiers |
 | `trade_limits` | Global daily limits |

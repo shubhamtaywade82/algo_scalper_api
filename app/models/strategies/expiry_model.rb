@@ -7,10 +7,10 @@ module Strategies
       now = Time.current.in_time_zone('Asia/Kolkata')
 
       # Market hours: 9:15 AM to 3:30 PM
-      if (now.hour == 9 && now.min >= 15) || (now.hour == 10 && now.min < 30)
-        :morning # 9:15-10:30
-      elsif (now.hour == 10 && now.min >= 30) || (now.hour >= 11 && now.hour < 13)
-        :midday # 10:30-13:00
+      if (now.hour == 9 && now.min >= 15) || now.hour == 10 || (now.hour == 11 && now.min < 30)
+        :morning # 9:15-11:30
+      elsif (now.hour == 11 && now.min >= 30) || (now.hour == 12)
+        :midday # 11:30-13:00
       elsif (now.hour == 13) || (now.hour == 14 && now.min < 30)
         :afternoon # 13:00-14:30
       elsif (now.hour == 14 && now.min >= 30) || (now.hour == 15 && now.min <= 30)

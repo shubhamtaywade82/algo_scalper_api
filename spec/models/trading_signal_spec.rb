@@ -8,7 +8,7 @@ RSpec.describe TradingSignal do
            index_key: 'NIFTY',
            direction: 'bullish',
            timeframe: '1m',
-           supertrend_value: 23440,
+           supertrend_value: 23_440,
            adx_value: 20.4,
            candle_timestamp: 1.minute.ago,
            signal_timestamp: Time.current,
@@ -57,6 +57,19 @@ RSpec.describe TradingSignal do
       signal.reload
       expect(signal.metadata['strategy']).to eq('supertrend_adx')
       expect(signal.metadata['entry_outcome']).to eq('skipped')
+    end
+
+    it 'merges extra_metadata with string keys for skip diagnostics' do
+      signal.record_entry_outcome(
+        'skipped',
+        'strike_selection: no legs',
+        extra_metadata: { 'entry_skip_stage' => 'strike_selection', 'entry_skip_code' => 'no_legs_after_filter' }
+      )
+
+      signal.reload
+      expect(signal.metadata['entry_blocked_reason']).to eq('strike_selection: no legs')
+      expect(signal.metadata['entry_skip_stage']).to eq('strike_selection')
+      expect(signal.metadata['entry_skip_code']).to eq('no_legs_after_filter')
     end
 
     it 'is a no-op when called on nil (safe navigation at call sites)' do

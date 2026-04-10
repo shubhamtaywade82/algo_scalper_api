@@ -5,7 +5,6 @@ module Entries
     class TimeRegimeGuard
       class << self
         def call(context)
-          return EntryGuardPipeline::PASS if AlgoConfig.run_mode == 'exit_testing'
           return EntryGuardPipeline::PASS if context[:expiry_power_trend]
 
           if time_regime_allows_entry?(
@@ -30,8 +29,8 @@ module Entries
           return false unless regime_service.allow_new_trades?
           return false unless regime_service.allow_entries?(regime)
 
-          if regime == Live::TimeRegimeService::CLOSE_GAMMA
-            return false if Live::TimeRegimeService.instance.current_ist_time.strftime('%H:%M') >= '14:45'
+          if regime == Live::TimeRegimeService::CLOSE_GAMMA && regime_service.current_ist_time.strftime('%H:%M') >= '14:45'
+            return false
           end
 
           true

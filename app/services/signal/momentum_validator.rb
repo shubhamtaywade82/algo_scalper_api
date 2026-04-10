@@ -209,6 +209,36 @@ module Signal
       { confirms: false, reason: "Premium speed check error: #{e.message}" }
     end
 
+    def self.validate_option_pick(index_key:, pick:, direction:)
+      return { confirms: false, reason: 'Option pick unavailable' } unless pick.is_a?(Hash)
+
+      current_ltp = pick[:ltp].to_f
+      previous_close = pick[:prev_close].to_f
+      return { confirms: false, reason: 'Option premium unavailable' } unless current_ltp.positive?
+      return { confirms: false, reason: 'Previous option close unavailable' } unless previous_close.positive?
+
+      premium_change_pct = ((current_ltp - previous_close) / previous_close * 100.0)
+      threshold_pct = option_premium_speed_threshold(index_key)
+
+      case direction
+      when :bullish
+        return { confirms: false, reason: 'Option premium moving down for bullish setup' } unless premium_change_pct.positive?
+      when :bearish
+        return { confirms: false, reason: 'Option premium moving down for bearish setup' } unless premium_change_pct.positive?
+      else
+        return { confirms: false, reason: "Invalid direction: #{direction}" }
+      end
+
+      if premium_change_pct >= threshold_pct
+        { confirms: true, reason: "Option premium speed #{premium_change_pct.round(2)}% >= #{threshold_pct}% threshold" }
+      else
+        { confirms: false, reason: "Option premium speed #{premium_change_pct.round(2)}% < #{threshold_pct}% threshold" }
+      end
+    rescue StandardError => e
+      Rails.logger.debug { "[MomentumValidator] Option pick validation failed: #{e.message}" }
+      { confirms: false, reason: "Option pick validation error: #{e.message}" }
+    end
+
     def self.invalid_result(reason)
       Result.new(
         valid: false,
@@ -216,6 +246,15 @@ module Signal
         factors: {},
         reasons: [reason]
       )
+    end
+
+    def self.option_premium_speed_threshold(index_key)
+      thresholds = {
+        'NIFTY' => 1.5,
+        'BANKNIFTY' => 2.0,
+        'SENSEX' => 1.5
+      }
+      thresholds[index_key.to_s.upcase] || 1.5
     end
   end
 end

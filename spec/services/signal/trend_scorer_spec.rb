@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Signal::TrendScorer do
-  let(:instrument) { instance_double(Instrument, candle_series: primary_series) }
+  let(:instrument) { instance_double(Instrument, candle_series: primary_series, symbol_name: 'NIFTY') }
   let(:primary_series) { build(:candle_series, :with_candles) }
   let(:confirmation_series) { build(:candle_series, :with_candles) }
 
@@ -253,7 +253,7 @@ RSpec.describe Signal::TrendScorer do
     end
 
     context 'with nil instrument methods' do
-      let(:nil_instrument) { instance_double(Instrument) }
+      let(:nil_instrument) { instance_double(Instrument, symbol_name: 'NIFTY') }
 
       before do
         allow(nil_instrument).to receive(:candle_series).and_return(nil)

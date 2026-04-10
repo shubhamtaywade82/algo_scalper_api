@@ -6,7 +6,6 @@ module Entries
     class SmcNavigatorGuard
       class << self
         def call(context)
-          return EntryGuardPipeline::PASS if AlgoConfig.run_mode == 'exit_testing'
           return EntryGuardPipeline::PASS unless overlay_enabled?
 
           instrument = context[:instrument]
