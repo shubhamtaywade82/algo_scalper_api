@@ -56,6 +56,9 @@ loss_streak_guard:
 
 sizing:
   post_1100_multiplier: 0.5
+  # Optional default max buy value as a fraction of available cash when an index omits
+  # capital_alloc_pct (0.30 = 30%). Per-index indices.*.capital_alloc_pct takes precedence.
+  # allocation_cap_pct: 0.30
 
 feature_flags:
   enable_direction_before_chain: true
