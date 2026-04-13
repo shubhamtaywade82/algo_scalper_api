@@ -16,6 +16,7 @@ RSpec.describe Api::PositionsController do
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.parsed_body['error']).to eq('invalid_date')
+    expect(response.parsed_body.keys).to contain_exactly('error', 'message')
   end
 
   it 'returns 200 when date is omitted (defaults to today)' do

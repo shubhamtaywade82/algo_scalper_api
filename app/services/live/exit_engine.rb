@@ -121,7 +121,9 @@ module Live
       tracker.with_lock do
         tracker.reload
         return false if tracker.exited?
-        return false if tracker.exit_sent_at.present?
+        if tracker.exit_sent_at.present? && !operator_may_resubmit_active_exit?(tracker, operator_retry)
+          return false
+        end
 
         if !operator_retry && tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
           return false
@@ -311,6 +313,12 @@ module Live
       return false if tracker.exit_requested_at.blank?
 
       (Time.current - tracker.exit_requested_at) >= EXIT_INTENT_RETRY_AFTER_SECONDS
+    end
+
+    # Broker ack persisted (exit_sent_at) but tracker still active — dashboard manual
+    # close may resubmit; COID idempotency avoids duplicate live risk where supported.
+    def operator_may_resubmit_active_exit?(tracker, operator_retry)
+      operator_retry && tracker.active?
     end
 
     def safe_pnl_snapshot(tracker)

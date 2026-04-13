@@ -168,6 +168,15 @@ RSpec.describe Live::ExitEngine do
         expect(router).not_to have_received(:exit_market)
       end
 
+      it 'operator_retry re-invokes broker when exit_sent_at set but tracker still active' do
+        tracker.update!(exit_sent_at: Time.current, exit_coid: 'AS-EXIT-SENT')
+
+        result = engine.execute_exit(tracker, 'MANUAL_DASHBOARD_CLOSE', operator_retry: true)
+
+        expect(router).to have_received(:exit_market).with(tracker, client_order_id: 'AS-EXIT-SENT')
+        expect(result[:success]).to be true
+      end
+
       it 'operator_retry re-invokes broker when intent is fresh and broker ack not persisted' do
         tracker.update!(exit_requested_at: Time.current, exit_coid: 'AS-EXIT-EXISTING')
 

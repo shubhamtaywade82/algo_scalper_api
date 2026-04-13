@@ -4,8 +4,9 @@ module Api
   # Optional Bearer / X-Api-Key checks for dashboard vs operator API tiers.
   #
   # When +API_DASHBOARD_TOKEN+ or +API_OPERATOR_TOKEN+ is unset, the check is skipped
-  # only in +development+ and +test+. Production and other environments (e.g. staging)
-  # return 503 when unset so the API does not run effectively open.
+  # only when +Rails.env.local?+ (+development+ / +test+). Staging, production, and
+  # any other env require
+  # an explicit token (503 when unset) so the API does not run effectively open.
   module TokenAuthenticatable
     extend ActiveSupport::Concern
 
@@ -29,7 +30,7 @@ module Api
             "(#{Rails.env})"
           )
           render json: { error: 'api_token_unconfigured', tier: tier.to_s }, status: :service_unavailable
-          return nil
+          return
         end
 
         return
@@ -39,7 +40,6 @@ module Api
 
       Rails.logger.warn("[#{self.class.name}] #{tier} API token missing or invalid from #{request.remote_ip}")
       render json: { error: 'unauthorized' }, status: :unauthorized
-      nil
     end
 
     def provided_api_token
@@ -58,8 +58,6 @@ module Api
     end
 
     def api_token_optional_when_unset?
-      return false if Rails.env.production?
-
       Rails.env.local?
     end
   end

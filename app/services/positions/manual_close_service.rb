@@ -35,6 +35,7 @@ module Positions
     end
 
     def run_exit(tracker)
+      clear_redis_exit_lock(tracker.id)
       exit_engine = nil
       router = TradingSystem::OrderRouter.new
       exit_engine = Live::ExitEngine.new(order_router: router)
@@ -42,6 +43,15 @@ module Positions
       translate(exit_engine.execute_exit(tracker, REASON, operator_retry: true))
     ensure
       exit_engine&.stop
+    end
+
+    def clear_redis_exit_lock(tracker_id)
+      return if tracker_id.blank?
+
+      redis = Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+      redis.del("exit_lock:#{tracker_id}")
+    rescue StandardError => e
+      Rails.logger.warn("[#{self.class.name}] clear_redis_exit_lock failed: #{e.class} - #{e.message}")
     end
 
     def translate(raw)
