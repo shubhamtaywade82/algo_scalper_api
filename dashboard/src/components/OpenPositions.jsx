@@ -51,11 +51,18 @@ export default function OpenPositions(props) {
                 <th class="text-right px-4 py-4 font-bold">% Change</th>
                 <th class="text-right px-4 py-4 font-bold">Peak (HWM)</th>
                 <th class="text-right px-6 py-4 font-bold">Duration</th>
+                <th class="text-center px-4 py-4 font-bold w-28">Action</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-white/5">
               <Index each={props.positions || []}>
-                {(pos) => <PositionRow pos={pos} />}
+                {(pos) => (
+                  <PositionRow
+                    pos={pos}
+                    onClose={props.onClosePosition}
+                    closingId={props.closingPositionId}
+                  />
+                )}
               </Index>
             </tbody>
           </table>

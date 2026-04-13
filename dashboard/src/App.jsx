@@ -19,7 +19,9 @@ function AppShell(props) {
     connected: positionsConnected,
     isStale: positionsStale,
     lastMessageAt: positionsLastMessageAt,
-    fetchPositions
+    fetchPositions,
+    closeOpenPosition,
+    closingPositionId
   } = usePositions()
 
   const {
@@ -34,7 +36,7 @@ function AppShell(props) {
     lastUpdated, recentSignals, config,
     open, closed,
     positionsConnected, positionsStale, positionsLastMessageAt,
-    fetchPositions
+    fetchPositions, closeOpenPosition, closingPositionId
   }
 
   return (

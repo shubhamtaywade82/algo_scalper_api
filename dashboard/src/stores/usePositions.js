@@ -1,5 +1,7 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
+import toast from 'solid-toast'
 import cable from '../cable'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
 
 const WS_STALE_AFTER_MS = 3000
 const BACKFILL_INTERVAL_MS = 5000
@@ -10,6 +12,7 @@ export function usePositions() {
   const [connected, setConnected] = createSignal(false)
   const [isStale, setIsStale] = createSignal(true)
   const [lastMessageAt, setLastMessageAt] = createSignal(null)
+  const [closingPositionId, setClosingPositionId] = createSignal(null)
 
   let subscription = null
   let staleTimer = null
@@ -43,7 +46,7 @@ export function usePositions() {
 
   async function fetchPositions() {
     try {
-      const res = await fetch('/api/positions')
+      const res = await fetch('/api/positions', { headers: dashboardApiHeaders() })
       const data = await res.json()
       // Merge server data with any live WS fields already applied (ltp, pnl, ltp_stale).
       // This prevents the periodic poll from overwriting fresher WS values.
@@ -59,6 +62,53 @@ export function usePositions() {
       setClosed(data.closed || [])
     } catch (e) {
       console.error('[Positions] fetch failed:', e)
+    }
+  }
+
+  async function closeOpenPosition(positionId) {
+    const id = positionId
+    if (id == null) return { ok: false }
+
+    setClosingPositionId(id)
+    try {
+      const res = await fetch(`/api/positions/${id}/close`, {
+        method: 'POST',
+        headers: {
+          ...dashboardApiHeaders(),
+          Accept: 'application/json'
+        }
+      })
+      let data = {}
+      try {
+        data = await res.json()
+      } catch {
+        /* ignore */
+      }
+
+      if (!res.ok) {
+        const msg =
+          data.error === 'not_found'
+            ? 'Position not found or already closed'
+            : data.message || data.error || `Close failed (${res.status})`
+        toast.error(msg)
+        return { ok: false, status: res.status, data }
+      }
+
+      if (data.reason === 'exit_already_requested') {
+        toast.success('Exit already in progress for this position')
+      } else if (data.reason === 'already_exited') {
+        toast.success('Position was already closed')
+      } else {
+        toast.success('Exit order submitted')
+      }
+      await fetchPositions()
+      return { ok: true, data }
+    } catch (e) {
+      console.error('[Positions] close failed:', e)
+      toast.error('Could not reach server to close position')
+      return { ok: false }
+    } finally {
+      setClosingPositionId(null)
     }
   }
 
@@ -121,5 +171,14 @@ export function usePositions() {
     stopBackfill()
   })
 
-  return { open, closed, connected, isStale, lastMessageAt, fetchPositions }
+  return {
+    open,
+    closed,
+    connected,
+    isStale,
+    lastMessageAt,
+    fetchPositions,
+    closeOpenPosition,
+    closingPositionId
+  }
 }

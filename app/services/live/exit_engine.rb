@@ -38,12 +38,14 @@ module Live
     #
     # @param tracker [PositionTracker] The position tracker to exit
     # @param reason [String] The reason for the exit (e.g., 'stop_loss', 'take_profit', 'trailing_stop')
+    # @param operator_retry [Boolean] When true (dashboard manual close only), bypass the
+    #   "fresh exit intent" short-circuit if no broker ack yet so the operator can resubmit.
     # @return [Hash] Result hash with keys:
     #   - :success [Boolean] Whether the exit was successful
     #   - :reason [String] Reason code ('success', 'already_exited', 'invalid_tracker', etc.)
     #   - :exit_price [BigDecimal, nil] The exit price if successful
     #   - :error [Object, nil] Error details if router failed
-    def execute_exit(tracker, reason)
+    def execute_exit(tracker, reason, operator_retry: false)
       # Input validation
       return { success: false, reason: 'invalid_tracker' } unless tracker
       return { success: false, reason: 'invalid_router' } unless @router
@@ -61,48 +63,52 @@ module Live
         return { success: false, reason: 'exit_lock_held' }
       end
 
-      intent_persisted = prepare_exit_intent!(tracker, reason)
-      return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
-      return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
-
-      ltp = safe_ltp(tracker)
-
-      cmd_result = nil
       begin
-        cmd_result = Orders::Commands::ExitOrderCommand.new(
-          gateway: @router,
-          tracker: tracker,
-          client_order_id: tracker.exit_coid,
-          reason: reason
-        ).call
-      rescue StandardError => e
-        Rails.logger.error("[ExitEngine] Router exception for #{tracker.order_no}: #{e.class} - #{e.message}")
-        return { success: false, reason: 'router_failed', error: e }
-      end
+        intent_persisted = prepare_exit_intent!(tracker, reason, operator_retry: operator_retry)
+        return { success: true, reason: 'already_exited', exit_price: tracker.exit_price } if tracker.exited?
+        return { success: true, reason: 'exit_already_requested', client_order_id: tracker.exit_coid } unless intent_persisted
 
-      unless cmd_result.success?
-        error_detail = cmd_result.error
-        if error_detail.nil? && cmd_result.payload.is_a?(Hash)
-          # Keep payload shape (includes :raw) for consistent caller/logging handling.
-          error_detail = cmd_result.payload
+        ltp = safe_ltp(tracker)
+
+        cmd_result = nil
+        begin
+          cmd_result = Orders::Commands::ExitOrderCommand.new(
+            gateway: @router,
+            tracker: tracker,
+            client_order_id: tracker.exit_coid,
+            reason: reason
+          ).call
+        rescue StandardError => e
+          Rails.logger.error("[ExitEngine] Router exception for #{tracker.order_no}: #{e.class} - #{e.message}")
+          return { success: false, reason: 'router_failed', error: e }
         end
-        error_detail = cmd_result.payload if error_detail.nil?
 
-        Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{cmd_result.reason} (coid: #{tracker.exit_coid})")
-        return { success: false, reason: 'router_failed', error: error_detail }
+        unless cmd_result.success?
+          error_detail = cmd_result.error
+          if error_detail.nil? && cmd_result.payload.is_a?(Hash)
+            # Keep payload shape (includes :raw) for consistent caller/logging handling.
+            error_detail = cmd_result.payload
+          end
+          error_detail = cmd_result.payload if error_detail.nil?
+
+          Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{cmd_result.reason} (coid: #{tracker.exit_coid})")
+          return { success: false, reason: 'router_failed', error: error_detail }
+        end
+
+        # Extract raw broker response from command payload for downstream helpers
+        result = cmd_result.payload[:raw] || {}
+        persist_broker_ack!(tracker, result)
+
+        # Use exit_price from command payload if available, fallback to LTP
+        exit_price = cmd_result.payload[:exit_price] || ltp
+
+        finalize_exit!(tracker, exit_price: exit_price, reason: reason)
+      rescue StandardError => e
+        Rails.logger.error("[ExitEngine] Failed executing exit for #{tracker&.order_no}: #{e.class} - #{e.message} (coid: #{tracker&.exit_coid})")
+        raise
+      ensure
+        release_exit_lock(tracker.id)
       end
-
-      # Extract raw broker response from command payload for downstream helpers
-      result = cmd_result.payload[:raw] || {}
-      persist_broker_ack!(tracker, result)
-
-      # Use exit_price from command payload if available, fallback to LTP
-      exit_price = cmd_result.payload[:exit_price] || ltp
-
-      finalize_exit!(tracker, exit_price: exit_price, reason: reason)
-    rescue StandardError => e
-      Rails.logger.error("[ExitEngine] Failed executing exit for #{tracker&.order_no}: #{e.class} - #{e.message} (coid: #{tracker&.exit_coid})")
-      raise
     end
 
     private
@@ -111,14 +117,21 @@ module Live
     # @param tracker [PositionTracker]
     # @param reason [String]
     # @return [Boolean] true when a new intent was persisted, false when already requested/exited
-    def prepare_exit_intent!(tracker, reason)
+    def prepare_exit_intent!(tracker, reason, operator_retry: false)
       tracker.with_lock do
         tracker.reload
         return false if tracker.exited?
         return false if tracker.exit_sent_at.present?
 
-        if tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
+        if !operator_retry && tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
           return false
+        end
+
+        if operator_retry && tracker.exit_requested_at.present? && !stale_exit_intent?(tracker)
+          Rails.logger.info(
+            "[ExitEngine] Operator manual close retry for #{tracker.order_no} " \
+            '(re-invoking broker; exit_sent_at still blank)'
+          )
         end
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
@@ -282,6 +295,16 @@ module Live
     rescue StandardError => e
       Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
       true
+    end
+
+    # Releases Redis exit lock immediately so the next close/exits are not blocked for the TTL window.
+    def release_exit_lock(tracker_id)
+      return if tracker_id.blank?
+      return unless @redis
+
+      @redis.del("exit_lock:#{tracker_id}")
+    rescue StandardError => e
+      Rails.logger.warn("[ExitEngine] release_exit_lock failed tracker=#{tracker_id}: #{e.class} - #{e.message}")
     end
 
     def stale_exit_intent?(tracker)

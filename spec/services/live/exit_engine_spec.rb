@@ -167,6 +167,15 @@ RSpec.describe Live::ExitEngine do
         expect(result).to include(success: true, reason: 'exit_already_requested', client_order_id: 'AS-EXIT-SENT')
         expect(router).not_to have_received(:exit_market)
       end
+
+      it 'operator_retry re-invokes broker when intent is fresh and broker ack not persisted' do
+        tracker.update!(exit_requested_at: Time.current, exit_coid: 'AS-EXIT-EXISTING')
+
+        result = engine.execute_exit(tracker, 'MANUAL_DASHBOARD_CLOSE', operator_retry: true)
+
+        expect(router).to have_received(:exit_market).with(tracker, client_order_id: 'AS-EXIT-EXISTING')
+        expect(result[:success]).to be true
+      end
     end
 
     context 'with invalid inputs' do
@@ -240,6 +249,22 @@ RSpec.describe Live::ExitEngine do
 
         tracker.reload
         expect(tracker.status).to eq('active')
+      end
+
+      it 'releases Redis lock after failure so immediate retry is not exit_lock_held' do
+        calls = 0
+        allow(router).to receive(:exit_market) do
+          calls += 1
+          calls == 1 ? { success: false } : { success: true }
+        end
+
+        first = engine.execute_exit(tracker, 'stop_loss')
+        expect(first[:success]).to be false
+        expect(first[:reason]).to eq('router_failed')
+
+        second = engine.execute_exit(tracker, 'MANUAL_DASHBOARD_CLOSE', operator_retry: true)
+        expect(second[:reason]).not_to eq('exit_lock_held')
+        expect(calls).to eq(2)
       end
     end
 

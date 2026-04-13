@@ -27,6 +27,7 @@ Rails.application.routes.draw do
     get :dashboard, to: "dashboard#show"
     get "public_ip/audit", to: "public_ip#audit"
     get :positions, to: "positions#index"
+    post "positions/:id/close", to: "positions#close"
     get :signals,   to: "signals#index"
 
     get 'smc/decision', to: 'smc#decision'

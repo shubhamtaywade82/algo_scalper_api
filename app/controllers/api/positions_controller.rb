@@ -18,6 +18,11 @@ module Api
       }
     end
 
+    def close
+      outcome = Positions::ManualCloseService.call(tracker_id: params[:id])
+      render json: outcome[:json], status: outcome[:status]
+    end
+
     private
 
     def open_positions

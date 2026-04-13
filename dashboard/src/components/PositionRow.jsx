@@ -27,7 +27,13 @@ function formatDuration(secs) {
 
 export default function PositionRow(props) {
   const pos = props.pos
+  const onClose = props.onClose
   const isStale = createMemo(() => pos()?.ltp_stale === true)
+  const isClosing = createMemo(() => {
+    const getter = props.closingId
+    const id = typeof getter === 'function' ? getter() : getter
+    return id != null && Number(id) === Number(pos()?.id)
+  })
 
   const ltpFlash = useFlash(() => pos()?.ltp)
   const pnlFlash = useFlash(() => pos()?.pnl)
@@ -72,6 +78,19 @@ export default function PositionRow(props) {
             <div class="h-full bg-primary-500/40 animate-pulse" style={{ width: '60%' }}></div>
           </div>
         </div>
+      </td>
+      <td class="px-4 py-5 text-center align-middle">
+        <Show when={typeof onClose === 'function'}>
+          <button
+            type="button"
+            class="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg border border-rose-500/40 text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 hover:border-rose-400/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            disabled={isClosing()}
+            onClick={() => onClose(pos().id)}
+            aria-label={`Close position ${pos().symbol}`}
+          >
+            {isClosing() ? '…' : 'Close'}
+          </button>
+        </Show>
       </td>
     </tr>
   )
