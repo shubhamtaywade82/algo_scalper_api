@@ -3,7 +3,7 @@
 source 'https://rubygems.org'
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
-gem 'rails', '~> 8.1.2'
+gem 'rails', '~> 8.1.3'
 # Use postgresql as the database for Active Record
 gem 'pg', '~> 1.6'
 # Use the Puma web server [https://github.com/puma/puma]
@@ -55,6 +55,13 @@ gem 'rotp', '~> 6.3'
 gem 'telegram-bot-ruby', '~> 0.19'
 
 gem 'ollama-client', '~> 1.1'
+
+# OpenAI API clients
+# ruby-openai (alexrudall) - used in development/test
+gem 'ruby-openai', '~> 8.0', group: %i[development test]
+
+# openai-ruby (official) - used in production
+gem 'openai', '~> 0.58', group: :production
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
