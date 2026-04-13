@@ -154,4 +154,85 @@ RSpec.describe Risk::Rules::TrailingStopRule do
       end
     end
   end
+
+  describe 'spot-anchored trailing (3-layer logic)' do
+    let(:tracker_dbl)    { instance_double('PositionTracker', entry_price: 100.0) }
+    let(:instrument_dbl) { instance_double('Instrument') }
+    let(:series_dbl)     { instance_double('CandleSeries', candles: []) }
+    let(:structure_dbl)  { instance_double('Smc::Detectors::Structure') }
+    let(:context_dbl) do
+      instance_double(
+        Risk::Rules::RuleContext,
+        active?: true,
+        tracker: tracker_dbl,
+        tracker_snapshot: { pnl_pct: 0.30, ltp: 90.0, hwm_pnl: 3000.0, pnl: 1000.0 }
+      )
+    end
+    let(:rule_dbl) { described_class.new(config: {}) }
+
+    before do
+      allow(tracker_dbl).to receive(:instrument).and_return(instrument_dbl)
+      allow(tracker_dbl).to receive(:watchable).and_return(nil)
+      allow(tracker_dbl).to receive(:side).and_return('long_pe')
+      allow(instrument_dbl).to receive(:candle_series).and_return(series_dbl)
+      allow(Smc::Detectors::Structure).to receive(:new).and_return(structure_dbl)
+      allow(structure_dbl).to receive(:choch?).and_return(false)
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        risk: {
+          exits: {
+            trailing: {
+              spot_anchored: {
+                enabled: true,
+                min_adx_to_hold: 15,
+                hard_floor_pct: 0.50
+              }
+            }
+          }
+        }
+      })
+    end
+
+    context 'Layer 1: spot trend alive — premium above hard floor' do
+      before do
+        allow(instrument_dbl).to receive(:supertrend_signal).and_return(:short_entry) # PE expects short
+        allow(instrument_dbl).to receive(:adx).and_return(22.0)
+      end
+
+      it 'does NOT exit (holds while spot trend intact regardless of HWM drop)' do
+        result = rule_dbl.evaluate(context_dbl)
+        expect(result.exit?).to be false
+      end
+    end
+
+    context 'Layer 2: spot trend alive — premium drops below hard floor (50% of entry)' do
+      before do
+        allow(instrument_dbl).to receive(:supertrend_signal).and_return(:short_entry)
+        allow(instrument_dbl).to receive(:adx).and_return(22.0)
+        allow(context_dbl).to receive(:tracker_snapshot).and_return(
+          { pnl_pct: 0.30, ltp: 45.0, hwm_pnl: 3000.0, pnl: 1000.0 }
+        )
+      end
+
+      it 'exits with TRAILING_HARD_FLOOR (premium below 50% of entry despite trend alive)' do
+        result = rule_dbl.evaluate(context_dbl)
+        expect(result.exit?).to be true
+        expect(result.reason).to include('TRAILING_HARD_FLOOR')
+      end
+    end
+
+    context 'Layer 3: spot trend broken — delegates to UEC trailing logic' do
+      before do
+        allow(instrument_dbl).to receive(:supertrend_signal).and_return(:long_entry) # Wrong for long_pe
+        allow(instrument_dbl).to receive(:adx).and_return(10.0)
+        allow(Live::UnifiedExitChecker).to receive(:send).and_return({ action: :hold, multiplier: 1.0, reason: nil })
+      end
+
+      it 'reaches UEC evaluation (spot-trend check does not short-circuit)' do
+        expect(Live::UnifiedExitChecker).to receive(:send)
+          .with(:evaluate_underlying_context, anything, anything)
+          .and_return({ action: :hold, multiplier: 1.0, reason: nil })
+        rule_dbl.evaluate(context_dbl)
+      end
+    end
+  end
 end
