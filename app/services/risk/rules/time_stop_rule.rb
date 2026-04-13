@@ -25,6 +25,8 @@ module Risk
     #
     # Priority: 40 (checked after premium momentum failure)
     class TimeStopRule < BaseRule
+      include Live::SpotTrendEvaluator
+
       PRIORITY = 40
 
       # Default time limits (used as fallback if config is missing)
@@ -55,10 +57,11 @@ module Risk
 
         pnl_pct = context.pnl_pct.to_f
 
-        # Bypass time stop for all profitable trades — trailing system owns winners.
-        # PremiumMomentumFailure (2min stall) handles dead/negative trades faster and
-        # more precisely, so no hard 5-min negative-PnL override is needed here.
-        return skip_result if pnl_pct >= 0.05
+        # Any profitable or breakeven position is immune — trailing system owns winners.
+        return skip_result if pnl_pct >= 0.0
+
+        # Spot trend still intact? Give the trade more time regardless of PnL.
+        return skip_result if spot_trend_alive?(tracker)
 
         # Check if time limit exceeded
         entry_time = tracker.created_at
@@ -135,6 +138,17 @@ module Risk
         # Trend trade: get index-specific limit
         index_key = tracker.meta&.dig('index_key') || 'NIFTY'
         limits[:trend][index_key] || limits[:trend]['NIFTY']
+      end
+
+      def spot_trend_alive?(tracker)
+        # Only bypass if we have actual instrument data — don't bypass on missing data
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        return false unless instrument
+
+        result = evaluate_spot_trend_for(tracker)
+        result[:trend_alive]
+      rescue StandardError
+        false  # On error, don't block the time stop
       end
 
       # Check if candle count exceeded (for scalps)
