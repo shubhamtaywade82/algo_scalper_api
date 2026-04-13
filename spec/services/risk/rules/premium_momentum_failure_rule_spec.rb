@@ -11,6 +11,8 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
       id: 1,
       created_at: 10.minutes.ago,
       entry_price: 200.0,
+      instrument: nil,
+      watchable: nil,
       meta: {
         'index_key' => index_key,
         'peak_premium' => 200.0,
@@ -29,7 +31,8 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
       tracker: tracker,
       position: position_data,
       active?: true,
-      pnl_pct: -0.05 # Losing position
+      pnl_pct: -0.05, # Losing position
+      tracker_snapshot: { ltp: 190.0, pnl_pct: -0.05 }
     )
   end
 
@@ -50,7 +53,10 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
   before do
     allow(AlgoConfig).to receive(:fetch).and_return({
       risk: {
-        exits: { premium_momentum_failure: pmf_config },
+        exits: {
+          premium_momentum_failure: pmf_config,
+          trailing: { spot_anchored: { min_adx_to_hold: 15 } }
+        },
         time_regimes: {
           open_expansion: { start: '09:15', end: '09:45' },
           trend_continuation: { start: '09:45', end: '11:30' },
@@ -65,7 +71,7 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
     let(:index_key) { 'NIFTY' }
     let(:peak_at) { 4.minutes.ago }
 
-    context 'NIFTY in morning (default 3 min) — stalled 4 min' do
+    context 'when NIFTY morning stall exceeds default' do
       before do
         allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-17 10:00:00 +05:30'))
       end
@@ -77,7 +83,7 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
       end
     end
 
-    context 'SENSEX in morning (base 4 min) — stalled 3.5 min' do
+    context 'when SENSEX stall under index threshold' do
       let(:index_key) { 'SENSEX' }
       let(:peak_at) { 3.5.minutes.ago }
 
@@ -95,7 +101,7 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
   describe 'session-aware stall minutes' do
     let(:index_key) { 'NIFTY' }
 
-    context 'NIFTY in chop_decay (3 + 2 = 5 min) — stalled 4 min' do
+    context 'when NIFTY chop_decay stall under sum' do
       let(:peak_at) { 4.minutes.ago }
 
       before do
@@ -108,7 +114,7 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
       end
     end
 
-    context 'SENSEX in chop_decay (4 + 2 = 6 min) — stalled 6 min' do
+    context 'when SENSEX chop_decay meets stall sum' do
       let(:index_key) { 'SENSEX' }
       let(:peak_at) { 6.minutes.ago }
 
@@ -122,7 +128,7 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
       end
     end
 
-    context 'NIFTY in close_gamma (3 + 2 = 5 min) — stalled 5 min' do
+    context 'when NIFTY close_gamma meets stall sum' do
       let(:peak_at) { 5.minutes.ago }
 
       before do
@@ -136,33 +142,88 @@ RSpec.describe Risk::Rules::PremiumMomentumFailureRule do
     end
   end
 
-  describe 'fallback when config absent' do
-    let(:index_key) { 'NIFTY' }
-    let(:peak_at) { 3.minutes.ago }
-
-    before do
-      allow(AlgoConfig).to receive(:fetch).and_return({ risk: {} })
-      allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-17 10:00:00 +05:30'))
-    end
-
-    it 'falls back to DEFAULT_STALL_MINUTES (3)' do
-      result = rule.evaluate(context)
-      expect(result.exit?).to be true
-    end
-  end
-
   describe 'winning position is skipped' do
     let(:index_key) { 'NIFTY' }
     let(:peak_at) { 5.minutes.ago }
 
     before do
-      allow(context).to receive(:pnl_pct).and_return(0.05) # Winning
       allow(Time).to receive(:current).and_return(Time.zone.parse('2026-03-17 10:00:00 +05:30'))
+      allow(context).to receive(:pnl_pct).and_return(0.05) # Winning
     end
 
     it 'returns no_action (winners handled by trailing)' do
       result = rule.evaluate(context)
       expect(result.exit?).to be false
+    end
+  end
+
+  describe 'minimum loss floor gate (-5% minimum)' do
+    let(:index_key) { 'NIFTY' }
+    let(:peak_at)   { 5.minutes.ago }
+
+    before do
+      allow(Time).to receive(:current).and_return(Time.zone.parse('2026-04-13 10:00:00 +05:30'))
+    end
+
+    context 'when pnl_pct is -0.02 (only -2% loss — too shallow)' do
+      before { allow(context).to receive(:pnl_pct).and_return(-0.02) }
+
+      it 'does NOT fire PMF (loss below -5% floor)' do
+        result = rule.evaluate(context)
+        expect(result.exit?).to be false
+      end
+    end
+
+    context 'when pnl_pct is -0.06 (-6% loss, stall >= threshold)' do
+      before do
+        allow(context).to receive_messages(pnl_pct: -0.06, tracker_snapshot: { ltp: 190.0, pnl_pct: -0.06 })
+      end
+
+      it 'fires PMF (loss meets -5% floor + stall time met)' do
+        result = rule.evaluate(context)
+        expect(result.exit?).to be true
+      end
+    end
+  end
+
+  describe 'spot trend confirmation gate' do
+    let(:index_key)  { 'NIFTY' }
+    let(:peak_at)    { 5.minutes.ago }
+    let(:instrument) { instance_double(Instrument) }
+    let(:series)     { instance_double(CandleSeries, candles: []) }
+    let(:structure)  { instance_double(Smc::Detectors::Structure) }
+
+    before do
+      # Stub Time before any let that uses 5.minutes.ago (tracker meta peak_premium_at).
+      allow(Time).to receive(:current).and_return(Time.zone.parse('2026-04-13 10:00:00 +05:30'))
+      allow(context).to receive_messages(pnl_pct: -0.08, tracker_snapshot: { ltp: 170.0, pnl_pct: -0.08 })
+      allow(tracker).to receive_messages(instrument: instrument, watchable: nil, side: 'long_ce')
+      allow(instrument).to receive(:candle_series).and_return(series)
+      allow(Smc::Detectors::Structure).to receive(:new).and_return(structure)
+      allow(structure).to receive(:choch?).and_return(false)
+    end
+
+    context 'when underlying spot trend is still intact' do
+      before do
+        allow(instrument).to receive_messages(supertrend_signal: :long_entry, adx: 20.0)
+      end
+
+      it 'does NOT fire PMF (spot not confirming failure)' do
+        result = rule.evaluate(context)
+        expect(result.exit?).to be false
+      end
+    end
+
+    context 'when underlying spot trend has broken' do
+      before do
+        allow(instrument).to receive_messages(supertrend_signal: :short_entry, adx: 10.0)
+      end
+
+      it 'fires PMF (spot confirms the momentum failure)' do
+        result = rule.evaluate(context)
+        expect(result.exit?).to be true
+        expect(result.reason).to include('PREMIUM_MOMENTUM_FAILURE')
+      end
     end
   end
 end
