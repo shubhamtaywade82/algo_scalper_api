@@ -26,9 +26,21 @@ module Live
 
       # instrument.supertrend_signal(interval:) → :long_entry | :short_entry | nil
       # instrument.adx(period, interval:) → Float | nil
-      st_signal = instrument.supertrend_signal(interval: '1') rescue nil
-      adx_value = instrument.adx(14, interval: '1').to_f rescue 0.0
-      series    = instrument.candle_series(interval: '1') rescue nil
+      st_signal = begin
+                    instrument.supertrend_signal(interval: '1')
+      rescue StandardError
+                    nil
+      end
+      adx_value = begin
+                    instrument.adx(14, interval: '1').to_f
+      rescue StandardError
+                    0.0
+      end
+      series = begin
+                    instrument.candle_series(interval: '1')
+      rescue StandardError
+                    nil
+      end
       choch_detected = detect_choch(series)
 
       # long_ce expects :long_entry, long_pe expects :short_entry
@@ -58,7 +70,7 @@ module Live
 
     def min_adx_to_hold
       AlgoConfig.fetch.dig(:risk, :exits, :trailing, :spot_anchored, :min_adx_to_hold).to_f
-    rescue
+    rescue StandardError
       15.0
     end
 

@@ -20,7 +20,7 @@ module Indicators
     end
 
     def calculate
-      closes = @series.candles.map(&:close).map(&:to_f)
+      closes = @series.candles.map { |c| c.close.to_f }
       return neutral_result if closes.size < @slow_period
 
       fast_val = ema(closes, @fast_period)
@@ -47,7 +47,7 @@ module Indicators
       k    = 2.0 / (period + 1)
       seed = closes.first(period).sum / period.to_f
 
-      closes.drop(period).reduce(seed) { |prev, c| c * k + prev * (1 - k) }
+      closes.drop(period).reduce(seed) { |prev, c| (c * k) + (prev * (1 - k)) }
     end
 
     def neutral_result

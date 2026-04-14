@@ -669,6 +669,9 @@ position_sizing:
     enabled: true # Global trailing toggle (used by dashboard)
     activation_pct: 0.10 # 10% - Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
     drawdown_pct: 0.03 # 3% - Exit if price drops this % from peak (used by trailing rules)
+    spot_anchored:
+      min_adx_to_hold: 15.0  # ADX floor; below this we consider the trend weak (TrailingStopRule)
+      hard_floor_pct: 0.50   # 50% - hard loss floor even when spot trend is alive
 
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
   secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000

@@ -148,7 +148,7 @@ module Risk
         result = evaluate_spot_trend_for(tracker)
         result[:trend_alive]
       rescue StandardError
-        false  # On error, don't block the time stop
+        false # On error, don't block the time stop
       end
 
       # Check if candle count exceeded (for scalps)

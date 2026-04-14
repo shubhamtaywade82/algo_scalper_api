@@ -101,7 +101,7 @@ module Risk
 
       def hard_floor_pct
         AlgoConfig.fetch.dig(:risk, :exits, :trailing, :spot_anchored, :hard_floor_pct).to_f
-      rescue
+      rescue StandardError
         0.50
       end
 
