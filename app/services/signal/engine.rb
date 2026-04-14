@@ -137,7 +137,8 @@ module Signal
           confidence_score: calculate_confidence_score(
             primary_analysis: primary_analysis,
             confirmation_analysis: confirmation_analysis,
-            validation_result: validation_result
+            validation_result: validation_result,
+            index_cfg: index_cfg
           ),
           metadata: diagnostic_metadata
         )
@@ -988,7 +989,43 @@ module Signal
         { valid: true }
       end
 
-      def calculate_confidence_score(primary_analysis:, confirmation_analysis:, validation_result:)
+      # Returns +0.10 when MACD histogram direction aligns with entry direction.
+      def macd_confidence_factor(direction, series)
+        result    = Indicators::MacdIndicator.new(series: series).calculate_at(-1)
+        histogram = result.dig(:value, :histogram).to_f
+        return 0.10 if direction == :bullish && histogram > 0
+        return 0.10 if direction == :bearish && histogram < 0
+        0.0
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] MACD factor error: #{e.message}")
+        0.0
+      end
+
+      # Returns +0.20 when SMC BiasEngine aligns, +0.05 when neutral, 0.0 when misaligned.
+      def smc_bias_confidence_factor(direction, index_cfg)
+        smc_direction = get_smc_bias_direction(index_cfg)
+        return 0.20 if smc_direction == direction
+        return 0.05 if smc_direction == :neutral
+        0.0
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] SMC bias factor error: #{e.message}")
+        0.0
+      end
+
+      # Resolves SMC bias direction for index_cfg → :bullish | :bearish | :neutral
+      def get_smc_bias_direction(index_cfg)
+        instrument = Instrument.find_by(tradingsymbol: index_cfg[:key]) rescue nil
+        return :neutral unless instrument
+
+        decision = Smc::BiasEngine.new(instrument).decision rescue nil
+        case decision
+        when :call then :bullish
+        when :put  then :bearish
+        else            :neutral
+        end
+      end
+
+      def calculate_confidence_score(primary_analysis:, confirmation_analysis:, validation_result:, index_cfg: nil)
         base_confidence = 0.5
 
         # ADX strength factor (0-0.3)
@@ -1021,7 +1058,13 @@ module Signal
           supertrend_factor = [st_value / 1000.0, 0.1].min # Cap at 0.1
         end
 
-        total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor
+        direction = primary_analysis[:direction]
+        series    = primary_analysis[:series]
+
+        macd_factor     = series && direction ? macd_confidence_factor(direction, series)          : 0.0
+        smc_factor      = index_cfg && direction ? smc_bias_confidence_factor(direction, index_cfg) : 0.0
+
+        total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor + macd_factor + smc_factor
         [total_confidence, 1.0].min # Cap at 1.0
       end
 
