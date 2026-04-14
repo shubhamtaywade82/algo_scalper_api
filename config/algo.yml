@@ -980,6 +980,9 @@ signals:
       require_trend_confirmation: true
       require_iv_rank_check: true
       require_theta_risk_check: true
+      require_rsi_check: true
+      rsi_overbought_block: 72
+      rsi_oversold_block: 28
     balanced:
       adx_min_strength: 18
       adx_confirmation_min_strength: 20
@@ -990,6 +993,9 @@ signals:
       require_trend_confirmation: true
       require_iv_rank_check: true
       require_theta_risk_check: true
+      require_rsi_check: true
+      rsi_overbought_block: 78
+      rsi_oversold_block: 22
     aggressive:
       adx_min_strength: 15
       adx_confirmation_min_strength: 18
@@ -1000,6 +1006,7 @@ signals:
       require_trend_confirmation: false
       require_iv_rank_check: true
       require_theta_risk_check: false
+      require_rsi_check: false
 
   validation_mode: balanced
 

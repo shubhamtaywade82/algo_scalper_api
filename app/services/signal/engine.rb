@@ -758,6 +758,12 @@ module Signal
         timing_result = validate_market_timing
         validation_checks << timing_result
 
+        # 6. RSI Anti-Chase Gate - Block CE on overbought, PE on oversold
+        if mode_config[:require_rsi_check]
+          rsi_check = validate_rsi_gate(direction, series, mode_config)
+          validation_checks << rsi_check unless rsi_check[:valid]
+        end
+
         # Log all validation results
         # Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
         validation_checks.each do |check|
@@ -958,6 +964,28 @@ module Signal
             { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
           end
         end
+      end
+
+      # RSI anti-chase gate — blocks CE entries when overbought, PE entries when oversold.
+      # Does NOT interfere with the normal trending RSI zone (45–75 CE, 25–55 PE).
+      def validate_rsi_gate(direction, series, mode_config)
+        return { valid: true } unless mode_config[:require_rsi_check]
+
+        rsi_result = Indicators::RsiIndicator.new(series: series).calculate_at(-1)
+        rsi_val    = rsi_result[:value].to_f
+
+        if direction == :bullish && rsi_val > mode_config.fetch(:rsi_overbought_block, 78).to_f
+          return { valid: false, reason: "RSI overbought (#{rsi_val.round(1)}) — avoid chasing CE entry", check: :rsi_overbought }
+        end
+
+        if direction == :bearish && rsi_val < mode_config.fetch(:rsi_oversold_block, 22).to_f
+          return { valid: false, reason: "RSI oversold (#{rsi_val.round(1)}) — avoid chasing PE entry", check: :rsi_oversold }
+        end
+
+        { valid: true, rsi_value: rsi_val }
+      rescue StandardError => e
+        Rails.logger.warn("[Signal::Engine] RSI gate error — allowing through: #{e.message}")
+        { valid: true }
       end
 
       def calculate_confidence_score(primary_analysis:, confirmation_analysis:, validation_result:)
