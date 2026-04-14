@@ -53,9 +53,16 @@ export default function StatsBar(props) {
           </div>
           <div class="flex items-center justify-between gap-2 mt-4">
             <Show when={stats().is_blocked} fallback={
-              <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1">
-                <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> LIVE ACTIVE
-              </span>
+              <Show when={!props.marketStatus || props.marketStatus?.market_open} fallback={
+                <span class="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                  <div class="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
+                  {props.marketStatus?.holiday_name ? 'HOLIDAY' : (props.marketStatus?.is_trading_day === false ? 'WEEKEND' : 'MARKET CLOSED')}
+                </span>
+              }>
+                <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                  <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> LIVE ACTIVE
+                </span>
+              </Show>
             }>
               <div class="flex items-center gap-2">
                 <span class="text-[9px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">

@@ -35,6 +35,7 @@ module Api
             config: Live::TimeRegimeService.instance.regime_config
           }
         },
+        market_status: build_market_status,
         timestamp: Time.current.iso8601
       }
     end
@@ -56,11 +57,23 @@ module Api
         strategy_name = resolve_strategy_name(signals_cfg, idx[:key])
 
         idx.merge(
-          ltp: Live::TickCache.ltp(idx[:segment], idx[:sid]),
+          ltp: index_tick_ltp(idx[:segment], idx[:sid]),
           strategy: strategy_name,
           timeframe: signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '1m'
         )
       end
+    end
+
+    # Index LTPs are written under Dhan's index segment (IDX_I) + security id. WatchlistItems
+    # sometimes carry a different segment label; fall back so header LTPs match the live feed.
+    def index_tick_ltp(segment, security_id)
+      sid = security_id.to_s
+      seg = segment.to_s
+      val = Live::TickCache.ltp(seg, sid)
+      return val if val.present?
+      return nil if seg == 'IDX_I' || sid.blank?
+
+      Live::TickCache.ltp('IDX_I', sid)
     end
 
     def subscribed_indices_payload
@@ -133,6 +146,21 @@ module Api
       else
         'supertrend_adx'
       end
+    end
+
+    def build_market_status
+      today = Date.current
+      is_trading_day = Market::Calendar.trading_day?(today)
+      market_open = TradingSession::Service.market_open?
+      holiday = MarketHoliday.find_by(exchange: :nse, observed_on: today)
+
+      {
+        is_trading_day: is_trading_day,
+        market_open: market_open,
+        holiday_name: holiday&.name.presence,
+        next_trading_day: Market::Calendar.next_trading_day.iso8601,
+        session: TradingSession::Service.entry_allowed?
+      }
     end
 
     def safe_wallet_snapshot

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_07_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_13_123000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,7 +23,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_120000) do
     t.string "request_id"
     t.string "source", null: false
     t.datetime "updated_at", null: false
-    t.index ["changed_paths"], name: "index_algo_config_change_logs_on_paths", using: :gin
     t.index ["created_at"], name: "index_algo_config_change_logs_on_created_at"
     t.index ["source"], name: "index_algo_config_change_logs_on_source"
   end
@@ -167,6 +166,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_120000) do
     t.index ["security_id", "symbol_name", "exchange", "segment"], name: "index_instruments_unique", unique: true
     t.index ["symbol_name"], name: "index_instruments_on_symbol_name"
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
+  end
+
+  create_table "market_holidays", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "exchange", limit: 8, null: false
+    t.string "name", default: "", null: false
+    t.date "observed_on", null: false
+    t.datetime "updated_at", null: false
+    t.index ["exchange", "observed_on"], name: "index_market_holidays_on_exchange_and_observed_on_unique", unique: true
+    t.index ["observed_on"], name: "index_market_holidays_on_observed_on"
   end
 
   create_table "paper_daily_wallets", force: :cascade do |t|

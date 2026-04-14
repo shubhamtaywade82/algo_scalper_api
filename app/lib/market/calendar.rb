@@ -1,12 +1,21 @@
 # frozen_string_literal: true
 
 module Market
+  # Trading-day calendar: weekends + holidays from `market_holidays` (NSE/BSE) merged with
+  # optional extras in config/market_holidays.yml.
+  #
+  # Official lists (verify yearly):
+  #   https://www.nseindia.com/resources/exchange-communication-holidays
+  #   https://www.bseindia.com/static/markets/marketinfo/listholi.aspx
   class Calendar
-    # Indian market holidays for 2024-2025 (simplified list)
-    # In production, this should be loaded from a more comprehensive source
-    MARKET_HOLIDAYS = [].freeze
+    CONFIG_BASENAME = 'market_holidays.yml'
 
     class << self
+      # Clears memoized holiday list (tests, console after editing YAML or DB rows).
+      def clear_holiday_cache!
+        @holiday_date_strings = nil
+      end
+
       # Returns today if it's a trading day, otherwise the last trading day
       def today_or_last_trading_day
         today = Date.current
@@ -52,10 +61,10 @@ module Market
         today + 1.day
       end
 
-      # Checks if a given date is a trading day
+      # Checks if a given date is a trading day (Mon–Fri, not a merged DB/YAML holiday date).
       def trading_day?(date)
         return false if date.saturday? || date.sunday?
-        return false if MARKET_HOLIDAYS.include?(date.strftime('%Y-%m-%d'))
+        return false if holiday_date_strings.include?(date.strftime('%Y-%m-%d'))
 
         true
       end
@@ -78,6 +87,42 @@ module Market
         end
 
         count
+      end
+
+      private
+
+      def holiday_date_strings
+        @holiday_date_strings ||= load_holiday_date_strings
+      end
+
+      def load_holiday_date_strings
+        (load_holiday_dates_from_database + load_yaml_holiday_strings).uniq.freeze
+      end
+
+      def load_holiday_dates_from_database
+        return [] unless ApplicationRecord.connection.data_source_exists?('market_holidays')
+
+        MarketHoliday.closure_date_strings
+      rescue StandardError => e
+        Rails.logger.warn("[Market::Calendar] market_holidays read failed: #{e.class} - #{e.message}")
+        []
+      end
+
+      def load_yaml_holiday_strings
+        path = Rails.root.join('config', CONFIG_BASENAME)
+        return [] unless File.file?(path)
+
+        raw = YAML.safe_load_file(
+          path,
+          permitted_classes: [],
+          permitted_symbols: [],
+          aliases: true
+        )
+        list = Array(raw&.dig('nse', 'holidays') || raw&.dig('holidays'))
+        list.map { |x| x.to_s.strip }.compact_blank.uniq
+      rescue StandardError => e
+        Rails.logger.warn("[Market::Calendar] #{CONFIG_BASENAME} load failed: #{e.class} - #{e.message}")
+        []
       end
     end
   end

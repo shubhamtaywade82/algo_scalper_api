@@ -51,6 +51,19 @@ RSpec.describe 'GET /api/dashboard', type: :request do
     expect(body['subscribed_indices']).to eq([])
   end
 
+  it 'includes market_status with expected keys' do
+    get '/api/dashboard'
+    expect(response).to have_http_status(:ok)
+    body = JSON.parse(response.body)
+    ms = body['market_status']
+    expect(ms).to be_a(Hash)
+    expect(ms).to have_key('is_trading_day')
+    expect(ms).to have_key('market_open')
+    expect(ms).to have_key('holiday_name')
+    expect(ms).to have_key('next_trading_day')
+    expect(ms).to have_key('session')
+  end
+
   context 'when SMC confluence digest is enabled' do
     before do
       allow(AlgoConfig).to receive(:fetch).and_return({
@@ -143,6 +156,25 @@ RSpec.describe 'GET /api/dashboard', type: :request do
       expect(response).to have_http_status(:ok)
       row = response.parsed_body['subscribed_indices'].find { |r| r['key'] == 'NIFTY' }
       expect(row['smc_confluence_ltf']).to be_nil
+    end
+  end
+
+  context 'when watchlist index segment differs from feed segment IDX_I' do
+    before do
+      allow(IndexConfigLoader).to receive(:load_indices).and_return(
+        [{ key: 'NIFTY', sid: '13', segment: 'NSE_EQ' }]
+      )
+      allow(Live::TickCache).to receive(:ltp).with('NSE_EQ', '13').and_return(nil)
+      allow(Live::TickCache).to receive(:ltp).with('IDX_I', '13').and_return(19_888.5)
+      chain = double('chain') # rubocop:disable RSpec/VerifiedDoubles
+      allow(Derivative).to receive(:options).and_return(chain)
+      allow(chain).to receive_messages(where: chain, group: chain, minimum: {})
+    end
+
+    it 'falls back to IDX_I + sid for index LTP on indices payload' do
+      get '/api/dashboard'
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['indices']['nifty']).to eq(19_888.5)
     end
   end
 end

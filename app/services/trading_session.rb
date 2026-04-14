@@ -19,6 +19,13 @@ module TradingSession
       # @return [Hash] { allowed: Boolean, reason: String }
       def entry_allowed?
         current_ist = current_ist_time
+        unless Market::Calendar.trading_day?(current_ist.to_date)
+          return {
+            allowed: false,
+            reason: 'Not a trading day (weekend/holiday)'
+          }
+        end
+
         hour = current_ist.hour
         minute = current_ist.min
 
@@ -102,6 +109,8 @@ module TradingSession
         return false if ENV['FORCE_MARKET_OPEN'].to_s == 'true'
 
         current_ist = current_ist_time
+        return true unless Market::Calendar.trading_day?(current_ist.to_date)
+
         hour = current_ist.hour
         minute = current_ist.min
 
