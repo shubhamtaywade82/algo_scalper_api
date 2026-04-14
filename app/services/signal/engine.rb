@@ -718,15 +718,19 @@ module Signal
 
       # Comprehensive validation checks before proceeding with trades
       # When supertrend_only: true, ADX and trend_confirmation are skipped (Supertrend-only entry).
-      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false, validation_mode: nil)
+      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false, validation_mode: nil, real_iv: nil)
         mode_config = get_validation_mode_config(override_mode: validation_mode)
         # Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction} (mode: #{mode_config[:mode]})")
 
         validation_checks = []
 
-        # 1. IV Rank Check - Avoid extreme volatility (if enabled)
+        # 1. IV Rank Check - Prefer real IV when available, fall back to proxy
         if mode_config[:require_iv_rank_check]
-          iv_rank_result = validate_iv_rank(index_cfg, series, mode_config)
+          iv_rank_result = if real_iv && real_iv.to_f > 0
+                             validate_iv_rank_real(real_iv.to_f, mode_config)
+                           else
+                             validate_iv_rank(index_cfg, series, mode_config)
+                           end
           validation_checks << iv_rank_result
         end
 
@@ -987,6 +991,31 @@ module Signal
       rescue StandardError => e
         Rails.logger.warn("[Signal::Engine] RSI gate error — allowing through: #{e.message}")
         { valid: true }
+      end
+
+      # Validates real implied volatility from option chain data.
+      # iv: Float (e.g. 0.45 = 45%) — from analysis_context[:option_data][:implied_volatility]
+      # Fails open when iv is zero (data unavailable).
+      def validate_iv_rank_real(iv, mode_config)
+        iv_f = iv.to_f
+        return { valid: true } if iv_f.zero?  # No IV data — fail open
+
+        iv_max = mode_config.fetch(:iv_rank_max, 0.75).to_f
+        iv_min = mode_config.fetch(:iv_rank_min, 0.10).to_f
+
+        if iv_f > iv_max
+          return { valid: false,
+                   reason: "IV too high (#{(iv_f * 100).round(1)}%) — IV crush risk, avoid entry",
+                   check: :iv_too_high }
+        end
+
+        if iv_f < iv_min
+          return { valid: false,
+                   reason: "IV too low (#{(iv_f * 100).round(1)}%) — insufficient premium",
+                   check: :iv_too_low }
+        end
+
+        { valid: true, iv: iv_f }
       end
 
       # Returns +0.10 when MACD histogram direction aligns with entry direction.
