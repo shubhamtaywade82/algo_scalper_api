@@ -826,6 +826,12 @@ signals:
   # Set to false to disable SMC decision alignment check (but keep permission checks)
   enable_smc_decision_alignment: true # Set to false to disable SMC decision alignment (default: true)
 
+  # SMC zone filter: block CE entries in premium zone / PE entries in discount zone.
+  # ADX override: if ADX >= zone_filter_adx_override, momentum is strong enough to ignore zone.
+  smc:
+    discount_premium_zone_filter: true
+    zone_filter_adx_override: 30    # ADX threshold to bypass zone restriction
+
   # SMC EventStore: persist every scan decision to smc_events for audit/replay
   smc_event_store_publish: true
 

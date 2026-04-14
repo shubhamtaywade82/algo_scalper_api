@@ -993,6 +993,68 @@ module Signal
         { valid: true }
       end
 
+      # EMA direction tie-break: if Supertrend and EMA 9/21 disagree,
+      # require ADX >= 25 to proceed (strong momentum overrides cross-current).
+      def check_ema_direction_alignment(direction, series, adx_value)
+        ema_result    = Indicators::EmaDirectionIndicator.new(series: series).calculate
+        ema_direction = ema_result[:direction]
+
+        if ema_direction == :neutral || ema_direction == direction
+          return { aligned: true, adx_override_needed: false, ema_direction: ema_direction }
+        end
+
+        adx_override_threshold = 25.0
+        if adx_value.to_f >= adx_override_threshold
+          return { aligned: true, adx_override_needed: false, ema_direction: ema_direction,
+                   note: 'EMA disagreement overridden by ADX strength' }
+        end
+
+        { aligned: false, adx_override_needed: true, ema_direction: ema_direction,
+          required_adx: adx_override_threshold, actual_adx: adx_value }
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] EMA alignment check error: #{e.message}")
+        { aligned: true, adx_override_needed: false }
+      end
+
+      # SMC Discount/Premium zone filter:
+      # CE (bullish): ideal in discount; blocked in premium unless ADX >= zone_filter_adx_override.
+      # PE (bearish): ideal in premium; blocked in discount unless ADX >= zone_filter_adx_override.
+      def smc_zone_allows_entry?(direction, index_cfg, adx_value)
+        zone = get_smc_zone(index_cfg)
+        return true if zone == :equilibrium
+
+        zone_override_adx = AlgoConfig.fetch.dig(:signals, :smc, :zone_filter_adx_override).to_f rescue 30.0
+
+        if direction == :bullish && zone == :premium
+          return adx_value.to_f >= zone_override_adx
+        end
+
+        if direction == :bearish && zone == :discount
+          return adx_value.to_f >= zone_override_adx
+        end
+
+        true
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] SMC zone filter error: #{e.message}")
+        true
+      end
+
+      # Resolves current SMC zone from Smc::Detectors::PremiumDiscount.
+      def get_smc_zone(index_cfg)
+        instrument = Instrument.find_by(tradingsymbol: index_cfg[:key])
+        return :equilibrium unless instrument
+
+        series = instrument.candle_series(interval: '5') rescue nil
+        return :equilibrium unless series
+
+        pd = Smc::Detectors::PremiumDiscount.new(series)
+        return :premium   if pd.premium?
+        return :discount  if pd.discount?
+        :equilibrium
+      rescue StandardError
+        :equilibrium
+      end
+
       # Validates real implied volatility from option chain data.
       # iv: Float (e.g. 0.45 = 45%) — from analysis_context[:option_data][:implied_volatility]
       # Fails open when iv is zero (data unavailable).
