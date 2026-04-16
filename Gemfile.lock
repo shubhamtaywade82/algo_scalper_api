@@ -315,7 +315,7 @@ GEM
       racc (~> 1.4)
     nokogiri (1.19.2-x86_64-linux-musl)
       racc (~> 1.4)
-    openai (0.58.0)
+    openai (0.59.0)
       base64
       cgi
       connection_pool
@@ -595,7 +595,7 @@ DEPENDENCIES
   factory_bot_rails
   faker
   kamal
-  openai (~> 0.58)
+  openai (~> 0.59)
   pg (~> 1.6)
   puma (>= 5.0)
   rack-cors
@@ -744,7 +744,7 @@ CHECKSUMS
   nokogiri (1.19.2-x86_64-darwin) sha256=7d9af11fda72dfaa2961d8c4d5380ca0b51bc389dc5f8d4b859b9644f195e7a4
   nokogiri (1.19.2-x86_64-linux-gnu) sha256=fa8feca882b73e871a9845f3817a72e9734c8e974bdc4fbad6e4bc6e8076b94f
   nokogiri (1.19.2-x86_64-linux-musl) sha256=93128448e61a9383a30baef041bf1f5817e22f297a1d400521e90294445069a8
-  openai (0.58.0) sha256=6a0bcb680a35331d62b832f85813556b1c0fadd51313732d5582f8afefdea662
+  openai (0.59.0) sha256=63000fcd58c8cdbd1c52666d9fe1a0709eabe179db085b1112f8a7add75cfbab
   ostruct (0.6.3) sha256=95a2ed4a4bd1d190784e666b47b2d3f078e4a9efda2fccf18f84ddc6538ed912
   parallel (2.0.1) sha256=337782d3e39f4121e67563bf91dd8ece67f48923d90698614773a0ec9a5b2c7d
   parser (3.3.11.1) sha256=d17ace7aabe3e72c3cc94043714be27cc6f852f104d81aa284c2281aecc65d54
