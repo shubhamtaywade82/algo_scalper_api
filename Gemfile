@@ -56,7 +56,7 @@ gem 'telegram-bot-ruby', '~> 0.19'
 gem 'ruby-openai', '~> 8.0', group: %i[development test]
 
 # openai-ruby (official) - used in production
-gem 'openai', '~> 0.59', group: :production
+gem 'openai', '~> 0.63', group: :production
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
