@@ -68,6 +68,12 @@ development:
     priority: 25
     description: "Persists public IP last-seen (throttled); dashboard no longer writes public_ip_logs"
 
+  ai_calibration:
+    class: AiCalibrationJob
+    queue: background
+    schedule: at 7:00am every day
+    description: "Daily AI-driven trading calibration — analyzes paper trades and proposes config patches"
+
 production:
   instruments_import:
     class: InstrumentsImportJob

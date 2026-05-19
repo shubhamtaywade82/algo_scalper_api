@@ -85,11 +85,11 @@ feature_flags:
 calibration:
   auto_apply:
     # Master switch. When false, runs only create CalibrationRun rows for manual review.
-    enabled: false
+    enabled: true
     # After WeeklyCalibrationJob (DhanHQ expired ATM±1 stats).
     historical_weekly: true
     # After AiCalibrationJob (paper-trade dataset + Ollama). Keep false until validated.
-    ai_trades: false
+    ai_trades: true
     # Skip auto-apply when RegimeDetector flags a shift (volatile vs prior runs).
     reject_on_regime_shift: true
     # Only auto-apply while paper_trading.enabled (recommended before going live).
