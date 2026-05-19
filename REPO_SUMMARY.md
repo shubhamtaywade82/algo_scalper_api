@@ -17,7 +17,7 @@ Rails 8 API-only backend for **fully autonomous intraday options scalping** on I
 
 Two main processes:
 
-- **Web API** (`bin/rails server -p 3001`) — REST/JSON endpoints, dashboards, AI tools.
+- **Web API** (`bin/rails server -p 3011`) — REST/JSON endpoints, dashboards, AI tools.
 - **Trading daemon** (`ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon`) — runs all live trading services in threads, coordinated by `lib/trading_system/supervisor.rb`.
 
 Jobs process (`bin/jobs`) runs Solid Queue for recurring tasks. Dashboard (`cd dashboard && npm run dev`) is a separate Next.js frontend.

@@ -85,7 +85,7 @@ The jobs process can be skipped by setting `ENABLE_JOBS=false` in your environme
 
 This uses `Procfile.dev` to start:
 
-- `web` — Rails API server on port 3001
+- `web` — Rails API server on port 3011
 - `trading` — trading daemon (`ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon`)
 - `jobs` — Solid Queue worker
 - `dashboard` — Next.js dashboard (in `dashboard/`)
@@ -95,7 +95,7 @@ This uses `Procfile.dev` to start:
 If you only need the Rails API (no trading threads), you can start the web server alone:
 
 ```bash
-bin/rails server -p 3001
+bin/rails server -p 3011
 ```
 
 In this mode the trading daemon is not started; endpoints still function for health checks, settings, dashboard reads, etc.

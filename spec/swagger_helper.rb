@@ -74,7 +74,7 @@ RSpec.configure do |config|
         }
       },
       servers: [
-        { url: 'http://localhost:3001', description: 'Local web (see Procfile.dev / bin/rails server)' },
+        { url: 'http://localhost:3011', description: 'Local web (see Procfile.dev / bin/rails server)' },
         { url: '/', description: 'Same origin' }
       ],
       tags: [

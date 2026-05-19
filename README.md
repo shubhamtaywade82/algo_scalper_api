@@ -63,7 +63,7 @@ This launches (via `Procfile.dev`):
 
 | Process | Command | Purpose |
 |---------|---------|---------|
-| `web` | `bin/rails server -p 3001` | Rails API server |
+| `web` | `bin/rails server -p 3011` | Rails API server |
 | `trading` | `ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon` | Trading brain (11 services in threads) |
 | `jobs` | `bin/jobs` | Solid Queue worker (SMC scanner, AI analysis, instrument sync) |
 | `dashboard` | `cd dashboard && npm run dev` | Next.js frontend |
@@ -89,7 +89,7 @@ ENABLE_TRADING_SERVICES=true bundle exec rake trading:daemon  # trading daemon s
 ├──────────────┬──────────────┬──────────────┬─────────────────────┤
 │ web          │ trading      │ jobs         │ dashboard           │
 │ Rails API    │ Daemon       │ Solid Queue  │ Next.js             │
-│ port 3001    │ 11 services  │ recurring    │ frontend            │
+│ port 3011    │ 11 services  │ recurring    │ frontend            │
 │              │ in threads   │ tasks        │                     │
 └──────┬───────┴──────┬───────┴──────┬───────┴─────────────────────┘
        │              │              │
