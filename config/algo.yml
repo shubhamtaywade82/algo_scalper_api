@@ -50,9 +50,20 @@ expiry_week_power_trend:
   entry_end: "13:45"       # End of optimal entry window (before gamma session)
 
 loss_streak_guard:
-  enabled: false
+  enabled: true
   consecutive_losses_threshold: 2
   cooldown_minutes: 30
+
+strike_cooldown_guard:
+  enabled: true
+  cooldown_minutes: 20
+
+capital_allocator:
+  post_peak_size_cut:
+    enabled: true
+    min_peak: 2000        # only activate after intraday peak ≥ ₹2k
+    giveback_ratio: 0.50  # if net < peak × 0.50, cut size
+    size_factor: 0.5      # halve allocator output
 
 sizing:
   post_1100_multiplier: 0.5
@@ -744,6 +755,10 @@ position_sizing:
 # Set enabled: false to disable the entire engine without removing config.
 profit_lock:
   enabled: true
+  early_giveback:
+    enabled: true
+    min_peak: 2000       # only arm once intraday peak ≥ ₹2k
+    keep_ratio: 0.40     # if net ≤ peak × 0.40, flatten + halt (gives back ≤60% of peak)
   levels:
     - trigger: 20000   # ₹20k — Level 1
       lock_ratio: 0.60 # floor = peak_pnl × 60%  (e.g. ₹20k peak → ₹12k floor)
