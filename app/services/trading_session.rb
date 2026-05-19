@@ -5,12 +5,12 @@ module TradingSession
   # Entry allowed: 9:20 AM to 3:15 PM IST
   # Exits must happen before 3:15 PM IST
   class Service
-    ENTRY_START_HOUR = 9
-    ENTRY_START_MINUTE = 20
+    ENTRY_START_HOUR = 8
+    ENTRY_START_MINUTE = 45
     EXIT_DEADLINE_HOUR = 15
-    EXIT_DEADLINE_MINUTE = 15
-    MARKET_CLOSE_HOUR = 15
-    MARKET_CLOSE_MINUTE = 30
+    EXIT_DEADLINE_MINUTE = 45
+    MARKET_CLOSE_HOUR = 16
+    MARKET_CLOSE_MINUTE = 0
 
     IST_TIMEZONE = 'Asia/Kolkata'
 
