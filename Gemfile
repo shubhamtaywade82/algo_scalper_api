@@ -46,7 +46,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ', '2.8.0'
+gem 'DhanHQ', '3.0.0'
 
 # TOTP generation for Dhan TOTP auth strategy
 gem 'rotp', '~> 6.3'
