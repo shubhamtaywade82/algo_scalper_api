@@ -35,7 +35,7 @@ function saveRunningPeak(n) {
 export default function Dashboard() {
   const {
     balance, stats, open, circuitBreaker, positionsConnected, positionsStale,
-    closeOpenPosition, closingPositionId
+    closeOpenPosition, closingPositionId, marketStatus
   } = useDashboardContext()
 
   const [runningPeakPnl, setRunningPeakPnl] = createSignal(loadRunningPeak())
@@ -68,7 +68,7 @@ export default function Dashboard() {
 
   return (
     <div class="space-y-8">
-      <StatsBar balance={balance()} stats={liveStats()} />
+      <StatsBar balance={balance()} stats={liveStats()} marketStatus={marketStatus()} />
       <div class="grid grid-cols-1 gap-8">
         <OpenPositions
           positions={open()}

@@ -44,6 +44,14 @@ RSpec.describe TradingSession::Service do
       end
     end
 
+    context 'when calendar day is not a trading day (weekend)' do
+      it 'returns true even inside clock window' do
+        travel_to Time.zone.parse('2025-01-18 12:00:00 +05:30') do # Saturday
+          expect(described_class.market_closed?).to be true
+        end
+      end
+    end
+
     context 'when market is open (9:20 AM–3:30 PM IST)' do
       it 'returns false at 9:20 AM IST' do
         travel_to Time.zone.parse('2025-01-15 09:20:00 +05:30') do
@@ -100,6 +108,16 @@ RSpec.describe TradingSession::Service do
   end
 
   describe '.entry_allowed?' do
+    context 'when weekend' do
+      it 'returns false for non-trading day' do
+        travel_to Time.zone.parse('2025-01-18 12:00:00 +05:30') do # Saturday
+          result = described_class.entry_allowed?
+          expect(result[:allowed]).to be false
+          expect(result[:reason]).to include('Not a trading day')
+        end
+      end
+    end
+
     context 'when before entry start time (9:20 AM)' do
       it 'returns false with appropriate reason' do
         travel_to Time.zone.parse('2025-01-15 09:19:00 +05:30') do

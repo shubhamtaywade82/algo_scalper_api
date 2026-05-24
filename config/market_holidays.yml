@@ -1,0 +1,12 @@
+# Optional extra closure dates (YYYY-MM-DD) merged with the `market_holidays` database table.
+#
+# Primary source: rows in `market_holidays` (exchange nse|bse), seeded via db/seeds/market_holidays.rb
+# and updated from official circulars:
+#   https://www.nseindia.com/resources/exchange-communication-holidays
+#   https://www.bseindia.com/static/markets/marketinfo/listholi.aspx
+#
+# Use this file for ad-hoc closures (e.g. unscheduled exchange halt) without a migration.
+# After edits: deploy and `Market::Calendar.clear_holiday_cache!` (or process restart).
+#
+nse:
+  holidays: []

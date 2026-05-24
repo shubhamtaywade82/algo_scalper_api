@@ -50,9 +50,20 @@ expiry_week_power_trend:
   entry_end: "13:45"       # End of optimal entry window (before gamma session)
 
 loss_streak_guard:
-  enabled: false
+  enabled: true
   consecutive_losses_threshold: 2
   cooldown_minutes: 30
+
+strike_cooldown_guard:
+  enabled: true
+  cooldown_minutes: 20
+
+capital_allocator:
+  post_peak_size_cut:
+    enabled: true
+    min_peak: 2000        # only activate after intraday peak ≥ ₹2k
+    giveback_ratio: 0.50  # if net < peak × 0.50, cut size
+    size_factor: 0.5      # halve allocator output
 
 sizing:
   post_1100_multiplier: 0.5
@@ -74,11 +85,11 @@ feature_flags:
 calibration:
   auto_apply:
     # Master switch. When false, runs only create CalibrationRun rows for manual review.
-    enabled: false
+    enabled: true
     # After WeeklyCalibrationJob (DhanHQ expired ATM±1 stats).
     historical_weekly: true
     # After AiCalibrationJob (paper-trade dataset + Ollama). Keep false until validated.
-    ai_trades: false
+    ai_trades: true
     # Skip auto-apply when RegimeDetector flags a shift (volatile vs prior runs).
     reject_on_regime_shift: true
     # Only auto-apply while paper_trading.enabled (recommended before going live).
@@ -669,6 +680,9 @@ position_sizing:
     enabled: true # Global trailing toggle (used by dashboard)
     activation_pct: 0.10 # 10% - Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
     drawdown_pct: 0.03 # 3% - Exit if price drops this % from peak (used by trailing rules)
+    spot_anchored:
+      min_adx_to_hold: 15.0  # ADX floor; below this we consider the trend weak (TrailingStopRule)
+      hard_floor_pct: 0.50   # 50% - hard loss floor even when spot trend is alive
 
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
   secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
@@ -741,6 +755,10 @@ position_sizing:
 # Set enabled: false to disable the entire engine without removing config.
 profit_lock:
   enabled: true
+  early_giveback:
+    enabled: true
+    min_peak: 2000       # only arm once intraday peak ≥ ₹2k
+    keep_ratio: 0.40     # if net ≤ peak × 0.40, flatten + halt (gives back ≤60% of peak)
   levels:
     - trigger: 20000   # ₹20k — Level 1
       lock_ratio: 0.60 # floor = peak_pnl × 60%  (e.g. ₹20k peak → ₹12k floor)
@@ -825,6 +843,12 @@ signals:
   # When enabled, requires SMC decision (call/put) to align with signal direction
   # Set to false to disable SMC decision alignment check (but keep permission checks)
   enable_smc_decision_alignment: true # Set to false to disable SMC decision alignment (default: true)
+
+  # SMC zone filter: block CE entries in premium zone / PE entries in discount zone.
+  # ADX override: if ADX >= zone_filter_adx_override, momentum is strong enough to ignore zone.
+  smc:
+    discount_premium_zone_filter: true
+    zone_filter_adx_override: 30    # ADX threshold to bypass zone restriction
 
   # SMC EventStore: persist every scan decision to smc_events for audit/replay
   smc_event_store_publish: true
@@ -980,6 +1004,9 @@ signals:
       require_trend_confirmation: true
       require_iv_rank_check: true
       require_theta_risk_check: true
+      require_rsi_check: true
+      rsi_overbought_block: 72
+      rsi_oversold_block: 28
     balanced:
       adx_min_strength: 18
       adx_confirmation_min_strength: 20
@@ -990,6 +1017,9 @@ signals:
       require_trend_confirmation: true
       require_iv_rank_check: true
       require_theta_risk_check: true
+      require_rsi_check: true
+      rsi_overbought_block: 78
+      rsi_oversold_block: 22
     aggressive:
       adx_min_strength: 15
       adx_confirmation_min_strength: 18
@@ -1000,6 +1030,7 @@ signals:
       require_trend_confirmation: false
       require_iv_rank_check: true
       require_theta_risk_check: false
+      require_rsi_check: false
 
   validation_mode: balanced
 

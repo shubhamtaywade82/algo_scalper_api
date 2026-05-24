@@ -20,7 +20,7 @@ This document provides a high-level overview of the Algorithmic Scalper API arch
 ├──────────────┬──────────────┬──────────────┬─────────────────────┤
 │ web          │ trading      │ jobs         │ dashboard           │
 │ Rails API    │ Daemon       │ Solid Queue  │ Next.js             │
-│ port 3001    │ 11 services  │ recurring    │ frontend            │
+│ port 3011    │ 11 services  │ recurring    │ frontend            │
 │              │ in threads   │ tasks        │                     │
 └──────┬───────┴──────┬───────┴──────┬───────┴─────────────────────┘
        │              │              │

@@ -33,6 +33,7 @@ module Entries
         Guards::MiddayQualityGuard,          # ADX >= 28 bypass covers all power-trend cases
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
+        Guards::StrikeCooldownGuard,
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
         Guards::InstrumentLookupGuard,       # sets context[:instrument] — required by EPT guard

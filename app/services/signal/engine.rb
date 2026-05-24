@@ -137,7 +137,8 @@ module Signal
           confidence_score: calculate_confidence_score(
             primary_analysis: primary_analysis,
             confirmation_analysis: confirmation_analysis,
-            validation_result: validation_result
+            validation_result: validation_result,
+            index_cfg: index_cfg
           ),
           metadata: diagnostic_metadata
         )
@@ -717,15 +718,19 @@ module Signal
 
       # Comprehensive validation checks before proceeding with trades
       # When supertrend_only: true, ADX and trend_confirmation are skipped (Supertrend-only entry).
-      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false, validation_mode: nil)
+      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false, validation_mode: nil, real_iv: nil)
         mode_config = get_validation_mode_config(override_mode: validation_mode)
         # Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction} (mode: #{mode_config[:mode]})")
 
         validation_checks = []
 
-        # 1. IV Rank Check - Avoid extreme volatility (if enabled)
+        # 1. IV Rank Check - Prefer real IV when available, fall back to proxy
         if mode_config[:require_iv_rank_check]
-          iv_rank_result = validate_iv_rank(index_cfg, series, mode_config)
+          iv_rank_result = if real_iv && real_iv.to_f > 0
+                             validate_iv_rank_real(real_iv.to_f, mode_config)
+                           else
+                             validate_iv_rank(index_cfg, series, mode_config)
+                           end
           validation_checks << iv_rank_result
         end
 
@@ -757,6 +762,12 @@ module Signal
         # 5. Market Timing Check - Avoid problematic times (always required)
         timing_result = validate_market_timing
         validation_checks << timing_result
+
+        # 6. RSI Anti-Chase Gate - Block CE on overbought, PE on oversold
+        if mode_config[:require_rsi_check]
+          rsi_check = validate_rsi_gate(direction, series, mode_config)
+          validation_checks << rsi_check unless rsi_check[:valid]
+        end
 
         # Log all validation results
         # Rails.logger.info("[Signal] Validation Results (#{mode_config[:mode]} mode):")
@@ -960,7 +971,152 @@ module Signal
         end
       end
 
-      def calculate_confidence_score(primary_analysis:, confirmation_analysis:, validation_result:)
+      # RSI anti-chase gate — blocks CE entries when overbought, PE entries when oversold.
+      # Does NOT interfere with the normal trending RSI zone (45–75 CE, 25–55 PE).
+      def validate_rsi_gate(direction, series, mode_config)
+        return { valid: true } unless mode_config[:require_rsi_check]
+
+        rsi_result = Indicators::RsiIndicator.new(series: series).calculate_at(-1)
+        rsi_val    = rsi_result[:value].to_f
+
+        if direction == :bullish && rsi_val > mode_config.fetch(:rsi_overbought_block, 78).to_f
+          return { valid: false, reason: "RSI overbought (#{rsi_val.round(1)}) — avoid chasing CE entry", check: :rsi_overbought }
+        end
+
+        if direction == :bearish && rsi_val < mode_config.fetch(:rsi_oversold_block, 22).to_f
+          return { valid: false, reason: "RSI oversold (#{rsi_val.round(1)}) — avoid chasing PE entry", check: :rsi_oversold }
+        end
+
+        { valid: true, rsi_value: rsi_val }
+      rescue StandardError => e
+        Rails.logger.warn("[Signal::Engine] RSI gate error — allowing through: #{e.message}")
+        { valid: true }
+      end
+
+      # EMA direction tie-break: if Supertrend and EMA 9/21 disagree,
+      # require ADX >= 25 to proceed (strong momentum overrides cross-current).
+      def check_ema_direction_alignment(direction, series, adx_value)
+        ema_result    = Indicators::EmaDirectionIndicator.new(series: series).calculate
+        ema_direction = ema_result[:direction]
+
+        if ema_direction == :neutral || ema_direction == direction
+          return { aligned: true, adx_override_needed: false, ema_direction: ema_direction }
+        end
+
+        adx_override_threshold = 25.0
+        if adx_value.to_f >= adx_override_threshold
+          return { aligned: true, adx_override_needed: false, ema_direction: ema_direction,
+                   note: 'EMA disagreement overridden by ADX strength' }
+        end
+
+        { aligned: false, adx_override_needed: true, ema_direction: ema_direction,
+          required_adx: adx_override_threshold, actual_adx: adx_value }
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] EMA alignment check error: #{e.message}")
+        { aligned: true, adx_override_needed: false }
+      end
+
+      # SMC Discount/Premium zone filter:
+      # CE (bullish): ideal in discount; blocked in premium unless ADX >= zone_filter_adx_override.
+      # PE (bearish): ideal in premium; blocked in discount unless ADX >= zone_filter_adx_override.
+      def smc_zone_allows_entry?(direction, index_cfg, adx_value)
+        zone = get_smc_zone(index_cfg)
+        return true if zone == :equilibrium
+
+        zone_override_adx = AlgoConfig.fetch.dig(:signals, :smc, :zone_filter_adx_override).to_f rescue 30.0
+
+        if direction == :bullish && zone == :premium
+          return adx_value.to_f >= zone_override_adx
+        end
+
+        if direction == :bearish && zone == :discount
+          return adx_value.to_f >= zone_override_adx
+        end
+
+        true
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] SMC zone filter error: #{e.message}")
+        true
+      end
+
+      # Resolves current SMC zone from Smc::Detectors::PremiumDiscount.
+      def get_smc_zone(index_cfg)
+        instrument = Instrument.find_by(tradingsymbol: index_cfg[:key])
+        return :equilibrium unless instrument
+
+        series = instrument.candle_series(interval: '5') rescue nil
+        return :equilibrium unless series
+
+        pd = Smc::Detectors::PremiumDiscount.new(series)
+        return :premium   if pd.premium?
+        return :discount  if pd.discount?
+        :equilibrium
+      rescue StandardError
+        :equilibrium
+      end
+
+      # Validates real implied volatility from option chain data.
+      # iv: Float (e.g. 0.45 = 45%) — from analysis_context[:option_data][:implied_volatility]
+      # Fails open when iv is zero (data unavailable).
+      def validate_iv_rank_real(iv, mode_config)
+        iv_f = iv.to_f
+        return { valid: true } if iv_f.zero?  # No IV data — fail open
+
+        iv_max = mode_config.fetch(:iv_rank_max, 0.75).to_f
+        iv_min = mode_config.fetch(:iv_rank_min, 0.10).to_f
+
+        if iv_f > iv_max
+          return { valid: false,
+                   reason: "IV too high (#{(iv_f * 100).round(1)}%) — IV crush risk, avoid entry",
+                   check: :iv_too_high }
+        end
+
+        if iv_f < iv_min
+          return { valid: false,
+                   reason: "IV too low (#{(iv_f * 100).round(1)}%) — insufficient premium",
+                   check: :iv_too_low }
+        end
+
+        { valid: true, iv: iv_f }
+      end
+
+      # Returns +0.10 when MACD histogram direction aligns with entry direction.
+      def macd_confidence_factor(direction, series)
+        result    = Indicators::MacdIndicator.new(series: series).calculate_at(-1)
+        histogram = result.dig(:value, :histogram).to_f
+        return 0.10 if direction == :bullish && histogram > 0
+        return 0.10 if direction == :bearish && histogram < 0
+        0.0
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] MACD factor error: #{e.message}")
+        0.0
+      end
+
+      # Returns +0.20 when SMC BiasEngine aligns, +0.05 when neutral, 0.0 when misaligned.
+      def smc_bias_confidence_factor(direction, index_cfg)
+        smc_direction = get_smc_bias_direction(index_cfg)
+        return 0.20 if smc_direction == direction
+        return 0.05 if smc_direction == :neutral
+        0.0
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] SMC bias factor error: #{e.message}")
+        0.0
+      end
+
+      # Resolves SMC bias direction for index_cfg → :bullish | :bearish | :neutral
+      def get_smc_bias_direction(index_cfg)
+        instrument = Instrument.find_by(tradingsymbol: index_cfg[:key]) rescue nil
+        return :neutral unless instrument
+
+        decision = Smc::BiasEngine.new(instrument).decision rescue nil
+        case decision
+        when :call then :bullish
+        when :put  then :bearish
+        else            :neutral
+        end
+      end
+
+      def calculate_confidence_score(primary_analysis:, confirmation_analysis:, validation_result:, index_cfg: nil)
         base_confidence = 0.5
 
         # ADX strength factor (0-0.3)
@@ -993,7 +1149,13 @@ module Signal
           supertrend_factor = [st_value / 1000.0, 0.1].min # Cap at 0.1
         end
 
-        total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor
+        direction = primary_analysis[:direction]
+        series    = primary_analysis[:series]
+
+        macd_factor     = series && direction ? macd_confidence_factor(direction, series)          : 0.0
+        smc_factor      = index_cfg && direction ? smc_bias_confidence_factor(direction, index_cfg) : 0.0
+
+        total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor + macd_factor + smc_factor
         [total_confidence, 1.0].min # Cap at 1.0
       end
 

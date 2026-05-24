@@ -5,12 +5,12 @@ module TradingSession
   # Entry allowed: 9:20 AM to 3:15 PM IST
   # Exits must happen before 3:15 PM IST
   class Service
-    ENTRY_START_HOUR = 9
-    ENTRY_START_MINUTE = 20
+    ENTRY_START_HOUR = 8
+    ENTRY_START_MINUTE = 45
     EXIT_DEADLINE_HOUR = 15
-    EXIT_DEADLINE_MINUTE = 15
-    MARKET_CLOSE_HOUR = 15
-    MARKET_CLOSE_MINUTE = 30
+    EXIT_DEADLINE_MINUTE = 45
+    MARKET_CLOSE_HOUR = 16
+    MARKET_CLOSE_MINUTE = 0
 
     IST_TIMEZONE = 'Asia/Kolkata'
 
@@ -19,6 +19,13 @@ module TradingSession
       # @return [Hash] { allowed: Boolean, reason: String }
       def entry_allowed?
         current_ist = current_ist_time
+        unless Market::Calendar.trading_day?(current_ist.to_date)
+          return {
+            allowed: false,
+            reason: 'Not a trading day (weekend/holiday)'
+          }
+        end
+
         hour = current_ist.hour
         minute = current_ist.min
 
@@ -102,6 +109,8 @@ module TradingSession
         return false if ENV['FORCE_MARKET_OPEN'].to_s == 'true'
 
         current_ist = current_ist_time
+        return true unless Market::Calendar.trading_day?(current_ist.to_date)
+
         hour = current_ist.hour
         minute = current_ist.min
 

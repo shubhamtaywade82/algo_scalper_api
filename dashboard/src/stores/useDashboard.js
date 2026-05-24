@@ -31,6 +31,7 @@ export function useDashboard(onPositionChange) {
   const [recentSignals, setRecentSignals] = createSignal([])
   const [config, setConfig] = createSignal({ risk: {}, signals: {}, time_restrictions: {} })
   const [subscribedIndices, setSubscribedIndices] = createSignal([])
+  const [marketStatus, setMarketStatus] = createSignal(null)
 
   let subscription = null
   let pollTimer = null
@@ -116,6 +117,7 @@ export function useDashboard(onPositionChange) {
     if (data.recent_signals) setRecentSignals(data.recent_signals)
     if (data.config) setConfig(data.config)
     if (data.subscribed_indices) setSubscribedIndices(data.subscribed_indices)
+    if (data.market_status) setMarketStatus(data.market_status)
 
     setLastUpdated(data.timestamp || new Date().toISOString())
   }
@@ -168,6 +170,7 @@ export function useDashboard(onPositionChange) {
 
   return {
     mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
-    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config
+    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config,
+    marketStatus
   }
 }

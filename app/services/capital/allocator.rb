@@ -90,11 +90,42 @@ module Capital
       def effective_multiplier(scale_multiplier)
         base_multiplier = normalize_multiplier(scale_multiplier)
         midday_multiplier = post_1100_multiplier
-        return base_multiplier if midday_multiplier >= 1.0
-        return base_multiplier unless post_1100?
+        adjusted = base_multiplier
+        adjusted = (adjusted * midday_multiplier).floor if midday_multiplier < 1.0 && post_1100?
 
-        adjusted = (base_multiplier * midday_multiplier).floor
+        peak_cut = post_peak_size_cut
+        adjusted = (adjusted * peak_cut).floor if peak_cut < 1.0
+
         [adjusted, 1].max
+      end
+
+      # Cuts size when intraday net PnL gives back a meaningful fraction of the
+      # day's peak. Reduces overtrading after the equity curve has rolled over.
+      def post_peak_size_cut
+        cfg = AlgoConfig.fetch.dig(:capital_allocator, :post_peak_size_cut) || {}
+        return 1.0 if cfg[:enabled] == false
+
+        min_peak    = cfg[:min_peak].to_f
+        min_peak    = 2_000.0 unless min_peak.positive?
+        warn_ratio  = cfg[:giveback_ratio].to_f
+        warn_ratio  = 0.50 unless warn_ratio.positive?
+        size_factor = cfg[:size_factor].to_f
+        size_factor = 0.5 unless size_factor.positive? && size_factor <= 1.0
+
+        peak = Portfolio::PnlTracker.peak_pnl
+        return 1.0 if peak < min_peak
+
+        net = Portfolio::PnlTracker.net_pnl
+        return 1.0 if net >= peak * warn_ratio
+
+        Rails.logger.info(
+          "[Allocator] post_peak_size_cut active: peak=₹#{peak.round(2)} " \
+          "net=₹#{net.round(2)} → size×#{size_factor}"
+        )
+        size_factor
+      rescue StandardError => e
+        Rails.logger.warn("[Allocator] post_peak_size_cut error: #{e.message}")
+        1.0
       end
 
       def post_1100_multiplier

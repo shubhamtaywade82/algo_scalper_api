@@ -764,14 +764,17 @@ RSpec.describe Live::UnifiedExitChecker do
         },
         exit: { early_exit: { enabled: false } }
       })
-      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: 0.05, ltp: 150.0 })
+      # Losing enough to pass PMF loss floor (-5%); rule still delegates stall logic to UEC (stubbed).
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return({ pnl_pct: -0.06, ltp: 150.0 })
+      # No instrument: skip spot gate (this example only asserts UEC delegation is wired).
+      allow(tracker).to receive(:instrument).and_return(nil)
     end
 
     it 'triggers when PremiumMomentumFailureRule evaluates to exit' do
       # Avoid mocking the rule directly as it complicates RuleResult return types.
       # Instead, mock the underlying legacy method that the rule delegates to.
-      allow(Live::UnifiedExitChecker).to receive(:premium_momentum_failure_hit?).and_return(true)
-      
+      allow(described_class).to receive(:premium_momentum_failure_hit?).and_return(true)
+
       result = described_class.check_exit_conditions(tracker)
       expect(result[:reason]).to eq('PREMIUM_MOMENTUM_FAILURE')
     end
