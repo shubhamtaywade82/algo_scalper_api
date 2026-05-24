@@ -109,6 +109,31 @@ paths:
                   circuit_breaker:
                     type: object
                     additionalProperties: true
+  "/api/dhan_access_token":
+    get:
+      summary: Dhan Access Token
+      tags:
+      - Authentication
+      description: Requires Bearer or X-Api-Key when API_DASHBOARD_TOKEN is set. Returns
+        the active Dhan access token.
+      responses:
+        '200':
+          description: access token JSON
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dhanaccesstoken:
+                    type: string
+                  dhan_access_token:
+                    type: string
+                  expiry_time:
+                    type: string
+                    format: date-time
+                required:
+                - dhanaccesstoken
+                - dhan_access_token
   "/api/positions":
     get:
       summary: Positions index

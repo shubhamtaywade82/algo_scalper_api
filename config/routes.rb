@@ -29,6 +29,7 @@ Rails.application.routes.draw do
     get :positions, to: "positions#index"
     post "positions/:id/close", to: "positions#close"
     get :signals,   to: "signals#index"
+    get :dhan_access_token, to: "dhan_access_token#show"
 
     get 'smc/decision', to: 'smc#decision'
 
