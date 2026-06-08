@@ -163,8 +163,11 @@ module Live
 
         enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
       ensure
-        # Perform a single consolidated update at the end of the cycle if meta changed
-        if pending_meta && pending_meta != tracker.meta
+        # Perform a single consolidated update at the end of the cycle if meta changed.
+        # Skip when the tracker exited mid-cycle — ExitFlow already wrote the authoritative
+        # meta (incl. exit_reason/exit_path) under lock; a blind update_columns here would
+        # clobber it with this cycle's stale pre-exit snapshot.
+        if pending_meta && pending_meta != tracker.meta && !exit_requested_or_sent?(tracker) && !tracker.exited?
           tracker.update_columns(meta: pending_meta) # rubocop:disable Rails/SkipsModelValidations
         end
       end
