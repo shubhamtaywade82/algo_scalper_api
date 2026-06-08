@@ -31,7 +31,7 @@ class GammaScalpAlpha < AlphaStrategy
       stop_loss: direction == :ce ? ltp - sl_points : ltp + sl_points,
       target: direction == :ce ? ltp + target_points : ltp - target_points,
       trailing_jump: (sl_points * 0.3).round,
-      confidence: 0.65,
+      confidence: 0.78,
       alpha_source: :gamma_scalp,
       iv_context: { realized_vol: rv, implied_vol: iv, ratio: (rv / iv).round(2) }
     )

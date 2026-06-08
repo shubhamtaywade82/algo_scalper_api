@@ -31,7 +31,7 @@ class ExpiryAlpha < AlphaStrategy
       stop_loss: direction == :ce ? ltp - sl_points : ltp + sl_points,
       target: direction == :ce ? ltp + target_points : ltp - target_points,
       trailing_jump: 3,
-      confidence: 0.52,
+      confidence: 0.78,
       alpha_source: :expiry,
       iv_context: { minutes_to_expiry: minutes_to_expiry, gamma: "high" }
     )
