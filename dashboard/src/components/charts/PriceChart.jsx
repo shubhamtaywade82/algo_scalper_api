@@ -78,6 +78,7 @@ export default function PriceChart(props) {
   // Animation state for the live (last) candle + LTP line
   let rafId = null
   let renderedClose = null   // currently-painted close (lerps toward target)
+  let lastVolPaint = null    // dedupe guard for volume bar repaints — {time,value,color}
   let targetBar = null       // latest known OHLC for the live bar
   let staticBars = []        // all-but-last bars, painted once via setData
   let didInitialFit = false  // only auto-zoom on the very first data load
@@ -107,11 +108,17 @@ export default function PriceChart(props) {
     }
 
     candleSeries.update(liveBar)
-    volumeSeries.update({
-      time: targetBar.time,
-      value: targetBar.volume || 0,
-      color: liveBar.close >= liveBar.open ? 'rgba(52,211,153,0.35)' : 'rgba(251,113,133,0.35)'
-    })
+
+    // Color by the TARGET's direction, not the lerping `liveBar.close` — the
+    // animated value crosses `open` mid-lerp, which flipped the color every
+    // frame it did. Direction is a property of the settled bar, not the
+    // in-flight animation; it shouldn't change until a new bar starts.
+    const volColor = targetBar.close >= targetBar.open ? 'rgba(52,211,153,0.35)' : 'rgba(251,113,133,0.35)'
+    const volValue = targetBar.volume || 0
+    if (lastVolPaint === null || lastVolPaint.value !== volValue || lastVolPaint.color !== volColor || lastVolPaint.time !== targetBar.time) {
+      volumeSeries.update({ time: targetBar.time, value: volValue, color: volColor })
+      lastVolPaint = { time: targetBar.time, value: volValue, color: volColor }
+    }
 
     if (priceLine) priceLine.applyOptions({ price: renderedClose })
     // Live bar updates can shift the autoscaled price range — keep capsules glued
@@ -131,6 +138,28 @@ export default function PriceChart(props) {
     if (rafId === null) rafId = requestAnimationFrame(animate)
   }
 
+  // `pos.entry_price` is the OPTION PREMIUM (e.g. ₹71 for a NIFTY PE) — wildly
+  // off-scale from the underlying index price (~23,000) shown on this chart.
+  // Anchoring a line/capsule there would sit far outside the visible range
+  // (priceToCoordinate returns null, nothing renders). Instead anchor to the
+  // underlying's own price at the moment of entry — the close of the candle
+  // nearest `entryTime` — which is a meaningful "where the index was when I
+  // bought this" reference level on the chart it's actually drawn on.
+  function underlyingPriceNear(time) {
+    if (!lastCandles.length || time == null) return null
+    let lo = 0
+    let hi = lastCandles.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (lastCandles[mid].time < time) lo = mid + 1
+      else hi = mid
+    }
+    const candidate = lastCandles[lo]
+    const prev = lastCandles[lo - 1]
+    if (prev && Math.abs(prev.time - time) <= Math.abs(candidate.time - time)) return prev.close
+    return candidate.close
+  }
+
   // Derives the display bundle for a position: option type (anchors marker side
   // since this bot only buys options — long CE reads bullish so plots below the
   // bar, long PE reads bearish so plots above), PnL color/label, etc.
@@ -140,7 +169,11 @@ export default function PriceChart(props) {
     const pnl = pos.pnl ?? 0
     const pnlColor = pnl >= 0 ? '#34d399' : '#fb7185'
     const pnlLabel = `${pnl >= 0 ? '+' : ''}₹${Number(pnl).toFixed(0)}${pos.pnl_pct != null ? ` (${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct}%)` : ''}`
-    return { optionType, isCall, pnl, pnlColor, pnlLabel }
+    // Full symbols ("NIFTY-Jun2026-23100-PE") made the capsule wide enough that
+    // the price/PnL spans clipped past the chart edge — show just strike+type.
+    const strikeMatch = (pos.symbol || '').match(/(\d+)-(CE|PE)$/i)
+    const shortSymbol = strikeMatch ? `${strikeMatch[1]} ${strikeMatch[2].toUpperCase()}` : (pos.symbol || 'POS')
+    return { optionType, isCall, pnl, pnlColor, pnlLabel, shortSymbol }
   }
 
   // Plots active positions on their underlying's chart: a thin dotted entry-price
@@ -155,31 +188,39 @@ export default function PriceChart(props) {
     for (const pos of positions) {
       seenIds.add(pos.id)
       const { optionType, isCall, pnlColor, pnlLabel } = describePosition(pos)
-
-      let line = positionLines.get(pos.id)
-      const lineOpts = {
-        price: pos.entry_price,
-        color: pnlColor,
-        lineWidth: 1,
-        lineStyle: 3, // dotted — visually distinct from the solid LTP dashed line
-        axisLabelVisible: true,
-        title: `${optionType} entry`
-      }
-      if (!line) {
-        line = candleSeries.createPriceLine(lineOpts)
-        positionLines.set(pos.id, line)
-      } else {
-        line.applyOptions(lineOpts)
-      }
-
       const entryTime = pos.created_at ? Math.floor(new Date(pos.created_at).getTime() / 1000) : null
+      const anchorPrice = underlyingPriceNear(entryTime)
+
+      // Skip the line/capsule entirely when we can't place it meaningfully on
+      // THIS chart (no candle data yet to derive the underlying's entry-time
+      // price) — still place the time-anchored marker below, since that only
+      // needs the entry timestamp, not a price-scale anchor.
+      if (anchorPrice != null) {
+        let line = positionLines.get(pos.id)
+        const lineOpts = {
+          price: anchorPrice,
+          color: pnlColor,
+          lineWidth: 1,
+          lineStyle: 3, // dotted — visually distinct from the solid LTP dashed line
+          axisLabelVisible: true,
+          title: `${optionType} ${pos.symbol || ''}`
+        }
+        if (!line) {
+          line = candleSeries.createPriceLine(lineOpts)
+          positionLines.set(pos.id, line)
+        } else {
+          line.applyOptions(lineOpts)
+        }
+      }
+
       if (entryTime) {
         markers.push({
           time: entryTime,
           position: isCall ? 'belowBar' : 'aboveBar',
           color: pnlColor,
-          shape: isCall ? 'arrowUp' : 'arrowDown',
-          text: `${optionType} ${pos.symbol || ''} ${pos.entry_price} · ${pnlLabel}`.trim()
+          shape: isCall ? 'arrowUp' : 'arrowDown'
+          // No text — capsule already carries full detail (symbol, entry, PnL);
+          // the candle marker is just a clean visual entry-point pin.
         })
       }
     }
@@ -204,7 +245,10 @@ export default function PriceChart(props) {
     const positions = props.positions ? props.positions() : []
     const next = positions
       .map(pos => {
-        const raw = candleSeries.priceToCoordinate(pos.entry_price)
+        const entryTime = pos.created_at ? Math.floor(new Date(pos.created_at).getTime() / 1000) : null
+        const anchorPrice = underlyingPriceNear(entryTime)
+        if (anchorPrice == null) return null
+        const raw = candleSeries.priceToCoordinate(anchorPrice)
         if (raw == null) return null
         // Round to whole pixels — autoscale wobbles by sub-pixel fractions every
         // frame as the live bar updates; feeding that straight into a signal
@@ -352,6 +396,7 @@ export default function PriceChart(props) {
       staticBars = []
       targetBar = null
       renderedClose = null
+      lastVolPaint = null
       didInitialFit = false
       for (const line of positionLines.values()) candleSeries.removePriceLine(line)
       positionLines.clear()
@@ -376,6 +421,7 @@ export default function PriceChart(props) {
     const isNewBar = !targetBar || targetBar.time !== lastBar.time
     targetBar = { ...lastBar }
     renderedClose = isNewBar ? lastBar.open : renderedClose
+    if (isNewBar) lastVolPaint = null
 
     kickAnimation()
 
@@ -426,25 +472,24 @@ export default function PriceChart(props) {
       {/* Floating capsules — anchored to each position's entry-price Y coordinate.
           pointer-events-none on the layer so chart pan/zoom/crosshair pass through;
           re-enabled per-card so they're still hoverable. */}
-      <div class="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+      <div class="absolute inset-0 pointer-events-none">
         <For each={capsules()}>
           {cap => (
             <div
-              class="absolute left-2 -translate-y-1/2 pointer-events-auto flex items-center gap-2 px-2.5 py-1 rounded-full border backdrop-blur-md text-[10px] font-bold whitespace-nowrap shadow-lg transition-[top] duration-150"
+              class="absolute left-2 -translate-y-1/2 pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full border backdrop-blur-md text-[10px] font-bold whitespace-nowrap shadow-lg transition-[top] duration-150 z-10"
               style={{
                 top: `${cap.top}px`,
                 'border-color': `${cap.pnlColor}55`,
-                background: `${cap.pnlColor}1a`,
-                color: cap.pnlColor
+                background: 'rgba(17,24,39,0.85)'
               }}
               title={`${cap.optionType} ${cap.pos.symbol || ''} — entry ₹${cap.pos.entry_price}`}
             >
-              <span class="px-1.5 py-0.5 rounded-full text-[9px] uppercase tracking-wider" style={{ background: `${cap.pnlColor}33` }}>
+              <span class="px-1.5 py-0.5 rounded-full text-[9px] uppercase tracking-wider text-gray-950" style={{ background: cap.pnlColor }}>
                 {cap.optionType}
               </span>
-              <span class="text-gray-200">{cap.pos.symbol}</span>
-              <span class="text-gray-400">@ ₹{cap.pos.entry_price}</span>
-              <span>{cap.pnlLabel}</span>
+              <span class="text-gray-200">{cap.shortSymbol}</span>
+              <span class="text-gray-500">@ ₹{cap.pos.entry_price}</span>
+              <span style={{ color: cap.pnlColor }}>{cap.pnlLabel}</span>
             </div>
           )}
         </For>
