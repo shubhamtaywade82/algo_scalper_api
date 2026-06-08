@@ -251,6 +251,11 @@ module Signal
           )
         end
 
+        if direction_gate_blocked?(index_cfg, signals_cfg, final_direction, regime_sym)
+          Signal::StateTracker.reset(index_cfg[:key])
+          return
+        end
+
         validation_result = comprehensive_validation(
           index_cfg, final_direction, primary_series,
           primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },

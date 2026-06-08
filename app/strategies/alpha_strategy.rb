@@ -47,22 +47,33 @@ class AlphaStrategy
     instrument&.expiry_list&.first
   end
 
+  # Shares the cache CandlesController populates — Signal::Engine, the dashboard,
+  # and this scanner were each hitting DhanHQ's intraday endpoint independently
+  # every cycle, tripping DH-904 rate limits and silently returning [] on every
+  # scan (AlphaSignal/positions count stayed at zero despite the job "finishing").
   def fetch_historical_bars(interval:, count: 20)
     return [] unless instrument
 
-    begin
+    days = [count, 1].max
+    cache_key = "candles/#{@config[:security_id]}/#{interval}/#{days}d/#{Time.zone.today}"
+    Rails.cache.fetch(cache_key, expires_in: bars_cache_ttl(interval)) do
       DhanHQ::Models::HistoricalData.intraday(
         security_id: @config[:security_id],
         exchange_segment: @config[:exchange_segment],
         instrument: DhanHQ::Constants::InstrumentType::INDEX,
         interval: interval.to_s,
-        from_date: (Time.zone.today - count.days).to_s,
+        from_date: (Time.zone.today - days.days).to_s,
         to_date: Time.zone.today.to_s
       )
-    rescue StandardError => e
-      Rails.logger.error "[AlphaStrategy] Historical data fetch failed for #{@index_key}: #{e.message}"
-      []
     end
+  rescue StandardError => e
+    Rails.logger.error "[AlphaStrategy] Historical data fetch failed for #{@index_key}: #{e.message}"
+    []
+  end
+
+  def bars_cache_ttl(interval)
+    { '1' => 30.seconds, '5' => 1.minute, '15' => 3.minutes, '25' => 5.minutes, '60' => 10.minutes }
+      .fetch(interval.to_s, 1.minute)
   end
 
   def calculate_atr(bars, period: 14)
