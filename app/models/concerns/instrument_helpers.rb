@@ -172,11 +172,17 @@ module InstrumentHelpers
   # @param entry_price [Numeric]
   # @param symbol [String]
   # @param index_key [String, nil]
+  # @param meta [Hash] Additional metadata (alpha_source, signal_confidence, etc.)
   # @return [PositionTracker]
   def after_order_track!(instrument:, order_no:, segment:, security_id:, side:, qty:, entry_price:, symbol:, # rubocop:disable Metrics/ParameterLists
-                         index_key: nil)
+                         index_key: nil, meta: {})
     # Determine watchable: if self is a Derivative, use self; otherwise use instrument
     watchable = is_a?(Derivative) ? self : instrument
+
+    # Build base meta with index_key
+    base_meta = index_key ? { 'index_key' => index_key.to_s } : {}
+    # Merge incoming meta (stringify keys for JSONB consistency)
+    merged_meta = base_meta.merge(meta.stringify_keys)
 
     tracker = PositionTracker.build_or_average!(
       watchable: watchable,
@@ -189,11 +195,11 @@ module InstrumentHelpers
       status: 'active',
       quantity: qty.to_i,
       entry_price: BigDecimal(entry_price.to_s),
-      meta: index_key ? { 'index_key' => index_key } : {}
+      meta: merged_meta
     )
 
     ensure_ws_subscription!(segment: segment, security_id: security_id)
-    Live::RedisPnlCache.instance.clear_tick(segment: segment, security_id: security_id.to_s)
+    Live::TickCache.delete(segment, security_id.to_s)
 
     tracker
   end

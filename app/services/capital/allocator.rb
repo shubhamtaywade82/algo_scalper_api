@@ -27,6 +27,17 @@ module Capital
 
         @index_key = index_cfg[:key] || 'UNKNOWN'
 
+        # Check if Kelly-based position sizing is enabled
+        if kelly_based_sizing_enabled?(index_cfg)
+          return calculate_kelly_based_quantity(
+            index_cfg: index_cfg,
+            entry_price: entry_price,
+            derivative_lot_size: derivative_lot_size,
+            capital_available: capital_available,
+            multiplier: multiplier
+          )
+        end
+
         # Check if rupee-based position sizing is enabled
         if rupee_based_sizing_enabled?
           return calculate_rupee_based_quantity(
@@ -453,6 +464,61 @@ module Capital
       def rupee_based_sizing_enabled?
         sizing_cfg = position_sizing_config
         sizing_cfg && sizing_cfg[:enabled] == true
+      end
+
+      # Kelly-based position sizing: derive quantity from Kelly Criterion formula
+      # Formula: f* = p - (1-p)/r
+      def calculate_kelly_based_quantity(index_cfg:, entry_price:, derivative_lot_size:, capital_available:, multiplier:)
+        sizing_cfg = AlgoConfig.fetch[:kelly_sizing] || {}
+        return 0 unless sizing_cfg[:enabled]
+
+        entry_bd = BigDecimal(entry_price.to_s)
+        return 0 unless entry_bd.finite? && entry_bd.positive?
+
+        # p = confidence (0.0 to 1.0)
+        p = (index_cfg[:confidence] || 0.55).to_f
+        # r = Reward-to-Risk ratio
+        risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || (entry_bd * 0.98)).to_s)).abs
+        reward = (BigDecimal((index_cfg[:target] || (entry_bd * 1.04)).to_s) - entry_bd).abs
+        r = risk.positive? ? (reward / risk).to_f : 1.0
+
+        # Calculate Kelly fraction f*
+        kelly_f = p - ((1 - p) / r)
+        # Apply safety factor (Half-Kelly or Fractional Kelly)
+        safety_factor = sizing_cfg[:safety_factor] || 0.5
+        f_star = [kelly_f * safety_factor, 0.20].min # Cap at 20% of capital per trade
+
+        return 0 if f_star <= 0
+
+        # buy_value = capital_available * f_star
+        buy_value = capital_available * BigDecimal(f_star.to_s)
+        lot_cost = entry_bd * derivative_lot_size
+        max_lots = (buy_value / lot_cost).floor
+
+        # Apply multiplier
+        max_lots = (max_lots * multiplier).to_i
+        quantity = max_lots * derivative_lot_size
+
+        # Minimum 1 lot
+        quantity = [quantity, derivative_lot_size.to_i].max
+
+        # Affordability check
+        max_affordable_lots = (capital_available / lot_cost).floor
+        final_quantity = [quantity, max_affordable_lots * derivative_lot_size.to_i].min
+
+        Rails.logger.info(
+          "[Allocator] KELLY_BASED index:#{@index_key} p:#{p.round(2)} r:#{r.round(2)} " \
+          "f_star:#{f_star.round(3)} buy_value:₹#{format_money(buy_value)} " \
+          "qty:#{final_quantity}"
+        )
+
+        final_quantity
+      end
+
+      def kelly_based_sizing_enabled?(index_cfg)
+        return false unless index_cfg[:confidence] # Requires signal confidence
+        cfg = AlgoConfig.fetch[:kelly_sizing]
+        cfg && cfg[:enabled] == true
       end
 
       def position_sizing_config

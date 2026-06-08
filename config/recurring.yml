@@ -17,6 +17,13 @@ development:
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
 
+  iv_snapshot:
+    class: IvSnapshotJob
+    schedule: at 8:45am every day
+    queue_name: background
+    priority: 2
+    description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
+
   portfolio_reset:
     class: PortfolioResetJob
     schedule: at 9:15am every day
@@ -81,6 +88,13 @@ production:
     queue_name: background
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
+
+  iv_snapshot:
+    class: IvSnapshotJob
+    schedule: at 8:45am every weekday
+    queue_name: background
+    priority: 2
+    description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
 
   portfolio_reset:
     class: PortfolioResetJob

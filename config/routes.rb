@@ -46,7 +46,17 @@ Rails.application.routes.draw do
     post   'settings/update_ip',    to: 'settings#update_ip'
 
     # Calibration runs — view and apply automated config patches
-    resources :calibration_runs, only: %i[index show] do
+    # Alpha Engine
+    namespace :alpha do
+      get  :status
+      post :scan
+      post :execute
+      get  :history
+      get  :performance
+    end
+
+    resources :calibration_runs, only: [:index, :show] do
+
       member do
         post :apply
       end
