@@ -3,8 +3,6 @@
 module Entries
   module Guards
     class LossStreakGuard
-      LOSS_EXIT_PATTERNS = %w[STOP_LOSS PREMIUM_MOMENTUM_FAILURE].freeze
-
       class << self
         include BaseGuard
 
@@ -88,10 +86,7 @@ module Entries
         end
 
         def loss_exit?(position)
-          return false unless position.last_pnl_rupees.to_f.negative?
-
-          reason = position.exit_reason.to_s
-          LOSS_EXIT_PATTERNS.any? { |pattern| reason.start_with?(pattern) }
+          position.last_pnl_rupees.to_f.negative?
         end
 
         def local_cooldown_active?(index_key)

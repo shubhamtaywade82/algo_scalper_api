@@ -246,6 +246,10 @@ export default function Header(props) {
             <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
             Strategies
           </A>
+          <A href="/alpha" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
+            <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
+            Alpha
+          </A>
           <A href="/signals" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
             <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
             Signals
@@ -254,6 +258,11 @@ export default function Header(props) {
             <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
             Analysis
           </A>
+          {/* Plain anchor + target=_blank — fullscreen workspace opens in its own tab, not SPA-routed */}
+          <a href="/charts" target="_blank" rel="noopener noreferrer" class={`${navLinkBase} ${navLinkInactive}`}>
+            <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0"></div>
+            Charts ↗
+          </a>
           <A href="/settings" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkSettingsActive} inactiveClass="">
             <div class="w-1 h-1 rounded-full bg-cyan-400 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
             Settings

@@ -164,7 +164,9 @@ class Instrument < ApplicationRecord
       side: 'LONG',
       qty: quantity,
       entry_price: ltp,
-      symbol: symbol_name || display_name
+      symbol: symbol_name || display_name,
+      index_key: meta[:index_key],
+      meta: meta.slice(:alpha_source, :signal_confidence, :expected_value, :entry_strategy, :direction, :client_order_id)
     )
 
     order

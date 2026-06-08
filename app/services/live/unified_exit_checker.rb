@@ -196,7 +196,10 @@ module Live
         if current_ltp > peak
           meta['peak_premium'] = current_ltp
           meta['peak_premium_at'] = Time.current.iso8601
-          tracker.update_column(:meta, meta) if tracker.respond_to?(:update_column)
+          if tracker.respond_to?(:update_column) && tracker.exit_requested_at.blank? &&
+             tracker.exit_sent_at.blank? && !tracker.exited?
+            tracker.update_column(:meta, meta)
+          end
           return false
         end
 

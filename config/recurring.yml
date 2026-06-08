@@ -17,6 +17,13 @@ development:
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
 
+  iv_snapshot:
+    class: IvSnapshotJob
+    schedule: at 8:45am every day
+    queue_name: background
+    priority: 2
+    description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
+
   portfolio_reset:
     class: PortfolioResetJob
     schedule: at 9:15am every day
@@ -74,6 +81,13 @@ development:
     schedule: at 7:00am every day
     description: "Daily AI-driven trading calibration — analyzes paper trades and proposes config patches"
 
+  alpha_scanner:
+    class: AlphaScanJob
+    schedule: every 5 minutes
+    queue_name: background
+    priority: 10
+    description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
+
 production:
   instruments_import:
     class: InstrumentsImportJob
@@ -81,6 +95,13 @@ production:
     queue_name: background
     priority: 1
     description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
+
+  iv_snapshot:
+    class: IvSnapshotJob
+    schedule: at 8:45am every weekday
+    queue_name: background
+    priority: 2
+    description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
 
   portfolio_reset:
     class: PortfolioResetJob
@@ -143,3 +164,10 @@ production:
     queue_name: background
     priority: 25
     description: "Persists public IP last-seen (throttled); dashboard polling does not write public_ip_logs"
+
+  alpha_scanner:
+    class: AlphaScanJob
+    schedule: every 5 minutes during market hours
+    queue_name: background
+    priority: 10
+    description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"

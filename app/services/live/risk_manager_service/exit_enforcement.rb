@@ -6,6 +6,14 @@ module Live
       include Live::UnderlyingLtpResolver
       include Live::StructureInvalidationEvaluator
 
+      # True once an exit has been requested/sent or finalized for this tracker.
+      # Guards blind meta read-modify-write paths (update_column/update_columns) from
+      # clobbering the authoritative meta (incl. exit_reason) that Positions::ExitFlow
+      # writes atomically under lock when the position exits mid-cycle.
+      def exit_in_flight?(tracker)
+        tracker.exit_requested_at.present? || tracker.exit_sent_at.present? || tracker.exited?
+      end
+
       # LAYER 1: DYNAMIC TRAILING SL
       # Purpose: Move SL up-only to capture trend moves (direct trailing)
       def enforce_dynamic_trailing_stops(exit_engine:)
@@ -507,7 +515,7 @@ module Live
         if trend_score > peak
           if pending_meta
             pending_meta['peak_trend_score'] = trend_score
-          else
+          elsif !exit_in_flight?(tracker)
             meta = tracker.meta || {}
             meta['peak_trend_score'] = trend_score
             tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
@@ -559,7 +567,7 @@ module Live
 
         if pending_meta
           pending_meta['profit_floor_rupees'] = dynamic_floor.to_i
-        else
+        elsif !exit_in_flight?(tracker)
           meta = (tracker.meta || {}).stringify_keys
           meta['profit_floor_rupees'] = dynamic_floor.to_i
           tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations

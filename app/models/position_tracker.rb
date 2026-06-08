@@ -14,7 +14,10 @@ class PositionTracker < ApplicationRecord
   store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
                  :exit_path, :exit_reason, :highest_price, :lowest_price, :be_set, :profit_floor_rupees,
                  :profit_floor_set_at, :profit_zone_state, :secured_sl_price, :secured_sl_rupees,
-                 :profit_zone_transitioned_at
+                 :profit_zone_transitioned_at,
+                 :alpha_source, :signal_confidence, :expected_value, :signal_timestamp, :client_order_id
+
+  after_update_commit :record_alpha_outcome!, if: :alpha_signal_just_exited?
 
   # Enums
   enum :status, {
@@ -109,6 +112,20 @@ class PositionTracker < ApplicationRecord
   end
 
   private
+
+  def alpha_signal_just_exited?
+    alpha_source.present? && saved_change_to_status? && exited?
+  end
+
+  def record_alpha_outcome!
+    if last_pnl_rupees.to_f.positive?
+      Risk::LimitsGuard.record_win!
+    else
+      Risk::LimitsGuard.record_loss!
+    end
+  rescue StandardError => e
+    Rails.logger.error("[PositionTracker] alpha outcome recording failed for ##{id}: #{e.message}")
+  end
 
   def meta_hash
     value = self[:meta]

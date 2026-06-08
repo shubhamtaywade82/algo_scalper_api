@@ -164,7 +164,8 @@ class Derivative < ApplicationRecord
       qty: quantity,
       entry_price: ltp,
       symbol: symbol_name || display_name,
-      index_key: (index_cfg || {})[:key]
+      index_key: (index_cfg || {})[:key],
+      meta: meta.slice(:alpha_source, :signal_confidence, :expected_value, :entry_strategy, :signal_timestamp, :direction, :client_order_id)
     )
 
     order
