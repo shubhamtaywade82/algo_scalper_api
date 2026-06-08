@@ -3,7 +3,9 @@ import toast from 'solid-toast'
 import cable from '../cable'
 import { dashboardApiHeaders } from '../lib/dashboardApi'
 
-const WS_STALE_AFTER_MS = 3000
+// Aligned with backend Live::FeedHealthService ticks threshold (10s) — illiquid strikes
+// can go several seconds between prints without the feed actually being down.
+const WS_STALE_AFTER_MS = 9000
 const BACKFILL_INTERVAL_MS = 5000
 
 export function usePositions() {
