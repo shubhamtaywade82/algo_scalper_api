@@ -12,6 +12,7 @@ const Strategies = lazy(() => import('./views/Strategies'))
 const Signals = lazy(() => import('./views/Signals'))
 const Alpha = lazy(() => import('./views/Alpha'))
 const Analysis = lazy(() => import('./views/Analysis'))
+const Charts = lazy(() => import('./views/Charts'))
 const Settings = lazy(() => import('./views/Settings'))
 
 function AppShell(props) {
@@ -75,13 +76,17 @@ function AppShell(props) {
 
 export default function App() {
   return (
-    <Router root={AppShell}>
-      <Route path="/" component={Dashboard} />
-      <Route path="/strategies" component={Strategies} />
-      <Route path="/alpha" component={Alpha} />
-      <Route path="/signals" component={Signals} />
-      <Route path="/analysis" component={Analysis} />
-      <Route path="/settings" component={Settings} />
+    <Router>
+      <Route component={AppShell}>
+        <Route path="/" component={Dashboard} />
+        <Route path="/strategies" component={Strategies} />
+        <Route path="/alpha" component={Alpha} />
+        <Route path="/signals" component={Signals} />
+        <Route path="/analysis" component={Analysis} />
+        <Route path="/settings" component={Settings} />
+      </Route>
+      {/* Fullscreen — own layout, no Header/footer chrome */}
+      <Route path="/charts" component={Charts} />
     </Router>
   )
 }

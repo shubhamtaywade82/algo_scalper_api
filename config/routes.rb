@@ -33,6 +33,9 @@ Rails.application.routes.draw do
 
     get 'smc/decision', to: 'smc#decision'
 
+    # OHLC candle series for dashboard charting (read-only)
+    get 'candles/:index_key', to: 'candles#index', as: :candles
+
     # Live AI analysis dashboard
     get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
     get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
