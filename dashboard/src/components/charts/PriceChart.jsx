@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createEffect } from 'solid-js'
+import { onMount, onCleanup, createEffect, createSignal, For } from 'solid-js'
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, ColorType } from 'lightweight-charts'
 
 // Overlay indicators are just LineSeries fed derived {time, value} arrays.
@@ -73,6 +73,7 @@ export default function PriceChart(props) {
   const indicatorSeries = new Map() // id -> { series, config }
   let positionMarkers          // ISeriesMarkersPluginApi — entry-point arrows
   const positionLines = new Map() // id -> price line (entry price)
+  const [capsules, setCapsules] = createSignal([]) // floating detail cards anchored to entry-price Y
 
   // Animation state for the live (last) candle + LTP line
   let rafId = null
@@ -107,6 +108,9 @@ export default function PriceChart(props) {
     })
 
     if (priceLine) priceLine.applyOptions({ price: renderedClose })
+    // Live bar updates can shift the autoscaled price range — keep capsules glued
+    // to their entry-price level as the price→pixel mapping moves under them.
+    if (capsules().length) recomputeCapsules()
 
     const settled = Math.abs(targetBar.close - renderedClose) < 1e-6
     if (!settled) {
@@ -121,9 +125,21 @@ export default function PriceChart(props) {
     if (rafId === null) rafId = requestAnimationFrame(animate)
   }
 
-  // Plots active positions on their underlying's chart: an entry-price dashed
-  // line per position (so you can see at a glance whether price is above/below
-  // your entry) plus an arrow marker at the moment of entry.
+  // Derives the display bundle for a position: option type (anchors marker side
+  // since this bot only buys options — long CE reads bullish so plots below the
+  // bar, long PE reads bearish so plots above), PnL color/label, etc.
+  function describePosition(pos) {
+    const optionType = /PE$/i.test(pos.symbol || '') ? 'PE' : 'CE'
+    const isCall = optionType === 'CE'
+    const pnl = pos.pnl ?? 0
+    const pnlColor = pnl >= 0 ? '#34d399' : '#fb7185'
+    const pnlLabel = `${pnl >= 0 ? '+' : ''}₹${Number(pnl).toFixed(0)}${pos.pnl_pct != null ? ` (${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct}%)` : ''}`
+    return { optionType, isCall, pnl, pnlColor, pnlLabel }
+  }
+
+  // Plots active positions on their underlying's chart: a thin dotted entry-price
+  // line, an arrow marker at the entry candle, and a floating "capsule" detail
+  // card anchored to the entry-price Y coordinate (recomputed in recomputeCapsules).
   function syncPositions() {
     if (!chart || !candleSeries || !positionMarkers) return
     const positions = props.positions ? props.positions() : []
@@ -132,15 +148,7 @@ export default function PriceChart(props) {
 
     for (const pos of positions) {
       seenIds.add(pos.id)
-      // Options-buying only — `side`/`direction` reflect the underlying's trend
-      // call, not where to anchor the marker. Anchor by what was actually bought:
-      // long CE (bullish bet) plots below the bar, long PE (bearish bet) above it —
-      // mirrors how a trader reads "where's my bias relative to price."
-      const optionType = /PE$/i.test(pos.symbol || '') ? 'PE' : 'CE'
-      const isCall = optionType === 'CE'
-      const pnl = pos.pnl ?? 0
-      const pnlColor = pnl >= 0 ? '#34d399' : '#fb7185'
-      const pnlLabel = `${pnl >= 0 ? '+' : ''}₹${Number(pnl).toFixed(0)}${pos.pnl_pct != null ? ` (${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct}%)` : ''}`
+      const { optionType, isCall, pnlColor, pnlLabel } = describePosition(pos)
 
       let line = positionLines.get(pos.id)
       const lineOpts = {
@@ -149,7 +157,7 @@ export default function PriceChart(props) {
         lineWidth: 1,
         lineStyle: 3, // dotted — visually distinct from the solid LTP dashed line
         axisLabelVisible: true,
-        title: `${pos.symbol || 'POS'} @ ${pos.entry_price} · ${pnlLabel}`
+        title: `${optionType} entry`
       }
       if (!line) {
         line = candleSeries.createPriceLine(lineOpts)
@@ -179,6 +187,23 @@ export default function PriceChart(props) {
 
     markers.sort((a, b) => a.time - b.time)
     positionMarkers.setMarkers(markers)
+    recomputeCapsules()
+  }
+
+  // Recomputes each capsule's Y pixel offset from its entry price via the series'
+  // own price scale — must rerun on pan/zoom/resize, not just on position changes,
+  // since the same price maps to a different pixel as the chart rescales.
+  function recomputeCapsules() {
+    if (!chart || !candleSeries) { setCapsules([]); return }
+    const positions = props.positions ? props.positions() : []
+    const next = positions
+      .map(pos => {
+        const top = candleSeries.priceToCoordinate(pos.entry_price)
+        if (top == null) return null
+        return { id: pos.id, top, pos, ...describePosition(pos) }
+      })
+      .filter(Boolean)
+    setCapsules(next)
   }
 
   // Reconciles indicatorSeries against the current config: adds series for newly
@@ -277,9 +302,17 @@ export default function PriceChart(props) {
       ro = new ResizeObserver(entries => {
         const entry = entries[0]
         if (entry && chart) chart.applyOptions({ width: entry.contentRect.width })
+        recomputeCapsules()
       })
       ro.observe(containerEl)
+    } else {
+      ro = new ResizeObserver(() => recomputeCapsules())
+      ro.observe(containerEl)
     }
+
+    // Same price → different pixel as the user pans/zooms — reposition capsules.
+    chart.timeScale().subscribeVisibleLogicalRangeChange(() => recomputeCapsules())
+    chart.priceScale('right').subscribeSizeChange?.(() => recomputeCapsules())
 
     onCleanup(() => {
       if (rafId !== null) cancelAnimationFrame(rafId)
@@ -306,6 +339,7 @@ export default function PriceChart(props) {
       for (const line of positionLines.values()) candleSeries.removePriceLine(line)
       positionLines.clear()
       positionMarkers?.setMarkers([])
+      setCapsules([])
       candleSeries.setData([])
       volumeSeries.setData([])
       return
@@ -368,7 +402,38 @@ export default function PriceChart(props) {
     kickAnimation()
   })
 
-  return <div ref={containerEl} class={`w-full rounded-2xl overflow-hidden ${props.fullHeight ? 'h-full' : ''}`} />
+  return (
+    <div class={`relative w-full ${props.fullHeight ? 'h-full' : ''}`}>
+      <div ref={containerEl} class={`w-full rounded-2xl overflow-hidden ${props.fullHeight ? 'h-full' : ''}`} />
+
+      {/* Floating capsules — anchored to each position's entry-price Y coordinate.
+          pointer-events-none on the layer so chart pan/zoom/crosshair pass through;
+          re-enabled per-card so they're still hoverable. */}
+      <div class="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+        <For each={capsules()}>
+          {cap => (
+            <div
+              class="absolute left-2 -translate-y-1/2 pointer-events-auto flex items-center gap-2 px-2.5 py-1 rounded-full border backdrop-blur-md text-[10px] font-bold whitespace-nowrap shadow-lg transition-[top] duration-150"
+              style={{
+                top: `${cap.top}px`,
+                'border-color': `${cap.pnlColor}55`,
+                background: `${cap.pnlColor}1a`,
+                color: cap.pnlColor
+              }}
+              title={`${cap.optionType} ${cap.pos.symbol || ''} — entry ₹${cap.pos.entry_price}`}
+            >
+              <span class="px-1.5 py-0.5 rounded-full text-[9px] uppercase tracking-wider" style={{ background: `${cap.pnlColor}33` }}>
+                {cap.optionType}
+              </span>
+              <span class="text-gray-200">{cap.pos.symbol}</span>
+              <span class="text-gray-400">@ ₹{cap.pos.entry_price}</span>
+              <span>{cap.pnlLabel}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
+  )
 }
 
 function toCandlePoint(c) {
