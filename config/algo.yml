@@ -54,6 +54,18 @@ loss_streak_guard:
   consecutive_losses_threshold: 2
   cooldown_minutes: 30
 
+segment_expectancy_guard:
+  enabled: true
+
+# Trading::SegmentExpectancyAnalyzer — realized win-rate/expectancy by (index, session-regime)
+# segment, computed from closed-trade history. Backs segment_expectancy_guard above.
+trading:
+  segment_expectancy:
+    lookback_days: 14
+    min_samples: 8                      # below this, a segment is "unproven" — never blocks
+    negative_expectancy_rupees: -150.0  # avg realized PnL/trade below this → negative edge
+    cache_ttl_minutes: 15
+
 strike_cooldown_guard:
   enabled: true
   cooldown_minutes: 20
