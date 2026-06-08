@@ -68,7 +68,8 @@ export default function PriceChart(props) {
   let chart
   let candleSeries
   let volumeSeries
-  let priceLine
+  let ltpSeries // short LTP "tail" — ends at the forming candle, not a full-width line
+  let ltpTailAnchor = null // {time, value} — the tail's fixed left endpoint for the current bar
   let lastCandles = []
   const indicatorSeries = new Map() // id -> { series, config }
   let positionMarkers          // ISeriesMarkersPluginApi — entry-point arrows
@@ -120,7 +121,7 @@ export default function PriceChart(props) {
       lastVolPaint = { time: targetBar.time, value: volValue, color: volColor }
     }
 
-    if (priceLine) priceLine.applyOptions({ price: renderedClose })
+    paintLtpTail(renderedClose)
     // Live bar updates can shift the autoscaled price range — keep capsules glued
     // to their entry-price level as the price→pixel mapping moves under them.
     if (capsules().length) recomputeCapsules()
@@ -176,6 +177,37 @@ export default function PriceChart(props) {
     return { optionType, isCall, pnl, pnlColor, pnlLabel, shortSymbol }
   }
 
+  // Resets the LTP tail's two-point window to the current bar — called once per
+  // new bar (full `setData`), NOT every animation frame. A full data swap each
+  // frame was what made the forming candle flicker (it forces lightweight-charts
+  // to rebuild internal state for the whole series on every repaint).
+  function resetLtpTail(value) {
+    if (!ltpSeries || !targetBar || !Number.isFinite(value)) return
+    // Scan backward for the last *distinct* timestamp — duplicate trailing
+    // candles (forming bar appearing twice across REST/live merges) made a
+    // naive `lastCandles[n-2].time` collide with `targetBar.time` and crash
+    // `setData`'s asc-order assertion, killing this effect mid-run (which is
+    // why volume stopped updating live — `kickAnimation()` never got reached).
+    let prevTime = targetBar.time - 60
+    for (let i = lastCandles.length - 1; i > 0; i--) {
+      if (lastCandles[i - 1].time < targetBar.time) { prevTime = lastCandles[i - 1].time; break }
+    }
+    ltpTailAnchor = { time: prevTime, value: targetBar.open }
+    ltpSeries.setData([ltpTailAnchor, { time: targetBar.time, value }])
+  }
+
+  // Per-frame repaint — `update()` only touches the series' last point, far
+  // cheaper than a full `setData` swap and doesn't trigger the flicker above.
+  // We don't need to manually draw into the empty axis gap either: lightweight-
+  // charts already renders a dotted "tracking line" from a series' last point to
+  // its own price-axis label whenever `lastValueVisible` is on (the same built-in
+  // mechanism `createPriceLine`'s axis label used) — that tracking line *is* the
+  // segment from the live candle to the LTP label.
+  function paintLtpTail(value) {
+    if (!ltpSeries || !targetBar || !Number.isFinite(value) || !ltpTailAnchor) return
+    ltpSeries.update({ time: targetBar.time, value })
+  }
+
   // Plots active positions on their underlying's chart: a thin dotted entry-price
   // line, an arrow marker at the entry candle, and a floating "capsule" detail
   // card anchored to the entry-price Y coordinate (recomputed in recomputeCapsules).
@@ -187,7 +219,7 @@ export default function PriceChart(props) {
 
     for (const pos of positions) {
       seenIds.add(pos.id)
-      const { optionType, isCall, pnlColor, pnlLabel } = describePosition(pos)
+      const { optionType, isCall, pnlColor } = describePosition(pos)
       const entryTime = pos.created_at ? Math.floor(new Date(pos.created_at).getTime() / 1000) : null
       const anchorPrice = underlyingPriceNear(entryTime)
 
@@ -333,8 +365,8 @@ export default function PriceChart(props) {
       borderVisible: false,
       wickUpColor: '#34d399',
       wickDownColor: '#fb7185',
-      // Built-in last-value label disabled — our custom `priceLine` "LTP" label
-      // already shows current price; both together duplicate the axis label.
+      // Built-in last-value label disabled — the `ltpSeries` LTP tail's own
+      // axis label already shows current price; both together would duplicate it.
       lastValueVisible: false,
       priceLineVisible: false
     })
@@ -349,12 +381,16 @@ export default function PriceChart(props) {
 
     positionMarkers = createSeriesMarkers(candleSeries, [])
 
-    priceLine = candleSeries.createPriceLine({
-      price: 0,
+    ltpSeries = chart.addSeries(LineSeries, {
       color: '#60a5fa',
       lineWidth: 1,
-      lineStyle: 2, // dashed
-      axisLabelVisible: true,
+      // Solid, not dashed — the segment only spans a few bars to the axis, and
+      // a dash pattern needs more run length than that to render any strokes
+      // at all (it was painting completely invisible dashes before).
+      lineStyle: 0,
+      lastValueVisible: true, // axis label still shows live LTP
+      priceLineVisible: true,
+      crosshairMarkerVisible: false,
       title: 'LTP'
     })
 
@@ -404,6 +440,8 @@ export default function PriceChart(props) {
       setCapsules([])
       candleSeries.setData([])
       volumeSeries.setData([])
+      ltpSeries?.setData([])
+      ltpTailAnchor = null
       return
     }
 
@@ -422,6 +460,11 @@ export default function PriceChart(props) {
     targetBar = { ...lastBar }
     renderedClose = isNewBar ? lastBar.open : renderedClose
     if (isNewBar) lastVolPaint = null
+    // Reset the tail's anchor on a new bar (full setData is fine here — once
+    // per bar close, not per frame); within the same bar, animate() repaints
+    // via the cheap `update()` path in paintLtpTail.
+    if (isNewBar || !ltpTailAnchor) resetLtpTail(renderedClose)
+    else paintLtpTail(renderedClose)
 
     kickAnimation()
 
@@ -449,7 +492,13 @@ export default function PriceChart(props) {
   // Active-position overlay changes (open/close/PnL flip) — independent of the
   // candles refresh cadence so a fresh entry/exit shows up immediately.
   createEffect(() => {
-    props.positions ? props.positions() : null
+    const positions = props.positions ? props.positions() : []
+    // Track pnl/pnl_pct explicitly — WS pushes mutate these in place on the
+    // same array slot, and depending on the store's merge shape the array
+    // reference alone may not change fast enough to feel "live". Reading the
+    // raw numbers here forces this effect (and the capsule recompute it
+    // triggers) to refire on every PnL tick, not just open/close events.
+    void positions.map(p => `${p.id}:${p.pnl}:${p.pnl_pct}`).join('|')
     if (!chart || !lastCandles.length) return
     syncPositions()
   })
