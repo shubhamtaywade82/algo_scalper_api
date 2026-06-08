@@ -999,6 +999,10 @@ signals:
       adx_confirmation_min_strength: 30
       iv_rank_max: 0.6
       iv_rank_min: 0.15
+      # Relative IV gating (preferred once Options::IvRankTracker has enough history) —
+      # block the index's own top/bottom percentile range rather than an absolute band.
+      iv_percentile_max: 0.70
+      iv_percentile_min: 0.15
       theta_risk_cutoff_hour: 14
       theta_risk_cutoff_minute: 0
       require_trend_confirmation: true
@@ -1012,6 +1016,8 @@ signals:
       adx_confirmation_min_strength: 20
       iv_rank_max: 0.8
       iv_rank_min: 0.1
+      iv_percentile_max: 0.75
+      iv_percentile_min: 0.10
       theta_risk_cutoff_hour: 14
       theta_risk_cutoff_minute: 30
       require_trend_confirmation: true
@@ -1025,6 +1031,8 @@ signals:
       adx_confirmation_min_strength: 18
       iv_rank_max: 0.9
       iv_rank_min: 0.05
+      iv_percentile_max: 0.85
+      iv_percentile_min: 0.05
       theta_risk_cutoff_hour: 15
       theta_risk_cutoff_minute: 0
       require_trend_confirmation: false
@@ -1184,3 +1192,13 @@ entry_quality:
   index_overrides:
     SENSEX:
       min_adx: 25                    # SENSEX keeps slightly higher ADX floor
+
+# ===== OPTIONS DECISION INFRASTRUCTURE =====
+options:
+  # Rolling-window IV history & percentile rank (Options::IvRankTracker, Redis-backed).
+  # Lets validate_iv_rank_real gate on "is IV cheap/expensive relative to THIS index's
+  # own recent range" rather than a flat absolute band — see signal/engine.rb.
+  iv_rank_tracker:
+    window_days: 20      # how long samples stay in the rolling window
+    max_samples: 500     # hard cap on samples per index (oldest trimmed first)
+    min_samples: 30      # below this, percentile_rank returns nil (cold start → fall back to absolute band)

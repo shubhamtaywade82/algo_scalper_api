@@ -731,7 +731,7 @@ module Signal
           effective_real_iv = real_iv.to_f.positive? ? real_iv : fetch_real_atm_iv(instrument: instrument, index_cfg: index_cfg, direction: direction)
 
           iv_rank_result = if effective_real_iv && effective_real_iv.to_f > 0
-                             validate_iv_rank_real(effective_real_iv.to_f, mode_config)
+                             validate_iv_rank_real(effective_real_iv.to_f, mode_config, index_key: index_cfg[:key])
                            else
                              validate_iv_rank(index_cfg, series, mode_config)
                            end
@@ -1079,7 +1079,13 @@ module Signal
         iv_raw = oc[atm_strike.to_s]&.dig(option_type, 'implied_volatility')&.to_f
         return nil unless iv_raw&.positive?
 
-        iv_raw > 1 ? iv_raw / 100.0 : iv_raw
+        iv_decimal = iv_raw > 1 ? iv_raw / 100.0 : iv_raw
+
+        # Feed the rolling IV-history window so validate_iv_rank_real can gate on
+        # this index's own recent percentile rank instead of a flat absolute band.
+        Options::IvRankTracker.instance.record_sample(index_key: index_cfg[:key], iv: iv_decimal)
+
+        iv_decimal
       rescue StandardError => e
         Rails.logger.warn("[Signal] Failed to fetch real ATM IV for #{index_cfg[:key]}: #{e.class} - #{e.message}")
         nil
@@ -1088,9 +1094,19 @@ module Signal
       # Validates real implied volatility from option chain data.
       # iv: Float decimal (e.g. 0.45 = 45%)
       # Fails open when iv is zero (data unavailable).
-      def validate_iv_rank_real(iv, mode_config)
+      #
+      # Prefers RELATIVE gating (this index's own percentile rank over its recent
+      # rolling window — see Options::IvRankTracker) over the flat absolute band once
+      # enough history has accumulated: 25% IV is "high" for a calm index in a quiet
+      # month and "cheap" during an event week — a fixed ceiling can't tell the difference,
+      # a percentile rank against the index's own recent range can. Falls back to the
+      # absolute band (iv_rank_max/iv_rank_min) when history is too thin (cold start).
+      def validate_iv_rank_real(iv, mode_config, index_key: nil)
         iv_f = iv.to_f
         return { valid: true } if iv_f.zero?  # No IV data — fail open
+
+        percentile = index_key.present? ? Options::IvRankTracker.instance.percentile_rank(index_key: index_key, iv: iv_f) : nil
+        return validate_iv_percentile(iv_f, percentile, mode_config) if percentile
 
         iv_max = mode_config.fetch(:iv_rank_max, 0.75).to_f
         iv_min = mode_config.fetch(:iv_rank_min, 0.10).to_f
@@ -1108,6 +1124,31 @@ module Signal
         end
 
         { valid: true, iv: iv_f }
+      end
+
+      # Gates on this index's own recent IV percentile rank (0.0–1.0 — fraction of the
+      # rolling window's samples that the current IV exceeds). Thresholds configurable
+      # via mode_config[:iv_percentile_max]/[:iv_percentile_min] (default: block the
+      # top 25% and bottom 10% of the index's own recent IV range).
+      def validate_iv_percentile(iv_f, percentile, mode_config)
+        pct_max = mode_config.fetch(:iv_percentile_max, 0.75).to_f
+        pct_min = mode_config.fetch(:iv_percentile_min, 0.10).to_f
+
+        if percentile > pct_max
+          return { valid: false,
+                   reason: "IV percentile too high (#{(percentile * 100).round(1)}th pct, #{(iv_f * 100).round(1)}%) " \
+                           "— relatively expensive premium for this index right now, IV crush risk",
+                   check: :iv_percentile_too_high }
+        end
+
+        if percentile < pct_min
+          return { valid: false,
+                   reason: "IV percentile too low (#{(percentile * 100).round(1)}th pct, #{(iv_f * 100).round(1)}%) " \
+                           "— relatively cheap premium for this index right now, insufficient edge",
+                   check: :iv_percentile_too_low }
+        end
+
+        { valid: true, iv: iv_f, iv_percentile: percentile }
       end
 
       # Returns +0.10 when MACD histogram direction aligns with entry direction.
