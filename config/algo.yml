@@ -696,6 +696,16 @@ position_sizing:
       min_adx_to_hold: 15.0  # ADX floor; below this we consider the trend weak (TrailingStopRule)
       hard_floor_pct: 0.50   # 50% - hard loss floor even when spot trend is alive
 
+  # Greeks Decay Exit Rule: exits when the position's OWN contract greeks (fetched from
+  # the live, ~2min-cached option chain) show structural decay — theta burning a large
+  # fraction of premium per day, or delta having collapsed (option drifted OTM, thesis dead).
+  greeks_decay_exit:
+    enabled: true
+    theta_burn_pct_of_premium: 0.08    # |theta|/premium >= 8%/day → burn alarm
+    theta_burn_pnl_immunity_pct: 0.10  # positions up >=10% are immune to the theta leg
+    delta_floor: 0.20                  # |delta| below this while losing → collapse alarm
+    delta_collapse_pnl_ceiling_pct: -0.03  # only fires when pnl_pct <= this (i.e. losing)
+
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
   secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
   secure_profit_drawdown_pct: 0.03 # 3% - Tighter drawdown threshold (3%) when profit is secured
