@@ -92,11 +92,17 @@ export default function PriceChart(props) {
 
     renderedClose = lerp(renderedClose, targetBar.close, SMOOTHING)
 
+    // Use the target's actual high/low — NOT Math.max/min(target, renderedClose).
+    // Recomputing range from the lerping value every frame made the autoscaled
+    // price axis recalculate every frame too, visibly "vibrating" the whole chart
+    // when price moved fast. The live-tick effect already extends targetBar's
+    // high/low the instant a new extreme prints, so the true range is always
+    // known up front — the lerp only needs to animate `close` toward it.
     const liveBar = {
       time: targetBar.time,
       open: targetBar.open,
-      high: Math.max(targetBar.high, renderedClose),
-      low: Math.min(targetBar.low, renderedClose),
+      high: targetBar.high,
+      low: targetBar.low,
       close: renderedClose
     }
 
@@ -198,12 +204,23 @@ export default function PriceChart(props) {
     const positions = props.positions ? props.positions() : []
     const next = positions
       .map(pos => {
-        const top = candleSeries.priceToCoordinate(pos.entry_price)
-        if (top == null) return null
-        return { id: pos.id, top, pos, ...describePosition(pos) }
+        const raw = candleSeries.priceToCoordinate(pos.entry_price)
+        if (raw == null) return null
+        // Round to whole pixels — autoscale wobbles by sub-pixel fractions every
+        // frame as the live bar updates; feeding that straight into a signal
+        // toggles the rendered `top` between adjacent values and flickers.
+        return { id: pos.id, top: Math.round(raw), pos, ...describePosition(pos) }
       })
       .filter(Boolean)
-    setCapsules(next)
+
+    // Skip the signal write entirely when nothing visible actually changed —
+    // same dedupe purpose: a no-op array swap still triggers a re-render/flicker.
+    setCapsules(prev => {
+      if (prev.length === next.length && prev.every((p, i) => p.top === next[i].top && p.pnlLabel === next[i].pnlLabel)) {
+        return prev
+      }
+      return next
+    })
   }
 
   // Reconciles indicatorSeries against the current config: adds series for newly
