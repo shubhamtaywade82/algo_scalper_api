@@ -20,6 +20,16 @@ module AlphaExecutionService
       return failure("Conflicting position exists for #{signal[:index_key]}") if conflicting_position?(signal)
 
       # 4. Find the tradable Derivative
+      # Safety: Re-verify ATM strike if index has moved since signal timestamp
+      current_ltp = fetch_current_index_ltp(signal[:index_key])
+      if current_ltp && signal[:underlying_ltp] && (current_ltp - signal[:underlying_ltp].to_f).abs > (current_ltp * 0.005)
+        # Index moved > 0.5%, re-calculate strike
+        new_strike = atm_strike(current_ltp, signal[:index_key])
+        Rails.logger.info "[AlphaExecutionService] Index moved from #{signal[:underlying_ltp]} to #{current_ltp}. Adjusting strike from #{signal[:strike]} to #{new_strike}"
+        signal[:strike] = new_strike
+        signal[:underlying_ltp] = current_ltp
+      end
+
       derivative = find_derivative(signal)
       return failure("Derivative not found for #{signal[:index_key]} strike #{signal[:strike]}") unless derivative
 
@@ -84,6 +94,23 @@ module AlphaExecutionService
         expiry_date: signal[:expiry],
         option_type: signal[:direction].to_s.upcase
       )
+    end
+
+    def fetch_current_index_ltp(index_key)
+      instrument = Instrument.find_by(symbol_name: index_key.to_s.upcase, segment: 'index')
+      return nil unless instrument
+      
+      cfg = AlphaStrategy::INDEX_CONFIG[index_key.to_sym]
+      return nil unless cfg
+      
+      instrument.resolve_ltp(segment: cfg[:exchange_segment], security_id: cfg[:security_id])
+    end
+
+    def atm_strike(ltp, index_key)
+      cfg = AlphaStrategy::INDEX_CONFIG[index_key.to_sym]
+      return 0 unless cfg
+      step = cfg[:tick_step]
+      (ltp.to_f / step).round * step
     end
 
     def conflicting_position?(signal)

@@ -4,11 +4,10 @@ class AlphaStrategy
   attr_reader :index_key, :signal_score, :confidence, :metadata
 
   INDEX_CONFIG = {
-    nifty:     { security_id: "13", exchange_segment: "IDX_I", lot_size: 25,  tick_step: 50,  min_sl_pct: 0.015 },
-    banknifty: { security_id: "25", exchange_segment: "IDX_I", lot_size: 15,  tick_step: 100, min_sl_pct: 0.018 },
-    sensex:    { security_id: "27", exchange_segment: "IDX_I", lot_size: 10,  tick_step: 100, min_sl_pct: 0.015 }
+    nifty:     { security_id: "13", exchange_segment: "IDX_I", lot_size: 75,  tick_step: 50,  min_sl_pct: 0.010, max_otm_pct: 0.015 },
+    banknifty: { security_id: "25", exchange_segment: "IDX_I", lot_size: 30,  tick_step: 100, min_sl_pct: 0.012, max_otm_pct: 0.020 },
+    sensex:    { security_id: "51", exchange_segment: "IDX_I", lot_size: 10,  tick_step: 100, min_sl_pct: 0.010, max_otm_pct: 0.015 }
   }.freeze
-
   def initialize(index_key:)
     @index_key = index_key.to_sym
     @config = INDEX_CONFIG[@index_key]
@@ -87,6 +86,14 @@ class AlphaStrategy
   end
 
   def build_signal(direction:, strike:, option_type:, entry_price:, stop_loss:, target:, trailing_jump: 0, confidence:, alpha_source:, iv_context: {})
+    ltp = underlying_ltp
+    # Sanity check: Ensure strike is not too far from current LTP
+    max_dist = ltp * (@config[:max_otm_pct] || 0.015)
+    if (strike - ltp).abs > max_dist
+      Rails.logger.warn "[AlphaStrategy] Signal rejected: Strike #{strike} is too far from LTP #{ltp}"
+      return nil
+    end
+
     {
       index_key: @index_key,
       direction: direction,
@@ -94,6 +101,7 @@ class AlphaStrategy
       option_type: option_type,
       expiry: nearest_expiry,
       entry_price: entry_price.to_f,
+      underlying_ltp: ltp.to_f,
       stop_loss: stop_loss.to_f,
       target: target.to_f,
       trailing_jump: trailing_jump.to_f,

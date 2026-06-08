@@ -1,11 +1,11 @@
 # scripts/test_alpha_execution.rb
 
 # 1. Setup a valid signal for a contract we know exists
-# We'll use the NIFTY 30000 CE (expiry June 30) found earlier
-derivative = Derivative.find_by(underlying_symbol: 'NIFTY', strike_price: 30000, expiry_date: '2026-06-30', option_type: 'CE')
+# We'll use a realistic strike for NIFTY (around 23200)
+derivative = Derivative.where(underlying_symbol: 'NIFTY').where('expiry_date >= ?', Date.today).first
 
 unless derivative
-  puts "❌ Could not find test derivative. Please check your DB."
+  puts "❌ Could not find any NIFTY derivative. Please check your DB."
   exit
 end
 
@@ -14,17 +14,18 @@ puts "✅ Found test derivative: #{derivative.symbol_name} #{derivative.strike_p
 # 2. Mock a Signal
 signal = {
   index_key: :nifty,
-  direction: :ce,
-  strike: 30000,
-  expiry: '2026-06-30',
+  direction: derivative.option_type.downcase.to_sym,
+  strike: derivative.strike_price.to_f,
+  expiry: derivative.expiry_date.to_s,
   confidence: 0.85,
   expected_value: 1500.0,
   alpha_source: :momentum,
   timestamp: Time.current.iso8601,
-  lot_size: 25,
-  entry_price: 24500.0, # Index price
-  stop_loss: 24400.0,
-  target: 24700.0
+  lot_size: 75,
+  entry_price: 23205.0, # Index price
+  underlying_ltp: 23205.0,
+  stop_loss: 23150.0,
+  target: 23300.0
 }
 
 puts "🚀 Executing Alpha Signal via AlphaExecutionService..."
