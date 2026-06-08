@@ -93,10 +93,48 @@ module Capital
         adjusted = base_multiplier
         adjusted = (adjusted * midday_multiplier).floor if midday_multiplier < 1.0 && post_1100?
 
+        regime_cut = time_regime_size_multiplier
+        adjusted = (adjusted * regime_cut).floor if regime_cut < 1.0
+
         peak_cut = post_peak_size_cut
         adjusted = (adjusted * peak_cut).floor if peak_cut < 1.0
 
         [adjusted, 1].max
+      end
+
+      # Scales position size down when the current market session is theta/IV-decay
+      # dominant. An option buyer's edge is weakest in the Chop/Theta zone (S3) and the
+      # Close/Gamma zone (S4) — risking full size there compounds the wasting-asset
+      # problem. Uses Live::TimeRegimeService's existing session classification (the
+      # same regimes that already gate entries) so sizing and entry logic agree on
+      # which windows are dangerous.
+      def time_regime_size_multiplier
+        return 1.0 unless decay_aware_sizing_enabled?
+
+        regime_service = Live::TimeRegimeService.instance
+        regime = regime_service.current_regime
+
+        case regime
+        when Live::TimeRegimeService::CHOP_DECAY
+          decay_sizing_cfg.fetch(:chop_decay_factor, 0.5).to_f
+        when Live::TimeRegimeService::CLOSE_GAMMA
+          decay_sizing_cfg.fetch(:close_gamma_factor, 0.6).to_f
+        else
+          1.0
+        end
+      rescue StandardError => e
+        Rails.logger.warn("[Allocator] time_regime_size_multiplier error: #{e.message}")
+        1.0
+      end
+
+      def decay_aware_sizing_enabled?
+        decay_sizing_cfg.fetch(:enabled, true) != false
+      end
+
+      def decay_sizing_cfg
+        AlgoConfig.fetch.dig(:capital_allocator, :decay_aware_sizing) || {}
+      rescue StandardError
+        {}
       end
 
       # Cuts size when intraday net PnL gives back a meaningful fraction of the

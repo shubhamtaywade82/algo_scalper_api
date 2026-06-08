@@ -54,6 +54,18 @@ loss_streak_guard:
   consecutive_losses_threshold: 2
   cooldown_minutes: 30
 
+segment_expectancy_guard:
+  enabled: true
+
+# Trading::SegmentExpectancyAnalyzer — realized win-rate/expectancy by (index, session-regime)
+# segment, computed from closed-trade history. Backs segment_expectancy_guard above.
+trading:
+  segment_expectancy:
+    lookback_days: 14
+    min_samples: 8                      # below this, a segment is "unproven" — never blocks
+    negative_expectancy_rupees: -150.0  # avg realized PnL/trade below this → negative edge
+    cache_ttl_minutes: 15
+
 strike_cooldown_guard:
   enabled: true
   cooldown_minutes: 20
@@ -684,6 +696,16 @@ position_sizing:
       min_adx_to_hold: 15.0  # ADX floor; below this we consider the trend weak (TrailingStopRule)
       hard_floor_pct: 0.50   # 50% - hard loss floor even when spot trend is alive
 
+  # Greeks Decay Exit Rule: exits when the position's OWN contract greeks (fetched from
+  # the live, ~2min-cached option chain) show structural decay — theta burning a large
+  # fraction of premium per day, or delta having collapsed (option drifted OTM, thesis dead).
+  greeks_decay_exit:
+    enabled: true
+    theta_burn_pct_of_premium: 0.08    # |theta|/premium >= 8%/day → burn alarm
+    theta_burn_pnl_immunity_pct: 0.10  # positions up >=10% are immune to the theta leg
+    delta_floor: 0.20                  # |delta| below this while losing → collapse alarm
+    delta_collapse_pnl_ceiling_pct: -0.03  # only fires when pnl_pct <= this (i.e. losing)
+
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
   secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
   secure_profit_drawdown_pct: 0.03 # 3% - Tighter drawdown threshold (3%) when profit is secured
@@ -999,6 +1021,10 @@ signals:
       adx_confirmation_min_strength: 30
       iv_rank_max: 0.6
       iv_rank_min: 0.15
+      # Relative IV gating (preferred once Options::IvRankTracker has enough history) —
+      # block the index's own top/bottom percentile range rather than an absolute band.
+      iv_percentile_max: 0.70
+      iv_percentile_min: 0.15
       theta_risk_cutoff_hour: 14
       theta_risk_cutoff_minute: 0
       require_trend_confirmation: true
@@ -1012,6 +1038,8 @@ signals:
       adx_confirmation_min_strength: 20
       iv_rank_max: 0.8
       iv_rank_min: 0.1
+      iv_percentile_max: 0.75
+      iv_percentile_min: 0.10
       theta_risk_cutoff_hour: 14
       theta_risk_cutoff_minute: 30
       require_trend_confirmation: true
@@ -1025,6 +1053,8 @@ signals:
       adx_confirmation_min_strength: 18
       iv_rank_max: 0.9
       iv_rank_min: 0.05
+      iv_percentile_max: 0.85
+      iv_percentile_min: 0.05
       theta_risk_cutoff_hour: 15
       theta_risk_cutoff_minute: 0
       require_trend_confirmation: false
@@ -1184,3 +1214,13 @@ entry_quality:
   index_overrides:
     SENSEX:
       min_adx: 25                    # SENSEX keeps slightly higher ADX floor
+
+# ===== OPTIONS DECISION INFRASTRUCTURE =====
+options:
+  # Rolling-window IV history & percentile rank (Options::IvRankTracker, Redis-backed).
+  # Lets validate_iv_rank_real gate on "is IV cheap/expensive relative to THIS index's
+  # own recent range" rather than a flat absolute band — see signal/engine.rb.
+  iv_rank_tracker:
+    window_days: 20      # how long samples stay in the rolling window
+    max_samples: 500     # hard cap on samples per index (oldest trimmed first)
+    min_samples: 30      # below this, percentile_rank returns nil (cold start → fall back to absolute band)
