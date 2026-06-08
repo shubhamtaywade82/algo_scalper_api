@@ -132,7 +132,12 @@ export default function PriceChart(props) {
 
     for (const pos of positions) {
       seenIds.add(pos.id)
-      const isLong = (pos.side || pos.direction || '').toUpperCase() !== 'SELL'
+      // Options-buying only — `side`/`direction` reflect the underlying's trend
+      // call, not where to anchor the marker. Anchor by what was actually bought:
+      // long CE (bullish bet) plots below the bar, long PE (bearish bet) above it —
+      // mirrors how a trader reads "where's my bias relative to price."
+      const optionType = /PE$/i.test(pos.symbol || '') ? 'PE' : 'CE'
+      const isCall = optionType === 'CE'
       const pnl = pos.pnl ?? 0
       const pnlColor = pnl >= 0 ? '#34d399' : '#fb7185'
       const pnlLabel = `${pnl >= 0 ? '+' : ''}₹${Number(pnl).toFixed(0)}${pos.pnl_pct != null ? ` (${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct}%)` : ''}`
@@ -157,10 +162,10 @@ export default function PriceChart(props) {
       if (entryTime) {
         markers.push({
           time: entryTime,
-          position: isLong ? 'belowBar' : 'aboveBar',
+          position: isCall ? 'belowBar' : 'aboveBar',
           color: pnlColor,
-          shape: isLong ? 'arrowUp' : 'arrowDown',
-          text: `${pos.symbol || ''} ${pos.entry_price} · ${pnlLabel}`.trim()
+          shape: isCall ? 'arrowUp' : 'arrowDown',
+          text: `${optionType} ${pos.symbol || ''} ${pos.entry_price} · ${pnlLabel}`.trim()
         })
       }
     }
