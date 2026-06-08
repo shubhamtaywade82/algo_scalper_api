@@ -255,7 +255,8 @@ module Signal
           index_cfg, final_direction, primary_series,
           primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
           supertrend_only: true,
-          validation_mode: effective_validation_mode
+          validation_mode: effective_validation_mode,
+          instrument: instrument
         )
 
         ta_result = perform_diagnostic_ta(index_cfg, signals_cfg)
@@ -327,7 +328,8 @@ module Signal
         validation_result = comprehensive_validation(
           index_cfg, final_direction, primary_series,
           analysis[:primary_analysis][:supertrend], { value: analysis[:primary_analysis][:adx_value] },
-          validation_mode: effective_validation_mode
+          validation_mode: effective_validation_mode,
+          instrument: instrument
         )
 
         {
@@ -718,16 +720,18 @@ module Signal
 
       # Comprehensive validation checks before proceeding with trades
       # When supertrend_only: true, ADX and trend_confirmation are skipped (Supertrend-only entry).
-      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false, validation_mode: nil, real_iv: nil)
+      def comprehensive_validation(index_cfg, direction, series, supertrend_result, adx, supertrend_only: false, validation_mode: nil, real_iv: nil, instrument: nil)
         mode_config = get_validation_mode_config(override_mode: validation_mode)
         # Rails.logger.info("[Signal] Running comprehensive validation for #{index_cfg[:key]} #{direction} (mode: #{mode_config[:mode]})")
 
         validation_checks = []
 
-        # 1. IV Rank Check - Prefer real IV when available, fall back to proxy
+        # 1. IV Rank Check - Prefer real IV (from option chain ATM strike) when available, fall back to proxy
         if mode_config[:require_iv_rank_check]
-          iv_rank_result = if real_iv && real_iv.to_f > 0
-                             validate_iv_rank_real(real_iv.to_f, mode_config)
+          effective_real_iv = real_iv.to_f.positive? ? real_iv : fetch_real_atm_iv(instrument: instrument, index_cfg: index_cfg, direction: direction)
+
+          iv_rank_result = if effective_real_iv && effective_real_iv.to_f > 0
+                             validate_iv_rank_real(effective_real_iv.to_f, mode_config)
                            else
                              validate_iv_rank(index_cfg, series, mode_config)
                            end
@@ -1055,8 +1059,34 @@ module Signal
         :equilibrium
       end
 
+      # Fetches the ATM strike's real implied volatility from the live option chain
+      # for the side (CE/PE) matching the signal direction. DhanHQ returns IV as a
+      # percentage (e.g. 14.5 = 14.5%); callers expect the decimal form (0.145).
+      # Returns nil on any failure so callers can fall back to the volatility proxy.
+      def fetch_real_atm_iv(instrument:, index_cfg:, direction:)
+        return nil unless instrument
+
+        expiry_date = Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
+        return nil unless expiry_date
+
+        chain_data = instrument.fetch_option_chain(expiry_date)
+        oc = chain_data.is_a?(Hash) ? chain_data[:oc] : nil
+        spot = chain_data.is_a?(Hash) ? chain_data[:last_price]&.to_f : nil
+        return nil unless oc.present? && spot&.positive?
+
+        atm_strike = oc.keys.map(&:to_f).min_by { |strike| (strike - spot).abs }
+        option_type = direction == :bullish ? 'ce' : 'pe'
+        iv_raw = oc[atm_strike.to_s]&.dig(option_type, 'implied_volatility')&.to_f
+        return nil unless iv_raw&.positive?
+
+        iv_raw > 1 ? iv_raw / 100.0 : iv_raw
+      rescue StandardError => e
+        Rails.logger.warn("[Signal] Failed to fetch real ATM IV for #{index_cfg[:key]}: #{e.class} - #{e.message}")
+        nil
+      end
+
       # Validates real implied volatility from option chain data.
-      # iv: Float (e.g. 0.45 = 45%) — from analysis_context[:option_data][:implied_volatility]
+      # iv: Float decimal (e.g. 0.45 = 45%)
       # Fails open when iv is zero (data unavailable).
       def validate_iv_rank_real(iv, mode_config)
         iv_f = iv.to_f
