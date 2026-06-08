@@ -2,11 +2,19 @@
 
 module Api
   class AlphaController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!, only: %i[status scan history performance]
+    before_action :authenticate_operator_token!, only: %i[execute]
+
+    VALID_INDICES = %w[nifty banknifty sensex].freeze
+    VALID_DIRECTIONS = %w[ce pe].freeze
+
     # GET /api/alpha/status
     def status
       config = AlgoConfig.fetch[:alpha_strategies] || {}
       limits = AlgoConfig.fetch[:risk_limits] || {}
-      
+
       render json: {
         enabled: config[:enabled] != false,
         indices: %w[nifty banknifty sensex],
@@ -19,12 +27,17 @@ module Api
           max_open_positions: limits[:max_open_positions] || 3
         }
       }
+    rescue StandardError => e
+      Rails.logger.error("[AlphaController] status error: #{e.class} - #{e.message}")
+      render json: { error: 'internal_error' }, status: :internal_server_error
     end
 
     # POST /api/alpha/scan
     def scan
-      indices = (params[:indices] || %w[nifty banknifty sensex]).map(&:to_sym)
-      engine = SignalEngine.new(indices: indices)
+      indices = (params[:indices] || VALID_INDICES).map(&:to_s) & VALID_INDICES
+      indices = VALID_INDICES if indices.empty?
+
+      engine = SignalEngine.new(indices: indices.map(&:to_sym))
       signals = engine.run
 
       render json: {
@@ -32,15 +45,29 @@ module Api
         count: signals.size,
         timestamp: Time.current.iso8601
       }
+    rescue StandardError => e
+      Rails.logger.error("[AlphaController] scan error: #{e.class} - #{e.message}")
+      render json: { error: 'internal_error' }, status: :internal_server_error
     end
 
     # POST /api/alpha/execute
     def execute
-      signal_params = params.require(:signal).permit!.to_h.symbolize_keys
-      
-      # Basic parameter normalization
-      signal_params[:index_key] = signal_params[:index_key].to_sym
-      signal_params[:direction] = signal_params[:direction].to_sym
+      signal_params = params.require(:signal).permit(
+        :index_key, :direction, :confidence, :strike, :expiry,
+        :stop_loss, :target, :alpha_source, :timestamp, :expected_value
+      ).to_h.symbolize_keys
+
+      index_key = signal_params[:index_key].to_s.downcase
+      direction = signal_params[:direction].to_s.downcase
+      unless VALID_INDICES.include?(index_key)
+        return render json: { status: :failure, reason: 'invalid index_key' }, status: :unprocessable_entity
+      end
+      unless VALID_DIRECTIONS.include?(direction)
+        return render json: { status: :failure, reason: 'invalid direction' }, status: :unprocessable_entity
+      end
+
+      signal_params[:index_key] = index_key.to_sym
+      signal_params[:direction] = direction.to_sym
       signal_params[:confidence] = signal_params[:confidence].to_f
       signal_params[:strike] = signal_params[:strike].to_f
 
@@ -51,41 +78,51 @@ module Api
       else
         render json: result, status: :unprocessable_entity
       end
+    rescue StandardError => e
+      Rails.logger.error("[AlphaController] execute error: #{e.class} - #{e.message}")
+      render json: { error: 'internal_error' }, status: :internal_server_error
     end
 
     # GET /api/alpha/history
     def history
-      signals = AlphaSignal.recent.limit(100).map do |s|
-        data = s.as_json
+      signals = AlphaSignal.recent.limit(100).to_a
+      order_ids = signals.filter_map(&:order_id)
+      trackers = PositionTracker.where(order_no: order_ids).index_by(&:order_no)
+
+      data = signals.map do |s|
+        row = s.as_json
         if s.order_id.present?
-          tracker = PositionTracker.find_by(order_no: s.order_id)
-          data[:pnl] = tracker&.last_pnl_rupees || tracker&.current_pnl_rupees
-          data[:symbol] = tracker&.symbol
-          data[:qty] = tracker&.quantity
+          tracker = trackers[s.order_id]
+          row[:pnl] = tracker&.last_pnl_rupees || tracker&.current_pnl_rupees
+          row[:symbol] = tracker&.symbol
+          row[:qty] = tracker&.quantity
         end
-        data
+        row
       end
-      render json: signals
+
+      render json: data
+    rescue StandardError => e
+      Rails.logger.error("[AlphaController] history error: #{e.class} - #{e.message}")
+      render json: { error: 'internal_error' }, status: :internal_server_error
     end
 
     # GET /api/alpha/performance
     def performance
       stats = AlphaSignal.executed.group(:alpha_source).count
-      pnl_stats = {}
+      signals = AlphaSignal.executed.to_a
+      trackers = PositionTracker.where(order_no: signals.filter_map(&:order_id)).index_by(&:order_no)
 
-      stats.each do |source, count|
-        signals = AlphaSignal.where(alpha_source: source).executed
-        order_ids = signals.pluck(:order_id).compact
-        trackers = PositionTracker.where(order_no: order_ids)
-        
-        total_pnl = trackers.sum(:last_pnl_rupees).to_f
-        wins = trackers.where('last_pnl_rupees > 0').count
-        
-        pnl_stats[source] = {
+      pnl_stats = signals.group_by(&:alpha_source).transform_values do |sigs|
+        relevant = sigs.filter_map { |s| trackers[s.order_id] }
+        count = sigs.size
+        total_pnl = relevant.sum { |t| t.last_pnl_rupees.to_f }
+        wins = relevant.count { |t| t.last_pnl_rupees.to_f > 0 }
+
+        {
           count: count,
           total_pnl: total_pnl.round(2),
-          win_rate: count > 0 ? (wins.to_f / count * 100).round(1) : 0,
-          avg_pnl: count > 0 ? (total_pnl / count).round(2) : 0
+          win_rate: count.positive? ? (wins.to_f / count * 100).round(1) : 0,
+          avg_pnl: count.positive? ? (total_pnl / count).round(2) : 0
         }
       end
 
@@ -94,6 +131,9 @@ module Api
         total_executed: stats.values.sum,
         timestamp: Time.current.iso8601
       }
+    rescue StandardError => e
+      Rails.logger.error("[AlphaController] performance error: #{e.class} - #{e.message}")
+      render json: { error: 'internal_error' }, status: :internal_server_error
     end
   end
 end

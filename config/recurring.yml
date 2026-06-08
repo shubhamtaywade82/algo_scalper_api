@@ -81,6 +81,13 @@ development:
     schedule: at 7:00am every day
     description: "Daily AI-driven trading calibration — analyzes paper trades and proposes config patches"
 
+  alpha_scanner:
+    class: AlphaScanJob
+    schedule: every 5 minutes
+    queue_name: background
+    priority: 10
+    description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
+
 production:
   instruments_import:
     class: InstrumentsImportJob
@@ -157,3 +164,10 @@ production:
     queue_name: background
     priority: 25
     description: "Persists public IP last-seen (throttled); dashboard polling does not write public_ip_logs"
+
+  alpha_scanner:
+    class: AlphaScanJob
+    schedule: every 5 minutes during market hours
+    queue_name: background
+    priority: 10
+    description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"

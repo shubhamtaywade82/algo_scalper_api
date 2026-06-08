@@ -66,7 +66,7 @@ module Risk
       private
 
       def redis
-        @redis ||= Redis.new(url: REDIS_URL)
+        @redis ||= Redis.new(url: REDIS_URL, timeout: 1, reconnect_attempts: 1)
       rescue StandardError => e
         Rails.logger.error "[Risk::LimitsGuard] Redis error: #{e.message}"
         nil

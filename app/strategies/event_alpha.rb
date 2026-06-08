@@ -59,6 +59,8 @@ class EventAlpha < AlphaStrategy
   def upcoming_event
     today = Date.current
     EVENT_CALENDAR.find do |(month, day), _|
+      next false unless Date.valid_date?(today.year, month, day)
+
       event_date = Date.new(today.year, month, day)
       event_date >= today && event_date <= today + 2
     end&.last

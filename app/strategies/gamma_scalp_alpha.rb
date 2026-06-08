@@ -64,9 +64,14 @@ class GammaScalpAlpha < AlphaStrategy
 
   def detect_micro_breakout(bars)
     closes = bars.map { |b| b[:close] || b['close'] || 0 }
-    if closes.last > closes.max_by { |c| c == closes.last ? 0 : c }
+    return nil if closes.size < 2
+
+    prior_max = closes[0..-2].max
+    prior_min = closes[0..-2].min
+
+    if closes.last > prior_max
       :ce
-    elsif closes.last < closes.min_by { |c| c == closes.last ? Float::INFINITY : c }
+    elsif closes.last < prior_min
       :pe
     end
   end

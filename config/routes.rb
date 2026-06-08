@@ -45,7 +45,6 @@ Rails.application.routes.draw do
     patch  'settings/deep_merge',   to: 'settings#update_deep_merge'
     post   'settings/update_ip',    to: 'settings#update_ip'
 
-    # Calibration runs — view and apply automated config patches
     # Alpha Engine
     namespace :alpha do
       get  :status
@@ -55,8 +54,8 @@ Rails.application.routes.draw do
       get  :performance
     end
 
-    resources :calibration_runs, only: [:index, :show] do
-
+    # Calibration runs — view and apply automated config patches
+    resources :calibration_runs, only: %i[index show] do
       member do
         post :apply
       end

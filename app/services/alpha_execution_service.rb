@@ -18,6 +18,9 @@ module AlphaExecutionService
 
       # 3. Directional Locking (Conflict check)
       return failure("Conflicting position exists for #{signal[:index_key]}") if conflicting_position?(signal)
+      
+      # 3b. AI Alpha Gate Check
+      return failure("Trade blocked by AI Risk Manager") unless Ai::AlphaGate.approve?(signal)
 
       # 4. Find the tradable Derivative
       # Safety: Re-verify ATM strike if index has moved since signal timestamp

@@ -1224,3 +1224,28 @@ options:
     window_days: 20      # how long samples stay in the rolling window
     max_samples: 500     # hard cap on samples per index (oldest trimmed first)
     min_samples: 30      # below this, percentile_rank returns nil (cold start → fall back to absolute band)
+
+# ===== ALPHA INTELLIGENCE ENGINE =====
+alpha_strategies:
+  enabled: true
+  auto_execute_threshold: 0.75
+  ai_gate:
+    enabled: true
+  nifty:
+    momentum_alpha: true
+    vol_expansion_alpha: true
+    event_alpha: true
+    gamma_scalp_alpha: true
+    expiry_alpha: true
+  banknifty:
+    momentum_alpha: true
+    vol_expansion_alpha: true
+    event_alpha: true
+    gamma_scalp_alpha: true
+    expiry_alpha: true
+  sensex:
+    momentum_alpha: true
+    vol_expansion_alpha: true
+    event_alpha: true
+    gamma_scalp_alpha: true
+    expiry_alpha: true
