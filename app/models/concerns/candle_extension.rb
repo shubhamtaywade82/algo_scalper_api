@@ -62,6 +62,9 @@ module CandleExtension
       @ohlc_cache[interval] = CandleSeries.new(symbol: symbol_name, interval: interval).tap do |series|
         series.load_from_raw(raw_data)
       end
+      @last_ohlc_fetched ||= {}
+      @last_ohlc_fetched[interval] = Time.current
+      @ohlc_cache[interval]
     end
 
     def ohlc_stale?(interval)
@@ -73,9 +76,9 @@ module CandleExtension
 
       return true unless @last_ohlc_fetched[interval]
 
-      Time.current - @last_ohlc_fetched[interval] > cache_duration_minutes.minutes
-    ensure
-      @last_ohlc_fetched[interval] = Time.current
+      is_stale = Time.current - @last_ohlc_fetched[interval] > cache_duration_minutes.minutes
+      @last_ohlc_fetched[interval] = Time.current if is_stale
+      is_stale
     end
 
     def candle_series(interval: '5')
