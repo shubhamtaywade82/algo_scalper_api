@@ -2,6 +2,7 @@ import { createSignal, createMemo, createResource, For, Show, onMount, onCleanup
 import { A } from '@solidjs/router'
 import { dashboardApiHeaders } from '../lib/dashboardApi'
 import { useDashboard } from '../stores/useDashboard'
+import { usePositions } from '../stores/usePositions'
 import PriceChart from '../components/charts/PriceChart'
 
 const INDICES = ['NIFTY', 'BANKNIFTY', 'SENSEX']
@@ -72,6 +73,13 @@ export default function Charts() {
     const val = indices()?.[key]
     return val == null ? null : Number(val)
   })
+
+  // Active positions whose underlying matches the chart's selected index —
+  // overlaid on PriceChart as entry-price lines + entry-time arrow markers.
+  const { open: openPositions } = usePositions()
+  const chartPositions = createMemo(() =>
+    (openPositions() || []).filter(p => (p.index_key || '').toUpperCase() === indexKey())
+  )
 
   return (
     <div class="h-screen w-screen flex flex-col bg-gray-950 text-gray-100 overflow-hidden">
@@ -165,7 +173,14 @@ export default function Charts() {
         </Show>
         <Show when={!candles.loading && !candles.error}>
           <div class="h-full rounded-2xl border border-white/5 bg-gray-900/40 overflow-hidden">
-            <PriceChart candles={() => candles() || []} liveLtp={liveLtp} indicators={indicators} height={null} fullHeight />
+            <PriceChart
+              candles={() => candles() || []}
+              liveLtp={liveLtp}
+              indicators={indicators}
+              positions={chartPositions}
+              height={null}
+              fullHeight
+            />
           </div>
         </Show>
       </div>

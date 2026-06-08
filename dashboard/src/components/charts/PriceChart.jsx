@@ -1,5 +1,5 @@
 import { onMount, onCleanup, createEffect } from 'solid-js'
-import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType } from 'lightweight-charts'
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, ColorType } from 'lightweight-charts'
 
 // Overlay indicators are just LineSeries fed derived {time, value} arrays.
 // Add a new type by: (1) writing a compute fn here, (2) registering it in
@@ -57,6 +57,9 @@ const INITIAL_VISIBLE_BARS = 80
  *   candles:    () => [{ time, open, high, low, close, volume }]  (time = unix seconds)
  *   liveLtp:    () => number | null — real-time tick driving the forming bar + LTP line
  *   indicators: () => [{ id, type: 'sma'|'ema', period, color, enabled }] — overlay config
+ *   positions:  () => [{ id, symbol, side, entry_price, created_at, pnl }] — active
+ *               positions on this underlying; rendered as dotted entry-price lines
+ *               + entry-time arrow markers, colored green/red by current PnL sign
  *   height:     number (optional, default 420)
  *   fullHeight: boolean — stretch to container via lightweight-charts autoSize
  */
@@ -68,6 +71,8 @@ export default function PriceChart(props) {
   let priceLine
   let lastCandles = []
   const indicatorSeries = new Map() // id -> { series, config }
+  let positionMarkers          // ISeriesMarkersPluginApi — entry-point arrows
+  const positionLines = new Map() // id -> price line (entry price)
 
   // Animation state for the live (last) candle + LTP line
   let rafId = null
@@ -114,6 +119,61 @@ export default function PriceChart(props) {
 
   function kickAnimation() {
     if (rafId === null) rafId = requestAnimationFrame(animate)
+  }
+
+  // Plots active positions on their underlying's chart: an entry-price dashed
+  // line per position (so you can see at a glance whether price is above/below
+  // your entry) plus an arrow marker at the moment of entry.
+  function syncPositions() {
+    if (!chart || !candleSeries || !positionMarkers) return
+    const positions = props.positions ? props.positions() : []
+    const seenIds = new Set()
+    const markers = []
+
+    for (const pos of positions) {
+      seenIds.add(pos.id)
+      const isLong = (pos.side || pos.direction || '').toUpperCase() !== 'SELL'
+      const pnl = pos.pnl ?? 0
+      const pnlColor = pnl >= 0 ? '#34d399' : '#fb7185'
+      const pnlLabel = `${pnl >= 0 ? '+' : ''}₹${Number(pnl).toFixed(0)}${pos.pnl_pct != null ? ` (${pos.pnl_pct >= 0 ? '+' : ''}${pos.pnl_pct}%)` : ''}`
+
+      let line = positionLines.get(pos.id)
+      const lineOpts = {
+        price: pos.entry_price,
+        color: pnlColor,
+        lineWidth: 1,
+        lineStyle: 3, // dotted — visually distinct from the solid LTP dashed line
+        axisLabelVisible: true,
+        title: `${pos.symbol || 'POS'} @ ${pos.entry_price} · ${pnlLabel}`
+      }
+      if (!line) {
+        line = candleSeries.createPriceLine(lineOpts)
+        positionLines.set(pos.id, line)
+      } else {
+        line.applyOptions(lineOpts)
+      }
+
+      const entryTime = pos.created_at ? Math.floor(new Date(pos.created_at).getTime() / 1000) : null
+      if (entryTime) {
+        markers.push({
+          time: entryTime,
+          position: isLong ? 'belowBar' : 'aboveBar',
+          color: pnlColor,
+          shape: isLong ? 'arrowUp' : 'arrowDown',
+          text: `${pos.symbol || ''} ${pos.entry_price} · ${pnlLabel}`.trim()
+        })
+      }
+    }
+
+    for (const [id, line] of positionLines) {
+      if (!seenIds.has(id)) {
+        candleSeries.removePriceLine(line)
+        positionLines.delete(id)
+      }
+    }
+
+    markers.sort((a, b) => a.time - b.time)
+    positionMarkers.setMarkers(markers)
   }
 
   // Reconciles indicatorSeries against the current config: adds series for newly
@@ -196,6 +256,8 @@ export default function PriceChart(props) {
       scaleMargins: { top: 0.85, bottom: 0 }
     })
 
+    positionMarkers = createSeriesMarkers(candleSeries, [])
+
     priceLine = candleSeries.createPriceLine({
       price: 0,
       color: '#60a5fa',
@@ -236,6 +298,9 @@ export default function PriceChart(props) {
       targetBar = null
       renderedClose = null
       didInitialFit = false
+      for (const line of positionLines.values()) candleSeries.removePriceLine(line)
+      positionLines.clear()
+      positionMarkers?.setMarkers([])
       candleSeries.setData([])
       volumeSeries.setData([])
       return
@@ -248,6 +313,7 @@ export default function PriceChart(props) {
     volumeSeries.setData(staticBars.map(toVolumePoint))
     lastCandles = candles
     syncIndicators()
+    syncPositions()
 
     // New live bar's open becomes the lerp start so each fresh refresh
     // re-animates from where the bar began rather than snapping to the latest close
@@ -276,6 +342,14 @@ export default function PriceChart(props) {
     props.indicators ? props.indicators() : null
     if (!chart || !lastCandles.length) return
     syncIndicators()
+  })
+
+  // Active-position overlay changes (open/close/PnL flip) — independent of the
+  // candles refresh cadence so a fresh entry/exit shows up immediately.
+  createEffect(() => {
+    props.positions ? props.positions() : null
+    if (!chart || !lastCandles.length) return
+    syncPositions()
   })
 
   // Real-time WS ticks (sub-second) — overrides the forming bar's close so the
