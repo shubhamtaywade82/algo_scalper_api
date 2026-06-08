@@ -14,6 +14,15 @@ const INTERVALS = [
   { value: '60', label: '1h' }
 ]
 
+// Default indicator catalog — each entry is a self-contained config the
+// PriceChart consumes directly. Add a new overlay by appending here AND
+// registering its compute fn in PriceChart's INDICATOR_COMPUTE map.
+const DEFAULT_INDICATORS = [
+  { id: 'sma20', type: 'sma', label: 'SMA', period: 20, color: '#fbbf24', enabled: true },
+  { id: 'sma50', type: 'sma', label: 'SMA', period: 50, color: '#a78bfa', enabled: true },
+  { id: 'ema21', type: 'ema', label: 'EMA', period: 21, color: '#38bdf8', enabled: false }
+]
+
 async function fetchCandles({ indexKey, interval }) {
   const res = await fetch(`/api/candles/${indexKey}?interval=${interval}&days=5`, {
     headers: dashboardApiHeaders()
@@ -30,6 +39,17 @@ async function fetchCandles({ indexKey, interval }) {
 export default function Charts() {
   const [indexKey, setIndexKey] = createSignal('NIFTY')
   const [interval, setInterval_] = createSignal('5')
+  const [indicators, setIndicators] = createSignal(DEFAULT_INDICATORS)
+  const [showIndicatorPanel, setShowIndicatorPanel] = createSignal(false)
+
+  function toggleIndicator(id) {
+    setIndicators(list => list.map(i => (i.id === id ? { ...i, enabled: !i.enabled } : i)))
+  }
+  function setIndicatorPeriod(id, period) {
+    const n = Number(period)
+    if (!Number.isFinite(n) || n < 1) return
+    setIndicators(list => list.map(i => (i.id === id ? { ...i, period: Math.round(n) } : i)))
+  }
 
   const [candles, { refetch }] = createResource(
     () => ({ indexKey: indexKey(), interval: interval() }),
@@ -96,8 +116,43 @@ export default function Charts() {
               )}
             </For>
           </div>
+
+          <button
+            class={`px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-wider transition-colors ${
+              showIndicatorPanel() ? 'bg-primary-500/20 border-primary-500/30 text-primary-300' : 'border-white/10 text-gray-400 hover:text-gray-200'
+            }`}
+            onClick={() => setShowIndicatorPanel(v => !v)}
+          >
+            Indicators
+          </button>
         </div>
       </header>
+
+      <Show when={showIndicatorPanel()}>
+        <div class="flex flex-wrap items-center gap-4 px-5 py-3 border-b border-white/5 bg-gray-900/40 shrink-0">
+          <For each={indicators()}>
+            {ind => (
+              <div class={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${ind.enabled ? 'border-white/10 bg-white/[0.03]' : 'border-white/5 opacity-50'}`}>
+                <button
+                  class="flex items-center gap-1.5"
+                  onClick={() => toggleIndicator(ind.id)}
+                  title={ind.enabled ? 'Disable' : 'Enable'}
+                >
+                  <span class="w-2.5 h-2.5 rounded-full" style={{ background: ind.color }} />
+                  <span class="text-xs font-bold text-gray-300">{ind.label}</span>
+                </button>
+                <input
+                  type="number"
+                  min="1"
+                  value={ind.period}
+                  class="w-14 bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs text-gray-200 text-center"
+                  onInput={e => setIndicatorPeriod(ind.id, e.currentTarget.value)}
+                />
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
 
       <div class="flex-1 min-h-0 p-4">
         <Show when={candles.loading}>
@@ -110,7 +165,7 @@ export default function Charts() {
         </Show>
         <Show when={!candles.loading && !candles.error}>
           <div class="h-full rounded-2xl border border-white/5 bg-gray-900/40 overflow-hidden">
-            <PriceChart candles={() => candles() || []} liveLtp={liveLtp} height={null} fullHeight />
+            <PriceChart candles={() => candles() || []} liveLtp={liveLtp} indicators={indicators} height={null} fullHeight />
           </div>
         </Show>
       </div>

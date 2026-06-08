@@ -44,18 +44,30 @@ module Api
       )
     end
 
+    # DhanHQ intraday fetch is the slow part (network round-trip per request).
+    # Cache the raw bars per index/interval/days — TTL scaled to the candle size so
+    # the cache naturally refreshes roughly once per bar close. Keyed by today's date
+    # so the cache can't bleed stale data across sessions.
     def fetch_bars(instrument, interval:, days:)
-      DhanHQ::Models::HistoricalData.intraday(
-        security_id: instrument.security_id,
-        exchange_segment: instrument.exchange_segment,
-        instrument: DhanHQ::Constants::InstrumentType::INDEX,
-        interval: interval,
-        from_date: (Time.zone.today - days.days).to_s,
-        to_date: Time.zone.today.to_s
-      )
+      cache_key = "candles/#{instrument.security_id}/#{interval}/#{days}d/#{Time.zone.today}"
+      Rails.cache.fetch(cache_key, expires_in: cache_ttl(interval)) do
+        DhanHQ::Models::HistoricalData.intraday(
+          security_id: instrument.security_id,
+          exchange_segment: instrument.exchange_segment,
+          instrument: DhanHQ::Constants::InstrumentType::INDEX,
+          interval: interval,
+          from_date: (Time.zone.today - days.days).to_s,
+          to_date: Time.zone.today.to_s
+        )
+      end
     rescue StandardError => e
       Rails.logger.warn("[Api::CandlesController] historical fetch failed: #{e.message}")
       []
+    end
+
+    def cache_ttl(interval)
+      { '1' => 30.seconds, '5' => 1.minute, '15' => 3.minutes, '25' => 5.minutes, '60' => 10.minutes }
+        .fetch(interval, 1.minute)
     end
 
     def serialize_bar(bar)

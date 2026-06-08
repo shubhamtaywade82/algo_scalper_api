@@ -1,5 +1,33 @@
 import { onMount, onCleanup, createEffect } from 'solid-js'
-import { createChart, CandlestickSeries, HistogramSeries, ColorType } from 'lightweight-charts'
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType } from 'lightweight-charts'
+
+// Overlay indicators are just LineSeries fed derived {time, value} arrays.
+// Add a new type by: (1) writing a compute fn here, (2) registering it in
+// INDICATOR_COMPUTE, (3) adding it to the catalog passed from Charts.jsx.
+function sma(bars, period) {
+  const out = []
+  let sum = 0
+  for (let i = 0; i < bars.length; i++) {
+    sum += bars[i].close
+    if (i >= period) sum -= bars[i - period].close
+    if (i >= period - 1) out.push({ time: bars[i].time, value: sum / period })
+  }
+  return out
+}
+
+function ema(bars, period) {
+  const out = []
+  const k = 2 / (period + 1)
+  let prev = null
+  for (let i = 0; i < bars.length; i++) {
+    const close = bars[i].close
+    prev = prev === null ? close : close * k + prev * (1 - k)
+    if (i >= period - 1) out.push({ time: bars[i].time, value: prev })
+  }
+  return out
+}
+
+const INDICATOR_COMPUTE = { sma, ema }
 
 // Exponential lerp toward a target — same approach as chart-studio's MotionEngine
 // (current += (target - current) * smoothingFactor per animation frame).
@@ -12,6 +40,10 @@ function lerp(current, target, factor, epsilon = 1e-6) {
 
 const SMOOTHING = 0.18 // higher = snappier, lower = floatier (0.1-0.25 reads as "smooth")
 
+// Default zoom on first load — show roughly this many bars rather than squeezing
+// all 5 days of history into view (which renders candles as thin slivers).
+const INITIAL_VISIBLE_BARS = 80
+
 /**
  * Candlestick + volume chart wrapper around lightweight-charts (vanilla,
  * framework-agnostic — same library used by chart-studio / janus). Solid owns the
@@ -22,8 +54,10 @@ const SMOOTHING = 0.18 // higher = snappier, lower = floatier (0.1-0.25 reads as
  * MotionEngine smoothing so price action reads as continuous motion, not steps.
  *
  * Props:
- *   candles:   () => [{ time, open, high, low, close, volume }]  (time = unix seconds)
- *   height:    number (optional, default 420)
+ *   candles:    () => [{ time, open, high, low, close, volume }]  (time = unix seconds)
+ *   liveLtp:    () => number | null — real-time tick driving the forming bar + LTP line
+ *   indicators: () => [{ id, type: 'sma'|'ema', period, color, enabled }] — overlay config
+ *   height:     number (optional, default 420)
  *   fullHeight: boolean — stretch to container via lightweight-charts autoSize
  */
 export default function PriceChart(props) {
@@ -32,12 +66,15 @@ export default function PriceChart(props) {
   let candleSeries
   let volumeSeries
   let priceLine
+  let lastCandles = []
+  const indicatorSeries = new Map() // id -> { series, config }
 
   // Animation state for the live (last) candle + LTP line
   let rafId = null
   let renderedClose = null   // currently-painted close (lerps toward target)
   let targetBar = null       // latest known OHLC for the live bar
   let staticBars = []        // all-but-last bars, painted once via setData
+  let didInitialFit = false  // only auto-zoom on the very first data load
 
   function animate() {
     if (!chart || !candleSeries || !targetBar) {
@@ -79,6 +116,45 @@ export default function PriceChart(props) {
     if (rafId === null) rafId = requestAnimationFrame(animate)
   }
 
+  // Reconciles indicatorSeries against the current config: adds series for newly
+  // enabled indicators, removes ones turned off, restyles changed ones, and
+  // (re)computes data for anything whose config or the underlying candles changed.
+  function syncIndicators() {
+    if (!chart) return
+    const configs = (props.indicators ? props.indicators() : []).filter(c => c.enabled)
+    const seenIds = new Set()
+
+    for (const cfg of configs) {
+      seenIds.add(cfg.id)
+      const computeFn = INDICATOR_COMPUTE[cfg.type]
+      if (!computeFn) continue
+
+      let entry = indicatorSeries.get(cfg.id)
+      if (!entry) {
+        const series = chart.addSeries(LineSeries, {
+          color: cfg.color, lineWidth: 2, lastValueVisible: false, priceLineVisible: false
+        })
+        entry = { series, config: null }
+        indicatorSeries.set(cfg.id, entry)
+      }
+
+      const prev = entry.config
+      const restyled = !prev || prev.color !== cfg.color
+      const recompute = !prev || prev.type !== cfg.type || prev.period !== cfg.period
+
+      if (restyled) entry.series.applyOptions({ color: cfg.color })
+      if (recompute) entry.series.setData(computeFn(lastCandles, cfg.period))
+      entry.config = { ...cfg }
+    }
+
+    for (const [id, entry] of indicatorSeries) {
+      if (!seenIds.has(id)) {
+        chart.removeSeries(entry.series)
+        indicatorSeries.delete(id)
+      }
+    }
+  }
+
   onMount(() => {
     chart = createChart(containerEl, {
       layout: {
@@ -92,7 +168,9 @@ export default function PriceChart(props) {
       width: containerEl.clientWidth,
       height: props.fullHeight ? containerEl.clientHeight : (props.height || 420),
       autoSize: !!props.fullHeight,
-      timeScale: { timeVisible: true, secondsVisible: false },
+      // rightOffset keeps a few empty bars between the latest candle and the
+      // price axis instead of pinning it flush against the edge.
+      timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5 },
       crosshair: { mode: 0 },
       // Built-in kinetic scroll/zoom easing — the chart's own "smooth animation" layer
       kineticScroll: { touch: true, mouse: true }
@@ -103,7 +181,11 @@ export default function PriceChart(props) {
       downColor: '#fb7185',
       borderVisible: false,
       wickUpColor: '#34d399',
-      wickDownColor: '#fb7185'
+      wickDownColor: '#fb7185',
+      // Built-in last-value label disabled — our custom `priceLine` "LTP" label
+      // already shows current price; both together duplicate the axis label.
+      lastValueVisible: false,
+      priceLineVisible: false
     })
 
     volumeSeries = chart.addSeries(HistogramSeries, {
@@ -153,6 +235,7 @@ export default function PriceChart(props) {
       staticBars = []
       targetBar = null
       renderedClose = null
+      didInitialFit = false
       candleSeries.setData([])
       volumeSeries.setData([])
       return
@@ -163,6 +246,8 @@ export default function PriceChart(props) {
 
     candleSeries.setData(staticBars.map(toCandlePoint))
     volumeSeries.setData(staticBars.map(toVolumePoint))
+    lastCandles = candles
+    syncIndicators()
 
     // New live bar's open becomes the lerp start so each fresh refresh
     // re-animates from where the bar began rather than snapping to the latest close
@@ -171,7 +256,26 @@ export default function PriceChart(props) {
     renderedClose = isNewBar ? lastBar.open : renderedClose
 
     kickAnimation()
-    chart.timeScale().fitContent()
+
+    // Zoom to a fixed bar count on first load only — fitContent() squeezes all
+    // history in (tiny candles) and re-fitting on every refresh would fight the
+    // user's manual zoom/pan.
+    if (!didInitialFit) {
+      didInitialFit = true
+      const total = candles.length
+      chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, total - INITIAL_VISIBLE_BARS),
+        to: total - 1 + 5 // include the rightOffset gap
+      })
+    }
+  })
+
+  // Indicator config changes (toggle on/off, edit period/color) — independent of
+  // the candles effect so flipping a switch updates immediately, no refetch needed.
+  createEffect(() => {
+    props.indicators ? props.indicators() : null
+    if (!chart || !lastCandles.length) return
+    syncIndicators()
   })
 
   // Real-time WS ticks (sub-second) — overrides the forming bar's close so the
