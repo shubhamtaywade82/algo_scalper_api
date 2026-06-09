@@ -1159,6 +1159,8 @@ module Signal
       # Returns +0.10 when MACD histogram direction aligns with entry direction.
       def macd_confidence_factor(direction, series)
         result    = Indicators::MacdIndicator.new(series: series).calculate_at(-1)
+        return 0.0 if result.nil?
+
         histogram = result.dig(:value, :histogram).to_f
         return 0.10 if direction == :bullish && histogram > 0
         return 0.10 if direction == :bearish && histogram < 0
