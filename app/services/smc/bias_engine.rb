@@ -132,7 +132,11 @@ module Smc
       sleep(@delay_seconds) if @delay_seconds.positive?
 
       series = @instrument.candles(interval: interval)
+      return nil if series.nil?
+
       trimmed = trim_series(series, max_candles: max_candles)
+      return nil if trimmed.nil?
+
       Smc::Context.new(trimmed)
     end
 
@@ -185,14 +189,20 @@ module Smc
     end
 
     def htf_bias_valid?(ctx)
+      return false if ctx.nil?
+
       ctx.pd.discount? || ctx.pd.premium?
     end
 
     def mtf_aligns?(htf, mtf)
+      return false if htf.nil? || mtf.nil?
+
       htf.structure.trend == mtf.structure.trend || mtf.structure.choch?
     end
 
     def ltf_entry(htf, _mtf, ltf)
+      return :no_trade if htf.nil? || ltf.nil?
+
       # State-machine driven entry: Trap -> Expansion -> Trend -> Entry Zone
       # We check if LTF is in a phase that supports the bias
 
