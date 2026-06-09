@@ -76,6 +76,10 @@ module Smc
       mtf_trimmed = trim_series(mtf_series, max_candles: MTF_CANDLES)
       ltf_trimmed = trim_series(ltf_series, max_candles: LTF_CANDLES)
 
+      Rails.logger.warn("[Smc::BiasEngine] details: HTF series unavailable for #{@instrument.symbol_name}") if htf_trimmed.nil?
+      Rails.logger.warn("[Smc::BiasEngine] details: MTF series unavailable for #{@instrument.symbol_name}") if mtf_trimmed.nil?
+      Rails.logger.warn("[Smc::BiasEngine] details: LTF series unavailable for #{@instrument.symbol_name}") if ltf_trimmed.nil?
+
       htf = htf_trimmed ? Smc::Context.new(htf_trimmed) : nil
       mtf = mtf_trimmed ? Smc::Context.new(mtf_trimmed) : nil
       ltf = ltf_trimmed ? Smc::Context.new(ltf_trimmed) : nil
@@ -111,7 +115,8 @@ module Smc
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true &&
         Services::Ai::OllamaClient.instance.enabled?
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::BiasEngine] ai_enabled? check failed: #{e.class} - #{e.message}")
       false
     end
 
@@ -136,10 +141,16 @@ module Smc
       sleep(@delay_seconds) if @delay_seconds.positive?
 
       series = @instrument.candles(interval: interval)
-      return nil if series.nil?
+      if series.nil?
+        Rails.logger.warn("[Smc::BiasEngine] No candle data for #{@instrument.symbol_name} interval=#{interval} — skipping context build")
+        return nil
+      end
 
       trimmed = trim_series(series, max_candles: max_candles)
-      return nil if trimmed.nil?
+      if trimmed.nil?
+        Rails.logger.warn("[Smc::BiasEngine] trim_series returned nil for #{@instrument.symbol_name} interval=#{interval}")
+        return nil
+      end
 
       Smc::Context.new(trimmed)
     end
@@ -161,7 +172,8 @@ module Smc
 
     def smc_confluence_digest_enabled?
       AlgoConfig.fetch.dig(:signals, :enable_smc_confluence_digest) == true
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::BiasEngine] smc_confluence_digest_enabled? check failed: #{e.class} - #{e.message}")
       false
     end
 
