@@ -72,18 +72,22 @@ module Smc
 
       ltf_series = @instrument.candles(interval: LTF_INTERVAL)
 
-      htf = Smc::Context.new(trim_series(htf_series, max_candles: HTF_CANDLES))
-      mtf = Smc::Context.new(trim_series(mtf_series, max_candles: MTF_CANDLES))
-      ltf = Smc::Context.new(trim_series(ltf_series, max_candles: LTF_CANDLES))
+      htf_trimmed = trim_series(htf_series, max_candles: HTF_CANDLES)
+      mtf_trimmed = trim_series(mtf_series, max_candles: MTF_CANDLES)
+      ltf_trimmed = trim_series(ltf_series, max_candles: LTF_CANDLES)
 
-      avrz = Avrz::Detector.new(ltf_series)
+      htf = htf_trimmed ? Smc::Context.new(htf_trimmed) : nil
+      mtf = mtf_trimmed ? Smc::Context.new(mtf_trimmed) : nil
+      ltf = ltf_trimmed ? Smc::Context.new(ltf_trimmed) : nil
+
+      avrz = ltf_series ? Avrz::Detector.new(ltf_series) : nil
 
       base = {
         decision: decision_value,
         timeframes: {
-          htf: { interval: HTF_INTERVAL, context: htf.to_h },
-          mtf: { interval: MTF_INTERVAL, context: mtf.to_h },
-          ltf: { interval: LTF_INTERVAL, context: ltf.to_h, avrz: avrz.to_h }
+          htf: { interval: HTF_INTERVAL, context: htf&.to_h },
+          mtf: { interval: MTF_INTERVAL, context: mtf&.to_h },
+          ltf: { interval: LTF_INTERVAL, context: ltf&.to_h, avrz: avrz&.to_h }
         }
       }
       merge_smc_confluence_mtf!(base, htf_series, mtf_series, ltf_series)
@@ -234,9 +238,9 @@ module Smc
         decision: decision.to_s,
         contexts: {
           decision: decision.to_s,
-          htf: htf.to_h,
-          mtf: mtf.to_h,
-          ltf: ltf.to_h
+          htf: htf&.to_h,
+          mtf: mtf&.to_h,
+          ltf: ltf&.to_h
         },
         price: current_price
       )
