@@ -24,8 +24,8 @@ module OptionsBuying
       pe = all.select { |c| c[:type].to_s.upcase == 'PE' }
 
       liquid = filter_liquid(all, spot: spot)
-      resistance_strike = max_oi_strike(ce, spot: spot)
-      support_strike = max_oi_strike(pe, spot: spot)
+      resistance_strike = structural_strike(ce, spot: spot, side: :resistance)
+      support_strike = structural_strike(pe, spot: spot, side: :support)
 
       StateStore.set_radar_strikes(@index_key, liquid)
       StateStore.set_resistance(@index_key, resistance_strike) if resistance_strike&.positive?
@@ -102,17 +102,32 @@ module OptionsBuying
       candidate[:ltp].to_f.positive?
     end
 
-    # Peak open-interest strike among the given (already type-filtered) candidates.
-    # Falls back to the strike nearest spot when OI is unavailable (LTP-only chain).
-    def max_oi_strike(candidates, spot:)
-      with_oi = candidates.select { |c| c[:oi].to_i.positive? }
+    # Call wall (CE) at/above spot; put wall (PE) at/below spot. Uses peak OI when
+    # available, otherwise the spot-side strike nearest to the index LTP.
+    def structural_strike(candidates, spot:, side:)
+      return nil unless spot&.positive? && candidates.any?
+
+      pool = candidates_for_side(candidates, spot: spot, side: side)
+      with_oi = pool.select { |c| c[:oi].to_i.positive? }
       if with_oi.any?
         return with_oi.max_by { |c| c[:oi].to_i }&.dig(:strike)&.to_f
       end
 
-      return nil unless spot&.positive? && candidates.any?
+      pool.min_by { |c| (c[:strike].to_f - spot.to_f).abs }&.dig(:strike)&.to_f
+    end
 
-      candidates.min_by { |c| (c[:strike].to_f - spot.to_f).abs }&.dig(:strike)&.to_f
+    def candidates_for_side(candidates, spot:, side:)
+      spot_f = spot.to_f
+      case side
+      when :resistance
+        above = candidates.select { |c| c[:strike].to_f >= spot_f }
+        above.presence || candidates
+      when :support
+        below = candidates.select { |c| c[:strike].to_f <= spot_f }
+        below.presence || candidates
+      else
+        candidates
+      end
     end
 
     def session_minutes_elapsed

@@ -85,5 +85,13 @@ RSpec.describe OptionsBuying::ChainRadar do
       expect(OptionsBuying::StateStore).to have_received(:set_resistance).with('NIFTY', 24_600.0)
       expect(OptionsBuying::StateStore).to have_received(:set_support).with('NIFTY', 24_400.0)
     end
+
+    it 'keeps resistance and support on opposite sides of spot' do
+      result = described_class.scan!('NIFTY')
+
+      expect(result[:resistance]).to be >= 24_500.0
+      expect(result[:support]).to be <= 24_500.0
+      expect(result[:resistance]).not_to eq(result[:support])
+    end
   end
 end

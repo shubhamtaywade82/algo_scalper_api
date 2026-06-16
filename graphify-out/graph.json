@@ -22378,11 +22378,19 @@
       "_origin": "ast"
     },
     {
-      "id": "options_buying_chain_radar_chainradar_max_oi_strike",
-      "label": ".max_oi_strike()",
+      "id": "options_buying_chain_radar_chainradar_structural_strike",
+      "label": ".structural_strike()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
       "source_location": "L107",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_chain_radar_chainradar_candidates_for_side",
+      "label": ".candidates_for_side()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L119",
       "_origin": "ast"
     },
     {
@@ -22390,7 +22398,7 @@
       "label": ".session_minutes_elapsed()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L118",
+      "source_location": "L133",
       "_origin": "ast"
     },
     {
@@ -22398,7 +22406,7 @@
       "label": ".strike_step_for()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L124",
+      "source_location": "L139",
       "_origin": "ast"
     },
     {
@@ -22406,7 +22414,7 @@
       "label": ".atm_delta_fallback()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L130",
+      "source_location": "L145",
       "_origin": "ast"
     },
     {
@@ -149491,7 +149499,7 @@
     },
     {
       "source": "options_buying_chain_radar_chainradar",
-      "target": "options_buying_chain_radar_chainradar_max_oi_strike",
+      "target": "options_buying_chain_radar_chainradar_structural_strike",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
@@ -149500,11 +149508,20 @@
     },
     {
       "source": "options_buying_chain_radar_chainradar",
+      "target": "options_buying_chain_radar_chainradar_candidates_for_side",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L119",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_chain_radar_chainradar",
       "target": "options_buying_chain_radar_chainradar_session_minutes_elapsed",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L118",
+      "source_location": "L133",
       "weight": 1.0
     },
     {
@@ -149513,7 +149530,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L124",
+      "source_location": "L139",
       "weight": 1.0
     },
     {
@@ -149522,7 +149539,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L130",
+      "source_location": "L145",
       "weight": 1.0
     },
     {
@@ -149537,7 +149554,7 @@
     },
     {
       "source": "options_buying_chain_radar_chainradar_scan",
-      "target": "options_buying_chain_radar_chainradar_max_oi_strike",
+      "target": "options_buying_chain_radar_chainradar_structural_strike",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -149573,6 +149590,16 @@
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
       "source_location": "L84",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_chain_radar_chainradar_structural_strike",
+      "target": "options_buying_chain_radar_chainradar_candidates_for_side",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L110",
       "weight": 1.0
     },
     {
@@ -281382,14 +281409,14 @@
       "weight": 1.0
     },
     {
-      "source": "options_buying_chain_radar_chainradar_max_oi_strike",
+      "source": "options_buying_chain_radar_chainradar_structural_strike",
       "target": "smc_smc_permission_resolver_normalizedsmc_dig",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L110",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -281400,7 +281427,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L120",
+      "source_location": "L135",
       "weight": 1.0
     },
     {
