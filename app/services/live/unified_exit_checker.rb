@@ -81,7 +81,7 @@ module Live
       end
 
       def early_exit_triggered?(tracker, snapshot)
-        config = exit_config
+        config = exit_config_for(tracker)
         return false unless config[:early_exit][:enabled]
         pnl_pct = snapshot[:pnl_pct].to_f
         return false if pnl_pct >= config[:early_exit][:profit_threshold].to_f
@@ -92,7 +92,7 @@ module Live
       end
 
       def loss_limit_hit?(tracker, snapshot)
-        config = exit_config
+        config = exit_config_for(tracker)
         pnl_pct = snapshot[:pnl_pct].to_f
         if pnl_pct.negative? && config[:stop_loss][:type] == 'adaptive'
           allowed_loss = Positions::DrawdownSchedule.reverse_dynamic_sl_pct(
@@ -112,12 +112,12 @@ module Live
         return false unless target.positive?
         pnl_pct = snapshot[:pnl_pct].to_f
         return false unless pnl_pct >= target
-        return false if trailing_armed?(tracker, snapshot, exit_config)
+        return false if trailing_armed?(tracker, snapshot, exit_config_for(tracker))
         true
       end
 
       def profit_target_hit?(tracker, snapshot)
-        config = exit_config
+        config = exit_config_for(tracker)
         pnl_pct = snapshot[:pnl_pct].to_f
         tp = config[:take_profit].to_f
         return false unless pnl_pct >= tp
@@ -125,7 +125,7 @@ module Live
       end
 
       def trailing_stop_hit?(tracker, snapshot, tightening_multiplier: 1.0)
-        config = exit_config
+        config = exit_config_for(tracker)
         return false unless config[:trailing][:enabled]
         ltp = snapshot[:ltp].to_f
         return false unless ltp.positive?
@@ -175,8 +175,8 @@ module Live
         (hwm - pnl) / hwm >= drop_threshold
       end
 
-      def time_based_exit?(_tracker)
-        config = exit_config
+      def time_based_exit?(tracker)
+        config = exit_config_for(tracker)
         return false unless config[:time_based][:enabled]
         exit_time = Time.zone.parse(config[:time_based][:exit_time])
         exit_time && Time.current >= exit_time
@@ -255,16 +255,20 @@ module Live
         )
       end
 
+      def exit_config_for(tracker)
+        build_exit_config(Positions::ExitConfigResolver.for(tracker))
+      end
+
       def exit_config
         now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         return @exit_config if @exit_config && @exit_config_expires_at && now < @exit_config_expires_at
-        @exit_config = build_exit_config
+
+        @exit_config = build_exit_config(AlgoConfig.fetch)
         @exit_config_expires_at = now + EXIT_CONFIG_TTL
         @exit_config
       end
 
-      def build_exit_config
-        algo_cfg = AlgoConfig.fetch
+      def build_exit_config(algo_cfg = AlgoConfig.fetch)
         risk_cfg = algo_cfg[:risk] || {}
         exit_cfg = algo_cfg[:exit] || {}
         sl_value_pct = risk_cfg[:sl_pct] || exit_cfg.dig(:stop_loss, :value) || 0.12

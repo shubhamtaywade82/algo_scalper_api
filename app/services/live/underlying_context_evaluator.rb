@@ -14,7 +14,7 @@ module Live
     def evaluate_underlying_context(tracker, snapshot)
       cfg = underlying_context_cfg
       return hold_result unless cfg[:enabled]
-      return hold_result unless trailing_armed?(tracker, snapshot, exit_config)
+      return hold_result unless trailing_armed?(tracker, snapshot, exit_config_for(tracker))
 
       pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
       underlying_pd = build_underlying_position_data(tracker, pos_data)

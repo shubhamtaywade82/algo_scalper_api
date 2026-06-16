@@ -11,6 +11,8 @@ module Risk
       def evaluate(context)
         return skip_result unless context.active?
 
+        @trailing = Positions::TrailingConfig.from(context.risk_config)
+
         # Check trailing activation threshold (pnl_pct >= trailing_activation_pct)
         # Peak drawdown rule only activates after trailing activation threshold is met
         unless context.trailing_activated?
@@ -40,7 +42,7 @@ module Risk
         return no_action_result unless peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
 
         # Log which tier was used for transparency
-        drawdown_threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak_profit_pct)
+        drawdown_threshold = @trailing.calculate_tiered_drawdown_threshold(peak_profit_pct)
         Rails.logger.debug do
           "[PeakDrawdownRule] Tiered protection: peak=#{(peak_profit_pct * 100).round(2)}% " \
             "threshold=#{(drawdown_threshold * 100).round(2)}% drawdown=#{((peak_profit_pct - current_profit_pct) * 100).round(2)}%"
@@ -79,11 +81,11 @@ module Risk
       private
 
       def peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
-        Positions::TrailingConfig.peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
+        @trailing.peak_drawdown_triggered?(peak_profit_pct, current_profit_pct)
       end
 
       def peak_drawdown_active?(profit_pct:, current_sl_offset_pct:)
-        Positions::TrailingConfig.peak_drawdown_active?(
+        @trailing.peak_drawdown_active?(
           profit_pct: profit_pct,
           current_sl_offset_pct: current_sl_offset_pct
         )
@@ -100,7 +102,7 @@ module Risk
       end
 
       def peak_drawdown_pct
-        Positions::TrailingConfig.config[:peak_drawdown_pct] || Positions::TrailingConfig::DEFAULT_PEAK_DRAWDOWN_PCT
+        @trailing.parsed[:peak_drawdown_pct] || Positions::TrailingConfig::DEFAULT_PEAK_DRAWDOWN_PCT
       end
 
       # Returns SL offset as decimal (e.g. 0.10 for 10%) for TrailingConfig.peak_drawdown_active?

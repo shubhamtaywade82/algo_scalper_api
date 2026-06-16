@@ -16718,7 +16718,7 @@
       "label": ".check_peak_drawdown()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L66",
+      "source_location": "L67",
       "_origin": "ast"
     },
     {
@@ -16726,7 +16726,7 @@
       "label": ".update_peak()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L156",
+      "source_location": "L153",
       "_origin": "ast"
     },
     {
@@ -16734,7 +16734,7 @@
       "label": ".persist_extremes_if_changed()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L200",
+      "source_location": "L197",
       "_origin": "ast"
     },
     {
@@ -16742,7 +16742,7 @@
       "label": ".apply_direct_trailing_sl()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L229",
+      "source_location": "L226",
       "_origin": "ast"
     },
     {
@@ -16750,7 +16750,7 @@
       "label": ".apply_tiered_sl()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L293",
+      "source_location": "L291",
       "_origin": "ast"
     },
     {
@@ -16758,7 +16758,7 @@
       "label": ".tailored_trailing_applicable?()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L346",
+      "source_location": "L345",
       "_origin": "ast"
     },
     {
@@ -16766,7 +16766,15 @@
       "label": ".apply_tailored_sl()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L360",
+      "source_location": "L359",
+      "_origin": "ast"
+    },
+    {
+      "id": "live_trailing_engine_trailingengine_trailing_for",
+      "label": ".trailing_for()",
+      "file_type": "code",
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L414",
       "_origin": "ast"
     },
     {
@@ -16774,7 +16782,7 @@
       "label": ".failure_result()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L415",
+      "source_location": "L418",
       "_origin": "ast"
     },
     {
@@ -16782,7 +16790,7 @@
       "label": ".peak_drawdown_activation_enabled?()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L424",
+      "source_location": "L427",
       "_origin": "ast"
     },
     {
@@ -16790,7 +16798,7 @@
       "label": ".feature_flags()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L428",
+      "source_location": "L431",
       "_origin": "ast"
     },
     {
@@ -16798,7 +16806,7 @@
       "label": ".current_sl_offset_pct()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L438",
+      "source_location": "L441",
       "_origin": "ast"
     },
     {
@@ -16806,7 +16814,7 @@
       "label": ".current_sl_offset_pct_decimal()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L447",
+      "source_location": "L450",
       "_origin": "ast"
     },
     {
@@ -16814,7 +16822,7 @@
       "label": ".increment_peak_drawdown_metric()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L455",
+      "source_location": "L458",
       "_origin": "ast"
     },
     {
@@ -16822,7 +16830,7 @@
       "label": ".calculate_capital_deployed()",
       "file_type": "code",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L464",
+      "source_location": "L467",
       "_origin": "ast"
     },
     {
@@ -17266,11 +17274,19 @@
       "_origin": "ast"
     },
     {
+      "id": "live_unified_exit_checker_exit_config_for",
+      "label": "exit_config_for()",
+      "file_type": "code",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L258",
+      "_origin": "ast"
+    },
+    {
       "id": "live_unified_exit_checker_exit_config",
       "label": "exit_config()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L258",
+      "source_location": "L262",
       "_origin": "ast"
     },
     {
@@ -17278,7 +17294,7 @@
       "label": "build_exit_config()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L266",
+      "source_location": "L271",
       "_origin": "ast"
     },
     {
@@ -17286,7 +17302,7 @@
       "label": "trailing_armed?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L284",
+      "source_location": "L288",
       "_origin": "ast"
     },
     {
@@ -17294,7 +17310,7 @@
       "label": "adaptive_trailing_exit?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L296",
+      "source_location": "L300",
       "_origin": "ast"
     },
     {
@@ -17302,7 +17318,7 @@
       "label": "check_smc_navigator_exit()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L306",
+      "source_location": "L310",
       "_origin": "ast"
     },
     {
@@ -17310,7 +17326,7 @@
       "label": "check_structure_invalidation()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L316",
+      "source_location": "L320",
       "_origin": "ast"
     },
     {
@@ -17318,7 +17334,7 @@
       "label": "structure_invalidated?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L329",
+      "source_location": "L333",
       "_origin": "ast"
     },
     {
@@ -17326,7 +17342,7 @@
       "label": "resolve_stall_minutes()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L339",
+      "source_location": "L343",
       "_origin": "ast"
     },
     {
@@ -25370,11 +25386,27 @@
       "_origin": "ast"
     },
     {
+      "id": "positions_trailing_config_from",
+      "label": "from()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L22",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_trailing_config_from_tracker",
+      "label": "from_tracker()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L26",
+      "_origin": "ast"
+    },
+    {
       "id": "positions_trailing_config_trailing_mode",
       "label": "trailing_mode()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L22",
+      "source_location": "L30",
       "_origin": "ast"
     },
     {
@@ -25382,7 +25414,7 @@
       "label": "direct_trailing_enabled?()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L26",
+      "source_location": "L34",
       "_origin": "ast"
     },
     {
@@ -25390,7 +25422,7 @@
       "label": "direct_trailing_distance_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L30",
+      "source_location": "L38",
       "_origin": "ast"
     },
     {
@@ -25398,7 +25430,7 @@
       "label": "direct_trailing_activation_profit_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L34",
+      "source_location": "L42",
       "_origin": "ast"
     },
     {
@@ -25406,7 +25438,7 @@
       "label": "direct_trailing_min_sl_offset_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L38",
+      "source_location": "L46",
       "_origin": "ast"
     },
     {
@@ -25414,7 +25446,7 @@
       "label": "tiers()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L42",
+      "source_location": "L50",
       "_origin": "ast"
     },
     {
@@ -25422,15 +25454,7 @@
       "label": "sl_offset_for()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L46",
-      "_origin": "ast"
-    },
-    {
-      "id": "positions_trailing_config_adaptive_drawdown_for_peak",
-      "label": "adaptive_drawdown_for_peak()",
-      "file_type": "code",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L60",
+      "source_location": "L54",
       "_origin": "ast"
     },
     {
@@ -25438,7 +25462,7 @@
       "label": "calculate_direct_trailing_sl()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L82",
+      "source_location": "L58",
       "_origin": "ast"
     },
     {
@@ -25446,7 +25470,7 @@
       "label": "peak_drawdown_triggered?()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L104",
+      "source_location": "L66",
       "_origin": "ast"
     },
     {
@@ -25454,7 +25478,7 @@
       "label": "calculate_tiered_drawdown_threshold()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L119",
+      "source_location": "L70",
       "_origin": "ast"
     },
     {
@@ -25462,7 +25486,7 @@
       "label": "peak_drawdown_active?()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L153",
+      "source_location": "L74",
       "_origin": "ast"
     },
     {
@@ -25470,7 +25494,7 @@
       "label": "sl_price_from_entry()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L162",
+      "source_location": "L78",
       "_origin": "ast"
     },
     {
@@ -25478,7 +25502,15 @@
       "label": "calculate_sl_price()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L169",
+      "source_location": "L82",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_trailing_config_adaptive_drawdown_for_peak",
+      "label": "adaptive_drawdown_for_peak()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L87",
       "_origin": "ast"
     },
     {
@@ -25486,63 +25518,7 @@
       "label": "config()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L176",
-      "_origin": "ast"
-    },
-    {
-      "id": "positions_trailing_config_parse_direct_trailing",
-      "label": "parse_direct_trailing()",
-      "file_type": "code",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L195",
-      "_origin": "ast"
-    },
-    {
-      "id": "positions_trailing_config_parse_dynamic_drawdown_thresholds",
-      "label": "parse_dynamic_drawdown_thresholds()",
-      "file_type": "code",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L212",
-      "_origin": "ast"
-    },
-    {
-      "id": "positions_trailing_config_parse_capital_based_thresholds",
-      "label": "parse_capital_based_thresholds()",
-      "file_type": "code",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L220",
-      "_origin": "ast"
-    },
-    {
-      "id": "positions_trailing_config_parse_tiered_drawdown_thresholds",
-      "label": "parse_tiered_drawdown_thresholds()",
-      "file_type": "code",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L228",
-      "_origin": "ast"
-    },
-    {
-      "id": "positions_trailing_config_fetch_risk_config",
-      "label": "fetch_risk_config()",
-      "file_type": "code",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L244",
-      "_origin": "ast"
-    },
-    {
-      "id": "positions_trailing_config_parse_tiers",
-      "label": "parse_tiers()",
-      "file_type": "code",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L250",
-      "_origin": "ast"
-    },
-    {
-      "id": "positions_trailing_config_numeric_or_default",
-      "label": "numeric_or_default()",
-      "file_type": "code",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L263",
+      "source_location": "L104",
       "_origin": "ast"
     },
     {
@@ -25550,7 +25526,207 @@
       "label": "reset_config!()",
       "file_type": "code",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L271",
+      "source_location": "L108",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_trailing_config_live_view",
+      "label": "live_view()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L112",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_trailing_config_extract_risk",
+      "label": "extract_risk()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L116",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_trailing_config_fetch_risk_config",
+      "label": "fetch_risk_config()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L124",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view",
+      "label": "view.rb",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view",
+      "label": "View",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L6",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_initialize",
+      "label": ".initialize()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L9",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_trailing_mode",
+      "label": ".trailing_mode()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L13",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_direct_trailing_enabled",
+      "label": ".direct_trailing_enabled?()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L17",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_direct_trailing_distance_pct",
+      "label": ".direct_trailing_distance_pct()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L21",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_direct_trailing_activation_profit_pct",
+      "label": ".direct_trailing_activation_profit_pct()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L25",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_direct_trailing_min_sl_offset_pct",
+      "label": ".direct_trailing_min_sl_offset_pct()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L29",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_tiers",
+      "label": ".tiers()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L33",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_sl_offset_for",
+      "label": ".sl_offset_for()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L37",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_calculate_direct_trailing_sl",
+      "label": ".calculate_direct_trailing_sl()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L47",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_peak_drawdown_triggered",
+      "label": ".peak_drawdown_triggered?()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L58",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_calculate_tiered_drawdown_threshold",
+      "label": ".calculate_tiered_drawdown_threshold()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L67",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_peak_drawdown_active",
+      "label": ".peak_drawdown_active?()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L89",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_sl_price_from_entry",
+      "label": ".sl_price_from_entry()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L96",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_calculate_sl_price",
+      "label": ".calculate_sl_price()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L102",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_to_h",
+      "label": ".to_h()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L109",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_build_parsed",
+      "label": ".build_parsed()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L115",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_parse_direct_trailing",
+      "label": ".parse_direct_trailing()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L135",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_parse_tiered_drawdown_thresholds",
+      "label": ".parse_tiered_drawdown_thresholds()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L152",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_parse_tiers",
+      "label": ".parse_tiers()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L168",
+      "_origin": "ast"
+    },
+    {
+      "id": "trailing_config_view_view_numeric_or_default",
+      "label": ".numeric_or_default()",
+      "file_type": "code",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L181",
       "_origin": "ast"
     },
     {
@@ -26238,7 +26414,7 @@
       "label": ".peak_drawdown_triggered?()",
       "file_type": "code",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L81",
+      "source_location": "L83",
       "_origin": "ast"
     },
     {
@@ -26246,7 +26422,7 @@
       "label": ".peak_drawdown_active?()",
       "file_type": "code",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L85",
+      "source_location": "L87",
       "_origin": "ast"
     },
     {
@@ -26254,7 +26430,7 @@
       "label": ".peak_drawdown_activation_enabled?()",
       "file_type": "code",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L92",
+      "source_location": "L94",
       "_origin": "ast"
     },
     {
@@ -26262,7 +26438,7 @@
       "label": ".feature_flags()",
       "file_type": "code",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L96",
+      "source_location": "L98",
       "_origin": "ast"
     },
     {
@@ -26270,7 +26446,7 @@
       "label": ".peak_drawdown_pct()",
       "file_type": "code",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L102",
+      "source_location": "L104",
       "_origin": "ast"
     },
     {
@@ -26278,7 +26454,7 @@
       "label": ".current_sl_offset_pct()",
       "file_type": "code",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L107",
+      "source_location": "L109",
       "_origin": "ast"
     },
     {
@@ -43258,7 +43434,7 @@
       "label": "build_position()",
       "file_type": "code",
       "source_file": "spec/services/live/trailing_engine_spec.rb",
-      "source_location": "L221",
+      "source_location": "L239",
       "_origin": "ast"
     },
     {
@@ -96754,7 +96930,7 @@
       "label": "Phase 1 — Safe high-value hardening  ✅ IMPLEMENTED",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L43",
+      "source_location": "L44",
       "_origin": "ast"
     },
     {
@@ -96762,7 +96938,7 @@
       "label": "Testing strategy",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L61",
+      "source_location": "L62",
       "_origin": "ast"
     },
     {
@@ -96770,7 +96946,7 @@
       "label": "Conventions",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L66",
+      "source_location": "L67",
       "_origin": "ast"
     },
     {
@@ -96778,7 +96954,7 @@
       "label": "Test layers",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L85",
+      "source_location": "L86",
       "_origin": "ast"
     },
     {
@@ -96786,7 +96962,7 @@
       "label": "Phase 1 — Test matrix",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L98",
+      "source_location": "L99",
       "_origin": "ast"
     },
     {
@@ -96794,7 +96970,7 @@
       "label": "Representative spec patterns",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L114",
+      "source_location": "L115",
       "_origin": "ast"
     },
     {
@@ -96802,7 +96978,7 @@
       "label": "Phase 1 — Verification commands",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L179",
+      "source_location": "L180",
       "_origin": "ast"
     },
     {
@@ -96810,7 +96986,7 @@
       "label": "Phase 2 — Sparse overrides, versioning, full pinning",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L207",
+      "source_location": "L215",
       "_origin": "ast"
     },
     {
@@ -96818,7 +96994,7 @@
       "label": "2.1 Sparse-override merge model",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L213",
+      "source_location": "L221",
       "_origin": "ast"
     },
     {
@@ -96826,15 +97002,15 @@
       "label": "2.2 `AlgoConfigVersion` model (already anticipated)",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L230",
+      "source_location": "L238",
       "_origin": "ast"
     },
     {
-      "id": "docs_config_architecture_roadmap_2_3_finish_per_position_pinning_trailingconfig",
-      "label": "2.3 Finish per-position pinning (`TrailingConfig`)",
+      "id": "docs_config_architecture_roadmap_2_3_finish_per_position_pinning_trailingconfig_implemented",
+      "label": "2.3 Finish per-position pinning (`TrailingConfig`)  ✅ IMPLEMENTED",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L242",
+      "source_location": "L250",
       "_origin": "ast"
     },
     {
@@ -96842,7 +97018,7 @@
       "label": "Phase 2 — Proposed spec templates (not yet implemented)",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L258",
+      "source_location": "L269",
       "_origin": "ast"
     },
     {
@@ -96850,7 +97026,7 @@
       "label": "2.1 Sparse-override merge — `spec/services/algo_config/sparse_override_store_spec.rb`",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L260",
+      "source_location": "L271",
       "_origin": "ast"
     },
     {
@@ -96858,15 +97034,15 @@
       "label": "2.2 `AlgoConfigVersion` — `spec/models/algo_config_version_spec.rb`",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L301",
+      "source_location": "L312",
       "_origin": "ast"
     },
     {
-      "id": "docs_config_architecture_roadmap_2_3_trailingconfig_pinning_extend_spec_services_positions_trailing_config_spec_rb",
-      "label": "2.3 `TrailingConfig` pinning — extend `spec/services/positions/trailing_config_spec.rb`",
+      "id": "docs_config_architecture_roadmap_2_3_trailingconfig_pinning_spec_services_positions_trailing_config_spec_rb",
+      "label": "2.3 `TrailingConfig` pinning — `spec/services/positions/trailing_config_spec.rb` ✅",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L334",
+      "source_location": "L345",
       "_origin": "ast"
     },
     {
@@ -96874,7 +97050,7 @@
       "label": "Phase 3 — Proposed spec templates",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L361",
+      "source_location": "L372",
       "_origin": "ast"
     },
     {
@@ -96882,7 +97058,7 @@
       "label": "3.1 Expanded validator cross-field rules — `spec/services/algo_config/validator_spec.rb`",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L363",
+      "source_location": "L374",
       "_origin": "ast"
     },
     {
@@ -96890,7 +97066,7 @@
       "label": "3.2 Settings diff + rollback API — `spec/requests/api/settings_spec.rb`",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L375",
+      "source_location": "L386",
       "_origin": "ast"
     },
     {
@@ -96898,7 +97074,7 @@
       "label": "3.3 Health endpoint config version — `spec/requests/api/health_spec.rb`",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L389",
+      "source_location": "L400",
       "_origin": "ast"
     },
     {
@@ -96906,7 +97082,7 @@
       "label": "Phase 4 — Proposed spec templates",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L401",
+      "source_location": "L412",
       "_origin": "ast"
     },
     {
@@ -96914,7 +97090,7 @@
       "label": "4.1 Credential redaction shared example — `spec/support/shared_examples/config_redaction.rb`",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L403",
+      "source_location": "L414",
       "_origin": "ast"
     },
     {
@@ -96922,7 +97098,7 @@
       "label": "4.2 Env-var inventory spec — `spec/lib/algo_config_env_audit_spec.rb`",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L416",
+      "source_location": "L427",
       "_origin": "ast"
     },
     {
@@ -96930,7 +97106,7 @@
       "label": "Phase 3 — Validation depth, diff/rollback UX, observability",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L436",
+      "source_location": "L447",
       "_origin": "ast"
     },
     {
@@ -96938,7 +97114,7 @@
       "label": "3.1 Expand the validation schema",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L438",
+      "source_location": "L449",
       "_origin": "ast"
     },
     {
@@ -96946,7 +97122,7 @@
       "label": "3.2 Config diff + rollback in the dashboard",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L443",
+      "source_location": "L454",
       "_origin": "ast"
     },
     {
@@ -96954,7 +97130,7 @@
       "label": "3.3 Observability",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L449",
+      "source_location": "L460",
       "_origin": "ast"
     },
     {
@@ -96962,7 +97138,7 @@
       "label": "Phase 4 — Env hygiene & secrets separation",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L457",
+      "source_location": "L468",
       "_origin": "ast"
     },
     {
@@ -96970,7 +97146,7 @@
       "label": "Cross-cutting principles",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L469",
+      "source_location": "L480",
       "_origin": "ast"
     },
     {
@@ -96978,7 +97154,7 @@
       "label": "Sequencing",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L477",
+      "source_location": "L488",
       "_origin": "ast"
     },
     {
@@ -98939,6 +99115,366 @@
       "file_type": "document",
       "source_file": "docs/options/deep-research-report (1).md",
       "source_location": "L129",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan",
+      "label": "options_buying_automation_master_plan.md",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_options_buying_automation_master_integration_plan",
+      "label": "Options Buying Automation: Master Integration Plan",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_1_tl_dr_core_principles",
+      "label": "1. TL;DR & Core Principles",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L7",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_2_phase_by_phase_trading_risk_rules",
+      "label": "2. Phase-by-Phase Trading & Risk Rules",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L16",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_phase_1_mindset_capital_preservation_rules",
+      "label": "Phase 1: Mindset & Capital Preservation Rules",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L18",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "label": "Phase 2: Dual Confirmation Setup Strategy (Data + Charts)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L24",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_phase_3_the_vertical_spread_execution_architecture",
+      "label": "Phase 3: The Vertical Spread Execution Architecture",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L31",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_phase_4_risk_management_trade_operations",
+      "label": "Phase 4: Risk Management & Trade Operations",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L40",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_3_codebase_integration_plan",
+      "label": "3. Codebase Integration Plan",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L49",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_system_architecture_flow",
+      "label": "System Architecture Flow",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L51",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_gap_analysis_core_code_updates",
+      "label": "Gap Analysis & Core Code Updates",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L75",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_step_1_implement_the_9_30_am_entry_filter",
+      "label": "Step 1: Implement the 9:30 AM Entry Filter",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L77",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_step_2_incorporate_the_atr_constraint",
+      "label": "Step 2: Incorporate the ATR Constraint",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L80",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_step_3_stream_and_track_open_interest_oi",
+      "label": "Step 3: Stream and Track Open Interest (OI)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L114",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_step_4_multi_leg_spread_order_construction",
+      "label": "Step 4: Multi-Leg Spread Order Construction",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L122",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_automation_master_plan_4_failure_modes_mitigations",
+      "label": "4. Failure Modes & Mitigations",
+      "file_type": "document",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L156",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework",
+      "label": "options_buying_framework.md",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_options_buying_framework_key_takeaways_from_big_bull_series_ep_92",
+      "label": "Options Buying Framework: Key Takeaways from Big Bull Series Ep-92",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L7",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_phase_1_mindset_capital_preservation_rules",
+      "label": "Phase 1: Mindset & Capital Preservation Rules",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L16",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "label": "Phase 2: Dual Confirmation Setup Strategy (Data + Charts)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L28",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_chart_structure_momentum_divergence",
+      "label": "1. Chart Structure (Momentum Divergence)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L32",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_data_validation_open_interest_option_chain_analytics",
+      "label": "2. Data Validation (Open Interest & Option Chain Analytics)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L38",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "label": "Phase 3: The Vertical Spread Execution Architecture",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L50",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_mechanics_of_a_bull_call_spread",
+      "label": "Mechanics of a Bull Call Spread",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L54",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_mathematical_mechanics_at_expiration",
+      "label": "Mathematical Mechanics at Expiration",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L61",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_precise_value_outcomes_based_on_spot_price_at_expiration",
+      "label": "Precise Value Outcomes Based on Spot Price at Expiration:",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L77",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_phase_4_risk_management_trade_operations",
+      "label": "Phase 4: Risk Management & Trade Operations",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L90",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan",
+      "label": "options_buying_implementation_plan.md",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_options_buying_automation_ep_92_framework_implementation_plan",
+      "label": "Options Buying Automation: Ep-92 Framework Implementation Plan",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_1_summary_of_framework_alignment",
+      "label": "1. Summary of Framework Alignment",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L7",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_2_actionable_implementation_steps",
+      "label": "2. Actionable Implementation Steps",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L24",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_step_1_implement_the_hard_9_30_am_entry_filter",
+      "label": "Step 1: Implement the Hard 9:30 AM Entry Filter",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L26",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_step_2_implement_short_covering_squeeze_triggers_oi_walls",
+      "label": "Step 2: Implement Short-Covering Squeeze Triggers (OI Walls)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L42",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_step_3_implement_spread_execution_mode_theta_mitigation",
+      "label": "Step 3: Implement Spread Execution Mode (Theta Mitigation)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L48",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_step_4_configure_stop_loss_to_half_the_target_distance",
+      "label": "Step 4: Configure Stop-Loss to half the Target distance",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L52",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_3_recommended_config_updates_config_algo_yml",
+      "label": "3. Recommended Config Updates (`config/algo.yml`)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L59",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_4_system_architecture_implementation_blueprints",
+      "label": "4. System Architecture & Implementation Blueprints",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L85",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_tl_dr",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L87",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_step_by_step_architecture_for_an_automated_system",
+      "label": "Step-by-Step Architecture for an Automated System",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L95",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_implementation_blueprints",
+      "label": "Implementation Blueprints",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L124",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_1_data_filtering_daily_atr_and_technical_constraints",
+      "label": "1. Data Filtering: Daily ATR and Technical Constraints",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L126",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_2_live_validation_high_oi_breakout_monitor",
+      "label": "2. Live Validation: High-OI Breakout Monitor",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L163",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_3_execution_multi_leg_spread_order_construction",
+      "label": "3. Execution: Multi-Leg Spread Order Construction",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L194",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_implementation_plan_critical_system_failure_modes_mitigation_strategies",
+      "label": "Critical System Failure Modes & Mitigation Strategies",
+      "file_type": "document",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L244",
       "_origin": "ast"
     },
     {
@@ -135212,7 +135748,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L66",
+      "source_location": "L67",
       "weight": 1.0
     },
     {
@@ -135221,7 +135757,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L156",
+      "source_location": "L153",
       "weight": 1.0
     },
     {
@@ -135230,7 +135766,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L200",
+      "source_location": "L197",
       "weight": 1.0
     },
     {
@@ -135239,7 +135775,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L229",
+      "source_location": "L226",
       "weight": 1.0
     },
     {
@@ -135248,7 +135784,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L293",
+      "source_location": "L291",
       "weight": 1.0
     },
     {
@@ -135257,7 +135793,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L346",
+      "source_location": "L345",
       "weight": 1.0
     },
     {
@@ -135266,7 +135802,16 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L360",
+      "source_location": "L359",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine",
+      "target": "live_trailing_engine_trailingengine_trailing_for",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L414",
       "weight": 1.0
     },
     {
@@ -135275,7 +135820,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L415",
+      "source_location": "L418",
       "weight": 1.0
     },
     {
@@ -135284,7 +135829,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L424",
+      "source_location": "L427",
       "weight": 1.0
     },
     {
@@ -135293,7 +135838,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L428",
+      "source_location": "L431",
       "weight": 1.0
     },
     {
@@ -135302,7 +135847,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L438",
+      "source_location": "L441",
       "weight": 1.0
     },
     {
@@ -135311,7 +135856,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L447",
+      "source_location": "L450",
       "weight": 1.0
     },
     {
@@ -135320,7 +135865,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L455",
+      "source_location": "L458",
       "weight": 1.0
     },
     {
@@ -135329,7 +135874,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L464",
+      "source_location": "L467",
       "weight": 1.0
     },
     {
@@ -135364,7 +135909,7 @@
     },
     {
       "source": "live_trailing_engine_trailingengine_process_tick",
-      "target": "live_trailing_engine_trailingengine_tailored_trailing_applicable",
+      "target": "live_trailing_engine_trailingengine_trailing_for",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -135374,7 +135919,7 @@
     },
     {
       "source": "live_trailing_engine_trailingengine_process_tick",
-      "target": "live_trailing_engine_trailingengine_apply_tailored_sl",
+      "target": "live_trailing_engine_trailingengine_tailored_trailing_applicable",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -135384,12 +135929,22 @@
     },
     {
       "source": "live_trailing_engine_trailingengine_process_tick",
+      "target": "live_trailing_engine_trailingengine_apply_tailored_sl",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_process_tick",
       "target": "live_trailing_engine_trailingengine_apply_direct_trailing_sl",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L43",
+      "source_location": "L44",
       "weight": 1.0
     },
     {
@@ -135399,7 +135954,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L45",
+      "source_location": "L46",
       "weight": 1.0
     },
     {
@@ -135409,7 +135964,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L98",
+      "source_location": "L97",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_check_peak_drawdown",
+      "target": "live_trailing_engine_trailingengine_trailing_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L100",
       "weight": 1.0
     },
     {
@@ -135419,7 +135984,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L109",
+      "source_location": "L108",
       "weight": 1.0
     },
     {
@@ -135429,7 +135994,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L114",
+      "source_location": "L111",
       "weight": 1.0
     },
     {
@@ -135439,7 +136004,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L120",
+      "source_location": "L117",
       "weight": 1.0
     },
     {
@@ -135449,7 +136014,27 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L183",
+      "source_location": "L180",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_apply_direct_trailing_sl",
+      "target": "live_trailing_engine_trailingengine_trailing_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L237",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_apply_tiered_sl",
+      "target": "live_trailing_engine_trailingengine_trailing_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L299",
       "weight": 1.0
     },
     {
@@ -136123,7 +136708,7 @@
     },
     {
       "source": "live_unified_exit_checker",
-      "target": "live_unified_exit_checker_exit_config",
+      "target": "live_unified_exit_checker_exit_config_for",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
@@ -136132,11 +136717,20 @@
     },
     {
       "source": "live_unified_exit_checker",
+      "target": "live_unified_exit_checker_exit_config",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L262",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker",
       "target": "live_unified_exit_checker_build_exit_config",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L266",
+      "source_location": "L271",
       "weight": 1.0
     },
     {
@@ -136145,7 +136739,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L284",
+      "source_location": "L288",
       "weight": 1.0
     },
     {
@@ -136154,7 +136748,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L296",
+      "source_location": "L300",
       "weight": 1.0
     },
     {
@@ -136163,7 +136757,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L306",
+      "source_location": "L310",
       "weight": 1.0
     },
     {
@@ -136172,7 +136766,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L316",
+      "source_location": "L320",
       "weight": 1.0
     },
     {
@@ -136181,7 +136775,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L329",
+      "source_location": "L333",
       "weight": 1.0
     },
     {
@@ -136190,7 +136784,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L339",
+      "source_location": "L343",
       "weight": 1.0
     },
     {
@@ -136205,12 +136799,32 @@
     },
     {
       "source": "live_unified_exit_checker_early_exit_triggered",
+      "target": "live_unified_exit_checker_exit_config_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L84",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_early_exit_triggered",
       "target": "live_unified_exit_checker_build_position_data",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
       "source_location": "L90",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_loss_limit_hit",
+      "target": "live_unified_exit_checker_exit_config_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L95",
       "weight": 1.0
     },
     {
@@ -136244,6 +136858,26 @@
       "weight": 1.0
     },
     {
+      "source": "live_unified_exit_checker_percentage_pnl_exit_hit",
+      "target": "live_unified_exit_checker_exit_config_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L115",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_profit_target_hit",
+      "target": "live_unified_exit_checker_exit_config_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L120",
+      "weight": 1.0
+    },
+    {
       "source": "live_unified_exit_checker_profit_target_hit",
       "target": "live_unified_exit_checker_trailing_armed",
       "relation": "calls",
@@ -136255,12 +136889,32 @@
     },
     {
       "source": "live_unified_exit_checker_trailing_stop_hit",
+      "target": "live_unified_exit_checker_exit_config_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L128",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_trailing_stop_hit",
       "target": "live_unified_exit_checker_adaptive_trailing_exit",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
       "source_location": "L146",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_time_based_exit",
+      "target": "live_unified_exit_checker_exit_config_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L179",
       "weight": 1.0
     },
     {
@@ -136304,13 +136958,33 @@
       "weight": 1.0
     },
     {
+      "source": "live_unified_exit_checker_exit_config_for",
+      "target": "live_unified_exit_checker_build_exit_config",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L259",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_exit_config",
+      "target": "live_unified_exit_checker_build_exit_config",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L266",
+      "weight": 1.0
+    },
+    {
       "source": "live_unified_exit_checker_check_structure_invalidation",
       "target": "live_unified_exit_checker_structure_invalidated",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L323",
+      "source_location": "L327",
       "weight": 1.0
     },
     {
@@ -148499,7 +149173,7 @@
     },
     {
       "source": "positions_trailing_config",
-      "target": "positions_trailing_config_trailing_mode",
+      "target": "positions_trailing_config_from",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
@@ -148508,7 +149182,7 @@
     },
     {
       "source": "positions_trailing_config",
-      "target": "positions_trailing_config_direct_trailing_enabled",
+      "target": "positions_trailing_config_from_tracker",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
@@ -148517,7 +149191,7 @@
     },
     {
       "source": "positions_trailing_config",
-      "target": "positions_trailing_config_direct_trailing_distance_pct",
+      "target": "positions_trailing_config_trailing_mode",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
@@ -148526,7 +149200,7 @@
     },
     {
       "source": "positions_trailing_config",
-      "target": "positions_trailing_config_direct_trailing_activation_profit_pct",
+      "target": "positions_trailing_config_direct_trailing_enabled",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
@@ -148535,7 +149209,7 @@
     },
     {
       "source": "positions_trailing_config",
-      "target": "positions_trailing_config_direct_trailing_min_sl_offset_pct",
+      "target": "positions_trailing_config_direct_trailing_distance_pct",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
@@ -148544,7 +149218,7 @@
     },
     {
       "source": "positions_trailing_config",
-      "target": "positions_trailing_config_tiers",
+      "target": "positions_trailing_config_direct_trailing_activation_profit_pct",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
@@ -148553,7 +149227,7 @@
     },
     {
       "source": "positions_trailing_config",
-      "target": "positions_trailing_config_sl_offset_for",
+      "target": "positions_trailing_config_direct_trailing_min_sl_offset_pct",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
@@ -148562,11 +149236,20 @@
     },
     {
       "source": "positions_trailing_config",
-      "target": "positions_trailing_config_adaptive_drawdown_for_peak",
+      "target": "positions_trailing_config_tiers",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L60",
+      "source_location": "L50",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config",
+      "target": "positions_trailing_config_sl_offset_for",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L54",
       "weight": 1.0
     },
     {
@@ -148575,7 +149258,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L82",
+      "source_location": "L58",
       "weight": 1.0
     },
     {
@@ -148584,7 +149267,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L104",
+      "source_location": "L66",
       "weight": 1.0
     },
     {
@@ -148593,7 +149276,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L119",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -148602,7 +149285,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L153",
+      "source_location": "L74",
       "weight": 1.0
     },
     {
@@ -148611,7 +149294,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L162",
+      "source_location": "L78",
       "weight": 1.0
     },
     {
@@ -148620,7 +149303,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L169",
+      "source_location": "L82",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config",
+      "target": "positions_trailing_config_adaptive_drawdown_for_peak",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -148629,70 +149321,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L176",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config",
-      "target": "positions_trailing_config_parse_direct_trailing",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L195",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config",
-      "target": "positions_trailing_config_parse_dynamic_drawdown_thresholds",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L212",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config",
-      "target": "positions_trailing_config_parse_capital_based_thresholds",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L220",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config",
-      "target": "positions_trailing_config_parse_tiered_drawdown_thresholds",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L228",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config",
-      "target": "positions_trailing_config_fetch_risk_config",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L244",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config",
-      "target": "positions_trailing_config_parse_tiers",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L250",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config",
-      "target": "positions_trailing_config_numeric_or_default",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L263",
+      "source_location": "L104",
       "weight": 1.0
     },
     {
@@ -148701,127 +149330,353 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L271",
+      "source_location": "L108",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_calculate_direct_trailing_sl",
-      "target": "positions_trailing_config_direct_trailing_enabled",
+      "source": "positions_trailing_config",
+      "target": "positions_trailing_config_live_view",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L112",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config",
+      "target": "positions_trailing_config_extract_risk",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L116",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config",
+      "target": "positions_trailing_config_fetch_risk_config",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L124",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_from",
+      "target": "positions_trailing_config_extract_risk",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L83",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_peak_drawdown_triggered",
-      "target": "positions_trailing_config_calculate_tiered_drawdown_threshold",
+      "source": "positions_trailing_config_from_tracker",
+      "target": "positions_trailing_config_from",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view",
+      "target": "trailing_config_view_view",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_initialize",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_trailing_mode",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_direct_trailing_enabled",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_direct_trailing_distance_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_direct_trailing_activation_profit_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_direct_trailing_min_sl_offset_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_tiers",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_sl_offset_for",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_calculate_direct_trailing_sl",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_peak_drawdown_triggered",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L58",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_calculate_tiered_drawdown_threshold",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L67",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_peak_drawdown_active",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L89",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_sl_price_from_entry",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L96",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_calculate_sl_price",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_to_h",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
       "source_location": "L109",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_calculate_sl_price",
-      "target": "positions_trailing_config_sl_offset_for",
-      "relation": "calls",
-      "context": "call",
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_build_parsed",
+      "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L170",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L115",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_calculate_sl_price",
-      "target": "positions_trailing_config_sl_price_from_entry",
-      "relation": "calls",
-      "context": "call",
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_parse_direct_trailing",
+      "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L173",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L135",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_config",
-      "target": "positions_trailing_config_parse_direct_trailing",
-      "relation": "calls",
-      "context": "call",
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_parse_tiered_drawdown_thresholds",
+      "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L152",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_parse_tiers",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L168",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view",
+      "target": "trailing_config_view_view_numeric_or_default",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
       "source_location": "L181",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_config",
-      "target": "positions_trailing_config_parse_tiers",
+      "source": "trailing_config_view_view_initialize",
+      "target": "trailing_config_view_view_build_parsed",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L182",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L10",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_config",
-      "target": "positions_trailing_config_numeric_or_default",
+      "source": "trailing_config_view_view_calculate_direct_trailing_sl",
+      "target": "trailing_config_view_view_direct_trailing_enabled",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L183",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L48",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_config",
-      "target": "positions_trailing_config_parse_dynamic_drawdown_thresholds",
+      "source": "trailing_config_view_view_peak_drawdown_triggered",
+      "target": "trailing_config_view_view_calculate_tiered_drawdown_threshold",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L184",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L61",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_config",
-      "target": "positions_trailing_config_parse_capital_based_thresholds",
+      "source": "trailing_config_view_view_calculate_sl_price",
+      "target": "trailing_config_view_view_sl_offset_for",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L185",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L103",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_config",
-      "target": "positions_trailing_config_parse_tiered_drawdown_thresholds",
+      "source": "trailing_config_view_view_calculate_sl_price",
+      "target": "trailing_config_view_view_sl_price_from_entry",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L190",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L106",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_parse_direct_trailing",
-      "target": "positions_trailing_config_numeric_or_default",
+      "source": "trailing_config_view_view_build_parsed",
+      "target": "trailing_config_view_view_parse_direct_trailing",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L200",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L118",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_parse_tiered_drawdown_thresholds",
-      "target": "positions_trailing_config_numeric_or_default",
+      "source": "trailing_config_view_view_build_parsed",
+      "target": "trailing_config_view_view_parse_tiers",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L232",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L119",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view_build_parsed",
+      "target": "trailing_config_view_view_numeric_or_default",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L120",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view_build_parsed",
+      "target": "trailing_config_view_view_parse_tiered_drawdown_thresholds",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L131",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view_parse_direct_trailing",
+      "target": "trailing_config_view_view_numeric_or_default",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L140",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view_parse_tiered_drawdown_thresholds",
+      "target": "trailing_config_view_view_numeric_or_default",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L156",
       "weight": 1.0
     },
     {
@@ -149647,7 +150502,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L81",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -149656,7 +150511,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L85",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -149665,7 +150520,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L92",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -149674,7 +150529,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L96",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
@@ -149683,7 +150538,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L102",
+      "source_location": "L104",
       "weight": 1.0
     },
     {
@@ -149692,7 +150547,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L107",
+      "source_location": "L109",
       "weight": 1.0
     },
     {
@@ -149702,7 +150557,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L40",
+      "source_location": "L42",
       "weight": 1.0
     },
     {
@@ -149712,7 +150567,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L50",
+      "source_location": "L52",
       "weight": 1.0
     },
     {
@@ -149722,7 +150577,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L51",
+      "source_location": "L53",
       "weight": 1.0
     },
     {
@@ -149732,7 +150587,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L53",
+      "source_location": "L55",
       "weight": 1.0
     },
     {
@@ -175062,7 +175917,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "spec/services/live/trailing_engine_spec.rb",
-      "source_location": "L221",
+      "source_location": "L239",
       "weight": 1.0
     },
     {
@@ -232732,7 +233587,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L43",
+      "source_location": "L44",
       "weight": 1.0
     },
     {
@@ -232741,7 +233596,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L61",
+      "source_location": "L62",
       "weight": 1.0
     },
     {
@@ -232750,7 +233605,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L66",
+      "source_location": "L67",
       "weight": 1.0
     },
     {
@@ -232759,7 +233614,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L85",
+      "source_location": "L86",
       "weight": 1.0
     },
     {
@@ -232768,7 +233623,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L98",
+      "source_location": "L99",
       "weight": 1.0
     },
     {
@@ -232777,7 +233632,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L114",
+      "source_location": "L115",
       "weight": 1.0
     },
     {
@@ -232786,7 +233641,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L179",
+      "source_location": "L180",
       "weight": 1.0
     },
     {
@@ -232795,7 +233650,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L207",
+      "source_location": "L215",
       "weight": 1.0
     },
     {
@@ -232804,7 +233659,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L213",
+      "source_location": "L221",
       "weight": 1.0
     },
     {
@@ -232813,16 +233668,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L230",
+      "source_location": "L238",
       "weight": 1.0
     },
     {
       "source": "docs_config_architecture_roadmap_phase_2_sparse_overrides_versioning_full_pinning",
-      "target": "docs_config_architecture_roadmap_2_3_finish_per_position_pinning_trailingconfig",
+      "target": "docs_config_architecture_roadmap_2_3_finish_per_position_pinning_trailingconfig_implemented",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L242",
+      "source_location": "L250",
       "weight": 1.0
     },
     {
@@ -232831,7 +233686,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L258",
+      "source_location": "L269",
       "weight": 1.0
     },
     {
@@ -232840,7 +233695,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L260",
+      "source_location": "L271",
       "weight": 1.0
     },
     {
@@ -232849,16 +233704,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L301",
+      "source_location": "L312",
       "weight": 1.0
     },
     {
       "source": "docs_config_architecture_roadmap_phase_2_proposed_spec_templates_not_yet_implemented",
-      "target": "docs_config_architecture_roadmap_2_3_trailingconfig_pinning_extend_spec_services_positions_trailing_config_spec_rb",
+      "target": "docs_config_architecture_roadmap_2_3_trailingconfig_pinning_spec_services_positions_trailing_config_spec_rb",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L334",
+      "source_location": "L345",
       "weight": 1.0
     },
     {
@@ -232867,7 +233722,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L361",
+      "source_location": "L372",
       "weight": 1.0
     },
     {
@@ -232876,7 +233731,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L363",
+      "source_location": "L374",
       "weight": 1.0
     },
     {
@@ -232885,7 +233740,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L375",
+      "source_location": "L386",
       "weight": 1.0
     },
     {
@@ -232894,7 +233749,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L389",
+      "source_location": "L400",
       "weight": 1.0
     },
     {
@@ -232903,7 +233758,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L401",
+      "source_location": "L412",
       "weight": 1.0
     },
     {
@@ -232912,7 +233767,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L403",
+      "source_location": "L414",
       "weight": 1.0
     },
     {
@@ -232921,7 +233776,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L416",
+      "source_location": "L427",
       "weight": 1.0
     },
     {
@@ -232930,7 +233785,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L436",
+      "source_location": "L447",
       "weight": 1.0
     },
     {
@@ -232939,7 +233794,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L438",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -232948,7 +233803,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L443",
+      "source_location": "L454",
       "weight": 1.0
     },
     {
@@ -232957,7 +233812,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L449",
+      "source_location": "L460",
       "weight": 1.0
     },
     {
@@ -232966,7 +233821,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L457",
+      "source_location": "L468",
       "weight": 1.0
     },
     {
@@ -232975,7 +233830,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L469",
+      "source_location": "L480",
       "weight": 1.0
     },
     {
@@ -232984,7 +233839,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L477",
+      "source_location": "L488",
       "weight": 1.0
     },
     {
@@ -235037,6 +235892,384 @@
       "confidence": "EXTRACTED",
       "source_file": "docs/options/deep-research-report (1).md",
       "source_location": "L129",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan",
+      "target": "docs_options_buying_automation_master_plan_options_buying_automation_master_integration_plan",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_options_buying_automation_master_integration_plan",
+      "target": "docs_options_buying_automation_master_plan_1_tl_dr_core_principles",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_options_buying_automation_master_integration_plan",
+      "target": "docs_options_buying_automation_master_plan_2_phase_by_phase_trading_risk_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_2_phase_by_phase_trading_risk_rules",
+      "target": "docs_options_buying_automation_master_plan_phase_1_mindset_capital_preservation_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_2_phase_by_phase_trading_risk_rules",
+      "target": "docs_options_buying_automation_master_plan_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_2_phase_by_phase_trading_risk_rules",
+      "target": "docs_options_buying_automation_master_plan_phase_3_the_vertical_spread_execution_architecture",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_2_phase_by_phase_trading_risk_rules",
+      "target": "docs_options_buying_automation_master_plan_phase_4_risk_management_trade_operations",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_options_buying_automation_master_integration_plan",
+      "target": "docs_options_buying_automation_master_plan_3_codebase_integration_plan",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L49",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_3_codebase_integration_plan",
+      "target": "docs_options_buying_automation_master_plan_system_architecture_flow",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_3_codebase_integration_plan",
+      "target": "docs_options_buying_automation_master_plan_gap_analysis_core_code_updates",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_gap_analysis_core_code_updates",
+      "target": "docs_options_buying_automation_master_plan_step_1_implement_the_9_30_am_entry_filter",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L77",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_gap_analysis_core_code_updates",
+      "target": "docs_options_buying_automation_master_plan_step_2_incorporate_the_atr_constraint",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L80",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_gap_analysis_core_code_updates",
+      "target": "docs_options_buying_automation_master_plan_step_3_stream_and_track_open_interest_oi",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L114",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_gap_analysis_core_code_updates",
+      "target": "docs_options_buying_automation_master_plan_step_4_multi_leg_spread_order_construction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L122",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_automation_master_plan_options_buying_automation_master_integration_plan",
+      "target": "docs_options_buying_automation_master_plan_4_failure_modes_mitigations",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_automation_master_plan.md",
+      "source_location": "L156",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_options_buying_framework_key_takeaways_from_big_bull_series_ep_92",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_options_buying_framework_key_takeaways_from_big_bull_series_ep_92",
+      "target": "docs_options_buying_framework_tl_dr",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_options_buying_framework_key_takeaways_from_big_bull_series_ep_92",
+      "target": "docs_options_buying_framework_phase_1_mindset_capital_preservation_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_options_buying_framework_key_takeaways_from_big_bull_series_ep_92",
+      "target": "docs_options_buying_framework_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "target": "docs_options_buying_framework_1_chart_structure_momentum_divergence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "target": "docs_options_buying_framework_2_data_validation_open_interest_option_chain_analytics",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_options_buying_framework_key_takeaways_from_big_bull_series_ep_92",
+      "target": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L50",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "target": "docs_options_buying_framework_mechanics_of_a_bull_call_spread",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L54",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "target": "docs_options_buying_framework_mathematical_mechanics_at_expiration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L61",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "target": "docs_options_buying_framework_precise_value_outcomes_based_on_spot_price_at_expiration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L77",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_options_buying_framework_key_takeaways_from_big_bull_series_ep_92",
+      "target": "docs_options_buying_framework_phase_4_risk_management_trade_operations",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L90",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan",
+      "target": "docs_options_buying_implementation_plan_options_buying_automation_ep_92_framework_implementation_plan",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_options_buying_automation_ep_92_framework_implementation_plan",
+      "target": "docs_options_buying_implementation_plan_1_summary_of_framework_alignment",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_options_buying_automation_ep_92_framework_implementation_plan",
+      "target": "docs_options_buying_implementation_plan_2_actionable_implementation_steps",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_2_actionable_implementation_steps",
+      "target": "docs_options_buying_implementation_plan_step_1_implement_the_hard_9_30_am_entry_filter",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_2_actionable_implementation_steps",
+      "target": "docs_options_buying_implementation_plan_step_2_implement_short_covering_squeeze_triggers_oi_walls",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_2_actionable_implementation_steps",
+      "target": "docs_options_buying_implementation_plan_step_3_implement_spread_execution_mode_theta_mitigation",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L48",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_2_actionable_implementation_steps",
+      "target": "docs_options_buying_implementation_plan_step_4_configure_stop_loss_to_half_the_target_distance",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L52",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_options_buying_automation_ep_92_framework_implementation_plan",
+      "target": "docs_options_buying_implementation_plan_3_recommended_config_updates_config_algo_yml",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L59",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_options_buying_automation_ep_92_framework_implementation_plan",
+      "target": "docs_options_buying_implementation_plan_4_system_architecture_implementation_blueprints",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L85",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_4_system_architecture_implementation_blueprints",
+      "target": "docs_options_buying_implementation_plan_tl_dr",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L87",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_4_system_architecture_implementation_blueprints",
+      "target": "docs_options_buying_implementation_plan_step_by_step_architecture_for_an_automated_system",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L95",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_4_system_architecture_implementation_blueprints",
+      "target": "docs_options_buying_implementation_plan_implementation_blueprints",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L124",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_implementation_blueprints",
+      "target": "docs_options_buying_implementation_plan_1_data_filtering_daily_atr_and_technical_constraints",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L126",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_implementation_blueprints",
+      "target": "docs_options_buying_implementation_plan_2_live_validation_high_oi_breakout_monitor",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L163",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_implementation_blueprints",
+      "target": "docs_options_buying_implementation_plan_3_execution_multi_leg_spread_order_construction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L194",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_implementation_plan_4_system_architecture_implementation_blueprints",
+      "target": "docs_options_buying_implementation_plan_critical_system_failure_modes_mitigation_strategies",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_implementation_plan.md",
+      "source_location": "L244",
       "weight": 1.0
     },
     {
@@ -263840,17 +265073,6 @@
       "weight": 1.0
     },
     {
-      "source": "live_trailing_engine_trailingengine_process_tick",
-      "target": "positions_trailing_config_direct_trailing_enabled",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L42",
-      "weight": 1.0
-    },
-    {
       "source": "live_trailing_engine_trailingengine_check_peak_drawdown",
       "target": "smc_smc_permission_resolver_normalizedsmc_dig",
       "relation": "calls",
@@ -263858,7 +265080,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L84",
+      "source_location": "L86",
       "weight": 1.0
     },
     {
@@ -263874,24 +265096,13 @@
     },
     {
       "source": "live_trailing_engine_trailingengine_check_peak_drawdown",
-      "target": "positions_trailing_config_calculate_tiered_drawdown_threshold",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L134",
-      "weight": 1.0
-    },
-    {
-      "source": "live_trailing_engine_trailingengine_check_peak_drawdown",
       "target": "live_feed_health_service_feedhealthservice_with_lock",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L139",
+      "source_location": "L136",
       "weight": 1.0
     },
     {
@@ -263902,7 +265113,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L168",
+      "source_location": "L165",
       "weight": 1.0
     },
     {
@@ -263913,7 +265124,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L177",
+      "source_location": "L174",
       "weight": 1.0
     },
     {
@@ -263924,7 +265135,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L204",
+      "source_location": "L201",
       "weight": 1.0
     },
     {
@@ -263935,7 +265146,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L204",
+      "source_location": "L201",
       "weight": 1.0
     },
     {
@@ -263946,18 +265157,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L232",
-      "weight": 1.0
-    },
-    {
-      "source": "live_trailing_engine_trailingengine_apply_direct_trailing_sl",
-      "target": "positions_trailing_config_calculate_direct_trailing_sl",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L241",
+      "source_location": "L229",
       "weight": 1.0
     },
     {
@@ -263968,7 +265168,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L265",
+      "source_location": "L263",
       "weight": 1.0
     },
     {
@@ -263979,18 +265179,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L296",
-      "weight": 1.0
-    },
-    {
-      "source": "live_trailing_engine_trailingengine_apply_tiered_sl",
-      "target": "positions_trailing_config_sl_offset_for",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L301",
+      "source_location": "L294",
       "weight": 1.0
     },
     {
@@ -264001,7 +265190,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L319",
+      "source_location": "L318",
       "weight": 1.0
     },
     {
@@ -264012,7 +265201,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L347",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -264023,7 +265212,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L350",
+      "source_location": "L349",
       "weight": 1.0
     },
     {
@@ -264034,7 +265223,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L385",
+      "source_location": "L384",
       "weight": 1.0
     },
     {
@@ -264045,7 +265234,18 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L390",
+      "source_location": "L389",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_trailing_for",
+      "target": "positions_trailing_config_from_tracker",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L415",
       "weight": 1.0
     },
     {
@@ -264056,7 +265256,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L439",
+      "source_location": "L442",
       "weight": 1.0
     },
     {
@@ -264067,7 +265267,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L448",
+      "source_location": "L451",
       "weight": 1.0
     },
     {
@@ -264078,7 +265278,18 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/trailing_engine.rb",
-      "source_location": "L465",
+      "source_location": "L468",
+      "weight": 1.0
+    },
+    {
+      "source": "live_underlying_context_evaluator_evaluate_underlying_context",
+      "target": "live_unified_exit_checker_exit_config_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/underlying_context_evaluator.rb",
+      "source_location": "L17",
       "weight": 1.0
     },
     {
@@ -264837,7 +266048,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L270",
+      "source_location": "L274",
       "weight": 1.0
     },
     {
@@ -264848,7 +266059,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L291",
+      "source_location": "L295",
       "weight": 1.0
     },
     {
@@ -264859,34 +266070,12 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L297",
+      "source_location": "L301",
       "weight": 1.0
     },
     {
       "source": "live_unified_exit_checker_check_smc_navigator_exit",
       "target": "smc_smc_permission_resolver_normalizedsmc_dig",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L307",
-      "weight": 1.0
-    },
-    {
-      "source": "live_unified_exit_checker_check_smc_navigator_exit",
-      "target": "market_session_resolver_current",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L308",
-      "weight": 1.0
-    },
-    {
-      "source": "live_unified_exit_checker_check_smc_navigator_exit",
-      "target": "smc_navigator_evaluate_exit",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -264897,7 +266086,7 @@
     },
     {
       "source": "live_unified_exit_checker_check_smc_navigator_exit",
-      "target": "smc_navigator_suggest_exit",
+      "target": "market_session_resolver_current",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -264908,18 +266097,29 @@
     },
     {
       "source": "live_unified_exit_checker_check_smc_navigator_exit",
-      "target": "schemas_smc_trading_signal_properties_reason",
+      "target": "smc_navigator_evaluate_exit",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L313",
+      "source_location": "L315",
       "weight": 1.0
     },
     {
-      "source": "live_unified_exit_checker_check_structure_invalidation",
-      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "source": "live_unified_exit_checker_check_smc_navigator_exit",
+      "target": "smc_navigator_suggest_exit",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L316",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_check_smc_navigator_exit",
+      "target": "schemas_smc_trading_signal_properties_reason",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -264930,13 +266130,24 @@
     },
     {
       "source": "live_unified_exit_checker_check_structure_invalidation",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L321",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_check_structure_invalidation",
       "target": "schemas_smc_trading_signal_properties_meta",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L318",
+      "source_location": "L322",
       "weight": 1.0
     },
     {
@@ -264947,7 +266158,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L318",
+      "source_location": "L322",
       "weight": 1.0
     },
     {
@@ -264958,7 +266169,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L330",
+      "source_location": "L334",
       "weight": 1.0
     },
     {
@@ -264969,7 +266180,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L330",
+      "source_location": "L334",
       "weight": 1.0
     },
     {
@@ -264980,7 +266191,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L330",
+      "source_location": "L334",
       "weight": 1.0
     },
     {
@@ -264991,7 +266202,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L340",
+      "source_location": "L344",
       "weight": 1.0
     },
     {
@@ -265002,7 +266213,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L343",
+      "source_location": "L347",
       "weight": 1.0
     },
     {
@@ -271584,50 +272795,6 @@
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_direct_trailing_enabled",
-      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L27",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config_direct_trailing_distance_pct",
-      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L31",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config_direct_trailing_activation_profit_pct",
-      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L35",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_trailing_config_direct_trailing_min_sl_offset_pct",
-      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L39",
-      "weight": 1.0
-    },
-    {
       "source": "positions_trailing_config_adaptive_drawdown_for_peak",
       "target": "models_candle_series_candleseries_each",
       "relation": "calls",
@@ -271635,18 +272802,62 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L66",
+      "source_location": "L93",
       "weight": 1.0
     },
     {
-      "source": "positions_trailing_config_config",
+      "source": "trailing_config_view_view_direct_trailing_enabled",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view_direct_trailing_distance_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view_direct_trailing_activation_profit_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view_direct_trailing_min_sl_offset_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "trailing_config_view_view_build_parsed",
       "target": "states_base_state_basestate_to_s",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
-      "source_file": "app/services/positions/trailing_config.rb",
-      "source_location": "L180",
+      "source_file": "app/services/positions/trailing_config/view.rb",
+      "source_location": "L117",
       "weight": 1.0
     },
     {
@@ -272025,13 +273236,35 @@
     },
     {
       "source": "rules_peak_drawdown_rule_peakdrawdownrule_evaluate",
+      "target": "positions_trailing_config_from",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "rules_peak_drawdown_rule_peakdrawdownrule_evaluate",
+      "target": "risk_manager_service_config_risk_config",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "rules_peak_drawdown_rule_peakdrawdownrule_evaluate",
       "target": "rules_rule_context_rulecontext_trailing_activated",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L16",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -272042,18 +273275,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L20",
-      "weight": 1.0
-    },
-    {
-      "source": "rules_peak_drawdown_rule_peakdrawdownrule_evaluate",
-      "target": "positions_trailing_config_calculate_tiered_drawdown_threshold",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L43",
+      "source_location": "L22",
       "weight": 1.0
     },
     {
@@ -272064,7 +273286,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L108",
+      "source_location": "L110",
       "weight": 1.0
     },
     {
@@ -283284,7 +284506,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "spec/services/live/trailing_engine_spec.rb",
-      "source_location": "L240",
+      "source_location": "L258",
       "weight": 1.0
     },
     {
@@ -284121,6 +285343,156 @@
       "confidence_score": 0.8,
       "source_file": "tmp/rubycritic/assets/vendor/javascripts/prettify.js",
       "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_calculate_direct_trailing_sl",
+      "target": "positions_trailing_config_direct_trailing_enabled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L83",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_peak_drawdown_triggered",
+      "target": "positions_trailing_config_calculate_tiered_drawdown_threshold",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L109",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_calculate_sl_price",
+      "target": "positions_trailing_config_sl_offset_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L170",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_calculate_sl_price",
+      "target": "positions_trailing_config_sl_price_from_entry",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L173",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_process_tick",
+      "target": "positions_trailing_config_direct_trailing_enabled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_check_peak_drawdown",
+      "target": "positions_trailing_config_calculate_tiered_drawdown_threshold",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L134",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_apply_direct_trailing_sl",
+      "target": "positions_trailing_config_calculate_direct_trailing_sl",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L241",
+      "weight": 1.0
+    },
+    {
+      "source": "live_trailing_engine_trailingengine_apply_tiered_sl",
+      "target": "positions_trailing_config_sl_offset_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/trailing_engine.rb",
+      "source_location": "L301",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_direct_trailing_enabled",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_direct_trailing_distance_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_direct_trailing_activation_profit_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_direct_trailing_min_sl_offset_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_trailing_config_config",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/trailing_config.rb",
+      "source_location": "L180",
+      "weight": 1.0
+    },
+    {
+      "source": "rules_peak_drawdown_rule_peakdrawdownrule_evaluate",
+      "target": "positions_trailing_config_calculate_tiered_drawdown_threshold",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
+      "source_location": "L43",
       "weight": 1.0
     },
     {

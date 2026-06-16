@@ -87,4 +87,74 @@ RSpec.describe 'Config pinning on exit path' do
       expect(Live::UnifiedExitChecker.emergency_peak_loss_exit_triggered?(tracker)).to be(false)
     end
   end
+
+  describe 'loss_limit_hit?' do
+    let(:tracker) do
+      instance_double(
+        PositionTracker,
+        meta: {
+          'config_snapshot' => {
+            'risk' => { 'sl_pct' => 0.08 },
+            'exit' => { 'stop_loss' => { 'type' => 'static', 'value' => 0.08 } }
+          }
+        },
+        instrument: nil,
+        watchable: nil
+      )
+    end
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        risk: { sl_pct: 0.50 },
+        exit: { stop_loss: { type: 'static', value: 0.50 } }
+      )
+    end
+
+    it 'uses pinned stop loss when live config differs' do
+      snapshot = { pnl_pct: -0.09 }
+
+      expect(Live::UnifiedExitChecker.loss_limit_hit?(tracker, snapshot)).to be(true)
+    end
+
+    it 'does not fire when loss is below pinned stop' do
+      snapshot = { pnl_pct: -0.05 }
+
+      expect(Live::UnifiedExitChecker.loss_limit_hit?(tracker, snapshot)).to be(false)
+    end
+  end
+
+  describe 'profit_target_hit?' do
+    let(:tracker) do
+      instance_double(
+        PositionTracker,
+        meta: {
+          'config_snapshot' => {
+            'exit' => { 'take_profit' => 0.20, 'trailing' => { 'enabled' => false } },
+            'risk' => {}
+          }
+        },
+        entry_price: 100.0,
+        quantity: 1
+      )
+    end
+
+    before do
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        exit: { take_profit: 0.99, trailing: { enabled: false } },
+        risk: {}
+      )
+    end
+
+    it 'uses pinned take profit when live config differs' do
+      snapshot = { pnl_pct: 0.25, hwm_pnl: 0.0 }
+
+      expect(Live::UnifiedExitChecker.profit_target_hit?(tracker, snapshot)).to be(true)
+    end
+
+    it 'does not fire when pnl is below pinned take profit' do
+      snapshot = { pnl_pct: 0.15, hwm_pnl: 0.0 }
+
+      expect(Live::UnifiedExitChecker.profit_target_hit?(tracker, snapshot)).to be(false)
+    end
+  end
 end

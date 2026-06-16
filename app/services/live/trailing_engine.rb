@@ -37,12 +37,13 @@ module Live
       peak_updated = update_peak(position_data, tracker: tracker, pending_meta: pending_meta)
 
       # 3. Apply trailing SL (direct or tiered based on config)
+      trailing = trailing_for(tracker)
       sl_result = if tailored_trailing_applicable?(position_data)
                     apply_tailored_sl(position_data, tracker: tracker)
-                  elsif Positions::TrailingConfig.direct_trailing_enabled?
-                    apply_direct_trailing_sl(position_data, tracker: tracker)
+                  elsif trailing.direct_trailing_enabled?
+                    apply_direct_trailing_sl(position_data, tracker: tracker, trailing: trailing)
                   else
-                    apply_tiered_sl(position_data, tracker: tracker)
+                    apply_tiered_sl(position_data, tracker: tracker, trailing: trailing)
                   end
 
       {
@@ -81,16 +82,14 @@ module Live
       end
 
       # Emergency defense-in-depth: sub-second path in UnifiedExitChecker is primary
-      drawdown_cfg = AlgoConfig.fetch.dig(:position_sizing, :drawdown) || {}
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
+      drawdown_cfg = Positions::ExitConfigResolver.for(tracker).dig(:position_sizing, :drawdown) || {}
       unless drawdown_cfg[:emergency_peak_loss_exit] == false
         emergency_min_peak = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
-        if peak >= emergency_min_peak && current < -0.02
-          tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
-          if tracker&.active?
+        if peak >= emergency_min_peak && current < -0.02 && tracker&.active?
             reason = "emergency_peak_loss_exit (peak: #{(peak * 100).round(2)}%, current: #{(current * 100).round(2)}%)"
             Live::ExitEngine.execute_exit(tracker: tracker, reason: reason, source: :trailing_engine)
             return true
-          end
         end
       end
 
@@ -98,8 +97,8 @@ module Live
       capital_deployed = calculate_capital_deployed(position_data)
 
       # Check if drawdown threshold is breached (with capital-aware thresholds)
-      # TrailingConfig expects decimal (e.g. 0.05 for 5%)
-      return false unless Positions::TrailingConfig.peak_drawdown_triggered?(
+      trailing = trailing_for(tracker)
+      return false unless trailing.peak_drawdown_triggered?(
         peak,
         current,
         _capital_deployed: capital_deployed
@@ -107,9 +106,7 @@ module Live
 
       # Apply peak-drawdown activation gating (if enabled)
       if peak_drawdown_activation_enabled?
-        # Use peak profit % (not current) for activation check
-        # TrailingConfig expects decimal for both profit_pct and current_sl_offset_pct
-        activation_ready = Positions::TrailingConfig.peak_drawdown_active?(
+        activation_ready = trailing.peak_drawdown_active?(
           profit_pct: peak,
           current_sl_offset_pct: current_sl_offset_pct_decimal(position_data)
         )
@@ -131,7 +128,7 @@ module Live
       end
 
       drawdown_pct = (peak - current) * 100.0
-      threshold = Positions::TrailingConfig.calculate_tiered_drawdown_threshold(peak)
+      threshold = trailing.calculate_tiered_drawdown_threshold(peak)
       capital_info = capital_deployed ? " (capital: ₹#{capital_deployed.round(0)})" : ''
       reason = "peak_drawdown_exit (drawdown: #{drawdown_pct.round(2)}%, threshold: #{(threshold * 100).round(2)}%, peak: #{(peak * 100).round(2)}%#{capital_info})"
 
@@ -179,7 +176,7 @@ module Live
 
       highest_price = entry_price * (1.0 + current)
       lowest_price = entry_price * (1.0 + min_profit)
- 
+
       persist_extremes_if_changed(position_data.tracker_id, highest_price, lowest_price, tracker: tracker, pending_meta: pending_meta)
 
       if peak_updated
@@ -204,16 +201,16 @@ module Live
       meta = (pending_meta || tracker.meta || {}).stringify_keys
       old_highest = meta['highest_price'].to_f
       old_lowest = meta['lowest_price']
- 
+
       new_highest = [old_highest, highest_price].max
       new_lowest = old_lowest.nil? ? lowest_price : [old_lowest.to_f, lowest_price].min
- 
+
       # Only write to DB if values actually changed
       return if new_highest == old_highest && new_lowest == old_lowest.to_f
- 
+
       meta['highest_price'] = new_highest
       meta['lowest_price'] = new_lowest
- 
+
       if pending_meta
         pending_meta['highest_price'] = new_highest
         pending_meta['lowest_price'] = new_lowest
@@ -226,7 +223,7 @@ module Live
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @return [Hash] Result hash with :updated, :new_sl_price, :reason
     # rubocop:disable Metrics/AbcSize
-    def apply_direct_trailing_sl(position_data, tracker: nil)
+    def apply_direct_trailing_sl(position_data, tracker: nil, trailing: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
@@ -236,9 +233,11 @@ module Live
 
       return { updated: false, new_sl_price: current_sl, reason: 'no_current_price' } unless current_price.positive?
 
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
+      trailing ||= trailing_for(tracker)
+
       # Calculate new SL based on current price (maintains fixed distance below)
-      # TrailingConfig expects decimal (e.g. 0.05 for 5%)
-      new_sl_price = Positions::TrailingConfig.calculate_direct_trailing_sl(
+      new_sl_price = trailing.calculate_direct_trailing_sl(
         current_price: current_price,
         entry_price: entry_price,
         current_profit_pct: current_profit_pct
@@ -249,7 +248,6 @@ module Live
       # Only update if new SL is higher than current SL (only moves upward)
       return { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved' } unless new_sl_price > current_sl
 
-      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
       # Calculate SL offset for logging
@@ -290,23 +288,24 @@ module Live
     # @param position_data [Positions::ActiveCache::PositionData] Position data
     # @return [Hash] Result hash with :updated, :new_sl_price, :reason
     # rubocop:disable Metrics/AbcSize
-    def apply_tiered_sl(position_data, tracker: nil)
+    def apply_tiered_sl(position_data, tracker: nil, trailing: nil)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       entry_price = position_data.entry_price.to_f
       current_profit_pct = position_data.pnl_pct.to_f # decimal (e.g. 0.05 for 5%)
       current_sl = position_data.sl_price.to_f
 
-      # TrailingConfig expects decimal
-      sl_offset_pct = Positions::TrailingConfig.sl_offset_for(current_profit_pct)
+      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
+      trailing ||= trailing_for(tracker)
+
+      sl_offset_pct = trailing.sl_offset_for(current_profit_pct)
       return { updated: false, new_sl_price: current_sl, reason: 'tier_not_reached' } unless sl_offset_pct
 
-      new_sl_price = Positions::TrailingConfig.sl_price_from_entry(entry_price, sl_offset_pct)
+      new_sl_price = trailing.sl_price_from_entry(entry_price, sl_offset_pct)
       return { updated: false, new_sl_price: nil, reason: 'invalid_sl_calculation' } unless new_sl_price.positive?
 
       return { updated: false, new_sl_price: current_sl, reason: 'sl_not_improved' } unless new_sl_price > current_sl
 
-      tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
       return { updated: false, new_sl_price: current_sl, reason: 'tracker_not_found' } unless tracker&.active?
 
       bracket_result = @bracket_placer.update_bracket(
@@ -412,6 +411,10 @@ module Live
     # Build failure result hash
     # @param error [String] Error message
     # @return [Hash]
+    def trailing_for(tracker)
+      Positions::TrailingConfig.from_tracker(tracker)
+    end
+
     def failure_result(error)
       {
         peak_updated: false,

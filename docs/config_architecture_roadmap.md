@@ -35,16 +35,17 @@ All mutations funnel through `DocumentStore#persist!` → `Setting.put` +
 - **No config identity per trade** — can't reconstruct which gates/params were active for a
   given trade. `AlgoConfigChangeLog` exists but is orphaned (no version, not joined to trades).
 - **`signal_tier` diverges** across YAML / DB / env with env silently winning.
-- `Positions::TrailingConfig` is a **global memoized module**, never `reset_config!`'d →
-  trailing params are accidentally frozen-at-boot and global, not per-position.
+- `Positions::TrailingConfig` was a **global memoized module** — **Phase 2.3** refactored it to
+  `TrailingConfig.from(snapshot)` / `from_tracker(tracker)`; live module methods delegate to
+  fresh reads (no `@config ||=` freeze).
 
 ---
 
 ## Phase 1 — Safe high-value hardening  ✅ IMPLEMENTED
 
-Status: done, TDD. **102 examples, 0 failures** in the focused Phase 1 suite (last verified
-2026-06-16). Code changes require a **trading-daemon restart**; DB-doc/tier changes are live
-within the 30s `AlgoConfig` cache.
+Status: done, TDD. **138 examples, 0 failures** in the focused config + pinning suite (last
+verified 2026-06-16). Code changes require a **trading-daemon restart**; DB-doc/tier changes
+are live within the 30s `AlgoConfig` cache.
 
 | Item | What | Key files |
 |------|------|-----------|
@@ -179,24 +180,31 @@ end
 ## Phase 1 — Verification commands
 
 ```bash
-# Focused Phase 1 suite (102 examples as of 2026-06-16)
+# Focused config + pinning suite (138 examples as of 2026-06-16)
 bundle exec rspec \
   spec/lib/algo_config_spec.rb \
   spec/services/algo_config/ \
   spec/models/algo_config_change_log_spec.rb \
   spec/services/positions/exit_config_resolver_spec.rb \
+  spec/services/positions/trailing_config_spec.rb \
   spec/services/entries/entry_guard_spec.rb \
   spec/models/trading_signal_spec.rb \
   spec/requests/api/settings_spec.rb \
   spec/integration/config_pinning_exit_spec.rb \
-  spec/services/options/calibration_auto_applier_spec.rb
+  spec/services/options/calibration_auto_applier_spec.rb \
+  spec/services/live/trailing_engine_spec.rb
 
 bundle exec rubocop \
   app/lib/algo_config.rb \
   app/services/algo_config/ \
   app/services/positions/exit_config_resolver.rb \
+  app/services/positions/trailing_config.rb \
+  app/services/positions/trailing_config/view.rb \
+  app/services/live/unified_exit_checker.rb \
+  app/services/live/trailing_engine.rb \
   spec/lib/algo_config_spec.rb \
-  spec/integration/config_pinning_exit_spec.rb
+  spec/integration/config_pinning_exit_spec.rb \
+  spec/services/positions/trailing_config_spec.rb
 ```
 
 Activation note: code changes require a **trading-daemon restart**; DB-doc/tier changes are
@@ -239,21 +247,24 @@ Build it for first-class versioning + rollback.
 - Wire `CalibrationRun#propose_config!` / `WeeklyCalibrationJob` to emit a proposed version
   instead of a silent no-op.
 
-### 2.3 Finish per-position pinning (`TrailingConfig`)
+### 2.3 Finish per-position pinning (`TrailingConfig`)  ✅ IMPLEMENTED
 
-`Positions::TrailingConfig` is a global `module_function` module with memoized `@config`,
-used by `unified_exit_checker`, `orders`/`trailing` engines, `profit_manager`,
-`peak_drawdown_rule` (5 files). Pin it per-tracker.
+`Positions::TrailingConfig` was a global `module_function` with memoized `@config`. Refactored
+to a `TrailingConfig::View` value object built from pinned or live risk config.
 
-- Refactor `TrailingConfig` to accept a config (the tracker's pinned snapshot) instead of
-  reading global `AlgoConfig.fetch[:risk]` — e.g. `TrailingConfig.for(snapshot)` returning a
-  small value object, or thread the resolved config through call sites.
-- Remove the never-reset memoization (`@config ||=` + absent `reset_config!`) — current
-  behavior freezes trailing params at process boot, which is a latent staleness bug.
-- Route the 5 callers through `ExitConfigResolver.for(tracker)`.
+- `TrailingConfig.from(effective_config)` / `from_tracker(tracker)` — pinned snapshot via
+  `ExitConfigResolver.for(tracker)`; module-level helpers delegate to `live_view` (no memo).
+- `UnifiedExitChecker#exit_config_for(tracker)` — early exit, stop loss, take profit, trailing,
+  time-based, and underlying-context paths use pinned config.
+- `Live::TrailingEngine` — tiered/direct trailing and peak-drawdown math use `from_tracker`.
+- `Risk::Rules::PeakDrawdownRule` — uses `TrailingConfig.from(context.risk_config)`.
 
-Constraint: LOCKED layer (CLAUDE.md). Justify under Critical Scenario #2/#3 (open-position
-stop integrity). Smallest viable change; preserve idempotency + linear lifecycle.
+Constraint: LOCKED layer (CLAUDE.md). Justified under Critical Scenario #2/#3 (open-position
+stop integrity).
+
+**Specs:** `spec/services/positions/trailing_config_spec.rb` (`.from` pinning),
+`spec/integration/config_pinning_exit_spec.rb` (loss limit + take profit pinning),
+`spec/services/live/trailing_engine_spec.rb` (updated for pinned API).
 
 ### Phase 2 — Proposed spec templates (not yet implemented)
 
@@ -331,10 +342,10 @@ RSpec.describe AlgoConfigVersion do
 end
 ```
 
-#### 2.3 `TrailingConfig` pinning — extend `spec/services/positions/trailing_config_spec.rb`
+#### 2.3 `TrailingConfig` pinning — `spec/services/positions/trailing_config_spec.rb` ✅
 
 ```ruby
-describe '.for' do
+describe '.from' do
   let(:pinned_snapshot) do
     {
       risk: {
@@ -350,7 +361,7 @@ describe '.for' do
       risk: { trailing: { tiers: [{ threshold_pct: 0.05, sl_offset_pct: -0.05 }] } }
     )
 
-    cfg = described_class.for(pinned_snapshot)
+    cfg = described_class.from(pinned_snapshot)
     expect(cfg.sl_offset_for(0.06)).to eq(-0.20)
   end
 end
