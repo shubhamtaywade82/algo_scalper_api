@@ -3922,11 +3922,19 @@
       "_origin": "ast"
     },
     {
+      "id": "models_instrument_segment_keys_for",
+      "label": "segment_keys_for()",
+      "file_type": "code",
+      "source_file": "app/models/instrument.rb",
+      "source_location": "L130",
+      "_origin": "ast"
+    },
+    {
       "id": "models_instrument_instrument_subscribe",
       "label": ".subscribe!()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L123",
+      "source_location": "L144",
       "_origin": "ast"
     },
     {
@@ -3934,7 +3942,7 @@
       "label": ".unsubscribe!()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L127",
+      "source_location": "L148",
       "_origin": "ast"
     },
     {
@@ -3942,7 +3950,7 @@
       "label": ".buy_market!()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L136",
+      "source_location": "L157",
       "_origin": "ast"
     },
     {
@@ -3950,7 +3958,7 @@
       "label": ".sell_market!()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L179",
+      "source_location": "L200",
       "_origin": "ast"
     },
     {
@@ -3958,7 +3966,7 @@
       "label": ".fetch_option_chain()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L206",
+      "source_location": "L227",
       "_origin": "ast"
     },
     {
@@ -3966,7 +3974,7 @@
       "label": ".fetch_fresh_option_chain()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L239",
+      "source_location": "L260",
       "_origin": "ast"
     },
     {
@@ -3974,7 +3982,7 @@
       "label": ".option_chain_stale?()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L264",
+      "source_location": "L285",
       "_origin": "ast"
     },
     {
@@ -3982,7 +3990,7 @@
       "label": ".normalize_option_chain_response()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L280",
+      "source_location": "L301",
       "_origin": "ast"
     },
     {
@@ -3990,7 +3998,7 @@
       "label": ".filter_option_chain_data()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L302",
+      "source_location": "L323",
       "_origin": "ast"
     },
     {
@@ -3998,7 +4006,7 @@
       "label": ".expiry_list()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L321",
+      "source_location": "L342",
       "_origin": "ast"
     },
     {
@@ -4006,7 +4014,7 @@
       "label": ".option_chain()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L328",
+      "source_location": "L349",
       "_origin": "ast"
     },
     {
@@ -4014,7 +4022,7 @@
       "label": ".lot_size_from_derivatives()",
       "file_type": "code",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L335",
+      "source_location": "L356",
       "_origin": "ast"
     },
     {
@@ -22362,11 +22370,19 @@
       "_origin": "ast"
     },
     {
+      "id": "options_buying_chain_radar_chainradar_liquid_enough",
+      "label": ".liquid_enough?()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L98",
+      "_origin": "ast"
+    },
+    {
       "id": "options_buying_chain_radar_chainradar_max_oi_strike",
       "label": ".max_oi_strike()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L90",
+      "source_location": "L107",
       "_origin": "ast"
     },
     {
@@ -22374,7 +22390,7 @@
       "label": ".session_minutes_elapsed()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L95",
+      "source_location": "L118",
       "_origin": "ast"
     },
     {
@@ -22382,7 +22398,7 @@
       "label": ".strike_step_for()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L101",
+      "source_location": "L124",
       "_origin": "ast"
     },
     {
@@ -22390,7 +22406,7 @@
       "label": ".atm_delta_fallback()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L107",
+      "source_location": "L130",
       "_origin": "ast"
     },
     {
@@ -118787,12 +118803,21 @@
       "weight": 1.0
     },
     {
+      "source": "models_instrument",
+      "target": "models_instrument_segment_keys_for",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/models/instrument.rb",
+      "source_location": "L130",
+      "weight": 1.0
+    },
+    {
       "source": "models_instrument_instrument",
       "target": "models_instrument_instrument_subscribe",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L123",
+      "source_location": "L144",
       "weight": 1.0
     },
     {
@@ -118801,7 +118826,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L127",
+      "source_location": "L148",
       "weight": 1.0
     },
     {
@@ -118810,7 +118835,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L136",
+      "source_location": "L157",
       "weight": 1.0
     },
     {
@@ -118819,7 +118844,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L179",
+      "source_location": "L200",
       "weight": 1.0
     },
     {
@@ -118828,7 +118853,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L206",
+      "source_location": "L227",
       "weight": 1.0
     },
     {
@@ -118837,7 +118862,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L239",
+      "source_location": "L260",
       "weight": 1.0
     },
     {
@@ -118846,7 +118871,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L264",
+      "source_location": "L285",
       "weight": 1.0
     },
     {
@@ -118855,7 +118880,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L280",
+      "source_location": "L301",
       "weight": 1.0
     },
     {
@@ -118864,7 +118889,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L302",
+      "source_location": "L323",
       "weight": 1.0
     },
     {
@@ -118873,7 +118898,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L321",
+      "source_location": "L342",
       "weight": 1.0
     },
     {
@@ -118882,7 +118907,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L328",
+      "source_location": "L349",
       "weight": 1.0
     },
     {
@@ -118891,17 +118916,27 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L335",
+      "source_location": "L356",
       "weight": 1.0
     },
     {
       "source": "models_instrument_find_by_sid_and_segment",
+      "target": "models_instrument_segment_keys_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/models/instrument.rb",
+      "source_location": "L115",
+      "weight": 1.0
+    },
+    {
+      "source": "models_instrument_segment_keys_for",
       "target": "models_instrument_segment_key_for",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L112",
+      "source_location": "L131",
       "weight": 1.0
     },
     {
@@ -118911,7 +118946,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L215",
+      "source_location": "L236",
       "weight": 1.0
     },
     {
@@ -118921,7 +118956,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L222",
+      "source_location": "L243",
       "weight": 1.0
     },
     {
@@ -118931,7 +118966,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L240",
+      "source_location": "L261",
       "weight": 1.0
     },
     {
@@ -118941,7 +118976,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L247",
+      "source_location": "L268",
       "weight": 1.0
     },
     {
@@ -118951,7 +118986,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L250",
+      "source_location": "L271",
       "weight": 1.0
     },
     {
@@ -118961,7 +118996,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L322",
+      "source_location": "L343",
       "weight": 1.0
     },
     {
@@ -118971,7 +119006,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/instrument.rb",
-      "source_location": "L329",
+      "source_location": "L350",
       "weight": 1.0
     },
     {
@@ -149447,11 +149482,20 @@
     },
     {
       "source": "options_buying_chain_radar_chainradar",
+      "target": "options_buying_chain_radar_chainradar_liquid_enough",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_chain_radar_chainradar",
       "target": "options_buying_chain_radar_chainradar_max_oi_strike",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L90",
+      "source_location": "L107",
       "weight": 1.0
     },
     {
@@ -149460,7 +149504,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L95",
+      "source_location": "L118",
       "weight": 1.0
     },
     {
@@ -149469,7 +149513,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L101",
+      "source_location": "L124",
       "weight": 1.0
     },
     {
@@ -149478,7 +149522,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L107",
+      "source_location": "L130",
       "weight": 1.0
     },
     {
@@ -149518,7 +149562,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L70",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_chain_radar_chainradar_filter_liquid",
+      "target": "options_buying_chain_radar_chainradar_liquid_enough",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L84",
       "weight": 1.0
     },
     {
@@ -259395,13 +259449,13 @@
     },
     {
       "source": "options_buying_daily_metrics_job_dailymetricsjob_seed_daily_atr",
-      "target": "states_base_state_basestate_to_s",
+      "target": "models_instrument_find_by_sid_and_segment",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/jobs/options_buying/daily_metrics_job.rb",
-      "source_location": "L20",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -259412,7 +259466,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/jobs/options_buying/daily_metrics_job.rb",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -259423,7 +259477,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/jobs/options_buying/daily_metrics_job.rb",
-      "source_location": "L28",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
@@ -262107,6 +262161,17 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
+      "source_location": "L114",
+      "weight": 1.0
+    },
+    {
+      "source": "models_instrument_find_by_sid_and_segment",
+      "target": "models_candle_series_candleseries_each",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/models/instrument.rb",
       "source_location": "L115",
       "weight": 1.0
     },
@@ -262118,7 +262183,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L138",
+      "source_location": "L159",
       "weight": 1.0
     },
     {
@@ -262129,7 +262194,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L146",
+      "source_location": "L167",
       "weight": 1.0
     },
     {
@@ -262140,7 +262205,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L152",
+      "source_location": "L173",
       "weight": 1.0
     },
     {
@@ -262151,7 +262216,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L159",
+      "source_location": "L180",
       "weight": 1.0
     },
     {
@@ -262162,7 +262227,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L181",
+      "source_location": "L202",
       "weight": 1.0
     },
     {
@@ -262173,7 +262238,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L187",
+      "source_location": "L208",
       "weight": 1.0
     },
     {
@@ -262184,7 +262249,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L194",
+      "source_location": "L215",
       "weight": 1.0
     },
     {
@@ -262195,7 +262260,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L200",
+      "source_location": "L221",
       "weight": 1.0
     },
     {
@@ -262206,7 +262271,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L220",
+      "source_location": "L241",
       "weight": 1.0
     },
     {
@@ -262217,7 +262282,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L232",
+      "source_location": "L253",
       "weight": 1.0
     },
     {
@@ -262228,7 +262293,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L254",
+      "source_location": "L275",
       "weight": 1.0
     },
     {
@@ -262239,7 +262304,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L259",
+      "source_location": "L280",
       "weight": 1.0
     },
     {
@@ -262250,7 +262315,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L269",
+      "source_location": "L290",
       "weight": 1.0
     },
     {
@@ -262261,7 +262326,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L273",
+      "source_location": "L294",
       "weight": 1.0
     },
     {
@@ -262272,7 +262337,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L291",
+      "source_location": "L312",
       "weight": 1.0
     },
     {
@@ -262283,7 +262348,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L292",
+      "source_location": "L313",
       "weight": 1.0
     },
     {
@@ -262294,7 +262359,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L311",
+      "source_location": "L332",
       "weight": 1.0
     },
     {
@@ -262305,7 +262370,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/instrument.rb",
-      "source_location": "L337",
+      "source_location": "L358",
       "weight": 1.0
     },
     {
@@ -281313,7 +281378,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L81",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
@@ -281324,7 +281389,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L92",
+      "source_location": "L110",
       "weight": 1.0
     },
     {
@@ -281335,7 +281400,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L97",
+      "source_location": "L120",
       "weight": 1.0
     },
     {
@@ -298353,6 +298418,27 @@
       "confidence_score": 0.8,
       "source_file": "tmp/rubycritic/assets/vendor/javascripts/prettify.js",
       "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "models_instrument_find_by_sid_and_segment",
+      "target": "models_instrument_segment_key_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/models/instrument.rb",
+      "source_location": "L112",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_daily_metrics_job_dailymetricsjob_seed_daily_atr",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/jobs/options_buying/daily_metrics_job.rb",
+      "source_location": "L20",
       "weight": 1.0
     },
     {

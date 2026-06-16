@@ -24,8 +24,8 @@ module OptionsBuying
       pe = all.select { |c| c[:type].to_s.upcase == 'PE' }
 
       liquid = filter_liquid(all, spot: spot)
-      resistance_strike = max_oi_strike(ce) # call wall above spot — bullish breakout level
-      support_strike = max_oi_strike(pe)    # put wall below spot — bearish breakdown level
+      resistance_strike = max_oi_strike(ce, spot: spot)
+      support_strike = max_oi_strike(pe, spot: spot)
 
       StateStore.set_radar_strikes(@index_key, liquid)
       StateStore.set_resistance(@index_key, resistance_strike) if resistance_strike&.positive?
@@ -64,6 +64,15 @@ module OptionsBuying
       delta_max = (radar_config[:delta_max] || 0.55).to_f
       min_volume = (radar_config[:min_volume] || 10_000).to_i
       strike_step = strike_step_for(spot)
+      liquidity_data_available = candidates.any? do |candidate|
+        candidate[:volume].to_i.positive? || candidate[:oi].to_i.positive?
+      end
+
+      unless liquidity_data_available
+        Rails.logger.info(
+          "[ChainRadar] #{@index_key} no OI/volume in chain — using LTP+delta fallback for radar strikes"
+        )
+      end
 
       candidates.filter_map do |candidate|
         delta = candidate[:delta].to_f.abs
@@ -72,7 +81,7 @@ module OptionsBuying
         volume = candidate[:volume].to_i
         liquidity = volume.positive? ? volume : candidate[:oi].to_i
         next unless delta.between?(delta_min, delta_max)
-        next unless liquidity >= min_volume
+        next unless liquid_enough?(candidate, liquidity, min_volume, liquidity_data_available)
 
         {
           security_id: candidate[:security_id],
@@ -86,10 +95,24 @@ module OptionsBuying
       end
     end
 
+    def liquid_enough?(candidate, liquidity, min_volume, liquidity_data_available)
+      return true if liquidity >= min_volume
+      return false if liquidity_data_available
+
+      candidate[:ltp].to_f.positive?
+    end
+
     # Peak open-interest strike among the given (already type-filtered) candidates.
-    def max_oi_strike(candidates)
+    # Falls back to the strike nearest spot when OI is unavailable (LTP-only chain).
+    def max_oi_strike(candidates, spot:)
       with_oi = candidates.select { |c| c[:oi].to_i.positive? }
-      with_oi.max_by { |c| c[:oi].to_i }&.dig(:strike)&.to_f
+      if with_oi.any?
+        return with_oi.max_by { |c| c[:oi].to_i }&.dig(:strike)&.to_f
+      end
+
+      return nil unless spot&.positive? && candidates.any?
+
+      candidates.min_by { |c| (c[:strike].to_f - spot.to_f).abs }&.dig(:strike)&.to_f
     end
 
     def session_minutes_elapsed

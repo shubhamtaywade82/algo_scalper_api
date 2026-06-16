@@ -16,9 +16,10 @@ module OptionsBuying
     private
 
     def seed_daily_atr(idx_cfg)
-      instrument = Instrument.find_by(
-        security_id: idx_cfg[:sid].to_s,
-        exchange_segment: idx_cfg[:segment]
+      instrument = Instrument.find_by_sid_and_segment(
+        security_id: idx_cfg[:sid],
+        segment_code: idx_cfg[:segment],
+        symbol_name: idx_cfg[:key]
       )
       return unless instrument
 

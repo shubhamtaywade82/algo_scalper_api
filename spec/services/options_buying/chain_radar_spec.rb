@@ -54,4 +54,36 @@ RSpec.describe OptionsBuying::ChainRadar do
     result = described_class.scan!('NIFTY')
     expect(result).to include(index_key: 'NIFTY', resistance: 24_700.0, support: 24_400.0)
   end
+
+  context 'when chain has LTP and greeks but no OI/volume' do
+    let(:ce_candidates) do
+      [
+        { security_id: 'c1', segment: 'NSE_FNO', strike: 24_600, type: 'CE', delta: 0.50, volume: 0, oi: 0,
+          ltp: 150.0 },
+        { security_id: 'c2', segment: 'NSE_FNO', strike: 24_700, type: 'CE', delta: 0.48, volume: 0, oi: 0,
+          ltp: 120.0 }
+      ]
+    end
+    let(:pe_candidates) do
+      [
+        { security_id: 'p1', segment: 'NSE_FNO', strike: 24_400, type: 'PE', delta: -0.50, volume: 0, oi: 0,
+          ltp: 140.0 }
+      ]
+    end
+
+    it 'seeds radar strikes from delta-qualified LTP-only candidates' do
+      described_class.scan!('NIFTY')
+
+      expect(OptionsBuying::StateStore).to have_received(:set_radar_strikes) do |_index_key, strikes|
+        expect(strikes.map { |s| s[:security_id] }).to contain_exactly('c1', 'c2', 'p1')
+      end
+    end
+
+    it 'falls back to spot-nearest strikes for resistance and support' do
+      described_class.scan!('NIFTY')
+
+      expect(OptionsBuying::StateStore).to have_received(:set_resistance).with('NIFTY', 24_600.0)
+      expect(OptionsBuying::StateStore).to have_received(:set_support).with('NIFTY', 24_400.0)
+    end
+  end
 end

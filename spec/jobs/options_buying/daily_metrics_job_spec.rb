@@ -8,7 +8,7 @@ RSpec.describe OptionsBuying::DailyMetricsJob, type: :job do
 
   before do
     allow(IndexConfigLoader).to receive(:load_indices).and_return([index_cfg])
-    allow(Instrument).to receive(:find_by).and_return(instrument)
+    allow(Instrument).to receive(:find_by_sid_and_segment).and_return(instrument)
     allow(OptionsBuying::ATRCompressionChecker).to receive(:compute_daily_atr_for).with(instrument).and_return(120.5)
     allow(OptionsBuying::StateStore).to receive(:set_daily_atr)
   end
@@ -22,7 +22,7 @@ RSpec.describe OptionsBuying::DailyMetricsJob, type: :job do
 
     context 'when instrument is missing' do
       before do
-        allow(Instrument).to receive(:find_by).and_return(nil)
+        allow(Instrument).to receive(:find_by_sid_and_segment).and_return(nil)
       end
 
       it 'skips seeding' do
