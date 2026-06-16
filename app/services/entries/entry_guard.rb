@@ -191,7 +191,9 @@ module Entries
           index_key: index_cfg[:key].to_s,
           symbol: pick[:symbol].to_s,
           direction: direction || pick[:direction],
-          entry_at: Time.current.iso8601
+          entry_at: Time.current.iso8601,
+          config_version: AlgoConfig.version,
+          config_snapshot: AlgoConfig.position_snapshot
         }
       end
 

@@ -66,6 +66,19 @@ RSpec.describe 'Api::Settings' do
       json = response.parsed_body
       expect(json['error']).to match(/No permitted/)
     end
+
+    it 'returns 422 with errors when a value is out of range' do
+      patch '/api/settings/bulk', params: { settings: { signals: { min_confidence: 999 } } }
+      expect(response).to have_http_status(:unprocessable_content)
+      json = response.parsed_body
+      expect(json['errors'].join).to match(/min_confidence/)
+    end
+
+    it 'does not persist an out-of-range value' do
+      patch '/api/settings/bulk', params: { settings: { signals: { min_confidence: 999 } } }
+      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
+      expect(doc['signals']).to be_nil
+    end
   end
 
   describe 'GET /api/settings/change_logs' do

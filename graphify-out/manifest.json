@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "app/controllers/api/settings_controller.rb": {
-    "mtime": 1775801790.9682884,
-    "ast_hash": "bb210383400cfc5b4903b4f7758a2778",
+    "mtime": 1781603921.0701592,
+    "ast_hash": "00e2da6438e3848a6927fd521bc887a6",
     "semantic_hash": ""
   },
   "app/controllers/api/signals_controller.rb": {
@@ -210,8 +210,8 @@
     "semantic_hash": ""
   },
   "app/lib/algo_config.rb": {
-    "mtime": 1781599079.7084062,
-    "ast_hash": "1cac28df6e611787e91143974b797f62",
+    "mtime": 1781604867.3475132,
+    "ast_hash": "faebff5f1d2ed00dcfab9b2ce4794e3a",
     "semantic_hash": ""
   },
   "app/lib/dhan/auth/strategies/authority.rb": {
@@ -410,8 +410,8 @@
     "semantic_hash": ""
   },
   "app/models/trading_signal.rb": {
-    "mtime": 1781601971.7578993,
-    "ast_hash": "40922768c116121a187353075bc658a4",
+    "mtime": 1781604254.0346994,
+    "ast_hash": "5321b2d5004dbb3ea0e6ebf95d0df190",
     "semantic_hash": ""
   },
   "app/models/watchlist_item.rb": {
@@ -505,8 +505,8 @@
     "semantic_hash": ""
   },
   "app/services/algo_config/document_store.rb": {
-    "mtime": 1775801790.9882884,
-    "ast_hash": "645af9f8ed124bd5447a7373d7a65de3",
+    "mtime": 1781603862.5061064,
+    "ast_hash": "a05feaac515382272ff703108b56a76b",
     "semantic_hash": ""
   },
   "app/services/algo_config/merge_util.rb": {
@@ -730,8 +730,8 @@
     "semantic_hash": ""
   },
   "app/services/entries/entry_guard.rb": {
-    "mtime": 1775801790.9982884,
-    "ast_hash": "5d0a248cc6db870facf70b1d76821487",
+    "mtime": 1781604873.599182,
+    "ast_hash": "c282d48301b4ddbc25bc9e3fc2876293",
     "semantic_hash": ""
   },
   "app/services/entries/entry_guard_pipeline.rb": {
@@ -1125,8 +1125,8 @@
     "semantic_hash": ""
   },
   "app/services/live/risk_manager_service/exit_enforcement.rb": {
-    "mtime": 1780930853.782204,
-    "ast_hash": "8696f6bc6cfa8aea8b62d2113a4a0185",
+    "mtime": 1781604994.7613385,
+    "ast_hash": "991a87379d209c38a49d1010a3de9cff",
     "semantic_hash": ""
   },
   "app/services/live/risk_manager_service/exit_execution.rb": {
@@ -1200,8 +1200,8 @@
     "semantic_hash": ""
   },
   "app/services/live/unified_exit_checker.rb": {
-    "mtime": 1781601772.3507464,
-    "ast_hash": "10b8a7fc85d301ed7cb0d00c443c4cbf",
+    "mtime": 1781604994.7613385,
+    "ast_hash": "bbccad27f09c7bac25a470d84459cd6e",
     "semantic_hash": ""
   },
   "app/services/live/ws_hub.rb": {
@@ -1565,8 +1565,8 @@
     "semantic_hash": ""
   },
   "app/services/orders/mfe_exit_engine.rb": {
-    "mtime": 1774856636.737612,
-    "ast_hash": "bc1302ab8faaee61a112b3d3f49a0fcb",
+    "mtime": 1781604851.0950084,
+    "ast_hash": "91e05733ce8e1576da8a6993f43c518f",
     "semantic_hash": ""
   },
   "app/services/orders/placer.rb": {
@@ -1575,8 +1575,8 @@
     "semantic_hash": ""
   },
   "app/services/orders/trailing_engine.rb": {
-    "mtime": 1774856636.737612,
-    "ast_hash": "fdb5c3202204028e706e18110d403f17",
+    "mtime": 1781604849.7383413,
+    "ast_hash": "2f2bbb1881d4a5604bb1c111edbf684f",
     "semantic_hash": ""
   },
   "app/services/orders/volatility_regime_detector.rb": {
@@ -3680,8 +3680,8 @@
     "semantic_hash": ""
   },
   "spec/lib/algo_config_spec.rb": {
-    "mtime": 1781596473.5929828,
-    "ast_hash": "007e5f19aeb75f1dbacf9714efce3c98",
+    "mtime": 1781604195.0566576,
+    "ast_hash": "8b6ede3c23b02699126d12473e1b495b",
     "semantic_hash": ""
   },
   "spec/lib/dhan/auth/strategies/authority_spec.rb": {
@@ -3870,8 +3870,8 @@
     "semantic_hash": ""
   },
   "spec/models/trading_signal_spec.rb": {
-    "mtime": 1781601889.628928,
-    "ast_hash": "0f803f838e19c71903f040266542a1b6",
+    "mtime": 1781604200.6391592,
+    "ast_hash": "2e1021ae42982d4114b127e36852dfe2",
     "semantic_hash": ""
   },
   "spec/models/watchlist_item_spec.rb": {
@@ -3930,8 +3930,8 @@
     "semantic_hash": ""
   },
   "spec/requests/api/settings_spec.rb": {
-    "mtime": 1775801791.1282883,
-    "ast_hash": "d68404d068256e6d07d6058e9112ef49",
+    "mtime": 1781603888.903107,
+    "ast_hash": "ad06cbe6be537155fdeeed956989b949",
     "semantic_hash": ""
   },
   "spec/requests/api/token_authentication_spec.rb": {
@@ -3995,8 +3995,8 @@
     "semantic_hash": ""
   },
   "spec/services/algo_config/document_store_spec.rb": {
-    "mtime": 1775801791.1282883,
-    "ast_hash": "093052da78bc176ca2292b0b20990dfc",
+    "mtime": 1781603841.798588,
+    "ast_hash": "5d9e7bcbd35f4ded60eeb461e2fa1869",
     "semantic_hash": ""
   },
   "spec/services/algo_config/merge_util_spec.rb": {
@@ -4085,8 +4085,8 @@
     "semantic_hash": ""
   },
   "spec/services/entries/entry_guard_spec.rb": {
-    "mtime": 1775801791.1382883,
-    "ast_hash": "e3214206edcd6329ece36c3438a5584b",
+    "mtime": 1781604886.221732,
+    "ast_hash": "b19f4eb1c57bb519383cc61f6a549ce1",
     "semantic_hash": ""
   },
   "spec/services/entries/guards/cooldown_guard_spec.rb": {
@@ -5580,8 +5580,8 @@
     "semantic_hash": ""
   },
   "config/algo.yml": {
-    "mtime": 1781602618.8653333,
-    "ast_hash": "3d4ddf79f4a04c4c0635c56070af3b34",
+    "mtime": 1781604071.184385,
+    "ast_hash": "fdcae6cd49955d208ea80dcb70a635e8",
     "semantic_hash": ""
   },
   "config/algo_organized.yml": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781602109.5810497,
-    "ast_hash": "9195febbebd3dfd4e632d770f3ec7fb0",
+    "mtime": 1781605054.889744,
+    "ast_hash": "704d5fbdd345e8ca089f7eeff77efa21",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10617,6 +10617,26 @@
   "spec/services/signal/live_metadata_cache_spec.rb": {
     "mtime": 1781601880.8620207,
     "ast_hash": "788841d8b3c2684d13ec58228e645689",
+    "semantic_hash": ""
+  },
+  "app/services/algo_config/validator.rb": {
+    "mtime": 1781603806.3864334,
+    "ast_hash": "e57e7dc69f21e2141accfb858525a3a8",
+    "semantic_hash": ""
+  },
+  "app/services/positions/exit_config_resolver.rb": {
+    "mtime": 1781604717.6372924,
+    "ast_hash": "94ba6818cd143a210eeee73f6daddd76",
+    "semantic_hash": ""
+  },
+  "spec/services/algo_config/validator_spec.rb": {
+    "mtime": 1781603771.5770957,
+    "ast_hash": "775dd4f399111fd46973f75be42988bb",
+    "semantic_hash": ""
+  },
+  "spec/services/positions/exit_config_resolver_spec.rb": {
+    "mtime": 1781604712.384791,
+    "ast_hash": "5e2fa8fb338cc14e17aa4203f41903c8",
     "semantic_hash": ""
   }
 }

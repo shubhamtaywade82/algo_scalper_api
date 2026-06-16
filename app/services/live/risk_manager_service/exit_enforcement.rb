@@ -363,7 +363,7 @@ module Live
       end
 
       def trailing_armed_for?(tracker, position_data)
-        trailing_cfg = AlgoConfig.fetch.dig(:risk, :trailing) || {}
+        trailing_cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :trailing) || {}
         return false if trailing_cfg[:enabled] == false
 
         activation = (trailing_cfg[:activation_pct] || 0.025).to_f

@@ -41,6 +41,20 @@ RSpec.describe TradingSignal do
       )
       expect(signal.effective_metadata).to include('mtf_rsi' => { '1m' => 44.0 })
     end
+
+    it 'stamps the effective config version on the persisted metadata' do
+      signal = described_class.create_from_analysis(
+        index_key: 'NIFTY',
+        direction: 'bullish',
+        timeframe: '1m',
+        supertrend_value: 22_000,
+        adx_value: 18.5,
+        candle_timestamp: 1.minute.ago,
+        metadata: { regime: 'TRENDING' }
+      )
+
+      expect(signal.metadata['config_version']).to include('hash')
+    end
   end
 
   describe '#record_entry_outcome' do

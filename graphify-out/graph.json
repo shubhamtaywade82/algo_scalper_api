@@ -774,7 +774,7 @@
       "label": ".update_deep_merge()",
       "file_type": "code",
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L70",
+      "source_location": "L73",
       "_origin": "ast"
     },
     {
@@ -782,7 +782,7 @@
       "label": ".change_logs()",
       "file_type": "code",
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L100",
+      "source_location": "L106",
       "_origin": "ast"
     },
     {
@@ -790,7 +790,7 @@
       "label": ".update_ip()",
       "file_type": "code",
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L118",
+      "source_location": "L124",
       "_origin": "ast"
     },
     {
@@ -798,7 +798,7 @@
       "label": ".authenticate_settings!()",
       "file_type": "code",
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L133",
+      "source_location": "L139",
       "_origin": "ast"
     },
     {
@@ -1774,7 +1774,7 @@
       "label": "fetch()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L9",
+      "source_location": "L11",
       "_origin": "ast"
     },
     {
@@ -1782,7 +1782,23 @@
       "label": "mode()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L26",
+      "source_location": "L28",
+      "_origin": "ast"
+    },
+    {
+      "id": "lib_algo_config_version",
+      "label": "version()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L34",
+      "_origin": "ast"
+    },
+    {
+      "id": "lib_algo_config_position_snapshot",
+      "label": "position_snapshot()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L43",
       "_origin": "ast"
     },
     {
@@ -1790,7 +1806,7 @@
       "label": "paper_trading_enabled?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L30",
+      "source_location": "L47",
       "_origin": "ast"
     },
     {
@@ -1798,7 +1814,7 @@
       "label": "reset!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L34",
+      "source_location": "L51",
       "_origin": "ast"
     },
     {
@@ -1806,7 +1822,7 @@
       "label": "event_driven_intraday_ai?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L41",
+      "source_location": "L58",
       "_origin": "ast"
     },
     {
@@ -1814,7 +1830,7 @@
       "label": "defer_scheduled_intraday_ai_jobs?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L50",
+      "source_location": "L67",
       "_origin": "ast"
     },
     {
@@ -1822,7 +1838,7 @@
       "label": "scheduled_ai_technical_analysis_job_deferred?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L58",
+      "source_location": "L75",
       "_origin": "ast"
     },
     {
@@ -1830,7 +1846,7 @@
       "label": "scheduled_smc_scanner_job_deferred?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L64",
+      "source_location": "L81",
       "_origin": "ast"
     },
     {
@@ -1838,7 +1854,7 @@
       "label": "suppress_smc_bias_notify_for_event_driven_ai?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L71",
+      "source_location": "L88",
       "_origin": "ast"
     },
     {
@@ -1846,7 +1862,15 @@
       "label": "market_closed_for_scheduling?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L75",
+      "source_location": "L92",
+      "_origin": "ast"
+    },
+    {
+      "id": "lib_algo_config_latest_change_log_id",
+      "label": "latest_change_log_id()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L100",
       "_origin": "ast"
     },
     {
@@ -1854,7 +1878,7 @@
       "label": "truthy_signal_flag?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L83",
+      "source_location": "L106",
       "_origin": "ast"
     },
     {
@@ -1862,7 +1886,7 @@
       "label": "deep_merge_hashes_with_arrays()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L87",
+      "source_location": "L110",
       "_origin": "ast"
     },
     {
@@ -1870,7 +1894,7 @@
       "label": "merge_arrays()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L91",
+      "source_location": "L114",
       "_origin": "ast"
     },
     {
@@ -1878,7 +1902,7 @@
       "label": "apply_signal_tier_preset!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L97",
+      "source_location": "L120",
       "_origin": "ast"
     },
     {
@@ -1886,7 +1910,31 @@
       "label": "resolve_signal_tier()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L112",
+      "source_location": "L138",
+      "_origin": "ast"
+    },
+    {
+      "id": "lib_algo_config_normalize_signal_tier",
+      "label": "normalize_signal_tier()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L148",
+      "_origin": "ast"
+    },
+    {
+      "id": "lib_algo_config_signal_tier_env_forced",
+      "label": "signal_tier_env_forced?()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L158",
+      "_origin": "ast"
+    },
+    {
+      "id": "lib_algo_config_warn_ignored_signal_tier_env",
+      "label": "warn_ignored_signal_tier_env()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L162",
       "_origin": "ast"
     },
     {
@@ -1894,7 +1942,7 @@
       "label": "load_signal_tier_presets()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L130",
+      "source_location": "L169",
       "_origin": "ast"
     },
     {
@@ -1902,7 +1950,7 @@
       "label": "apply_live_trading_env_override!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L143",
+      "source_location": "L182",
       "_origin": "ast"
     },
     {
@@ -1910,7 +1958,7 @@
       "label": "apply_paper_research_overrides!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L150",
+      "source_location": "L189",
       "_origin": "ast"
     },
     {
@@ -1918,7 +1966,7 @@
       "label": "paper_strict_direction_gate?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L159",
+      "source_location": "L198",
       "_origin": "ast"
     },
     {
@@ -1926,7 +1974,7 @@
       "label": "live_trading_env_truthy?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L163",
+      "source_location": "L202",
       "_origin": "ast"
     },
     {
@@ -4278,7 +4326,7 @@
       "label": ".confidence_level()",
       "file_type": "code",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L64",
+      "source_location": "L65",
       "_origin": "ast"
     },
     {
@@ -4286,7 +4334,7 @@
       "label": ".bullish?()",
       "file_type": "code",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L76",
+      "source_location": "L77",
       "_origin": "ast"
     },
     {
@@ -4294,7 +4342,7 @@
       "label": ".bearish?()",
       "file_type": "code",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L80",
+      "source_location": "L81",
       "_origin": "ast"
     },
     {
@@ -4302,7 +4350,7 @@
       "label": ".calculate_accuracy()",
       "file_type": "code",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L84",
+      "source_location": "L85",
       "_origin": "ast"
     },
     {
@@ -4310,7 +4358,7 @@
       "label": ".avoid?()",
       "file_type": "code",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L106",
+      "source_location": "L107",
       "_origin": "ast"
     },
     {
@@ -4318,7 +4366,7 @@
       "label": ".effective_metadata()",
       "file_type": "code",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L110",
+      "source_location": "L111",
       "_origin": "ast"
     },
     {
@@ -4326,7 +4374,7 @@
       "label": ".record_entry_outcome()",
       "file_type": "code",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L115",
+      "source_location": "L116",
       "_origin": "ast"
     },
     {
@@ -5430,7 +5478,7 @@
       "label": "deep_symbolize()",
       "file_type": "code",
       "source_file": "app/services/algo_config/document_store.rb",
-      "source_location": "L164",
+      "source_location": "L165",
       "_origin": "ast"
     },
     {
@@ -5438,7 +5486,7 @@
       "label": "redact_for_audit()",
       "file_type": "code",
       "source_file": "app/services/algo_config/document_store.rb",
-      "source_location": "L175",
+      "source_location": "L176",
       "_origin": "ast"
     },
     {
@@ -5471,6 +5519,142 @@
       "file_type": "code",
       "source_file": "app/services/algo_config/merge_util.rb",
       "source_location": "L24",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator",
+      "label": "validator.rb",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_algoconfig",
+      "label": "AlgoConfig",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L3",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_validationerror",
+      "label": "ValidationError",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L5",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_validationerror_initialize",
+      "label": ".initialize()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L8",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_validator",
+      "label": "Validator",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L16",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_validate",
+      "label": "validate!()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L32",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_collect_errors",
+      "label": "collect_errors()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L41",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_applicable_rules",
+      "label": "applicable_rules()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L48",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_scope_keys",
+      "label": "scope_keys()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L55",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_rule_error",
+      "label": "rule_error()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L64",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_enum_error",
+      "label": "enum_error()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L72",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_integer_error",
+      "label": "integer_error()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L78",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_number_error",
+      "label": "number_error()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L84",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_range_error",
+      "label": "range_error()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L90",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_numeric_like",
+      "label": "numeric_like?()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L97",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_integer_like",
+      "label": "integer_like?()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L106",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_label",
+      "label": "label()",
+      "file_type": "code",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L115",
       "_origin": "ast"
     },
     {
@@ -8750,7 +8934,7 @@
       "label": "apply_bos_metadata!()",
       "file_type": "code",
       "source_file": "app/services/entries/entry_guard.rb",
-      "source_location": "L198",
+      "source_location": "L200",
       "_origin": "ast"
     },
     {
@@ -16974,7 +17158,7 @@
       "label": "pnl_snapshot()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L54",
+      "source_location": "L55",
       "_origin": "ast"
     },
     {
@@ -16982,7 +17166,7 @@
       "label": "portfolio_floor_breach?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L62",
+      "source_location": "L63",
       "_origin": "ast"
     },
     {
@@ -16990,7 +17174,7 @@
       "label": "emergency_peak_loss_exit_triggered?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L68",
+      "source_location": "L69",
       "_origin": "ast"
     },
     {
@@ -16998,7 +17182,7 @@
       "label": "early_exit_triggered?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L82",
+      "source_location": "L83",
       "_origin": "ast"
     },
     {
@@ -17006,7 +17190,7 @@
       "label": "loss_limit_hit?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L93",
+      "source_location": "L94",
       "_origin": "ast"
     },
     {
@@ -17014,7 +17198,7 @@
       "label": "percentage_pnl_exit_hit?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L107",
+      "source_location": "L108",
       "_origin": "ast"
     },
     {
@@ -17022,7 +17206,7 @@
       "label": "profit_target_hit?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L118",
+      "source_location": "L119",
       "_origin": "ast"
     },
     {
@@ -17030,7 +17214,7 @@
       "label": "trailing_stop_hit?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L126",
+      "source_location": "L127",
       "_origin": "ast"
     },
     {
@@ -17038,7 +17222,7 @@
       "label": "time_based_exit?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L177",
+      "source_location": "L178",
       "_origin": "ast"
     },
     {
@@ -17046,7 +17230,7 @@
       "label": "premium_momentum_failure_hit?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L184",
+      "source_location": "L185",
       "_origin": "ast"
     },
     {
@@ -17054,7 +17238,7 @@
       "label": "seconds_below_entry()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L210",
+      "source_location": "L211",
       "_origin": "ast"
     },
     {
@@ -17062,7 +17246,7 @@
       "label": "calculate_atr_ratio()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L223",
+      "source_location": "L224",
       "_origin": "ast"
     },
     {
@@ -17070,7 +17254,7 @@
       "label": "calculate_atr()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L235",
+      "source_location": "L236",
       "_origin": "ast"
     },
     {
@@ -17078,7 +17262,7 @@
       "label": "build_position_data()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L241",
+      "source_location": "L242",
       "_origin": "ast"
     },
     {
@@ -17086,7 +17270,7 @@
       "label": "exit_config()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L257",
+      "source_location": "L258",
       "_origin": "ast"
     },
     {
@@ -17094,7 +17278,7 @@
       "label": "build_exit_config()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L265",
+      "source_location": "L266",
       "_origin": "ast"
     },
     {
@@ -17102,7 +17286,7 @@
       "label": "trailing_armed?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L283",
+      "source_location": "L284",
       "_origin": "ast"
     },
     {
@@ -17110,7 +17294,7 @@
       "label": "adaptive_trailing_exit?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L295",
+      "source_location": "L296",
       "_origin": "ast"
     },
     {
@@ -17118,7 +17302,7 @@
       "label": "check_smc_navigator_exit()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L305",
+      "source_location": "L306",
       "_origin": "ast"
     },
     {
@@ -17126,7 +17310,7 @@
       "label": "check_structure_invalidation()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L315",
+      "source_location": "L316",
       "_origin": "ast"
     },
     {
@@ -17134,7 +17318,7 @@
       "label": "structure_invalidated?()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L328",
+      "source_location": "L329",
       "_origin": "ast"
     },
     {
@@ -17142,7 +17326,7 @@
       "label": "resolve_stall_minutes()",
       "file_type": "code",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L338",
+      "source_location": "L339",
       "_origin": "ast"
     },
     {
@@ -23887,6 +24071,30 @@
       "file_type": "code",
       "source_file": "app/services/positions/daily_pnl_recorder.rb",
       "source_location": "L33",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exit_config_resolver",
+      "label": "exit_config_resolver.rb",
+      "file_type": "code",
+      "source_file": "app/services/positions/exit_config_resolver.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exit_config_resolver_exitconfigresolver",
+      "label": "ExitConfigResolver",
+      "file_type": "code",
+      "source_file": "app/services/positions/exit_config_resolver.rb",
+      "source_location": "L7",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exit_config_resolver_exitconfigresolver_for",
+      "label": ".for()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exit_config_resolver.rb",
+      "source_location": "L8",
       "_origin": "ast"
     },
     {
@@ -41726,6 +41934,14 @@
       "_origin": "ast"
     },
     {
+      "id": "lib_algo_config_spec_seed_tier",
+      "label": "seed_tier()",
+      "file_type": "code",
+      "source_file": "spec/lib/algo_config_spec.rb",
+      "source_location": "L107",
+      "_origin": "ast"
+    },
+    {
       "id": "strategies_authority_spec",
       "label": "authority_spec.rb",
       "file_type": "code",
@@ -42290,6 +42506,14 @@
       "label": "merge_util_spec.rb",
       "file_type": "code",
       "source_file": "spec/services/algo_config/merge_util_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "algo_config_validator_spec",
+      "label": "validator_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/services/algo_config/validator_spec.rb",
       "source_location": "L1",
       "_origin": "ast"
     },
@@ -43594,6 +43818,14 @@
       "label": "activecache_add_remove_spec.rb",
       "file_type": "code",
       "source_file": "spec/services/positions/activecache_add_remove_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exit_config_resolver_spec",
+      "label": "exit_config_resolver_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/services/positions/exit_config_resolver_spec.rb",
       "source_location": "L1",
       "_origin": "ast"
     },
@@ -109331,7 +109563,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L70",
+      "source_location": "L73",
       "weight": 1.0
     },
     {
@@ -109340,7 +109572,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L100",
+      "source_location": "L106",
       "weight": 1.0
     },
     {
@@ -109349,7 +109581,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L118",
+      "source_location": "L124",
       "weight": 1.0
     },
     {
@@ -109358,7 +109590,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L133",
+      "source_location": "L139",
       "weight": 1.0
     },
     {
@@ -110640,7 +110872,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L9",
+      "source_location": "L11",
       "weight": 1.0
     },
     {
@@ -110649,21 +110881,12 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L26",
+      "source_location": "L28",
       "weight": 1.0
     },
     {
       "source": "lib_algo_config",
-      "target": "lib_algo_config_paper_trading_enabled",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/lib/algo_config.rb",
-      "source_location": "L30",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_algo_config",
-      "target": "lib_algo_config_reset",
+      "target": "lib_algo_config_version",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
@@ -110672,25 +110895,34 @@
     },
     {
       "source": "lib_algo_config",
+      "target": "lib_algo_config_position_snapshot",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_paper_trading_enabled",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_reset",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
       "target": "lib_algo_config_event_driven_intraday_ai",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/lib/algo_config.rb",
-      "source_location": "L41",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_algo_config",
-      "target": "lib_algo_config_defer_scheduled_intraday_ai_jobs",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/lib/algo_config.rb",
-      "source_location": "L50",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_algo_config",
-      "target": "lib_algo_config_scheduled_ai_technical_analysis_job_deferred",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
@@ -110699,25 +110931,16 @@
     },
     {
       "source": "lib_algo_config",
-      "target": "lib_algo_config_scheduled_smc_scanner_job_deferred",
+      "target": "lib_algo_config_defer_scheduled_intraday_ai_jobs",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L64",
+      "source_location": "L67",
       "weight": 1.0
     },
     {
       "source": "lib_algo_config",
-      "target": "lib_algo_config_suppress_smc_bias_notify_for_event_driven_ai",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/lib/algo_config.rb",
-      "source_location": "L71",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_algo_config",
-      "target": "lib_algo_config_market_closed_for_scheduling",
+      "target": "lib_algo_config_scheduled_ai_technical_analysis_job_deferred",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
@@ -110726,11 +110949,47 @@
     },
     {
       "source": "lib_algo_config",
+      "target": "lib_algo_config_scheduled_smc_scanner_job_deferred",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L81",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_suppress_smc_bias_notify_for_event_driven_ai",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L88",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_market_closed_for_scheduling",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L92",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_latest_change_log_id",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L100",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
       "target": "lib_algo_config_truthy_signal_flag",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L83",
+      "source_location": "L106",
       "weight": 1.0
     },
     {
@@ -110739,7 +110998,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L87",
+      "source_location": "L110",
       "weight": 1.0
     },
     {
@@ -110748,7 +111007,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L91",
+      "source_location": "L114",
       "weight": 1.0
     },
     {
@@ -110757,7 +111016,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L97",
+      "source_location": "L120",
       "weight": 1.0
     },
     {
@@ -110766,7 +111025,34 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L112",
+      "source_location": "L138",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_normalize_signal_tier",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L148",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_signal_tier_env_forced",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L158",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_warn_ignored_signal_tier_env",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L162",
       "weight": 1.0
     },
     {
@@ -110775,7 +111061,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L130",
+      "source_location": "L169",
       "weight": 1.0
     },
     {
@@ -110784,7 +111070,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L143",
+      "source_location": "L182",
       "weight": 1.0
     },
     {
@@ -110793,7 +111079,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L150",
+      "source_location": "L189",
       "weight": 1.0
     },
     {
@@ -110802,7 +111088,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L159",
+      "source_location": "L198",
       "weight": 1.0
     },
     {
@@ -110811,7 +111097,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L163",
+      "source_location": "L202",
       "weight": 1.0
     },
     {
@@ -110821,7 +111107,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L17",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -110831,7 +111117,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L18",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -110841,7 +111127,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L19",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -110851,7 +111137,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L43",
+      "source_location": "L60",
       "weight": 1.0
     },
     {
@@ -110861,7 +111147,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L51",
+      "source_location": "L68",
       "weight": 1.0
     },
     {
@@ -110871,7 +111157,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L53",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -110881,7 +111167,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L61",
+      "source_location": "L78",
       "weight": 1.0
     },
     {
@@ -110891,7 +111177,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L67",
+      "source_location": "L84",
       "weight": 1.0
     },
     {
@@ -110901,7 +111187,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L72",
+      "source_location": "L89",
       "weight": 1.0
     },
     {
@@ -110911,7 +111197,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L98",
+      "source_location": "L121",
       "weight": 1.0
     },
     {
@@ -110921,7 +111207,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L107",
+      "source_location": "L130",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_resolve_signal_tier",
+      "target": "lib_algo_config_normalize_signal_tier",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L139",
       "weight": 1.0
     },
     {
@@ -110931,7 +111227,37 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L113",
+      "source_location": "L140",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_resolve_signal_tier",
+      "target": "lib_algo_config_signal_tier_env_forced",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L141",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_resolve_signal_tier",
+      "target": "lib_algo_config_warn_ignored_signal_tier_env",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L144",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_signal_tier_env_forced",
+      "target": "lib_algo_config_fetch",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L159",
       "weight": 1.0
     },
     {
@@ -110941,7 +111267,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L144",
+      "source_location": "L183",
       "weight": 1.0
     },
     {
@@ -110951,7 +111277,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L151",
+      "source_location": "L190",
       "weight": 1.0
     },
     {
@@ -110961,7 +111287,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L160",
+      "source_location": "L199",
       "weight": 1.0
     },
     {
@@ -110971,7 +111297,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L164",
+      "source_location": "L203",
       "weight": 1.0
     },
     {
@@ -113897,7 +114223,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L64",
+      "source_location": "L65",
       "weight": 1.0
     },
     {
@@ -113906,7 +114232,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L76",
+      "source_location": "L77",
       "weight": 1.0
     },
     {
@@ -113915,7 +114241,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L80",
+      "source_location": "L81",
       "weight": 1.0
     },
     {
@@ -113924,7 +114250,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L84",
+      "source_location": "L85",
       "weight": 1.0
     },
     {
@@ -113933,7 +114259,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L106",
+      "source_location": "L107",
       "weight": 1.0
     },
     {
@@ -113942,7 +114268,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L110",
+      "source_location": "L111",
       "weight": 1.0
     },
     {
@@ -113951,7 +114277,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L115",
+      "source_location": "L116",
       "weight": 1.0
     },
     {
@@ -115332,7 +115658,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/algo_config/document_store.rb",
-      "source_location": "L164",
+      "source_location": "L165",
       "weight": 1.0
     },
     {
@@ -115341,7 +115667,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/algo_config/document_store.rb",
-      "source_location": "L175",
+      "source_location": "L176",
       "weight": 1.0
     },
     {
@@ -115549,6 +115875,300 @@
       "confidence": "EXTRACTED",
       "source_file": "app/services/algo_config/merge_util.rb",
       "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_algoconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_validationerror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_validationerror",
+      "target": "algo_config_validator_validationerror_initialize",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_validator",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_validate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_collect_errors",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L41",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_applicable_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L48",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_scope_keys",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L55",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_rule_error",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L64",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_enum_error",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L72",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_integer_error",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L78",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_number_error",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L84",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_range_error",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L90",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_numeric_like",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L97",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_integer_like",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L106",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator",
+      "target": "algo_config_validator_label",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L115",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_validate",
+      "target": "algo_config_validator_collect_errors",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_validate",
+      "target": "algo_config_validator_scope_keys",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_collect_errors",
+      "target": "algo_config_validator_applicable_rules",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_collect_errors",
+      "target": "algo_config_validator_rule_error",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_rule_error",
+      "target": "algo_config_validator_enum_error",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L66",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_rule_error",
+      "target": "algo_config_validator_integer_error",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L67",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_rule_error",
+      "target": "algo_config_validator_number_error",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L68",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_enum_error",
+      "target": "algo_config_validator_label",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_integer_error",
+      "target": "algo_config_validator_label",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_integer_error",
+      "target": "algo_config_validator_integer_like",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_integer_error",
+      "target": "algo_config_validator_range_error",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L81",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_number_error",
+      "target": "algo_config_validator_label",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L85",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_number_error",
+      "target": "algo_config_validator_numeric_like",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L85",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_number_error",
+      "target": "algo_config_validator_range_error",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L87",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_range_error",
+      "target": "algo_config_validator_label",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -120842,7 +121462,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/entries/entry_guard.rb",
-      "source_location": "L198",
+      "source_location": "L200",
       "weight": 1.0
     },
     {
@@ -135109,7 +135729,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L54",
+      "source_location": "L55",
       "weight": 1.0
     },
     {
@@ -135118,7 +135738,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L62",
+      "source_location": "L63",
       "weight": 1.0
     },
     {
@@ -135127,7 +135747,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L68",
+      "source_location": "L69",
       "weight": 1.0
     },
     {
@@ -135136,7 +135756,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L82",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -135145,7 +135765,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L93",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -135154,7 +135774,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L107",
+      "source_location": "L108",
       "weight": 1.0
     },
     {
@@ -135163,7 +135783,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L118",
+      "source_location": "L119",
       "weight": 1.0
     },
     {
@@ -135172,7 +135792,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L126",
+      "source_location": "L127",
       "weight": 1.0
     },
     {
@@ -135181,7 +135801,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L177",
+      "source_location": "L178",
       "weight": 1.0
     },
     {
@@ -135190,7 +135810,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L184",
+      "source_location": "L185",
       "weight": 1.0
     },
     {
@@ -135199,7 +135819,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L210",
+      "source_location": "L211",
       "weight": 1.0
     },
     {
@@ -135208,7 +135828,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L223",
+      "source_location": "L224",
       "weight": 1.0
     },
     {
@@ -135217,7 +135837,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L235",
+      "source_location": "L236",
       "weight": 1.0
     },
     {
@@ -135226,7 +135846,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L241",
+      "source_location": "L242",
       "weight": 1.0
     },
     {
@@ -135235,7 +135855,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L257",
+      "source_location": "L258",
       "weight": 1.0
     },
     {
@@ -135244,7 +135864,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L265",
+      "source_location": "L266",
       "weight": 1.0
     },
     {
@@ -135253,7 +135873,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L283",
+      "source_location": "L284",
       "weight": 1.0
     },
     {
@@ -135262,7 +135882,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L295",
+      "source_location": "L296",
       "weight": 1.0
     },
     {
@@ -135271,7 +135891,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L305",
+      "source_location": "L306",
       "weight": 1.0
     },
     {
@@ -135280,7 +135900,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L315",
+      "source_location": "L316",
       "weight": 1.0
     },
     {
@@ -135289,7 +135909,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L328",
+      "source_location": "L329",
       "weight": 1.0
     },
     {
@@ -135298,7 +135918,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L338",
+      "source_location": "L339",
       "weight": 1.0
     },
     {
@@ -135318,7 +135938,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L89",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
@@ -135328,7 +135948,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L99",
+      "source_location": "L100",
       "weight": 1.0
     },
     {
@@ -135338,7 +135958,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L100",
+      "source_location": "L101",
       "weight": 1.0
     },
     {
@@ -135348,7 +135968,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L114",
+      "source_location": "L115",
       "weight": 1.0
     },
     {
@@ -135358,7 +135978,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L123",
+      "source_location": "L124",
       "weight": 1.0
     },
     {
@@ -135368,7 +135988,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L145",
+      "source_location": "L146",
       "weight": 1.0
     },
     {
@@ -135378,7 +135998,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L204",
+      "source_location": "L205",
       "weight": 1.0
     },
     {
@@ -135388,7 +136008,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L213",
+      "source_location": "L214",
       "weight": 1.0
     },
     {
@@ -135398,7 +136018,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L230",
+      "source_location": "L231",
       "weight": 1.0
     },
     {
@@ -135408,7 +136028,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L250",
+      "source_location": "L251",
       "weight": 1.0
     },
     {
@@ -135418,7 +136038,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L322",
+      "source_location": "L323",
       "weight": 1.0
     },
     {
@@ -145994,6 +146614,24 @@
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/daily_pnl_recorder.rb",
       "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_config_resolver",
+      "target": "positions_exit_config_resolver_exitconfigresolver",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exit_config_resolver.rb",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_config_resolver_exitconfigresolver",
+      "target": "positions_exit_config_resolver_exitconfigresolver_for",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exit_config_resolver.rb",
+      "source_location": "L8",
       "weight": 1.0
     },
     {
@@ -173927,6 +174565,15 @@
       "confidence": "EXTRACTED",
       "source_file": "spec/integration/supertrend_adx_computation_spec.rb",
       "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_spec",
+      "target": "lib_algo_config_spec_seed_tier",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spec/lib/algo_config_spec.rb",
+      "source_location": "L107",
       "weight": 1.0
     },
     {
@@ -245480,7 +246127,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/settings_controller.rb",
-      "source_location": "L82",
+      "source_location": "L85",
       "weight": 1.0
     },
     {
@@ -246156,17 +246803,6 @@
     },
     {
       "source": "telegram_send_smc_alert_job_sendsmcalertjob_perform",
-      "target": "trading_ai_output_sanitizer_validate",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/jobs/notifications/telegram/send_smc_alert_job.rb",
-      "source_location": "L34",
-      "weight": 1.0
-    },
-    {
-      "source": "telegram_send_smc_alert_job_sendsmcalertjob_perform",
       "target": "telegram_smc_alert_smcalert_notify",
       "relation": "calls",
       "context": "call",
@@ -246453,17 +247089,6 @@
     },
     {
       "source": "smc_tick_ai_digest_job_tickaidigestjob_run_ai_and_notify",
-      "target": "trading_ai_output_sanitizer_validate",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/jobs/smc/tick_ai_digest_job.rb",
-      "source_location": "L96",
-      "weight": 1.0
-    },
-    {
-      "source": "smc_tick_ai_digest_job_tickaidigestjob_run_ai_and_notify",
       "target": "telegram_smc_tick_ai_alert_smctickaialert_deliver",
       "relation": "calls",
       "context": "call",
@@ -246657,7 +247282,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L10",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
@@ -246668,7 +247293,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L15",
+      "source_location": "L17",
       "weight": 1.0
     },
     {
@@ -246679,7 +247304,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L31",
+      "source_location": "L48",
       "weight": 1.0
     },
     {
@@ -246690,7 +247315,18 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L76",
+      "source_location": "L93",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_latest_change_log_id",
+      "target": "schemas_smc_trading_signal_confidence_maximum",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L101",
       "weight": 1.0
     },
     {
@@ -246701,29 +247337,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L84",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_algo_config_resolve_signal_tier",
-      "target": "states_base_state_basestate_to_s",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/lib/algo_config.rb",
-      "source_location": "L114",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_algo_config_resolve_signal_tier",
-      "target": "commands_command_result_commandresult_inspect",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/lib/algo_config.rb",
-      "source_location": "L118",
+      "source_location": "L107",
       "weight": 1.0
     },
     {
@@ -246734,7 +247348,29 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L121",
+      "source_location": "L139",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_normalize_signal_tier",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L151",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_normalize_signal_tier",
+      "target": "commands_command_result_commandresult_inspect",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L154",
       "weight": 1.0
     },
     {
@@ -246745,7 +247381,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L152",
+      "source_location": "L191",
       "weight": 1.0
     },
     {
@@ -246756,7 +247392,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L166",
+      "source_location": "L205",
       "weight": 1.0
     },
     {
@@ -249390,13 +250026,24 @@
     },
     {
       "source": "models_trading_signal_tradingsignal_create_from_analysis",
+      "target": "live_redis_tick_cache_redistickcache_stringify_keys",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/models/trading_signal.rb",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "models_trading_signal_tradingsignal_create_from_analysis",
       "target": "market_session_resolver_current",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L52",
+      "source_location": "L53",
       "weight": 1.0
     },
     {
@@ -249407,7 +250054,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L57",
+      "source_location": "L58",
       "weight": 1.0
     },
     {
@@ -249418,7 +250065,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L111",
+      "source_location": "L112",
       "weight": 1.0
     },
     {
@@ -249429,7 +250076,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L121",
+      "source_location": "L122",
       "weight": 1.0
     },
     {
@@ -249440,7 +250087,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L125",
+      "source_location": "L126",
       "weight": 1.0
     },
     {
@@ -249451,7 +250098,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/trading_signal.rb",
-      "source_location": "L137",
+      "source_location": "L138",
       "weight": 1.0
     },
     {
@@ -250254,7 +250901,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/algo_config/document_store.rb",
-      "source_location": "L179",
+      "source_location": "L180",
       "weight": 1.0
     },
     {
@@ -250288,6 +250935,72 @@
       "confidence_score": 0.8,
       "source_file": "app/services/algo_config/merge_util.rb",
       "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_collect_errors",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_scope_keys",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L58",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_enum_error",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L73",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_enum_error",
+      "target": "commands_command_result_commandresult_inspect",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_integer_error",
+      "target": "commands_command_result_commandresult_inspect",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "algo_config_validator_number_error",
+      "target": "commands_command_result_commandresult_inspect",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/algo_config/validator.rb",
+      "source_location": "L85",
       "weight": 1.0
     },
     {
@@ -253063,6 +253776,17 @@
       "weight": 1.0
     },
     {
+      "source": "entries_entry_guard_build_base_meta",
+      "target": "lib_algo_config_position_snapshot",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/entries/entry_guard.rb",
+      "source_location": "L196",
+      "weight": 1.0
+    },
+    {
       "source": "entries_entry_guard_pipeline_entryguardpipeline_run",
       "target": "models_candle_series_candleseries_each",
       "relation": "calls",
@@ -255007,6 +255731,17 @@
       "confidence_score": 0.8,
       "source_file": "app/services/index_config_loader.rb",
       "source_location": "L67",
+      "weight": 1.0
+    },
+    {
+      "source": "services_index_config_loader_indexconfigloader_build_index_config_from_watchlist_item",
+      "target": "algo_config_validator_label",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/index_config_loader.rb",
+      "source_location": "L88",
       "weight": 1.0
     },
     {
@@ -263113,7 +263848,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L22",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -263124,7 +263859,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L32",
+      "source_location": "L33",
       "weight": 1.0
     },
     {
@@ -263135,7 +263870,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L41",
+      "source_location": "L42",
       "weight": 1.0
     },
     {
@@ -263146,7 +263881,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L46",
+      "source_location": "L47",
       "weight": 1.0
     },
     {
@@ -263157,7 +263892,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L55",
+      "source_location": "L56",
       "weight": 1.0
     },
     {
@@ -263168,7 +263903,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L55",
+      "source_location": "L56",
       "weight": 1.0
     },
     {
@@ -263179,7 +263914,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L63",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -263190,7 +263925,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L69",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -263201,7 +263936,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L73",
+      "source_location": "L74",
       "weight": 1.0
     },
     {
@@ -263212,7 +263947,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L77",
+      "source_location": "L78",
       "weight": 1.0
     },
     {
@@ -263223,7 +263958,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L90",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -263234,7 +263969,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L97",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
@@ -263245,7 +263980,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L108",
+      "source_location": "L109",
       "weight": 1.0
     },
     {
@@ -263256,7 +263991,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L132",
+      "source_location": "L133",
       "weight": 1.0
     },
     {
@@ -263267,7 +264002,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L132",
+      "source_location": "L133",
       "weight": 1.0
     },
     {
@@ -263278,7 +264013,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L134",
+      "source_location": "L135",
       "weight": 1.0
     },
     {
@@ -263289,7 +264024,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L140",
+      "source_location": "L141",
       "weight": 1.0
     },
     {
@@ -263300,7 +264035,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L140",
+      "source_location": "L141",
       "weight": 1.0
     },
     {
@@ -263311,7 +264046,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L147",
+      "source_location": "L148",
       "weight": 1.0
     },
     {
@@ -263322,7 +264057,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L147",
+      "source_location": "L148",
       "weight": 1.0
     },
     {
@@ -263333,7 +264068,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L165",
+      "source_location": "L166",
       "weight": 1.0
     },
     {
@@ -263344,7 +264079,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L181",
+      "source_location": "L182",
       "weight": 1.0
     },
     {
@@ -263355,7 +264090,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L185",
+      "source_location": "L186",
       "weight": 1.0
     },
     {
@@ -263366,7 +264101,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L190",
+      "source_location": "L191",
       "weight": 1.0
     },
     {
@@ -263377,7 +264112,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L192",
+      "source_location": "L193",
       "weight": 1.0
     },
     {
@@ -263388,7 +264123,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L193",
+      "source_location": "L194",
       "weight": 1.0
     },
     {
@@ -263399,7 +264134,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L194",
+      "source_location": "L195",
       "weight": 1.0
     },
     {
@@ -263410,7 +264145,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L197",
+      "source_location": "L198",
       "weight": 1.0
     },
     {
@@ -263421,7 +264156,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L205",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -263432,7 +264167,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L212",
+      "source_location": "L213",
       "weight": 1.0
     },
     {
@@ -263443,7 +264178,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L217",
+      "source_location": "L218",
       "weight": 1.0
     },
     {
@@ -263454,7 +264189,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L226",
+      "source_location": "L227",
       "weight": 1.0
     },
     {
@@ -263465,7 +264200,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L237",
+      "source_location": "L238",
       "weight": 1.0
     },
     {
@@ -263476,7 +264211,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L237",
+      "source_location": "L238",
       "weight": 1.0
     },
     {
@@ -263487,7 +264222,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L237",
+      "source_location": "L238",
       "weight": 1.0
     },
     {
@@ -263498,7 +264233,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L242",
+      "source_location": "L243",
       "weight": 1.0
     },
     {
@@ -263509,7 +264244,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L248",
+      "source_location": "L249",
       "weight": 1.0
     },
     {
@@ -263520,7 +264255,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L248",
+      "source_location": "L249",
       "weight": 1.0
     },
     {
@@ -263531,7 +264266,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L251",
+      "source_location": "L252",
       "weight": 1.0
     },
     {
@@ -263542,7 +264277,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L269",
+      "source_location": "L270",
       "weight": 1.0
     },
     {
@@ -263553,7 +264288,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L290",
+      "source_location": "L291",
       "weight": 1.0
     },
     {
@@ -263564,23 +264299,12 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L296",
+      "source_location": "L297",
       "weight": 1.0
     },
     {
       "source": "live_unified_exit_checker_check_smc_navigator_exit",
       "target": "smc_smc_permission_resolver_normalizedsmc_dig",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L306",
-      "weight": 1.0
-    },
-    {
-      "source": "live_unified_exit_checker_check_smc_navigator_exit",
-      "target": "market_session_resolver_current",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -263591,18 +264315,18 @@
     },
     {
       "source": "live_unified_exit_checker_check_smc_navigator_exit",
-      "target": "smc_navigator_evaluate_exit",
+      "target": "market_session_resolver_current",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L310",
+      "source_location": "L308",
       "weight": 1.0
     },
     {
       "source": "live_unified_exit_checker_check_smc_navigator_exit",
-      "target": "smc_navigator_suggest_exit",
+      "target": "smc_navigator_evaluate_exit",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -263613,13 +264337,24 @@
     },
     {
       "source": "live_unified_exit_checker_check_smc_navigator_exit",
-      "target": "schemas_smc_trading_signal_properties_reason",
+      "target": "smc_navigator_suggest_exit",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
       "source_location": "L312",
+      "weight": 1.0
+    },
+    {
+      "source": "live_unified_exit_checker_check_smc_navigator_exit",
+      "target": "schemas_smc_trading_signal_properties_reason",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/unified_exit_checker.rb",
+      "source_location": "L313",
       "weight": 1.0
     },
     {
@@ -263630,7 +264365,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L316",
+      "source_location": "L317",
       "weight": 1.0
     },
     {
@@ -263641,7 +264376,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L317",
+      "source_location": "L318",
       "weight": 1.0
     },
     {
@@ -263652,7 +264387,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L317",
+      "source_location": "L318",
       "weight": 1.0
     },
     {
@@ -263663,7 +264398,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L329",
+      "source_location": "L330",
       "weight": 1.0
     },
     {
@@ -263674,7 +264409,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L329",
+      "source_location": "L330",
       "weight": 1.0
     },
     {
@@ -263685,7 +264420,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L329",
+      "source_location": "L330",
       "weight": 1.0
     },
     {
@@ -263696,7 +264431,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L339",
+      "source_location": "L340",
       "weight": 1.0
     },
     {
@@ -263707,7 +264442,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/unified_exit_checker.rb",
-      "source_location": "L342",
+      "source_location": "L343",
       "weight": 1.0
     },
     {
@@ -269274,6 +270009,28 @@
       "confidence_score": 0.8,
       "source_file": "app/services/positions/daily_pnl_recorder.rb",
       "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_config_resolver_exitconfigresolver_for",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exit_config_resolver.rb",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_config_resolver_exitconfigresolver_for",
+      "target": "schemas_smc_trading_signal_properties_meta",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exit_config_resolver.rb",
+      "source_location": "L9",
       "weight": 1.0
     },
     {
@@ -277616,6 +278373,17 @@
     },
     {
       "source": "db_seeds_seed_default_index_watchlist",
+      "target": "algo_config_validator_label",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "db/seeds.rb",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "db_seeds_seed_default_index_watchlist",
       "target": "schemas_smc_trading_signal_properties_active",
       "relation": "calls",
       "context": "call",
@@ -281476,6 +282244,17 @@
       "weight": 1.0
     },
     {
+      "source": "test_services_base_setup_test_watchlist_items",
+      "target": "algo_config_validator_label",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "scripts/test_services/base.rb",
+      "source_location": "L125",
+      "weight": 1.0
+    },
+    {
       "source": "test_services_base_setup_test_derivatives",
       "target": "models_candle_series_candleseries_each",
       "relation": "calls",
@@ -282782,6 +283561,50 @@
       "confidence_score": 0.8,
       "source_file": "tmp/rubycritic/assets/vendor/javascripts/prettify.js",
       "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "telegram_send_smc_alert_job_sendsmcalertjob_perform",
+      "target": "trading_ai_output_sanitizer_validate",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/jobs/notifications/telegram/send_smc_alert_job.rb",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
+      "source": "smc_tick_ai_digest_job_tickaidigestjob_run_ai_and_notify",
+      "target": "trading_ai_output_sanitizer_validate",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/jobs/smc/tick_ai_digest_job.rb",
+      "source_location": "L96",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_resolve_signal_tier",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L114",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_resolve_signal_tier",
+      "target": "commands_command_result_commandresult_inspect",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L118",
       "weight": 1.0
     },
     {

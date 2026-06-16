@@ -18,8 +18,9 @@ module Live
         return nil unless snapshot
 
         # Use the RuleEngine with exit rules
+        pinned_config = Positions::ExitConfigResolver.for(tracker)
         engine = Risk::Rules::RuleEngine.new(
-          rules: Risk::Rules::RuleFactory.exit_rules(AlgoConfig.fetch)
+          rules: Risk::Rules::RuleFactory.exit_rules(pinned_config)
         )
 
         # Build RuleContext
@@ -33,7 +34,7 @@ module Live
           ),
           tracker: tracker,
           tracker_snapshot: snapshot,
-          risk_config: AlgoConfig.fetch
+          risk_config: pinned_config
         )
 
         result = engine.evaluate(context)
@@ -66,7 +67,7 @@ module Live
       end
 
       def emergency_peak_loss_exit_triggered?(tracker)
-        drawdown_cfg = AlgoConfig.fetch.dig(:position_sizing, :drawdown) || {}
+        drawdown_cfg = Positions::ExitConfigResolver.for(tracker).dig(:position_sizing, :drawdown) || {}
         return false if drawdown_cfg[:emergency_peak_loss_exit] == false
 
         min_peak_pct = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
@@ -105,7 +106,7 @@ module Live
       end
 
       def percentage_pnl_exit_hit?(tracker, snapshot)
-        cfg = AlgoConfig.fetch.dig(:risk, :percentage_pnl_exit) || {}
+        cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :percentage_pnl_exit) || {}
         return false unless cfg[:enabled]
         target = cfg[:target_pct].to_f
         return false unless target.positive?
@@ -138,7 +139,7 @@ module Live
           return false if activation.positive? && peak_profit_pct < activation
 
           index_key = tracker.meta&.dig('index_key')&.downcase
-          inst_trailing = AlgoConfig.fetch.dig(:risk, :institutional_trailing, index_key&.to_sym) || {}
+          inst_trailing = Positions::ExitConfigResolver.for(tracker).dig(:risk, :institutional_trailing, index_key&.to_sym) || {}
           adaptive_tiers = inst_trailing[:adaptive_drawdown]
 
           return true if adaptive_tiers.is_a?(Array) && adaptive_tiers.any? &&
@@ -182,7 +183,7 @@ module Live
       end
 
       def premium_momentum_failure_hit?(tracker, snapshot)
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}
+        cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :premium_momentum_failure) || {}
         return false unless cfg[:enabled]
         return false unless tracker.created_at
 
@@ -303,7 +304,7 @@ module Live
       end
 
       def check_smc_navigator_exit(tracker, snapshot)
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
+        cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :smc_navigator_exit) || {}
         return unless cfg[:enabled] && tracker.created_at && (Time.current - tracker.created_at) >= (cfg[:min_hold_seconds] || 120)
         ltp = snapshot[:ltp].to_f
         return unless ltp.positive? && tracker.instrument
@@ -313,7 +314,7 @@ module Live
       end
 
       def check_structure_invalidation(tracker, snapshot)
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
+        cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :structure_invalidation) || {}
         return unless cfg.fetch(:enabled, true) && tracker.meta&.dig('structure_invalidation_price') && (Time.current - tracker.created_at) >= (cfg[:min_hold_seconds] || 90)
         underlying_ltp = resolve_underlying_ltp(tracker.meta['index_key'])
         return unless underlying_ltp
@@ -328,7 +329,7 @@ module Live
       def structure_invalidated?(tracker, underlying_ltp, invalidation_price)
         direction = tracker.meta&.dig('direction').to_s
         level = invalidation_price.to_f
-        pct = (AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation, :buffer_pct) || 0.002).to_f
+        pct = (Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :structure_invalidation, :buffer_pct) || 0.002).to_f
         buffer = (level * pct).abs
         direction == 'long_pe' ? underlying_ltp > level + buffer : (direction == 'long_ce' ? underlying_ltp < level - buffer : false)
       end
@@ -336,7 +337,7 @@ module Live
       private
 
       def resolve_stall_minutes(tracker)
-        pmf_cfg = AlgoConfig.fetch.dig(:risk, :exits, :premium_momentum_failure) || {}
+        pmf_cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :premium_momentum_failure) || {}
         default_stall = 3
 
         index_key = tracker.meta&.dig('index_key')

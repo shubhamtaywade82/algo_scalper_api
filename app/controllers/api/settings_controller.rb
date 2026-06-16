@@ -59,6 +59,9 @@ module Api
     rescue ActionController::ParameterMissing => e
       Rails.logger.warn("[SettingsController] update_bulk missing params: #{e.message}")
       render json: { error: e.message }, status: :bad_request
+    rescue AlgoConfig::ValidationError => e
+      Rails.logger.warn("[SettingsController] update_bulk rejected invalid config: #{e.message}")
+      render json: { error: 'invalid_config', errors: e.errors }, status: :unprocessable_content
     rescue StandardError => e
       Rails.logger.error("[SettingsController] update_bulk error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error
@@ -91,6 +94,9 @@ module Api
     rescue ActionController::ParameterMissing => e
       Rails.logger.warn("[SettingsController] update_deep_merge missing params: #{e.message}")
       render json: { error: e.message }, status: :bad_request
+    rescue AlgoConfig::ValidationError => e
+      Rails.logger.warn("[SettingsController] update_deep_merge rejected invalid config: #{e.message}")
+      render json: { error: 'invalid_config', errors: e.errors }, status: :unprocessable_content
     rescue StandardError => e
       Rails.logger.error("[SettingsController] update_deep_merge error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error

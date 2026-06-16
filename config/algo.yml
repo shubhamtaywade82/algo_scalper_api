@@ -824,9 +824,10 @@ market_context:
 # ============================================
 signals:
   # exploratory = most permissive (research/paper). standard = use algo.yml as written (no tier overlay).
-  # selective = strict gates + higher quality bar (not a profit guarantee). Override: SIGNAL_TIER env.
+  # selective = strict gates + higher quality bar (not a profit guarantee).
+  # Single source of truth: this value (DB document). SIGNAL_TIER env is ignored unless SIGNAL_TIER_FORCE=true.
   # See config/signal_tier_presets.yml
-  signal_tier: selective
+  signal_tier: standard
 
   # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path

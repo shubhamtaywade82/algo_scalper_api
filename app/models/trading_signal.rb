@@ -40,7 +40,8 @@ class TradingSignal < ApplicationRecord
   def self.create_from_analysis(index_key:, direction:, timeframe:, supertrend_value:, adx_value:, candle_timestamp:,
                                 confidence_score: nil, metadata: {})
     full_metadata = (metadata || {}).deep_stringify_keys
-    slim = Signal::LiveMetadataCache.slim_metadata(full_metadata).merge('index_key' => index_key)
+    slim = Signal::LiveMetadataCache.slim_metadata(full_metadata)
+           .merge('index_key' => index_key, 'config_version' => AlgoConfig.version.stringify_keys)
 
     signal = create!(
       index_key: index_key,
