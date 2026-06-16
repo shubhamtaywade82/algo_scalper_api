@@ -1075,9 +1075,10 @@ signals:
   halt_on_validation_failure: false
 
   # Block new signals when nearest series expiry is too soon (0 = expiry day, 1 = tomorrow, etc.).
+  # -1 => reject only after expiry has passed, i.e. allow 0-DTE expiry-day entries.
   entry_dte_guard:
     enabled: true
-    reject_when_days_to_expiry_lte: 0
+    reject_when_days_to_expiry_lte: -1
 
   supertrend:
     period: 10
@@ -1194,11 +1195,11 @@ ai:
 # ===== ENTRY QUALITY FILTER =====
 entry_quality:
   enforce: true                      # false = log-only mode (no blocking)
-  min_score: 55                      # tightened minimum quality score (0-100)
+  min_score: 50                      # minimum quality score (0-100)
   gates:
-    min_adx: 25                      # hard gate: minimum ADX value
+    min_adx: 22                      # hard gate: minimum ADX value (catch emerging trends)
     block_choppy_regime: true        # hard gate: block CHOPPY regime
-    min_body_ratio: 0.40             # hard gate: minimum candle body/range ratio
+    min_body_ratio: 0.38             # hard gate: minimum candle body/range ratio
     require_momentum_confirm: true   # hard gate: close must be beyond Supertrend level
   scoring:
     candle_body_weight: 25           # max points for candle body strength
@@ -1208,9 +1209,9 @@ entry_quality:
     momentum_weight: 15              # max points for momentum strength
   session_overrides:
     chop_decay:
-      min_score: 60
+      min_score: 55
       gates:
-        min_adx: 30
+        min_adx: 27
   index_overrides:
     SENSEX:
       min_adx: 25                    # SENSEX keeps slightly higher ADX floor

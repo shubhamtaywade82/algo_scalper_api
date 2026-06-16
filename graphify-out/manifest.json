@@ -5580,8 +5580,8 @@
     "semantic_hash": ""
   },
   "config/algo.yml": {
-    "mtime": 1781602605.356333,
-    "ast_hash": "44cf335f8b9165353eaf462e0871b5e0",
+    "mtime": 1781602618.8653333,
+    "ast_hash": "3d4ddf79f4a04c4c0635c56070af3b34",
     "semantic_hash": ""
   },
   "config/algo_organized.yml": {
@@ -5635,8 +5635,8 @@
     "semantic_hash": ""
   },
   "config/signal_tier_presets.yml": {
-    "mtime": 1775801791.0482883,
-    "ast_hash": "a2f00fbfc7c37f3205e201418000328d",
+    "mtime": 1781602642.3134885,
+    "ast_hash": "2b155647f23187239eb97453492d8618",
     "semantic_hash": ""
   },
   "config/storage.yml": {
