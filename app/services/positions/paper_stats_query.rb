@@ -47,8 +47,14 @@ module Positions
         blocked_reason: Portfolio::DrawdownGuard.triggered? ? 'Drawdown Guard Active' : nil,
         peak_pnl: peak.round(2),
         paper_mode: resolved_paper_filter.nil? ? nil : resolved_paper_filter,
-        stats_scope: resolved_paper_filter.nil? ? 'all' : (resolved_paper_filter ? 'paper' : 'live')
+        stats_scope: stats_scope_label
       }
+    end
+
+    def stats_scope_label
+      return 'all' if resolved_paper_filter.nil?
+
+      resolved_paper_filter ? 'paper' : 'live'
     end
 
     def reset_memoized_scopes!

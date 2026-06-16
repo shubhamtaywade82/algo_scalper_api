@@ -1690,8 +1690,8 @@
     "semantic_hash": ""
   },
   "app/services/positions/paper_stats_query.rb": {
-    "mtime": 1781599405.527902,
-    "ast_hash": "ccb1cb54590a3185c5258c48d8156af1",
+    "mtime": 1781600419.2000356,
+    "ast_hash": "f46d3c6dc7cfd175f9f8f629895a6b76",
     "semantic_hash": ""
   },
   "app/services/positions/serializer.rb": {
@@ -2585,8 +2585,8 @@
     "semantic_hash": ""
   },
   "dashboard/package.json": {
-    "mtime": 1780930853.7913706,
-    "ast_hash": "31bf13e0e99dec61f747539f1bb30ce7",
+    "mtime": 1781600588.2438023,
+    "ast_hash": "0d990598fd37e9c5eb45cc956d779df6",
     "semantic_hash": ""
   },
   "dashboard/src/App.jsx": {
@@ -2600,28 +2600,28 @@
     "semantic_hash": ""
   },
   "dashboard/src/components/ClosedTrades.jsx": {
-    "mtime": 1781597237.647389,
-    "ast_hash": "c6060a545874210d8508203653751eb1",
+    "mtime": 1781600541.1742165,
+    "ast_hash": "70ef90bd155c1e22efccde7eaa678d72",
     "semantic_hash": ""
   },
   "dashboard/src/components/Header.jsx": {
-    "mtime": 1780931277.5788546,
-    "ast_hash": "874399c17572b71ff92ab3e75e5b5cb4",
+    "mtime": 1781600709.0330973,
+    "ast_hash": "d38ae409ee6235919926fabdfe2bd05b",
     "semantic_hash": ""
   },
   "dashboard/src/components/OpenPositions.jsx": {
-    "mtime": 1776057575.4777703,
-    "ast_hash": "9b3b750afa1121dea701a9838aaf36f6",
+    "mtime": 1781600547.9062166,
+    "ast_hash": "e0dc56fe192edcc9bb1ec6fb87d38839",
     "semantic_hash": ""
   },
   "dashboard/src/components/PositionRow.jsx": {
-    "mtime": 1776057694.2377458,
-    "ast_hash": "6c6fd9ce0c0c2710b32c3c90c0c274f8",
+    "mtime": 1781600571.2968023,
+    "ast_hash": "2843641bcd7907af06d21af291243dca",
     "semantic_hash": ""
   },
   "dashboard/src/components/StatsBar.jsx": {
-    "mtime": 1781599070.0334063,
-    "ast_hash": "112095db49cb6a6f93ee40a0590b7c97",
+    "mtime": 1781600528.8262162,
+    "ast_hash": "2131d32a1260459acbb16a5d29203189",
     "semantic_hash": ""
   },
   "dashboard/src/components/analysis/AiInsights.jsx": {
@@ -5650,8 +5650,8 @@
     "semantic_hash": ""
   },
   "dashboard/index.html": {
-    "mtime": 1775801791.0482883,
-    "ast_hash": "91b4a24c5b4273f0ea008c7360459307",
+    "mtime": 1781600441.1780357,
+    "ast_hash": "9e3d72ce76f21ccceafed4c5a6ec268e",
     "semantic_hash": ""
   },
   "docker-compose.ollama.yml": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781599597.1865237,
-    "ast_hash": "c2e9d3f9cd8c52d1f1451dccc1cfc66b",
+    "mtime": 1781599639.8198445,
+    "ast_hash": "a52c15cacfa330eafbe26808b0090a67",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {

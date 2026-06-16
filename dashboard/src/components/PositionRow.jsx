@@ -39,7 +39,13 @@ export default function PositionRow(props) {
   const pnlFlash = useFlash(() => pos()?.pnl)
 
   return (
-    <tr class="group hover:bg-white/[0.03] transition-all duration-300 relative">
+    <tr 
+      class={`group transition-all duration-300 relative border-l-2 ${
+        Number(pos().pnl) >= 0 
+          ? 'bg-emerald-500/[0.01] hover:bg-emerald-500/[0.025] border-l-emerald-500/40' 
+          : 'bg-rose-500/[0.01] hover:bg-rose-500/[0.025] border-l-rose-500/40'
+      }`}
+    >
       <td class="px-6 py-5">
         <div class="flex flex-col">
           <span class="text-sm font-bold text-gray-100 uppercase tracking-tight">{pos().symbol}</span>
@@ -47,7 +53,7 @@ export default function PositionRow(props) {
         </div>
       </td>
       <td class="px-4 py-5 text-center">
-        <span class={`text-[10px] font-black px-2.5 py-1 rounded-md tracking-tighter inline-block min-w-[50px] ${pos().side === 'BUY' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+        <span class={`text-[9px] font-black px-3 py-1 rounded-full tracking-wider uppercase inline-block min-w-[55px] ${pos().side === 'BUY' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.05)]' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-[0_0_8px_rgba(239,68,68,0.05)]'}`}>
           {pos().side}
         </span>
       </td>
@@ -75,7 +81,7 @@ export default function PositionRow(props) {
         <div class="flex flex-col items-end">
           <span class="text-data text-[11px] text-gray-400 font-bold">{formatDuration(pos().time_in_position_sec)}</span>
           <div class="w-12 h-1 bg-white/5 rounded-full mt-1.5 overflow-hidden">
-            <div class="h-full bg-primary-500/40 animate-pulse" style={{ width: '60%' }}></div>
+            <div class="h-full duration-bar-progress" style={{ width: '100%' }}></div>
           </div>
         </div>
       </td>
@@ -83,7 +89,7 @@ export default function PositionRow(props) {
         <Show when={typeof onClose === 'function'}>
           <button
             type="button"
-            class="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg border border-rose-500/40 text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 hover:border-rose-400/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            class="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border border-rose-500/30 text-rose-300 bg-rose-500/10 hover:bg-rose-500/25 hover:border-rose-500/50 shadow-[0_0_10px_rgba(239,68,68,0.05)] hover:shadow-[0_0_15px_rgba(239,68,68,0.2)] transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
             disabled={isClosing()}
             onClick={() => onClose(pos().id)}
             aria-label={`Close position ${pos().symbol}`}

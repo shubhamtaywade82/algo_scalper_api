@@ -31,6 +31,7 @@ RSpec.describe Positions::PaperStatsQuery do
     end
 
     it 'falls back to all exits when auto scope is empty but day has live trades' do
+      PositionTracker.delete_all
       allow(AlgoConfig).to receive(:paper_trading_enabled?).and_return(true)
       create(:position_tracker, :exited, paper: false, segment: 'NSE_FNO',
                                          exited_at: Time.current, last_pnl_rupees: BigDecimal('-500'))

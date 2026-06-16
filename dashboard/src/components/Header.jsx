@@ -138,10 +138,10 @@ export default function Header(props) {
     return expiryBadgeMeta(row)
   }
 
-  const navLinkBase = 'px-5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white flex items-center gap-2 group'
-  const navLinkInactive = 'text-gray-500'
-  const navLinkActive = 'bg-white/10 text-white shadow-[0_0_15px_rgba(255,255,255,0.05)] border border-white/10'
-  const navLinkSettingsActive = 'bg-cyan-500/20 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.15)] border border-cyan-500/30'
+  const navLinkBase = 'px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white flex items-center gap-2 group border border-transparent'
+  const navLinkInactive = 'text-gray-500 hover:bg-white/[0.02]'
+  const navLinkActive = 'bg-primary-500/10 text-primary-300 border-primary-500/25 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+  const navLinkSettingsActive = 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
 
   return (
     <div class="sticky top-0 z-50">
@@ -152,147 +152,199 @@ export default function Header(props) {
             <span class="text-[8px] font-bold text-gray-500 tracking-widest mt-0.5 uppercase">Active Terminal</span>
           </div>
 
-          <div class="hidden xl:flex items-center gap-8 border-l border-white/10 pl-10">
-            <div class="flex flex-col gap-1">
-              <span class="text-[9px] font-black text-gray-500 tracking-widest uppercase mb-1">Nifty 50</span>
-              <span class={`text-sm font-black text-white text-data transition-all duration-300 rounded px-1 ${niftyFlash()}`}>
-                {inr(props.indices?.nifty)}
-              </span>
-              {(() => {
-                const b = expiryBlock('NIFTY')
-                return (
-                  <div class="flex flex-col gap-0.5 items-start mt-0.5">
-                    <span class={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border ${b.className}`}>
-                      {b.text}
-                    </span>
-                    <Show when={b.sub}>
-                      <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
-                    </Show>
-                    <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}>
-                      <span
-                        class="text-[7px] font-mono text-gray-500 tracking-tight mt-0.5"
-                        title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
-                      >
-                        {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}
+          <div class="hidden xl:flex items-center gap-4 border-l border-white/10 pl-4">
+            {/* Nifty 50 Card */}
+            <div class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-2 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+              <div class="flex flex-col">
+                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Nifty 50</span>
+                <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${niftyFlash()}`}>
+                  {inr(props.indices?.nifty)}
+                </span>
+              </div>
+              <div class="flex flex-col items-end gap-1">
+                {(() => {
+                  const b = expiryBlock('NIFTY')
+                  return (
+                    <>
+                      <span class={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded border leading-none ${b.className}`}>
+                        {b.text}
                       </span>
-                    </Show>
-                  </div>
-                )
-              })()}
+                      <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}>
+                        <span
+                          class="text-[6px] font-mono text-gray-500 leading-none tracking-tighter"
+                          title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
+                        >
+                          {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}
+                        </span>
+                      </Show>
+                    </>
+                  )
+                })()}
+              </div>
             </div>
-            <div class="flex flex-col gap-1">
-              <span class="text-[9px] font-black text-gray-500 tracking-widest uppercase mb-1">Bank Nifty</span>
-              <span class={`text-sm font-black text-white text-data transition-all duration-300 rounded px-1 ${bankniftyFlash()}`}>
-                {inr(props.indices?.banknifty)}
-              </span>
-              {(() => {
-                const b = expiryBlock('BANKNIFTY')
-                return (
-                  <div class="flex flex-col gap-0.5 items-start mt-0.5">
-                    <span class={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border ${b.className}`}>
-                      {b.text}
-                    </span>
-                    <Show when={b.sub}>
-                      <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
-                    </Show>
-                    <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}>
-                      <span
-                        class="text-[7px] font-mono text-gray-500 tracking-tight mt-0.5"
-                        title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
-                      >
-                        {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}
+
+            {/* Bank Nifty Card */}
+            <div class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-2 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+              <div class="flex flex-col">
+                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Bank Nifty</span>
+                <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${bankniftyFlash()}`}>
+                  {inr(props.indices?.banknifty)}
+                </span>
+              </div>
+              <div class="flex flex-col items-end gap-1">
+                {(() => {
+                  const b = expiryBlock('BANKNIFTY')
+                  return (
+                    <>
+                      <span class={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded border leading-none ${b.className}`}>
+                        {b.text}
                       </span>
-                    </Show>
-                  </div>
-                )
-              })()}
+                      <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}>
+                        <span
+                          class="text-[6px] font-mono text-gray-500 leading-none tracking-tighter"
+                          title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
+                        >
+                          {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}
+                        </span>
+                      </Show>
+                    </>
+                  )
+                })()}
+              </div>
             </div>
-            <div class="flex flex-col gap-1">
-              <span class="text-[9px] font-black text-gray-500 tracking-widest uppercase mb-1">Sensex</span>
-              <span class={`text-sm font-black text-white text-data transition-all duration-300 rounded px-1 ${sensexFlash()}`}>
-                {inr(props.indices?.sensex)}
-              </span>
-              {(() => {
-                const b = expiryBlock('SENSEX')
-                return (
-                  <div class="flex flex-col gap-0.5 items-start mt-0.5">
-                    <span class={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded border ${b.className}`}>
-                      {b.text}
-                    </span>
-                    <Show when={b.sub}>
-                      <span class="text-[8px] font-bold text-gray-600">{b.sub}</span>
-                    </Show>
-                    <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}>
-                      <span
-                        class="text-[7px] font-mono text-gray-500 tracking-tight mt-0.5"
-                        title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
-                      >
-                        {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}
+
+            {/* Sensex Card */}
+            <div class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-2 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+              <div class="flex flex-col">
+                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Sensex</span>
+                <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${sensexFlash()}`}>
+                  {inr(props.indices?.sensex)}
+                </span>
+              </div>
+              <div class="flex flex-col items-end gap-1">
+                {(() => {
+                  const b = expiryBlock('SENSEX')
+                  return (
+                    <>
+                      <span class={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded border leading-none ${b.className}`}>
+                        {b.text}
                       </span>
-                    </Show>
-                  </div>
-                )
-              })()}
+                      <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}>
+                        <span
+                          class="text-[6px] font-mono text-gray-500 leading-none tracking-tighter"
+                          title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
+                        >
+                          {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}
+                        </span>
+                      </Show>
+                    </>
+                  )
+                })()}
+              </div>
             </div>
           </div>
         </div>
 
-        <nav class="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/5 backdrop-blur-md">
+        <nav class="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-white/[0.02] p-1.5 rounded-2xl border border-white/5 backdrop-blur-xl">
           <A href="/" end class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect width="20" height="16" x="2" y="4" rx="2" stroke-width="2.5"/>
+              <path d="m7 10 2 2-2 2m5-2h5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             Terminal
           </A>
           <A href="/strategies" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             Strategies
           </A>
           <A href="/alpha" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="m12 3-1.912 5.886H3.886L9.088 12.5l-1.912 5.886L12 14.772l4.824 3.614-1.912-5.886 5.202-3.614h-6.202L12 3z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             Alpha
           </A>
           <A href="/signals" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             Signals
           </A>
           <A href="/analysis" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             Analysis
           </A>
-          {/* Plain anchor + target=_blank — fullscreen workspace opens in its own tab, not SPA-routed */}
           <a href="/charts" target="_blank" rel="noopener noreferrer" class={`${navLinkBase} ${navLinkInactive}`}>
-            <div class="w-1 h-1 rounded-full bg-primary-500 opacity-0"></div>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M18 20V10M12 20V4M6 20v-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             Charts ↗
           </a>
           <A href="/settings" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkSettingsActive} inactiveClass="">
-            <div class="w-1 h-1 rounded-full bg-cyan-400 opacity-0 [.active_&]:opacity-100 transition-opacity"></div>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="12" cy="12" r="3" stroke-width="2.5"/>
+            </svg>
             Settings
           </A>
         </nav>
 
-        <div class="flex items-center gap-6 text-[10px]">
+        <div class="flex items-center gap-3 text-[9px] font-black tracking-wider">
           <div
-            class="flex items-center gap-2 group cursor-help"
+            class={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white/[0.01] transition-all duration-300 ${isIpVerified() ? 'border-emerald-500/10 hover:border-emerald-500/25 text-gray-500 hover:text-gray-300' : 'border-rose-500/10 hover:border-rose-500/25 text-rose-400'}`}
             title={isIpVerified() ? `Verified: ${publicIpv4()}` : `Not Registered: ${publicIpv4()}`}
           >
-            <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${isIpVerified() ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-rose-500 shadow-rose-500/40'}`}></div>
-            <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">NET IDENTITY</span>
+            <span class="relative flex h-1.5 w-1.5">
+              <Show when={!isIpVerified()}>
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              </Show>
+              <span class={`relative inline-flex rounded-full h-1.5 w-1.5 ${isIpVerified() ? 'bg-emerald-400' : 'bg-rose-500'}`}></span>
+            </span>
+            <span>NET ID</span>
           </div>
-          <div class="flex items-center gap-2 group cursor-help">
-            <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${props.system?.ws_market_feed ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-gray-700'}`}></div>
-            <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">MD FEED</span>
+
+          <div class={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white/[0.01] transition-all duration-300 ${props.system?.ws_market_feed ? 'border-emerald-500/10 hover:border-emerald-500/25 text-gray-500 hover:text-gray-300' : 'border-gray-800 text-gray-600'}`}>
+            <span class="relative flex h-1.5 w-1.5">
+              <Show when={props.system?.ws_market_feed}>
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              </Show>
+              <span class={`relative inline-flex rounded-full h-1.5 w-1.5 ${props.system?.ws_market_feed ? 'bg-emerald-400' : 'bg-gray-700'}`}></span>
+            </span>
+            <span>FEED</span>
           </div>
-          <div class="flex items-center gap-2 group cursor-help">
-            <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${props.system?.scheduler === 'running' ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-rose-500 shadow-rose-500/40'}`}></div>
-            <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">STG ENGINE</span>
+
+          <div class={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white/[0.01] transition-all duration-300 ${props.system?.scheduler === 'running' ? 'border-emerald-500/10 hover:border-emerald-500/25 text-gray-500 hover:text-gray-300' : 'border-rose-500/10 hover:border-rose-500/25 text-rose-400'}`}>
+            <span class="relative flex h-1.5 w-1.5">
+              <Show when={props.system?.scheduler === 'running'}>
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              </Show>
+              <span class={`relative inline-flex rounded-full h-1.5 w-1.5 ${props.system?.scheduler === 'running' ? 'bg-emerald-400' : 'bg-rose-500'}`}></span>
+            </span>
+            <span>ENGINE</span>
           </div>
-          <div class="flex items-center gap-2 group cursor-help">
-            <div class={`w-2 h-2 rounded-full shadow-[0_0_8px] transition-colors ${props.system?.pnl_updater_running ? 'bg-emerald-400 shadow-emerald-400/40' : 'bg-gray-700'}`}></div>
-            <span class="text-gray-500 font-bold tracking-widest group-hover:text-gray-300 transition-colors">PNL UPDATER</span>
+
+          <div class={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white/[0.01] transition-all duration-300 ${props.system?.pnl_updater_running ? 'border-emerald-500/10 hover:border-emerald-500/25 text-gray-500 hover:text-gray-300' : 'border-gray-800 text-gray-600'}`}>
+            <span class="relative flex h-1.5 w-1.5">
+              <Show when={props.system?.pnl_updater_running}>
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              </Show>
+              <span class={`relative inline-flex rounded-full h-1.5 w-1.5 ${props.system?.pnl_updater_running ? 'bg-emerald-400' : 'bg-gray-700'}`}></span>
+            </span>
+            <span>PNL</span>
           </div>
-          <div class={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all duration-500 ${props.connected ? (props.isStale ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400') : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
-            <span class={`w-2 h-2 rounded-full ${props.connected ? (props.isStale ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400 animate-pulse') : 'bg-rose-500'}`}></span>
+
+          <div class={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition-all duration-500 ${props.connected ? (props.isStale ? 'bg-amber-500/10 border-amber-500/25 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.1)]' : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]') : 'bg-rose-500/10 border-rose-500/25 text-rose-400 shadow-[0_0_15px_rgba(239,68,68,0.1)]'}`}>
+            <span class="relative flex h-1.5 w-1.5">
+              <Show when={props.connected}>
+                <span class={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${props.isStale ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+              </Show>
+              <span class={`relative inline-flex rounded-full h-1.5 w-1.5 ${props.connected ? (props.isStale ? 'bg-amber-400' : 'bg-emerald-400') : 'bg-rose-500'}`}></span>
+            </span>
             <span class="font-black tracking-[0.1em]">
-              {!props.connected ? 'DISCONNECTED' : (props.isStale ? 'STALE' : 'CONNECTED')}
+              {!props.connected ? 'OFFLINE' : (props.isStale ? 'STALE' : 'LIVE')}
             </span>
           </div>
         </div>

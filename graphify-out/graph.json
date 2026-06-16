@@ -24426,11 +24426,19 @@
       "_origin": "ast"
     },
     {
+      "id": "positions_paper_stats_query_paperstatsquery_stats_scope_label",
+      "label": ".stats_scope_label()",
+      "file_type": "code",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L54",
+      "_origin": "ast"
+    },
+    {
       "id": "positions_paper_stats_query_paperstatsquery_reset_memoized_scopes",
       "label": ".reset_memoized_scopes!()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L54",
+      "source_location": "L60",
       "_origin": "ast"
     },
     {
@@ -24438,7 +24446,7 @@
       "label": ".resolved_paper_filter()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L63",
+      "source_location": "L69",
       "_origin": "ast"
     },
     {
@@ -24446,7 +24454,7 @@
       "label": ".exited_scope()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L70",
+      "source_location": "L76",
       "_origin": "ast"
     },
     {
@@ -24454,7 +24462,7 @@
       "label": ".active_positions()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L78",
+      "source_location": "L84",
       "_origin": "ast"
     },
     {
@@ -24462,7 +24470,7 @@
       "label": ".realized_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L86",
+      "source_location": "L92",
       "_origin": "ast"
     },
     {
@@ -24470,7 +24478,7 @@
       "label": ".unrealized_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L90",
+      "source_location": "L96",
       "_origin": "ast"
     },
     {
@@ -24478,7 +24486,7 @@
       "label": ".total_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L94",
+      "source_location": "L100",
       "_origin": "ast"
     },
     {
@@ -24486,7 +24494,7 @@
       "label": ".winners_count()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L98",
+      "source_location": "L104",
       "_origin": "ast"
     },
     {
@@ -24494,7 +24502,7 @@
       "label": ".losers_count()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L102",
+      "source_location": "L108",
       "_origin": "ast"
     },
     {
@@ -24502,7 +24510,7 @@
       "label": ".win_rate()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L106",
+      "source_location": "L112",
       "_origin": "ast"
     },
     {
@@ -24510,7 +24518,7 @@
       "label": ".avg_realized_pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L113",
+      "source_location": "L119",
       "_origin": "ast"
     },
     {
@@ -24518,7 +24526,7 @@
       "label": ".avg_unrealized_pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L120",
+      "source_location": "L126",
       "_origin": "ast"
     },
     {
@@ -24526,7 +24534,7 @@
       "label": ".pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L127",
+      "source_location": "L133",
       "_origin": "ast"
     },
     {
@@ -24534,7 +24542,7 @@
       "label": ".date_range()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L134",
+      "source_location": "L140",
       "_origin": "ast"
     },
     {
@@ -33730,11 +33738,19 @@
       "_origin": "ast"
     },
     {
+      "id": "dashboard_package_type",
+      "label": "type",
+      "file_type": "code",
+      "source_file": "dashboard/package.json",
+      "source_location": "L5",
+      "_origin": "ast"
+    },
+    {
       "id": "dashboard_package_scripts",
       "label": "scripts",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L5",
+      "source_location": "L6",
       "_origin": "ast"
     },
     {
@@ -33742,7 +33758,7 @@
       "label": "dev",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L6",
+      "source_location": "L7",
       "_origin": "ast"
     },
     {
@@ -33750,7 +33766,7 @@
       "label": "build",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L7",
+      "source_location": "L8",
       "_origin": "ast"
     },
     {
@@ -33758,7 +33774,7 @@
       "label": "preview",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L8",
+      "source_location": "L9",
       "_origin": "ast"
     },
     {
@@ -33766,7 +33782,7 @@
       "label": "dependencies",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L10",
+      "source_location": "L11",
       "_origin": "ast"
     },
     {
@@ -33774,7 +33790,7 @@
       "label": "@rails/actioncable",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L11",
+      "source_location": "L12",
       "_origin": "ast"
     },
     {
@@ -33782,7 +33798,7 @@
       "label": "@solidjs/router",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L12",
+      "source_location": "L13",
       "_origin": "ast"
     },
     {
@@ -33790,7 +33806,7 @@
       "label": "lightweight-charts",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L13",
+      "source_location": "L14",
       "_origin": "ast"
     },
     {
@@ -33798,7 +33814,7 @@
       "label": "solid-js",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L14",
+      "source_location": "L15",
       "_origin": "ast"
     },
     {
@@ -33806,7 +33822,7 @@
       "label": "solid-toast",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L15",
+      "source_location": "L16",
       "_origin": "ast"
     },
     {
@@ -33814,7 +33830,7 @@
       "label": "devDependencies",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L17",
+      "source_location": "L18",
       "_origin": "ast"
     },
     {
@@ -33822,7 +33838,7 @@
       "label": "@tailwindcss/vite",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L18",
+      "source_location": "L19",
       "_origin": "ast"
     },
     {
@@ -33830,7 +33846,7 @@
       "label": "tailwindcss",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L19",
+      "source_location": "L20",
       "_origin": "ast"
     },
     {
@@ -33838,7 +33854,7 @@
       "label": "vite",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L20",
+      "source_location": "L21",
       "_origin": "ast"
     },
     {
@@ -33846,7 +33862,7 @@
       "label": "vite-plugin-solid",
       "file_type": "code",
       "source_file": "dashboard/package.json",
-      "source_location": "L21",
+      "source_location": "L22",
       "_origin": "ast"
     },
     {
@@ -34002,11 +34018,11 @@
       "_origin": "ast"
     },
     {
-      "id": "components_header_expiryblock",
-      "label": "expiryBlock()",
+      "id": "components_header_header",
+      "label": "Header()",
       "file_type": "code",
       "source_file": "dashboard/src/components/Header.jsx",
-      "source_location": "L136",
+      "source_location": "L122",
       "_origin": "ast"
     },
     {
@@ -43418,7 +43434,7 @@
       "label": "create_exited_tracker()",
       "file_type": "code",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L64",
+      "source_location": "L65",
       "_origin": "ast"
     },
     {
@@ -43426,7 +43442,7 @@
       "label": "create_active_tracker()",
       "file_type": "code",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L68",
+      "source_location": "L69",
       "_origin": "ast"
     },
     {
@@ -146325,7 +146341,7 @@
     },
     {
       "source": "positions_paper_stats_query_paperstatsquery",
-      "target": "positions_paper_stats_query_paperstatsquery_reset_memoized_scopes",
+      "target": "positions_paper_stats_query_paperstatsquery_stats_scope_label",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
@@ -146334,11 +146350,20 @@
     },
     {
       "source": "positions_paper_stats_query_paperstatsquery",
+      "target": "positions_paper_stats_query_paperstatsquery_reset_memoized_scopes",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L60",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery",
       "target": "positions_paper_stats_query_paperstatsquery_resolved_paper_filter",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L63",
+      "source_location": "L69",
       "weight": 1.0
     },
     {
@@ -146347,7 +146372,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L70",
+      "source_location": "L76",
       "weight": 1.0
     },
     {
@@ -146356,7 +146381,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L78",
+      "source_location": "L84",
       "weight": 1.0
     },
     {
@@ -146365,7 +146390,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L86",
+      "source_location": "L92",
       "weight": 1.0
     },
     {
@@ -146374,7 +146399,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L90",
+      "source_location": "L96",
       "weight": 1.0
     },
     {
@@ -146383,7 +146408,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L94",
+      "source_location": "L100",
       "weight": 1.0
     },
     {
@@ -146392,7 +146417,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L98",
+      "source_location": "L104",
       "weight": 1.0
     },
     {
@@ -146401,7 +146426,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L102",
+      "source_location": "L108",
       "weight": 1.0
     },
     {
@@ -146410,7 +146435,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L106",
+      "source_location": "L112",
       "weight": 1.0
     },
     {
@@ -146419,7 +146444,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L113",
+      "source_location": "L119",
       "weight": 1.0
     },
     {
@@ -146428,7 +146453,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L120",
+      "source_location": "L126",
       "weight": 1.0
     },
     {
@@ -146437,7 +146462,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L127",
+      "source_location": "L133",
       "weight": 1.0
     },
     {
@@ -146446,7 +146471,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L134",
+      "source_location": "L140",
       "weight": 1.0
     },
     {
@@ -160206,7 +160231,7 @@
     },
     {
       "source": "dashboard_package",
-      "target": "dashboard_package_scripts",
+      "target": "dashboard_package_type",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
@@ -160214,8 +160239,8 @@
       "weight": 1.0
     },
     {
-      "source": "dashboard_package_scripts",
-      "target": "dashboard_package_scripts_dev",
+      "source": "dashboard_package",
+      "target": "dashboard_package_scripts",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
@@ -160224,7 +160249,7 @@
     },
     {
       "source": "dashboard_package_scripts",
-      "target": "dashboard_package_scripts_build",
+      "target": "dashboard_package_scripts_dev",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
@@ -160233,11 +160258,20 @@
     },
     {
       "source": "dashboard_package_scripts",
-      "target": "dashboard_package_scripts_preview",
+      "target": "dashboard_package_scripts_build",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
       "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "dashboard_package_scripts",
+      "target": "dashboard_package_scripts_preview",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "dashboard/package.json",
+      "source_location": "L9",
       "weight": 1.0
     },
     {
@@ -160246,7 +160280,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L10",
+      "source_location": "L11",
       "weight": 1.0
     },
     {
@@ -160255,7 +160289,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
@@ -160264,7 +160298,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0,
       "context": "import"
     },
@@ -160274,7 +160308,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -160283,7 +160317,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0,
       "context": "import"
     },
@@ -160293,7 +160327,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -160302,7 +160336,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0,
       "context": "import"
     },
@@ -160312,7 +160346,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -160321,7 +160355,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0,
       "context": "import"
     },
@@ -160331,7 +160365,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L15",
+      "source_location": "L16",
       "weight": 1.0
     },
     {
@@ -160340,7 +160374,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L15",
+      "source_location": "L16",
       "weight": 1.0,
       "context": "import"
     },
@@ -160350,7 +160384,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L17",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -160359,7 +160393,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -160368,7 +160402,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0,
       "context": "import"
     },
@@ -160378,7 +160412,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L19",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -160387,7 +160421,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L19",
+      "source_location": "L20",
       "weight": 1.0,
       "context": "import"
     },
@@ -160397,7 +160431,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -160406,7 +160440,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0,
       "context": "import"
     },
@@ -160416,7 +160450,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L21",
+      "source_location": "L22",
       "weight": 1.0
     },
     {
@@ -160425,7 +160459,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/package.json",
-      "source_location": "L21",
+      "source_location": "L22",
       "weight": 1.0,
       "context": "import"
     },
@@ -160886,11 +160920,11 @@
     },
     {
       "source": "components_header",
-      "target": "components_header_expiryblock",
+      "target": "components_header_header",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/Header.jsx",
-      "source_location": "L136",
+      "source_location": "L122",
       "weight": 1.0
     },
     {
@@ -161004,7 +161038,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/PositionRow.jsx",
-      "source_location": "L58",
+      "source_location": "L61",
       "weight": 1.0
     },
     {
@@ -161014,7 +161048,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/PositionRow.jsx",
-      "source_location": "L64",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -161024,7 +161058,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/PositionRow.jsx",
-      "source_location": "L69",
+      "source_location": "L75",
       "weight": 1.0
     },
     {
@@ -173594,7 +173628,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L64",
+      "source_location": "L65",
       "weight": 1.0
     },
     {
@@ -173603,7 +173637,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L68",
+      "source_location": "L69",
       "weight": 1.0
     },
     {
@@ -243598,6 +243632,16 @@
       "weight": 1.0
     },
     {
+      "source": "src_app",
+      "target": "components_header_header",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "dashboard/src/App.jsx",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
       "source": "components_openpositions",
       "target": "components_positionrow_positionrow",
       "relation": "imports",
@@ -243755,26 +243799,6 @@
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
       "source_location": "L115",
-      "weight": 1.0
-    },
-    {
-      "source": "components_header_expiryblock",
-      "target": "lib_expirybadge_subscribedrowbykey",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "dashboard/src/components/Header.jsx",
-      "source_location": "L137",
-      "weight": 1.0
-    },
-    {
-      "source": "components_header_expiryblock",
-      "target": "lib_expirybadge_expirybadgemeta",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "dashboard/src/components/Header.jsx",
-      "source_location": "L138",
       "weight": 1.0
     },
     {
@@ -269557,7 +269581,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L91",
+      "source_location": "L97",
       "weight": 1.0
     },
     {
@@ -269568,7 +269592,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L123",
+      "source_location": "L129",
       "weight": 1.0
     },
     {
@@ -269579,7 +269603,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L128",
+      "source_location": "L134",
       "weight": 1.0
     },
     {
@@ -276942,6 +276966,28 @@
       "weight": 1.0
     },
     {
+      "source": "components_header_header",
+      "target": "context_dashboardcontext_usedashboardcontext",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "dashboard/src/components/Header.jsx",
+      "source_location": "L123",
+      "weight": 1.0
+    },
+    {
+      "source": "components_header_header",
+      "target": "stores_useflash_useflash",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "dashboard/src/components/Header.jsx",
+      "source_location": "L132",
+      "weight": 1.0
+    },
+    {
       "source": "components_positionrow_positionrow",
       "target": "stores_useflash_useflash",
       "relation": "calls",
@@ -281602,7 +281648,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L65",
+      "source_location": "L66",
       "weight": 1.0
     },
     {

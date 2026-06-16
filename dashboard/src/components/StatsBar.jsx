@@ -45,7 +45,7 @@ export default function StatsBar(props) {
   return (
     <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-4">
       {/* Available Balance Card */}
-      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4 border-primary-500/50">
+      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4 border-primary-500/50 shadow-[0_4px_20px_rgba(59,130,246,0.05)] hover:shadow-[0_8px_30px_rgba(59,130,246,0.15)]">
         <div class="absolute top-0 right-0 w-32 h-32 bg-primary-500/5 blur-3xl transition-opacity group-hover:opacity-10"></div>
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Available Cash</span>
@@ -67,8 +67,8 @@ export default function StatsBar(props) {
                 </Show>
                 <span class={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${
                   tradingMode() === 'PAPER'
-                    ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10'
-                    : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                    ? 'text-cyan-400 border-cyan-500/25 bg-cyan-500/10'
+                    : 'text-emerald-400 border-emerald-500/25 bg-emerald-500/10'
                 }`}>
                   {tradingMode()}
                 </span>
@@ -80,7 +80,7 @@ export default function StatsBar(props) {
                 </span>
                 <button
                   onClick={resetDrawdown}
-                  class="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-400 border border-rose-500/30 rounded text-[8px] font-black uppercase tracking-tighter transition-all"
+                  class="px-2 py-1 bg-rose-500/25 hover:bg-rose-500/40 text-rose-300 border border-rose-500/40 rounded-lg text-[8px] font-black uppercase tracking-widest shadow-[0_0_8px_rgba(239,68,68,0.15)] hover:shadow-[0_0_12px_rgba(239,68,68,0.35)] transition-all animate-pulse"
                 >
                   RESET GUARD
                 </button>
@@ -91,7 +91,10 @@ export default function StatsBar(props) {
       </div>
 
       {/* Total P&L Card */}
-      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group">
+      <div 
+        class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:border-l-4 transition-all duration-300"
+        style={{ 'border-left-width': '4px', 'border-left-color': `var(--color-${Number(stats().total_pnl_rupees) >= 0 ? 'emerald' : 'rose'}-500)` }}
+      >
         <div class={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br opacity-5 blur-3xl transition-opacity group-hover:opacity-10 ${pnlClass(stats().total_pnl_rupees)}`}></div>
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Net P&amp;L</span>
@@ -99,18 +102,32 @@ export default function StatsBar(props) {
             <span class={`text-sm font-bold ${Number(stats().total_pnl_rupees) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{sign(stats().total_pnl_rupees)}</span>
             <span class="text-3xl font-black text-white text-data tracking-tighter">₹{inr(stats().total_pnl_rupees)}</span>
           </div>
-          <div class="flex items-center gap-2 mt-4">
-            <div class="flex -space-x-2">
-              <div class="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-[10px] font-bold text-emerald-400">{stats().winners}</div>
-              <div class="w-6 h-6 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-[10px] font-bold text-rose-400">{stats().losers}</div>
+          
+          <div class="flex flex-col gap-1.5 mt-4">
+            <div class="flex justify-between items-center text-[8px] font-black tracking-widest text-gray-500">
+              <span>WIN RATE: {(() => {
+                const w = Number(stats().winners || 0);
+                const l = Number(stats().losers || 0);
+                const tot = w + l;
+                return tot > 0 ? `${Math.round((w / tot) * 100)}%` : '—';
+              })()}</span>
+              <span class="text-gray-600">{stats().winners}W - {stats().losers}L</span>
             </div>
-            <span class="text-[10px] font-bold text-gray-600 uppercase tracking-tighter">Day Performance</span>
+            <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden flex">
+              <div class="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(() => {
+                const w = Number(stats().winners || 0);
+                const l = Number(stats().losers || 0);
+                const tot = w + l;
+                return tot > 0 ? (w / tot) * 100 : 50;
+              })()}%` }}></div>
+              <div class="h-full bg-rose-500 transition-all duration-500 flex-1"></div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Realized P&L */}
-      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group">
+      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4 border-emerald-500/50 shadow-[0_4px_20px_rgba(16,185,129,0.03)] hover:shadow-[0_8px_30px_rgba(16,185,129,0.1)]">
         <div class={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br opacity-5 blur-3xl transition-opacity group-hover:opacity-10 ${pnlClass(stats().realized_pnl_rupees)}`}></div>
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Realized</span>
@@ -119,15 +136,14 @@ export default function StatsBar(props) {
             <span class="text-2xl font-black text-white text-data tracking-tight">₹{inr(stats().realized_pnl_rupees)}</span>
           </div>
           <div class="flex items-center gap-2 mt-4">
-            <span class="text-[9px] font-black text-primary-400 uppercase tracking-widest">BOOKED PROFIT</span>
-            <div class="w-1.5 h-1.5 rounded-full bg-primary-500/40"></div>
+            <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">BOOKED P&L</span>
           </div>
         </div>
       </div>
 
       {/* Unrealized P&L */}
       <div
-        class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4"
+        class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4 shadow-[0_4px_20px_rgba(0,0,0,0.3)]"
         style={{ 'border-left-color': `var(--color-${Number(stats().unrealized_pnl_rupees) >= 0 ? 'emerald' : 'rose'}-500)` }}
       >
         <div class={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br opacity-5 blur-3xl transition-opacity group-hover:opacity-10 ${pnlClass(stats().unrealized_pnl_rupees)}`}></div>
@@ -148,7 +164,7 @@ export default function StatsBar(props) {
       </div>
 
       {/* Daily Peak (HWM) */}
-      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4 border-amber-500/30">
+      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4 border-amber-500/50 shadow-[0_4px_20px_rgba(245,158,11,0.03)] hover:shadow-[0_8px_30px_rgba(245,158,11,0.1)]">
         <div class="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 blur-3xl transition-opacity group-hover:opacity-10"></div>
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Daily Peak (HWM)</span>
@@ -156,41 +172,40 @@ export default function StatsBar(props) {
             <span class="text-2xl font-black text-amber-400 text-data tracking-tight">₹{inr(stats().peak_pnl)}</span>
           </div>
           <div class="flex items-center gap-2 mt-4">
-            <span class="text-[9px] font-black text-amber-500/60 uppercase tracking-widest">PROFIT CEILING</span>
-            <div class="w-1.5 h-1.5 rounded-full bg-amber-500/40"></div>
+            <span class="text-[9px] font-black text-amber-500 uppercase tracking-widest bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">HIGH WATERMARK</span>
           </div>
         </div>
       </div>
 
       {/* Active Positions */}
-      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-primary-400/10 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-150 duration-700"></div>
+      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4 border-indigo-500/50 shadow-[0_4px_20px_rgba(99,102,241,0.03)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.1)]">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-indigo-400/10 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-150 duration-700"></div>
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Live Exposure</span>
           <div class="flex items-baseline gap-2 mt-2">
-            <span class="text-3xl font-black text-primary-400 text-data">{stats().active_positions ?? 0}</span>
+            <span class="text-3xl font-black text-indigo-400 text-data">{stats().active_positions ?? 0}</span>
             <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Active</span>
           </div>
           <div class="flex items-center gap-1 mt-4">
-            <div class="w-1 h-3 bg-primary-500/40 rounded-full"></div>
-            <div class="w-1 h-3 bg-primary-500/20 rounded-full"></div>
-            <div class="w-1 h-3 bg-primary-500/10 rounded-full"></div>
+            <div class="w-1.5 h-3 bg-indigo-500/40 rounded-full"></div>
+            <div class="w-1.5 h-3 bg-indigo-500/20 rounded-full"></div>
+            <div class="w-1.5 h-3 bg-indigo-500/10 rounded-full"></div>
           </div>
         </div>
       </div>
 
       {/* Day Volume */}
-      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-150 duration-700"></div>
+      <div class="glass glass-hover p-5 rounded-2xl relative overflow-hidden group border-l-4 border-cyan-500/50 shadow-[0_4px_20px_rgba(6,182,212,0.03)] hover:shadow-[0_8px_30px_rgba(6,182,212,0.1)]">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-cyan-400/10 rounded-full -mr-8 -mt-8 transition-transform group-hover:scale-150 duration-700"></div>
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Day Volume</span>
           <div class="flex items-baseline gap-2 mt-2">
-            <span class="text-3xl font-black text-white text-data">{stats().total_trades ?? 0}</span>
+            <span class="text-3xl font-black text-cyan-400 text-data">{stats().total_trades ?? 0}</span>
             <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Trades</span>
           </div>
           <div class="mt-4 flex items-center gap-1">
             <For each={[1, 2, 3, 4, 5]}>
-              {(i) => <div class={`h-1 flex-1 rounded-full ${i <= 3 ? 'bg-primary-500/40' : 'bg-white/5'}`}></div>}
+              {(i) => <div class={`h-1.5 flex-1 rounded-full ${i <= (stats().total_trades > 5 ? 5 : stats().total_trades) ? 'bg-cyan-500/40 shadow-[0_0_8px_rgba(6,182,212,0.3)]' : 'bg-white/5'}`}></div>}
             </For>
           </div>
         </div>

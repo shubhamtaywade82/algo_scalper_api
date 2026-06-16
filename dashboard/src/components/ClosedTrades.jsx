@@ -190,14 +190,14 @@ export default function ClosedTrades() {
       </div>
 
       {/* Filters */}
-      <div class="px-6 py-4 border-b border-white/5 bg-white/[0.005] flex flex-wrap items-end gap-4">
+      <div class="px-6 py-5 border-b border-white/5 bg-white/[0.005] flex flex-wrap items-end gap-4">
         {/* Date dropdown */}
-        <div class="flex flex-col gap-1">
-          <label class="text-[9px] font-black text-gray-600 uppercase tracking-widest">Date</label>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Date</label>
           <select
             value={selectedDate()}
             onChange={(e) => { setSelectedDate(e.target.value); fetchPositions() }}
-            class="bg-gray-900 border border-gray-700 text-gray-200 text-xs rounded px-2 py-1.5 focus:ring-1 focus:ring-cyan-500 outline-none min-w-[130px]"
+            class="glass-select text-xs rounded-xl px-3 py-2 min-w-[140px]"
           >
             <For each={availableDates()}>
               {(d) => <option value={d}>{d}</option>}
@@ -209,12 +209,12 @@ export default function ClosedTrades() {
         </div>
 
         {/* Index filter */}
-        <div class="flex flex-col gap-1">
-          <label class="text-[9px] font-black text-gray-600 uppercase tracking-widest">Index</label>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Index</label>
           <select
             value={indexKey()}
             onChange={(e) => setIndexKey(e.target.value)}
-            class="bg-gray-900 border border-gray-700 text-gray-200 text-xs rounded px-2 py-1.5 focus:ring-1 focus:ring-cyan-500 outline-none"
+            class="glass-select text-xs rounded-xl px-3 py-2 min-w-[110px]"
           >
             <option value="">All</option>
             <option value="NIFTY">NIFTY</option>
@@ -224,12 +224,12 @@ export default function ClosedTrades() {
         </div>
 
         {/* Option type */}
-        <div class="flex flex-col gap-1">
-          <label class="text-[9px] font-black text-gray-600 uppercase tracking-widest">Type</label>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Type</label>
           <select
             value={optionType()}
             onChange={(e) => setOptionType(e.target.value)}
-            class="bg-gray-900 border border-gray-700 text-gray-200 text-xs rounded px-2 py-1.5 focus:ring-1 focus:ring-cyan-500 outline-none"
+            class="glass-select text-xs rounded-xl px-3 py-2 min-w-[110px]"
           >
             <option value="">CE + PE</option>
             <option value="CE">CE</option>
@@ -238,12 +238,12 @@ export default function ClosedTrades() {
         </div>
 
         {/* Outcome */}
-        <div class="flex flex-col gap-1">
-          <label class="text-[9px] font-black text-gray-600 uppercase tracking-widest">Outcome</label>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Outcome</label>
           <select
             value={outcome()}
             onChange={(e) => setOutcome(e.target.value)}
-            class="bg-gray-900 border border-gray-700 text-gray-200 text-xs rounded px-2 py-1.5 focus:ring-1 focus:ring-cyan-500 outline-none"
+            class="glass-select text-xs rounded-xl px-3 py-2 min-w-[125px]"
           >
             <option value="">All</option>
             <option value="profit">Profit</option>
@@ -253,12 +253,12 @@ export default function ClosedTrades() {
         </div>
 
         {/* Side */}
-        <div class="flex flex-col gap-1">
-          <label class="text-[9px] font-black text-gray-600 uppercase tracking-widest">Side</label>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[9px] font-black text-gray-500 uppercase tracking-widest">Side</label>
           <select
             value={side()}
             onChange={(e) => setSide(e.target.value)}
-            class="bg-gray-900 border border-gray-700 text-gray-200 text-xs rounded px-2 py-1.5 focus:ring-1 focus:ring-cyan-500 outline-none"
+            class="glass-select text-xs rounded-xl px-3 py-2 min-w-[90px]"
           >
             <option value="">All</option>
             <option value="BUY">BUY</option>
@@ -269,13 +269,13 @@ export default function ClosedTrades() {
         <div class="flex gap-2 ml-auto">
           <button
             onClick={applyFilter}
-            class="px-4 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-black uppercase tracking-widest rounded transition-colors"
+            class="px-5 py-2 bg-primary-600 hover:bg-primary-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-[0_4px_15px_rgba(59,130,246,0.15)] hover:shadow-[0_4px_20px_rgba(59,130,246,0.35)] cursor-pointer"
           >
             Apply
           </button>
           <button
             onClick={resetFilters}
-            class="px-4 py-1.5 border border-gray-700 hover:border-gray-500 text-gray-400 hover:text-gray-200 text-[10px] font-black uppercase tracking-widest rounded transition-colors"
+            class="px-5 py-2 border border-white/10 hover:border-white/25 text-gray-400 hover:text-gray-200 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all cursor-pointer"
           >
             Reset
           </button>
