@@ -7,7 +7,7 @@ class IvSnapshotJob < ApplicationJob
   INDEX_MAP = {
     'NIFTY' => { security_id: '13', segment: 'index' },
     'BANKNIFTY' => { security_id: '25', segment: 'index' },
-    'SENSEX' => { security_id: '27', segment: 'index' }
+    'SENSEX' => { security_id: '51', segment: 'index' }
   }.freeze
 
   # Mapping for strike step (interval) per index

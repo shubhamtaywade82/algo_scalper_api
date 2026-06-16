@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Entries::EntryGuard do
-  let(:index_cfg) { { key: 'NIFTY', segment: 'NSE_FNO', cooldown_sec: 0 } }
+  let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', cooldown_sec: 0 } }
   let(:pick) { { symbol: 'NIFTY24MAR22000CE', security_id: '12345', segment: 'NSE_FNO' } }
   let(:direction) { 'LONG' }
   let(:signal) { double('Signal', record_entry_outcome: true) }

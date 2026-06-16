@@ -38,7 +38,11 @@ module Entries
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
         Guards::InstrumentLookupGuard,       # sets context[:instrument] — required by EPT guard
+        Guards::CompressionSetupGuard,       # positional+carry: require ATR compression setup
         Guards::LtpResolutionGuard,
+        Guards::BidAskSpreadGuard,
+        Guards::BreakoutReadyGuard,          # intraday: 1m breakout + OI unwind armed
+        Guards::RsiBiasGuard,
         Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
         Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block
         Guards::BankniftyLastWeekGuard,

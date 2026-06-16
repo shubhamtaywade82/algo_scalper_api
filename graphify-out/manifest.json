@@ -160,8 +160,8 @@
     "semantic_hash": ""
   },
   "app/jobs/clear_carried_overnight_positions_job.rb": {
-    "mtime": 1775801790.9682884,
-    "ast_hash": "99efe8ffcd76e46314fe7b5a421ca0fe",
+    "mtime": 1781630350.304788,
+    "ast_hash": "84a53fb6fdb973ce203480cbe1d79300",
     "semantic_hash": ""
   },
   "app/jobs/dhan/auto_ip_updater_job.rb": {
@@ -175,8 +175,8 @@
     "semantic_hash": ""
   },
   "app/jobs/iv_snapshot_job.rb": {
-    "mtime": 1780930853.782204,
-    "ast_hash": "9ecccbe71358cb7d706313b7043f73f7",
+    "mtime": 1781630350.304788,
+    "ast_hash": "4ea412d1df35ed3a38e5455f0abf3ab1",
     "semantic_hash": ""
   },
   "app/jobs/notifications/telegram/send_smc_alert_job.rb": {
@@ -360,8 +360,8 @@
     "semantic_hash": ""
   },
   "app/models/iv_snapshot.rb": {
-    "mtime": 1780930853.782204,
-    "ast_hash": "0024059c5a098b26408e1d479d492adf",
+    "mtime": 1781630350.304788,
+    "ast_hash": "68299ac50b4b0924abed9e1b7f2b4e36",
     "semantic_hash": ""
   },
   "app/models/market_holiday.rb": {
@@ -375,8 +375,8 @@
     "semantic_hash": ""
   },
   "app/models/position_tracker.rb": {
-    "mtime": 1780930853.782204,
-    "ast_hash": "2554bb4001d9acf8d6a9f322fb49d70c",
+    "mtime": 1781630350.304788,
+    "ast_hash": "52e59196bdb4492fbc65fe4c0bcf3872",
     "semantic_hash": ""
   },
   "app/models/public_ip_log.rb": {
@@ -730,13 +730,13 @@
     "semantic_hash": ""
   },
   "app/services/entries/entry_guard.rb": {
-    "mtime": 1781604873.599182,
-    "ast_hash": "c282d48301b4ddbc25bc9e3fc2876293",
+    "mtime": 1781630350.304788,
+    "ast_hash": "8a07d705a8918f2a8b914fff5ef45eff",
     "semantic_hash": ""
   },
   "app/services/entries/entry_guard_pipeline.rb": {
-    "mtime": 1780931026.714119,
-    "ast_hash": "98c3590b6598d3920eaf58ae025a7602",
+    "mtime": 1781630350.304788,
+    "ast_hash": "182c8f3c2fb6c1c9b2c202885d69853f",
     "semantic_hash": ""
   },
   "app/services/entries/guards/banknifty_last_week_guard.rb": {
@@ -940,8 +940,8 @@
     "semantic_hash": ""
   },
   "app/services/index_config_loader.rb": {
-    "mtime": 1774856636.727612,
-    "ast_hash": "297968839a193b70f697fc051b1cf98c",
+    "mtime": 1781630350.304788,
+    "ast_hash": "549356baada3fdcc159a4f7cfb860ae0",
     "semantic_hash": ""
   },
   "app/services/index_instrument_cache.rb": {
@@ -1125,8 +1125,8 @@
     "semantic_hash": ""
   },
   "app/services/live/risk_manager_service/exit_enforcement.rb": {
-    "mtime": 1781604994.7613385,
-    "ast_hash": "991a87379d209c38a49d1010a3de9cff",
+    "mtime": 1781630350.304788,
+    "ast_hash": "3c042286c06a1cd48f781e493cad0f9d",
     "semantic_hash": ""
   },
   "app/services/live/risk_manager_service/exit_execution.rb": {
@@ -1175,8 +1175,8 @@
     "semantic_hash": ""
   },
   "app/services/live/time_regime_service.rb": {
-    "mtime": 1774856636.757612,
-    "ast_hash": "c54a6367c4b98d6d74409314e7fbae96",
+    "mtime": 1781630350.304788,
+    "ast_hash": "be151aa783466fd20fcda2999d2ec3a3",
     "semantic_hash": ""
   },
   "app/services/live/trailing_engine.rb": {
@@ -2920,8 +2920,8 @@
     "semantic_hash": ""
   },
   "db/schema.rb": {
-    "mtime": 1780930979.381035,
-    "ast_hash": "1f1f324619d78306fb14de2df52ade0c",
+    "mtime": 1781630350.304788,
+    "ast_hash": "39fb807d794fc63c7bf3c695bb98ecc0",
     "semantic_hash": ""
   },
   "db/seeds.rb": {
@@ -3080,8 +3080,8 @@
     "semantic_hash": ""
   },
   "lib/trading_system/bootstrap.rb": {
-    "mtime": 1775801791.0982883,
-    "ast_hash": "125fe0887de7209b3c4087f2459caf9c",
+    "mtime": 1781630350.304788,
+    "ast_hash": "c235db84065628582f8da8c9eb51dd8c",
     "semantic_hash": ""
   },
   "lib/trading_system/daemon.rb": {
@@ -3600,8 +3600,8 @@
     "semantic_hash": ""
   },
   "spec/integration/signal_generation_strategies_spec.rb": {
-    "mtime": 1775801791.1082883,
-    "ast_hash": "7e32d3d0814dfe463418f17cbdaf46ad",
+    "mtime": 1781630350.304788,
+    "ast_hash": "e398269b694516981f40d3c3f76c4525",
     "semantic_hash": ""
   },
   "spec/integration/supertrend_adx_computation_spec.rb": {
@@ -3640,8 +3640,8 @@
     "semantic_hash": ""
   },
   "spec/jobs/clear_carried_overnight_positions_job_spec.rb": {
-    "mtime": 1775801791.1082883,
-    "ast_hash": "81e1ea6be9f92d6b9dee0d609fd49d08",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "64f2d34ed4e2b0b41a28a4e276212212",
     "semantic_hash": ""
   },
   "spec/jobs/dhan/auto_ip_updater_job_spec.rb": {
@@ -4050,8 +4050,8 @@
     "semantic_hash": ""
   },
   "spec/services/entries/bos_entry_engine_spec.rb": {
-    "mtime": 1775801791.1382883,
-    "ast_hash": "bcafd06aee1f618a8221fd476fa80cbf",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "4c7975603ba67669a799cfa61a33f693",
     "semantic_hash": ""
   },
   "spec/services/entries/candle_utils_spec.rb": {
@@ -4070,8 +4070,8 @@
     "semantic_hash": ""
   },
   "spec/services/entries/entry_guard_integration_spec.rb": {
-    "mtime": 1775801791.1382883,
-    "ast_hash": "5955324a1c34788889f04047efa45d96",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "d277755d2859f8ef059c7976498ba9e5",
     "semantic_hash": ""
   },
   "spec/services/entries/entry_guard_pipeline_spec.rb": {
@@ -4080,13 +4080,13 @@
     "semantic_hash": ""
   },
   "spec/services/entries/entry_guard_signal_recording_spec.rb": {
-    "mtime": 1775801791.1382883,
-    "ast_hash": "91d0fff02f0bb3a8df9a3d9d81aa8b7b",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "b48e744beebab8b5de80e1ac1b0c9ad2",
     "semantic_hash": ""
   },
   "spec/services/entries/entry_guard_spec.rb": {
-    "mtime": 1781604886.221732,
-    "ast_hash": "b19f4eb1c57bb519383cc61f6a549ce1",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "e4c52a521f8366d296b622f7ba1c555c",
     "semantic_hash": ""
   },
   "spec/services/entries/guards/cooldown_guard_spec.rb": {
@@ -4110,8 +4110,8 @@
     "semantic_hash": ""
   },
   "spec/services/entries/guards/ltp_resolution_guard_spec.rb": {
-    "mtime": 1775801791.1382883,
-    "ast_hash": "672be3c25b52b7ffb29801d1c3cc0928",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "d79063d8d5ec127327bccb8cdb4ef255",
     "semantic_hash": ""
   },
   "spec/services/entries/guards/max_concurrent_guard_spec.rb": {
@@ -4130,8 +4130,8 @@
     "semantic_hash": ""
   },
   "spec/services/entries/guards/time_regime_guard_spec.rb": {
-    "mtime": 1775801791.1382883,
-    "ast_hash": "325599cf788484cf44b8f736f89d9a4a",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "a90e42937cd33457e8dbcbf6da651131",
     "semantic_hash": ""
   },
   "spec/services/entries/no_trade_context_builder_spec.rb": {
@@ -4340,8 +4340,8 @@
     "semantic_hash": ""
   },
   "spec/services/live/risk_manager_service/exit_enforcement_spec.rb": {
-    "mtime": 1774856653.7976065,
-    "ast_hash": "3f8332eed71fc66405c3550c35cb8a51",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "4cf8f5c25fb6b418bfabdb76be0a2ef7",
     "semantic_hash": ""
   },
   "spec/services/live/risk_manager_service_active_cache_guard_spec.rb": {
@@ -4420,8 +4420,8 @@
     "semantic_hash": ""
   },
   "spec/services/options/auto_calibrator_spec.rb": {
-    "mtime": 1775801791.1482882,
-    "ast_hash": "726c617b9542a04e42528adb0da675a7",
+    "mtime": 1781630350.3146462,
+    "ast_hash": "5e6804de74d50b44eb031d22ae3804a8",
     "semantic_hash": ""
   },
   "spec/services/options/calibration_auto_applier_spec.rb": {
@@ -4940,7 +4940,7 @@
     "semantic_hash": ""
   },
   "spec/services/smc/detectors/liquidity_spec.rb": {
-    "mtime": 1781598605.225937,
+    "mtime": 1781628219.311745,
     "ast_hash": "3930c5d1795a7702bca6d104298a10ad",
     "semantic_hash": ""
   },
@@ -5580,8 +5580,8 @@
     "semantic_hash": ""
   },
   "config/algo.yml": {
-    "mtime": 1781604071.184385,
-    "ast_hash": "fdcae6cd49955d208ea80dcb70a635e8",
+    "mtime": 1781630529.3593664,
+    "ast_hash": "5ee006960d2459c9dff9b40331e75565",
     "semantic_hash": ""
   },
   "config/algo_organized.yml": {
@@ -5630,8 +5630,8 @@
     "semantic_hash": ""
   },
   "config/recurring.yml": {
-    "mtime": 1780930989.8401992,
-    "ast_hash": "09a36ffd69ec5c7a2aff15e0fdc5baa6",
+    "mtime": 1781630350.304788,
+    "ast_hash": "973fe320db9bf33eeb395918cc5e3541",
     "semantic_hash": ""
   },
   "config/signal_tier_presets.yml": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781614314.9724576,
-    "ast_hash": "4a2759d6e0c8998c271d5100c20a4314",
+    "mtime": 1781631838.7319446,
+    "ast_hash": "da5ece9236af793231179d64558cacdf",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10655,18 +10655,258 @@
     "semantic_hash": ""
   },
   "docs/options_buying_automation_master_plan.md": {
-    "mtime": 1781614748.4324641,
-    "ast_hash": "d031cffc2a0f261cd70afb3d2b81e102",
+    "mtime": 1781630350.304788,
+    "ast_hash": "27c43bc02d5374f6ee34136d51ff2ee5",
     "semantic_hash": ""
   },
   "docs/options_buying_framework.md": {
-    "mtime": 1781614485.6524084,
-    "ast_hash": "fc053e8903de07d8765e120b1e20c827",
+    "mtime": 1781630350.304788,
+    "ast_hash": "d9cc01efe5c214ff4debf63b9d00c0a0",
     "semantic_hash": ""
   },
   "docs/options_buying_implementation_plan.md": {
-    "mtime": 1781614620.162424,
-    "ast_hash": "f8a5d3f6e4eba89cae8c1a91abf3080c",
+    "mtime": 1781630350.304788,
+    "ast_hash": "d5f24ddd817bbb9e4882d46cfb2618ee",
+    "semantic_hash": ""
+  },
+  "app/jobs/options_buying/chain_radar_job.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "24bec2efd0ee716dfd8a2dfe52aaf538",
+    "semantic_hash": ""
+  },
+  "app/jobs/options_buying/daily_metrics_job.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "7b488ec88f9014043cfbe3e3d71c4b27",
+    "semantic_hash": ""
+  },
+  "app/jobs/options_buying/eod_carry_job.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "b50e4264c2b5e487d7ae6fc80823ee72",
+    "semantic_hash": ""
+  },
+  "app/jobs/options_buying/telemetry_sink_job.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "d29ec68a247b9b52ab73cf0d9bb40f3a",
+    "semantic_hash": ""
+  },
+  "app/models/options_buying_signal_event.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "06119a356c9309b65f290fc2496f7b4d",
+    "semantic_hash": ""
+  },
+  "app/services/entries/guards/bid_ask_spread_guard.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "d3d5abddb9c5b479b1fcfb9eaac0e9dc",
+    "semantic_hash": ""
+  },
+  "app/services/entries/guards/breakout_ready_guard.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "052bde0ea7c309b4541bb2ada7c6eaa7",
+    "semantic_hash": ""
+  },
+  "app/services/entries/guards/compression_setup_guard.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "cad2fee52a67fa44f7ecb0e34de1702e",
+    "semantic_hash": ""
+  },
+  "app/services/entries/guards/rsi_bias_guard.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "9e83b68f5842f356f7836765ba1a3718",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/atr_compression_checker.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "617e75fc38268b5ced85879bfa0eef0e",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/breakout_evaluator.rb": {
+    "mtime": 1781630532.9227653,
+    "ast_hash": "1b4f3c132d89288479982bc9ec63e974",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/breakout_watcher.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "5a995cf52ed1f365ead2520b879c7c93",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/carry_policy.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "bb23a930facf1020825af5efcc64dcea",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/chain_radar.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "67c0b1b6b7c752dd2de50df3c444da58",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/eod_carry_manager.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "2dc3420f9783a221d0e8dfeeadb372fb",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/minute_bar_aggregator.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "7e55a35b8f7487ce5ec2da80c797afe3",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/mode.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "bf3a2e3cb6bf93f005de4a33317725a4",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/rsi_divergence_scanner.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "1712c8fb50a2313dedea6aa3cafe97d5",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/state_store.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "2c1502909a5f748c9c43fd8efee9add7",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/stream_consumer.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "91308ed95b147b152ce137b4b017e434",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/stream_writer.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "96950a56e833bf69a623ef410f3f5f1b",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/tick_metrics.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "856c74a34ff285e02556f54b60c5f752",
+    "semantic_hash": ""
+  },
+  "db/migrate/20260616143000_create_options_buying_signal_events.rb": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "27be957931d6d3b215ef9970df28bd77",
+    "semantic_hash": ""
+  },
+  "spec/jobs/options_buying/chain_radar_job_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "129d7edb5ba4b7f8548f8117f70c8f0b",
+    "semantic_hash": ""
+  },
+  "spec/jobs/options_buying/daily_metrics_job_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "e825196116b551ed57e4c65b94ba8518",
+    "semantic_hash": ""
+  },
+  "spec/jobs/options_buying/eod_carry_job_spec.rb": {
+    "mtime": 1781630291.4915185,
+    "ast_hash": "2e2df75535e09186569299146fbd311f",
+    "semantic_hash": ""
+  },
+  "spec/jobs/options_buying/telemetry_sink_job_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "e915ee7759f0cd967fea108109b7dd0a",
+    "semantic_hash": ""
+  },
+  "spec/models/options_buying_signal_event_spec.rb": {
+    "mtime": 1781630298.3323429,
+    "ast_hash": "f9807d2dbaf5f5280d1d8fc24c3d1aca",
+    "semantic_hash": ""
+  },
+  "spec/services/entries/guards/bid_ask_spread_guard_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "0064bdc06c528f3b3bca0c2b5cb9fdeb",
+    "semantic_hash": ""
+  },
+  "spec/services/entries/guards/breakout_ready_guard_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "79be52bcd74c2b5f07df8647f5a19048",
+    "semantic_hash": ""
+  },
+  "spec/services/entries/guards/compression_setup_guard_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "f15d98bc8ad6b10f08a0c361604ad00a",
+    "semantic_hash": ""
+  },
+  "spec/services/entries/guards/rsi_bias_guard_spec.rb": {
+    "mtime": 1781630259.5635333,
+    "ast_hash": "92e13568b31ed94f0f009740ffaaf22a",
+    "semantic_hash": ""
+  },
+  "spec/services/index_config_loader_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "6f7c5ce60aa2eab3c1ca4143b781801e",
+    "semantic_hash": ""
+  },
+  "spec/services/live/time_regime_service_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "44a851df70c721292cedd35981fbf74a",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/atr_compression_checker_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "6da0307b66949648861e3f4c98ef79e7",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/breakout_evaluator_spec.rb": {
+    "mtime": 1781630597.1657262,
+    "ast_hash": "1442b049631c694793a796b01abec6d2",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/breakout_watcher_spec.rb": {
+    "mtime": 1781630582.4467196,
+    "ast_hash": "9ae351ce178ce74d378a8f4f114c0596",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/carry_policy_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "facde9c98e816660abef3124b137b967",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/chain_radar_spec.rb": {
+    "mtime": 1781631701.904492,
+    "ast_hash": "8ca2be2f2df6c4054a5ea1286fb54647",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/eod_carry_manager_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "5c56f6640ce02c708ec5933fd106f34d",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/minute_bar_aggregator_spec.rb": {
+    "mtime": 1781630620.6717064,
+    "ast_hash": "a3210244098b324b0e962f0b0d37ed1c",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/rsi_divergence_scanner_spec.rb": {
+    "mtime": 1781630369.962983,
+    "ast_hash": "2db7837f9d5e3600ccc57038f6abacf8",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/state_store_spec.rb": {
+    "mtime": 1781631669.3649108,
+    "ast_hash": "279183148468e1adf82f1ac6f2ea0b96",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/stream_consumer_spec.rb": {
+    "mtime": 1781630721.8981369,
+    "ast_hash": "dad469f1588579ca6c3665de5aa0353b",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/stream_writer_spec.rb": {
+    "mtime": 1781630601.6845877,
+    "ast_hash": "73c119ac3a4a3c5612c3925ed9c458f8",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/tick_metrics_spec.rb": {
+    "mtime": 1781630350.3146462,
+    "ast_hash": "113bbf511690613ad7e439e50369dff7",
+    "semantic_hash": ""
+  },
+  "docs/options_buying_ingestion_sidecar_future.md": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "de766a2705ecd1b117d6597e06d627a5",
+    "semantic_hash": ""
+  },
+  "docs/options_buying_stream_architecture.md": {
+    "mtime": 1781630350.304788,
+    "ast_hash": "2b5eff9452f1666af82574058bb4b8e2",
     "semantic_hash": ""
   }
 }

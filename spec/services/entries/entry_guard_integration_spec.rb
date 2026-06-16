@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe "Entries::EntryGuard Integration" do
-  let(:index_cfg) { { key: 'NIFTY', segment: 'NSE_FNO', cooldown_sec: 60 } }
+  let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', cooldown_sec: 60 } }
   let(:instrument) { create(:instrument, symbol_name: 'NIFTY', exchange: :nse, segment: :index) }
   let(:derivative) { create(:derivative, instrument: instrument, security_id: '12345', segment: :derivatives, expiry_flag: 'WEEKLY') }
   let(:pick) { { symbol: derivative.symbol_name, security_id: derivative.security_id, segment: 'NSE_FNO', derivative_id: derivative.id } }

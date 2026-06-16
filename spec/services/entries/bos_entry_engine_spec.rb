@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Entries::BosEntryEngine do
-  let(:index_cfg) { { key: 'NIFTY', segment: 'NSE_FNO' } }
+  let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I' } }
   let(:instrument) { instance_double(Instrument, symbol_name: 'NIFTY') }
   let(:direction) { :bullish }
   let(:picks) { [{ symbol: 'NIFTY24MAR22000CE', security_id: '12345' }] }

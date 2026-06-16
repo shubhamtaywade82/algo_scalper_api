@@ -31,6 +31,19 @@ RSpec.describe Entries::Guards::TimeRegimeGuard do
       end
     end
 
+    context 'when before 09:30 earliest entry' do
+      before do
+        allow(Live::TimeRegimeService.instance).to receive(:allow_new_trades?).and_return(false)
+      end
+
+      it 'blocks entry via allow_new_trades?' do
+        time = Time.zone.parse('2026-03-17 09:20:00 +05:30')
+        allow(Live::TimeRegimeService.instance).to receive(:allow_new_trades?).with(time: time).and_return(false)
+
+        expect(Live::TimeRegimeService.instance.allow_new_trades?(time: time)).to be(false)
+      end
+    end
+
     context 'when new trades are allowed and entries are permitted' do
       before do
         allow(Live::TimeRegimeService.instance).to receive_messages(allow_new_trades?: true, allow_entries?: true, current_regime: :trend_continuation)

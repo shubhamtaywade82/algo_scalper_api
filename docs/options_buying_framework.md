@@ -1,97 +1,82 @@
-# Options Buying Framework: Key Takeaways from Big Bull Series Ep-92
+# Options Buying Framework
 
-This document extracts and structures the core insights and actionable strategies related to **Options Buying** discussed by SEBI-registered analyst Tarun (Stock Pathshala) in the episode *"Options Trading Is NOT Gambling - If You Build a Framework First."*
+Single reference for **intraday scalper** (active default) and **positional Ep-92** (carry-gated reference).
 
----
-
-### TL;DR
-
-* **Do Not Naked Buy Options Overnight:** Naked options buying subjects you to brutal time decay (theta) and catastrophic unhedged gap-down risks.
-* **Convert to Spreads:** Mitigation lies in using vertical spreads (e.g., buying an ATM/In-The-Money Call and selling an Out-of-the-Money Call) to cap maximum losses and dramatically lower the break-even point.
-* **Dual Confirmation Framework:** Never trade based on a single chart or data point. Concurrently combine technical analysis structures (like RSI divergences) with live Options Chain data (Open Interest shifts) to identify true institutional support and resistance levels.
-* **Strict Capital Allocation Rules:** Treat options buying like a business, meaning you plan your maximum risk per trade to allow at least 30 to 50 failed trades sequentially before account wipeout. Stop averaging down losing options positions immediately.
+Config: `options_buying.mode` in [`config/algo.yml`](../config/algo.yml).
 
 ---
 
-### Phase 1: Mindset & Capital Preservation Rules
+## Mode Matrix
 
-Options buying features a lower probability of success than options selling ($1/3$ vs $2/3$). To make options buying highly mechanical and eliminate gambling biases, adhere to these strict infrastructure rules:
+| Rule | Intraday Scalper (default) | Positional (Ep-92, carry only) |
+| :--- | :--- | :--- |
+| Product | Naked `INTRADAY` CE/PE | Vertical spreads (documented; not v1 code) |
+| OI breakout timing | 1m close + volume spike + OI unwind | 15–20 min hold above high-OI strike |
+| ATR exhaustion (≥80% range) | **Removed** — blocks outlier trend days | **Removed** |
+| ATR compression (&lt;30% range) | Soft **arm** for breakout (Redis) | Hard **gate** when carry allowed |
+| R:R | ~1:3 premium (15% SL / 45% TP) | 1:1 capped spread math (reference) |
+| Overnight carry | Never | Only when `CarryPolicy.carry_allowed?` (DTE ≥ 1, not expiry day) |
 
-* **The Reality Check:** Do not expect to replace a full-time income or generate massive chunks of wealth immediately with tiny capital. Treat initial capital allocation strictly as a business expense.
-* **Risk Capital Baseline:** Begin total options trading capital exclusively with an amount equivalent to one month's salary. If lost, it won't impact critical personal savings, reducing psychological stress.
-* **Quantified Capital Allocation:** Determine your per-trade risk based on structural risk tolerance, not random target figures. Ensure your capital can survive a long streak of losses (variance).
-* *Example:* With ₹1,0,000 total capital, limiting risk to ₹2,000–₹3,000 per trade allows 33 to 50 wrong trades before account ruin.
-* **Zero Averaging Policy:** Never average down a losing options buying position. Options fluctuate rapidly and carry a definitive expiration timeline. Traders rely on averaging to artificially lower their entry costs, converting tiny controlled losses into complete account wipeouts. If a trade goes invalid, exit immediately.
-
----
-
-### Phase 2: Dual Confirmation Setup Strategy (Data + Charts)
-
-An expert options buying framework demands dual-factor validation. Relying purely on the chart or purely on the data causes false entries.
-
-#### 1. Chart Structure (Momentum Divergence)
-
-Monitor structural trends and price extremes, focusing closely on **RSI Divergences** to identify when the current price movement is running out of steam.
-
-* *Bearish Indication:* If the index hits a higher high but the RSI hits a lower high, momentum is slowing down. This provides an early technical warning of an impending reversal or breakdown.
-
-#### 2. Data Validation (Open Interest & Option Chain Analytics)
-
-Validate chart resistance and support zones by auditing the Option Chain's **Open Interest (OI)**. Treat large OI build-ups as lines in the sand drawn by options sellers (who risk heavy capital).
-
-* **Locating Structural Levels:** 
-  * **Resistance:** The Call strike showing the highest total Open Interest.
-  * **Support:** The Put strike showing the highest total Open Interest.
-* **Assessing the Near-The-Money Layer:** Check the second-highest OI concentrations right around the current Spot Price. If At-The-Money (ATM) Call and Put options display nearly identical high OI, a major structural tug-of-war is taking place, predicting a consolidation zone until one side breaks.
-* **Execution Trigger for Buyers:** Do not buy a Call option right at a resistance strike simply because you feel bullish. Wait for the Spot Price to cross and sustainably trade above that high-OI strike level for **15–20 minutes (roughly 3 to 4 consecutive 5-minute candles)**. This duration forces trapped option sellers into a panic, triggering short-covering momentum that drives an explosive spike in option premiums due to high delta values.
+> **Positional rules activate only when** `options_buying.mode: positional`, `positional.enabled: true`, and the series can be carried to the next session (not expiry day).
 
 ---
 
-### Phase 3: The Vertical Spread Execution Architecture
+## Intraday Scalper Principles (Active)
 
-Naked options buying exposes you to unlimited overnight gap risks and steady theta decay. To trade safely over a multi-day holding period, convert naked positions into **Vertical Spreads**.
+* **Convexity:** Buy naked options; manage risk with premium stops, not short legs that cap gamma.
+* **Fast squeeze capture:** 1-minute bar close above chain resistance + volume &gt; 2× average + negative OI delta (short-covering).
+* **Compression arms setups:** Session range &lt; 30% of daily ATR sets `compression_arm` in Redis; does not block trend days.
+* **Chain radar:** 09:16 + every 30m — liquid ATM-layer strikes (delta 0.45–0.55), max call-OI resistance.
+* **Greeks & liquidity:** Filter wide bid-ask spreads (&gt; 1.5% of premium) before entry.
+* **No averaging down:** Enforced by exit engine and guard pipeline.
 
-#### Mechanics of a Bull Call Spread
+### Services
 
-Instead of buying a single naked contract, combine a long option with a short option.
-
-1. **Buy an At-The-Money (ATM) Call** (e.g., Strike 205 at a premium of ₹8.95).
-2. **Simultaneously Sell a Higher Out-Of-The-Money (OTM) Call** (e.g., Strike 210 at a premium of ₹6.40).
-
-#### Mathematical Mechanics at Expiration
-
-Using a contract lot size of 1,650 shares:
-
-* **Net Premium Outflow (Max Risk):** $\text{Bought Premium} - \text{Sold Premium} = 8.95 - 6.40 = 2.55 \text{ points}$ (₹4,207.50 max risk instead of the naked risk of ₹14,767.50).
-* **Break-Even Adjustment:** The premium collected from the short call offsets the cost of the long call, lowering the price target needed to turn a profit.
-
-```
-   Market Outlook: Bullish (Trend Reversal Expected)
-   -------------------------------------------------
-   Step 1: Buy ATM Call (Strike 205)  --> Pay 8.95 Premium
-   Step 2: Sell OTM Call (Strike 210) --> Collect 6.40 Premium
-   -------------------------------------------------
-   Result: Capped Max Loss (2.55 Points) & Capped Max Profit (2.45 Points)
-```
-
-#### Precise Value Outcomes Based on Spot Price at Expiration:
-
-* **Scenario A: Market Crashes to Strike 200 or below**
-  * Both Call options finish out of the money, expiring with an intrinsic value of ₹0.
-  * Long Call Loss = -₹8.95; Short Call Profit = +₹6.40.
-  * **Net Position Outcome:** Fixed maximum loss of **2.55 points (₹4,207.50)**, protecting your account regardless of how far the index drops.
-* **Scenario B: Market Rallies to Strike 220**
-  * Intrinsic Value of 205 Long Call = $220 - 205 = 15 \text{ points}$. Gross profit = $15 - 8.95 = +6.05 \text{ points}$.
-  * Intrinsic Value of 210 Short Call = $220 - 210 = 10 \text{ points}$. Gross loss = $6.40 - 10 = -3.60 \text{ points}$.
-  * **Net Position Outcome:** Fixed maximum profit of **2.45 points (₹4,042.50)**.
+| Component | Path |
+| :--- | :--- |
+| Chain radar | `app/services/options_buying/chain_radar.rb` |
+| Breakout watcher | `app/services/options_buying/breakout_watcher.rb` |
+| Breakout evaluator | `app/services/options_buying/breakout_evaluator.rb` |
+| Entry guards | `CompressionSetupGuard`, `BreakoutReadyGuard`, `BidAskSpreadGuard`, `RsiBiasGuard` |
 
 ---
 
-### Phase 4: Risk Management & Trade Operations
+## Positional Reference (Ep-92 — Carry-Gated)
 
-* **Favorable Risk-Reward Ratio:** Only accept setups offering at least a $1:2$ structural risk-to-reward ratio based on the underlying index levels before executing. If index resistance sits 100 points above your stop-loss, ensure clear structural space allows for a 200-point move downward or upward.
-* **Using ATR (Average True Range):** Reference the ATR indicator to map out standard daily market volatility. If an index features a daily ATR of 400 points, and has already moved 350 points by mid-day, avoid buying breakout options. The statistical probability of further extension is low, making an entry highly unfavorable.
-* **Managing Positions on Intraday Expiration Days:** 
-  * Avoid executing fresh options buying positions past **2:30 PM** on expiration day. Late-afternoon trading sessions introduce irregular price swings, institutional manipulation, and extreme gamma risks.
-  * Liquidate or lock in profits on spread configurations early once the trade captures **70% to 80% of its maximum profit potential**. Do not risk your capital sitting through late-day consolidations just to squeeze out the final 20% of premium decay.
-* **Real-Time Data Monitoring:** Track open interest continuously while in a position. If your target asset climbs and you notice substantial negative OI changes (unwinding positions) at your overhead resistance strikes, it validates that sellers are closing out their positions under pressure, signaling a safe environment to hold your long position.
+Source: Big Bull Series Ep-92 (Stock Pathshala). **Not the default execution path** for `algo_scalper_api`.
+
+### Capital & Mindset
+
+* Risk 2–3% per trade; survive 30–50 consecutive losses.
+* Never average down losing option positions.
+
+### Dual Confirmation
+
+* **Charts:** RSI divergence (e.g. higher high in price, lower high in RSI).
+* **Chain:** Highest call OI = resistance; highest put OI = support.
+* **Trigger:** Spot holds above resistance for **15–20 minutes** before positional entry.
+
+### Vertical Spreads (Multi-Day Holds)
+
+Bull call spread: buy ATM call, sell OTM call. Caps loss and profit (~1:1 on spread width). Doubles friction for intraday — **not used** in scalper mode.
+
+### When Positional Rules Apply in Code
+
+* `CompressionSetupGuard` blocks entries until compressed **only** when positional + carry allowed.
+* Spread orchestrator and 15–20 min OI timer: documented, deferred to v2.
+
+---
+
+## Shared Rules
+
+* Kill zones: opening drive 09:15–10:30, closing repricing 14:00–15:15 (see workspace trading rules).
+* Strike preference: ATM or slight ITM (delta ≈ 0.45–0.55).
+* Expiry day: no fresh entries after 13:00 when `options_buying.expiry_day.lockout_after` is set.
+* Earliest entry: 09:30 (`Live::TimeRegimeService`).
+
+---
+
+## Related Docs
+
+* [`options_buying_implementation_plan.md`](options_buying_implementation_plan.md) — gap analysis and file map
+* [`options_buying_automation_master_plan.md`](options_buying_automation_master_plan.md) — phases and architecture

@@ -31,6 +31,34 @@ development:
     priority: 1
     description: "Daily portfolio PnL reset (realized, peak, floor, level) before market open"
 
+  options_buying_daily_metrics:
+    class: OptionsBuying::DailyMetricsJob
+    schedule: at 9:08am every day
+    queue_name: background
+    priority: 2
+    description: "Seed daily ATR metrics for options buying compression radar"
+
+  options_buying_chain_radar_open:
+    class: OptionsBuying::ChainRadarJob
+    schedule: at 9:16am every day
+    queue_name: background
+    priority: 3
+    description: "Pre-open option chain radar — resistance, liquid strikes, Greeks"
+
+  options_buying_chain_radar_refresh:
+    class: OptionsBuying::ChainRadarJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 8
+    description: "Refresh option chain radar during session"
+
+  options_buying_eod_carry:
+    class: OptionsBuying::EodCarryJob
+    schedule: at 3:10pm every day
+    queue_name: background
+    priority: 2
+    description: "Tag high-ROI positional carries before EOD force-close (positional mode only)"
+
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob
     schedule: at 9:15am every day
@@ -109,6 +137,34 @@ production:
     queue_name: background
     priority: 1
     description: "Daily portfolio PnL reset (realized, peak, floor, level) before market open"
+
+  options_buying_daily_metrics:
+    class: OptionsBuying::DailyMetricsJob
+    schedule: at 9:08am every weekday
+    queue_name: background
+    priority: 2
+    description: "Seed daily ATR metrics for options buying compression radar"
+
+  options_buying_chain_radar_open:
+    class: OptionsBuying::ChainRadarJob
+    schedule: at 9:16am every weekday
+    queue_name: background
+    priority: 3
+    description: "Pre-open option chain radar — resistance, liquid strikes, Greeks"
+
+  options_buying_chain_radar_refresh:
+    class: OptionsBuying::ChainRadarJob
+    schedule: every 30 minutes during market hours
+    queue_name: background
+    priority: 8
+    description: "Refresh option chain radar during session"
+
+  options_buying_eod_carry:
+    class: OptionsBuying::EodCarryJob
+    schedule: at 3:10pm every weekday
+    queue_name: background
+    priority: 2
+    description: "Tag high-ROI positional carries before EOD force-close (positional mode only)"
 
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob
