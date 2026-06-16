@@ -7,8 +7,25 @@
 ```bash
 uv tool install "graphifyy[ollama,pdf,leiden,mcp]"
 graphify cursor install --project
-bin/install-graphify-hooks   # pre-commit AST refresh + merge driver + post-checkout
+bin/install-graphify-cursor   # skill + MCP plugin + cursor rule
+bin/install-graphify-hooks    # pre-commit AST refresh + merge driver + post-checkout
 ```
+
+## Cursor Skill and MCP Plugin
+
+```bash
+bin/install-graphify-cursor
+```
+
+Installs:
+
+| Artifact | Path | Purpose |
+|----------|------|---------|
+| Always-on rule | `.cursor/rules/graphify.mdc` | Query graph before grep/read |
+| Agent skill | `.cursor/skills/graphify/SKILL.md` | Full `/graphify` workflow + references |
+| MCP server | `.cursor/mcp.json` | `query_graph`, `shortest_path`, `get_node`, PR tools |
+
+Reload Cursor after install so MCP connects. Requires `graphify-mcp` on PATH (`uv tool install graphifyy[mcp]`).
 
 ## Git Hooks (Pre-Commit)
 

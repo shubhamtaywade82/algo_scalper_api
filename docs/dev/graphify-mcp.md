@@ -28,6 +28,21 @@ python -m graphify.serve graphify-out/graph.json \
 
 ## Cursor MCP Config
 
+Project-local config is written by `bin/install-graphify-cursor` to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "graphify": {
+      "command": "graphify-mcp",
+      "args": ["graphify-out/graph.json"]
+    }
+  }
+}
+```
+
+For a shared HTTP server (team), use instead:
+
 ```json
 {
   "mcpServers": {

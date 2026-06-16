@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+if ! command -v graphify >/dev/null 2>&1; then
+  echo "graphify CLI not found. Install with: uv tool install \"graphifyy[ollama,mcp]\""
+  exit 1
+fi
+
+graphify cursor install --project
+
+PYTHON=""
+if command -v graphify-mcp >/dev/null 2>&1; then
+  PYTHON="$(head -1 "$(command -v graphify-mcp)" | sed 's/^#! *//')"
+elif command -v graphify >/dev/null 2>&1; then
+  SHEBANG="$(head -1 "$(command -v graphify)" | sed 's/^#! *//')"
+  case "$SHEBANG" in
+    */env\ *) PYTHON="${SHEBANG#*/env }" ;;
+    *) PYTHON="$SHEBANG" ;;
+  esac
+fi
+
+if [ -z "$PYTHON" ] || ! "$PYTHON" -c "import graphify" 2>/dev/null; then
+  echo "Could not locate graphify Python package."
+  exit 1
+fi
+
+PKG="$("$PYTHON" -c "import pathlib, graphify; print(pathlib.Path(graphify.__file__).parent)")"
+SKILL_DST="$ROOT/.cursor/skills/graphify"
+mkdir -p "$SKILL_DST"
+
+cp "$PKG/skill.md" "$SKILL_DST/SKILL.md"
+rm -rf "$SKILL_DST/references"
+cp -r "$PKG/skills/claude/references" "$SKILL_DST/references"
+echo "Installed .cursor/skills/graphify/SKILL.md (+ references/)"
+
+MCP_JSON="$ROOT/.cursor/mcp.json"
+GRAPH_PATH="graphify-out/graph.json"
+
+if [ -f "$MCP_JSON" ]; then
+  if grep -q '"graphify"' "$MCP_JSON" 2>/dev/null; then
+    echo "graphify MCP entry already present in .cursor/mcp.json"
+  else
+    echo "Warning: .cursor/mcp.json exists — add graphify server manually (see docs/dev/graphify-mcp.md)"
+  fi
+else
+  cat >"$MCP_JSON" <<EOF
+{
+  "mcpServers": {
+    "graphify": {
+      "command": "graphify-mcp",
+      "args": ["$GRAPH_PATH"]
+    }
+  }
+}
+EOF
+  echo "Wrote .cursor/mcp.json (stdio MCP → $GRAPH_PATH)"
+fi
+
+echo ""
+echo "Cursor graphify setup complete:"
+echo "  - Rule:  .cursor/rules/graphify.mdc (always apply)"
+echo "  - Skill: .cursor/skills/graphify/SKILL.md"
+echo "  - MCP:   graphify-mcp graphify-out/graph.json"
+echo ""
+echo "Reload Cursor window to pick up MCP. Use /graphify or graphify query in chat."
