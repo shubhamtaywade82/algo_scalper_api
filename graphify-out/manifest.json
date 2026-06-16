@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "app/controllers/api/dashboard_controller.rb": {
-    "mtime": 1780930851.6005378,
-    "ast_hash": "a0ad8c1c512c4c9f54f96064a92384e1",
+    "mtime": 1781599405.941902,
+    "ast_hash": "75e364d78acb96c7f1fed98433b09d26",
     "semantic_hash": ""
   },
   "app/controllers/api/dhan_access_token_controller.rb": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "app/services/live/pnl_updater_service.rb": {
-    "mtime": 1781597380.1500316,
-    "ast_hash": "6cf6c862ffe57f1dd0f2477b7d28a65e",
+    "mtime": 1781599406.553902,
+    "ast_hash": "230e46cad7a82e6553bfbf5d6212d8f7",
     "semantic_hash": ""
   },
   "app/services/live/position_index.rb": {
@@ -1690,8 +1690,8 @@
     "semantic_hash": ""
   },
   "app/services/positions/paper_stats_query.rb": {
-    "mtime": 1781599009.8091946,
-    "ast_hash": "87141f88980e2d0a8fb5e35ce6e5a8b5",
+    "mtime": 1781599405.527902,
+    "ast_hash": "ccb1cb54590a3185c5258c48d8156af1",
     "semantic_hash": ""
   },
   "app/services/positions/serializer.rb": {
@@ -4660,8 +4660,8 @@
     "semantic_hash": ""
   },
   "spec/services/positions/paper_stats_query_spec.rb": {
-    "mtime": 1781599099.475516,
-    "ast_hash": "77143c47bba78ed0de4b6d5a5f0c98a6",
+    "mtime": 1781599612.972524,
+    "ast_hash": "07b900d5f0d7e24780b6e9af5150ae97",
     "semantic_hash": ""
   },
   "spec/services/positions/states/position_state_machine_spec.rb": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781599132.0687122,
-    "ast_hash": "751bcb750b7577c2a6f93ada37f8e91c",
+    "mtime": 1781599597.1865237,
+    "ast_hash": "c2e9d3f9cd8c52d1f1451dccc1cfc66b",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {

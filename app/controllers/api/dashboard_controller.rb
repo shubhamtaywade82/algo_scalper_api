@@ -11,7 +11,7 @@ module Api
       render json: {
         mode: AlgoConfig.mode,
         balance: safe_wallet_snapshot,
-        today: PositionTracker.paper_trading_stats_with_pct,
+        today: PositionTracker.trading_stats_with_pct,
         indices: formatted_indices,
         subscribed_indices: subscribed_indices_payload,
         public_ipv4: ip_info[:public_ipv4],

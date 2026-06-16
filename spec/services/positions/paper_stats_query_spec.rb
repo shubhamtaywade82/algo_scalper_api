@@ -21,13 +21,25 @@ RSpec.describe Positions::PaperStatsQuery do
     end
 
     it 'returns aggregated paper stats hash' do
-      result = described_class.call
+      result = described_class.call(paper: true)
 
       expect(result[:total_trades]).to eq(2)
       expect(result[:winners]).to eq(1)
       expect(result[:losers]).to eq(1)
-      expect(result[:paper_mode]).to be(true)
+      expect(result[:stats_scope]).to eq('paper')
       expect(Portfolio::PaperPeakTracker).to have_received(:observe!).with(anything, paper: true)
+    end
+
+    it 'falls back to all exits when auto scope is empty but day has live trades' do
+      allow(AlgoConfig).to receive(:paper_trading_enabled?).and_return(true)
+      create(:position_tracker, :exited, paper: false, segment: 'NSE_FNO',
+                                         exited_at: Time.current, last_pnl_rupees: BigDecimal('-500'))
+
+      result = described_class.call
+
+      expect(result[:total_trades]).to eq(1)
+      expect(result[:realized_pnl_rupees]).to eq(-500.0)
+      expect(result[:stats_scope]).to eq('all')
     end
 
     context 'when effective mode is live' do
@@ -41,11 +53,11 @@ RSpec.describe Positions::PaperStatsQuery do
         create(:position_tracker, :paper, :exited, segment: 'NSE_FNO',
                                                   exited_at: Time.current, last_pnl_rupees: BigDecimal('999'))
 
-        result = described_class.call
+        result = described_class.call(paper: false)
 
         expect(result[:total_trades]).to eq(1)
         expect(result[:realized_pnl_rupees]).to eq(-500.0)
-        expect(result[:paper_mode]).to be(false)
+        expect(result[:stats_scope]).to eq('live')
       end
     end
 

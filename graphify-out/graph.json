@@ -24418,11 +24418,27 @@
       "_origin": "ast"
     },
     {
-      "id": "positions_paper_stats_query_paperstatsquery_paper_mode",
-      "label": ".paper_mode()",
+      "id": "positions_paper_stats_query_paperstatsquery_build_stats",
+      "label": ".build_stats()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L41",
+      "source_location": "L24",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_paper_stats_query_paperstatsquery_reset_memoized_scopes",
+      "label": ".reset_memoized_scopes!()",
+      "file_type": "code",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L54",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_paper_stats_query_paperstatsquery_resolved_paper_filter",
+      "label": ".resolved_paper_filter()",
+      "file_type": "code",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L63",
       "_origin": "ast"
     },
     {
@@ -24430,7 +24446,7 @@
       "label": ".exited_scope()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L45",
+      "source_location": "L70",
       "_origin": "ast"
     },
     {
@@ -24438,7 +24454,7 @@
       "label": ".active_positions()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L49",
+      "source_location": "L78",
       "_origin": "ast"
     },
     {
@@ -24446,7 +24462,7 @@
       "label": ".realized_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L53",
+      "source_location": "L86",
       "_origin": "ast"
     },
     {
@@ -24454,7 +24470,7 @@
       "label": ".unrealized_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L57",
+      "source_location": "L90",
       "_origin": "ast"
     },
     {
@@ -24462,7 +24478,7 @@
       "label": ".total_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L61",
+      "source_location": "L94",
       "_origin": "ast"
     },
     {
@@ -24470,7 +24486,7 @@
       "label": ".winners_count()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L65",
+      "source_location": "L98",
       "_origin": "ast"
     },
     {
@@ -24478,7 +24494,7 @@
       "label": ".losers_count()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L69",
+      "source_location": "L102",
       "_origin": "ast"
     },
     {
@@ -24486,7 +24502,7 @@
       "label": ".win_rate()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L73",
+      "source_location": "L106",
       "_origin": "ast"
     },
     {
@@ -24494,7 +24510,7 @@
       "label": ".avg_realized_pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L80",
+      "source_location": "L113",
       "_origin": "ast"
     },
     {
@@ -24502,7 +24518,7 @@
       "label": ".avg_unrealized_pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L87",
+      "source_location": "L120",
       "_origin": "ast"
     },
     {
@@ -24510,7 +24526,7 @@
       "label": ".pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L94",
+      "source_location": "L127",
       "_origin": "ast"
     },
     {
@@ -24518,7 +24534,7 @@
       "label": ".date_range()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L101",
+      "source_location": "L134",
       "_origin": "ast"
     },
     {
@@ -43402,7 +43418,7 @@
       "label": "create_exited_tracker()",
       "file_type": "code",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L52",
+      "source_location": "L64",
       "_origin": "ast"
     },
     {
@@ -43410,7 +43426,7 @@
       "label": "create_active_tracker()",
       "file_type": "code",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L56",
+      "source_location": "L68",
       "_origin": "ast"
     },
     {
@@ -146300,11 +146316,29 @@
     },
     {
       "source": "positions_paper_stats_query_paperstatsquery",
-      "target": "positions_paper_stats_query_paperstatsquery_paper_mode",
+      "target": "positions_paper_stats_query_paperstatsquery_build_stats",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L41",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery",
+      "target": "positions_paper_stats_query_paperstatsquery_reset_memoized_scopes",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L54",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery",
+      "target": "positions_paper_stats_query_paperstatsquery_resolved_paper_filter",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L63",
       "weight": 1.0
     },
     {
@@ -146313,7 +146347,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L45",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -146322,7 +146356,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L49",
+      "source_location": "L78",
       "weight": 1.0
     },
     {
@@ -146331,7 +146365,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L53",
+      "source_location": "L86",
       "weight": 1.0
     },
     {
@@ -146340,7 +146374,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L57",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
@@ -146349,7 +146383,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L61",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -146358,7 +146392,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L65",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
@@ -146367,7 +146401,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L69",
+      "source_location": "L102",
       "weight": 1.0
     },
     {
@@ -146376,7 +146410,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L73",
+      "source_location": "L106",
       "weight": 1.0
     },
     {
@@ -146385,7 +146419,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L80",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -146394,7 +146428,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L87",
+      "source_location": "L120",
       "weight": 1.0
     },
     {
@@ -146403,7 +146437,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L94",
+      "source_location": "L127",
       "weight": 1.0
     },
     {
@@ -146412,17 +146446,27 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L101",
+      "source_location": "L134",
       "weight": 1.0
     },
     {
-      "source": "positions_paper_stats_query_paperstatsquery_call",
+      "source": "positions_paper_stats_query_paperstatsquery_build_stats",
+      "target": "positions_paper_stats_query_paperstatsquery_reset_memoized_scopes",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery_build_stats",
       "target": "positions_paper_stats_query_paperstatsquery_pnl_pct",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L20",
+      "source_location": "L36",
       "weight": 1.0
     },
     {
@@ -173550,7 +173594,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L52",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -173559,7 +173603,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L56",
+      "source_location": "L68",
       "weight": 1.0
     },
     {
@@ -244317,7 +244361,7 @@
     },
     {
       "source": "api_dashboard_controller_dashboardcontroller_show",
-      "target": "position_tracker_queryable_paper_trading_stats_with_pct",
+      "target": "position_tracker_queryable_trading_stats_with_pct",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -257385,7 +257429,7 @@
     },
     {
       "source": "live_pnl_updater_service_pnlupdaterservice_build_dashboard_stats",
-      "target": "position_tracker_queryable_paper_trading_stats_with_pct",
+      "target": "position_tracker_queryable_trading_stats_with_pct",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -269463,35 +269507,46 @@
     },
     {
       "source": "positions_paper_stats_query_paperstatsquery_call",
+      "target": "javascripts_highcharts_src_4_0_1_merge",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery_build_stats",
       "target": "portfolio_paper_peak_tracker_observe",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L12",
+      "source_location": "L28",
       "weight": 1.0
     },
     {
-      "source": "positions_paper_stats_query_paperstatsquery_call",
+      "source": "positions_paper_stats_query_paperstatsquery_build_stats",
       "target": "portfolio_paper_peak_tracker_current_for",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L13",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
-      "source": "positions_paper_stats_query_paperstatsquery_call",
+      "source": "positions_paper_stats_query_paperstatsquery_build_stats",
       "target": "portfolio_drawdown_guard_triggered",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L30",
+      "source_location": "L46",
       "weight": 1.0
     },
     {
@@ -269502,7 +269557,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L58",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -269513,7 +269568,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L90",
+      "source_location": "L123",
       "weight": 1.0
     },
     {
@@ -269524,7 +269579,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L95",
+      "source_location": "L128",
       "weight": 1.0
     },
     {
@@ -281547,7 +281602,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L53",
+      "source_location": "L65",
       "weight": 1.0
     },
     {
@@ -282351,6 +282406,71 @@
       "confidence_score": 0.8,
       "source_file": "tmp/rubycritic/assets/vendor/javascripts/prettify.js",
       "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery_call",
+      "target": "positions_paper_stats_query_paperstatsquery_pnl_pct",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "api_dashboard_controller_dashboardcontroller_show",
+      "target": "position_tracker_queryable_paper_trading_stats_with_pct",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/dashboard_controller.rb",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "live_pnl_updater_service_pnlupdaterservice_build_dashboard_stats",
+      "target": "position_tracker_queryable_paper_trading_stats_with_pct",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/pnl_updater_service.rb",
+      "source_location": "L462",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery_call",
+      "target": "portfolio_paper_peak_tracker_observe",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery_call",
+      "target": "portfolio_paper_peak_tracker_current_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery_call",
+      "target": "portfolio_drawdown_guard_triggered",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L30",
       "weight": 1.0
     }
   ]

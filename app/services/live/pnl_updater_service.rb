@@ -459,7 +459,7 @@ module Live
         type: "stats",
         mode: AlgoConfig.mode,
         balance: safe_wallet_snapshot,
-        today: PositionTracker.paper_trading_stats_with_pct,
+        today: PositionTracker.trading_stats_with_pct,
         indices: {
           nifty: Live::TickCache.ltp('IDX_I', '13'),
           banknifty: Live::TickCache.ltp('IDX_I', '25'),

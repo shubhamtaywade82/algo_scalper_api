@@ -2,15 +2,31 @@
 
 module Positions
   class PaperStatsQuery < ApplicationService
-    def initialize(date: nil, paper: nil)
+    def initialize(date: nil, paper: :auto)
       @date = date
-      @paper = paper.nil? ? AlgoConfig.paper_trading_enabled? : paper
+      @paper = paper
     end
 
     def call
+      stats = build_stats
+      return stats if stats[:total_trades].positive? || paper != :auto
+
+      fallback = self.class.new(date: date, paper: :all).send(:build_stats)
+      return stats unless fallback[:total_trades].positive?
+
+      fallback.merge(stats_scope: 'all')
+    end
+
+    private
+
+    attr_reader :date, :paper
+
+    def build_stats
+      reset_memoized_scopes!
       total = total_pnl_rupees
-      Portfolio::PaperPeakTracker.observe!(total, paper: paper_mode)
-      stored_peak = Portfolio::PaperPeakTracker.current_for(paper: paper_mode)
+      peak_mode = resolved_paper_filter.nil? ? AlgoConfig.paper_trading_enabled? : resolved_paper_filter
+      Portfolio::PaperPeakTracker.observe!(total, paper: peak_mode)
+      stored_peak = Portfolio::PaperPeakTracker.current_for(paper: peak_mode)
       peak = [stored_peak, total].max
 
       {
@@ -30,24 +46,41 @@ module Positions
         is_blocked: Portfolio::DrawdownGuard.triggered?,
         blocked_reason: Portfolio::DrawdownGuard.triggered? ? 'Drawdown Guard Active' : nil,
         peak_pnl: peak.round(2),
-        paper_mode: paper_mode
+        paper_mode: resolved_paper_filter.nil? ? nil : resolved_paper_filter,
+        stats_scope: resolved_paper_filter.nil? ? 'all' : (resolved_paper_filter ? 'paper' : 'live')
       }
     end
 
-    private
+    def reset_memoized_scopes!
+      @exited_scope = nil
+      @active_positions = nil
+      @realized_pnl_rupees = nil
+      @unrealized_pnl_rupees = nil
+      @winners_count = nil
+      @losers_count = nil
+    end
 
-    attr_reader :date, :paper
+    def resolved_paper_filter
+      return nil if paper == :all
+      return paper if paper.in?([true, false])
 
-    def paper_mode
-      paper
+      AlgoConfig.paper_trading_enabled?
     end
 
     def exited_scope
-      @exited_scope ||= PositionTracker.where(paper: paper_mode, status: :exited).where(exited_at: date_range)
+      @exited_scope ||= begin
+        scope = PositionTracker.where(status: :exited).where(exited_at: date_range)
+        filter = resolved_paper_filter
+        filter.nil? ? scope : scope.where(paper: filter)
+      end
     end
 
     def active_positions
-      @active_positions ||= PositionTracker.where(paper: paper_mode, status: :active).to_a
+      @active_positions ||= begin
+        scope = PositionTracker.where(status: :active)
+        filter = resolved_paper_filter
+        filter.nil? ? scope.to_a : scope.where(paper: filter).to_a
+      end
     end
 
     def realized_pnl_rupees
