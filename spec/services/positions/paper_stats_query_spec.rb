@@ -26,7 +26,27 @@ RSpec.describe Positions::PaperStatsQuery do
       expect(result[:total_trades]).to eq(2)
       expect(result[:winners]).to eq(1)
       expect(result[:losers]).to eq(1)
-      expect(Portfolio::PaperPeakTracker).to have_received(:observe!)
+      expect(result[:paper_mode]).to be(true)
+      expect(Portfolio::PaperPeakTracker).to have_received(:observe!).with(anything, paper: true)
+    end
+
+    context 'when effective mode is live' do
+      before do
+        allow(AlgoConfig).to receive(:paper_trading_enabled?).and_return(false)
+      end
+
+      it 'aggregates live exited positions only' do
+        create(:position_tracker, :exited, paper: false, segment: 'NSE_FNO',
+                                           exited_at: Time.current, last_pnl_rupees: BigDecimal('-500'))
+        create(:position_tracker, :paper, :exited, segment: 'NSE_FNO',
+                                                  exited_at: Time.current, last_pnl_rupees: BigDecimal('999'))
+
+        result = described_class.call
+
+        expect(result[:total_trades]).to eq(1)
+        expect(result[:realized_pnl_rupees]).to eq(-500.0)
+        expect(result[:paper_mode]).to be(false)
+      end
     end
 
     def create_exited_tracker(pnl)

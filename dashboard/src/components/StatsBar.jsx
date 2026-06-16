@@ -35,6 +35,7 @@ async function resetDrawdown() {
 export default function StatsBar(props) {
   const stats = () => props.stats || {}
   const balance = () => props.balance || {}
+  const tradingMode = () => (props.mode === 'paper' || stats().paper_mode === true ? 'PAPER' : 'LIVE')
 
   const totalFlash = useFlash(() => stats().total_pnl_rupees)
   const realizedFlash = useFlash(() => stats().realized_pnl_rupees)
@@ -53,16 +54,25 @@ export default function StatsBar(props) {
           </div>
           <div class="flex items-center justify-between gap-2 mt-4">
             <Show when={stats().is_blocked} fallback={
-              <Show when={!props.marketStatus || props.marketStatus?.market_open} fallback={
-                <span class="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
-                  <div class="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
-                  {props.marketStatus?.holiday_name ? 'HOLIDAY' : (props.marketStatus?.is_trading_day === false ? 'WEEKEND' : 'MARKET CLOSED')}
+              <div class="flex items-center gap-2">
+                <Show when={!props.marketStatus || props.marketStatus?.market_open} fallback={
+                  <span class="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                    <div class="w-1.5 h-1.5 rounded-full bg-amber-500"></div>
+                    {props.marketStatus?.holiday_name ? 'HOLIDAY' : (props.marketStatus?.is_trading_day === false ? 'WEEKEND' : 'MARKET CLOSED')}
+                  </span>
+                }>
+                  <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> MARKET OPEN
+                  </span>
+                </Show>
+                <span class={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${
+                  tradingMode() === 'PAPER'
+                    ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10'
+                    : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                }`}>
+                  {tradingMode()}
                 </span>
-              }>
-                <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1">
-                  <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> LIVE ACTIVE
-                </span>
-              </Show>
+              </div>
             }>
               <div class="flex items-center gap-2">
                 <span class="text-[9px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">

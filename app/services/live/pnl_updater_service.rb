@@ -175,6 +175,15 @@ module Live
           next
         end
 
+        if tracker.exited?
+          begin
+            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
+          rescue StandardError
+            nil
+          end
+          next
+        end
+
         # Resolve segment reliably (match PositionTracker.subscribe logic)
         seg = (tracker.segment.presence ||
                tracker.watchable&.exchange_segment ||
@@ -412,7 +421,11 @@ module Live
         hwm_pnl: hwm.to_f.round(2),
         ltp_stale: false
       })
-      Rails.cache.delete("pnl_stale:#{tracker_id}") rescue nil
+      begin
+        Rails.cache.delete("pnl_stale:#{tracker_id}")
+      rescue StandardError
+        nil
+      end
     rescue StandardError => e
       @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
     end

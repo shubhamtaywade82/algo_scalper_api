@@ -210,8 +210,8 @@
     "semantic_hash": ""
   },
   "app/lib/algo_config.rb": {
-    "mtime": 1781596417.2676215,
-    "ast_hash": "2aa029f0ece3351320d159c11f004ebb",
+    "mtime": 1781599079.7084062,
+    "ast_hash": "1cac28df6e611787e91143974b797f62",
     "semantic_hash": ""
   },
   "app/lib/dhan/auth/strategies/authority.rb": {
@@ -325,13 +325,13 @@
     "semantic_hash": ""
   },
   "app/models/concerns/position_tracker/pnl_calculatable.rb": {
-    "mtime": 1775801790.9782884,
-    "ast_hash": "060daebce70d6b99f83104486d4aabee",
+    "mtime": 1781597380.7890315,
+    "ast_hash": "82aa8a0abdf60957b3839c47f105ad76",
     "semantic_hash": ""
   },
   "app/models/concerns/position_tracker/queryable.rb": {
-    "mtime": 1775801790.9782884,
-    "ast_hash": "29238a26fa2216bf8a33a192dedc0505",
+    "mtime": 1781599023.1046412,
+    "ast_hash": "763a1833358485217370bb99d657d228",
     "semantic_hash": ""
   },
   "app/models/concerns/position_tracker_factory.rb": {
@@ -1045,8 +1045,8 @@
     "semantic_hash": ""
   },
   "app/services/live/exit_engine.rb": {
-    "mtime": 1776068224.375325,
-    "ast_hash": "8f282f2f3ab3ce67be546208e398447b",
+    "mtime": 1781597378.8810315,
+    "ast_hash": "44cec89473d6c1292d9494580e6f89a3",
     "semantic_hash": ""
   },
   "app/services/live/feed_health_service.rb": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "app/services/live/pnl_updater_service.rb": {
-    "mtime": 1775801791.0082884,
-    "ast_hash": "86a593002bc2e887533870eb33ed3fec",
+    "mtime": 1781597380.1500316,
+    "ast_hash": "6cf6c862ffe57f1dd0f2477b7d28a65e",
     "semantic_hash": ""
   },
   "app/services/live/position_index.rb": {
@@ -1100,8 +1100,8 @@
     "semantic_hash": ""
   },
   "app/services/live/reconciliation_service.rb": {
-    "mtime": 1775801791.0082884,
-    "ast_hash": "a0f1c8cefe057365a5455627e7c6c393",
+    "mtime": 1781597817.6146002,
+    "ast_hash": "ac54ba97d43767c84f04f957efb1c471",
     "semantic_hash": ""
   },
   "app/services/live/redis_pnl_cache.rb": {
@@ -1615,8 +1615,8 @@
     "semantic_hash": ""
   },
   "app/services/portfolio/paper_peak_tracker.rb": {
-    "mtime": 1775801791.0182884,
-    "ast_hash": "d3f572cca5a2c53bb5e2bcf14ac35929",
+    "mtime": 1781599020.692641,
+    "ast_hash": "bf4df0a6aa71f2a8006f0c03997ca65c",
     "semantic_hash": ""
   },
   "app/services/portfolio/pnl_tracker.rb": {
@@ -1650,8 +1650,8 @@
     "semantic_hash": ""
   },
   "app/services/positions/exit_flow.rb": {
-    "mtime": 1775801791.0282884,
-    "ast_hash": "b74d6a295c4d0054f3aa0d72d4e3223f",
+    "mtime": 1781597210.269791,
+    "ast_hash": "872e96325a4c687b8a9117bbfed21867",
     "semantic_hash": ""
   },
   "app/services/positions/feed_subscription.rb": {
@@ -1690,8 +1690,8 @@
     "semantic_hash": ""
   },
   "app/services/positions/paper_stats_query.rb": {
-    "mtime": 1775801791.0282884,
-    "ast_hash": "4cf314739aeea610966647f9f5845b02",
+    "mtime": 1781599009.8091946,
+    "ast_hash": "87141f88980e2d0a8fb5e35ce6e5a8b5",
     "semantic_hash": ""
   },
   "app/services/positions/serializer.rb": {
@@ -2600,8 +2600,8 @@
     "semantic_hash": ""
   },
   "dashboard/src/components/ClosedTrades.jsx": {
-    "mtime": 1776057595.3877654,
-    "ast_hash": "ff44a776a6f7ac49533c9a9783051514",
+    "mtime": 1781597237.647389,
+    "ast_hash": "c6060a545874210d8508203653751eb1",
     "semantic_hash": ""
   },
   "dashboard/src/components/Header.jsx": {
@@ -2620,8 +2620,8 @@
     "semantic_hash": ""
   },
   "dashboard/src/components/StatsBar.jsx": {
-    "mtime": 1780930851.6097045,
-    "ast_hash": "171a51f305444a3812c248d3d66e7ea3",
+    "mtime": 1781599070.0334063,
+    "ast_hash": "112095db49cb6a6f93ee40a0590b7c97",
     "semantic_hash": ""
   },
   "dashboard/src/components/analysis/AiInsights.jsx": {
@@ -2740,8 +2740,8 @@
     "semantic_hash": ""
   },
   "dashboard/src/views/Dashboard.jsx": {
-    "mtime": 1780930851.6097045,
-    "ast_hash": "f1dcc56bc7b57afe309c2c699747df3f",
+    "mtime": 1781599082.2104063,
+    "ast_hash": "c36bcb644ed0149df1d1ebc1b71c6b36",
     "semantic_hash": ""
   },
   "dashboard/src/views/Settings.jsx": {
@@ -4635,8 +4635,8 @@
     "semantic_hash": ""
   },
   "spec/services/positions/exit_flow_spec.rb": {
-    "mtime": 1775801791.1482882,
-    "ast_hash": "2579bff002e8b0f05dced63e5dfcb431",
+    "mtime": 1781597356.101106,
+    "ast_hash": "cdc86ec61bf920fdcae0add2644c1760",
     "semantic_hash": ""
   },
   "spec/services/positions/feed_subscription_spec.rb": {
@@ -4660,8 +4660,8 @@
     "semantic_hash": ""
   },
   "spec/services/positions/paper_stats_query_spec.rb": {
-    "mtime": 1775801791.1482882,
-    "ast_hash": "cab29a69581ed0e2e8ff97e042a2267e",
+    "mtime": 1781599099.475516,
+    "ast_hash": "77143c47bba78ed0de4b6d5a5f0c98a6",
     "semantic_hash": ""
   },
   "spec/services/positions/states/position_state_machine_spec.rb": {
@@ -4940,7 +4940,7 @@
     "semantic_hash": ""
   },
   "spec/services/smc/detectors/liquidity_spec.rb": {
-    "mtime": 1781590332.4449747,
+    "mtime": 1781598605.225937,
     "ast_hash": "3930c5d1795a7702bca6d104298a10ad",
     "semantic_hash": ""
   },
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781596581.6340115,
-    "ast_hash": "57d1ac3dc9c0a2f43c2ab745c9caf9e6",
+    "mtime": 1781599132.0687122,
+    "ast_hash": "751bcb750b7577c2a6f93ada37f8e91c",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10572,6 +10572,26 @@
   "spec/services/signal/cycle_summary_spec.rb": {
     "mtime": 1781596551.5494263,
     "ast_hash": "c61716cc779db40aaf6a5dfdabb95693",
+    "semantic_hash": ""
+  },
+  "app/services/positions/exited_pnl_reconciler.rb": {
+    "mtime": 1781597648.9873989,
+    "ast_hash": "6f097f290bc50def11fd699666bbf040",
+    "semantic_hash": ""
+  },
+  "app/services/positions/final_pnl.rb": {
+    "mtime": 1781597196.2657907,
+    "ast_hash": "07dbb1c19e29688252f7aa2776ad940c",
+    "semantic_hash": ""
+  },
+  "spec/services/positions/exited_pnl_reconciler_spec.rb": {
+    "mtime": 1781597673.7463992,
+    "ast_hash": "8595eb0964e84530c5851796cd2ee390",
+    "semantic_hash": ""
+  },
+  "spec/services/positions/final_pnl_spec.rb": {
+    "mtime": 1781597300.2715387,
+    "ast_hash": "ca7b22c9d8deae38765f100317788fd3",
     "semantic_hash": ""
   }
 }

@@ -1778,11 +1778,19 @@
       "_origin": "ast"
     },
     {
+      "id": "lib_algo_config_paper_trading_enabled",
+      "label": "paper_trading_enabled?()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L30",
+      "_origin": "ast"
+    },
+    {
       "id": "lib_algo_config_reset",
       "label": "reset!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L30",
+      "source_location": "L34",
       "_origin": "ast"
     },
     {
@@ -1790,7 +1798,7 @@
       "label": "event_driven_intraday_ai?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L37",
+      "source_location": "L41",
       "_origin": "ast"
     },
     {
@@ -1798,7 +1806,7 @@
       "label": "defer_scheduled_intraday_ai_jobs?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L46",
+      "source_location": "L50",
       "_origin": "ast"
     },
     {
@@ -1806,7 +1814,7 @@
       "label": "scheduled_ai_technical_analysis_job_deferred?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L54",
+      "source_location": "L58",
       "_origin": "ast"
     },
     {
@@ -1814,7 +1822,7 @@
       "label": "scheduled_smc_scanner_job_deferred?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L60",
+      "source_location": "L64",
       "_origin": "ast"
     },
     {
@@ -1822,7 +1830,7 @@
       "label": "suppress_smc_bias_notify_for_event_driven_ai?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L67",
+      "source_location": "L71",
       "_origin": "ast"
     },
     {
@@ -1830,7 +1838,7 @@
       "label": "market_closed_for_scheduling?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L71",
+      "source_location": "L75",
       "_origin": "ast"
     },
     {
@@ -1838,7 +1846,7 @@
       "label": "truthy_signal_flag?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L79",
+      "source_location": "L83",
       "_origin": "ast"
     },
     {
@@ -1846,7 +1854,7 @@
       "label": "deep_merge_hashes_with_arrays()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L83",
+      "source_location": "L87",
       "_origin": "ast"
     },
     {
@@ -1854,7 +1862,7 @@
       "label": "merge_arrays()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L87",
+      "source_location": "L91",
       "_origin": "ast"
     },
     {
@@ -1862,7 +1870,7 @@
       "label": "apply_signal_tier_preset!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L93",
+      "source_location": "L97",
       "_origin": "ast"
     },
     {
@@ -1870,7 +1878,7 @@
       "label": "resolve_signal_tier()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L108",
+      "source_location": "L112",
       "_origin": "ast"
     },
     {
@@ -1878,7 +1886,7 @@
       "label": "load_signal_tier_presets()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L126",
+      "source_location": "L130",
       "_origin": "ast"
     },
     {
@@ -1886,7 +1894,7 @@
       "label": "apply_live_trading_env_override!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L139",
+      "source_location": "L143",
       "_origin": "ast"
     },
     {
@@ -1894,7 +1902,7 @@
       "label": "apply_paper_research_overrides!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L146",
+      "source_location": "L150",
       "_origin": "ast"
     },
     {
@@ -1902,7 +1910,7 @@
       "label": "paper_strict_direction_gate?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L155",
+      "source_location": "L159",
       "_origin": "ast"
     },
     {
@@ -1910,7 +1918,7 @@
       "label": "live_trading_env_truthy?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L159",
+      "source_location": "L163",
       "_origin": "ast"
     },
     {
@@ -3382,7 +3390,7 @@
       "label": "cache_live_pnl()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L78",
+      "source_location": "L80",
       "_origin": "ast"
     },
     {
@@ -3390,7 +3398,7 @@
       "label": "zero_bd()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L89",
+      "source_location": "L93",
       "_origin": "ast"
     },
     {
@@ -3398,7 +3406,7 @@
       "label": "log_pnl_cache_error()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L93",
+      "source_location": "L97",
       "_origin": "ast"
     },
     {
@@ -3406,7 +3414,7 @@
       "label": "persist_final_pnl_from_cache()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L97",
+      "source_location": "L101",
       "_origin": "ast"
     },
     {
@@ -3414,7 +3422,7 @@
       "label": "recalculate_last_pnl_pct()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L115",
+      "source_location": "L119",
       "_origin": "ast"
     },
     {
@@ -3422,7 +3430,7 @@
       "label": "persist_hwm_pnl_pct()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L123",
+      "source_location": "L127",
       "_origin": "ast"
     },
     {
@@ -3466,11 +3474,19 @@
       "_origin": "ast"
     },
     {
+      "id": "position_tracker_queryable_trading_stats_with_pct",
+      "label": "trading_stats_with_pct()",
+      "file_type": "code",
+      "source_file": "app/models/concerns/position_tracker/queryable.rb",
+      "source_location": "L28",
+      "_origin": "ast"
+    },
+    {
       "id": "position_tracker_queryable_paper_positions_details",
       "label": "paper_positions_details()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L28",
+      "source_location": "L32",
       "_origin": "ast"
     },
     {
@@ -3478,7 +3494,7 @@
       "label": "total_paper_pnl()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L32",
+      "source_location": "L36",
       "_origin": "ast"
     },
     {
@@ -3486,7 +3502,7 @@
       "label": "active_paper_positions_count()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L38",
+      "source_location": "L42",
       "_origin": "ast"
     },
     {
@@ -3494,7 +3510,7 @@
       "label": "paper_win_rate()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L42",
+      "source_location": "L46",
       "_origin": "ast"
     },
     {
@@ -3502,7 +3518,7 @@
       "label": "paper_trading_stats()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L50",
+      "source_location": "L54",
       "_origin": "ast"
     },
     {
@@ -3510,7 +3526,7 @@
       "label": "clear_orphaned_redis_pnl!()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L79",
+      "source_location": "L83",
       "_origin": "ast"
     },
     {
@@ -3518,7 +3534,7 @@
       "label": "should_clear_orphaned?()",
       "file_type": "code",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L83",
+      "source_location": "L87",
       "_origin": "ast"
     },
     {
@@ -13070,7 +13086,15 @@
       "label": ".ensure_exit_reason_on_meta!()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L262",
+      "source_location": "L263",
+      "_origin": "ast"
+    },
+    {
+      "id": "live_exit_engine_exitengine_final_pnl_snapshot",
+      "label": ".final_pnl_snapshot()",
+      "file_type": "code",
+      "source_file": "app/services/live/exit_engine.rb",
+      "source_location": "L279",
       "_origin": "ast"
     },
     {
@@ -13078,7 +13102,7 @@
       "label": ".classify_exit()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L278",
+      "source_location": "L306",
       "_origin": "ast"
     },
     {
@@ -13086,7 +13110,7 @@
       "label": ".build_final_reason()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L285",
+      "source_location": "L313",
       "_origin": "ast"
     },
     {
@@ -13094,7 +13118,7 @@
       "label": ".acquire_exit_lock()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L293",
+      "source_location": "L321",
       "_origin": "ast"
     },
     {
@@ -13102,7 +13126,7 @@
       "label": ".release_exit_lock()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L303",
+      "source_location": "L331",
       "_origin": "ast"
     },
     {
@@ -13110,7 +13134,7 @@
       "label": ".stale_exit_intent?()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L312",
+      "source_location": "L340",
       "_origin": "ast"
     },
     {
@@ -13118,7 +13142,7 @@
       "label": ".operator_may_resubmit_active_exit?()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L320",
+      "source_location": "L348",
       "_origin": "ast"
     },
     {
@@ -13126,7 +13150,7 @@
       "label": ".safe_pnl_snapshot()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L324",
+      "source_location": "L352",
       "_origin": "ast"
     },
     {
@@ -13134,7 +13158,7 @@
       "label": ".deterministic_exit_coid()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L333",
+      "source_location": "L361",
       "_origin": "ast"
     },
     {
@@ -13142,7 +13166,7 @@
       "label": ".safe_ltp()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L339",
+      "source_location": "L367",
       "_origin": "ast"
     },
     {
@@ -13150,7 +13174,7 @@
       "label": ".notify_telegram_exit()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L349",
+      "source_location": "L377",
       "_origin": "ast"
     },
     {
@@ -13158,7 +13182,7 @@
       "label": ".record_trade_telemetry()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L366",
+      "source_location": "L394",
       "_origin": "ast"
     },
     {
@@ -13166,7 +13190,7 @@
       "label": ".resolved_entry_tf()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L405",
+      "source_location": "L433",
       "_origin": "ast"
     },
     {
@@ -13174,7 +13198,7 @@
       "label": ".telegram_enabled?()",
       "file_type": "code",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L414",
+      "source_location": "L442",
       "_origin": "ast"
     },
     {
@@ -14142,7 +14166,7 @@
       "label": ".queue_empty?()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L297",
+      "source_location": "L306",
       "_origin": "ast"
     },
     {
@@ -14150,7 +14174,7 @@
       "label": ".demand_driven_enabled?()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L301",
+      "source_location": "L310",
       "_origin": "ast"
     },
     {
@@ -14158,7 +14182,7 @@
       "label": ".feature_flags()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L305",
+      "source_location": "L314",
       "_origin": "ast"
     },
     {
@@ -14166,7 +14190,7 @@
       "label": ".loop_intervals()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L311",
+      "source_location": "L320",
       "_origin": "ast"
     },
     {
@@ -14174,7 +14198,7 @@
       "label": ".next_interval()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L320",
+      "source_location": "L329",
       "_origin": "ast"
     },
     {
@@ -14182,7 +14206,7 @@
       "label": ".wait_for_interval()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L329",
+      "source_location": "L338",
       "_origin": "ast"
     },
     {
@@ -14190,7 +14214,7 @@
       "label": ".wake_up!()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L337",
+      "source_location": "L346",
       "_origin": "ast"
     },
     {
@@ -14198,7 +14222,7 @@
       "label": ".check_and_notify_pnl_milestones()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L347",
+      "source_location": "L356",
       "_origin": "ast"
     },
     {
@@ -14206,7 +14230,7 @@
       "label": ".broadcast_pnl_update()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L401",
+      "source_location": "L410",
       "_origin": "ast"
     },
     {
@@ -14214,7 +14238,7 @@
       "label": ".maybe_broadcast_pnl_stale()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L422",
+      "source_location": "L435",
       "_origin": "ast"
     },
     {
@@ -14222,7 +14246,7 @@
       "label": ".maybe_broadcast_heartbeat()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L435",
+      "source_location": "L448",
       "_origin": "ast"
     },
     {
@@ -14230,7 +14254,7 @@
       "label": ".build_dashboard_stats()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L444",
+      "source_location": "L457",
       "_origin": "ast"
     },
     {
@@ -14238,7 +14262,7 @@
       "label": ".safe_wallet_snapshot()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L466",
+      "source_location": "L479",
       "_origin": "ast"
     },
     {
@@ -14246,7 +14270,7 @@
       "label": ".telegram_milestones_enabled?()",
       "file_type": "code",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L474",
+      "source_location": "L487",
       "_origin": "ast"
     },
     {
@@ -14598,7 +14622,7 @@
       "label": ".start()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L33",
+      "source_location": "L34",
       "_origin": "ast"
     },
     {
@@ -14606,7 +14630,7 @@
       "label": ".stop()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L44",
+      "source_location": "L45",
       "_origin": "ast"
     },
     {
@@ -14614,7 +14638,7 @@
       "label": ".running?()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L51",
+      "source_location": "L52",
       "_origin": "ast"
     },
     {
@@ -14622,7 +14646,7 @@
       "label": ".stats()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L55",
+      "source_location": "L56",
       "_origin": "ast"
     },
     {
@@ -14630,7 +14654,7 @@
       "label": ".run_loop()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L61",
+      "source_location": "L62",
       "_origin": "ast"
     },
     {
@@ -14638,7 +14662,7 @@
       "label": ".should_reconcile?()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L94",
+      "source_location": "L95",
       "_origin": "ast"
     },
     {
@@ -14646,7 +14670,15 @@
       "label": ".reconcile_all_positions()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L101",
+      "source_location": "L102",
+      "_origin": "ast"
+    },
+    {
+      "id": "live_reconciliation_service_reconciliationservice_reconcile_exited_pnl_truth",
+      "label": ".reconcile_exited_pnl_truth()",
+      "file_type": "code",
+      "source_file": "app/services/live/reconciliation_service.rb",
+      "source_location": "L124",
       "_origin": "ast"
     },
     {
@@ -14654,7 +14686,7 @@
       "label": ".reconcile_position()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L120",
+      "source_location": "L135",
       "_origin": "ast"
     },
     {
@@ -14662,7 +14694,7 @@
       "label": ".stuck_in_exit?()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L165",
+      "source_location": "L180",
       "_origin": "ast"
     },
     {
@@ -14670,7 +14702,7 @@
       "label": ".fix_stuck_exit()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L173",
+      "source_location": "L188",
       "_origin": "ast"
     },
     {
@@ -14678,7 +14710,7 @@
       "label": ".subscribed?()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L190",
+      "source_location": "L205",
       "_origin": "ast"
     },
     {
@@ -14686,7 +14718,7 @@
       "label": ".fix_subscription()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L199",
+      "source_location": "L214",
       "_origin": "ast"
     },
     {
@@ -14694,7 +14726,7 @@
       "label": ".in_active_cache?()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L206",
+      "source_location": "L221",
       "_origin": "ast"
     },
     {
@@ -14702,7 +14734,7 @@
       "label": ".fix_active_cache()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L210",
+      "source_location": "L225",
       "_origin": "ast"
     },
     {
@@ -14710,7 +14742,7 @@
       "label": ".pnl_needs_sync?()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L216",
+      "source_location": "L231",
       "_origin": "ast"
     },
     {
@@ -14718,7 +14750,7 @@
       "label": ".fix_pnl_sync()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L227",
+      "source_location": "L242",
       "_origin": "ast"
     },
     {
@@ -14726,7 +14758,7 @@
       "label": ".sync_activecache_pnl()",
       "file_type": "code",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L232",
+      "source_location": "L247",
       "_origin": "ast"
     },
     {
@@ -22974,7 +23006,7 @@
       "label": "observe!()",
       "file_type": "code",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L18",
+      "source_location": "L19",
       "_origin": "ast"
     },
     {
@@ -22982,7 +23014,7 @@
       "label": "current_for()",
       "file_type": "code",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L36",
+      "source_location": "L38",
       "_origin": "ast"
     },
     {
@@ -22990,7 +23022,7 @@
       "label": "reset_day!()",
       "file_type": "code",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L45",
+      "source_location": "L48",
       "_origin": "ast"
     },
     {
@@ -22998,7 +23030,7 @@
       "label": "key_for()",
       "file_type": "code",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L56",
+      "source_location": "L59",
       "_origin": "ast"
     },
     {
@@ -23006,7 +23038,7 @@
       "label": "redis()",
       "file_type": "code",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L60",
+      "source_location": "L65",
       "_origin": "ast"
     },
     {
@@ -23742,7 +23774,7 @@
       "label": ".resolve_exit_reason_string()",
       "file_type": "code",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L64",
+      "source_location": "L60",
       "_origin": "ast"
     },
     {
@@ -23750,7 +23782,7 @@
       "label": ".resolved_exit_price()",
       "file_type": "code",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L74",
+      "source_location": "L70",
       "_origin": "ast"
     },
     {
@@ -23758,7 +23790,7 @@
       "label": ".resolved_exited_at()",
       "file_type": "code",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L79",
+      "source_location": "L75",
       "_origin": "ast"
     },
     {
@@ -23766,7 +23798,7 @@
       "label": ".cleanup_exit_caches()",
       "file_type": "code",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L83",
+      "source_location": "L79",
       "_origin": "ast"
     },
     {
@@ -23774,7 +23806,7 @@
       "label": ".register_cooldown!()",
       "file_type": "code",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L87",
+      "source_location": "L83",
       "_origin": "ast"
     },
     {
@@ -23782,7 +23814,103 @@
       "label": ".sync_final_pnl_to_database()",
       "file_type": "code",
       "source_file": "app/services/positions/exit_flow.rb",
+      "source_location": "L87",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exit_flow_exitflow_resolve_final_pnl",
+      "label": ".resolve_final_pnl()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exit_flow.rb",
+      "source_location": "L100",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler",
+      "label": "exited_pnl_reconciler.rb",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "label": "ExitedPnlReconciler",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L4",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_initialize",
+      "label": ".initialize()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L9",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_call",
+      "label": ".call()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L14",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_batch",
+      "label": ".reconcile_batch()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L24",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_candidates",
+      "label": ".candidates()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L37",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "label": ".reconcile_tracker()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L45",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_truth_snapshot",
+      "label": ".truth_snapshot()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L72",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_drifted",
+      "label": ".drifted?()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L81",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_apply_truth",
+      "label": ".apply_truth!()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
       "source_location": "L91",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_exited_pnl_reconciler_exitedpnlreconciler_classify_exit",
+      "label": ".classify_exit()",
+      "file_type": "code",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L110",
       "_origin": "ast"
     },
     {
@@ -23839,6 +23967,22 @@
       "file_type": "code",
       "source_file": "app/services/positions/feed_subscription.rb",
       "source_location": "L39",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_final_pnl",
+      "label": "final_pnl.rb",
+      "file_type": "code",
+      "source_file": "app/services/positions/final_pnl.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_final_pnl_from_exit_price",
+      "label": "from_exit_price()",
+      "file_type": "code",
+      "source_file": "app/services/positions/final_pnl.rb",
+      "source_location": "L7",
       "_origin": "ast"
     },
     {
@@ -24270,7 +24414,15 @@
       "label": ".call()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L9",
+      "source_location": "L10",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_paper_stats_query_paperstatsquery_paper_mode",
+      "label": ".paper_mode()",
+      "file_type": "code",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L41",
       "_origin": "ast"
     },
     {
@@ -24278,7 +24430,7 @@
       "label": ".exited_scope()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L39",
+      "source_location": "L45",
       "_origin": "ast"
     },
     {
@@ -24286,7 +24438,7 @@
       "label": ".active_positions()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L46",
+      "source_location": "L49",
       "_origin": "ast"
     },
     {
@@ -24294,7 +24446,7 @@
       "label": ".realized_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L50",
+      "source_location": "L53",
       "_origin": "ast"
     },
     {
@@ -24302,7 +24454,7 @@
       "label": ".unrealized_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L54",
+      "source_location": "L57",
       "_origin": "ast"
     },
     {
@@ -24310,7 +24462,7 @@
       "label": ".total_pnl_rupees()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L58",
+      "source_location": "L61",
       "_origin": "ast"
     },
     {
@@ -24318,7 +24470,7 @@
       "label": ".winners_count()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L62",
+      "source_location": "L65",
       "_origin": "ast"
     },
     {
@@ -24326,7 +24478,7 @@
       "label": ".losers_count()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L66",
+      "source_location": "L69",
       "_origin": "ast"
     },
     {
@@ -24334,7 +24486,7 @@
       "label": ".win_rate()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L70",
+      "source_location": "L73",
       "_origin": "ast"
     },
     {
@@ -24342,7 +24494,7 @@
       "label": ".avg_realized_pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L77",
+      "source_location": "L80",
       "_origin": "ast"
     },
     {
@@ -24350,7 +24502,7 @@
       "label": ".avg_unrealized_pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L84",
+      "source_location": "L87",
       "_origin": "ast"
     },
     {
@@ -24358,7 +24510,7 @@
       "label": ".pnl_pct()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L91",
+      "source_location": "L94",
       "_origin": "ast"
     },
     {
@@ -24366,7 +24518,7 @@
       "label": ".date_range()",
       "file_type": "code",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L98",
+      "source_location": "L101",
       "_origin": "ast"
     },
     {
@@ -33758,7 +33910,7 @@
       "label": "SortHeader()",
       "file_type": "code",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L56",
+      "source_location": "L64",
       "_origin": "ast"
     },
     {
@@ -33766,7 +33918,7 @@
       "label": "buildQuery()",
       "file_type": "code",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L91",
+      "source_location": "L99",
       "_origin": "ast"
     },
     {
@@ -33774,7 +33926,7 @@
       "label": "fetchPositions()",
       "file_type": "code",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L103",
+      "source_location": "L111",
       "_origin": "ast"
     },
     {
@@ -33782,7 +33934,7 @@
       "label": "handleSort()",
       "file_type": "code",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L123",
+      "source_location": "L131",
       "_origin": "ast"
     },
     {
@@ -33790,7 +33942,7 @@
       "label": "applyFilter()",
       "file_type": "code",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L133",
+      "source_location": "L141",
       "_origin": "ast"
     },
     {
@@ -33798,7 +33950,7 @@
       "label": "resetFilters()",
       "file_type": "code",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L137",
+      "source_location": "L145",
       "_origin": "ast"
     },
     {
@@ -43190,10 +43342,26 @@
       "_origin": "ast"
     },
     {
+      "id": "positions_exited_pnl_reconciler_spec",
+      "label": "exited_pnl_reconciler_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/services/positions/exited_pnl_reconciler_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
       "id": "positions_feed_subscription_spec",
       "label": "feed_subscription_spec.rb",
       "file_type": "code",
       "source_file": "spec/services/positions/feed_subscription_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "positions_final_pnl_spec",
+      "label": "final_pnl_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/services/positions/final_pnl_spec.rb",
       "source_location": "L1",
       "_origin": "ast"
     },
@@ -43234,7 +43402,7 @@
       "label": "create_exited_tracker()",
       "file_type": "code",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L32",
+      "source_location": "L52",
       "_origin": "ast"
     },
     {
@@ -43242,7 +43410,7 @@
       "label": "create_active_tracker()",
       "file_type": "code",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L36",
+      "source_location": "L56",
       "_origin": "ast"
     },
     {
@@ -110205,7 +110373,7 @@
     },
     {
       "source": "lib_algo_config",
-      "target": "lib_algo_config_reset",
+      "target": "lib_algo_config_paper_trading_enabled",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
@@ -110214,11 +110382,20 @@
     },
     {
       "source": "lib_algo_config",
+      "target": "lib_algo_config_reset",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
       "target": "lib_algo_config_event_driven_intraday_ai",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L37",
+      "source_location": "L41",
       "weight": 1.0
     },
     {
@@ -110227,7 +110404,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L46",
+      "source_location": "L50",
       "weight": 1.0
     },
     {
@@ -110236,7 +110413,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L54",
+      "source_location": "L58",
       "weight": 1.0
     },
     {
@@ -110245,7 +110422,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L60",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -110254,7 +110431,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L67",
+      "source_location": "L71",
       "weight": 1.0
     },
     {
@@ -110263,7 +110440,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L71",
+      "source_location": "L75",
       "weight": 1.0
     },
     {
@@ -110272,7 +110449,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L79",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -110281,7 +110458,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L83",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -110290,7 +110467,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L87",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -110299,7 +110476,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L93",
+      "source_location": "L97",
       "weight": 1.0
     },
     {
@@ -110308,7 +110485,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L108",
+      "source_location": "L112",
       "weight": 1.0
     },
     {
@@ -110317,7 +110494,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L126",
+      "source_location": "L130",
       "weight": 1.0
     },
     {
@@ -110326,7 +110503,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L139",
+      "source_location": "L143",
       "weight": 1.0
     },
     {
@@ -110335,7 +110512,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L146",
+      "source_location": "L150",
       "weight": 1.0
     },
     {
@@ -110344,7 +110521,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L155",
+      "source_location": "L159",
       "weight": 1.0
     },
     {
@@ -110353,7 +110530,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L159",
+      "source_location": "L163",
       "weight": 1.0
     },
     {
@@ -110393,7 +110570,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L39",
+      "source_location": "L43",
       "weight": 1.0
     },
     {
@@ -110403,7 +110580,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L47",
+      "source_location": "L51",
       "weight": 1.0
     },
     {
@@ -110413,7 +110590,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L49",
+      "source_location": "L53",
       "weight": 1.0
     },
     {
@@ -110423,7 +110600,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L57",
+      "source_location": "L61",
       "weight": 1.0
     },
     {
@@ -110433,7 +110610,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L63",
+      "source_location": "L67",
       "weight": 1.0
     },
     {
@@ -110443,7 +110620,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L68",
+      "source_location": "L72",
       "weight": 1.0
     },
     {
@@ -110453,7 +110630,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L94",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
@@ -110463,7 +110640,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L103",
+      "source_location": "L107",
       "weight": 1.0
     },
     {
@@ -110473,7 +110650,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L109",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -110483,7 +110660,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L140",
+      "source_location": "L144",
       "weight": 1.0
     },
     {
@@ -110493,7 +110670,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L147",
+      "source_location": "L151",
       "weight": 1.0
     },
     {
@@ -110503,7 +110680,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L156",
+      "source_location": "L160",
       "weight": 1.0
     },
     {
@@ -110513,7 +110690,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L160",
+      "source_location": "L164",
       "weight": 1.0
     },
     {
@@ -112372,7 +112549,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L78",
+      "source_location": "L80",
       "weight": 1.0
     },
     {
@@ -112381,7 +112558,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L89",
+      "source_location": "L93",
       "weight": 1.0
     },
     {
@@ -112390,7 +112567,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L93",
+      "source_location": "L97",
       "weight": 1.0
     },
     {
@@ -112399,7 +112576,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L97",
+      "source_location": "L101",
       "weight": 1.0
     },
     {
@@ -112408,7 +112585,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L115",
+      "source_location": "L119",
       "weight": 1.0
     },
     {
@@ -112417,7 +112594,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L123",
+      "source_location": "L127",
       "weight": 1.0
     },
     {
@@ -112477,7 +112654,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L109",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -112487,7 +112664,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L112",
+      "source_location": "L116",
       "weight": 1.0
     },
     {
@@ -112528,7 +112705,7 @@
     },
     {
       "source": "position_tracker_queryable",
-      "target": "position_tracker_queryable_paper_positions_details",
+      "target": "position_tracker_queryable_trading_stats_with_pct",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
@@ -112537,7 +112714,7 @@
     },
     {
       "source": "position_tracker_queryable",
-      "target": "position_tracker_queryable_total_paper_pnl",
+      "target": "position_tracker_queryable_paper_positions_details",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
@@ -112546,16 +112723,16 @@
     },
     {
       "source": "position_tracker_queryable",
-      "target": "position_tracker_queryable_active_paper_positions_count",
+      "target": "position_tracker_queryable_total_paper_pnl",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L38",
+      "source_location": "L36",
       "weight": 1.0
     },
     {
       "source": "position_tracker_queryable",
-      "target": "position_tracker_queryable_paper_win_rate",
+      "target": "position_tracker_queryable_active_paper_positions_count",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
@@ -112564,11 +112741,20 @@
     },
     {
       "source": "position_tracker_queryable",
+      "target": "position_tracker_queryable_paper_win_rate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/models/concerns/position_tracker/queryable.rb",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "position_tracker_queryable",
       "target": "position_tracker_queryable_paper_trading_stats",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L50",
+      "source_location": "L54",
       "weight": 1.0
     },
     {
@@ -112577,7 +112763,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L79",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -112586,7 +112772,17 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L83",
+      "source_location": "L87",
+      "weight": 1.0
+    },
+    {
+      "source": "position_tracker_queryable_trading_stats_with_pct",
+      "target": "position_tracker_queryable_paper_trading_stats_with_pct",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/models/concerns/position_tracker/queryable.rb",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
@@ -127385,7 +127581,16 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L262",
+      "source_location": "L263",
+      "weight": 1.0
+    },
+    {
+      "source": "live_exit_engine_exitengine",
+      "target": "live_exit_engine_exitengine_final_pnl_snapshot",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/exit_engine.rb",
+      "source_location": "L279",
       "weight": 1.0
     },
     {
@@ -127394,7 +127599,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L278",
+      "source_location": "L306",
       "weight": 1.0
     },
     {
@@ -127403,7 +127608,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L285",
+      "source_location": "L313",
       "weight": 1.0
     },
     {
@@ -127412,7 +127617,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L293",
+      "source_location": "L321",
       "weight": 1.0
     },
     {
@@ -127421,7 +127626,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L303",
+      "source_location": "L331",
       "weight": 1.0
     },
     {
@@ -127430,7 +127635,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L312",
+      "source_location": "L340",
       "weight": 1.0
     },
     {
@@ -127439,7 +127644,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L320",
+      "source_location": "L348",
       "weight": 1.0
     },
     {
@@ -127448,7 +127653,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L324",
+      "source_location": "L352",
       "weight": 1.0
     },
     {
@@ -127457,7 +127662,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L333",
+      "source_location": "L361",
       "weight": 1.0
     },
     {
@@ -127466,7 +127671,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L339",
+      "source_location": "L367",
       "weight": 1.0
     },
     {
@@ -127475,7 +127680,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L349",
+      "source_location": "L377",
       "weight": 1.0
     },
     {
@@ -127484,7 +127689,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L366",
+      "source_location": "L394",
       "weight": 1.0
     },
     {
@@ -127493,7 +127698,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L405",
+      "source_location": "L433",
       "weight": 1.0
     },
     {
@@ -127502,7 +127707,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L414",
+      "source_location": "L442",
       "weight": 1.0
     },
     {
@@ -127637,12 +127842,22 @@
     },
     {
       "source": "live_exit_engine_exitengine_normalize_exit_reason_with_final_pnl",
+      "target": "live_exit_engine_exitengine_final_pnl_snapshot",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/exit_engine.rb",
+      "source_location": "L230",
+      "weight": 1.0
+    },
+    {
+      "source": "live_exit_engine_exitengine_normalize_exit_reason_with_final_pnl",
       "target": "live_exit_engine_exitengine_ensure_exit_reason_on_meta",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L237",
+      "source_location": "L239",
       "weight": 1.0
     },
     {
@@ -127652,7 +127867,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L242",
+      "source_location": "L243",
       "weight": 1.0
     },
     {
@@ -127662,7 +127877,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L256",
+      "source_location": "L257",
       "weight": 1.0
     },
     {
@@ -127672,7 +127887,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L350",
+      "source_location": "L378",
       "weight": 1.0
     },
     {
@@ -127682,7 +127897,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L387",
+      "source_location": "L415",
       "weight": 1.0
     },
     {
@@ -129638,7 +129853,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L297",
+      "source_location": "L306",
       "weight": 1.0
     },
     {
@@ -129647,7 +129862,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L301",
+      "source_location": "L310",
       "weight": 1.0
     },
     {
@@ -129656,7 +129871,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L305",
+      "source_location": "L314",
       "weight": 1.0
     },
     {
@@ -129665,7 +129880,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L311",
+      "source_location": "L320",
       "weight": 1.0
     },
     {
@@ -129674,7 +129889,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L320",
+      "source_location": "L329",
       "weight": 1.0
     },
     {
@@ -129683,7 +129898,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L329",
+      "source_location": "L338",
       "weight": 1.0
     },
     {
@@ -129692,7 +129907,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L337",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -129701,7 +129916,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L347",
+      "source_location": "L356",
       "weight": 1.0
     },
     {
@@ -129710,7 +129925,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L401",
+      "source_location": "L410",
       "weight": 1.0
     },
     {
@@ -129719,7 +129934,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L422",
+      "source_location": "L435",
       "weight": 1.0
     },
     {
@@ -129728,7 +129943,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L435",
+      "source_location": "L448",
       "weight": 1.0
     },
     {
@@ -129737,7 +129952,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L444",
+      "source_location": "L457",
       "weight": 1.0
     },
     {
@@ -129746,7 +129961,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L466",
+      "source_location": "L479",
       "weight": 1.0
     },
     {
@@ -129755,7 +129970,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L474",
+      "source_location": "L487",
       "weight": 1.0
     },
     {
@@ -129885,7 +130100,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L207",
+      "source_location": "L216",
       "weight": 1.0
     },
     {
@@ -129895,7 +130110,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L223",
+      "source_location": "L232",
       "weight": 1.0
     },
     {
@@ -129905,7 +130120,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L278",
+      "source_location": "L287",
       "weight": 1.0
     },
     {
@@ -129915,7 +130130,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L288",
+      "source_location": "L297",
       "weight": 1.0
     },
     {
@@ -129925,7 +130140,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L322",
+      "source_location": "L331",
       "weight": 1.0
     },
     {
@@ -129935,7 +130150,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L330",
+      "source_location": "L339",
       "weight": 1.0
     },
     {
@@ -129945,7 +130160,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L348",
+      "source_location": "L357",
       "weight": 1.0
     },
     {
@@ -129955,7 +130170,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L457",
+      "source_location": "L470",
       "weight": 1.0
     },
     {
@@ -130585,7 +130800,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L33",
+      "source_location": "L34",
       "weight": 1.0
     },
     {
@@ -130594,7 +130809,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L44",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -130603,7 +130818,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L51",
+      "source_location": "L52",
       "weight": 1.0
     },
     {
@@ -130612,7 +130827,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L55",
+      "source_location": "L56",
       "weight": 1.0
     },
     {
@@ -130621,7 +130836,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L61",
+      "source_location": "L62",
       "weight": 1.0
     },
     {
@@ -130630,7 +130845,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L94",
+      "source_location": "L95",
       "weight": 1.0
     },
     {
@@ -130639,7 +130854,16 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L101",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "live_reconciliation_service_reconciliationservice",
+      "target": "live_reconciliation_service_reconciliationservice_reconcile_exited_pnl_truth",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/live/reconciliation_service.rb",
+      "source_location": "L124",
       "weight": 1.0
     },
     {
@@ -130648,7 +130872,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L120",
+      "source_location": "L135",
       "weight": 1.0
     },
     {
@@ -130657,7 +130881,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L165",
+      "source_location": "L180",
       "weight": 1.0
     },
     {
@@ -130666,7 +130890,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L173",
+      "source_location": "L188",
       "weight": 1.0
     },
     {
@@ -130675,7 +130899,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L190",
+      "source_location": "L205",
       "weight": 1.0
     },
     {
@@ -130684,7 +130908,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L199",
+      "source_location": "L214",
       "weight": 1.0
     },
     {
@@ -130693,7 +130917,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L206",
+      "source_location": "L221",
       "weight": 1.0
     },
     {
@@ -130702,7 +130926,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L210",
+      "source_location": "L225",
       "weight": 1.0
     },
     {
@@ -130711,7 +130935,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L216",
+      "source_location": "L231",
       "weight": 1.0
     },
     {
@@ -130720,7 +130944,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L227",
+      "source_location": "L242",
       "weight": 1.0
     },
     {
@@ -130729,7 +130953,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L232",
+      "source_location": "L247",
       "weight": 1.0
     },
     {
@@ -130739,7 +130963,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L80",
+      "source_location": "L81",
       "weight": 1.0
     },
     {
@@ -130749,7 +130973,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L113",
+      "source_location": "L114",
       "weight": 1.0
     },
     {
@@ -130759,7 +130983,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L124",
+      "source_location": "L139",
       "weight": 1.0
     },
     {
@@ -130769,7 +130993,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L125",
+      "source_location": "L140",
       "weight": 1.0
     },
     {
@@ -130779,7 +131003,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L131",
+      "source_location": "L146",
       "weight": 1.0
     },
     {
@@ -130789,7 +131013,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L132",
+      "source_location": "L147",
       "weight": 1.0
     },
     {
@@ -130799,7 +131023,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L138",
+      "source_location": "L153",
       "weight": 1.0
     },
     {
@@ -130809,7 +131033,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L139",
+      "source_location": "L154",
       "weight": 1.0
     },
     {
@@ -130819,7 +131043,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L150",
+      "source_location": "L165",
       "weight": 1.0
     },
     {
@@ -130829,7 +131053,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L151",
+      "source_location": "L166",
       "weight": 1.0
     },
     {
@@ -130839,7 +131063,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L157",
+      "source_location": "L172",
       "weight": 1.0
     },
     {
@@ -130849,7 +131073,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L191",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -130859,7 +131083,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L200",
+      "source_location": "L215",
       "weight": 1.0
     },
     {
@@ -144001,7 +144225,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -144010,7 +144234,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L36",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -144019,7 +144243,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L45",
+      "source_location": "L48",
       "weight": 1.0
     },
     {
@@ -144028,7 +144252,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L56",
+      "source_location": "L59",
       "weight": 1.0
     },
     {
@@ -144037,7 +144261,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L60",
+      "source_location": "L65",
       "weight": 1.0
     },
     {
@@ -144047,7 +144271,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -144057,7 +144281,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L37",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -144067,7 +144291,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L49",
+      "source_location": "L52",
       "weight": 1.0
     },
     {
@@ -145201,7 +145425,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L64",
+      "source_location": "L60",
       "weight": 1.0
     },
     {
@@ -145210,7 +145434,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L74",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -145219,7 +145443,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L79",
+      "source_location": "L75",
       "weight": 1.0
     },
     {
@@ -145228,7 +145452,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L83",
+      "source_location": "L79",
       "weight": 1.0
     },
     {
@@ -145237,7 +145461,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L87",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -145246,7 +145470,26 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L91",
+      "source_location": "L87",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_flow_exitflow",
+      "target": "positions_exit_flow_exitflow_resolve_final_pnl",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exit_flow.rb",
+      "source_location": "L100",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_flow_exitflow_call",
+      "target": "positions_exit_flow_exitflow_resolve_final_pnl",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exit_flow.rb",
+      "source_location": "L25",
       "weight": 1.0
     },
     {
@@ -145256,7 +145499,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L32",
+      "source_location": "L28",
       "weight": 1.0
     },
     {
@@ -145266,7 +145509,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L52",
+      "source_location": "L48",
       "weight": 1.0
     },
     {
@@ -145276,7 +145519,157 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L53",
+      "source_location": "L49",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_initialize",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_call",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_batch",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_candidates",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_truth_snapshot",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L72",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_drifted",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L81",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_apply_truth",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_classify_exit",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L110",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_call",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_batch",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_truth_snapshot",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_drifted",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L49",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_apply_truth",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L56",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_apply_truth",
+      "target": "positions_exited_pnl_reconciler_exitedpnlreconciler_classify_exit",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L99",
       "weight": 1.0
     },
     {
@@ -145351,6 +145744,15 @@
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/feed_subscription.rb",
       "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_final_pnl",
+      "target": "positions_final_pnl_from_exit_price",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/final_pnl.rb",
+      "source_location": "L7",
       "weight": 1.0
     },
     {
@@ -145893,7 +146295,16 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L9",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_paper_stats_query_paperstatsquery",
+      "target": "positions_paper_stats_query_paperstatsquery_paper_mode",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/positions/paper_stats_query.rb",
+      "source_location": "L41",
       "weight": 1.0
     },
     {
@@ -145902,7 +146313,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L39",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -145911,7 +146322,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L46",
+      "source_location": "L49",
       "weight": 1.0
     },
     {
@@ -145920,7 +146331,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L50",
+      "source_location": "L53",
       "weight": 1.0
     },
     {
@@ -145929,7 +146340,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L54",
+      "source_location": "L57",
       "weight": 1.0
     },
     {
@@ -145938,7 +146349,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L58",
+      "source_location": "L61",
       "weight": 1.0
     },
     {
@@ -145947,7 +146358,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L62",
+      "source_location": "L65",
       "weight": 1.0
     },
     {
@@ -145956,7 +146367,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L66",
+      "source_location": "L69",
       "weight": 1.0
     },
     {
@@ -145965,7 +146376,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L70",
+      "source_location": "L73",
       "weight": 1.0
     },
     {
@@ -145974,7 +146385,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L77",
+      "source_location": "L80",
       "weight": 1.0
     },
     {
@@ -145983,7 +146394,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L84",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -145992,7 +146403,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L91",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -146001,7 +146412,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L98",
+      "source_location": "L101",
       "weight": 1.0
     },
     {
@@ -146011,7 +146422,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L19",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -160204,7 +160615,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L56",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -160213,7 +160624,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L91",
+      "source_location": "L99",
       "weight": 1.0
     },
     {
@@ -160222,7 +160633,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L103",
+      "source_location": "L111",
       "weight": 1.0
     },
     {
@@ -160231,7 +160642,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L123",
+      "source_location": "L131",
       "weight": 1.0
     },
     {
@@ -160240,7 +160651,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L133",
+      "source_location": "L141",
       "weight": 1.0
     },
     {
@@ -160249,7 +160660,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L137",
+      "source_location": "L145",
       "weight": 1.0
     },
     {
@@ -160259,7 +160670,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L107",
+      "source_location": "L115",
       "weight": 1.0
     },
     {
@@ -160269,7 +160680,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L130",
+      "source_location": "L138",
       "weight": 1.0
     },
     {
@@ -160279,7 +160690,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L134",
+      "source_location": "L142",
       "weight": 1.0
     },
     {
@@ -160289,7 +160700,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L144",
+      "source_location": "L152",
       "weight": 1.0
     },
     {
@@ -160299,7 +160710,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L348",
+      "source_location": "L356",
       "weight": 1.0
     },
     {
@@ -173139,7 +173550,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L32",
+      "source_location": "L52",
       "weight": 1.0
     },
     {
@@ -173148,7 +173559,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L36",
+      "source_location": "L56",
       "weight": 1.0
     },
     {
@@ -243299,7 +243710,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/components/ClosedTrades.jsx",
-      "source_location": "L107",
+      "source_location": "L115",
       "weight": 1.0
     },
     {
@@ -245544,6 +245955,17 @@
       "weight": 1.0
     },
     {
+      "source": "lib_algo_config_paper_trading_enabled",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
       "source": "lib_algo_config_market_closed_for_scheduling",
       "target": "services_trading_session_market_closed",
       "relation": "calls",
@@ -245551,7 +245973,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L72",
+      "source_location": "L76",
       "weight": 1.0
     },
     {
@@ -245562,23 +245984,12 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L80",
+      "source_location": "L84",
       "weight": 1.0
     },
     {
       "source": "lib_algo_config_resolve_signal_tier",
       "target": "states_base_state_basestate_to_s",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/lib/algo_config.rb",
-      "source_location": "L110",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_algo_config_resolve_signal_tier",
-      "target": "commands_command_result_commandresult_inspect",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -245589,13 +246000,24 @@
     },
     {
       "source": "lib_algo_config_resolve_signal_tier",
+      "target": "commands_command_result_commandresult_inspect",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L118",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_resolve_signal_tier",
       "target": "smc_smc_permission_resolver_normalizedsmc_dig",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L117",
+      "source_location": "L121",
       "weight": 1.0
     },
     {
@@ -245606,7 +246028,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L141",
+      "source_location": "L145",
       "weight": 1.0
     },
     {
@@ -245617,7 +246039,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L148",
+      "source_location": "L152",
       "weight": 1.0
     },
     {
@@ -245628,7 +246050,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L162",
+      "source_location": "L166",
       "weight": 1.0
     },
     {
@@ -247509,7 +247931,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L70",
+      "source_location": "L72",
       "weight": 1.0
     },
     {
@@ -247520,7 +247942,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L75",
+      "source_location": "L77",
       "weight": 1.0
     },
     {
@@ -247531,7 +247953,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L79",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -247542,7 +247964,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L98",
+      "source_location": "L102",
       "weight": 1.0
     },
     {
@@ -247553,7 +247975,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L98",
+      "source_location": "L102",
       "weight": 1.0
     },
     {
@@ -247564,7 +247986,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L102",
+      "source_location": "L106",
       "weight": 1.0
     },
     {
@@ -247575,7 +247997,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L116",
+      "source_location": "L120",
       "weight": 1.0
     },
     {
@@ -247586,7 +248008,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L126",
+      "source_location": "L130",
       "weight": 1.0
     },
     {
@@ -247597,7 +248019,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/pnl_calculatable.rb",
-      "source_location": "L126",
+      "source_location": "L130",
       "weight": 1.0
     },
     {
@@ -247619,7 +248041,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L39",
+      "source_location": "L43",
       "weight": 1.0
     },
     {
@@ -247630,7 +248052,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L52",
+      "source_location": "L56",
       "weight": 1.0
     },
     {
@@ -247641,7 +248063,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L60",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -247652,7 +248074,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/models/concerns/position_tracker/queryable.rb",
-      "source_location": "L85",
+      "source_location": "L89",
       "weight": 1.0
     },
     {
@@ -255104,24 +255526,13 @@
     },
     {
       "source": "live_exit_engine_exitengine_normalize_exit_reason_with_final_pnl",
-      "target": "schemas_smc_trading_signal_properties_entry_price",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L231",
-      "weight": 1.0
-    },
-    {
-      "source": "live_exit_engine_exitengine_normalize_exit_reason_with_final_pnl",
       "target": "commands_command_result_commandresult_inspect",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L236",
+      "source_location": "L237",
       "weight": 1.0
     },
     {
@@ -255132,7 +255543,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L246",
+      "source_location": "L247",
       "weight": 1.0
     },
     {
@@ -255143,7 +255554,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L249",
+      "source_location": "L250",
       "weight": 1.0
     },
     {
@@ -255154,7 +255565,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L256",
+      "source_location": "L257",
       "weight": 1.0
     },
     {
@@ -255165,7 +255576,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L259",
+      "source_location": "L260",
       "weight": 1.0
     },
     {
@@ -255176,7 +255587,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L266",
+      "source_location": "L267",
       "weight": 1.0
     },
     {
@@ -255187,7 +255598,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L266",
+      "source_location": "L267",
       "weight": 1.0
     },
     {
@@ -255198,7 +255609,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L268",
+      "source_location": "L269",
       "weight": 1.0
     },
     {
@@ -255209,7 +255620,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L272",
+      "source_location": "L273",
       "weight": 1.0
     },
     {
@@ -255220,7 +255631,29 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L273",
+      "source_location": "L274",
+      "weight": 1.0
+    },
+    {
+      "source": "live_exit_engine_exitengine_final_pnl_snapshot",
+      "target": "positions_final_pnl_from_exit_price",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/exit_engine.rb",
+      "source_location": "L280",
+      "weight": 1.0
+    },
+    {
+      "source": "live_exit_engine_exitengine_final_pnl_snapshot",
+      "target": "schemas_smc_trading_signal_properties_entry_price",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/exit_engine.rb",
+      "source_location": "L281",
       "weight": 1.0
     },
     {
@@ -255231,7 +255664,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L315",
+      "source_location": "L343",
       "weight": 1.0
     },
     {
@@ -255242,7 +255675,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L325",
+      "source_location": "L353",
       "weight": 1.0
     },
     {
@@ -255253,7 +255686,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L325",
+      "source_location": "L353",
       "weight": 1.0
     },
     {
@@ -255264,7 +255697,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L334",
+      "source_location": "L362",
       "weight": 1.0
     },
     {
@@ -255275,7 +255708,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L340",
+      "source_location": "L368",
       "weight": 1.0
     },
     {
@@ -255286,7 +255719,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L356",
+      "source_location": "L384",
       "weight": 1.0
     },
     {
@@ -255297,7 +255730,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L356",
+      "source_location": "L384",
       "weight": 1.0
     },
     {
@@ -255308,7 +255741,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L370",
+      "source_location": "L398",
       "weight": 1.0
     },
     {
@@ -255319,7 +255752,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L370",
+      "source_location": "L398",
       "weight": 1.0
     },
     {
@@ -255330,7 +255763,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L373",
+      "source_location": "L401",
       "weight": 1.0
     },
     {
@@ -255341,7 +255774,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L386",
+      "source_location": "L414",
       "weight": 1.0
     },
     {
@@ -255352,7 +255785,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L406",
+      "source_location": "L434",
       "weight": 1.0
     },
     {
@@ -255363,7 +255796,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L406",
+      "source_location": "L434",
       "weight": 1.0
     },
     {
@@ -255374,7 +255807,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/exit_engine.rb",
-      "source_location": "L417",
+      "source_location": "L445",
       "weight": 1.0
     },
     {
@@ -256683,7 +257116,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L179",
+      "source_location": "L188",
       "weight": 1.0
     },
     {
@@ -256694,7 +257127,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L184",
+      "source_location": "L193",
       "weight": 1.0
     },
     {
@@ -256705,7 +257138,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L187",
+      "source_location": "L196",
       "weight": 1.0
     },
     {
@@ -256716,7 +257149,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L194",
+      "source_location": "L203",
       "weight": 1.0
     },
     {
@@ -256727,7 +257160,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L212",
+      "source_location": "L221",
       "weight": 1.0
     },
     {
@@ -256738,7 +257171,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L241",
+      "source_location": "L250",
       "weight": 1.0
     },
     {
@@ -256749,7 +257182,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L241",
+      "source_location": "L250",
       "weight": 1.0
     },
     {
@@ -256760,7 +257193,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L257",
+      "source_location": "L266",
       "weight": 1.0
     },
     {
@@ -256771,7 +257204,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L264",
+      "source_location": "L273",
       "weight": 1.0
     },
     {
@@ -256782,7 +257215,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L269",
+      "source_location": "L278",
       "weight": 1.0
     },
     {
@@ -256793,7 +257226,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L282",
+      "source_location": "L291",
       "weight": 1.0
     },
     {
@@ -256804,7 +257237,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L322",
+      "source_location": "L331",
       "weight": 1.0
     },
     {
@@ -256815,7 +257248,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L339",
+      "source_location": "L348",
       "weight": 1.0
     },
     {
@@ -256826,7 +257259,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L356",
+      "source_location": "L365",
       "weight": 1.0
     },
     {
@@ -256837,7 +257270,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L359",
+      "source_location": "L368",
       "weight": 1.0
     },
     {
@@ -256848,7 +257281,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L379",
+      "source_location": "L388",
       "weight": 1.0
     },
     {
@@ -256859,7 +257292,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L379",
+      "source_location": "L388",
       "weight": 1.0
     },
     {
@@ -256870,7 +257303,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L389",
+      "source_location": "L398",
       "weight": 1.0
     },
     {
@@ -256881,23 +257314,12 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L389",
+      "source_location": "L398",
       "weight": 1.0
     },
     {
       "source": "live_pnl_updater_service_pnlupdaterservice_broadcast_pnl_update",
       "target": "api_test_controller_testcontroller_broadcast",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L406",
-      "weight": 1.0
-    },
-    {
-      "source": "live_pnl_updater_service_pnlupdaterservice_broadcast_pnl_update",
-      "target": "live_underlying_monitor_cache",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -256907,6 +257329,17 @@
       "weight": 1.0
     },
     {
+      "source": "live_pnl_updater_service_pnlupdaterservice_broadcast_pnl_update",
+      "target": "live_underlying_monitor_cache",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/live/pnl_updater_service.rb",
+      "source_location": "L425",
+      "weight": 1.0
+    },
+    {
       "source": "live_pnl_updater_service_pnlupdaterservice_maybe_broadcast_pnl_stale",
       "target": "live_underlying_monitor_cache",
       "relation": "calls",
@@ -256914,7 +257347,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L426",
+      "source_location": "L439",
       "weight": 1.0
     },
     {
@@ -256925,7 +257358,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L429",
+      "source_location": "L442",
       "weight": 1.0
     },
     {
@@ -256936,7 +257369,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L436",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -256947,7 +257380,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L439",
+      "source_location": "L452",
       "weight": 1.0
     },
     {
@@ -256958,7 +257391,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L449",
+      "source_location": "L462",
       "weight": 1.0
     },
     {
@@ -256969,7 +257402,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L455",
+      "source_location": "L468",
       "weight": 1.0
     },
     {
@@ -256980,7 +257413,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L456",
+      "source_location": "L469",
       "weight": 1.0
     },
     {
@@ -256991,7 +257424,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L456",
+      "source_location": "L469",
       "weight": 1.0
     },
     {
@@ -257002,7 +257435,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L460",
+      "source_location": "L473",
       "weight": 1.0
     },
     {
@@ -257013,7 +257446,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L467",
+      "source_location": "L480",
       "weight": 1.0
     },
     {
@@ -257024,7 +257457,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/pnl_updater_service.rb",
-      "source_location": "L477",
+      "source_location": "L490",
       "weight": 1.0
     },
     {
@@ -257651,7 +258084,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -257662,7 +258095,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L67",
+      "source_location": "L68",
       "weight": 1.0
     },
     {
@@ -257673,7 +258106,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L69",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -257684,7 +258117,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L69",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -257695,7 +258128,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L96",
+      "source_location": "L97",
       "weight": 1.0
     },
     {
@@ -257706,7 +258139,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L102",
+      "source_location": "L103",
       "weight": 1.0
     },
     {
@@ -257717,7 +258150,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L105",
+      "source_location": "L106",
       "weight": 1.0
     },
     {
@@ -257728,7 +258161,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L105",
+      "source_location": "L106",
       "weight": 1.0
     },
     {
@@ -257739,7 +258172,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L112",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -257750,7 +258183,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L170",
+      "source_location": "L185",
       "weight": 1.0
     },
     {
@@ -257761,7 +258194,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L177",
+      "source_location": "L192",
       "weight": 1.0
     },
     {
@@ -257772,7 +258205,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L177",
+      "source_location": "L192",
       "weight": 1.0
     },
     {
@@ -257783,7 +258216,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L181",
+      "source_location": "L196",
       "weight": 1.0
     },
     {
@@ -257794,7 +258227,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L181",
+      "source_location": "L196",
       "weight": 1.0
     },
     {
@@ -257805,7 +258238,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L184",
+      "source_location": "L199",
       "weight": 1.0
     },
     {
@@ -257816,7 +258249,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L194",
+      "source_location": "L209",
       "weight": 1.0
     },
     {
@@ -257827,7 +258260,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L207",
+      "source_location": "L222",
       "weight": 1.0
     },
     {
@@ -257838,7 +258271,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L211",
+      "source_location": "L226",
       "weight": 1.0
     },
     {
@@ -257849,7 +258282,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L213",
+      "source_location": "L228",
       "weight": 1.0
     },
     {
@@ -257860,7 +258293,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L217",
+      "source_location": "L232",
       "weight": 1.0
     },
     {
@@ -257871,7 +258304,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L228",
+      "source_location": "L243",
       "weight": 1.0
     },
     {
@@ -257882,7 +258315,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L233",
+      "source_location": "L248",
       "weight": 1.0
     },
     {
@@ -257893,7 +258326,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L236",
+      "source_location": "L251",
       "weight": 1.0
     },
     {
@@ -257904,7 +258337,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L236",
+      "source_location": "L251",
       "weight": 1.0
     },
     {
@@ -257915,7 +258348,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/live/reconciliation_service.rb",
-      "source_location": "L251",
+      "source_location": "L266",
       "weight": 1.0
     },
     {
@@ -267628,7 +268061,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/portfolio/paper_peak_tracker.rb",
-      "source_location": "L29",
+      "source_location": "L30",
       "weight": 1.0
     },
     {
@@ -268343,7 +268776,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L24",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -268354,7 +268787,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L24",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -268365,7 +268798,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L31",
+      "source_location": "L27",
       "weight": 1.0
     },
     {
@@ -268376,7 +268809,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L34",
+      "source_location": "L30",
       "weight": 1.0
     },
     {
@@ -268387,7 +268820,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L38",
+      "source_location": "L33",
       "weight": 1.0
     },
     {
@@ -268398,7 +268831,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L70",
+      "source_location": "L66",
       "weight": 1.0
     },
     {
@@ -268409,7 +268842,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L76",
+      "source_location": "L72",
       "weight": 1.0
     },
     {
@@ -268420,7 +268853,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L80",
+      "source_location": "L76",
       "weight": 1.0
     },
     {
@@ -268431,7 +268864,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
-      "source_location": "L94",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -268442,7 +268875,128 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/exit_flow.rb",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_flow_exitflow_resolve_final_pnl",
+      "target": "positions_final_pnl_from_exit_price",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exit_flow.rb",
+      "source_location": "L101",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_flow_exitflow_resolve_final_pnl",
+      "target": "schemas_smc_trading_signal_properties_entry_price",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exit_flow.rb",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exit_flow_exitflow_resolve_final_pnl",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exit_flow.rb",
+      "source_location": "L123",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "target": "live_redis_pnl_cache_redispnlcache_clear_tracker",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_reconcile_tracker",
+      "target": "ai_ollama_client_instance",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_truth_snapshot",
+      "target": "positions_final_pnl_from_exit_price",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L73",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_truth_snapshot",
+      "target": "schemas_smc_trading_signal_properties_entry_price",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L74",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_drifted",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L88",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_apply_truth",
+      "target": "live_feed_health_service_feedhealthservice_with_lock",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L92",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_apply_truth",
+      "target": "schemas_smc_trading_signal_properties_meta",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
       "source_location": "L94",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_exited_pnl_reconciler_exitedpnlreconciler_apply_truth",
+      "target": "positions_meta_updater_metaupdater_update",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/exited_pnl_reconciler.rb",
+      "source_location": "L102",
       "weight": 1.0
     },
     {
@@ -268487,6 +269041,17 @@
       "confidence_score": 0.8,
       "source_file": "app/services/positions/feed_subscription.rb",
       "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "positions_final_pnl_from_exit_price",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/positions/final_pnl.rb",
+      "source_location": "L10",
       "weight": 1.0
     },
     {
@@ -268904,7 +269469,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
@@ -268915,7 +269480,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -268926,18 +269491,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L29",
-      "weight": 1.0
-    },
-    {
-      "source": "positions_paper_stats_query_paperstatsquery_active_positions",
-      "target": "schemas_smc_trading_signal_properties_active",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L47",
+      "source_location": "L30",
       "weight": 1.0
     },
     {
@@ -268948,7 +269502,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L55",
+      "source_location": "L58",
       "weight": 1.0
     },
     {
@@ -268959,7 +269513,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L87",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
@@ -268970,7 +269524,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/positions/paper_stats_query.rb",
-      "source_location": "L92",
+      "source_location": "L95",
       "weight": 1.0
     },
     {
@@ -280993,7 +281547,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "spec/services/positions/paper_stats_query_spec.rb",
-      "source_location": "L33",
+      "source_location": "L53",
       "weight": 1.0
     },
     {

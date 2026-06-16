@@ -26,6 +26,7 @@ module Live
         subscriptions_fixed: 0,
         activecache_fixed: 0,
         pnl_synced: 0,
+        exited_pnl_fixed: 0,
         errors: 0
       }
     end
@@ -103,18 +104,32 @@ module Live
       @stats[:reconciliations] += 1
 
       active_trackers = Positions::ActivePositionsCache.instance.active_trackers
-      return if active_trackers.empty?
 
-      hub = Live::MarketFeedHub.instance
-      active_cache = Positions::ActiveCache.instance
-      redis_cache = Live::RedisPnlCache.instance
+      unless active_trackers.empty?
+        hub = Live::MarketFeedHub.instance
+        active_cache = Positions::ActiveCache.instance
+        redis_cache = Live::RedisPnlCache.instance
 
-      active_trackers.each do |tracker|
-        reconcile_position(tracker, hub, active_cache, redis_cache)
-      rescue StandardError => e
-        @stats[:errors] += 1
-        Rails.logger.error("[ReconciliationService] Failed to reconcile tracker #{tracker.id}: #{e.class} - #{e.message}")
+        active_trackers.each do |tracker|
+          reconcile_position(tracker, hub, active_cache, redis_cache)
+        rescue StandardError => e
+          @stats[:errors] += 1
+          Rails.logger.error("[ReconciliationService] Failed to reconcile tracker #{tracker.id}: #{e.class} - #{e.message}")
+        end
       end
+
+      reconcile_exited_pnl_truth
+    end
+
+    def reconcile_exited_pnl_truth
+      batch = Positions::ExitedPnlReconciler.call(since: 1.day.ago)
+      return if batch[:fixed].zero?
+
+      @stats[:exited_pnl_fixed] += batch[:fixed]
+      @stats[:positions_fixed] += batch[:fixed]
+      Rails.logger.info(
+        "[ReconciliationService] Exited PnL truth sync: scanned=#{batch[:scanned]} fixed=#{batch[:fixed]}"
+      )
     end
 
     def reconcile_position(tracker, hub, active_cache, redis_cache)
@@ -133,14 +148,14 @@ module Live
         fixes_applied << :activecache
         @stats[:activecache_fixed] += 1
       end
-      
+
       # 2.5 Auto-correct stuck exits
       if stuck_in_exit?(tracker)
         fix_stuck_exit(tracker)
         fixes_applied << :stuck_exit
         @stats[:stuck_exits_fixed] ||= 0
         @stats[:stuck_exits_fixed] += 1
-        
+
         # If successfully exited, don't try to sync active PnL
         tracker.reload
         return unless tracker.active?
@@ -165,17 +180,17 @@ module Live
     def stuck_in_exit?(tracker)
       return false unless tracker.active?
       return false if tracker.exit_requested_at.blank?
-      
+
       # If requested more than 30 seconds ago but still active
       (Time.current - tracker.exit_requested_at) > 30.seconds
     end
-    
+
     def fix_stuck_exit(tracker)
       Rails.logger.warn("[ReconciliationService] Auto-correcting stuck exit for #{tracker.order_no}")
-      
+
       # Try the standard ExitEngine path first to ensure proper routing
       exit_engine = Rails.application.config.x.trading_supervisor&.dig(:exit_manager)
-      
+
       if exit_engine
         # The engine will check stale_exit_intent? and allow a retry
         exit_engine.execute_exit(tracker, tracker.meta['exit_reason'] || 'AUTO_RECONCILED_EXIT')

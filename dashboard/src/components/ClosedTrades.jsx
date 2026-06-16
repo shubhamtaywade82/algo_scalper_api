@@ -29,18 +29,26 @@ function formatTime(iso) {
 }
 
 function exitBadge(pos) {
+  const reason = (pos.exit_reason || '').toLowerCase()
+
+  if (reason.includes('premium_momentum')) return { label: 'PMF', cls: 'text-amber-400 border-amber-500/30' }
+  if (reason.includes('stop_loss') || reason.includes('premium_r_stop')) {
+    return { label: 'SL', cls: 'text-red-400 border-red-500/30' }
+  }
+  if (reason.includes('structure')) return { label: 'STRUCT', cls: 'text-orange-400 border-orange-500/30' }
+  if (reason.includes('time')) return { label: 'TIME', cls: 'text-yellow-400 border-yellow-500/30' }
+  if (reason.includes('trail')) return { label: 'TRAIL', cls: 'text-blue-400 border-blue-500/30' }
+  if (reason.includes('take_profit') || reason.includes('profit_floor')) {
+    return { label: 'TP', cls: 'text-emerald-400 border-emerald-500/30' }
+  }
+  if (reason.includes('manual')) return { label: 'MNL', cls: 'text-purple-400 border-purple-500/30' }
+
   const classification = pos.exit_classification
   if (classification === 'profit') return { label: 'TP', cls: 'text-emerald-400 border-emerald-500/30' }
   if (classification === 'loss') return { label: 'SL', cls: 'text-red-400 border-red-500/30' }
   if (classification === 'breakeven') return { label: 'BE', cls: 'text-yellow-400 border-yellow-500/30' }
-  const reason = pos.exit_reason
-  if (!reason) return { label: '—', cls: 'text-gray-600 border-gray-700' }
-  const r = reason.toLowerCase()
-  if (r.includes('sl') || r.includes('stop_loss')) return { label: 'SL', cls: 'text-red-400 border-red-500/30' }
-  if (r.includes('time') || r.includes('eod')) return { label: 'TIME', cls: 'text-yellow-400 border-yellow-500/30' }
-  if (r.includes('tp') || r.includes('target') || r.includes('profit')) return { label: 'TP', cls: 'text-emerald-400 border-emerald-500/30' }
-  if (r.includes('trail')) return { label: 'TRAIL', cls: 'text-blue-400 border-blue-500/30' }
-  if (r.includes('manual')) return { label: 'MNL', cls: 'text-purple-400 border-purple-500/30' }
+  if (!pos.exit_reason) return { label: '—', cls: 'text-gray-600 border-gray-700' }
+
   return { label: reason.slice(0, 8).toUpperCase(), cls: 'text-gray-400 border-gray-700' }
 }
 

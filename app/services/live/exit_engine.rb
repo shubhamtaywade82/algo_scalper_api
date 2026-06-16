@@ -227,19 +227,20 @@ module Live
     # @param reason [String]
     # @return [String]
     def normalize_exit_reason_with_final_pnl(tracker, reason)
-      final_pnl = tracker.last_pnl_rupees
-      entry_price = tracker.entry_price
-      quantity = tracker.quantity
+      snapshot = final_pnl_snapshot(tracker)
+      final_pnl = snapshot[:pnl]
+      pnl_pct_decimal = snapshot[:pnl_pct_decimal]
 
-      unless final_pnl.present? && entry_price.present? && quantity.present? &&
-             entry_price.to_f.positive? && quantity.to_i.positive?
-        Rails.logger.warn("[ExitEngine] Cannot update exit reason for #{tracker.order_no}: final_pnl=#{final_pnl.inspect}, entry_price=#{entry_price.inspect}, quantity=#{quantity.inspect}, reason=#{reason.inspect}")
+      unless final_pnl.present? && pnl_pct_decimal
+        Rails.logger.warn(
+          "[ExitEngine] Cannot update exit reason for #{tracker.order_no}: " \
+          "final_pnl=#{final_pnl.inspect}, pnl_pct=#{pnl_pct_decimal.inspect}, reason=#{reason.inspect}"
+        )
         ensure_exit_reason_on_meta!(tracker, reason)
         return reason
       end
 
-      pnl_pct_display = ((final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0)
-      classification = classify_exit(pnl_pct_display)
+      classification = classify_exit(pnl_pct_decimal)
 
       tracker.transaction do
         tracker.lock!
@@ -247,7 +248,7 @@ module Live
 
         execution_meta = (meta['execution'].is_a?(Hash) ? meta['execution'].dup : {})
         execution_meta['type'] = reason.to_s
-        execution_meta['final_pnl_pct'] = pnl_pct_display.round(2)
+        execution_meta['final_pnl_pct'] = pnl_pct_decimal.round(2)
         execution_meta['classified_as'] = classification
         meta['execution'] = execution_meta
 
@@ -273,6 +274,33 @@ module Live
       tracker.update!(meta: meta, exit_reason: col)
     rescue StandardError => e
       Rails.logger.warn("[ExitEngine] ensure_exit_reason_on_meta! failed for #{tracker&.order_no}: #{e.class} - #{e.message}")
+    end
+
+    def final_pnl_snapshot(tracker)
+      priced = Positions::FinalPnl.from_exit_price(
+        entry_price: tracker.entry_price,
+        quantity: tracker.quantity,
+        exit_price: tracker.exit_price,
+        is_exited: true
+      )
+      if priced
+        return {
+          pnl: priced[:pnl],
+          pnl_pct_decimal: (priced[:pnl_pct].to_f * 100.0)
+        }
+      end
+
+      final_pnl = tracker.last_pnl_rupees
+      entry_price = tracker.entry_price
+      quantity = tracker.quantity
+      return { pnl: nil, pnl_pct_decimal: nil } unless final_pnl.present? && entry_price.present? &&
+                                                       quantity.present? &&
+                                                       entry_price.to_f.positive? && quantity.to_i.positive?
+
+      {
+        pnl: final_pnl,
+        pnl_pct_decimal: (final_pnl.to_f / (entry_price.to_f * quantity.to_i)) * 100.0
+      }
     end
 
     def classify_exit(final_pnl_pct_decimal)

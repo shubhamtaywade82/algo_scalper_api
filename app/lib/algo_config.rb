@@ -27,6 +27,10 @@ class AlgoConfig
       fetch[:mode]
     end
 
+    def paper_trading_enabled?
+      fetch.dig(:paper_trading, :enabled) != false
+    end
+
     def reset!
       @cached_config = nil
       @cache_expires_at = nil
