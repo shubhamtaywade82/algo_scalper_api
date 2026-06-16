@@ -2605,8 +2605,8 @@
     "semantic_hash": ""
   },
   "dashboard/src/components/Header.jsx": {
-    "mtime": 1781600709.0330973,
-    "ast_hash": "d38ae409ee6235919926fabdfe2bd05b",
+    "mtime": 1781600851.9684057,
+    "ast_hash": "388864db8d3c4d8975a50fb60c2e8988",
     "semantic_hash": ""
   },
   "dashboard/src/components/OpenPositions.jsx": {
@@ -2735,8 +2735,8 @@
     "semantic_hash": ""
   },
   "dashboard/src/views/Charts.jsx": {
-    "mtime": 1781600816.979948,
-    "ast_hash": "274d1895f528f8e7e9d15729f187fb7e",
+    "mtime": 1781600834.4309483,
+    "ast_hash": "80aee2af8f16e002652716771a9df948",
     "semantic_hash": ""
   },
   "dashboard/src/views/Dashboard.jsx": {

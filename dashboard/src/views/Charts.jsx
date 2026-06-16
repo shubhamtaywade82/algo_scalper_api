@@ -1,5 +1,5 @@
 import { createSignal, createMemo, createResource, For, Show, onMount, onCleanup } from 'solid-js'
-import { A } from '@solidjs/router'
+import { A, useSearchParams } from '@solidjs/router'
 import { dashboardApiHeaders } from '../lib/dashboardApi'
 import { useDashboard } from '../stores/useDashboard'
 import { usePositions } from '../stores/usePositions'
@@ -38,7 +38,9 @@ async function fetchCandles({ indexKey, interval }) {
  * (no Header/footer chrome, no DashboardContext dependency). Lives at /charts.
  */
 export default function Charts() {
-  const [indexKey, setIndexKey] = createSignal('NIFTY')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialSymbol = (searchParams.symbol || 'NIFTY').toUpperCase()
+  const [indexKey, setIndexKey] = createSignal(initialSymbol)
   const [interval, setInterval_] = createSignal('5')
   const [indicators, setIndicators] = createSignal(DEFAULT_INDICATORS)
   const [showIndicatorPanel, setShowIndicatorPanel] = createSignal(false)
@@ -102,7 +104,7 @@ export default function Charts() {
                   class={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
                     indexKey() === idx ? 'bg-primary-500/20 text-primary-300' : 'text-gray-400 hover:text-gray-200'
                   }`}
-                  onClick={() => setIndexKey(idx)}
+                  onClick={() => { setIndexKey(idx); setSearchParams({ symbol: idx }); }}
                 >
                   {idx}
                 </button>

@@ -277061,7 +277061,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "dashboard/src/views/Charts.jsx",
-      "source_location": "L70",
+      "source_location": "L72",
       "weight": 1.0
     },
     {
@@ -277072,7 +277072,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "dashboard/src/views/Charts.jsx",
-      "source_location": "L79",
+      "source_location": "L81",
       "weight": 1.0
     },
     {
@@ -277083,7 +277083,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "dashboard/src/views/Charts.jsx",
-      "source_location": "L141",
+      "source_location": "L143",
       "weight": 1.0
     },
     {

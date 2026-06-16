@@ -155,9 +155,14 @@ export default function Header(props) {
 
           <div class="hidden xl:flex items-center gap-2.5 border-l border-white/10 pl-4 min-w-0">
             {/* Nifty 50 Card */}
-            <div class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+            <a
+              href="/charts?symbol=NIFTY"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+            >
               <div class="flex flex-col">
-                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Nifty 50</span>
+                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Nifty 50</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${niftyFlash()}`}>
                   {inr(props.indices?.nifty)}
                 </span>
@@ -182,12 +187,17 @@ export default function Header(props) {
                   )
                 })()}
               </div>
-            </div>
+            </a>
 
             {/* Bank Nifty Card */}
-            <div class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+            <a
+              href="/charts?symbol=BANKNIFTY"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+            >
               <div class="flex flex-col">
-                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Bank Nifty</span>
+                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Bank Nifty</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${bankniftyFlash()}`}>
                   {inr(props.indices?.banknifty)}
                 </span>
@@ -212,12 +222,17 @@ export default function Header(props) {
                   )
                 })()}
               </div>
-            </div>
+            </a>
 
             {/* Sensex Card */}
-            <div class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+            <a
+              href="/charts?symbol=SENSEX"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+            >
               <div class="flex flex-col">
-                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Sensex</span>
+                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Sensex</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${sensexFlash()}`}>
                   {inr(props.indices?.sensex)}
                 </span>
@@ -242,7 +257,7 @@ export default function Header(props) {
                   )
                 })()}
               </div>
-            </div>
+            </a>
           </div>
         </div>
 
@@ -279,12 +294,6 @@ export default function Header(props) {
             </svg>
             Analysis
           </A>
-          <a href="/charts" target="_blank" rel="noopener noreferrer" class={`${navLinkBase} ${navLinkInactive}`}>
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M18 20V10M12 20V4M6 20v-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Charts ↗
-          </a>
           <A href="/settings" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkSettingsActive} inactiveClass="">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
