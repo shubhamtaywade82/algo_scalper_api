@@ -226,11 +226,19 @@
       "_origin": "ast"
     },
     {
+      "id": "api_analysis_controller_analysiscontroller_risk_explorer",
+      "label": ".risk_explorer()",
+      "file_type": "code",
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L60",
+      "_origin": "ast"
+    },
+    {
       "id": "api_analysis_controller_analysiscontroller_historical",
       "label": ".historical()",
       "file_type": "code",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L59",
+      "source_location": "L82",
       "_origin": "ast"
     },
     {
@@ -238,7 +246,7 @@
       "label": ".ai_snapshot()",
       "file_type": "code",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L74",
+      "source_location": "L97",
       "_origin": "ast"
     },
     {
@@ -246,7 +254,15 @@
       "label": ".find_instrument()",
       "file_type": "code",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L124",
+      "source_location": "L147",
+      "_origin": "ast"
+    },
+    {
+      "id": "api_analysis_controller_analysiscontroller_index_known",
+      "label": ".index_known?()",
+      "file_type": "code",
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L157",
       "_origin": "ast"
     },
     {
@@ -254,7 +270,7 @@
       "label": ".index_config_summary()",
       "file_type": "code",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L134",
+      "source_location": "L161",
       "_origin": "ast"
     },
     {
@@ -262,7 +278,7 @@
       "label": ".safe_call()",
       "file_type": "code",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L148",
+      "source_location": "L175",
       "_origin": "ast"
     },
     {
@@ -270,7 +286,7 @@
       "label": ".render_analysis_internal_error()",
       "file_type": "code",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L155",
+      "source_location": "L182",
       "_origin": "ast"
     },
     {
@@ -10431,6 +10447,86 @@
       "file_type": "code",
       "source_file": "app/services/entries/guards/time_regime_guard.rb",
       "source_location": "L41",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard",
+      "label": "transaction_cost_guard.rb",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard",
+      "label": "TransactionCostGuard",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L12",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard_call",
+      "label": ".call()",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L18",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard_enabled",
+      "label": ".enabled?()",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L38",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard_expected_edge_pct",
+      "label": ".expected_edge_pct()",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L44",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard_round_trip_cost_pct",
+      "label": ".round_trip_cost_pct()",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L51",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard_spread_pct",
+      "label": ".spread_pct()",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L56",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard_slippage_pct",
+      "label": ".slippage_pct()",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L70",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard_fees_pct",
+      "label": ".fees_pct()",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L76",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_transactioncostguard_min_net_edge_pct",
+      "label": ".min_net_edge_pct()",
+      "file_type": "code",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L90",
       "_origin": "ast"
     },
     {
@@ -22246,7 +22342,7 @@
       "label": "EodCarryManager",
       "file_type": "code",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L9",
+      "source_location": "L12",
       "_origin": "ast"
     },
     {
@@ -22254,7 +22350,7 @@
       "label": ".run!()",
       "file_type": "code",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L10",
+      "source_location": "L13",
       "_origin": "ast"
     },
     {
@@ -22262,7 +22358,7 @@
       "label": ".active_trackers()",
       "file_type": "code",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L35",
+      "source_location": "L48",
       "_origin": "ast"
     },
     {
@@ -22270,7 +22366,55 @@
       "label": ".already_tagged?()",
       "file_type": "code",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L39",
+      "source_location": "L52",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_eod_carry_manager_eodcarrymanager_existing_carries",
+      "label": ".existing_carries()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L56",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_eod_carry_manager_eodcarrymanager_eligible_candidates",
+      "label": ".eligible_candidates()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L61",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_eod_carry_manager_eodcarrymanager_notional_of",
+      "label": ".notional_of()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L69",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_eod_carry_manager_eodcarrymanager_room_for",
+      "label": ".room_for?()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L73",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_eod_carry_manager_eodcarrymanager_max_carry_positions",
+      "label": ".max_carry_positions()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L80",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_eod_carry_manager_eodcarrymanager_max_carry_exposure_rupees",
+      "label": ".max_carry_exposure_rupees()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L84",
       "_origin": "ast"
     },
     {
@@ -22278,7 +22422,55 @@
       "label": ".tag_carry!()",
       "file_type": "code",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L43",
+      "source_location": "L88",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_expected_value_model",
+      "label": "expected_value_model.rb",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_expected_value_model_expectedvaluemodel",
+      "label": "ExpectedValueModel",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L8",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_expected_value_model_ev",
+      "label": "ev()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L13",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_expected_value_model_break_even_win_rate",
+      "label": "break_even_win_rate()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L22",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_expected_value_model_reward_multiple",
+      "label": "reward_multiple()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L29",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_expected_value_model_grid",
+      "label": "grid()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L37",
       "_origin": "ast"
     },
     {
@@ -22423,6 +22615,142 @@
       "file_type": "code",
       "source_file": "app/services/options_buying/mode.rb",
       "source_location": "L43",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer",
+      "label": "risk_explorer.rb",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer",
+      "label": "RiskExplorer",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L6",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_call",
+      "label": ".call()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L7",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_initialize",
+      "label": ".initialize()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L12",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_risk_config",
+      "label": ".risk_config()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L47",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_position_limits",
+      "label": ".position_limits()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L62",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_capital_snapshot",
+      "label": ".capital_snapshot()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L73",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_scenario_payload",
+      "label": ".scenario_payload()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L87",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_resolved_win_probability",
+      "label": ".resolved_win_probability()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L100",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_historical_context",
+      "label": ".historical_context()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L110",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_side_stats",
+      "label": ".side_stats()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L132",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_blend_side_stats",
+      "label": ".blend_side_stats()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L166",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_realized_context",
+      "label": ".realized_context()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L181",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_weighted_expectancy",
+      "label": ".weighted_expectancy()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L206",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_theta_churn_assessment",
+      "label": ".theta_churn_assessment()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L214",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_deploy_readiness",
+      "label": ".deploy_readiness()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L242",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_riskexplorer_index_config",
+      "label": ".index_config()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L261",
       "_origin": "ast"
     },
     {
@@ -36562,6 +36890,38 @@
       "_origin": "ast"
     },
     {
+      "id": "analysis_expectedvalueriskpanel",
+      "label": "ExpectedValueRiskPanel.jsx",
+      "file_type": "code",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "analysis_expectedvalueriskpanel_fmtpct",
+      "label": "fmtPct()",
+      "file_type": "code",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L4",
+      "_origin": "ast"
+    },
+    {
+      "id": "analysis_expectedvalueriskpanel_fmtnum",
+      "label": "fmtNum()",
+      "file_type": "code",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L9",
+      "_origin": "ast"
+    },
+    {
+      "id": "analysis_expectedvalueriskpanel_evclass",
+      "label": "evClass()",
+      "file_type": "code",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L14",
+      "_origin": "ast"
+    },
+    {
       "id": "analysis_historicalbehavior",
       "label": "HistoricalBehavior.jsx",
       "file_type": "code",
@@ -37174,7 +37534,7 @@
       "label": "watchlistTabKeys()",
       "file_type": "code",
       "source_file": "dashboard/src/views/Analysis.jsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "_origin": "ast"
     },
     {
@@ -44822,6 +45182,22 @@
       "_origin": "ast"
     },
     {
+      "id": "guards_transaction_cost_guard_spec",
+      "label": "transaction_cost_guard_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/services/entries/guards/transaction_cost_guard_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "guards_transaction_cost_guard_spec_configure",
+      "label": "configure()",
+      "file_type": "code",
+      "source_file": "spec/services/entries/guards/transaction_cost_guard_spec.rb",
+      "source_location": "L19",
+      "_origin": "ast"
+    },
+    {
       "id": "entries_no_trade_context_builder_spec",
       "label": "no_trade_context_builder_spec.rb",
       "file_type": "code",
@@ -45710,10 +46086,26 @@
       "_origin": "ast"
     },
     {
+      "id": "options_buying_expected_value_model_spec",
+      "label": "expected_value_model_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/services/options_buying/expected_value_model_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
       "id": "options_buying_minute_bar_aggregator_spec",
       "label": "minute_bar_aggregator_spec.rb",
       "file_type": "code",
       "source_file": "spec/services/options_buying/minute_bar_aggregator_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_risk_explorer_spec",
+      "label": "risk_explorer_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/services/options_buying/risk_explorer_spec.rb",
       "source_location": "L1",
       "_origin": "ast"
     },
@@ -101206,91 +101598,1387 @@
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_options_buying_framework",
-      "label": "Options Buying Framework",
+      "id": "docs_options_buying_framework_tl_dr",
+      "label": "TL;DR",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
       "source_location": "L1",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_mode_matrix",
-      "label": "Mode Matrix",
+      "id": "docs_options_buying_framework_phase_1_mindset_capital_preservation_rules",
+      "label": "Phase 1: Mindset & Capital Preservation Rules",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L9",
+      "source_location": "L10",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_intraday_scalper_principles_active",
-      "label": "Intraday Scalper Principles (Active)",
+      "id": "docs_options_buying_framework_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "label": "Phase 2: Dual Confirmation Setup Strategy (Data + Charts)",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L24",
+      "source_location": "L23",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_services",
-      "label": "Services",
+      "id": "docs_options_buying_framework_1_chart_structure_momentum_divergence",
+      "label": "1. Chart Structure (Momentum Divergence)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L27",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_data_validation_open_interest_option_chain_analytics",
+      "label": "2. Data Validation (Open Interest & Option Chain Analytics)",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
       "source_location": "L33",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_positional_reference_ep_92_carry_gated",
-      "label": "Positional Reference (Ep-92 — Carry-Gated)",
+      "id": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "label": "Phase 3: The Vertical Spread Execution Architecture",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L44",
+      "source_location": "L47",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_capital_mindset",
-      "label": "Capital & Mindset",
+      "id": "docs_options_buying_framework_mechanics_of_a_bull_call_spread",
+      "label": "Mechanics of a Bull Call Spread",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L48",
+      "source_location": "L51",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_dual_confirmation",
-      "label": "Dual Confirmation",
+      "id": "docs_options_buying_framework_mathematical_mechanics_at_expiration",
+      "label": "Mathematical Mechanics at Expiration",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L53",
+      "source_location": "L58",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_vertical_spreads_multi_day_holds",
-      "label": "Vertical Spreads (Multi-Day Holds)",
+      "id": "docs_options_buying_framework_precise_value_outcomes_based_on_spot_price_at_expiration",
+      "label": "Precise Value Outcomes Based on Spot Price at Expiration",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L59",
+      "source_location": "L75",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_when_positional_rules_apply_in_code",
-      "label": "When Positional Rules Apply in Code",
+      "id": "docs_options_buying_framework_phase_4_risk_management_trade_operations",
+      "label": "Phase 4: Risk Management & Trade Operations",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L63",
+      "source_location": "L89",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_shared_rules",
-      "label": "Shared Rules",
+      "id": "docs_options_buying_framework_tl_dr_98",
+      "label": "TL;DR",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L70",
+      "source_location": "L98",
       "_origin": "ast"
     },
     {
-      "id": "docs_options_buying_framework_related_docs",
-      "label": "Related Docs",
+      "id": "docs_options_buying_framework_step_by_step_architecture_for_an_automated_system",
+      "label": "Step-by-Step Architecture for an Automated System",
       "file_type": "document",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L79",
+      "source_location": "L106",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_implementation_blueprints",
+      "label": "Implementation Blueprints",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L136",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_data_filtering_daily_atr_and_technical_constraints",
+      "label": "1. Data Filtering: Daily ATR and Technical Constraints",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L138",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_live_validation_high_oi_breakout_monitor",
+      "label": "2. Live Validation: High-OI Breakout Monitor",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L175",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_3_execution_multi_leg_spread_order_construction",
+      "label": "3. Execution: Multi-Leg Spread Order Construction",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L207",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_critical_system_failure_modes_mitigation_strategies",
+      "label": "Critical System Failure Modes & Mitigation Strategies",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L258",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_269",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L269",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_architectural_mapping_framework_strategy_to_dhanhq_v2",
+      "label": "Architectural Mapping: Framework Strategy to DhanHQ v2",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L278",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_real_time_data_oi_validation_websocket",
+      "label": "1. Real-Time Data & OI Validation (WebSocket)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L301",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_order_execution_spread_routing_rest",
+      "label": "2. Order Execution & Spread Routing (REST)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L309",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_3_real_time_execution_guardrails_order_tracking",
+      "label": "3. Real-Time Execution Guardrails & Order Tracking",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L317",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_production_obstacles_missing_gaps",
+      "label": "Production Obstacles & Missing Gaps",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L327",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_timeframe_matrix_strategic_mapping",
+      "label": "Timeframe Matrix & Strategic Mapping",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L337",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_core_data_requirements_configurations",
+      "label": "Core Data Requirements & Configurations",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L348",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_daily_timeframe_1d_structural_risk_filtering",
+      "label": "1. Daily Timeframe ($1D$) – Structural Risk Filtering",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L350",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_timeframe_matrix_strategic_mapping_412",
+      "label": "Timeframe Matrix & Strategic Mapping",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L412",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_core_data_requirements_configurations_423",
+      "label": "Core Data Requirements & Configurations",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L423",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_daily_timeframe_1d_structural_risk_filtering_425",
+      "label": "1. Daily Timeframe ($1D$) – Structural Risk Filtering",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L425",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "label": "DhanHQ Client API Guide",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L487",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_table_of_contents",
+      "label": "Table of Contents",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L491",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_getting_started",
+      "label": "Getting Started",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L507",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_working_with_models",
+      "label": "Working With Models",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L567",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_orders",
+      "label": "Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L582",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_available_methods",
+      "label": "Available Methods",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L584",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_placement_payload_order_place_order_create_order_save",
+      "label": "Placement Payload (Order.place / Order#create / Order#save)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L606",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_modification_cancellation",
+      "label": "Modification & Cancellation",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L657",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_slicing_orders",
+      "label": "Slicing Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L680",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_super_forever_orders",
+      "label": "Super & Forever Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L713",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_super_orders",
+      "label": "Super Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L715",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_endpoints",
+      "label": "Endpoints",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L719",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_place_super_order",
+      "label": "Place Super Order",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L728",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_modify_super_order",
+      "label": "Modify Super Order",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L769",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_cancel_super_order",
+      "label": "Cancel Super Order",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L799",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_super_order_list",
+      "label": "Super Order List",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L808",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_forever_orders_gtt",
+      "label": "Forever Orders (GTT)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L812",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_portfolio_funds",
+      "label": "Portfolio & Funds",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L838",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_positions",
+      "label": "Positions",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L840",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_trade_ledger_data",
+      "label": "Trade & Ledger Data",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L869",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_trades",
+      "label": "Trades",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L871",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_ledger_entries",
+      "label": "Ledger Entries",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L885",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "label": "DhanHQ Client API Guide",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L904",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_table_of_contents_908",
+      "label": "Table of Contents",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L908",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_getting_started_924",
+      "label": "Getting Started",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L924",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_working_with_models_988",
+      "label": "Working With Models",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L988",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_orders_1003",
+      "label": "Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1003",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_available_methods_1005",
+      "label": "Available Methods",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1005",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_placement_payload_order_place_order_create_order_save_1027",
+      "label": "Placement Payload (Order.place / Order#create / Order#save)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1027",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_modification_cancellation_1078",
+      "label": "Modification & Cancellation",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1078",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_slicing_orders_1101",
+      "label": "Slicing Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1101",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_super_forever_orders_1134",
+      "label": "Super & Forever Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1134",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_super_orders_1136",
+      "label": "Super Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1136",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_endpoints_1140",
+      "label": "Endpoints",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1140",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_place_super_order_1149",
+      "label": "Place Super Order",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1149",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_modify_super_order_1211",
+      "label": "Modify Super Order",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1211",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_cancel_super_order_1262",
+      "label": "Cancel Super Order",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1262",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_super_order_list_1289",
+      "label": "Super Order List",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1289",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_forever_orders_gtt_1301",
+      "label": "Forever Orders (GTT)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1301",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_portfolio_funds_1329",
+      "label": "Portfolio & Funds",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1329",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_positions_1331",
+      "label": "Positions",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1331",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_holdings",
+      "label": "Holdings",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1360",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_funds",
+      "label": "Funds",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1368",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_trade_ledger_data_1382",
+      "label": "Trade & Ledger Data",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1382",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_trades_1384",
+      "label": "Trades",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1384",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_ledger_entries_1398",
+      "label": "Ledger Entries",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1398",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_data_market_services",
+      "label": "Data & Market Services",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1410",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_historical_data",
+      "label": "Historical Data",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1412",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_option_chain",
+      "label": "Option Chain",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1438",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_margin_calculator",
+      "label": "Margin Calculator",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1456",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_rest_market_feed_batch_ltp_ohlc_quote",
+      "label": "REST Market Feed (Batch LTP/OHLC/Quote)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1479",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_instrument_convenience_methods",
+      "label": "Instrument Convenience Methods",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1495",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_websocket_market_feed",
+      "label": "WebSocket Market Feed",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1544",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_account_utilities",
+      "label": "Account Utilities",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1567",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_profile",
+      "label": "Profile",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1569",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_alert_orders",
+      "label": "Alert Orders",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1581",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_edis_electronic_delivery_instruction_slip",
+      "label": "EDIS (Electronic Delivery Instruction Slip)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1620",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_ip_setup",
+      "label": "IP Setup",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1644",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_trader_control_kill_switch",
+      "label": "Trader Control (Kill Switch)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1657",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_kill_switch_model",
+      "label": "Kill Switch (model)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1669",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_constants_enums",
+      "label": "Constants & Enums",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1692",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_error_handling",
+      "label": "Error Handling",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1716",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_best_practices",
+      "label": "Best Practices",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1750",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_testing_development",
+      "label": "Testing & Development",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1765",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_1798",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1798",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_algorithmic_architecture_flowchart",
+      "label": "Algorithmic Architecture Flowchart",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1806",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_1_pre_market_risk_gate_volatility_assessment_1d_timeframe",
+      "label": "Step 1: Pre-Market Risk Gate & Volatility Assessment (1D Timeframe)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1810",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_2_directional_structural_scan_divergence_isolation_15m_timeframe",
+      "label": "Step 2: Directional Structural Scan & Divergence Isolation (15m Timeframe)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1854",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_3_micro_timeframe_high_oi_validation_trigger_live_tick_5m_buffer",
+      "label": "Step 3: Micro-Timeframe High-OI Validation Trigger (Live Tick & 5m Buffer)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1895",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_4_algorithmic_multi_leg_spread_entry_rest_execution_engine",
+      "label": "Step 4: Algorithmic Multi-Leg Spread Entry (REST Execution Engine)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1939",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_5_position_lifecycle_management_order_update_processing",
+      "label": "Step 5: Position Lifecycle Management & Order Update Processing",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2007",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_edge_case_handling_operational_safeguards",
+      "label": "Edge-Case Handling & Operational Safeguards",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2048",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_2054",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2054",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_the_4_structural_failure_modes_of_this_framework_for_intraday_buying",
+      "label": "The 4 Structural Failure Modes of This Framework for Intraday Buying",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2063",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_the_spread_drag_on_intraday_execution",
+      "label": "1. The Spread Drag on Intraday Execution",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2067",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_the_15_minute_momentum_squelch",
+      "label": "2. The 15-Minute Momentum Squelch",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2075",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_3_the_atr_filter_kills_the_outliers",
+      "label": "3. The ATR Filter Kills the Outliers",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2082",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_4_the_1_1_risk_reward_imbalance",
+      "label": "4. The 1:1 Risk-Reward Imbalance",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2089",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_how_to_calibrate_the_system_for_real_world_intraday_autotrading",
+      "label": "How to Calibrate the System for Real-World Intraday Autotrading",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2098",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_2115",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2115",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_architectural_ingestion_execution_loop",
+      "label": "Architectural Ingestion & Execution Loop",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2124",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_by_step_intraday_framework_implementation",
+      "label": "Step-by-Step Intraday Framework Implementation",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2130",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_real_time_option_chain_greek_scoping_rest_snapshots",
+      "label": "1. Real-Time Option Chain & Greek Scoping (REST Snapshots)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2132",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_high_frequency_local_data_aggregation_websocket_pipeline",
+      "label": "2. High-Frequency Local Data Aggregation (WebSocket Pipeline)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2171",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_3_high_velocity_breakout_trigger_system",
+      "label": "3. High-Velocity Breakout Trigger System",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2212",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_4_execution_routine_intraday_order_routing",
+      "label": "4. Execution Routine (`INTRADAY` Order Routing)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2251",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_5_live_tracking_and_exit_orchestration",
+      "label": "5. Live Tracking and Exit Orchestration",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2297",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_system_safeguards_real_world_constraints",
+      "label": "System Safeguards & Real-World Constraints",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2346",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_2352",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2352",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_functional_system_data_flow",
+      "label": "Functional System Data Flow",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2361",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_expected_value_risk_explorer",
+      "label": "Expected Value & Risk Explorer",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2365",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_detailed_product_requirements_prd",
+      "label": "Detailed Product Requirements (PRD)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2373",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_functional_scope_gate_parameters",
+      "label": "1. Functional Scope & Gate Parameters",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2375",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_execution_risk_boundaries",
+      "label": "2. Execution & Risk Boundaries",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2381",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_technical_implementation_plan",
+      "label": "Technical Implementation Plan",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2389",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_relational_persistence_architecture",
+      "label": "Relational Persistence Architecture",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2558",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_database_migration_schema",
+      "label": "Database Migration Schema",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2562",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "label": "Operational Recovery & Resilience Rules",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2595",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_2601",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2601",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_the_websocket_ingestion_anti_pattern",
+      "label": "The WebSocket Ingestion Anti-Pattern",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2610",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_decoupled_event_driven_system_architecture",
+      "label": "Decoupled Event-Driven System Architecture",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2629",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_production_grade_decoupled_blueprint",
+      "label": "Production-Grade Decoupled Blueprint",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2641",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_synchronization_strategy_for_index_option_ticks",
+      "label": "Synchronization Strategy for Index & Option Ticks",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2702",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_the_architecture_solution",
+      "label": "The Architecture Solution",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2713",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_2719",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2719",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_the_latest_value_structural_blind_spot",
+      "label": "The \"Latest Value\" Structural Blind Spot",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2727",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_upgrading_to_a_time_series_pipeline",
+      "label": "Upgrading to a Time-Series Pipeline",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2741",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_refined_production_implementation_plan",
+      "label": "Refined Production Implementation Plan",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2759",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_the_updated_ingestion_hook_websocket_connection",
+      "label": "1. The Updated Ingestion Hook (WebSocket Connection)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2761",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_building_an_event_driven_processing_service_no_polling",
+      "label": "2. Building an Event-Driven Processing Service (No Polling)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2797",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_3_real_time_signal_processing_intraday_evaluator",
+      "label": "3. Real-Time Signal Processing (Intraday Evaluator)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2840",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_2879",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2879",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_architectural_refactoring_blueprint",
+      "label": "Architectural Refactoring Blueprint",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2888",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_directory_structure_additions_for_algo_scalper_api",
+      "label": "1. Directory Structure Additions for `algo_scalper_api`",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2903",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_technical_code_integration",
+      "label": "2. Technical Code Integration",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2926",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_1_refactoring_the_ingestion_pipeline",
+      "label": "Step 1: Refactoring the Ingestion Pipeline",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2928",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_2_the_event_driven_stream_consumer_loop",
+      "label": "Step 2: The Event-Driven Stream Consumer Loop",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2983",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_3_sliding_window_logic_breakout_validation",
+      "label": "Step 3: Sliding Window Logic & Breakout Validation",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3030",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_step_4_core_execution_router_configuration",
+      "label": "Step 4: Core Execution Router Configuration",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3070",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_3_operational_deployment_steps",
+      "label": "3. Operational Deployment Steps",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3124",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_3134",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3134",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_architectural_comparison_matrix",
+      "label": "Architectural Comparison Matrix",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3143",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_why_pure_ruby_works_given_the_redis_buffer",
+      "label": "Why Pure Ruby Works (Given the Redis Buffer)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3154",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_the_i_o_offloading_advantage",
+      "label": "1. The I/O Offloading Advantage",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3158",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_native_gem_reuse",
+      "label": "2. Native Gem Reuse",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3162",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_where_ruby_fails_the_case_for_the_node_js_sidecar",
+      "label": "Where Ruby Fails (The Case for the Node.js Sidecar)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3176",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_gvl_contention_on_binary_unpacking",
+      "label": "1. GVL Contention on Binary Unpacking",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3180",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_node_js_binary_processing_superiority",
+      "label": "2. Node.js Binary Processing Superiority",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3192",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_the_verdict_execution_strategy",
+      "label": "The Verdict & Execution Strategy",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3198",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_phase_1_stick_to_pure_ruby_current_scale",
+      "label": "Phase 1: Stick to Pure Ruby (Current Scale)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3200",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_phase_2_migrate_to_a_ingestion_only_node_js_sidecar_scale_50_strikes",
+      "label": "Phase 2: Migrate to a Ingestion-Only Node.js Sidecar (Scale > 50 Strikes)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3204",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_3228",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3228",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_why_your_current_rails_setup_is_architecturally_sound",
+      "label": "Why Your Current Rails Setup is Architecturally Sound",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3236",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_concrete_scaling_guardrails",
+      "label": "Concrete Scaling Guardrails",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3246",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_production_hardening_checklist_for_algo_scalper_api",
+      "label": "Production Hardening Checklist for `algo_scalper_api`",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3259",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_enforce_process_separation_at_the_os_level",
+      "label": "1. Enforce Process Separation at the OS Level",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3263",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_optimize_the_ruby_garbage_collector_for_low_latency_throughput",
+      "label": "2. Optimize the Ruby Garbage Collector for Low-Latency Throughput",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3271",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_3_implement_redis_stream_auto_trimming",
+      "label": "3. Implement Redis Stream Auto-Trimming",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3283",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_tl_dr_3295",
+      "label": "TL;DR",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3295",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_what_was_missing_the_structural_asymmetry",
+      "label": "What Was Missing: The Structural Asymmetry",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3304",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_refactored_polymorphic_implementations",
+      "label": "Refactored Polymorphic Implementations",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3315",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_1_dual_scouting_engine_ce_pe_support",
+      "label": "1. Dual-Scouting Engine (CE & PE Support)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3317",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_2_direction_aware_signal_processing",
+      "label": "2. Direction-Aware Signal Processing",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3367",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_framework_summary_directional_guardrails",
+      "label": "Summary Directional Guardrails",
+      "file_type": "document",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3416",
       "_origin": "ast"
     },
     {
@@ -111709,11 +113397,20 @@
     },
     {
       "source": "api_analysis_controller_analysiscontroller",
+      "target": "api_analysis_controller_analysiscontroller_risk_explorer",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L60",
+      "weight": 1.0
+    },
+    {
+      "source": "api_analysis_controller_analysiscontroller",
       "target": "api_analysis_controller_analysiscontroller_historical",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L59",
+      "source_location": "L82",
       "weight": 1.0
     },
     {
@@ -111722,7 +113419,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L74",
+      "source_location": "L97",
       "weight": 1.0
     },
     {
@@ -111731,7 +113428,16 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L124",
+      "source_location": "L147",
+      "weight": 1.0
+    },
+    {
+      "source": "api_analysis_controller_analysiscontroller",
+      "target": "api_analysis_controller_analysiscontroller_index_known",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L157",
       "weight": 1.0
     },
     {
@@ -111740,7 +113446,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L134",
+      "source_location": "L161",
       "weight": 1.0
     },
     {
@@ -111749,7 +113455,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L148",
+      "source_location": "L175",
       "weight": 1.0
     },
     {
@@ -111758,7 +113464,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L155",
+      "source_location": "L182",
       "weight": 1.0
     },
     {
@@ -111802,13 +113508,33 @@
       "weight": 1.0
     },
     {
+      "source": "api_analysis_controller_analysiscontroller_risk_explorer",
+      "target": "api_analysis_controller_analysiscontroller_index_known",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "api_analysis_controller_analysiscontroller_risk_explorer",
+      "target": "api_analysis_controller_analysiscontroller_render_analysis_internal_error",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L78",
+      "weight": 1.0
+    },
+    {
       "source": "api_analysis_controller_analysiscontroller_historical",
       "target": "api_analysis_controller_analysiscontroller_render_analysis_internal_error",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L68",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -111818,7 +113544,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L76",
+      "source_location": "L99",
       "weight": 1.0
     },
     {
@@ -126411,6 +128137,137 @@
       "confidence": "EXTRACTED",
       "source_file": "app/services/entries/guards/time_regime_guard.rb",
       "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard",
+      "target": "guards_transaction_cost_guard_transactioncostguard",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard",
+      "target": "guards_transaction_cost_guard_transactioncostguard_call",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard",
+      "target": "guards_transaction_cost_guard_transactioncostguard_enabled",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard",
+      "target": "guards_transaction_cost_guard_transactioncostguard_expected_edge_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard",
+      "target": "guards_transaction_cost_guard_transactioncostguard_round_trip_cost_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard",
+      "target": "guards_transaction_cost_guard_transactioncostguard_spread_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L56",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard",
+      "target": "guards_transaction_cost_guard_transactioncostguard_slippage_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L70",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard",
+      "target": "guards_transaction_cost_guard_transactioncostguard_fees_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L76",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard",
+      "target": "guards_transaction_cost_guard_transactioncostguard_min_net_edge_pct",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L90",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_call",
+      "target": "guards_transaction_cost_guard_transactioncostguard_enabled",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_call",
+      "target": "guards_transaction_cost_guard_transactioncostguard_expected_edge_pct",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_call",
+      "target": "guards_transaction_cost_guard_transactioncostguard_round_trip_cost_pct",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_round_trip_cost_pct",
+      "target": "guards_transaction_cost_guard_transactioncostguard_spread_pct",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L52",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_round_trip_cost_pct",
+      "target": "guards_transaction_cost_guard_transactioncostguard_fees_pct",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L52",
       "weight": 1.0
     },
     {
@@ -147061,7 +148918,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L9",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
@@ -147070,7 +148927,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L10",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -147079,7 +148936,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L35",
+      "source_location": "L48",
       "weight": 1.0
     },
     {
@@ -147088,7 +148945,61 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L39",
+      "source_location": "L52",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_existing_carries",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L56",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_eligible_candidates",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L61",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_notional_of",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L69",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_room_for",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L73",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_max_carry_positions",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L80",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_max_carry_exposure_rupees",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L84",
       "weight": 1.0
     },
     {
@@ -147097,27 +149008,142 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L43",
+      "source_location": "L88",
       "weight": 1.0
     },
     {
       "source": "options_buying_eod_carry_manager_eodcarrymanager_run",
-      "target": "options_buying_eod_carry_manager_eodcarrymanager_already_tagged",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_existing_carries",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L19",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
       "source": "options_buying_eod_carry_manager_eodcarrymanager_run",
-      "target": "options_buying_eod_carry_manager_eodcarrymanager_tag_carry",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_notional_of",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
       "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_run",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_eligible_candidates",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_run",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_room_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_run",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_tag_carry",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_existing_carries",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_already_tagged",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_eligible_candidates",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_already_tagged",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L63",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_expected_value_model",
+      "target": "options_buying_expected_value_model_expectedvaluemodel",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_expected_value_model",
+      "target": "options_buying_expected_value_model_ev",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_expected_value_model",
+      "target": "options_buying_expected_value_model_break_even_win_rate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_expected_value_model",
+      "target": "options_buying_expected_value_model_reward_multiple",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_expected_value_model",
+      "target": "options_buying_expected_value_model_grid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_expected_value_model_grid",
+      "target": "options_buying_expected_value_model_break_even_win_rate",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_expected_value_model_grid",
+      "target": "options_buying_expected_value_model_ev",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/expected_value_model.rb",
+      "source_location": "L48",
       "weight": 1.0
     },
     {
@@ -147282,6 +149308,230 @@
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/mode.rb",
       "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer",
+      "target": "options_buying_risk_explorer_riskexplorer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_call",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_initialize",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_risk_config",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_position_limits",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_capital_snapshot",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L73",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_scenario_payload",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L87",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_resolved_win_probability",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L100",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_historical_context",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L110",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_side_stats",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L132",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_blend_side_stats",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L166",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_realized_context",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L181",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_weighted_expectancy",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L206",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_theta_churn_assessment",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L214",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_deploy_readiness",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L242",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer",
+      "target": "options_buying_risk_explorer_riskexplorer_index_config",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L261",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_call",
+      "target": "options_buying_risk_explorer_riskexplorer_historical_context",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_call",
+      "target": "options_buying_risk_explorer_riskexplorer_resolved_win_probability",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_call",
+      "target": "options_buying_risk_explorer_riskexplorer_scenario_payload",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_call",
+      "target": "options_buying_risk_explorer_riskexplorer_theta_churn_assessment",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_call",
+      "target": "options_buying_risk_explorer_riskexplorer_deploy_readiness",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_historical_context",
+      "target": "options_buying_risk_explorer_riskexplorer_side_stats",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L117",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_historical_context",
+      "target": "options_buying_risk_explorer_riskexplorer_blend_side_stats",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L125",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_realized_context",
+      "target": "options_buying_risk_explorer_riskexplorer_weighted_expectancy",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L196",
       "weight": 1.0
     },
     {
@@ -168517,6 +170767,53 @@
       "weight": 1.0
     },
     {
+      "source": "analysis_expectedvalueriskpanel",
+      "target": "solid_js",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "analysis_expectedvalueriskpanel",
+      "target": "analysis_expectedvalueriskpanel_fmtpct",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "analysis_expectedvalueriskpanel",
+      "target": "analysis_expectedvalueriskpanel_fmtnum",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "analysis_expectedvalueriskpanel",
+      "target": "analysis_expectedvalueriskpanel_evclass",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "analysis_expectedvalueriskpanel_fmtpct",
+      "target": "analysis_expectedvalueriskpanel_fmtnum",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx",
+      "source_location": "L84",
+      "weight": 1.0
+    },
+    {
       "source": "analysis_historicalbehavior",
       "target": "solid_js",
       "relation": "imports_from",
@@ -169572,7 +171869,7 @@
     },
     {
       "source": "views_analysis",
-      "target": "analysis_calibrationpanel",
+      "target": "analysis_expectedvalueriskpanel",
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -169582,11 +171879,21 @@
     },
     {
       "source": "views_analysis",
+      "target": "analysis_calibrationpanel",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "dashboard/src/views/Analysis.jsx",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "views_analysis",
       "target": "views_analysis_watchlisttabkeys",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/views/Analysis.jsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -180681,6 +182988,15 @@
       "confidence": "EXTRACTED",
       "source_file": "spec/services/entries/guards/rsi_bias_guard_spec.rb",
       "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_spec",
+      "target": "guards_transaction_cost_guard_spec_configure",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "spec/services/entries/guards/transaction_cost_guard_spec.rb",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -240867,7 +243183,7 @@
     },
     {
       "source": "docs_options_buying_framework",
-      "target": "docs_options_buying_framework_options_buying_framework",
+      "target": "docs_options_buying_framework_tl_dr",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
@@ -240875,26 +243191,35 @@
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_options_buying_framework",
-      "target": "docs_options_buying_framework_mode_matrix",
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_phase_1_mindset_capital_preservation_rules",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L9",
+      "source_location": "L10",
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_options_buying_framework",
-      "target": "docs_options_buying_framework_intraday_scalper_principles_active",
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_phase_2_dual_confirmation_setup_strategy_data_charts",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L24",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_intraday_scalper_principles_active",
-      "target": "docs_options_buying_framework_services",
+      "source": "docs_options_buying_framework_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "target": "docs_options_buying_framework_1_chart_structure_momentum_divergence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_phase_2_dual_confirmation_setup_strategy_data_charts",
+      "target": "docs_options_buying_framework_2_data_validation_open_interest_option_chain_analytics",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
@@ -240902,66 +243227,1515 @@
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_options_buying_framework",
-      "target": "docs_options_buying_framework_positional_reference_ep_92_carry_gated",
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L44",
+      "source_location": "L47",
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_positional_reference_ep_92_carry_gated",
-      "target": "docs_options_buying_framework_capital_mindset",
+      "source": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "target": "docs_options_buying_framework_mechanics_of_a_bull_call_spread",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L48",
+      "source_location": "L51",
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_positional_reference_ep_92_carry_gated",
-      "target": "docs_options_buying_framework_dual_confirmation",
+      "source": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "target": "docs_options_buying_framework_mathematical_mechanics_at_expiration",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L53",
+      "source_location": "L58",
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_positional_reference_ep_92_carry_gated",
-      "target": "docs_options_buying_framework_vertical_spreads_multi_day_holds",
+      "source": "docs_options_buying_framework_phase_3_the_vertical_spread_execution_architecture",
+      "target": "docs_options_buying_framework_precise_value_outcomes_based_on_spot_price_at_expiration",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L59",
+      "source_location": "L75",
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_positional_reference_ep_92_carry_gated",
-      "target": "docs_options_buying_framework_when_positional_rules_apply_in_code",
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_phase_4_risk_management_trade_operations",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L63",
+      "source_location": "L89",
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_options_buying_framework",
-      "target": "docs_options_buying_framework_shared_rules",
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_tl_dr_98",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L70",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
-      "source": "docs_options_buying_framework_options_buying_framework",
-      "target": "docs_options_buying_framework_related_docs",
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_step_by_step_architecture_for_an_automated_system",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_framework.md",
-      "source_location": "L79",
+      "source_location": "L106",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_implementation_blueprints",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L136",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_implementation_blueprints",
+      "target": "docs_options_buying_framework_1_data_filtering_daily_atr_and_technical_constraints",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L138",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_implementation_blueprints",
+      "target": "docs_options_buying_framework_2_live_validation_high_oi_breakout_monitor",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L175",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_implementation_blueprints",
+      "target": "docs_options_buying_framework_3_execution_multi_leg_spread_order_construction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L207",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_critical_system_failure_modes_mitigation_strategies",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L258",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_tl_dr_269",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L269",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_architectural_mapping_framework_strategy_to_dhanhq_v2",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L278",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_architectural_mapping_framework_strategy_to_dhanhq_v2",
+      "target": "docs_options_buying_framework_1_real_time_data_oi_validation_websocket",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L301",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_architectural_mapping_framework_strategy_to_dhanhq_v2",
+      "target": "docs_options_buying_framework_2_order_execution_spread_routing_rest",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L309",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_architectural_mapping_framework_strategy_to_dhanhq_v2",
+      "target": "docs_options_buying_framework_3_real_time_execution_guardrails_order_tracking",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L317",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_production_obstacles_missing_gaps",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L327",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_timeframe_matrix_strategic_mapping",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L337",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_core_data_requirements_configurations",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L348",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_core_data_requirements_configurations",
+      "target": "docs_options_buying_framework_1_daily_timeframe_1d_structural_risk_filtering",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L350",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_timeframe_matrix_strategic_mapping_412",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L412",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_core_data_requirements_configurations_423",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L423",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_core_data_requirements_configurations_423",
+      "target": "docs_options_buying_framework_1_daily_timeframe_1d_structural_risk_filtering_425",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L425",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L487",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "target": "docs_options_buying_framework_table_of_contents",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L491",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "target": "docs_options_buying_framework_getting_started",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L507",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "target": "docs_options_buying_framework_working_with_models",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L567",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "target": "docs_options_buying_framework_orders",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L582",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_orders",
+      "target": "docs_options_buying_framework_available_methods",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L584",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_orders",
+      "target": "docs_options_buying_framework_placement_payload_order_place_order_create_order_save",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L606",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_orders",
+      "target": "docs_options_buying_framework_modification_cancellation",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L657",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_orders",
+      "target": "docs_options_buying_framework_slicing_orders",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L680",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "target": "docs_options_buying_framework_super_forever_orders",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L713",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_forever_orders",
+      "target": "docs_options_buying_framework_super_orders",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L715",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders",
+      "target": "docs_options_buying_framework_endpoints",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L719",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders",
+      "target": "docs_options_buying_framework_place_super_order",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L728",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders",
+      "target": "docs_options_buying_framework_modify_super_order",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L769",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders",
+      "target": "docs_options_buying_framework_cancel_super_order",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L799",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders",
+      "target": "docs_options_buying_framework_super_order_list",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L808",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_forever_orders",
+      "target": "docs_options_buying_framework_forever_orders_gtt",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L812",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "target": "docs_options_buying_framework_portfolio_funds",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L838",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_portfolio_funds",
+      "target": "docs_options_buying_framework_positions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L840",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide",
+      "target": "docs_options_buying_framework_trade_ledger_data",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L869",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_trade_ledger_data",
+      "target": "docs_options_buying_framework_trades",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L871",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_trade_ledger_data",
+      "target": "docs_options_buying_framework_ledger_entries",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L885",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework",
+      "target": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L904",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_table_of_contents_908",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L908",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_getting_started_924",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L924",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_working_with_models_988",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L988",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_orders_1003",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1003",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_orders_1003",
+      "target": "docs_options_buying_framework_available_methods_1005",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1005",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_orders_1003",
+      "target": "docs_options_buying_framework_placement_payload_order_place_order_create_order_save_1027",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1027",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_orders_1003",
+      "target": "docs_options_buying_framework_modification_cancellation_1078",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1078",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_orders_1003",
+      "target": "docs_options_buying_framework_slicing_orders_1101",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1101",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_super_forever_orders_1134",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1134",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_forever_orders_1134",
+      "target": "docs_options_buying_framework_super_orders_1136",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1136",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders_1136",
+      "target": "docs_options_buying_framework_endpoints_1140",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1140",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders_1136",
+      "target": "docs_options_buying_framework_place_super_order_1149",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1149",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders_1136",
+      "target": "docs_options_buying_framework_modify_super_order_1211",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1211",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders_1136",
+      "target": "docs_options_buying_framework_cancel_super_order_1262",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1262",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_orders_1136",
+      "target": "docs_options_buying_framework_super_order_list_1289",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1289",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_super_forever_orders_1134",
+      "target": "docs_options_buying_framework_forever_orders_gtt_1301",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1301",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_portfolio_funds_1329",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1329",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_portfolio_funds_1329",
+      "target": "docs_options_buying_framework_positions_1331",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1331",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_portfolio_funds_1329",
+      "target": "docs_options_buying_framework_holdings",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1360",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_portfolio_funds_1329",
+      "target": "docs_options_buying_framework_funds",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1368",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_trade_ledger_data_1382",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1382",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_trade_ledger_data_1382",
+      "target": "docs_options_buying_framework_trades_1384",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1384",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_trade_ledger_data_1382",
+      "target": "docs_options_buying_framework_ledger_entries_1398",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1398",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_data_market_services",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1410",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_data_market_services",
+      "target": "docs_options_buying_framework_historical_data",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1412",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_data_market_services",
+      "target": "docs_options_buying_framework_option_chain",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1438",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_data_market_services",
+      "target": "docs_options_buying_framework_margin_calculator",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1456",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_data_market_services",
+      "target": "docs_options_buying_framework_rest_market_feed_batch_ltp_ohlc_quote",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1479",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_data_market_services",
+      "target": "docs_options_buying_framework_instrument_convenience_methods",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1495",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_data_market_services",
+      "target": "docs_options_buying_framework_websocket_market_feed",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1544",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_account_utilities",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1567",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_account_utilities",
+      "target": "docs_options_buying_framework_profile",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1569",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_account_utilities",
+      "target": "docs_options_buying_framework_alert_orders",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1581",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_account_utilities",
+      "target": "docs_options_buying_framework_edis_electronic_delivery_instruction_slip",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1620",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_account_utilities",
+      "target": "docs_options_buying_framework_ip_setup",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1644",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_account_utilities",
+      "target": "docs_options_buying_framework_trader_control_kill_switch",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1657",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_account_utilities",
+      "target": "docs_options_buying_framework_kill_switch_model",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1669",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_constants_enums",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1692",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_error_handling",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1716",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_best_practices",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1750",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_testing_development",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1765",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_tl_dr_1798",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1798",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_algorithmic_architecture_flowchart",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1806",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_step_1_pre_market_risk_gate_volatility_assessment_1d_timeframe",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1810",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_step_2_directional_structural_scan_divergence_isolation_15m_timeframe",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1854",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_step_3_micro_timeframe_high_oi_validation_trigger_live_tick_5m_buffer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1895",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_step_4_algorithmic_multi_leg_spread_entry_rest_execution_engine",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L1939",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_step_5_position_lifecycle_management_order_update_processing",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2007",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_edge_case_handling_operational_safeguards",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2048",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_tl_dr_2054",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2054",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_the_4_structural_failure_modes_of_this_framework_for_intraday_buying",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2063",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_the_4_structural_failure_modes_of_this_framework_for_intraday_buying",
+      "target": "docs_options_buying_framework_1_the_spread_drag_on_intraday_execution",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2067",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_the_4_structural_failure_modes_of_this_framework_for_intraday_buying",
+      "target": "docs_options_buying_framework_2_the_15_minute_momentum_squelch",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2075",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_the_4_structural_failure_modes_of_this_framework_for_intraday_buying",
+      "target": "docs_options_buying_framework_3_the_atr_filter_kills_the_outliers",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2082",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_the_4_structural_failure_modes_of_this_framework_for_intraday_buying",
+      "target": "docs_options_buying_framework_4_the_1_1_risk_reward_imbalance",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2089",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_how_to_calibrate_the_system_for_real_world_intraday_autotrading",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2098",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_tl_dr_2115",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2115",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_architectural_ingestion_execution_loop",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2124",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_step_by_step_intraday_framework_implementation",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2130",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_step_by_step_intraday_framework_implementation",
+      "target": "docs_options_buying_framework_1_real_time_option_chain_greek_scoping_rest_snapshots",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2132",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_step_by_step_intraday_framework_implementation",
+      "target": "docs_options_buying_framework_2_high_frequency_local_data_aggregation_websocket_pipeline",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2171",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_step_by_step_intraday_framework_implementation",
+      "target": "docs_options_buying_framework_3_high_velocity_breakout_trigger_system",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2212",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_step_by_step_intraday_framework_implementation",
+      "target": "docs_options_buying_framework_4_execution_routine_intraday_order_routing",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2251",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_step_by_step_intraday_framework_implementation",
+      "target": "docs_options_buying_framework_5_live_tracking_and_exit_orchestration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2297",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_system_safeguards_real_world_constraints",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2346",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_tl_dr_2352",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2352",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_functional_system_data_flow",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2361",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_testing_development",
+      "target": "docs_options_buying_framework_expected_value_risk_explorer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2365",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_detailed_product_requirements_prd",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2373",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_detailed_product_requirements_prd",
+      "target": "docs_options_buying_framework_1_functional_scope_gate_parameters",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2375",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_detailed_product_requirements_prd",
+      "target": "docs_options_buying_framework_2_execution_risk_boundaries",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2381",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_technical_implementation_plan",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2389",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_relational_persistence_architecture",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2558",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_relational_persistence_architecture",
+      "target": "docs_options_buying_framework_database_migration_schema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2562",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2595",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_tl_dr_2601",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2601",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_the_websocket_ingestion_anti_pattern",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2610",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_decoupled_event_driven_system_architecture",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2629",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_production_grade_decoupled_blueprint",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2641",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_synchronization_strategy_for_index_option_ticks",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2702",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_synchronization_strategy_for_index_option_ticks",
+      "target": "docs_options_buying_framework_the_architecture_solution",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2713",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_tl_dr_2719",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2719",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_the_latest_value_structural_blind_spot",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2727",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_upgrading_to_a_time_series_pipeline",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2741",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_refined_production_implementation_plan",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2759",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_refined_production_implementation_plan",
+      "target": "docs_options_buying_framework_1_the_updated_ingestion_hook_websocket_connection",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2761",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_refined_production_implementation_plan",
+      "target": "docs_options_buying_framework_2_building_an_event_driven_processing_service_no_polling",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2797",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_refined_production_implementation_plan",
+      "target": "docs_options_buying_framework_3_real_time_signal_processing_intraday_evaluator",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2840",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_operational_recovery_resilience_rules",
+      "target": "docs_options_buying_framework_tl_dr_2879",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2879",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_architectural_refactoring_blueprint",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2888",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_1_directory_structure_additions_for_algo_scalper_api",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2903",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_2_technical_code_integration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2926",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_2_technical_code_integration",
+      "target": "docs_options_buying_framework_step_1_refactoring_the_ingestion_pipeline",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2928",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_2_technical_code_integration",
+      "target": "docs_options_buying_framework_step_2_the_event_driven_stream_consumer_loop",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L2983",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_2_technical_code_integration",
+      "target": "docs_options_buying_framework_step_3_sliding_window_logic_breakout_validation",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3030",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_2_technical_code_integration",
+      "target": "docs_options_buying_framework_step_4_core_execution_router_configuration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3070",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_3_operational_deployment_steps",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3124",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_3_operational_deployment_steps",
+      "target": "docs_options_buying_framework_tl_dr_3134",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3134",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_architectural_comparison_matrix",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3143",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_why_pure_ruby_works_given_the_redis_buffer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3154",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_why_pure_ruby_works_given_the_redis_buffer",
+      "target": "docs_options_buying_framework_1_the_i_o_offloading_advantage",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3158",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_why_pure_ruby_works_given_the_redis_buffer",
+      "target": "docs_options_buying_framework_2_native_gem_reuse",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3162",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_where_ruby_fails_the_case_for_the_node_js_sidecar",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3176",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_where_ruby_fails_the_case_for_the_node_js_sidecar",
+      "target": "docs_options_buying_framework_1_gvl_contention_on_binary_unpacking",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3180",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_where_ruby_fails_the_case_for_the_node_js_sidecar",
+      "target": "docs_options_buying_framework_2_node_js_binary_processing_superiority",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3192",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_the_verdict_execution_strategy",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3198",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_the_verdict_execution_strategy",
+      "target": "docs_options_buying_framework_phase_1_stick_to_pure_ruby_current_scale",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3200",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_the_verdict_execution_strategy",
+      "target": "docs_options_buying_framework_phase_2_migrate_to_a_ingestion_only_node_js_sidecar_scale_50_strikes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3204",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_the_verdict_execution_strategy",
+      "target": "docs_options_buying_framework_tl_dr_3228",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3228",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_why_your_current_rails_setup_is_architecturally_sound",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3236",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_concrete_scaling_guardrails",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3246",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_production_hardening_checklist_for_algo_scalper_api",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3259",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_production_hardening_checklist_for_algo_scalper_api",
+      "target": "docs_options_buying_framework_1_enforce_process_separation_at_the_os_level",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3263",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_production_hardening_checklist_for_algo_scalper_api",
+      "target": "docs_options_buying_framework_2_optimize_the_ruby_garbage_collector_for_low_latency_throughput",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3271",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_production_hardening_checklist_for_algo_scalper_api",
+      "target": "docs_options_buying_framework_3_implement_redis_stream_auto_trimming",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3283",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_production_hardening_checklist_for_algo_scalper_api",
+      "target": "docs_options_buying_framework_tl_dr_3295",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3295",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_what_was_missing_the_structural_asymmetry",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3304",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_refactored_polymorphic_implementations",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3315",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_refactored_polymorphic_implementations",
+      "target": "docs_options_buying_framework_1_dual_scouting_engine_ce_pe_support",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3317",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_refactored_polymorphic_implementations",
+      "target": "docs_options_buying_framework_2_direction_aware_signal_processing",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3367",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_framework_dhanhq_client_api_guide_904",
+      "target": "docs_options_buying_framework_summary_directional_guardrails",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_framework.md",
+      "source_location": "L3416",
       "weight": 1.0
     },
     {
@@ -251781,7 +255555,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "dashboard/src/views/Analysis.jsx",
-      "source_location": "L9",
+      "source_location": "L10",
       "weight": 1.0
     },
     {
@@ -252064,6 +255838,17 @@
       "weight": 1.0
     },
     {
+      "source": "api_analysis_controller_analysiscontroller_risk_explorer",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L61",
+      "weight": 1.0
+    },
+    {
       "source": "api_analysis_controller_analysiscontroller_historical",
       "target": "states_base_state_basestate_to_s",
       "relation": "calls",
@@ -252071,7 +255856,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L60",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -252082,7 +255867,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L75",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
@@ -252093,7 +255878,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L79",
+      "source_location": "L102",
       "weight": 1.0
     },
     {
@@ -252104,7 +255889,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L80",
+      "source_location": "L103",
       "weight": 1.0
     },
     {
@@ -252115,7 +255900,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L82",
+      "source_location": "L105",
       "weight": 1.0
     },
     {
@@ -252126,7 +255911,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L84",
+      "source_location": "L107",
       "weight": 1.0
     },
     {
@@ -252137,7 +255922,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L90",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -252148,7 +255933,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L100",
+      "source_location": "L123",
       "weight": 1.0
     },
     {
@@ -252159,7 +255944,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L105",
+      "source_location": "L128",
       "weight": 1.0
     },
     {
@@ -252170,7 +255955,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L113",
+      "source_location": "L136",
       "weight": 1.0
     },
     {
@@ -252181,7 +255966,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L125",
+      "source_location": "L148",
       "weight": 1.0
     },
     {
@@ -252192,7 +255977,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L125",
+      "source_location": "L148",
       "weight": 1.0
     },
     {
@@ -252203,7 +255988,40 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L128",
+      "source_location": "L151",
+      "weight": 1.0
+    },
+    {
+      "source": "api_analysis_controller_analysiscontroller_index_known",
+      "target": "services_index_config_loader_indexconfigloader_load_indices",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L158",
+      "weight": 1.0
+    },
+    {
+      "source": "api_analysis_controller_analysiscontroller_index_known",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L158",
+      "weight": 1.0
+    },
+    {
+      "source": "api_analysis_controller_analysiscontroller_index_config_summary",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L164",
       "weight": 1.0
     },
     {
@@ -252214,7 +256032,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
-      "source_location": "L140",
+      "source_location": "L167",
       "weight": 1.0
     },
     {
@@ -258554,17 +262372,6 @@
       "weight": 1.0
     },
     {
-      "source": "backtest_engine_engine_run",
-      "target": "guides_dhanhq_client_trades",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/backtest/engine.rb",
-      "source_location": "L27",
-      "weight": 1.0
-    },
-    {
       "source": "backtest_market_replayer_marketreplayer_each_tick",
       "target": "models_candle_series_candleseries_each",
       "relation": "calls",
@@ -259908,6 +263715,17 @@
     },
     {
       "source": "dhan_ip_service_ipservice_fetch_ip_info",
+      "target": "guards_transaction_cost_guard_spec_configure",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/dhan/ip_service.rb",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "dhan_ip_service_ipservice_fetch_ip_info",
       "target": "live_underlying_monitor_reset_cache",
       "relation": "calls",
       "context": "call",
@@ -259926,6 +263744,17 @@
       "confidence_score": 0.8,
       "source_file": "app/services/dhan/ip_service.rb",
       "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "dhan_ip_service_ipservice_update_ip",
+      "target": "guards_transaction_cost_guard_spec_configure",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/dhan/ip_service.rb",
+      "source_location": "L50",
       "weight": 1.0
     },
     {
@@ -262038,6 +265867,83 @@
       "confidence_score": 0.8,
       "source_file": "app/services/entries/guards/time_regime_guard.rb",
       "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_call",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_enabled",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_expected_edge_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L48",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_spread_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L58",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_spread_pct",
+      "target": "live_tick_query_for_security",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L59",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_slippage_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L71",
+      "weight": 1.0
+    },
+    {
+      "source": "guards_transaction_cost_guard_transactioncostguard_min_net_edge_pct",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/entries/guards/transaction_cost_guard.rb",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -275589,7 +279495,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L15",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -275600,18 +279506,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L18",
-      "weight": 1.0
-    },
-    {
-      "source": "options_buying_eod_carry_manager_eodcarrymanager_run",
-      "target": "options_buying_carry_policy_carry_eligible",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L20",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -275622,7 +279517,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L36",
+      "source_location": "L49",
       "weight": 1.0
     },
     {
@@ -275633,7 +279528,62 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L40",
+      "source_location": "L53",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_eligible_candidates",
+      "target": "trading_market_permission_gate_marketpermissiongate_reject",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_eligible_candidates",
+      "target": "options_buying_carry_policy_carry_eligible",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L64",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_notional_of",
+      "target": "schemas_smc_trading_signal_properties_entry_price",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L70",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_max_carry_positions",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L81",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_max_carry_exposure_rupees",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L85",
       "weight": 1.0
     },
     {
@@ -275644,7 +279594,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L44",
+      "source_location": "L89",
       "weight": 1.0
     },
     {
@@ -275655,7 +279605,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L46",
+      "source_location": "L91",
       "weight": 1.0
     },
     {
@@ -275666,7 +279616,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/eod_carry_manager.rb",
-      "source_location": "L50",
+      "source_location": "L95",
       "weight": 1.0
     },
     {
@@ -275843,6 +279793,204 @@
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/mode.rb",
       "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_initialize",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_call",
+      "target": "market_session_resolver_current",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_call",
+      "target": "options_buying_expected_value_model_grid",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_risk_config",
+      "target": "options_buying_expected_value_model_reward_multiple",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_risk_config",
+      "target": "options_buying_expected_value_model_break_even_win_rate",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_position_limits",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L66",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_capital_snapshot",
+      "target": "capital_allocator_available_cash",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L74",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_capital_snapshot",
+      "target": "capital_allocator_deployment_policy",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_capital_snapshot",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_scenario_payload",
+      "target": "options_buying_expected_value_model_ev",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L90",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_resolved_win_probability",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L103",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_side_stats",
+      "target": "options_buying_expected_value_model_ev",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L159",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_realized_context",
+      "target": "trading_segment_expectancy_analyzer_segmentexpectancyanalyzer_segment_stats",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L184",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_realized_context",
+      "target": "ai_ollama_client_instance",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L184",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_theta_churn_assessment",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L221",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_deploy_readiness",
+      "target": "options_buying_expected_value_model_ev",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L243",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_deploy_readiness",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L257",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_risk_explorer_riskexplorer_index_config",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/risk_explorer.rb",
+      "source_location": "L263",
       "weight": 1.0
     },
     {
@@ -280115,17 +284263,6 @@
     },
     {
       "source": "rules_peak_drawdown_rule_peakdrawdownrule_evaluate",
-      "target": "risk_manager_service_config_risk_config",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
-      "source_location": "L14",
-      "weight": 1.0
-    },
-    {
-      "source": "rules_peak_drawdown_rule_peakdrawdownrule_evaluate",
       "target": "rules_rule_context_rulecontext_trailing_activated",
       "relation": "calls",
       "context": "call",
@@ -280644,17 +284781,6 @@
     {
       "source": "rules_time_based_exit_rule_timebasedexitrule_config_for_rule",
       "target": "smc_smc_permission_resolver_normalizedsmc_dig",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "INFERRED",
-      "confidence_score": 0.8,
-      "source_file": "app/services/risk/rules/time_based_exit_rule.rb",
-      "source_location": "L35",
-      "weight": 1.0
-    },
-    {
-      "source": "rules_time_based_exit_rule_timebasedexitrule_config_for_rule",
-      "target": "risk_manager_service_config_risk_config",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -292211,6 +296337,60 @@
       "confidence_score": 0.8,
       "source_file": "tmp/rubycritic/assets/vendor/javascripts/prettify.js",
       "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_run",
+      "target": "options_buying_eod_carry_manager_eodcarrymanager_already_tagged",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "backtest_engine_engine_run",
+      "target": "guides_dhanhq_client_trades",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/backtest/engine.rb",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_eod_carry_manager_eodcarrymanager_run",
+      "target": "options_buying_carry_policy_carry_eligible",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/eod_carry_manager.rb",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "rules_peak_drawdown_rule_peakdrawdownrule_evaluate",
+      "target": "risk_manager_service_config_risk_config",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/risk/rules/peak_drawdown_rule.rb",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "rules_time_based_exit_rule_timebasedexitrule_config_for_rule",
+      "target": "risk_manager_service_config_risk_config",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/risk/rules/time_based_exit_rule.rb",
+      "source_location": "L35",
       "weight": 1.0
     },
     {

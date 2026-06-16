@@ -41,6 +41,7 @@ module Entries
         Guards::CompressionSetupGuard,       # positional+carry: require ATR compression setup
         Guards::LtpResolutionGuard,
         Guards::BidAskSpreadGuard,
+        Guards::TransactionCostGuard,        # pre-trade TCM: block when fees+spread+slippage > expected edge
         Guards::BreakoutReadyGuard,          # intraday: 1m breakout + OI unwind armed
         Guards::RsiBiasGuard,
         Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected

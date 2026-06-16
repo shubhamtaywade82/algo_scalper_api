@@ -40,8 +40,8 @@
     "semantic_hash": ""
   },
   "app/controllers/api/analysis_controller.rb": {
-    "mtime": 1775801790.9682884,
-    "ast_hash": "24e786e295803c1ab6ffcf3d1ee692aa",
+    "mtime": 1781633095.9358566,
+    "ast_hash": "2e4b90e781f8cb6bd9c63a98c3c28b0f",
     "semantic_hash": ""
   },
   "app/controllers/api/calibration_runs_controller.rb": {
@@ -735,8 +735,8 @@
     "semantic_hash": ""
   },
   "app/services/entries/entry_guard_pipeline.rb": {
-    "mtime": 1781630350.304788,
-    "ast_hash": "182c8f3c2fb6c1c9b2c202885d69853f",
+    "mtime": 1781633093.754926,
+    "ast_hash": "31a4c4476d7ebcd81df94bbe1f7484c8",
     "semantic_hash": ""
   },
   "app/services/entries/guards/banknifty_last_week_guard.rb": {
@@ -2575,8 +2575,8 @@
     "semantic_hash": ""
   },
   "config/routes.rb": {
-    "mtime": 1780930853.7913706,
-    "ast_hash": "f6840358aa107cdb89f6104cb92b8e44",
+    "mtime": 1781633096.278155,
+    "ast_hash": "7c3ce08e5484606296a64fdffbff9b7f",
     "semantic_hash": ""
   },
   "config/schedule.rb": {
@@ -2705,8 +2705,8 @@
     "semantic_hash": ""
   },
   "dashboard/src/stores/useAnalysis.js": {
-    "mtime": 1775801791.0582883,
-    "ast_hash": "04dc6f468c05157ce947e163eadf5bb9",
+    "mtime": 1781633156.0325994,
+    "ast_hash": "3694139458c8099f0f99fb77083f4418",
     "semantic_hash": ""
   },
   "dashboard/src/stores/useDashboard.js": {
@@ -2730,8 +2730,8 @@
     "semantic_hash": ""
   },
   "dashboard/src/views/Analysis.jsx": {
-    "mtime": 1775801791.0582883,
-    "ast_hash": "00b6d5e547b441db2444fd3732009fa6",
+    "mtime": 1781633157.1989508,
+    "ast_hash": "d7e23133e85bfc504c9249e29dfe2956",
     "semantic_hash": ""
   },
   "dashboard/src/views/Charts.jsx": {
@@ -3950,8 +3950,8 @@
     "semantic_hash": ""
   },
   "spec/requests/api_docs/v1/openapi_smc_analysis_spec.rb": {
-    "mtime": 1775801791.1282883,
-    "ast_hash": "facef077b303b423603295ea934d2c17",
+    "mtime": 1781633161.016061,
+    "ast_hash": "c1d8ec04eda50dfb844d37f5a03b29c5",
     "semantic_hash": ""
   },
   "spec/requests/legacy_smc_redirect_spec.rb": {
@@ -5580,8 +5580,8 @@
     "semantic_hash": ""
   },
   "config/algo.yml": {
-    "mtime": 1781630529.3593664,
-    "ast_hash": "5ee006960d2459c9dff9b40331e75565",
+    "mtime": 1781633113.3483262,
+    "ast_hash": "bd486a3ba27e35d1e8b5e5d425822854",
     "semantic_hash": ""
   },
   "config/algo_organized.yml": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781631838.7319446,
-    "ast_hash": "da5ece9236af793231179d64558cacdf",
+    "mtime": 1781633351.9143894,
+    "ast_hash": "df37efaf3f3d691f9f99fd66938e1399",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10660,8 +10660,8 @@
     "semantic_hash": ""
   },
   "docs/options_buying_framework.md": {
-    "mtime": 1781630350.304788,
-    "ast_hash": "d9cc01efe5c214ff4debf63b9d00c0a0",
+    "mtime": 1781633851.5754158,
+    "ast_hash": "9da3710e3779e1391fe3287d3a6379be",
     "semantic_hash": ""
   },
   "docs/options_buying_implementation_plan.md": {
@@ -10740,8 +10740,8 @@
     "semantic_hash": ""
   },
   "app/services/options_buying/eod_carry_manager.rb": {
-    "mtime": 1781630350.304788,
-    "ast_hash": "2dc3420f9783a221d0e8dfeeadb372fb",
+    "mtime": 1781633141.4758232,
+    "ast_hash": "99eb05218e58cf4c11f64907cb38ad8c",
     "semantic_hash": ""
   },
   "app/services/options_buying/minute_bar_aggregator.rb": {
@@ -10865,8 +10865,8 @@
     "semantic_hash": ""
   },
   "spec/services/options_buying/eod_carry_manager_spec.rb": {
-    "mtime": 1781630350.3146462,
-    "ast_hash": "5c56f6640ce02c708ec5933fd106f34d",
+    "mtime": 1781633314.326165,
+    "ast_hash": "2829741fb86ad3646b8ece01a63e38b3",
     "semantic_hash": ""
   },
   "spec/services/options_buying/minute_bar_aggregator_spec.rb": {
@@ -10907,6 +10907,41 @@
   "docs/options_buying_stream_architecture.md": {
     "mtime": 1781630350.304788,
     "ast_hash": "2b5eff9452f1666af82574058bb4b8e2",
+    "semantic_hash": ""
+  },
+  "app/services/entries/guards/transaction_cost_guard.rb": {
+    "mtime": 1781633294.779259,
+    "ast_hash": "1833dd9bf986bcac9a82284ee33eae22",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/expected_value_model.rb": {
+    "mtime": 1781633057.3920553,
+    "ast_hash": "e2b5a2a8b0a24598b0df8b98d20c0609",
+    "semantic_hash": ""
+  },
+  "app/services/options_buying/risk_explorer.rb": {
+    "mtime": 1781633209.2196193,
+    "ast_hash": "9a61783dbe5c5dd00f884d88a0ac4b82",
+    "semantic_hash": ""
+  },
+  "dashboard/src/components/analysis/ExpectedValueRiskPanel.jsx": {
+    "mtime": 1781633149.6453624,
+    "ast_hash": "56948d3ff112d8ac83772343698f5604",
+    "semantic_hash": ""
+  },
+  "spec/services/entries/guards/transaction_cost_guard_spec.rb": {
+    "mtime": 1781633301.0728066,
+    "ast_hash": "00c03f34993fa519e14a8441d4f3423c",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/expected_value_model_spec.rb": {
+    "mtime": 1781633203.5257945,
+    "ast_hash": "ee5a7fc8ae66a0e44e7572a39f78180e",
+    "semantic_hash": ""
+  },
+  "spec/services/options_buying/risk_explorer_spec.rb": {
+    "mtime": 1781633218.0581887,
+    "ast_hash": "2a9fded6f13c89ab1e1322bce9f0242c",
     "semantic_hash": ""
   }
 }

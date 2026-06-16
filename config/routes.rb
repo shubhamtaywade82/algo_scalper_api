@@ -39,6 +39,7 @@ Rails.application.routes.draw do
     # Live AI analysis dashboard
     get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
     get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
+    get  'analysis/:index_key/risk_explorer', to: 'analysis#risk_explorer', as: :analysis_risk_explorer
     post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
 
     # Algo Settings

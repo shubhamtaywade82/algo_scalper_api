@@ -63,10 +63,16 @@ options_buying:
   execution:
     spread_enabled: false         # BidAskSpreadGuard only runs when true
     max_bid_ask_spread_pct: 0.015
+    tcm_enabled: false            # TransactionCostGuard (pre-trade net-edge gate) only runs when true
+    min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
+    expected_edge_pct: 0.30       # fallback expected premium edge when signal injects none (DECIMAL)
+    slippage_pct_per_side: 0.001  # modelled slippage per fill; charged on entry + exit
   positional:
     enabled: false
     require_carry_allowed: true
     min_carry_roi: 0.30           # DECIMAL: hold overnight only when ROI >= +30%
+    max_carry_positions: 3        # book-level cap: max simultaneous overnight carries (0 = unlimited)
+    max_carry_exposure_rupees: 150000  # book-level cap: max total carried premium outlay (0 = unlimited)
   expiry_day:
     lockout_after: "13:00"
   rsi_bias:
