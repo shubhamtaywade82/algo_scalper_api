@@ -38814,6 +38814,254 @@
       "_origin": "ast"
     },
     {
+      "id": "observability_entry_funnel_metrics",
+      "label": "entry_funnel_metrics.rb",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "label": "EntryFunnelMetrics",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L4",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_initialize",
+      "label": ".initialize()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L25",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_call",
+      "label": ".call()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L31",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "label": ".render()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L47",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_bucket_for",
+      "label": ".guard_bucket_for()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L96",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_day_range",
+      "label": ".day_range()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L108",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_index_suffix",
+      "label": ".index_suffix()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L112",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_summary_counts",
+      "label": ".summary_counts()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L116",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_breakout_event_counts",
+      "label": ".breakout_event_counts()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L140",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_position_counts",
+      "label": ".position_counts()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L146",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_breakdown",
+      "label": ".signal_breakdown()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L155",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_block_counts",
+      "label": ".guard_block_counts()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L164",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_skip_counts",
+      "label": ".signal_skip_counts()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L186",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_alignment_metrics",
+      "label": ".alignment_metrics()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L198",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_live_breakout_state",
+      "label": ".live_breakout_state()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L214",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_live_index_keys",
+      "label": ".live_index_keys()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L230",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_report_notes",
+      "label": ".report_notes()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L240",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_scope",
+      "label": ".signal_scope()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L248",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_breakout_event_scope",
+      "label": ".breakout_event_scope()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L254",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_position_scope",
+      "label": ".position_scope()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L260",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_count_hash",
+      "label": ".count_hash()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L268",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_sort_desc",
+      "label": ".sort_desc()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L274",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_percentage",
+      "label": ".percentage()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L278",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_append_summary_lines",
+      "label": ".append_summary_lines()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L284",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_append_count_lines",
+      "label": ".append_count_lines()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L297",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_append_signal_lines",
+      "label": ".append_signal_lines()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L306",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_append_guard_lines",
+      "label": ".append_guard_lines()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L316",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_append_skip_lines",
+      "label": ".append_skip_lines()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L334",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_append_alignment_lines",
+      "label": ".append_alignment_lines()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L344",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_entryfunnelmetrics_append_live_state_lines",
+      "label": ".append_live_state_lines()",
+      "file_type": "code",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L352",
+      "_origin": "ast"
+    },
+    {
       "id": "observability_structured_log",
       "label": "structured_log.rb",
       "file_type": "code",
@@ -44378,6 +44626,14 @@
       "label": "telegram_notifier_spec.rb",
       "file_type": "code",
       "source_file": "spec/lib/notifications/telegram_notifier_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "observability_entry_funnel_metrics_spec",
+      "label": "entry_funnel_metrics_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/lib/observability/entry_funnel_metrics_spec.rb",
       "source_location": "L1",
       "_origin": "ast"
     },
@@ -173724,6 +173980,496 @@
       "weight": 1.0
     },
     {
+      "source": "observability_entry_funnel_metrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_initialize",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_call",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_bucket_for",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L96",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_day_range",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L108",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_index_suffix",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L112",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_summary_counts",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L116",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_breakout_event_counts",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L140",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_position_counts",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L146",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_breakdown",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L155",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_block_counts",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L164",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_skip_counts",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L186",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_alignment_metrics",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L198",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_live_breakout_state",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L214",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_live_index_keys",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L230",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_report_notes",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L240",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_scope",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L248",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_breakout_event_scope",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L254",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_position_scope",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L260",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_count_hash",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L268",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_sort_desc",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L274",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_percentage",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L278",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_summary_lines",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L284",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_count_lines",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L297",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_signal_lines",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L306",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_guard_lines",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L316",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_skip_lines",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L334",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_alignment_lines",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L344",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_live_state_lines",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L352",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_index_suffix",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_summary_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L56",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_count_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L60",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_signal_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L68",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_guard_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L72",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_skip_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L76",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_alignment_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L80",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_live_state_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L85",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_summary_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_percentage",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L135",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_breakout_event_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_sort_desc",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L141",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_breakout_event_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_count_hash",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L142",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_position_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_sort_desc",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L147",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_position_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_count_hash",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L148",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_breakdown",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_count_hash",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L157",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_block_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_count_hash",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L166",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_block_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_bucket_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L167",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_block_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_sort_desc",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L179",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_skip_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_count_hash",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L188",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_skip_counts",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_sort_desc",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L192",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_append_signal_lines",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_count_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L307",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_append_guard_lines",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_count_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L320",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_append_skip_lines",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_append_count_lines",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L338",
+      "weight": 1.0
+    },
+    {
       "source": "observability_structured_log",
       "target": "observability_structured_log_info",
       "relation": "contains",
@@ -255983,6 +256729,17 @@
     },
     {
       "source": "api_alpha_controller_alphacontroller_status",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/alpha_controller.rb",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "api_alpha_controller_alphacontroller_status",
       "target": "risk_limits_guard_current_stats",
       "relation": "calls",
       "context": "call",
@@ -255990,6 +256747,17 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/alpha_controller.rb",
       "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "api_alpha_controller_alphacontroller_scan",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/alpha_controller.rb",
+      "source_location": "L43",
       "weight": 1.0
     },
     {
@@ -256015,6 +256783,17 @@
       "weight": 1.0
     },
     {
+      "source": "api_alpha_controller_alphacontroller_execute",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/alpha_controller.rb",
+      "source_location": "L63",
+      "weight": 1.0
+    },
+    {
       "source": "api_alpha_controller_alphacontroller_history",
       "target": "position_tracker_pnl_calculatable_current_pnl_rupees",
       "relation": "calls",
@@ -256037,6 +256816,28 @@
       "weight": 1.0
     },
     {
+      "source": "api_alpha_controller_alphacontroller_history",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/alpha_controller.rb",
+      "source_location": "L103",
+      "weight": 1.0
+    },
+    {
+      "source": "api_alpha_controller_alphacontroller_performance",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/alpha_controller.rb",
+      "source_location": "L129",
+      "weight": 1.0
+    },
+    {
       "source": "api_alpha_controller_alphacontroller_performance",
       "target": "market_session_resolver_current",
       "relation": "calls",
@@ -256056,6 +256857,17 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
       "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "api_analysis_controller_analysiscontroller_show",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -256180,6 +256992,17 @@
       "weight": 1.0
     },
     {
+      "source": "api_analysis_controller_analysiscontroller_risk_explorer",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
       "source": "api_analysis_controller_analysiscontroller_historical",
       "target": "states_base_state_basestate_to_s",
       "relation": "calls",
@@ -256191,6 +257014,17 @@
       "weight": 1.0
     },
     {
+      "source": "api_analysis_controller_analysiscontroller_historical",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L89",
+      "weight": 1.0
+    },
+    {
       "source": "api_analysis_controller_analysiscontroller_ai_snapshot",
       "target": "states_base_state_basestate_to_s",
       "relation": "calls",
@@ -256199,6 +257033,17 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/analysis_controller.rb",
       "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "api_analysis_controller_analysiscontroller_ai_snapshot",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L100",
       "weight": 1.0
     },
     {
@@ -256367,6 +257212,17 @@
       "weight": 1.0
     },
     {
+      "source": "api_analysis_controller_analysiscontroller_render_analysis_internal_error",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/analysis_controller.rb",
+      "source_location": "L188",
+      "weight": 1.0
+    },
+    {
       "source": "api_calibration_runs_controller_calibrationrunscontroller_index",
       "target": "schemas_smc_trading_signal_properties_order",
       "relation": "calls",
@@ -256375,6 +257231,39 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/calibration_runs_controller.rb",
       "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "api_calibration_runs_controller_calibrationrunscontroller_index",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/calibration_runs_controller.rb",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "api_calibration_runs_controller_calibrationrunscontroller_show",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/calibration_runs_controller.rb",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "api_calibration_runs_controller_calibrationrunscontroller_apply",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/calibration_runs_controller.rb",
+      "source_location": "L37",
       "weight": 1.0
     },
     {
@@ -256408,6 +257297,17 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/candles_controller.rb",
       "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "api_candles_controller_candlescontroller_index",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/candles_controller.rb",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -256500,6 +257400,17 @@
     },
     {
       "source": "api_circuit_breaker_controller_circuitbreakercontroller_show",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/circuit_breaker_controller.rb",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "api_circuit_breaker_controller_circuitbreakercontroller_show",
       "target": "ai_ollama_client_instance",
       "relation": "calls",
       "context": "call",
@@ -256532,6 +257443,17 @@
       "weight": 1.0
     },
     {
+      "source": "api_circuit_breaker_controller_circuitbreakercontroller_trip",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/circuit_breaker_controller.rb",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
       "source": "api_circuit_breaker_controller_circuitbreakercontroller_reset",
       "target": "ai_ollama_client_instance",
       "relation": "calls",
@@ -256543,6 +257465,28 @@
       "weight": 1.0
     },
     {
+      "source": "api_circuit_breaker_controller_circuitbreakercontroller_reset",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/circuit_breaker_controller.rb",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "api_circuit_breaker_controller_circuitbreakercontroller_authenticate",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/circuit_breaker_controller.rb",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
       "source": "api_dashboard_controller_dashboardcontroller_show",
       "target": "dhan_ip_service_ipservice_fetch_ip_info",
       "relation": "calls",
@@ -256551,6 +257495,17 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/dashboard_controller.rb",
       "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "api_dashboard_controller_dashboardcontroller_show",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/dashboard_controller.rb",
+      "source_location": "L11",
       "weight": 1.0
     },
     {
@@ -256818,6 +257773,28 @@
       "weight": 1.0
     },
     {
+      "source": "api_dhan_access_token_controller_dhanaccesstokencontroller_show",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/dhan_access_token_controller.rb",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "api_drawdown_guard_controller_drawdownguardcontroller_reset",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/drawdown_guard_controller.rb",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
       "source": "api_health_controller_healthcontroller_show",
       "target": "ai_ollama_client_instance",
       "relation": "calls",
@@ -256841,6 +257818,17 @@
     },
     {
       "source": "api_health_controller_healthcontroller_show",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/health_controller.rb",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "api_health_controller_healthcontroller_show",
       "target": "schemas_smc_trading_signal_properties_active",
       "relation": "calls",
       "context": "call",
@@ -256848,6 +257836,28 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/health_controller.rb",
       "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "api_positions_controller_positionscontroller_index",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/positions_controller.rb",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "api_positions_controller_positionscontroller_close",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/positions_controller.rb",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -256939,6 +257949,17 @@
       "weight": 1.0
     },
     {
+      "source": "api_positions_controller_positionscontroller_assign_filter_date",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/positions_controller.rb",
+      "source_location": "L112",
+      "weight": 1.0
+    },
+    {
       "source": "api_public_ip_controller_publicipcontroller_audit",
       "target": "dhan_ip_service_ipservice_audit_public_ips",
       "relation": "calls",
@@ -256947,6 +257968,39 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/public_ip_controller.rb",
       "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "api_public_ip_controller_publicipcontroller_audit",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/public_ip_controller.rb",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "api_settings_controller_settingscontroller_index",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/settings_controller.rb",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "api_settings_controller_settingscontroller_update_bulk",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/settings_controller.rb",
+      "source_location": "L46",
       "weight": 1.0
     },
     {
@@ -256962,6 +258016,17 @@
     },
     {
       "source": "api_settings_controller_settingscontroller_update_deep_merge",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/settings_controller.rb",
+      "source_location": "L81",
+      "weight": 1.0
+    },
+    {
+      "source": "api_settings_controller_settingscontroller_update_deep_merge",
       "target": "algo_config_document_store_apply_deep_merge_patch",
       "relation": "calls",
       "context": "call",
@@ -256969,6 +258034,39 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/settings_controller.rb",
       "source_location": "L85",
+      "weight": 1.0
+    },
+    {
+      "source": "api_settings_controller_settingscontroller_change_logs",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/settings_controller.rb",
+      "source_location": "L112",
+      "weight": 1.0
+    },
+    {
+      "source": "api_settings_controller_settingscontroller_update_ip",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/settings_controller.rb",
+      "source_location": "L129",
+      "weight": 1.0
+    },
+    {
+      "source": "api_settings_controller_settingscontroller_authenticate_settings",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/settings_controller.rb",
+      "source_location": "L144",
       "weight": 1.0
     },
     {
@@ -256980,6 +258078,17 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/signals_controller.rb",
       "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "api_signals_controller_signalscontroller_index",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/signals_controller.rb",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -257049,6 +258158,17 @@
       "weight": 1.0
     },
     {
+      "source": "api_smc_controller_smccontroller_decision",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/smc_controller.rb",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
       "source": "api_smc_controller_smccontroller_authenticate_smc_decision",
       "target": "states_base_state_basestate_to_s",
       "relation": "calls",
@@ -257068,6 +258188,17 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/smc_controller.rb",
       "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "api_smc_controller_smccontroller_find_instrument",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/smc_controller.rb",
+      "source_location": "L49",
       "weight": 1.0
     },
     {
@@ -257123,6 +258254,116 @@
       "confidence_score": 0.8,
       "source_file": "app/controllers/api/test_controller.rb",
       "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "api_test_controller_testcontroller_broadcast",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/test_controller.rb",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "api_test_controller_testcontroller_ensure_test_broadcast_allowed",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/api/test_controller.rb",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "api_error_handling_render_success",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/concerns/api/error_handling.rb",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "api_error_handling_render_error",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/concerns/api/error_handling.rb",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "controllers_redis_ui_controller_redisuicontroller_index",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/redis_ui_controller.rb",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "controllers_redis_ui_controller_redisuicontroller_show",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/redis_ui_controller.rb",
+      "source_location": "L53",
+      "weight": 1.0
+    },
+    {
+      "source": "controllers_redis_ui_controller_redisuicontroller_destroy",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/redis_ui_controller.rb",
+      "source_location": "L65",
+      "weight": 1.0
+    },
+    {
+      "source": "controllers_redis_ui_controller_redisuicontroller_info",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/redis_ui_controller.rb",
+      "source_location": "L72",
+      "weight": 1.0
+    },
+    {
+      "source": "controllers_redis_ui_controller_redisuicontroller_ensure_development",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/redis_ui_controller.rb",
+      "source_location": "L82",
+      "weight": 1.0
+    },
+    {
+      "source": "controllers_redis_ui_controller_redisuicontroller_init_redis",
+      "target": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/controllers/redis_ui_controller.rb",
+      "source_location": "L89",
       "weight": 1.0
     },
     {
@@ -291861,6 +293102,160 @@
       "confidence_score": 0.8,
       "source_file": "lib/notifications/telegram_notifier.rb",
       "source_location": "L405",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_initialize",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_render",
+      "target": "models_candle_series_candleseries_each",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_bucket_for",
+      "target": "models_candle_series_candleseries_each",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L99",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_summary_counts",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L118",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_position_counts",
+      "target": "schemas_smc_trading_signal_properties_meta",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L149",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_breakdown",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L157",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_breakdown",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L158",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_block_counts",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L167",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_guard_block_counts",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L176",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_signal_skip_counts",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L188",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_live_breakout_state",
+      "target": "options_buying_state_store_breakout_ready",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L220",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_live_breakout_state",
+      "target": "options_buying_state_store_resistance",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L222",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_append_count_lines",
+      "target": "models_candle_series_candleseries_each",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L303",
+      "weight": 1.0
+    },
+    {
+      "source": "observability_entry_funnel_metrics_entryfunnelmetrics_append_live_state_lines",
+      "target": "models_candle_series_candleseries_each",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "lib/observability/entry_funnel_metrics.rb",
+      "source_location": "L358",
       "weight": 1.0
     },
     {

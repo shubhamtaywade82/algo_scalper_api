@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781633351.9143894,
-    "ast_hash": "df37efaf3f3d691f9f99fd66938e1399",
+    "mtime": 1781636640.7388923,
+    "ast_hash": "c21f31b71e3c1a6c2c904fb277db28c7",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10947,6 +10947,16 @@
   "docs/options_buying_intraday_spec.md": {
     "mtime": 1781633988.278499,
     "ast_hash": "8c7ebd4adc272ea0feb41df93c2f6c90",
+    "semantic_hash": ""
+  },
+  "lib/observability/entry_funnel_metrics.rb": {
+    "mtime": 1781636541.9725425,
+    "ast_hash": "6867bb0538de040aa608e7038571a42f",
+    "semantic_hash": ""
+  },
+  "spec/lib/observability/entry_funnel_metrics_spec.rb": {
+    "mtime": 1781636554.5218508,
+    "ast_hash": "23b2eb0a75991dc6cf2c5971dd93fd59",
     "semantic_hash": ""
   }
 }
