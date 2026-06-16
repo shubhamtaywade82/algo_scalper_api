@@ -138,23 +138,24 @@ export default function Header(props) {
     return expiryBadgeMeta(row)
   }
 
-  const navLinkBase = 'px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white flex items-center gap-2 group border border-transparent'
+  const navLinkBase = 'px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 hover:text-white flex items-center gap-1.5 group border border-transparent'
   const navLinkInactive = 'text-gray-500 hover:bg-white/[0.02]'
   const navLinkActive = 'bg-primary-500/10 text-primary-300 border-primary-500/25 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
   const navLinkSettingsActive = 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
 
   return (
     <div class="sticky top-0 z-50">
-      <header class="glass border-b border-white/5 px-6 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-10">
-          <div class="flex flex-col">
+      <header class="glass border-b border-white/5 px-6 py-4 flex items-center justify-between gap-4">
+        {/* Left Section: title & tickers */}
+        <div class="flex items-center gap-6 min-w-0 flex-1">
+          <div class="flex flex-col shrink-0">
             <span class="text-[10px] font-black text-primary-400 tracking-[0.3em] uppercase">{props.mode} ENGINE</span>
             <span class="text-[8px] font-bold text-gray-500 tracking-widest mt-0.5 uppercase">Active Terminal</span>
           </div>
 
-          <div class="hidden xl:flex items-center gap-4 border-l border-white/10 pl-4">
+          <div class="hidden xl:flex items-center gap-2.5 border-l border-white/10 pl-4 min-w-0">
             {/* Nifty 50 Card */}
-            <div class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-2 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+            <div class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Nifty 50</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${niftyFlash()}`}>
@@ -184,7 +185,7 @@ export default function Header(props) {
             </div>
 
             {/* Bank Nifty Card */}
-            <div class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-2 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+            <div class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Bank Nifty</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${bankniftyFlash()}`}>
@@ -214,7 +215,7 @@ export default function Header(props) {
             </div>
 
             {/* Sensex Card */}
-            <div class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-2xl px-4 py-2 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
+            <div class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-300 group">
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase">Sensex</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${sensexFlash()}`}>
@@ -245,7 +246,8 @@ export default function Header(props) {
           </div>
         </div>
 
-        <nav class="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-white/[0.02] p-1.5 rounded-2xl border border-white/5 backdrop-blur-xl">
+        {/* Center Section: Navigation */}
+        <nav class="flex items-center gap-1 bg-white/[0.02] p-1 rounded-2xl border border-white/5 backdrop-blur-xl shrink-0">
           <A href="/" end class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <rect width="20" height="16" x="2" y="4" rx="2" stroke-width="2.5"/>
@@ -292,7 +294,8 @@ export default function Header(props) {
           </A>
         </nav>
 
-        <div class="flex items-center gap-3 text-[9px] font-black tracking-wider">
+        {/* Right Section: System badges */}
+        <div class="flex items-center gap-2.5 text-[9px] font-black tracking-wider flex-1 justify-end shrink-0">
           <div
             class={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white/[0.01] transition-all duration-300 ${isIpVerified() ? 'border-emerald-500/10 hover:border-emerald-500/25 text-gray-500 hover:text-gray-300' : 'border-rose-500/10 hover:border-rose-500/25 text-rose-400'}`}
             title={isIpVerified() ? `Verified: ${publicIpv4()}` : `Not Registered: ${publicIpv4()}`}
