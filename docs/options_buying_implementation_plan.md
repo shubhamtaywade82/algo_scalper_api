@@ -1,6 +1,8 @@
 # Options Buying Implementation Plan
 
-Maps the **intraday scalper** framework to `algo_scalper_api`. Ep-92 positional logic is reference-only unless `mode: positional` and carry is allowed.
+Maps the **intraday scalper** framework to `algo_scalper_api`. **Canonical strategy rules:**
+`docs/options_buying_intraday_spec.md`. Ep-92 positional logic is reference-only unless
+`mode: positional` and carry is allowed.
 
 ---
 

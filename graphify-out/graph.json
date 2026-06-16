@@ -103002,7 +103002,7 @@
       "label": "1. Alignment Table",
       "file_type": "document",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L7",
+      "source_location": "L9",
       "_origin": "ast"
     },
     {
@@ -103010,7 +103010,7 @@
       "label": "2. Intraday Data Flow",
       "file_type": "document",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L27",
+      "source_location": "L29",
       "_origin": "ast"
     },
     {
@@ -103018,7 +103018,7 @@
       "label": "3. Config (`config/algo.yml`)",
       "file_type": "document",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L39",
+      "source_location": "L41",
       "_origin": "ast"
     },
     {
@@ -103026,7 +103026,7 @@
       "label": "4. Guard Pipeline Order (new guards)",
       "file_type": "document",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L73",
+      "source_location": "L75",
       "_origin": "ast"
     },
     {
@@ -103034,7 +103034,7 @@
       "label": "5. Positional Gap (v2)",
       "file_type": "document",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L85",
+      "source_location": "L87",
       "_origin": "ast"
     },
     {
@@ -103042,7 +103042,7 @@
       "label": "6. Verification",
       "file_type": "document",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L97",
+      "source_location": "L99",
       "_origin": "ast"
     },
     {
@@ -103050,7 +103050,7 @@
       "label": "7. Stream Hybrid",
       "file_type": "document",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L110",
+      "source_location": "L112",
       "_origin": "ast"
     },
     {
@@ -103115,6 +103115,166 @@
       "file_type": "document",
       "source_file": "docs/options_buying_ingestion_sidecar_future.md",
       "source_location": "L82",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec",
+      "label": "options_buying_intraday_spec.md",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "label": "Options Buying — Canonical Intraday Spec",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_1_design_thesis",
+      "label": "1. Design Thesis",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L12",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_2_scope_indices",
+      "label": "2. Scope & Indices",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L28",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_3_entry_pipeline_all_must_pass",
+      "label": "3. Entry Pipeline (All Must Pass)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L38",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_3_1_structural_setup_atr_compression_soft_arm",
+      "label": "3.1 Structural setup — ATR compression (soft arm)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L40",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_3_2_directional_bias_15m_rsi_filter_not_sole_trigger",
+      "label": "3.2 Directional bias — 15m RSI (filter, not sole trigger)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L48",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_3_3_trigger_1m_short_covering_squeeze",
+      "label": "3.3 Trigger — 1m short-covering squeeze",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L55",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_3_4_strike_selection",
+      "label": "3.4 Strike selection",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L65",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_3_5_pre_trade_guards",
+      "label": "3.5 Pre-trade guards",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L71",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_4_execution",
+      "label": "4. Execution",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L83",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_5_risk_exits_ev",
+      "label": "5. Risk, Exits & EV",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L96",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_premium_stops_primary",
+      "label": "Premium stops (primary)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L98",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_exit_stack_priority_handled_by_exit_engine_risk_manager",
+      "label": "Exit stack (priority handled by exit engine / risk manager)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L106",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_expected_value_before_deploy",
+      "label": "Expected value before deploy",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L113",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_6_time_expiry_rules",
+      "label": "6. Time & Expiry Rules",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L127",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_7_data_architecture",
+      "label": "7. Data & Architecture",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L138",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_8_explicit_non_goals_intraday_mode",
+      "label": "8. Explicit Non-Goals (Intraday Mode)",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L154",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_9_config_code_map",
+      "label": "9. Config & Code Map",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L165",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_options_buying_intraday_spec_10_acceptance_checklist",
+      "label": "10. Acceptance Checklist",
+      "file_type": "document",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L183",
       "_origin": "ast"
     },
     {
@@ -244753,7 +244913,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L7",
+      "source_location": "L9",
       "weight": 1.0
     },
     {
@@ -244762,7 +244922,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L27",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
@@ -244771,7 +244931,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L39",
+      "source_location": "L41",
       "weight": 1.0
     },
     {
@@ -244780,7 +244940,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L73",
+      "source_location": "L75",
       "weight": 1.0
     },
     {
@@ -244789,7 +244949,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L85",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -244798,7 +244958,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L97",
+      "source_location": "L99",
       "weight": 1.0
     },
     {
@@ -244807,7 +244967,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_implementation_plan.md",
-      "source_location": "L110",
+      "source_location": "L112",
       "weight": 1.0
     },
     {
@@ -244871,6 +245031,177 @@
       "confidence": "EXTRACTED",
       "source_file": "docs/options_buying_ingestion_sidecar_future.md",
       "source_location": "L82",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_1_design_thesis",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_2_scope_indices",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_3_entry_pipeline_all_must_pass",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_3_entry_pipeline_all_must_pass",
+      "target": "docs_options_buying_intraday_spec_3_1_structural_setup_atr_compression_soft_arm",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_3_entry_pipeline_all_must_pass",
+      "target": "docs_options_buying_intraday_spec_3_2_directional_bias_15m_rsi_filter_not_sole_trigger",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L48",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_3_entry_pipeline_all_must_pass",
+      "target": "docs_options_buying_intraday_spec_3_3_trigger_1m_short_covering_squeeze",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L55",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_3_entry_pipeline_all_must_pass",
+      "target": "docs_options_buying_intraday_spec_3_4_strike_selection",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L65",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_3_entry_pipeline_all_must_pass",
+      "target": "docs_options_buying_intraday_spec_3_5_pre_trade_guards",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L71",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_4_execution",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L83",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_5_risk_exits_ev",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L96",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_5_risk_exits_ev",
+      "target": "docs_options_buying_intraday_spec_premium_stops_primary",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_5_risk_exits_ev",
+      "target": "docs_options_buying_intraday_spec_exit_stack_priority_handled_by_exit_engine_risk_manager",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L106",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_5_risk_exits_ev",
+      "target": "docs_options_buying_intraday_spec_expected_value_before_deploy",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L113",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_6_time_expiry_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L127",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_7_data_architecture",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L138",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_8_explicit_non_goals_intraday_mode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L154",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_9_config_code_map",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L165",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_options_buying_intraday_spec_options_buying_canonical_intraday_spec",
+      "target": "docs_options_buying_intraday_spec_10_acceptance_checklist",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/options_buying_intraday_spec.md",
+      "source_location": "L183",
       "weight": 1.0
     },
     {
