@@ -59,6 +59,13 @@ development:
     priority: 2
     description: "Tag high-ROI positional carries before EOD force-close (positional mode only)"
 
+  entry_funnel_metrics:
+    class: Observability::EntryFunnelMetricsJob
+    schedule: at 3:30pm every day
+    queue_name: background
+    priority: 4
+    description: "Post-session entry funnel report — signal skips, guard blocks, breakout alignment"
+
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob
     schedule: at 9:15am every day
@@ -165,6 +172,13 @@ production:
     queue_name: background
     priority: 2
     description: "Tag high-ROI positional carries before EOD force-close (positional mode only)"
+
+  entry_funnel_metrics:
+    class: Observability::EntryFunnelMetricsJob
+    schedule: at 3:30pm every weekday
+    queue_name: background
+    priority: 4
+    description: "Post-session entry funnel report — signal skips, guard blocks, breakout alignment"
 
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob

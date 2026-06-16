@@ -1201,6 +1201,7 @@ telegram:
   notify_daily_profit_target: true # Telegram when global daily profit cap is hit (entries blocked)
   include_stats_on_exit: true # Include trading stats summary in exit notifications
   notify_stats_at_market_close: true # Send daily trading stats at end of market session (3:30 PM IST)
+  notify_entry_funnel_at_market_close: true # Send entry funnel summary at 3:30 PM IST (Solid Queue job)
   # SMC Alert Settings
   smc_alert_cooldown_minutes: 30 # Cooldown between duplicate alerts (same instrument+decision)
   smc_max_alerts_per_session: 2 # Max alerts per instrument per trading session (prevents overtrading)

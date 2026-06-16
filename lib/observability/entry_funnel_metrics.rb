@@ -29,19 +29,7 @@ module Observability
     end
 
     def call
-      {
-        date: @date.iso8601,
-        index_key: @index_key,
-        summary: summary_counts,
-        breakout_events: breakout_event_counts,
-        positions: position_counts,
-        signals: signal_breakdown,
-        guard_blocks: guard_block_counts,
-        signal_skips: signal_skip_counts,
-        alignment: alignment_metrics,
-        live_state: live_breakout_state,
-        notes: report_notes
-      }
+      @call ||= build_report
     end
 
     def render
@@ -104,6 +92,22 @@ module Observability
     end
 
     private
+
+    def build_report
+      {
+        date: @date.iso8601,
+        index_key: @index_key,
+        summary: summary_counts,
+        breakout_events: breakout_event_counts,
+        positions: position_counts,
+        signals: signal_breakdown,
+        guard_blocks: guard_block_counts,
+        signal_skips: signal_skip_counts,
+        alignment: alignment_metrics,
+        live_state: live_breakout_state,
+        notes: report_notes
+      }
+    end
 
     def day_range
       @date.in_time_zone.all_day

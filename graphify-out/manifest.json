@@ -5580,8 +5580,8 @@
     "semantic_hash": ""
   },
   "config/algo.yml": {
-    "mtime": 1781633991.4302118,
-    "ast_hash": "89cf70a4629483d2a75e4994efe866e1",
+    "mtime": 1781636848.7958245,
+    "ast_hash": "97ad027986251fc85a67bf88a4596c15",
     "semantic_hash": ""
   },
   "config/algo_organized.yml": {
@@ -5630,8 +5630,8 @@
     "semantic_hash": ""
   },
   "config/recurring.yml": {
-    "mtime": 1781630350.304788,
-    "ast_hash": "973fe320db9bf33eeb395918cc5e3541",
+    "mtime": 1781636846.9393485,
+    "ast_hash": "a57d074d1d66e1c748aa4025f4bf15ce",
     "semantic_hash": ""
   },
   "config/signal_tier_presets.yml": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781636640.7388923,
-    "ast_hash": "c21f31b71e3c1a6c2c904fb277db28c7",
+    "mtime": 1781636939.0405917,
+    "ast_hash": "add4bd30bc8ba7b26b373ee1527fdb9b",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10950,13 +10950,23 @@
     "semantic_hash": ""
   },
   "lib/observability/entry_funnel_metrics.rb": {
-    "mtime": 1781636541.9725425,
-    "ast_hash": "6867bb0538de040aa608e7038571a42f",
+    "mtime": 1781636897.4914527,
+    "ast_hash": "4812e754a6dbdfa7cd00620c750c2cd4",
     "semantic_hash": ""
   },
   "spec/lib/observability/entry_funnel_metrics_spec.rb": {
     "mtime": 1781636554.5218508,
     "ast_hash": "23b2eb0a75991dc6cf2c5971dd93fd59",
+    "semantic_hash": ""
+  },
+  "app/jobs/observability/entry_funnel_metrics_job.rb": {
+    "mtime": 1781636838.1427248,
+    "ast_hash": "a76be8a1292b82fbdaf4d0d90e39cd6b",
+    "semantic_hash": ""
+  },
+  "spec/jobs/observability/entry_funnel_metrics_job_spec.rb": {
+    "mtime": 1781636901.4528332,
+    "ast_hash": "9b172ebb76b6fbb69263ba4641a3065c",
     "semantic_hash": ""
   }
 }
