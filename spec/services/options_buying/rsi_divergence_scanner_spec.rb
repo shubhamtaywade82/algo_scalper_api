@@ -74,7 +74,7 @@ RSpec.describe OptionsBuying::RsiDivergenceScanner do
       idx = { key: 'NIFTY', sid: '13', segment: 'IDX_I' }
       allow(IndexConfigLoader).to receive(:load_indices).and_return([idx])
       instrument = instance_double(Instrument)
-      allow(Instrument).to receive(:find_by).and_return(instrument)
+      allow(Instrument).to receive(:find_by_sid_and_segment).and_return(instrument)
       series = instance_double(CandleSeries, candles: Array.new(5))
       allow(instrument).to receive(:candle_series).and_return(series)
 

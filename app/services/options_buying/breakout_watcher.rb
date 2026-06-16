@@ -136,7 +136,10 @@ module OptionsBuying
       idx = IndexConfigLoader.load_indices.find { |c| c[:key].to_s == index_key.to_s }
       return unless idx
 
-      Instrument.find_by(security_id: idx[:sid].to_s, exchange_segment: idx[:segment])
+      Instrument.find_by_sid_and_segment(
+        security_id: idx[:sid],
+        segment_code: idx[:segment]
+      )
     end
   end
 end

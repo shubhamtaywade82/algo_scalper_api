@@ -23,7 +23,7 @@ module OptionsBuying
       ce = all.select { |c| c[:type].to_s.upcase == 'CE' }
       pe = all.select { |c| c[:type].to_s.upcase == 'PE' }
 
-      liquid = filter_liquid(all)
+      liquid = filter_liquid(all, spot: spot)
       resistance_strike = max_oi_strike(ce) # call wall above spot — bullish breakout level
       support_strike = max_oi_strike(pe)    # put wall below spot — bearish breakdown level
 
@@ -59,13 +59,16 @@ module OptionsBuying
       Mode.config[:chain_radar] || {}
     end
 
-    def filter_liquid(candidates)
+    def filter_liquid(candidates, spot:)
       delta_min = (radar_config[:delta_min] || 0.45).to_f
       delta_max = (radar_config[:delta_max] || 0.55).to_f
       min_volume = (radar_config[:min_volume] || 10_000).to_i
+      strike_step = strike_step_for(spot)
 
       candidates.filter_map do |candidate|
         delta = candidate[:delta].to_f.abs
+        delta = atm_delta_fallback(candidate[:strike], spot, strike_step) if delta.zero?
+
         volume = candidate[:volume].to_i
         liquidity = volume.positive? ? volume : candidate[:oi].to_i
         next unless delta.between?(delta_min, delta_max)
@@ -93,6 +96,19 @@ module OptionsBuying
       market_open = Time.zone.parse("#{Time.zone.today} 09:15")
       elapsed = ((Time.current - market_open) / 60.0).floor
       [elapsed, 1].max
+    end
+
+    def strike_step_for(spot)
+      return 50 unless spot&.positive?
+
+      spot >= 50_000 ? 100 : 50
+    end
+
+    def atm_delta_fallback(strike, spot, strike_step)
+      return 0.0 unless spot&.positive? && strike&.positive? && strike_step.positive?
+
+      atm = (spot / strike_step).round * strike_step
+      (strike.to_f - atm).abs <= (strike_step * 2) ? 0.5 : 0.0
     end
   end
 end

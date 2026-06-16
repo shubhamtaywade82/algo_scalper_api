@@ -20534,7 +20534,7 @@
       "label": ".calc_spread()",
       "file_type": "code",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L550",
+      "source_location": "L553",
       "_origin": "ast"
     },
     {
@@ -20542,7 +20542,7 @@
       "label": ".strike_increment_for()",
       "file_type": "code",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L559",
+      "source_location": "L562",
       "_origin": "ast"
     },
     {
@@ -20550,7 +20550,7 @@
       "label": ".combined_score()",
       "file_type": "code",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L573",
+      "source_location": "L576",
       "_origin": "ast"
     },
     {
@@ -20558,7 +20558,7 @@
       "label": ".build_symbol()",
       "file_type": "code",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L617",
+      "source_location": "L620",
       "_origin": "ast"
     },
     {
@@ -20566,7 +20566,7 @@
       "label": ".reason_for()",
       "file_type": "code",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L626",
+      "source_location": "L629",
       "_origin": "ast"
     },
     {
@@ -20574,7 +20574,7 @@
       "label": ".transform_chain_for_flow()",
       "file_type": "code",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L648",
+      "source_location": "L651",
       "_origin": "ast"
     },
     {
@@ -22366,7 +22366,7 @@
       "label": ".max_oi_strike()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L87",
+      "source_location": "L90",
       "_origin": "ast"
     },
     {
@@ -22374,7 +22374,23 @@
       "label": ".session_minutes_elapsed()",
       "file_type": "code",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L92",
+      "source_location": "L95",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_chain_radar_chainradar_strike_step_for",
+      "label": ".strike_step_for()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L101",
+      "_origin": "ast"
+    },
+    {
+      "id": "options_buying_chain_radar_chainradar_atm_delta_fallback",
+      "label": ".atm_delta_fallback()",
+      "file_type": "code",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L107",
       "_origin": "ast"
     },
     {
@@ -22846,7 +22862,7 @@
       "label": ".detect_divergence()",
       "file_type": "code",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L52",
+      "source_location": "L55",
       "_origin": "ast"
     },
     {
@@ -22854,7 +22870,7 @@
       "label": ".index_of_max()",
       "file_type": "code",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L80",
+      "source_location": "L83",
       "_origin": "ast"
     },
     {
@@ -22862,7 +22878,7 @@
       "label": ".index_of_min()",
       "file_type": "code",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L84",
+      "source_location": "L87",
       "_origin": "ast"
     },
     {
@@ -22870,7 +22886,7 @@
       "label": ".rsi_window()",
       "file_type": "code",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L90",
+      "source_location": "L93",
       "_origin": "ast"
     },
     {
@@ -22878,7 +22894,7 @@
       "label": ".wilder_rsi_series()",
       "file_type": "code",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L95",
+      "source_location": "L98",
       "_origin": "ast"
     },
     {
@@ -22886,7 +22902,7 @@
       "label": ".rsi_from()",
       "file_type": "code",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L119",
+      "source_location": "L122",
       "_origin": "ast"
     },
     {
@@ -146223,7 +146239,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L550",
+      "source_location": "L553",
       "weight": 1.0
     },
     {
@@ -146232,7 +146248,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L559",
+      "source_location": "L562",
       "weight": 1.0
     },
     {
@@ -146241,7 +146257,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L573",
+      "source_location": "L576",
       "weight": 1.0
     },
     {
@@ -146250,7 +146266,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L617",
+      "source_location": "L620",
       "weight": 1.0
     },
     {
@@ -146259,7 +146275,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L626",
+      "source_location": "L629",
       "weight": 1.0
     },
     {
@@ -146268,7 +146284,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L648",
+      "source_location": "L651",
       "weight": 1.0
     },
     {
@@ -146368,7 +146384,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L511",
+      "source_location": "L515",
       "weight": 1.0
     },
     {
@@ -146378,7 +146394,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L519",
+      "source_location": "L522",
       "weight": 1.0
     },
     {
@@ -146388,7 +146404,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L538",
+      "source_location": "L541",
       "weight": 1.0
     },
     {
@@ -146398,7 +146414,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L540",
+      "source_location": "L543",
       "weight": 1.0
     },
     {
@@ -146408,7 +146424,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L585",
+      "source_location": "L588",
       "weight": 1.0
     },
     {
@@ -146418,7 +146434,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L638",
+      "source_location": "L641",
       "weight": 1.0
     },
     {
@@ -149435,7 +149451,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L87",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
@@ -149444,7 +149460,25 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L92",
+      "source_location": "L95",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_chain_radar_chainradar",
+      "target": "options_buying_chain_radar_chainradar_strike_step_for",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L101",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_chain_radar_chainradar",
+      "target": "options_buying_chain_radar_chainradar_atm_delta_fallback",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L107",
       "weight": 1.0
     },
     {
@@ -149465,6 +149499,26 @@
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/chain_radar.rb",
       "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_chain_radar_chainradar_filter_liquid",
+      "target": "options_buying_chain_radar_chainradar_strike_step_for",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L66",
+      "weight": 1.0
+    },
+    {
+      "source": "options_buying_chain_radar_chainradar_filter_liquid",
+      "target": "options_buying_chain_radar_chainradar_atm_delta_fallback",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/options_buying/chain_radar.rb",
+      "source_location": "L70",
       "weight": 1.0
     },
     {
@@ -150131,7 +150185,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L52",
+      "source_location": "L55",
       "weight": 1.0
     },
     {
@@ -150140,7 +150194,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L80",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -150149,7 +150203,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L84",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -150158,7 +150212,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L90",
+      "source_location": "L93",
       "weight": 1.0
     },
     {
@@ -150167,7 +150221,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L95",
+      "source_location": "L98",
       "weight": 1.0
     },
     {
@@ -150176,7 +150230,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L119",
+      "source_location": "L122",
       "weight": 1.0
     },
     {
@@ -150206,7 +150260,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L54",
+      "source_location": "L57",
       "weight": 1.0
     },
     {
@@ -150216,7 +150270,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L66",
+      "source_location": "L69",
       "weight": 1.0
     },
     {
@@ -150226,7 +150280,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L92",
+      "source_location": "L95",
       "weight": 1.0
     },
     {
@@ -150236,7 +150290,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L109",
+      "source_location": "L112",
       "weight": 1.0
     },
     {
@@ -279779,6 +279833,17 @@
     },
     {
       "source": "options_derivative_chain_analyzer_derivativechainanalyzer_build_option_data",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options/derivative_chain_analyzer.rb",
+      "source_location": "L426",
+      "weight": 1.0
+    },
+    {
+      "source": "options_derivative_chain_analyzer_derivativechainanalyzer_build_option_data",
       "target": "schemas_smc_trading_signal_properties_security_id",
       "relation": "calls",
       "context": "call",
@@ -279807,7 +279872,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L627",
+      "source_location": "L630",
       "weight": 1.0
     },
     {
@@ -279818,7 +279883,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L650",
+      "source_location": "L653",
       "weight": 1.0
     },
     {
@@ -279829,7 +279894,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options/derivative_chain_analyzer.rb",
-      "source_location": "L651",
+      "source_location": "L654",
       "weight": 1.0
     },
     {
@@ -281043,6 +281108,17 @@
       "weight": 1.0
     },
     {
+      "source": "options_buying_breakout_watcher_breakoutwatcher_instrument_for_index",
+      "target": "models_instrument_find_by_sid_and_segment",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/breakout_watcher.rb",
+      "source_location": "L139",
+      "weight": 1.0
+    },
+    {
       "source": "options_buying_carry_policy_carry_allowed",
       "target": "options_buying_mode_positional_active",
       "relation": "calls",
@@ -281237,7 +281313,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L78",
+      "source_location": "L81",
       "weight": 1.0
     },
     {
@@ -281248,7 +281324,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L89",
+      "source_location": "L92",
       "weight": 1.0
     },
     {
@@ -281259,7 +281335,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/chain_radar.rb",
-      "source_location": "L94",
+      "source_location": "L97",
       "weight": 1.0
     },
     {
@@ -281857,6 +281933,17 @@
       "weight": 1.0
     },
     {
+      "source": "options_buying_rsi_divergence_scanner_rsidivergencescanner_index_instrument",
+      "target": "models_instrument_find_by_sid_and_segment",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
+      "source_location": "L49",
+      "weight": 1.0
+    },
+    {
       "source": "options_buying_rsi_divergence_scanner_rsidivergencescanner_wilder_rsi_series",
       "target": "models_candle_series_candleseries_each",
       "relation": "calls",
@@ -281864,7 +281951,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/options_buying/rsi_divergence_scanner.rb",
-      "source_location": "L111",
+      "source_location": "L114",
       "weight": 1.0
     },
     {
