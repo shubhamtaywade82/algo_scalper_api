@@ -16,6 +16,7 @@ class AlgoConfig
 
       apply_signal_tier_preset!(base_config)
       apply_live_trading_env_override!(base_config)
+      apply_paper_research_overrides!(base_config)
 
       @cached_config = base_config
       @cache_expires_at = Time.current + CACHE_TTL
@@ -138,6 +139,21 @@ class AlgoConfig
     def apply_live_trading_env_override!(config)
       paper = !live_trading_env_truthy?
       config[:paper_trading] = (config[:paper_trading] || {}).merge(enabled: paper)
+    end
+
+    # Paper mode: relax direction gate so ranging/choppy sessions still generate candidates.
+    # Opt back into live-like behavior with PAPER_STRICT_DIRECTION_GATE=true.
+    def apply_paper_research_overrides!(config)
+      return if paper_strict_direction_gate?
+      return unless config.dig(:paper_trading, :enabled)
+
+      signals = (config[:signals] || {}).dup
+      signals[:enable_direction_gate] = false
+      config[:signals] = signals
+    end
+
+    def paper_strict_direction_gate?
+      ActiveModel::Type::Boolean.new.cast(ENV.fetch('PAPER_STRICT_DIRECTION_GATE', 'false'))
     end
 
     def live_trading_env_truthy?

@@ -1774,7 +1774,7 @@
       "label": "mode()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L25",
+      "source_location": "L26",
       "_origin": "ast"
     },
     {
@@ -1782,7 +1782,7 @@
       "label": "reset!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L29",
+      "source_location": "L30",
       "_origin": "ast"
     },
     {
@@ -1790,7 +1790,7 @@
       "label": "event_driven_intraday_ai?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L36",
+      "source_location": "L37",
       "_origin": "ast"
     },
     {
@@ -1798,7 +1798,7 @@
       "label": "defer_scheduled_intraday_ai_jobs?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L45",
+      "source_location": "L46",
       "_origin": "ast"
     },
     {
@@ -1806,7 +1806,7 @@
       "label": "scheduled_ai_technical_analysis_job_deferred?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L53",
+      "source_location": "L54",
       "_origin": "ast"
     },
     {
@@ -1814,7 +1814,7 @@
       "label": "scheduled_smc_scanner_job_deferred?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L59",
+      "source_location": "L60",
       "_origin": "ast"
     },
     {
@@ -1822,7 +1822,7 @@
       "label": "suppress_smc_bias_notify_for_event_driven_ai?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L66",
+      "source_location": "L67",
       "_origin": "ast"
     },
     {
@@ -1830,7 +1830,7 @@
       "label": "market_closed_for_scheduling?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L70",
+      "source_location": "L71",
       "_origin": "ast"
     },
     {
@@ -1838,7 +1838,7 @@
       "label": "truthy_signal_flag?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L78",
+      "source_location": "L79",
       "_origin": "ast"
     },
     {
@@ -1846,7 +1846,7 @@
       "label": "deep_merge_hashes_with_arrays()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L82",
+      "source_location": "L83",
       "_origin": "ast"
     },
     {
@@ -1854,7 +1854,7 @@
       "label": "merge_arrays()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L86",
+      "source_location": "L87",
       "_origin": "ast"
     },
     {
@@ -1862,7 +1862,7 @@
       "label": "apply_signal_tier_preset!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L92",
+      "source_location": "L93",
       "_origin": "ast"
     },
     {
@@ -1870,7 +1870,7 @@
       "label": "resolve_signal_tier()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L107",
+      "source_location": "L108",
       "_origin": "ast"
     },
     {
@@ -1878,7 +1878,7 @@
       "label": "load_signal_tier_presets()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L125",
+      "source_location": "L126",
       "_origin": "ast"
     },
     {
@@ -1886,7 +1886,23 @@
       "label": "apply_live_trading_env_override!()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L138",
+      "source_location": "L139",
+      "_origin": "ast"
+    },
+    {
+      "id": "lib_algo_config_apply_paper_research_overrides",
+      "label": "apply_paper_research_overrides!()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L146",
+      "_origin": "ast"
+    },
+    {
+      "id": "lib_algo_config_paper_strict_direction_gate",
+      "label": "paper_strict_direction_gate?()",
+      "file_type": "code",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L155",
       "_origin": "ast"
     },
     {
@@ -1894,7 +1910,7 @@
       "label": "live_trading_env_truthy?()",
       "file_type": "code",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L143",
+      "source_location": "L159",
       "_origin": "ast"
     },
     {
@@ -26674,6 +26690,86 @@
       "_origin": "ast"
     },
     {
+      "id": "signal_cycle_summary",
+      "label": "cycle_summary.rb",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary",
+      "label": "CycleSummary",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L4",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary_initialize",
+      "label": ".initialize()",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L7",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary_skip",
+      "label": ".skip!()",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L13",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary_block",
+      "label": ".block!()",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L17",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary_entered",
+      "label": ".entered!()",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L21",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary_pending",
+      "label": ".pending?()",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L29",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary_finalize_pending",
+      "label": ".finalize_pending!()",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L33",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary_log_line",
+      "label": ".log_line()",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L39",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_cyclesummary_assign",
+      "label": ".assign!()",
+      "file_type": "code",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L49",
+      "_origin": "ast"
+    },
+    {
       "id": "signal_direction_validator",
       "label": "direction_validator.rb",
       "file_type": "code",
@@ -26778,11 +26874,19 @@
       "_origin": "ast"
     },
     {
+      "id": "signal_engine_record_cycle_block",
+      "label": "record_cycle_block!()",
+      "file_type": "code",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L202",
+      "_origin": "ast"
+    },
+    {
       "id": "signal_engine_tradable_session",
       "label": "tradable_session?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L174",
+      "source_location": "L206",
       "_origin": "ast"
     },
     {
@@ -26790,7 +26894,7 @@
       "label": "fetch_instrument()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L184",
+      "source_location": "L216",
       "_origin": "ast"
     },
     {
@@ -26798,7 +26902,7 @@
       "label": "initialize_analysis_context()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L192",
+      "source_location": "L224",
       "_origin": "ast"
     },
     {
@@ -26806,7 +26910,7 @@
       "label": "execute_supertrend_only_flow()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L207",
+      "source_location": "L239",
       "_origin": "ast"
     },
     {
@@ -26814,7 +26918,7 @@
       "label": "perform_diagnostic_ta()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L282",
+      "source_location": "L317",
       "_origin": "ast"
     },
     {
@@ -26822,7 +26926,7 @@
       "label": "execute_standard_analysis_flow()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L291",
+      "source_location": "L326",
       "_origin": "ast"
     },
     {
@@ -26830,7 +26934,7 @@
       "label": "perform_standard_ta()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L356",
+      "source_location": "L391",
       "_origin": "ast"
     },
     {
@@ -26838,7 +26942,7 @@
       "label": "resolve_strategy_recommendation()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L387",
+      "source_location": "L422",
       "_origin": "ast"
     },
     {
@@ -26846,7 +26950,7 @@
       "label": "analyze_primary_and_confirmation()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L408",
+      "source_location": "L443",
       "_origin": "ast"
     },
     {
@@ -26854,7 +26958,7 @@
       "label": "resolve_final_trade_direction()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L473",
+      "source_location": "L508",
       "_origin": "ast"
     },
     {
@@ -26862,7 +26966,7 @@
       "label": "should_perform_confirmation?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L483",
+      "source_location": "L518",
       "_origin": "ast"
     },
     {
@@ -26870,7 +26974,7 @@
       "label": "log_avoid_reason()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L487",
+      "source_location": "L522",
       "_origin": "ast"
     },
     {
@@ -26878,7 +26982,7 @@
       "label": "direction_gate_blocked?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L495",
+      "source_location": "L530",
       "_origin": "ast"
     },
     {
@@ -26886,7 +26990,7 @@
       "label": "multi_indicator_enabled?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L515",
+      "source_location": "L553",
       "_origin": "ast"
     },
     {
@@ -26894,7 +26998,7 @@
       "label": "analyze_with_multi_indicators()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L519",
+      "source_location": "L557",
       "_origin": "ast"
     },
     {
@@ -26902,7 +27006,7 @@
       "label": "analyze_timeframe()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L579",
+      "source_location": "L617",
       "_origin": "ast"
     },
     {
@@ -26910,7 +27014,7 @@
       "label": "analyze_multi_timeframe()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L633",
+      "source_location": "L671",
       "_origin": "ast"
     },
     {
@@ -26918,7 +27022,7 @@
       "label": "multi_timeframe_direction()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L704",
+      "source_location": "L742",
       "_origin": "ast"
     },
     {
@@ -26926,7 +27030,7 @@
       "label": "normalize_interval()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L718",
+      "source_location": "L756",
       "_origin": "ast"
     },
     {
@@ -26934,7 +27038,7 @@
       "label": "comprehensive_validation()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L728",
+      "source_location": "L766",
       "_origin": "ast"
     },
     {
@@ -26942,7 +27046,7 @@
       "label": "get_validation_mode_config()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L803",
+      "source_location": "L841",
       "_origin": "ast"
     },
     {
@@ -26950,7 +27054,7 @@
       "label": "validate_iv_rank()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L817",
+      "source_location": "L855",
       "_origin": "ast"
     },
     {
@@ -26958,7 +27062,7 @@
       "label": "validate_theta_risk()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L860",
+      "source_location": "L898",
       "_origin": "ast"
     },
     {
@@ -26966,7 +27070,7 @@
       "label": "validate_adx_strength()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L883",
+      "source_location": "L921",
       "_origin": "ast"
     },
     {
@@ -26974,7 +27078,7 @@
       "label": "validate_trend_confirmation()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L909",
+      "source_location": "L947",
       "_origin": "ast"
     },
     {
@@ -26982,7 +27086,7 @@
       "label": "validate_market_timing()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L943",
+      "source_location": "L981",
       "_origin": "ast"
     },
     {
@@ -26990,7 +27094,7 @@
       "label": "validate_rsi_gate()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L985",
+      "source_location": "L1023",
       "_origin": "ast"
     },
     {
@@ -26998,7 +27102,7 @@
       "label": "check_ema_direction_alignment()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1007",
+      "source_location": "L1045",
       "_origin": "ast"
     },
     {
@@ -27006,7 +27110,7 @@
       "label": "smc_zone_allows_entry?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1031",
+      "source_location": "L1069",
       "_origin": "ast"
     },
     {
@@ -27014,7 +27118,7 @@
       "label": "get_smc_zone()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1052",
+      "source_location": "L1090",
       "_origin": "ast"
     },
     {
@@ -27022,7 +27126,7 @@
       "label": "fetch_real_atm_iv()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1071",
+      "source_location": "L1109",
       "_origin": "ast"
     },
     {
@@ -27030,7 +27134,7 @@
       "label": "validate_iv_rank_real()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1109",
+      "source_location": "L1147",
       "_origin": "ast"
     },
     {
@@ -27038,7 +27142,7 @@
       "label": "validate_iv_percentile()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1138",
+      "source_location": "L1176",
       "_origin": "ast"
     },
     {
@@ -27046,7 +27150,7 @@
       "label": "macd_confidence_factor()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1160",
+      "source_location": "L1198",
       "_origin": "ast"
     },
     {
@@ -27054,7 +27158,7 @@
       "label": "smc_bias_confidence_factor()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1174",
+      "source_location": "L1212",
       "_origin": "ast"
     },
     {
@@ -27062,7 +27166,7 @@
       "label": "get_smc_bias_direction()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1185",
+      "source_location": "L1223",
       "_origin": "ast"
     },
     {
@@ -27070,7 +27174,7 @@
       "label": "calculate_confidence_score()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1197",
+      "source_location": "L1235",
       "_origin": "ast"
     },
     {
@@ -27078,7 +27182,7 @@
       "label": "analyze_with_recommended_strategy()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1240",
+      "source_location": "L1278",
       "_origin": "ast"
     },
     {
@@ -27086,7 +27190,7 @@
       "label": "build_entry_path_identifier()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1318",
+      "source_location": "L1356",
       "_origin": "ast"
     },
     {
@@ -27094,7 +27198,7 @@
       "label": "decide_direction()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1337",
+      "source_location": "L1375",
       "_origin": "ast"
     },
     {
@@ -27102,7 +27206,7 @@
       "label": "get_smc_decision()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1372",
+      "source_location": "L1410",
       "_origin": "ast"
     },
     {
@@ -27110,7 +27214,7 @@
       "label": "smc_decision_aligned?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1405",
+      "source_location": "L1443",
       "_origin": "ast"
     },
     {
@@ -27118,7 +27222,7 @@
       "label": "expiry_trade_allowed?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1419",
+      "source_location": "L1457",
       "_origin": "ast"
     },
     {
@@ -27126,7 +27230,7 @@
       "label": "resolve_nearest_expiry_date()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1429",
+      "source_location": "L1467",
       "_origin": "ast"
     },
     {
@@ -27134,7 +27238,7 @@
       "label": "entry_dte_guard_blocks?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1439",
+      "source_location": "L1477",
       "_origin": "ast"
     },
     {
@@ -27142,7 +27246,7 @@
       "label": "evaluate_market_context_for_entry()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1462",
+      "source_location": "L1500",
       "_origin": "ast"
     },
     {
@@ -27150,7 +27254,7 @@
       "label": "dynamic_config_enabled?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1522",
+      "source_location": "L1560",
       "_origin": "ast"
     },
     {
@@ -27158,7 +27262,7 @@
       "label": "resolved_supertrend_cfg()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1526",
+      "source_location": "L1564",
       "_origin": "ast"
     },
     {
@@ -27166,7 +27270,7 @@
       "label": "resolved_adx_min()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1544",
+      "source_location": "L1582",
       "_origin": "ast"
     },
     {
@@ -27174,7 +27278,7 @@
       "label": "record_signal_skip()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1559",
+      "source_location": "L1597",
       "_origin": "ast"
     },
     {
@@ -27182,7 +27286,7 @@
       "label": "trading_context_blocked?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1570",
+      "source_location": "L1608",
       "_origin": "ast"
     },
     {
@@ -27190,7 +27294,7 @@
       "label": "evaluate_entry_quality()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1599",
+      "source_location": "L1637",
       "_origin": "ast"
     },
     {
@@ -27198,7 +27302,7 @@
       "label": "execute_execution_gates()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1617",
+      "source_location": "L1655",
       "_origin": "ast"
     },
     {
@@ -27206,7 +27310,7 @@
       "label": "execute_no_trade_gate()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1689",
+      "source_location": "L1727",
       "_origin": "ast"
     },
     {
@@ -27214,7 +27318,7 @@
       "label": "recent_no_trade_bars()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1733",
+      "source_location": "L1771",
       "_origin": "ast"
     },
     {
@@ -27222,7 +27326,7 @@
       "label": "fetch_ltf_confluence_snapshot_if_needed()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1737",
+      "source_location": "L1775",
       "_origin": "ast"
     },
     {
@@ -27230,7 +27334,7 @@
       "label": "blocked_by_smc_confluence_gate?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1745",
+      "source_location": "L1783",
       "_origin": "ast"
     },
     {
@@ -27238,7 +27342,7 @@
       "label": "gate_result_hash()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1757",
+      "source_location": "L1795",
       "_origin": "ast"
     },
     {
@@ -27246,7 +27350,7 @@
       "label": "execute_options_analysis()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1765",
+      "source_location": "L1803",
       "_origin": "ast"
     },
     {
@@ -27254,7 +27358,7 @@
       "label": "build_diagnostic_metadata()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1798",
+      "source_location": "L1836",
       "_origin": "ast"
     },
     {
@@ -27262,7 +27366,7 @@
       "label": "options_analysis_gate_blocks_entry?()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1830",
+      "source_location": "L1868",
       "_origin": "ast"
     },
     {
@@ -27270,7 +27374,7 @@
       "label": "execute_entry_gate()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1873",
+      "source_location": "L1911",
       "_origin": "ast"
     },
     {
@@ -27278,7 +27382,7 @@
       "label": "trigger_entry_flow()",
       "file_type": "code",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1990",
+      "source_location": "L2028",
       "_origin": "ast"
     },
     {
@@ -27846,7 +27950,7 @@
       "label": ".evaluate_strategy()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L133",
+      "source_location": "L128",
       "_origin": "ast"
     },
     {
@@ -27854,7 +27958,7 @@
       "label": ".determine_direction()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L148",
+      "source_location": "L143",
       "_origin": "ast"
     },
     {
@@ -27862,7 +27966,7 @@
       "label": ".process_signal()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L156",
+      "source_location": "L151",
       "_origin": "ast"
     },
     {
@@ -27870,7 +27974,7 @@
       "label": ".build_pick_from_signal()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L185",
+      "source_location": "L180",
       "_origin": "ast"
     },
     {
@@ -27878,7 +27982,15 @@
       "label": ".default_provider()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L196",
+      "source_location": "L191",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_scheduler_scheduler_log_cycle_summary",
+      "label": ".log_cycle_summary()",
+      "file_type": "code",
+      "source_file": "app/services/signal/scheduler.rb",
+      "source_location": "L197",
       "_origin": "ast"
     },
     {
@@ -27886,7 +27998,7 @@
       "label": ".evaluate_supertrend_signal()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L202",
+      "source_location": "L203",
       "_origin": "ast"
     },
     {
@@ -27894,7 +28006,7 @@
       "label": ".evaluate_with_trend_scorer()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L220",
+      "source_location": "L221",
       "_origin": "ast"
     },
     {
@@ -27902,7 +28014,7 @@
       "label": ".evaluate_with_legacy_indicators()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L259",
+      "source_location": "L260",
       "_origin": "ast"
     },
     {
@@ -27910,7 +28022,7 @@
       "label": ".select_candidate_from_chain()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L278",
+      "source_location": "L279",
       "_origin": "ast"
     },
     {
@@ -27918,7 +28030,7 @@
       "label": ".signal_config()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L297",
+      "source_location": "L298",
       "_origin": "ast"
     },
     {
@@ -27926,7 +28038,7 @@
       "label": ".trend_scorer_enabled?()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L304",
+      "source_location": "L305",
       "_origin": "ast"
     },
     {
@@ -27934,7 +28046,7 @@
       "label": ".feature_flags()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L315",
+      "source_location": "L316",
       "_origin": "ast"
     },
     {
@@ -27942,7 +28054,7 @@
       "label": ".reorder_indices_by_expiry()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L324",
+      "source_location": "L325",
       "_origin": "ast"
     },
     {
@@ -27950,7 +28062,7 @@
       "label": ".max_expiry_days()",
       "file_type": "code",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L429",
+      "source_location": "L430",
       "_origin": "ast"
     },
     {
@@ -43354,6 +43466,14 @@
       "label": "underlying_exit_rule_spec.rb",
       "file_type": "code",
       "source_file": "spec/services/risk/rules/underlying_exit_rule_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "signal_cycle_summary_spec",
+      "label": "cycle_summary_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/services/signal/cycle_summary_spec.rb",
       "source_location": "L1",
       "_origin": "ast"
     },
@@ -110080,7 +110200,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0
     },
     {
@@ -110089,7 +110209,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L29",
+      "source_location": "L30",
       "weight": 1.0
     },
     {
@@ -110098,7 +110218,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L36",
+      "source_location": "L37",
       "weight": 1.0
     },
     {
@@ -110107,7 +110227,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L45",
+      "source_location": "L46",
       "weight": 1.0
     },
     {
@@ -110116,7 +110236,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L53",
+      "source_location": "L54",
       "weight": 1.0
     },
     {
@@ -110125,7 +110245,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L59",
+      "source_location": "L60",
       "weight": 1.0
     },
     {
@@ -110134,7 +110254,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L66",
+      "source_location": "L67",
       "weight": 1.0
     },
     {
@@ -110143,7 +110263,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L70",
+      "source_location": "L71",
       "weight": 1.0
     },
     {
@@ -110152,7 +110272,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L78",
+      "source_location": "L79",
       "weight": 1.0
     },
     {
@@ -110161,7 +110281,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L82",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -110170,7 +110290,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L86",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -110179,7 +110299,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L92",
+      "source_location": "L93",
       "weight": 1.0
     },
     {
@@ -110188,7 +110308,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L107",
+      "source_location": "L108",
       "weight": 1.0
     },
     {
@@ -110197,7 +110317,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L125",
+      "source_location": "L126",
       "weight": 1.0
     },
     {
@@ -110206,7 +110326,25 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L138",
+      "source_location": "L139",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_apply_paper_research_overrides",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L146",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config",
+      "target": "lib_algo_config_paper_strict_direction_gate",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L155",
       "weight": 1.0
     },
     {
@@ -110215,7 +110353,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L143",
+      "source_location": "L159",
       "weight": 1.0
     },
     {
@@ -110239,13 +110377,23 @@
       "weight": 1.0
     },
     {
+      "source": "lib_algo_config_fetch",
+      "target": "lib_algo_config_apply_paper_research_overrides",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
       "source": "lib_algo_config_event_driven_intraday_ai",
       "target": "lib_algo_config_truthy_signal_flag",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -110255,7 +110403,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L46",
+      "source_location": "L47",
       "weight": 1.0
     },
     {
@@ -110265,7 +110413,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L48",
+      "source_location": "L49",
       "weight": 1.0
     },
     {
@@ -110275,7 +110423,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L56",
+      "source_location": "L57",
       "weight": 1.0
     },
     {
@@ -110285,7 +110433,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L62",
+      "source_location": "L63",
       "weight": 1.0
     },
     {
@@ -110295,7 +110443,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L67",
+      "source_location": "L68",
       "weight": 1.0
     },
     {
@@ -110305,7 +110453,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L93",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -110315,7 +110463,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L102",
+      "source_location": "L103",
       "weight": 1.0
     },
     {
@@ -110325,7 +110473,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L108",
+      "source_location": "L109",
       "weight": 1.0
     },
     {
@@ -110335,7 +110483,27 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L139",
+      "source_location": "L140",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_apply_paper_research_overrides",
+      "target": "lib_algo_config_paper_strict_direction_gate",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L147",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_paper_strict_direction_gate",
+      "target": "lib_algo_config_fetch",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L156",
       "weight": 1.0
     },
     {
@@ -110345,7 +110513,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L144",
+      "source_location": "L160",
       "weight": 1.0
     },
     {
@@ -148787,6 +148955,127 @@
       "weight": 1.0
     },
     {
+      "source": "signal_cycle_summary",
+      "target": "signal_cycle_summary_cyclesummary",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary",
+      "target": "signal_cycle_summary_cyclesummary_initialize",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary",
+      "target": "signal_cycle_summary_cyclesummary_skip",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary",
+      "target": "signal_cycle_summary_cyclesummary_block",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary",
+      "target": "signal_cycle_summary_cyclesummary_entered",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary",
+      "target": "signal_cycle_summary_cyclesummary_pending",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary",
+      "target": "signal_cycle_summary_cyclesummary_finalize_pending",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary",
+      "target": "signal_cycle_summary_cyclesummary_log_line",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary",
+      "target": "signal_cycle_summary_cyclesummary_assign",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L49",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary_skip",
+      "target": "signal_cycle_summary_cyclesummary_assign",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary_block",
+      "target": "signal_cycle_summary_cyclesummary_assign",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary_finalize_pending",
+      "target": "signal_cycle_summary_cyclesummary_block",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary_finalize_pending",
+      "target": "signal_cycle_summary_cyclesummary_pending",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L34",
+      "weight": 1.0
+    },
+    {
       "source": "signal_direction_validator",
       "target": "signal_direction_validator_directionvalidator",
       "relation": "contains",
@@ -148957,11 +149246,20 @@
     },
     {
       "source": "app_services_signal_engine_rb_services_signal_engine",
+      "target": "signal_engine_record_cycle_block",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L202",
+      "weight": 1.0
+    },
+    {
+      "source": "app_services_signal_engine_rb_services_signal_engine",
       "target": "signal_engine_tradable_session",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L174",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -148970,7 +149268,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L184",
+      "source_location": "L216",
       "weight": 1.0
     },
     {
@@ -148979,7 +149277,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L192",
+      "source_location": "L224",
       "weight": 1.0
     },
     {
@@ -148988,7 +149286,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L207",
+      "source_location": "L239",
       "weight": 1.0
     },
     {
@@ -148997,7 +149295,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L282",
+      "source_location": "L317",
       "weight": 1.0
     },
     {
@@ -149006,7 +149304,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L291",
+      "source_location": "L326",
       "weight": 1.0
     },
     {
@@ -149015,7 +149313,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L356",
+      "source_location": "L391",
       "weight": 1.0
     },
     {
@@ -149024,7 +149322,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L387",
+      "source_location": "L422",
       "weight": 1.0
     },
     {
@@ -149033,7 +149331,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L408",
+      "source_location": "L443",
       "weight": 1.0
     },
     {
@@ -149042,7 +149340,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L473",
+      "source_location": "L508",
       "weight": 1.0
     },
     {
@@ -149051,7 +149349,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L483",
+      "source_location": "L518",
       "weight": 1.0
     },
     {
@@ -149060,7 +149358,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L487",
+      "source_location": "L522",
       "weight": 1.0
     },
     {
@@ -149069,7 +149367,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L495",
+      "source_location": "L530",
       "weight": 1.0
     },
     {
@@ -149078,7 +149376,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L515",
+      "source_location": "L553",
       "weight": 1.0
     },
     {
@@ -149087,7 +149385,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L519",
+      "source_location": "L557",
       "weight": 1.0
     },
     {
@@ -149096,7 +149394,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L579",
+      "source_location": "L617",
       "weight": 1.0
     },
     {
@@ -149105,7 +149403,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L633",
+      "source_location": "L671",
       "weight": 1.0
     },
     {
@@ -149114,7 +149412,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L704",
+      "source_location": "L742",
       "weight": 1.0
     },
     {
@@ -149123,7 +149421,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L718",
+      "source_location": "L756",
       "weight": 1.0
     },
     {
@@ -149132,7 +149430,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L728",
+      "source_location": "L766",
       "weight": 1.0
     },
     {
@@ -149141,7 +149439,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L803",
+      "source_location": "L841",
       "weight": 1.0
     },
     {
@@ -149150,7 +149448,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L817",
+      "source_location": "L855",
       "weight": 1.0
     },
     {
@@ -149159,7 +149457,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L860",
+      "source_location": "L898",
       "weight": 1.0
     },
     {
@@ -149168,7 +149466,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L883",
+      "source_location": "L921",
       "weight": 1.0
     },
     {
@@ -149177,7 +149475,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L909",
+      "source_location": "L947",
       "weight": 1.0
     },
     {
@@ -149186,7 +149484,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L943",
+      "source_location": "L981",
       "weight": 1.0
     },
     {
@@ -149195,7 +149493,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L985",
+      "source_location": "L1023",
       "weight": 1.0
     },
     {
@@ -149204,7 +149502,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1007",
+      "source_location": "L1045",
       "weight": 1.0
     },
     {
@@ -149213,7 +149511,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1031",
+      "source_location": "L1069",
       "weight": 1.0
     },
     {
@@ -149222,7 +149520,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1052",
+      "source_location": "L1090",
       "weight": 1.0
     },
     {
@@ -149231,7 +149529,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1071",
+      "source_location": "L1109",
       "weight": 1.0
     },
     {
@@ -149240,7 +149538,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1109",
+      "source_location": "L1147",
       "weight": 1.0
     },
     {
@@ -149249,7 +149547,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1138",
+      "source_location": "L1176",
       "weight": 1.0
     },
     {
@@ -149258,7 +149556,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1160",
+      "source_location": "L1198",
       "weight": 1.0
     },
     {
@@ -149267,7 +149565,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1174",
+      "source_location": "L1212",
       "weight": 1.0
     },
     {
@@ -149276,7 +149574,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1185",
+      "source_location": "L1223",
       "weight": 1.0
     },
     {
@@ -149285,7 +149583,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1197",
+      "source_location": "L1235",
       "weight": 1.0
     },
     {
@@ -149294,7 +149592,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1240",
+      "source_location": "L1278",
       "weight": 1.0
     },
     {
@@ -149303,7 +149601,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1318",
+      "source_location": "L1356",
       "weight": 1.0
     },
     {
@@ -149312,7 +149610,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1337",
+      "source_location": "L1375",
       "weight": 1.0
     },
     {
@@ -149321,7 +149619,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1372",
+      "source_location": "L1410",
       "weight": 1.0
     },
     {
@@ -149330,7 +149628,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1405",
+      "source_location": "L1443",
       "weight": 1.0
     },
     {
@@ -149339,7 +149637,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1419",
+      "source_location": "L1457",
       "weight": 1.0
     },
     {
@@ -149348,7 +149646,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1429",
+      "source_location": "L1467",
       "weight": 1.0
     },
     {
@@ -149357,7 +149655,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1439",
+      "source_location": "L1477",
       "weight": 1.0
     },
     {
@@ -149366,7 +149664,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1462",
+      "source_location": "L1500",
       "weight": 1.0
     },
     {
@@ -149375,7 +149673,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1522",
+      "source_location": "L1560",
       "weight": 1.0
     },
     {
@@ -149384,7 +149682,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1526",
+      "source_location": "L1564",
       "weight": 1.0
     },
     {
@@ -149393,7 +149691,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1544",
+      "source_location": "L1582",
       "weight": 1.0
     },
     {
@@ -149402,7 +149700,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1559",
+      "source_location": "L1597",
       "weight": 1.0
     },
     {
@@ -149411,7 +149709,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1570",
+      "source_location": "L1608",
       "weight": 1.0
     },
     {
@@ -149420,7 +149718,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1599",
+      "source_location": "L1637",
       "weight": 1.0
     },
     {
@@ -149429,7 +149727,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1617",
+      "source_location": "L1655",
       "weight": 1.0
     },
     {
@@ -149438,7 +149736,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1689",
+      "source_location": "L1727",
       "weight": 1.0
     },
     {
@@ -149447,7 +149745,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1733",
+      "source_location": "L1771",
       "weight": 1.0
     },
     {
@@ -149456,7 +149754,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1737",
+      "source_location": "L1775",
       "weight": 1.0
     },
     {
@@ -149465,7 +149763,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1745",
+      "source_location": "L1783",
       "weight": 1.0
     },
     {
@@ -149474,7 +149772,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1757",
+      "source_location": "L1795",
       "weight": 1.0
     },
     {
@@ -149483,7 +149781,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1765",
+      "source_location": "L1803",
       "weight": 1.0
     },
     {
@@ -149492,7 +149790,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1798",
+      "source_location": "L1836",
       "weight": 1.0
     },
     {
@@ -149501,7 +149799,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1830",
+      "source_location": "L1868",
       "weight": 1.0
     },
     {
@@ -149510,7 +149808,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1873",
+      "source_location": "L1911",
       "weight": 1.0
     },
     {
@@ -149519,7 +149817,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1990",
+      "source_location": "L2028",
       "weight": 1.0
     },
     {
@@ -149529,22 +149827,12 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L9",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
       "source": "signal_engine_run_for",
       "target": "signal_engine_fetch_instrument",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/signal/engine.rb",
-      "source_location": "L11",
-      "weight": 1.0
-    },
-    {
-      "source": "signal_engine_run_for",
-      "target": "signal_engine_initialize_analysis_context",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -149554,17 +149842,7 @@
     },
     {
       "source": "signal_engine_run_for",
-      "target": "signal_engine_execute_supertrend_only_flow",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/signal/engine.rb",
-      "source_location": "L24",
-      "weight": 1.0
-    },
-    {
-      "source": "signal_engine_run_for",
-      "target": "signal_engine_execute_standard_analysis_flow",
+      "target": "signal_engine_initialize_analysis_context",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -149574,12 +149852,42 @@
     },
     {
       "source": "signal_engine_run_for",
+      "target": "signal_engine_execute_supertrend_only_flow",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_run_for",
+      "target": "signal_engine_execute_standard_analysis_flow",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L35",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_run_for",
+      "target": "signal_engine_record_cycle_block",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L59",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_run_for",
       "target": "signal_engine_trading_context_blocked",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L54",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -149589,7 +149897,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L60",
+      "source_location": "L71",
       "weight": 1.0
     },
     {
@@ -149599,7 +149907,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L67",
+      "source_location": "L79",
       "weight": 1.0
     },
     {
@@ -149609,7 +149917,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L70",
+      "source_location": "L85",
       "weight": 1.0
     },
     {
@@ -149619,7 +149927,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L71",
+      "source_location": "L86",
       "weight": 1.0
     },
     {
@@ -149629,7 +149937,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L77",
+      "source_location": "L93",
       "weight": 1.0
     },
     {
@@ -149639,7 +149947,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L94",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -149649,7 +149957,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L105",
+      "source_location": "L124",
       "weight": 1.0
     },
     {
@@ -149659,7 +149967,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L137",
+      "source_location": "L156",
       "weight": 1.0
     },
     {
@@ -149669,7 +149977,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L147",
+      "source_location": "L166",
       "weight": 1.0
     },
     {
@@ -149679,7 +149987,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L156",
+      "source_location": "L178",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_execute_supertrend_only_flow",
+      "target": "signal_engine_record_cycle_block",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L243",
       "weight": 1.0
     },
     {
@@ -149689,7 +150007,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L214",
+      "source_location": "L247",
       "weight": 1.0
     },
     {
@@ -149699,7 +150017,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L254",
+      "source_location": "L289",
       "weight": 1.0
     },
     {
@@ -149709,7 +150027,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L259",
+      "source_location": "L294",
       "weight": 1.0
     },
     {
@@ -149719,7 +150037,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L267",
+      "source_location": "L302",
       "weight": 1.0
     },
     {
@@ -149729,7 +150047,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L293",
+      "source_location": "L328",
       "weight": 1.0
     },
     {
@@ -149739,7 +150057,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L297",
+      "source_location": "L332",
       "weight": 1.0
     },
     {
@@ -149749,7 +150067,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L301",
+      "source_location": "L336",
       "weight": 1.0
     },
     {
@@ -149759,7 +150077,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L328",
+      "source_location": "L363",
       "weight": 1.0
     },
     {
@@ -149769,7 +150087,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L333",
+      "source_location": "L368",
       "weight": 1.0
     },
     {
@@ -149779,7 +150097,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L409",
+      "source_location": "L444",
       "weight": 1.0
     },
     {
@@ -149789,7 +150107,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L410",
+      "source_location": "L445",
       "weight": 1.0
     },
     {
@@ -149799,7 +150117,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L417",
+      "source_location": "L452",
       "weight": 1.0
     },
     {
@@ -149809,7 +150127,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L426",
+      "source_location": "L461",
       "weight": 1.0
     },
     {
@@ -149819,7 +150137,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L441",
+      "source_location": "L476",
       "weight": 1.0
     },
     {
@@ -149829,7 +150147,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L452",
+      "source_location": "L487",
       "weight": 1.0
     },
     {
@@ -149839,7 +150157,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L462",
+      "source_location": "L497",
       "weight": 1.0
     },
     {
@@ -149849,7 +150167,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L478",
+      "source_location": "L513",
       "weight": 1.0
     },
     {
@@ -149859,7 +150177,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L484",
+      "source_location": "L519",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_direction_gate_blocked",
+      "target": "signal_engine_record_cycle_block",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L538",
       "weight": 1.0
     },
     {
@@ -149869,7 +150197,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L525",
+      "source_location": "L563",
       "weight": 1.0
     },
     {
@@ -149879,7 +150207,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L580",
+      "source_location": "L618",
       "weight": 1.0
     },
     {
@@ -149889,7 +150217,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L599",
+      "source_location": "L637",
       "weight": 1.0
     },
     {
@@ -149899,7 +150227,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L608",
+      "source_location": "L646",
       "weight": 1.0
     },
     {
@@ -149909,7 +150237,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L612",
+      "source_location": "L650",
       "weight": 1.0
     },
     {
@@ -149919,7 +150247,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L651",
+      "source_location": "L689",
       "weight": 1.0
     },
     {
@@ -149929,72 +150257,12 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L686",
+      "source_location": "L724",
       "weight": 1.0
     },
     {
       "source": "signal_engine_comprehensive_validation",
       "target": "signal_engine_get_validation_mode_config",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/signal/engine.rb",
-      "source_location": "L729",
-      "weight": 1.0
-    },
-    {
-      "source": "signal_engine_comprehensive_validation",
-      "target": "signal_engine_fetch_real_atm_iv",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/signal/engine.rb",
-      "source_location": "L736",
-      "weight": 1.0
-    },
-    {
-      "source": "signal_engine_comprehensive_validation",
-      "target": "signal_engine_validate_iv_rank_real",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/signal/engine.rb",
-      "source_location": "L739",
-      "weight": 1.0
-    },
-    {
-      "source": "signal_engine_comprehensive_validation",
-      "target": "signal_engine_validate_iv_rank",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/signal/engine.rb",
-      "source_location": "L741",
-      "weight": 1.0
-    },
-    {
-      "source": "signal_engine_comprehensive_validation",
-      "target": "signal_engine_validate_theta_risk",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/signal/engine.rb",
-      "source_location": "L748",
-      "weight": 1.0
-    },
-    {
-      "source": "signal_engine_comprehensive_validation",
-      "target": "signal_engine_validate_adx_strength",
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/services/signal/engine.rb",
-      "source_location": "L758",
-      "weight": 1.0
-    },
-    {
-      "source": "signal_engine_comprehensive_validation",
-      "target": "signal_engine_validate_trend_confirmation",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -150004,12 +150272,72 @@
     },
     {
       "source": "signal_engine_comprehensive_validation",
-      "target": "signal_engine_validate_rsi_gate",
+      "target": "signal_engine_fetch_real_atm_iv",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L774",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_comprehensive_validation",
+      "target": "signal_engine_validate_iv_rank_real",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
       "source_location": "L777",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_comprehensive_validation",
+      "target": "signal_engine_validate_iv_rank",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L779",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_comprehensive_validation",
+      "target": "signal_engine_validate_theta_risk",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L786",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_comprehensive_validation",
+      "target": "signal_engine_validate_adx_strength",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L796",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_comprehensive_validation",
+      "target": "signal_engine_validate_trend_confirmation",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L805",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_comprehensive_validation",
+      "target": "signal_engine_validate_rsi_gate",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L815",
       "weight": 1.0
     },
     {
@@ -150019,7 +150347,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L819",
+      "source_location": "L857",
       "weight": 1.0
     },
     {
@@ -150029,7 +150357,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L862",
+      "source_location": "L900",
       "weight": 1.0
     },
     {
@@ -150039,7 +150367,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L885",
+      "source_location": "L923",
       "weight": 1.0
     },
     {
@@ -150049,7 +150377,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1032",
+      "source_location": "L1070",
       "weight": 1.0
     },
     {
@@ -150059,7 +150387,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1114",
+      "source_location": "L1152",
       "weight": 1.0
     },
     {
@@ -150069,7 +150397,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1175",
+      "source_location": "L1213",
       "weight": 1.0
     },
     {
@@ -150079,7 +150407,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1233",
+      "source_location": "L1271",
       "weight": 1.0
     },
     {
@@ -150089,7 +150417,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1234",
+      "source_location": "L1272",
       "weight": 1.0
     },
     {
@@ -150099,7 +150427,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1241",
+      "source_location": "L1279",
       "weight": 1.0
     },
     {
@@ -150109,7 +150437,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1529",
+      "source_location": "L1567",
       "weight": 1.0
     },
     {
@@ -150119,7 +150447,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1547",
+      "source_location": "L1585",
       "weight": 1.0
     },
     {
@@ -150129,7 +150457,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1648",
+      "source_location": "L1686",
       "weight": 1.0
     },
     {
@@ -150139,7 +150467,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1649",
+      "source_location": "L1687",
       "weight": 1.0
     },
     {
@@ -150149,7 +150477,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1662",
+      "source_location": "L1700",
       "weight": 1.0
     },
     {
@@ -150159,7 +150487,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1666",
+      "source_location": "L1704",
       "weight": 1.0
     },
     {
@@ -150169,7 +150497,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1680",
+      "source_location": "L1718",
       "weight": 1.0
     },
     {
@@ -150179,7 +150507,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1692",
+      "source_location": "L1730",
       "weight": 1.0
     },
     {
@@ -150189,7 +150517,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1767",
+      "source_location": "L1805",
       "weight": 1.0
     },
     {
@@ -150199,7 +150527,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1785",
+      "source_location": "L1823",
       "weight": 1.0
     },
     {
@@ -150209,7 +150537,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1786",
+      "source_location": "L1824",
       "weight": 1.0
     },
     {
@@ -150219,7 +150547,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1841",
+      "source_location": "L1879",
       "weight": 1.0
     },
     {
@@ -150229,7 +150557,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1881",
+      "source_location": "L1919",
       "weight": 1.0
     },
     {
@@ -150239,7 +150567,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1891",
+      "source_location": "L1929",
       "weight": 1.0
     },
     {
@@ -150249,7 +150577,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1966",
+      "source_location": "L2004",
       "weight": 1.0
     },
     {
@@ -150259,7 +150587,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L2023",
+      "source_location": "L2061",
       "weight": 1.0
     },
     {
@@ -151078,7 +151406,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L133",
+      "source_location": "L128",
       "weight": 1.0
     },
     {
@@ -151087,7 +151415,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L148",
+      "source_location": "L143",
       "weight": 1.0
     },
     {
@@ -151096,7 +151424,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L156",
+      "source_location": "L151",
       "weight": 1.0
     },
     {
@@ -151105,7 +151433,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L185",
+      "source_location": "L180",
       "weight": 1.0
     },
     {
@@ -151114,7 +151442,16 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L196",
+      "source_location": "L191",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_scheduler_scheduler",
+      "target": "signal_scheduler_scheduler_log_cycle_summary",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/scheduler.rb",
+      "source_location": "L197",
       "weight": 1.0
     },
     {
@@ -151123,7 +151460,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L202",
+      "source_location": "L203",
       "weight": 1.0
     },
     {
@@ -151132,7 +151469,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L220",
+      "source_location": "L221",
       "weight": 1.0
     },
     {
@@ -151141,7 +151478,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L259",
+      "source_location": "L260",
       "weight": 1.0
     },
     {
@@ -151150,7 +151487,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L278",
+      "source_location": "L279",
       "weight": 1.0
     },
     {
@@ -151159,7 +151496,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L297",
+      "source_location": "L298",
       "weight": 1.0
     },
     {
@@ -151168,7 +151505,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L304",
+      "source_location": "L305",
       "weight": 1.0
     },
     {
@@ -151177,7 +151514,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L315",
+      "source_location": "L316",
       "weight": 1.0
     },
     {
@@ -151186,7 +151523,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L324",
+      "source_location": "L325",
       "weight": 1.0
     },
     {
@@ -151195,7 +151532,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L429",
+      "source_location": "L430",
       "weight": 1.0
     },
     {
@@ -151219,13 +151556,23 @@
       "weight": 1.0
     },
     {
+      "source": "signal_scheduler_scheduler_process_index",
+      "target": "signal_scheduler_scheduler_log_cycle_summary",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/services/signal/scheduler.rb",
+      "source_location": "L122",
+      "weight": 1.0
+    },
+    {
       "source": "signal_scheduler_scheduler_process_signal",
       "target": "signal_scheduler_scheduler_build_pick_from_signal",
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L157",
+      "source_location": "L152",
       "weight": 1.0
     },
     {
@@ -151235,7 +151582,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L159",
+      "source_location": "L154",
       "weight": 1.0
     },
     {
@@ -151245,7 +151592,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L210",
+      "source_location": "L211",
       "weight": 1.0
     },
     {
@@ -151255,7 +151602,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L210",
+      "source_location": "L211",
       "weight": 1.0
     },
     {
@@ -151265,7 +151612,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L213",
+      "source_location": "L214",
       "weight": 1.0
     },
     {
@@ -151275,7 +151622,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L238",
+      "source_location": "L239",
       "weight": 1.0
     },
     {
@@ -151285,7 +151632,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L382",
+      "source_location": "L383",
       "weight": 1.0
     },
     {
@@ -245204,7 +245551,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L71",
+      "source_location": "L72",
       "weight": 1.0
     },
     {
@@ -245215,7 +245562,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L79",
+      "source_location": "L80",
       "weight": 1.0
     },
     {
@@ -245226,7 +245573,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L109",
+      "source_location": "L110",
       "weight": 1.0
     },
     {
@@ -245237,7 +245584,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L113",
+      "source_location": "L114",
       "weight": 1.0
     },
     {
@@ -245248,7 +245595,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L116",
+      "source_location": "L117",
       "weight": 1.0
     },
     {
@@ -245259,7 +245606,18 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L140",
+      "source_location": "L141",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_algo_config_apply_paper_research_overrides",
+      "target": "smc_smc_permission_resolver_normalizedsmc_dig",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/lib/algo_config.rb",
+      "source_location": "L148",
       "weight": 1.0
     },
     {
@@ -245270,7 +245628,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/lib/algo_config.rb",
-      "source_location": "L146",
+      "source_location": "L162",
       "weight": 1.0
     },
     {
@@ -270134,6 +270492,39 @@
       "weight": 1.0
     },
     {
+      "source": "signal_cycle_summary_cyclesummary_initialize",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary_entered",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_cycle_summary_cyclesummary_assign",
+      "target": "states_base_state_basestate_to_s",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/cycle_summary.rb",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
       "source": "signal_direction_validator_directionvalidator_validate",
       "target": "trading_market_permission_gate_marketpermissiongate_reject",
       "relation": "calls",
@@ -270201,13 +270592,57 @@
     },
     {
       "source": "signal_engine_run_for",
+      "target": "market_session_resolver_current",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_run_for",
+      "target": "signal_cycle_summary_cyclesummary_skip",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_run_for",
+      "target": "signal_cycle_summary_cyclesummary_block",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_run_for",
+      "target": "signal_cycle_summary_cyclesummary_finalize_pending",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_run_for",
       "target": "signal_state_tracker_record",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L86",
+      "source_location": "L105",
       "weight": 1.0
     },
     {
@@ -270218,7 +270653,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L130",
+      "source_location": "L149",
       "weight": 1.0
     },
     {
@@ -270229,7 +270664,40 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L132",
+      "source_location": "L151",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_run_for",
+      "target": "signal_cycle_summary_cyclesummary_entered",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L188",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_record_cycle_block",
+      "target": "signal_cycle_summary_cyclesummary_block",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L203",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_record_cycle_block",
+      "target": "market_session_resolver_current",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L203",
       "weight": 1.0
     },
     {
@@ -270240,7 +270708,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L175",
+      "source_location": "L207",
       "weight": 1.0
     },
     {
@@ -270251,7 +270719,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L185",
+      "source_location": "L217",
       "weight": 1.0
     },
     {
@@ -270262,7 +270730,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L185",
+      "source_location": "L217",
       "weight": 1.0
     },
     {
@@ -270273,7 +270741,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L193",
+      "source_location": "L225",
       "weight": 1.0
     },
     {
@@ -270284,7 +270752,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L193",
+      "source_location": "L225",
       "weight": 1.0
     },
     {
@@ -270295,7 +270763,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L240",
+      "source_location": "L275",
       "weight": 1.0
     },
     {
@@ -270306,7 +270774,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L241",
+      "source_location": "L276",
       "weight": 1.0
     },
     {
@@ -270317,7 +270785,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L285",
+      "source_location": "L320",
       "weight": 1.0
     },
     {
@@ -270328,7 +270796,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L316",
+      "source_location": "L351",
       "weight": 1.0
     },
     {
@@ -270339,7 +270807,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L319",
+      "source_location": "L354",
       "weight": 1.0
     },
     {
@@ -270350,7 +270818,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L362",
+      "source_location": "L397",
       "weight": 1.0
     },
     {
@@ -270361,7 +270829,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L370",
+      "source_location": "L405",
       "weight": 1.0
     },
     {
@@ -270372,12 +270840,12 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L393",
+      "source_location": "L428",
       "weight": 1.0
     },
     {
-      "source": "signal_engine_analyze_with_multi_indicators",
-      "target": "trading_permission_execution_policy_deep_dup",
+      "source": "signal_engine_direction_gate_blocked",
+      "target": "states_base_state_basestate_to_s",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
@@ -270388,13 +270856,24 @@
     },
     {
       "source": "signal_engine_analyze_with_multi_indicators",
+      "target": "trading_permission_execution_policy_deep_dup",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/engine.rb",
+      "source_location": "L572",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_engine_analyze_with_multi_indicators",
       "target": "concerns_candle_extension_candle_series",
       "relation": "calls",
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L540",
+      "source_location": "L578",
       "weight": 1.0
     },
     {
@@ -270405,7 +270884,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L558",
+      "source_location": "L596",
       "weight": 1.0
     },
     {
@@ -270416,7 +270895,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L569",
+      "source_location": "L607",
       "weight": 1.0
     },
     {
@@ -270427,7 +270906,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L572",
+      "source_location": "L610",
       "weight": 1.0
     },
     {
@@ -270438,7 +270917,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L587",
+      "source_location": "L625",
       "weight": 1.0
     },
     {
@@ -270449,7 +270928,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L625",
+      "source_location": "L663",
       "weight": 1.0
     },
     {
@@ -270460,7 +270939,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L635",
+      "source_location": "L673",
       "weight": 1.0
     },
     {
@@ -270471,7 +270950,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L721",
+      "source_location": "L759",
       "weight": 1.0
     },
     {
@@ -270482,7 +270961,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L783",
+      "source_location": "L821",
       "weight": 1.0
     },
     {
@@ -270493,7 +270972,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L789",
+      "source_location": "L827",
       "weight": 1.0
     },
     {
@@ -270504,7 +270983,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L806",
+      "source_location": "L844",
       "weight": 1.0
     },
     {
@@ -270515,7 +270994,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L813",
+      "source_location": "L851",
       "weight": 1.0
     },
     {
@@ -270526,7 +271005,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L823",
+      "source_location": "L861",
       "weight": 1.0
     },
     {
@@ -270537,7 +271016,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L841",
+      "source_location": "L879",
       "weight": 1.0
     },
     {
@@ -270548,7 +271027,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L874",
+      "source_location": "L912",
       "weight": 1.0
     },
     {
@@ -270559,7 +271038,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L893",
+      "source_location": "L931",
       "weight": 1.0
     },
     {
@@ -270570,7 +271049,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L925",
+      "source_location": "L963",
       "weight": 1.0
     },
     {
@@ -270581,7 +271060,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L944",
+      "source_location": "L982",
       "weight": 1.0
     },
     {
@@ -270592,7 +271071,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L965",
+      "source_location": "L1003",
       "weight": 1.0
     },
     {
@@ -270603,7 +271082,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1008",
+      "source_location": "L1046",
       "weight": 1.0
     },
     {
@@ -270614,7 +271093,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1035",
+      "source_location": "L1073",
       "weight": 1.0
     },
     {
@@ -270625,7 +271104,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1056",
+      "source_location": "L1094",
       "weight": 1.0
     },
     {
@@ -270636,7 +271115,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1060",
+      "source_location": "L1098",
       "weight": 1.0
     },
     {
@@ -270647,7 +271126,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1061",
+      "source_location": "L1099",
       "weight": 1.0
     },
     {
@@ -270658,7 +271137,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1074",
+      "source_location": "L1112",
       "weight": 1.0
     },
     {
@@ -270669,7 +271148,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1084",
+      "source_location": "L1122",
       "weight": 1.0
     },
     {
@@ -270680,7 +271159,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1084",
+      "source_location": "L1122",
       "weight": 1.0
     },
     {
@@ -270691,7 +271170,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1091",
+      "source_location": "L1129",
       "weight": 1.0
     },
     {
@@ -270702,7 +271181,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1091",
+      "source_location": "L1129",
       "weight": 1.0
     },
     {
@@ -270713,7 +271192,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1113",
+      "source_location": "L1151",
       "weight": 1.0
     },
     {
@@ -270724,7 +271203,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1113",
+      "source_location": "L1151",
       "weight": 1.0
     },
     {
@@ -270735,7 +271214,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1164",
+      "source_location": "L1202",
       "weight": 1.0
     },
     {
@@ -270746,7 +271225,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1248",
+      "source_location": "L1286",
       "weight": 1.0
     },
     {
@@ -270757,7 +271236,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1263",
+      "source_location": "L1301",
       "weight": 1.0
     },
     {
@@ -270768,7 +271247,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1272",
+      "source_location": "L1310",
       "weight": 1.0
     },
     {
@@ -270779,7 +271258,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1287",
+      "source_location": "L1325",
       "weight": 1.0
     },
     {
@@ -270790,7 +271269,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1320",
+      "source_location": "L1358",
       "weight": 1.0
     },
     {
@@ -270801,7 +271280,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1423",
+      "source_location": "L1461",
       "weight": 1.0
     },
     {
@@ -270812,7 +271291,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1430",
+      "source_location": "L1468",
       "weight": 1.0
     },
     {
@@ -270823,7 +271302,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1433",
+      "source_location": "L1471",
       "weight": 1.0
     },
     {
@@ -270834,7 +271313,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1447",
+      "source_location": "L1485",
       "weight": 1.0
     },
     {
@@ -270845,7 +271324,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1464",
+      "source_location": "L1502",
       "weight": 1.0
     },
     {
@@ -270856,7 +271335,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1479",
+      "source_location": "L1517",
       "weight": 1.0
     },
     {
@@ -270867,7 +271346,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1483",
+      "source_location": "L1521",
       "weight": 1.0
     },
     {
@@ -270878,7 +271357,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1486",
+      "source_location": "L1524",
       "weight": 1.0
     },
     {
@@ -270889,7 +271368,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1502",
+      "source_location": "L1540",
       "weight": 1.0
     },
     {
@@ -270900,7 +271379,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1523",
+      "source_location": "L1561",
       "weight": 1.0
     },
     {
@@ -270911,7 +271390,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1545",
+      "source_location": "L1583",
       "weight": 1.0
     },
     {
@@ -270922,7 +271401,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1561",
+      "source_location": "L1599",
       "weight": 1.0
     },
     {
@@ -270933,7 +271412,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1563",
+      "source_location": "L1601",
       "weight": 1.0
     },
     {
@@ -270944,7 +271423,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1585",
+      "source_location": "L1623",
       "weight": 1.0
     },
     {
@@ -270955,7 +271434,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1587",
+      "source_location": "L1625",
       "weight": 1.0
     },
     {
@@ -270966,7 +271445,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1588",
+      "source_location": "L1626",
       "weight": 1.0
     },
     {
@@ -270977,7 +271456,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1588",
+      "source_location": "L1626",
       "weight": 1.0
     },
     {
@@ -270988,7 +271467,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1620",
+      "source_location": "L1658",
       "weight": 1.0
     },
     {
@@ -270999,7 +271478,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1623",
+      "source_location": "L1661",
       "weight": 1.0
     },
     {
@@ -271010,7 +271489,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1678",
+      "source_location": "L1716",
       "weight": 1.0
     },
     {
@@ -271021,7 +271500,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1704",
+      "source_location": "L1742",
       "weight": 1.0
     },
     {
@@ -271032,7 +271511,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1712",
+      "source_location": "L1750",
       "weight": 1.0
     },
     {
@@ -271043,7 +271522,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1719",
+      "source_location": "L1757",
       "weight": 1.0
     },
     {
@@ -271054,7 +271533,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1734",
+      "source_location": "L1772",
       "weight": 1.0
     },
     {
@@ -271065,7 +271544,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1747",
+      "source_location": "L1785",
       "weight": 1.0
     },
     {
@@ -271076,7 +271555,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1768",
+      "source_location": "L1806",
       "weight": 1.0
     },
     {
@@ -271087,7 +271566,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1778",
+      "source_location": "L1816",
       "weight": 1.0
     },
     {
@@ -271098,7 +271577,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1779",
+      "source_location": "L1817",
       "weight": 1.0
     },
     {
@@ -271109,7 +271588,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1779",
+      "source_location": "L1817",
       "weight": 1.0
     },
     {
@@ -271120,7 +271599,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1825",
+      "source_location": "L1863",
       "weight": 1.0
     },
     {
@@ -271131,7 +271610,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1831",
+      "source_location": "L1869",
       "weight": 1.0
     },
     {
@@ -271142,7 +271621,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1915",
+      "source_location": "L1953",
       "weight": 1.0
     },
     {
@@ -271153,7 +271632,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1932",
+      "source_location": "L1970",
       "weight": 1.0
     },
     {
@@ -271164,7 +271643,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1946",
+      "source_location": "L1984",
       "weight": 1.0
     },
     {
@@ -271175,7 +271654,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L1995",
+      "source_location": "L2033",
       "weight": 1.0
     },
     {
@@ -271186,7 +271665,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L2004",
+      "source_location": "L2042",
       "weight": 1.0
     },
     {
@@ -271197,7 +271676,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L2006",
+      "source_location": "L2044",
       "weight": 1.0
     },
     {
@@ -271208,7 +271687,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L2010",
+      "source_location": "L2048",
       "weight": 1.0
     },
     {
@@ -271219,7 +271698,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/engine.rb",
-      "source_location": "L2011",
+      "source_location": "L2049",
       "weight": 1.0
     },
     {
@@ -271780,7 +272259,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L149",
+      "source_location": "L144",
       "weight": 1.0
     },
     {
@@ -271791,7 +272270,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L150",
+      "source_location": "L145",
       "weight": 1.0
     },
     {
@@ -271802,7 +272281,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L158",
+      "source_location": "L153",
       "weight": 1.0
     },
     {
@@ -271813,7 +272292,18 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L162",
+      "source_location": "L157",
+      "weight": 1.0
+    },
+    {
+      "source": "signal_scheduler_scheduler_log_cycle_summary",
+      "target": "signal_cycle_summary_cyclesummary_log_line",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "app/services/signal/scheduler.rb",
+      "source_location": "L200",
       "weight": 1.0
     },
     {
@@ -271824,7 +272314,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L203",
+      "source_location": "L204",
       "weight": 1.0
     },
     {
@@ -271835,7 +272325,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L203",
+      "source_location": "L204",
       "weight": 1.0
     },
     {
@@ -271846,7 +272336,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L221",
+      "source_location": "L222",
       "weight": 1.0
     },
     {
@@ -271857,7 +272347,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L226",
+      "source_location": "L227",
       "weight": 1.0
     },
     {
@@ -271868,7 +272358,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L231",
+      "source_location": "L232",
       "weight": 1.0
     },
     {
@@ -271879,7 +272369,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L328",
+      "source_location": "L329",
       "weight": 1.0
     },
     {
@@ -271890,7 +272380,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L330",
+      "source_location": "L331",
       "weight": 1.0
     },
     {
@@ -271901,7 +272391,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L339",
+      "source_location": "L340",
       "weight": 1.0
     },
     {
@@ -271912,7 +272402,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L339",
+      "source_location": "L340",
       "weight": 1.0
     },
     {
@@ -271923,7 +272413,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L341",
+      "source_location": "L342",
       "weight": 1.0
     },
     {
@@ -271934,7 +272424,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "app/services/signal/scheduler.rb",
-      "source_location": "L383",
+      "source_location": "L384",
       "weight": 1.0
     },
     {

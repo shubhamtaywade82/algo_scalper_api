@@ -12,12 +12,17 @@ RSpec.describe Signal::Scheduler do
     end
 
     it 'delegates to Signal::Engine.run_for with regime state' do
+      summary = Signal::CycleSummary.new(index_key: 'NIFTY').block!('supertrend_none')
+      allow(Signal::Engine).to receive(:run_for).and_return(summary)
+      allow(Rails.logger).to receive(:info)
+
       scheduler.send(:process_index, index_cfg)
 
       expect(Signal::Engine).to have_received(:run_for).with(
         index_cfg,
         regime_state: instance_of(Market::RegimeState)
       )
+      expect(Rails.logger).to have_received(:info).with(summary.log_line)
     end
   end
 

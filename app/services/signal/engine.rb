@@ -6,10 +6,19 @@ module Signal
   class Engine
     class << self
       def run_for(index_cfg, regime_state: nil)
-        return unless tradable_session?(index_cfg)
+        summary = CycleSummary.new(index_key: index_cfg[:key])
+        Thread.current[:signal_cycle_summary] = summary
+
+        unless tradable_session?(index_cfg)
+          summary.skip!('market_closed')
+          return summary
+        end
 
         instrument = fetch_instrument(index_cfg)
-        return unless instrument
+        unless instrument
+          summary.block!('missing_instrument')
+          return summary
+        end
 
         signals_cfg = AlgoConfig.fetch[:signals] || {}
 
@@ -26,7 +35,7 @@ module Signal
           result = execute_standard_analysis_flow(index_cfg, instrument, signals_cfg, primary_tf, confirmation_tf)
         end
 
-        return unless result
+        return summary.finalize_pending! unless result
 
         final_direction = result[:direction]
         primary_analysis = result[:primary_analysis]
@@ -47,35 +56,45 @@ module Signal
             "[Signal] halt_on_validation_failure BLOCKED #{index_cfg[:key]}: #{validation_result[:reason]}"
           )
           Signal::StateTracker.reset(index_cfg[:key])
-          return
+          record_cycle_block!('validation_failed', regime: regime, direction: final_direction)
+          return summary
         end
 
         # 5. Trading Context Gate
         if trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, signals_cfg)
           Signal::StateTracker.reset(index_cfg[:key])
-          return
+          record_cycle_block!('trading_context', regime: regime, direction: final_direction)
+          return summary
         end
 
         # 6. Entry Quality Filter
         quality_result = evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime)
         unless quality_result[:pass]
           Signal::StateTracker.reset(index_cfg[:key])
-          return
+          record_cycle_block!('entry_quality', regime: regime, direction: final_direction)
+          return summary
         end
 
         # 7. No-Trade Context Gate
         no_trade_gate = execute_no_trade_gate(index_cfg: index_cfg, instrument: instrument, signals_cfg: signals_cfg)
-        return unless no_trade_gate
+        unless no_trade_gate
+          record_cycle_block!('no_trade_engine', regime: regime, direction: final_direction)
+          return summary
+        end
 
         nearest_expiry = resolve_nearest_expiry_date(index_cfg: index_cfg, no_trade_gate: no_trade_gate)
         if entry_dte_guard_blocks?(index_cfg: index_cfg, signals_cfg: signals_cfg, nearest_expiry: nearest_expiry)
           Signal::StateTracker.reset(index_cfg[:key])
-          return
+          record_cycle_block!('entry_dte_guard', regime: regime, direction: final_direction)
+          return summary
         end
 
         # 8. Institutional and Permission Gates
         gate_results = execute_execution_gates(index_cfg, instrument, primary_series, final_direction, signals_cfg)
-        return unless gate_results
+        unless gate_results
+          record_cycle_block!('execution_gates', regime: regime, direction: final_direction)
+          return summary
+        end
 
         permission = gate_results[:permission]
         smc_decision = gate_results[:smc_decision]
@@ -150,7 +169,10 @@ module Signal
           options_analysis: options_analysis, momentum_score: momentum_score,
           permission: permission, smc_decision: smc_decision
         )
-        return unless gate_result
+        unless gate_result
+          record_cycle_block!('entry_gate', regime: regime, direction: final_direction)
+          return summary
+        end
 
         # 14. Trigger Entry
         trigger_entry_flow(
@@ -163,13 +185,23 @@ module Signal
           market_context_extra: gate_result[:market_context_extra],
           execution_permission: gate_result[:execution_permission]
         )
+        summary.entered!(direction: final_direction, regime: regime)
+        summary
       rescue StandardError => e
         Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
         Rails.logger.error("[Signal] Backtrace: #{e.backtrace.first(5).join(', ')}")
+        summary&.block!('error')
+        summary
+      ensure
+        Thread.current[:signal_cycle_summary] = nil
       end
 
       private
+
+      def record_cycle_block!(code, regime: nil, direction: nil)
+        Thread.current[:signal_cycle_summary]&.block!(code, regime: regime, direction: direction)
+      end
 
       def tradable_session?(index_cfg)
         if defined?(TradingSession::Service) && TradingSession::Service.respond_to?(:market_closed?) && TradingSession::Service.market_closed?
@@ -208,6 +240,7 @@ module Signal
         supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
           Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
+          record_cycle_block!('supertrend_config_missing')
           return
         end
 
@@ -221,6 +254,7 @@ module Signal
         unless primary_analysis[:status] == :ok
           Rails.logger.warn("[Signal] Primary timeframe analysis unavailable for #{index_cfg[:key]}: #{primary_analysis[:message]}")
           Signal::StateTracker.reset(index_cfg[:key])
+          record_cycle_block!('analysis_unavailable')
           return
         end
 
@@ -231,6 +265,7 @@ module Signal
         if trend_direction == :none
           Rails.logger.info("[Signal] SupertrendTrend :none — no trade for #{index_cfg[:key]}")
           Signal::StateTracker.reset(index_cfg[:key])
+          record_cycle_block!('supertrend_none')
           return
         end
 
@@ -496,15 +531,18 @@ module Signal
         return false unless signals_cfg.fetch(:enable_direction_gate, false)
 
         trade_side = final_direction == :bullish ? :CE : :PE
+        direction_label = final_direction.to_s
 
         if %w[RANGING CHOPPY INSUFFICIENT_DATA].include?(regime)
           Rails.logger.info("[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Market is #{regime}. Skipping to avoid theta decay.")
+          record_cycle_block!("direction_gate:#{regime.to_s.downcase}", regime: regime, direction: direction_label)
           return true
         end
 
         aligned = (regime == 'TRENDING_UP' && trade_side == :CE) || (regime == 'TRENDING_DOWN' && trade_side == :PE)
         unless aligned
           Rails.logger.info("[Signal] DirectionGate BLOCKED #{index_cfg[:key]}: Counter-trend trade. #{trade_side} requested vs #{regime}.")
+          record_cycle_block!('direction_gate:counter_trend', regime: regime, direction: direction_label)
           return true
         end
 

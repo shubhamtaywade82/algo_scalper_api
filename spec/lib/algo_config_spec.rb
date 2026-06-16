@@ -56,6 +56,38 @@ RSpec.describe AlgoConfig do
       end
     end
 
+    context 'when paper trading relaxes direction gate for research' do
+      around do |example|
+        prior_live = ENV.fetch('LIVE_TRADING', nil)
+        prior_strict = ENV.fetch('PAPER_STRICT_DIRECTION_GATE', nil)
+        ENV['LIVE_TRADING'] = 'false'
+        ENV.delete('PAPER_STRICT_DIRECTION_GATE')
+        example.run
+        if prior_live.nil?
+          ENV.delete('LIVE_TRADING')
+        else
+          ENV['LIVE_TRADING'] = prior_live
+        end
+        if prior_strict.nil?
+          ENV.delete('PAPER_STRICT_DIRECTION_GATE')
+        else
+          ENV['PAPER_STRICT_DIRECTION_GATE'] = prior_strict
+        end
+        described_class.reset!
+      end
+
+      it 'disables enable_direction_gate when paper mode is active' do
+        described_class.reset!
+        expect(described_class.fetch.dig(:signals, :enable_direction_gate)).to be(false)
+      end
+
+      it 'keeps direction gate enabled when PAPER_STRICT_DIRECTION_GATE is true' do
+        ENV['PAPER_STRICT_DIRECTION_GATE'] = 'true'
+        described_class.reset!
+        expect(described_class.fetch.dig(:signals, :enable_direction_gate)).to be(true)
+      end
+    end
+
     context 'when SIGNAL_TIER env applies exploratory preset' do
       around do |example|
         prior = ENV.fetch('SIGNAL_TIER', nil)

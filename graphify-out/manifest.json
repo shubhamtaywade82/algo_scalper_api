@@ -210,8 +210,8 @@
     "semantic_hash": ""
   },
   "app/lib/algo_config.rb": {
-    "mtime": 1775801790.9782884,
-    "ast_hash": "a88ea09322a7555b8f007785b79bb050",
+    "mtime": 1781596417.2676215,
+    "ast_hash": "2aa029f0ece3351320d159c11f004ebb",
     "semantic_hash": ""
   },
   "app/lib/dhan/auth/strategies/authority.rb": {
@@ -1900,8 +1900,8 @@
     "semantic_hash": ""
   },
   "app/services/signal/engine.rb": {
-    "mtime": 1781003822.1638823,
-    "ast_hash": "4c0f2451cf0a5969eb764177b5bcaa2a",
+    "mtime": 1781596450.1910622,
+    "ast_hash": "162807fca67b34604a7f9068e4b0a1a5",
     "semantic_hash": ""
   },
   "app/services/signal/engines/base_engine.rb": {
@@ -1950,8 +1950,8 @@
     "semantic_hash": ""
   },
   "app/services/signal/scheduler.rb": {
-    "mtime": 1774856636.757612,
-    "ast_hash": "ae4f3ba622e07164b01eb02d7e3030d0",
+    "mtime": 1781596459.7490623,
+    "ast_hash": "3218d7e49a5a36b6448e5583b39ab553",
     "semantic_hash": ""
   },
   "app/services/signal/state_tracker.rb": {
@@ -3680,8 +3680,8 @@
     "semantic_hash": ""
   },
   "spec/lib/algo_config_spec.rb": {
-    "mtime": 1775801791.1182883,
-    "ast_hash": "cb9d9076a097b597768c07bae17cbf5e",
+    "mtime": 1781596473.5929828,
+    "ast_hash": "007e5f19aeb75f1dbacf9714efce3c98",
     "semantic_hash": ""
   },
   "spec/lib/dhan/auth/strategies/authority_spec.rb": {
@@ -4895,8 +4895,8 @@
     "semantic_hash": ""
   },
   "spec/services/signal/scheduler_spec.rb": {
-    "mtime": 1775801791.1482882,
-    "ast_hash": "3a6defecb1ada75cc07b5f656ff063f1",
+    "mtime": 1781596552.0984263,
+    "ast_hash": "3256a04dbaf160783ba226fb12bac402",
     "semantic_hash": ""
   },
   "spec/services/signal/trend_scorer_spec.rb": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781590896.0544882,
-    "ast_hash": "2d931d63e97a2f4fb38e996b893c4953",
+    "mtime": 1781596581.6340115,
+    "ast_hash": "57d1ac3dc9c0a2f43c2ab745c9caf9e6",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10562,6 +10562,16 @@
   ".cursor/skills/graphify/references/update.md": {
     "mtime": 1781593769.6565864,
     "ast_hash": "0dad167a95bdb389f02fecffb60b1bc8",
+    "semantic_hash": ""
+  },
+  "app/services/signal/cycle_summary.rb": {
+    "mtime": 1781596412.4886215,
+    "ast_hash": "c2bd86bf6f0f3085922e421ad7216a26",
+    "semantic_hash": ""
+  },
+  "spec/services/signal/cycle_summary_spec.rb": {
+    "mtime": 1781596551.5494263,
+    "ast_hash": "c61716cc779db40aaf6a5dfdabb95693",
     "semantic_hash": ""
   }
 }
