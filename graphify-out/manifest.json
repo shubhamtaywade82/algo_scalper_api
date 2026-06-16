@@ -10638,5 +10638,10 @@
     "mtime": 1781604712.384791,
     "ast_hash": "5e2fa8fb338cc14e17aa4203f41903c8",
     "semantic_hash": ""
+  },
+  "docs/config_architecture_roadmap.md": {
+    "mtime": 1781605203.2339067,
+    "ast_hash": "b9097bb8d10cbb073fa4d80fe834e7fb",
+    "semantic_hash": ""
   }
 }
