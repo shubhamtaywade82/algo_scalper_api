@@ -41718,6 +41718,14 @@
       "_origin": "ast"
     },
     {
+      "id": "integration_config_pinning_exit_spec",
+      "label": "config_pinning_exit_spec.rb",
+      "file_type": "code",
+      "source_file": "spec/integration/config_pinning_exit_spec.rb",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
       "id": "integration_database_persistence_spec",
       "label": "database_persistence_spec.rb",
       "file_type": "code",
@@ -96750,11 +96758,59 @@
       "_origin": "ast"
     },
     {
+      "id": "docs_config_architecture_roadmap_testing_strategy",
+      "label": "Testing strategy",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L61",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_conventions",
+      "label": "Conventions",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L66",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_test_layers",
+      "label": "Test layers",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L85",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_phase_1_test_matrix",
+      "label": "Phase 1 — Test matrix",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L98",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_representative_spec_patterns",
+      "label": "Representative spec patterns",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L114",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_phase_1_verification_commands",
+      "label": "Phase 1 — Verification commands",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L179",
+      "_origin": "ast"
+    },
+    {
       "id": "docs_config_architecture_roadmap_phase_2_sparse_overrides_versioning_full_pinning",
       "label": "Phase 2 — Sparse overrides, versioning, full pinning",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L62",
+      "source_location": "L207",
       "_origin": "ast"
     },
     {
@@ -96762,7 +96818,7 @@
       "label": "2.1 Sparse-override merge model",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L68",
+      "source_location": "L213",
       "_origin": "ast"
     },
     {
@@ -96770,7 +96826,7 @@
       "label": "2.2 `AlgoConfigVersion` model (already anticipated)",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L85",
+      "source_location": "L230",
       "_origin": "ast"
     },
     {
@@ -96778,15 +96834,95 @@
       "label": "2.3 Finish per-position pinning (`TrailingConfig`)",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L97",
+      "source_location": "L242",
       "_origin": "ast"
     },
     {
-      "id": "docs_config_architecture_roadmap_phase_2_tests",
-      "label": "Phase 2 tests",
+      "id": "docs_config_architecture_roadmap_phase_2_proposed_spec_templates_not_yet_implemented",
+      "label": "Phase 2 — Proposed spec templates (not yet implemented)",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L113",
+      "source_location": "L258",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_2_1_sparse_override_merge_spec_services_algo_config_sparse_override_store_spec_rb",
+      "label": "2.1 Sparse-override merge — `spec/services/algo_config/sparse_override_store_spec.rb`",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L260",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_2_2_algoconfigversion_spec_models_algo_config_version_spec_rb",
+      "label": "2.2 `AlgoConfigVersion` — `spec/models/algo_config_version_spec.rb`",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L301",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_2_3_trailingconfig_pinning_extend_spec_services_positions_trailing_config_spec_rb",
+      "label": "2.3 `TrailingConfig` pinning — extend `spec/services/positions/trailing_config_spec.rb`",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L334",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_phase_3_proposed_spec_templates",
+      "label": "Phase 3 — Proposed spec templates",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L361",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_3_1_expanded_validator_cross_field_rules_spec_services_algo_config_validator_spec_rb",
+      "label": "3.1 Expanded validator cross-field rules — `spec/services/algo_config/validator_spec.rb`",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L363",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_3_2_settings_diff_rollback_api_spec_requests_api_settings_spec_rb",
+      "label": "3.2 Settings diff + rollback API — `spec/requests/api/settings_spec.rb`",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L375",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_3_3_health_endpoint_config_version_spec_requests_api_health_spec_rb",
+      "label": "3.3 Health endpoint config version — `spec/requests/api/health_spec.rb`",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L389",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_phase_4_proposed_spec_templates",
+      "label": "Phase 4 — Proposed spec templates",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L401",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_4_1_credential_redaction_shared_example_spec_support_shared_examples_config_redaction_rb",
+      "label": "4.1 Credential redaction shared example — `spec/support/shared_examples/config_redaction.rb`",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L403",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_config_architecture_roadmap_4_2_env_var_inventory_spec_spec_lib_algo_config_env_audit_spec_rb",
+      "label": "4.2 Env-var inventory spec — `spec/lib/algo_config_env_audit_spec.rb`",
+      "file_type": "document",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L416",
       "_origin": "ast"
     },
     {
@@ -96794,7 +96930,7 @@
       "label": "Phase 3 — Validation depth, diff/rollback UX, observability",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L122",
+      "source_location": "L436",
       "_origin": "ast"
     },
     {
@@ -96802,7 +96938,7 @@
       "label": "3.1 Expand the validation schema",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L124",
+      "source_location": "L438",
       "_origin": "ast"
     },
     {
@@ -96810,7 +96946,7 @@
       "label": "3.2 Config diff + rollback in the dashboard",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L129",
+      "source_location": "L443",
       "_origin": "ast"
     },
     {
@@ -96818,7 +96954,7 @@
       "label": "3.3 Observability",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L135",
+      "source_location": "L449",
       "_origin": "ast"
     },
     {
@@ -96826,7 +96962,7 @@
       "label": "Phase 4 — Env hygiene & secrets separation",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L143",
+      "source_location": "L457",
       "_origin": "ast"
     },
     {
@@ -96834,7 +96970,7 @@
       "label": "Cross-cutting principles",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L155",
+      "source_location": "L469",
       "_origin": "ast"
     },
     {
@@ -96842,7 +96978,7 @@
       "label": "Sequencing",
       "file_type": "document",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L163",
+      "source_location": "L477",
       "_origin": "ast"
     },
     {
@@ -232601,11 +232737,65 @@
     },
     {
       "source": "docs_config_architecture_roadmap_config_architecture_roadmap",
+      "target": "docs_config_architecture_roadmap_testing_strategy",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L61",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_testing_strategy",
+      "target": "docs_config_architecture_roadmap_conventions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L66",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_testing_strategy",
+      "target": "docs_config_architecture_roadmap_test_layers",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L85",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_config_architecture_roadmap",
+      "target": "docs_config_architecture_roadmap_phase_1_test_matrix",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_1_test_matrix",
+      "target": "docs_config_architecture_roadmap_representative_spec_patterns",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L114",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_config_architecture_roadmap",
+      "target": "docs_config_architecture_roadmap_phase_1_verification_commands",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L179",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_config_architecture_roadmap",
       "target": "docs_config_architecture_roadmap_phase_2_sparse_overrides_versioning_full_pinning",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L62",
+      "source_location": "L207",
       "weight": 1.0
     },
     {
@@ -232614,7 +232804,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L68",
+      "source_location": "L213",
       "weight": 1.0
     },
     {
@@ -232623,7 +232813,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L85",
+      "source_location": "L230",
       "weight": 1.0
     },
     {
@@ -232632,16 +232822,106 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L97",
+      "source_location": "L242",
       "weight": 1.0
     },
     {
       "source": "docs_config_architecture_roadmap_phase_2_sparse_overrides_versioning_full_pinning",
-      "target": "docs_config_architecture_roadmap_phase_2_tests",
+      "target": "docs_config_architecture_roadmap_phase_2_proposed_spec_templates_not_yet_implemented",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L113",
+      "source_location": "L258",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_2_proposed_spec_templates_not_yet_implemented",
+      "target": "docs_config_architecture_roadmap_2_1_sparse_override_merge_spec_services_algo_config_sparse_override_store_spec_rb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L260",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_2_proposed_spec_templates_not_yet_implemented",
+      "target": "docs_config_architecture_roadmap_2_2_algoconfigversion_spec_models_algo_config_version_spec_rb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L301",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_2_proposed_spec_templates_not_yet_implemented",
+      "target": "docs_config_architecture_roadmap_2_3_trailingconfig_pinning_extend_spec_services_positions_trailing_config_spec_rb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L334",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_config_architecture_roadmap",
+      "target": "docs_config_architecture_roadmap_phase_3_proposed_spec_templates",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L361",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_3_proposed_spec_templates",
+      "target": "docs_config_architecture_roadmap_3_1_expanded_validator_cross_field_rules_spec_services_algo_config_validator_spec_rb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L363",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_3_proposed_spec_templates",
+      "target": "docs_config_architecture_roadmap_3_2_settings_diff_rollback_api_spec_requests_api_settings_spec_rb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L375",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_3_proposed_spec_templates",
+      "target": "docs_config_architecture_roadmap_3_3_health_endpoint_config_version_spec_requests_api_health_spec_rb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L389",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_config_architecture_roadmap",
+      "target": "docs_config_architecture_roadmap_phase_4_proposed_spec_templates",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L401",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_4_proposed_spec_templates",
+      "target": "docs_config_architecture_roadmap_4_1_credential_redaction_shared_example_spec_support_shared_examples_config_redaction_rb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L403",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_config_architecture_roadmap_phase_4_proposed_spec_templates",
+      "target": "docs_config_architecture_roadmap_4_2_env_var_inventory_spec_spec_lib_algo_config_env_audit_spec_rb",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/config_architecture_roadmap.md",
+      "source_location": "L416",
       "weight": 1.0
     },
     {
@@ -232650,7 +232930,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L122",
+      "source_location": "L436",
       "weight": 1.0
     },
     {
@@ -232659,7 +232939,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L124",
+      "source_location": "L438",
       "weight": 1.0
     },
     {
@@ -232668,7 +232948,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L129",
+      "source_location": "L443",
       "weight": 1.0
     },
     {
@@ -232677,7 +232957,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L135",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -232686,7 +232966,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L143",
+      "source_location": "L457",
       "weight": 1.0
     },
     {
@@ -232695,7 +232975,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L155",
+      "source_location": "L469",
       "weight": 1.0
     },
     {
@@ -232704,7 +232984,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/config_architecture_roadmap.md",
-      "source_location": "L163",
+      "source_location": "L477",
       "weight": 1.0
     },
     {

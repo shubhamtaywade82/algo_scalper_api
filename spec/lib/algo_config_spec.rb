@@ -152,6 +152,52 @@ RSpec.describe AlgoConfig do
     end
   end
 
+  describe '.position_snapshot' do
+    let(:doc_key) { AlgoConfig::DocumentStore::DOCUMENT_KEY }
+
+    around do |example|
+      prior_live = ENV.fetch('LIVE_TRADING', nil)
+      ENV['LIVE_TRADING'] = 'false'
+      example.run
+    ensure
+      prior_live.nil? ? ENV.delete('LIVE_TRADING') : ENV['LIVE_TRADING'] = prior_live
+      Setting.where(key: doc_key).delete_all
+      described_class.reset!
+    end
+
+    it 'returns effective config minus credential sections' do
+      Setting.put(
+        doc_key,
+        {
+          risk: { sl_pct: 0.02 },
+          signals: { signal_tier: 'standard' },
+          dhanhq: { client_id: 'secret' },
+          telegram: { bot_token: 'secret' },
+          ai: { enabled: true }
+        }.to_json
+      )
+      described_class.reset!
+
+      snapshot = described_class.position_snapshot
+
+      expect(snapshot).to include(:risk, :signals)
+      expect(snapshot.keys).not_to include(:dhanhq, :telegram, :ai)
+    end
+
+    it 'reflects document changes after reset' do
+      Setting.put(doc_key, { risk: { sl_pct: 0.02 } }.to_json)
+      described_class.reset!
+      first = described_class.position_snapshot.dig(:risk, :sl_pct)
+
+      Setting.put(doc_key, { risk: { sl_pct: 0.05 } }.to_json)
+      described_class.reset!
+      second = described_class.position_snapshot.dig(:risk, :sl_pct)
+
+      expect(first).to eq(0.02)
+      expect(second).to eq(0.05)
+    end
+  end
+
   describe '.version' do
     it 'returns a content hash and the latest change-log id' do
       version = described_class.version

@@ -3680,8 +3680,8 @@
     "semantic_hash": ""
   },
   "spec/lib/algo_config_spec.rb": {
-    "mtime": 1781604195.0566576,
-    "ast_hash": "8b6ede3c23b02699126d12473e1b495b",
+    "mtime": 1781605833.097683,
+    "ast_hash": "cc2dbf7187695e5b5f85846876ce5b77",
     "semantic_hash": ""
   },
   "spec/lib/dhan/auth/strategies/authority_spec.rb": {
@@ -4425,8 +4425,8 @@
     "semantic_hash": ""
   },
   "spec/services/options/calibration_auto_applier_spec.rb": {
-    "mtime": 1775801791.1482882,
-    "ast_hash": "9615989a284673961d80047e6999501e",
+    "mtime": 1781605822.903063,
+    "ast_hash": "80861d8725dc0869688a57fac2367aa0",
     "semantic_hash": ""
   },
   "spec/services/options/calibration_config_patch_builder_spec.rb": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781605054.889744,
-    "ast_hash": "704d5fbdd345e8ca089f7eeff77efa21",
+    "mtime": 1781607976.9312036,
+    "ast_hash": "06b93b04b129ac5a9292717080d4d901",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10640,8 +10640,13 @@
     "semantic_hash": ""
   },
   "docs/config_architecture_roadmap.md": {
-    "mtime": 1781605203.2339067,
-    "ast_hash": "b9097bb8d10cbb073fa4d80fe834e7fb",
+    "mtime": 1781605919.2164147,
+    "ast_hash": "56aa3098fe9af5f05d67247ed1c1bb7f",
+    "semantic_hash": ""
+  },
+  "spec/integration/config_pinning_exit_spec.rb": {
+    "mtime": 1781605901.2497427,
+    "ast_hash": "af6644fecaaad40059cbecaa303645f6",
     "semantic_hash": ""
   }
 }
