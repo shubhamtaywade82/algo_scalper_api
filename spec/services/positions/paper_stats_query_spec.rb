@@ -13,6 +13,9 @@ RSpec.describe Positions::PaperStatsQuery do
       active_tracker
       allow(cache).to receive(:fetch_pnl).with(active_tracker.id).and_return({ pnl: '10', pnl_pct: '0.01' })
       allow(cache).to receive(:fetch_pnl).and_return(nil)
+      allow(cache).to receive(:fetch_all).and_return(
+        active_tracker.id => { pnl: 10.0, pnl_pct: 0.01 }
+      )
       allow(Live::RedisPnlCache).to receive(:instance).and_return(cache)
       allow(Capital::Allocator).to receive(:paper_trading_balance).and_return(1000)
       allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(false)

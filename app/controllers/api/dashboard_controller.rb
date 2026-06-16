@@ -17,7 +17,7 @@ module Api
         public_ipv4: ip_info[:public_ipv4],
         public_ipv6: ip_info[:public_ipv6],
         registered_ips: ip_info[:registered_ips],
-        recent_signals: TradingSignal.order(created_at: :desc).limit(10).as_json(methods: [:confidence_level]),
+        recent_signals: recent_signals_payload,
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
           ws_order_update: Live::OrderUpdateHub.instance.running?,
@@ -41,6 +41,14 @@ module Api
     end
 
     private
+
+    def recent_signals_payload
+      TradingSignal.order(created_at: :desc).limit(10).map do |signal|
+        signal.as_json(methods: [:confidence_level]).merge(
+          'metadata' => signal.effective_metadata
+        )
+      end
+    end
 
     def formatted_indices
       load_indices = sorted_indices_with_strategy

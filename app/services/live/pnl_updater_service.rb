@@ -361,9 +361,8 @@ module Live
       pnl_pct_decimal = pnl_pct.to_f
       pnl_pct_as_percent = pnl_pct_decimal * 100.0
 
-      # Get notified milestones from tracker meta
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      notified_milestones = meta['telegram_notified_milestones'] || []
+      # Get notified milestones from runtime cache (no per-milestone DB write)
+      notified_milestones = Live::PositionRuntimeCache.instance.telegram_milestones_for(tracker)
 
       milestones.each do |milestone_pct|
         # Check if milestone reached (positive or negative); compare percentage to percentage
@@ -392,10 +391,9 @@ module Live
             pnl_pct: pnl_pct_as_percent
           )
 
-          # Mark milestone as notified
+          # Mark milestone as notified (Redis only until exit flush)
           milestone_key = pnl_pct_as_percent.positive? ? milestone_pct : -milestone_pct
-          notified_milestones << milestone_key
-          tracker.update!(meta: meta.merge('telegram_notified_milestones' => notified_milestones))
+          Live::PositionRuntimeCache.instance.append_telegram_milestone!(tracker, milestone_key)
         rescue StandardError => e
           @logger.error("[PnlUpdater] Failed to notify milestone for #{tracker.id}: #{e.class} - #{e.message}")
         end

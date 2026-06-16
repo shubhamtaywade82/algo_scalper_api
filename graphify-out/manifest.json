@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "app/controllers/api/dashboard_controller.rb": {
-    "mtime": 1781599405.941902,
-    "ast_hash": "75e364d78acb96c7f1fed98433b09d26",
+    "mtime": 1781601859.3610203,
+    "ast_hash": "652b2523fe0fe1549d18a9bd1538088d",
     "semantic_hash": ""
   },
   "app/controllers/api/dhan_access_token_controller.rb": {
@@ -320,8 +320,8 @@
     "semantic_hash": ""
   },
   "app/models/concerns/position_tracker/lifecycle.rb": {
-    "mtime": 1775801790.9782884,
-    "ast_hash": "3612cfc7363fb0532c617799ffd126de",
+    "mtime": 1781601852.9800203,
+    "ast_hash": "ce195208e17192cfcaacb30ac99e2854",
     "semantic_hash": ""
   },
   "app/models/concerns/position_tracker/pnl_calculatable.rb": {
@@ -410,8 +410,8 @@
     "semantic_hash": ""
   },
   "app/models/trading_signal.rb": {
-    "mtime": 1775801790.9882884,
-    "ast_hash": "0f9d99f71b604dca32084e4bbb1b72d8",
+    "mtime": 1781601971.7578993,
+    "ast_hash": "40922768c116121a187353075bc658a4",
     "semantic_hash": ""
   },
   "app/models/watchlist_item.rb": {
@@ -1075,13 +1075,13 @@
     "semantic_hash": ""
   },
   "app/services/live/paper_pnl_refresher.rb": {
-    "mtime": 1775801791.0082884,
-    "ast_hash": "e626fbda9e86ac20996bcc0503042afc",
+    "mtime": 1781601861.0620205,
+    "ast_hash": "1958b970cb856c9e397ea0ee3d3a6ee9",
     "semantic_hash": ""
   },
   "app/services/live/pnl_updater_service.rb": {
-    "mtime": 1781599406.553902,
-    "ast_hash": "230e46cad7a82e6553bfbf5d6212d8f7",
+    "mtime": 1781601806.324806,
+    "ast_hash": "4840169d0cdc4974f567b840f70bdb62",
     "semantic_hash": ""
   },
   "app/services/live/position_index.rb": {
@@ -1105,8 +1105,8 @@
     "semantic_hash": ""
   },
   "app/services/live/redis_pnl_cache.rb": {
-    "mtime": 1774856636.757612,
-    "ast_hash": "1b3548dd0fb26d8b529c64da09eea19f",
+    "mtime": 1781601796.649806,
+    "ast_hash": "295e93b70553eaab9d2450f3ea7c1be0",
     "semantic_hash": ""
   },
   "app/services/live/redis_tick_cache.rb": {
@@ -1130,13 +1130,13 @@
     "semantic_hash": ""
   },
   "app/services/live/risk_manager_service/exit_execution.rb": {
-    "mtime": 1775801791.0082884,
-    "ast_hash": "47505cd12c3b5999ebc9c667f669e41b",
+    "mtime": 1781601861.0620205,
+    "ast_hash": "d030dedf330a519fdcdfba053bd2f8bd",
     "semantic_hash": ""
   },
   "app/services/live/risk_manager_service/pnl_cache.rb": {
-    "mtime": 1775801791.0082884,
-    "ast_hash": "e10d103aa6620725f22d952159b75d16",
+    "mtime": 1781601794.5078058,
+    "ast_hash": "98e6de9c0bdcdf454f4cbe2a7ff0ae03",
     "semantic_hash": ""
   },
   "app/services/live/risk_manager_service/runner.rb": {
@@ -1155,8 +1155,8 @@
     "semantic_hash": ""
   },
   "app/services/live/structure_invalidation_evaluator.rb": {
-    "mtime": 1774856636.757612,
-    "ast_hash": "5e4f58ff69def6b7049fff9827bdb5f9",
+    "mtime": 1781601775.3387463,
+    "ast_hash": "fa5a6699512e9bf0b8a1bd540a516751",
     "semantic_hash": ""
   },
   "app/services/live/system_status_cache.rb": {
@@ -1200,8 +1200,8 @@
     "semantic_hash": ""
   },
   "app/services/live/unified_exit_checker.rb": {
-    "mtime": 1780930853.782204,
-    "ast_hash": "21f15de76536d8ba16784ad767341dd5",
+    "mtime": 1781601772.3507464,
+    "ast_hash": "10b8a7fc85d301ed7cb0d00c443c4cbf",
     "semantic_hash": ""
   },
   "app/services/live/ws_hub.rb": {
@@ -1535,8 +1535,8 @@
     "semantic_hash": ""
   },
   "app/services/orders/gamma_trailing_engine.rb": {
-    "mtime": 1774856636.737612,
-    "ast_hash": "f0bc3d0c75e41f49fec1b4d956d4f8a3",
+    "mtime": 1781601783.1678057,
+    "ast_hash": "dc7b768f9619e65337969de1a3859718",
     "semantic_hash": ""
   },
   "app/services/orders/gateway.rb": {
@@ -1650,8 +1650,8 @@
     "semantic_hash": ""
   },
   "app/services/positions/exit_flow.rb": {
-    "mtime": 1781597210.269791,
-    "ast_hash": "872e96325a4c687b8a9117bbfed21867",
+    "mtime": 1781601806.3158062,
+    "ast_hash": "48283b02ffcbfb2eeba7af36680c02e8",
     "semantic_hash": ""
   },
   "app/services/positions/feed_subscription.rb": {
@@ -1690,8 +1690,8 @@
     "semantic_hash": ""
   },
   "app/services/positions/paper_stats_query.rb": {
-    "mtime": 1781600419.2000356,
-    "ast_hash": "f46d3c6dc7cfd175f9f8f629895a6b76",
+    "mtime": 1781602052.3197572,
+    "ast_hash": "fc61d3a45af0516656b84a257b20f6ff",
     "semantic_hash": ""
   },
   "app/services/positions/serializer.rb": {
@@ -2270,8 +2270,8 @@
     "semantic_hash": ""
   },
   "app/services/trading/trailing_engine.rb": {
-    "mtime": 1775801791.0482883,
-    "ast_hash": "564e65a7b4356a07836b164cf36f98a2",
+    "mtime": 1781601779.6128056,
+    "ast_hash": "e8593091f441e8382b9bdfef534095d7",
     "semantic_hash": ""
   },
   "app/services/trading/trend_scorer.rb": {
@@ -3870,8 +3870,8 @@
     "semantic_hash": ""
   },
   "spec/models/trading_signal_spec.rb": {
-    "mtime": 1775801791.1282883,
-    "ast_hash": "f4db44697bb39e8b3770e920398e3477",
+    "mtime": 1781601889.628928,
+    "ast_hash": "0f803f838e19c71903f040266542a1b6",
     "semantic_hash": ""
   },
   "spec/models/watchlist_item_spec.rb": {
@@ -4660,8 +4660,8 @@
     "semantic_hash": ""
   },
   "spec/services/positions/paper_stats_query_spec.rb": {
-    "mtime": 1781599612.972524,
-    "ast_hash": "07b900d5f0d7e24780b6e9af5150ae97",
+    "mtime": 1781601966.033899,
+    "ast_hash": "82db54f8809b95c11004670d7c24bfd5",
     "semantic_hash": ""
   },
   "spec/services/positions/states/position_state_machine_spec.rb": {
@@ -5580,8 +5580,8 @@
     "semantic_hash": ""
   },
   "config/algo.yml": {
-    "mtime": 1780931011.6441224,
-    "ast_hash": "35a5ad172d552e17a20acd26a5fb2e1f",
+    "mtime": 1781602605.356333,
+    "ast_hash": "44cf335f8b9165353eaf462e0871b5e0",
     "semantic_hash": ""
   },
   "config/algo_organized.yml": {
@@ -7410,8 +7410,8 @@
     "semantic_hash": ""
   },
   "spec/failed_examples.txt": {
-    "mtime": 1781599639.8198445,
-    "ast_hash": "a52c15cacfa330eafbe26808b0090a67",
+    "mtime": 1781602109.5810497,
+    "ast_hash": "9195febbebd3dfd4e632d770f3ec7fb0",
     "semantic_hash": ""
   },
   "spec/services/risk/rules/README.md": {
@@ -10592,6 +10592,31 @@
   "spec/services/positions/final_pnl_spec.rb": {
     "mtime": 1781597300.2715387,
     "ast_hash": "ca7b22c9d8deae38765f100317788fd3",
+    "semantic_hash": ""
+  },
+  ".kimchi/ferments/019ecfbc-f2e6-72f9-8080-a90af093749d.json": {
+    "mtime": 1781601727.2061865,
+    "ast_hash": "8530d0475a16e5d084605d9a81fe046c",
+    "semantic_hash": ""
+  },
+  "app/services/live/position_runtime_cache.rb": {
+    "mtime": 1781602052.0767572,
+    "ast_hash": "91253d17b637738ece1704b04791add4",
+    "semantic_hash": ""
+  },
+  "app/services/signal/live_metadata_cache.rb": {
+    "mtime": 1781601728.1421866,
+    "ast_hash": "93a23e2a315ba1a247c9fd908f1fe4bd",
+    "semantic_hash": ""
+  },
+  "spec/services/live/position_runtime_cache_spec.rb": {
+    "mtime": 1781601964.845899,
+    "ast_hash": "8abe880e94c6b43cb36084ce47d8fbba",
+    "semantic_hash": ""
+  },
+  "spec/services/signal/live_metadata_cache_spec.rb": {
+    "mtime": 1781601880.8620207,
+    "ast_hash": "788841d8b3c2684d13ec58228e645689",
     "semantic_hash": ""
   }
 }

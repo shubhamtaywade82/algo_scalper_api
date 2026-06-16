@@ -25,6 +25,7 @@ module Positions
         pnl_snapshot = resolve_final_pnl(exit_price: exit_px, cache_data: cache_data)
 
         metadata = tracker.meta.is_a?(Hash) ? tracker.meta.deep_stringify_keys.dup : {}
+        metadata = Live::PositionRuntimeCache.instance.flush_to_meta!(metadata, tracker.id)
         resolved_reason = resolve_exit_reason_string(metadata)
         metadata['exit_reason'] = resolved_reason
         metadata['exit_triggered_at'] ||= Time.current

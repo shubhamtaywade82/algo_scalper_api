@@ -83,9 +83,17 @@ module Positions
 
     def active_positions
       @active_positions ||= begin
-        scope = PositionTracker.where(status: :active)
-        filter = resolved_paper_filter
-        filter.nil? ? scope.to_a : scope.where(paper: filter).to_a
+        cached = Positions::ActiveCache.instance.all_positions
+        if cached.any?
+          ids = cached.filter_map(&:tracker_id)
+          scope = PositionTracker.where(id: ids)
+          filter = resolved_paper_filter
+          filter.nil? ? scope.to_a : scope.where(paper: filter).to_a
+        else
+          scope = PositionTracker.where(status: :active)
+          filter = resolved_paper_filter
+          filter.nil? ? scope.to_a : scope.where(paper: filter).to_a
+        end
       end
     end
 
@@ -94,7 +102,15 @@ module Positions
     end
 
     def unrealized_pnl_rupees
-      @unrealized_pnl_rupees ||= active_positions.sum { |t| t.current_pnl_rupees.to_f }
+      @unrealized_pnl_rupees ||= begin
+        redis_pnl = Live::RedisPnlCache.instance.fetch_all
+        active_positions.sum do |tracker|
+          cached = redis_pnl[tracker.id]
+          next cached[:pnl].to_f if cached && cached[:pnl]
+
+          tracker.current_pnl_rupees.to_f
+        end
+      end
     end
 
     def total_pnl_rupees
@@ -126,7 +142,12 @@ module Positions
     def avg_unrealized_pnl_pct
       return 0.0 if active_positions.empty?
 
-      values = active_positions.map { |t| (t.current_pnl_pct || 0).to_f * 100.0 }
+      redis_pnl = Live::RedisPnlCache.instance.fetch_all
+      values = active_positions.map do |tracker|
+        cached = redis_pnl[tracker.id]
+        pct = cached&.dig(:pnl_pct) || tracker.current_pnl_pct || 0
+        pct.to_f * 100.0
+      end
       values.sum / values.size.to_f
     end
 

@@ -1,0 +1,17 @@
+{
+  "id": "019ecfbc-f2e6-72f9-8080-a90af093749d",
+  "name": "Redis-first live data layer",
+  "description": "Reduce DB UPDATE frequency by moving high-churn live data (TradingSignal metadata, position meta, dashboard stats) to Redis-first with throttled/periodic DB persistence. The development.log shows ~3,500 UPDATEs vs 24 SELECTs in a 50MB sample — 93% are solid_queue heartbeats, but the remaining 67 position_tracker updates and massive TradingSignal metadata JSON overwrites are the real pain points. Position PnL is already Redis-cached (RedisPnlCache with 30s DB sync throttle) and ticks are Redis-cached (RedisTickCache). The gap is:\n\n1. TradingSignal.metadata gets rewritten as a giant JSON blob on every signal evaluation cycle (every tick/signal) — even for skipped signals. Move to Redis hash per signal, only persist to DB on resolution/entry/exit.\n2. DashboardController still queries PositionTracker aggregates directly for stats — should read from RedisPnlCache + Positions::ActiveCache.\n3. position_trackers.meta JSON still gets updated for things like telegram milestones and exit metadata — should batch in Redis.\n4. public_ip_logs.last_seen_at gets updated every ~15m — trivial Redis candidate.\n\nGoal: cut non-SolidQueue DB UPDATEs by 80%+ during live trading hours, reflect live data to UI via existing ActionCable + Redis caches, and only persist to DB when state transitions (entry, exit, signal resolution) occur.",
+  "status": "draft",
+  "worktree": {
+    "path": "/home/nemesis/project/trading-workspace/algo_scalper_api",
+    "branch": "pnl-reconcile",
+    "commit": "a4278a70c1f1df2dcef289c3d30fd086c66c58bc"
+  },
+  "scoping": {},
+  "phases": [],
+  "decisions": [],
+  "memories": [],
+  "createdAt": "2026-06-16T09:22:07.205Z",
+  "updatedAt": "2026-06-16T09:22:07.205Z"
+}

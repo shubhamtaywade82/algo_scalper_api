@@ -189,17 +189,12 @@ module Live
         current_ltp = snapshot[:ltp].to_f
         current_ltp = tracker.entry_price.to_f if current_ltp <= 0
 
-        meta = tracker.meta || {}
-        peak = meta['peak_premium'].to_f
-        last_peak_at = meta['peak_premium_at'] ? Time.zone.parse(meta['peak_premium_at']) : tracker.created_at
+        runtime = Live::PositionRuntimeCache.instance
+        peak = runtime.peak_premium_for(tracker)
+        last_peak_at = runtime.peak_premium_at_for(tracker)
 
         if current_ltp > peak
-          meta['peak_premium'] = current_ltp
-          meta['peak_premium_at'] = Time.current.iso8601
-          if tracker.respond_to?(:update_column) && tracker.exit_requested_at.blank? &&
-             tracker.exit_sent_at.blank? && !tracker.exited?
-            tracker.update_column(:meta, meta)
-          end
+          runtime.update_peak_premium!(tracker, current_ltp)
           return false
         end
 
