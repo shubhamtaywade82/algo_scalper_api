@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+export PYTHONHASHSEED=0
+
+if [ "${GRAPHIFY_SKIP_HOOK:-0}" = "1" ]; then
+  exit 0
+fi
+
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+[ -d "$GIT_DIR/rebase-merge" ] && exit 0
+[ -d "$GIT_DIR/rebase-apply" ] && exit 0
+[ -f "$GIT_DIR/MERGE_HEAD" ] && exit 0
+[ -f "$GIT_DIR/CHERRY_PICK_HEAD" ] && exit 0
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+_NON_GRAPH=$(echo "$STAGED" | grep -v '^graphify-out/' || true)
+if [ -z "$_NON_GRAPH" ]; then
+  exit 0
+fi
+
+if ! command -v graphify >/dev/null 2>&1; then
+  echo "[graphify pre-commit] graphify CLI not found. Install: uv tool install \"graphifyy[ollama]\"" >&2
+  echo "[graphify pre-commit] Skip with: GRAPHIFY_SKIP_HOOK=1 git commit ..." >&2
+  exit 1
+fi
+
+echo "[graphify pre-commit] AST graph refresh (staged changes outside graphify-out/)..."
+if ! bin/graphify-update; then
+  echo "[graphify pre-commit] graph update failed — commit aborted." >&2
+  exit 1
+fi
+
+for artifact in graphify-out/graph.json graphify-out/manifest.json graphify-out/GRAPH_REPORT.md; do
+  if [ -f "$artifact" ]; then
+    git add "$artifact"
+  fi
+done
+
+echo "[graphify pre-commit] graph artifacts staged."

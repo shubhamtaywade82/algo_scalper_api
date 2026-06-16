@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+if ! command -v graphify >/dev/null 2>&1; then
+  echo "graphify CLI not found. Install with: uv tool install \"graphifyy[ollama]\""
+  exit 1
+fi
+
+graphify update . --no-cluster

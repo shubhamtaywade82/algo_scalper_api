@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+if ! command -v graphify >/dev/null 2>&1; then
+  echo "graphify CLI not found. Install with: uv tool install \"graphifyy[ollama]\""
+  exit 1
+fi
+
+if [[ -f "$ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
+fi
+
+use_cloud="${GRAPHIFY_OLLAMA_USE_CLOUD:-${OLLAMA_USE_CLOUD:-false}}"
+if [[ "$use_cloud" == "true" || "$use_cloud" == "1" ]]; then
+  export OLLAMA_BASE_URL="${OLLAMA_CLOUD_URL:-${OLLAMA_BASE_URL:-https://ollama.com}}"
+  if [[ -z "${OLLAMA_API_KEY:-}" ]]; then
+    echo "Cloud extraction requires OLLAMA_API_KEY in .env"
+    exit 1
+  fi
+  echo "Using Ollama Cloud at ${OLLAMA_BASE_URL}"
+else
+  export OLLAMA_BASE_URL="${OLLAMA_LOCAL_URL:-${OLLAMA_HOST_URL:-${OLLAMA_BASE_URL:-http://localhost:11434}}}"
+  echo "Using local Ollama at ${OLLAMA_BASE_URL}"
+fi
+
+export OLLAMA_MODEL="${GRAPHIFY_OLLAMA_MODEL:-${OLLAMA_MODEL:-}}"
+
+args=(extract . --backend ollama)
+if [[ -n "${OLLAMA_MODEL:-}" ]]; then
+  args+=(--model "$OLLAMA_MODEL")
+fi
+
+graphify "${args[@]}"

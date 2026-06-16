@@ -1,0 +1,8 @@
+# Generated artifacts — do not commit
+/graphify-out/cache/
+/graphify-out/graph.html
+/graphify-out/.graphify_python
+/graphify-out/cost.json
+
+# Large generated reports (optional — commit if team wants)
+# /graphify-out/GRAPH_REPORT.md

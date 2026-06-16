@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+MARKER_START="# graphify-pre-commit-start"
+MARKER_END="# graphify-pre-commit-end"
+
+HOOK_BODY='#!/bin/sh
+# graphify-pre-commit-start
+# AST-only graph refresh before commit; stages graphify-out artifacts.
+# Installed by: bin/install-graphify-hooks
+
+exec "$(git rev-parse --show-toplevel)/bin/graphify-pre-commit"
+# graphify-pre-commit-end
+'
+
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "Not inside a git repository."
+  exit 1
+fi
+
+HOOKS_DIR="$(git rev-parse --git-path hooks)"
+HOOK_FILE="$ROOT/$HOOKS_DIR/pre-commit"
+mkdir -p "$(dirname "$HOOK_FILE")"
+
+if [ -f "$HOOK_FILE" ] && grep -q "$MARKER_START" "$HOOK_FILE"; then
+  echo "graphify pre-commit: already installed at $HOOK_FILE"
+else
+  if [ -f "$HOOK_FILE" ]; then
+    printf '\n%s\n' "$HOOK_BODY" >>"$HOOK_FILE"
+    echo "graphify pre-commit: appended to $HOOK_FILE"
+  else
+    printf '%s\n' "$HOOK_BODY" >"$HOOK_FILE"
+    chmod +x "$HOOK_FILE"
+    echo "graphify pre-commit: installed at $HOOK_FILE"
+  fi
+fi
+
+if command -v graphify >/dev/null 2>&1; then
+  graphify hook uninstall >/dev/null 2>&1 || true
+  graphify hook install >/dev/null 2>&1 || true
+  if [ -f "$ROOT/$HOOKS_DIR/post-commit" ] && grep -q '# graphify-hook-start' "$ROOT/$HOOKS_DIR/post-commit"; then
+    ROOT="$ROOT" HOOKS_DIR="$HOOKS_DIR" python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+root = Path(os.environ["ROOT"])
+post = root / os.environ["HOOKS_DIR"] / "post-commit"
+text = post.read_text(encoding="utf-8")
+new = re.sub(
+    r"# graphify-hook-start.*?# graphify-hook-end\n?",
+    "",
+    text,
+    flags=re.DOTALL,
+).strip()
+if not new or new in ("#!/bin/bash", "#!/bin/sh"):
+    post.unlink(missing_ok=True)
+    print("graphify post-commit: removed (pre-commit handles AST refresh)")
+else:
+    post.write_text(new + "\n", encoding="utf-8")
+    print("graphify post-commit: graphify block removed (pre-commit handles AST refresh)")
+PY
+  fi
+else
+  echo "graphify CLI not found — skipped post-checkout hook and merge driver."
+fi
+
+if ! grep -q 'graphify-out/graph.json merge=graphify' "$ROOT/.gitattributes" 2>/dev/null; then
+  {
+    echo ""
+    echo "# Graphify union-merge for parallel graph.json edits"
+    echo "graphify-out/graph.json merge=graphify"
+  } >>"$ROOT/.gitattributes"
+  echo "Added graphify merge driver entry to .gitattributes"
+fi
+
+if command -v graphify >/dev/null 2>&1; then
+  git config --local merge.graphify.name "graphify graph.json union merge"
+  git config --local merge.graphify.driver "graphify merge-driver %O %A %B"
+  echo "Configured git merge.graphify driver"
+fi
+
+echo "Done. Pre-commit runs bin/graphify-pre-commit before each commit."
+echo "Skip once: GRAPHIFY_SKIP_HOOK=1 git commit ..."

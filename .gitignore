@@ -43,3 +43,9 @@ spec/failed_examples.txt
 dashboard/node_modules
 dashboard/dist
 dump.rdb
+
+# Graphify generated artifacts (graph.json + GRAPH_REPORT.md are committed)
+/graphify-out/cache/
+/graphify-out/graph.html
+/graphify-out/.graphify_python
+/graphify-out/cost.json
