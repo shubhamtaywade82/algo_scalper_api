@@ -879,7 +879,7 @@ signals:
   # selective = strict gates + higher quality bar (not a profit guarantee).
   # Single source of truth: this value (DB document). SIGNAL_TIER env is ignored unless SIGNAL_TIER_FORCE=true.
   # See config/signal_tier_presets.yml
-  signal_tier: standard
+  signal_tier: exploratory
 
   # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path

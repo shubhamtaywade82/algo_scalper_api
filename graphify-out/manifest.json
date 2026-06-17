@@ -4940,7 +4940,7 @@
     "semantic_hash": ""
   },
   "spec/services/smc/detectors/liquidity_spec.rb": {
-    "mtime": 1781628219.311745,
+    "mtime": 1781676110.2827601,
     "ast_hash": "3930c5d1795a7702bca6d104298a10ad",
     "semantic_hash": ""
   },
@@ -5580,8 +5580,8 @@
     "semantic_hash": ""
   },
   "config/algo.yml": {
-    "mtime": 1781636848.7958245,
-    "ast_hash": "97ad027986251fc85a67bf88a4596c15",
+    "mtime": 1781676385.8426142,
+    "ast_hash": "8fdd8ea14a6f0189bbe345f00de8c5c1",
     "semantic_hash": ""
   },
   "config/algo_organized.yml": {
