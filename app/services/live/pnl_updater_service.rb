@@ -25,6 +25,7 @@ module Live
       @sleep_mutex = Mutex.new
       @sleep_cv = ConditionVariable.new
       @last_heartbeat_at = nil
+      @last_positions_keepalive_at = nil
     end
 
     # Accept arbitrary payload fields; last-wins for a tracker id
@@ -123,6 +124,7 @@ module Live
 
         processed = flush!
         maybe_broadcast_heartbeat
+        maybe_broadcast_positions_keepalive
         sleep_duration = next_interval(queue_empty: !processed && queue_empty?)
         wait_for_interval(sleep_duration)
       end
@@ -450,6 +452,17 @@ module Live
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")
+    end
+
+    # Keep the positions WS channel warm when ticks are quiet (illiquid strikes).
+    def maybe_broadcast_positions_keepalive
+      return if @last_positions_keepalive_at && (Time.current.to_f - @last_positions_keepalive_at) < 3.0
+      return unless Positions::ActivePositionsCache.instance.active_trackers.any?
+
+      @last_positions_keepalive_at = Time.current.to_f
+      ActionCable.server.broadcast("positions", { type: 'keepalive', timestamp: Time.current.iso8601 })
+    rescue StandardError => e
+      @logger.debug("[PnlUpdater] positions keepalive broadcast failed: #{e.message}")
     end
 
     def build_dashboard_stats

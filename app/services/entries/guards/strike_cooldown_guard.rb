@@ -3,11 +3,9 @@
 module Entries
   module Guards
     # Blocks re-entry of the same option contract (security_id) within a
-    # cooldown window after a STOP_LOSS / loss exit. Prevents chasing the
-    # same strike after it just stopped you out.
+    # cooldown window after a recent exit. Prevents chop re-entry on the
+    # same strike after give-back or stop-out.
     class StrikeCooldownGuard
-      LOSS_EXIT_PATTERNS = %w[STOP_LOSS PREMIUM_MOMENTUM_FAILURE TRAILING_STOP].freeze
-
       class << self
         include BaseGuard
 
@@ -17,11 +15,12 @@ module Entries
           security_id = context.dig(:pick, :security_id).to_s
           return PASS if security_id.empty?
 
-          last_loss_at = recent_loss_exit_at(security_id)
-          return PASS if last_loss_at.nil?
+          last_exit = recent_exit(security_id)
+          return PASS if last_exit.nil?
 
-          age_seconds = Time.current - last_loss_at
-          window = cooldown_seconds
+          last_exit_at, last_pnl = last_exit
+          age_seconds = Time.current - last_exit_at
+          window = cooldown_seconds_for(last_pnl)
           return PASS if age_seconds >= window
 
           remaining = (window - age_seconds).round
@@ -40,19 +39,34 @@ module Entries
           config[:enabled] != false
         end
 
-        def cooldown_seconds
-          value = config[:cooldown_minutes].to_i
-          (value.positive? ? value : 20) * 60
+        def after_any_exit?
+          config[:after_any_exit] != false
         end
 
-        def recent_loss_exit_at(security_id)
-          position_scope
-            .where(status: :exited, security_id: security_id)
-            .where(exited_at: Time.zone.today.all_day)
-            .where("last_pnl_rupees < 0")
-            .order(exited_at: :desc)
-            .limit(1)
-            .pick(:exited_at)
+        def cooldown_seconds_for(last_pnl_rupees)
+          loss_minutes = config[:loss_cooldown_minutes].to_i
+          base_minutes = config[:cooldown_minutes].to_i
+          base_minutes = 20 if base_minutes <= 0
+
+          minutes = if after_any_exit? && last_pnl_rupees.to_f.negative? && loss_minutes.positive?
+                      loss_minutes
+                    else
+                      base_minutes
+                    end
+
+          minutes * 60
+        end
+
+        def recent_exit(security_id)
+          scope = position_scope
+                  .where(status: :exited, security_id: security_id)
+                  .where(exited_at: Time.zone.today.all_day)
+                  .order(exited_at: :desc)
+                  .limit(1)
+
+          scope = scope.where('last_pnl_rupees < 0') unless after_any_exit?
+
+          scope.pick(:exited_at, :last_pnl_rupees)
         rescue StandardError
           nil
         end

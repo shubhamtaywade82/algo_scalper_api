@@ -12,7 +12,7 @@ module Live
     TTL_SECONDS = 6.hours.to_i
 
     RUNTIME_FIELDS = %w[
-      peak_premium peak_premium_at highest_price peak_trend_score
+      peak_premium peak_premium_at highest_price lowest_price peak_trend_score
       telegram_notified_milestones hwm_pnl_pct
     ].freeze
 
@@ -148,7 +148,7 @@ module Live
 
     def deserialize_field(key, value)
       return JSON.parse(value) if key == 'telegram_notified_milestones'
-      return value.to_f if %w[peak_premium highest_price hwm_pnl_pct].include?(key)
+      return value.to_f if %w[peak_premium highest_price lowest_price hwm_pnl_pct peak_trend_score].include?(key)
 
       value
     rescue JSON::ParserError

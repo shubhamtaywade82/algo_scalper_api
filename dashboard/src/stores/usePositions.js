@@ -160,6 +160,8 @@ export function usePositions() {
         markFresh()
         if (data.type === 'pnl_stale') {
           applyPnlStale(data)
+        } else if (data.type === 'keepalive') {
+          // markFresh() above resets WS stale timer
         } else {
           applyPnlUpdate(data)
         }

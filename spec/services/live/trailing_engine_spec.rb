@@ -30,6 +30,7 @@ RSpec.describe Live::TrailingEngine do
     allow(bracket_placer).to receive(:update_bracket).and_return({ success: true })
     allow(exit_engine).to receive(:execute_exit)
     allow(tracker).to receive(:update_column)
+    allow(tracker).to receive(:runtime_meta_fetch).and_return(nil)
     allow(tracker).to receive(:with_lock).and_yield
     allow(tracker).to receive(:exited?).and_return(false)
     allow(Rails.logger).to receive_messages(info: nil, warn: nil, error: nil, debug: nil)
@@ -222,17 +223,20 @@ RSpec.describe Live::TrailingEngine do
   end
 
   describe '#update_peak persistence' do
-    it 'persists extremes to database when new peak is reached' do
-      # Entry 100, Current Profit 20%, Old Peak 10%
-      # Highest price = 100 * 1.2 = 120
+    it 'persists extremes to Redis when new peak is reached' do
+      runtime_cache = Live::PositionRuntimeCache.instance
+      allow(runtime_cache).to receive(:merge).and_call_original
+
       position = build_position(entry_price: 100.0, peak_profit_pct: 0.10, pnl_pct: 0.20)
 
-      # Should update meta in DB
-      expect(tracker).to receive(:update_column).with(
-        :meta, hash_including('highest_price' => 120.0)
-      )
+      expect(tracker).not_to receive(:update_column)
 
       engine.update_peak(position, tracker: tracker)
+
+      expect(runtime_cache).to have_received(:merge).with(
+        tracker.id,
+        hash_including(highest_price: 120.0, lowest_price: kind_of(Numeric))
+      )
     end
   end
 

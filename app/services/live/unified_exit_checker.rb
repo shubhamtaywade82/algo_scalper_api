@@ -29,8 +29,9 @@ module Live
             current_ltp: snapshot[:ltp],
             pnl_pct: snapshot[:pnl_pct],
             pnl_rupees: snapshot[:pnl],
+            high_water_mark: snapshot[:hwm_pnl],
             hwm_pnl: snapshot[:hwm_pnl],
-            peak_profit_pct: (tracker.entry_price.to_f > 0 ? (snapshot[:hwm_pnl].to_f / (tracker.entry_price.to_f * tracker.quantity.to_i)) : 0)
+            peak_profit_pct: peak_profit_pct_for(snapshot, tracker)
           ),
           tracker: tracker,
           tracker_snapshot: snapshot,
@@ -246,7 +247,7 @@ module Live
         adx_hash = adx_value.is_a?(Hash) ? adx_value : { value: adx_value }
         OpenStruct.new(
           trend_score: adx_hash[:value]&.to_f || 0,
-          peak_trend_score: tracker.meta&.dig('peak_trend_score') || 0,
+          peak_trend_score: tracker.runtime_meta_fetch('peak_trend_score') || 0,
           adx: adx_hash[:value],
           atr_ratio: calculate_atr_ratio(tracker),
           underlying_price: tracker.entry_price.to_f,
@@ -336,6 +337,15 @@ module Live
         pct = (Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :structure_invalidation, :buffer_pct) || 0.002).to_f
         buffer = (level * pct).abs
         direction == 'long_pe' ? underlying_ltp > level + buffer : (direction == 'long_ce' ? underlying_ltp < level - buffer : false)
+      end
+
+      def peak_profit_pct_for(snapshot, tracker)
+        return snapshot[:hwm_pnl_pct].to_f if snapshot[:hwm_pnl_pct]
+
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return 0.0 unless entry_value.positive?
+
+        snapshot[:hwm_pnl].to_f / entry_value
       end
 
       private
