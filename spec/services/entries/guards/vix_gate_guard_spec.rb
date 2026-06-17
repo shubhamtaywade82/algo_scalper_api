@@ -37,7 +37,7 @@ RSpec.describe Entries::Guards::VixGateGuard do
 
     context 'when VIX is above ceiling' do
       before do
-        allow(Market::VixGate).to receive_messages(entry_allowed?: false, current_ltp: 21.5)
+        allow(Market::VixGate).to receive_messages(entry_allowed?: false, evaluated?: true, current_ltp: 21.5)
       end
 
       it 'blocks entry' do
@@ -46,6 +46,18 @@ RSpec.describe Entries::Guards::VixGateGuard do
         expect(result[:blocked]).to include('India VIX gate')
         expect(result[:blocked]).to include('21.5')
         expect(result[:blocked]).to include('20.0')
+      end
+    end
+
+    context 'when VIX gate is fail-closed and unevaluated' do
+      before do
+        allow(Market::VixGate).to receive_messages(entry_allowed?: false, evaluated?: false)
+      end
+
+      it 'blocks with unevaluated reason' do
+        result = described_class.call(context)
+
+        expect(result[:blocked]).to include('awaiting first VIX evaluation')
       end
     end
   end

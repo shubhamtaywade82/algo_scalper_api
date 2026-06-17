@@ -183,7 +183,8 @@ dhanhq:
 market:
   vix_gate:
     enabled: true
-    security_id: "21"       # India VIX on Dhan IDX_I — verify against instrument master
+    fail_closed_entries: true  # block entries until first successful evaluate!
+    security_id: "21"       # India VIX (NSE IDX_I) — Dhan scrip master confirmed
     segment: IDX_I
     entry_ceiling: 20.0     # block new entries when VIX above this
     force_exit_above: 22.0  # force-exit all positions when VIX above this
@@ -1254,7 +1255,9 @@ data_freshness:
 # Format: Array of strings "SEGMENT:SECURITY_ID" or empty array []
 # Example: ["NSE_EQ:11536", "NSE_EQ:11536"]
 # Can also be set via ENV['DHANHQ_WS_WATCHLIST'] as fallback
-watchlist: []
+watchlist:
+  - segment: IDX_I
+    security_id: "21"   # India VIX — keeps TickCache warm for VixGate
 
 # ============================================
 # TELEGRAM NOTIFICATIONS

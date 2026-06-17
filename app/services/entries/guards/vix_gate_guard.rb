@@ -9,6 +9,8 @@ module Entries
         return PASS unless gate_enabled?
         return PASS if Market::VixGate.entry_allowed?
 
+        return unevaluated_block unless Market::VixGate.evaluated?
+
         vix = Market::VixGate.current_ltp
         ceiling = entry_ceiling
         { blocked: "India VIX gate: VIX=#{vix&.round(2) || 'n/a'} above entry ceiling #{ceiling}" }
@@ -28,6 +30,11 @@ module Entries
       rescue StandardError
         20.0
       end
+
+      def self.unevaluated_block
+        { blocked: 'India VIX gate: awaiting first VIX evaluation (fail-closed)' }
+      end
+      private_class_method :unevaluated_block
     end
   end
 end

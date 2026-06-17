@@ -29,10 +29,17 @@ module Market
 
       def entry_allowed?
         return true unless enabled?
+        return false if fail_closed_entries? && !evaluated?
 
         Rails.cache.read(ENTRY_ALLOWED_KEY) != false
       rescue StandardError
-        true
+        !fail_closed_entries?
+      end
+
+      def evaluated?
+        Rails.cache.read(CACHE_TS_KEY).present?
+      rescue StandardError
+        false
       end
 
       def force_exit_active?
@@ -70,23 +77,53 @@ module Market
         (config[:force_exit_above] || 22.0).to_f
       end
 
+      def fail_closed_entries?
+        config.fetch(:fail_closed_entries, true) != false
+      end
+
       def fetch_ltp
         segment = config[:segment].to_s.presence || 'IDX_I'
         security_id = config[:security_id].to_s.presence
         return nil if security_id.blank?
 
-        cached = Live::TickCache.ltp(segment, security_id)
-        return cached.to_f if cached&.to_f&.positive?
+        ltp = ltp_from_tick_cache(segment, security_id)
+        return ltp if ltp&.positive?
 
+        ltp = ltp_from_instrument(segment, security_id)
+        return ltp if ltp&.positive?
+
+        ltp_from_dhan_api(segment, security_id)
+      rescue StandardError => e
+        Rails.logger.warn("[VixGate] fetch_ltp #{e.class} - #{e.message}")
+        nil
+      end
+
+      def ltp_from_tick_cache(segment, security_id)
+        Live::TickCache.ltp(segment, security_id)&.to_f
+      end
+
+      def ltp_from_instrument(segment, security_id)
         instrument = Instrument.find_by_sid_and_segment(
           security_id: security_id,
-          segment_code: segment
+          segment_code: segment,
+          symbol_name: 'INDIA VIX'
         )
+        instrument ||= Instrument.where(symbol_name: %w[INDIA VIX India VIX]).first
         return nil unless instrument
 
         instrument.resolve_ltp(segment: segment, security_id: security_id)&.to_f
+      end
+
+      def ltp_from_dhan_api(segment, security_id)
+        return nil if ENV['DHANHQ_ENABLED'] == 'false'
+
+        segment_enum = segment.to_s.upcase
+        response = DhanHQ::Models::MarketFeed.ltp({ segment_enum => [security_id.to_i] })
+        return nil unless response.is_a?(Hash) && response['status'] == 'success'
+
+        response.dig('data', segment_enum, security_id.to_s, 'last_price')&.to_f
       rescue StandardError => e
-        Rails.logger.warn("[VixGate] fetch_ltp #{e.class} - #{e.message}")
+        Rails.logger.warn("[VixGate] ltp_from_dhan_api #{e.class} - #{e.message}")
         nil
       end
 
