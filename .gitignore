@@ -44,8 +44,23 @@ dashboard/node_modules
 dashboard/dist
 dump.rdb
 
-# Graphify generated artifacts (graph.json + GRAPH_REPORT.md are committed)
-/graphify-out/cache/
-/graphify-out/graph.html
-/graphify-out/.graphify_python
-/graphify-out/cost.json
+# Graphify (Development Intelligence Layer)
+# Ignore all volatile/generated directories/files under graphify directories
+# (e.g., .graphify/ or graphify-out/)
+.graphify/cache/
+.graphify/memory/
+.graphify/sessions/
+.graphify/runs/
+.graphify/traces/
+.graphify/index/
+.graphify/embeddings/
+.graphify/output/
+.graphify/tmp/
+.graphify/checkpoints/
+.graphify/logs/
+.graphify/summaries/
+.graphify/graphs/
+
+# For this repository's graphify-out directory
+/graphify-out/
+

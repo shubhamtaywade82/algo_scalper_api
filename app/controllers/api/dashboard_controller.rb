@@ -28,7 +28,9 @@ module Api
           signals: (AlgoConfig.fetch[:signals] || {}).slice(
             :enable_adx_filter, :adx, :enable_direction_gate,
             :enable_smc_confluence_digest, :enable_smc_confluence_gating, :smc_confluence_intervals
-          ).compact,
+          ).compact.merge(
+            fast_entry_mode: Signal::FastEntryMode.enabled?
+          ),
           time_restrictions: AlgoConfig.fetch[:trading_time_restrictions],
           market_session: {
             current: Live::TimeRegimeService.instance.current_regime,

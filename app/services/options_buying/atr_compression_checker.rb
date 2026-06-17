@@ -49,6 +49,17 @@ module OptionsBuying
       compute_daily_atr
     end
 
+    def compute_daily_atr
+      to_date = (Time.zone.today - 1).to_s
+      from_date = (Time.zone.today - 40).to_s
+      raw = @instrument.historical_ohlc(from_date: from_date, to_date: to_date)
+      return nil if raw.blank?
+
+      series = CandleSeries.new(symbol: @instrument.symbol_name, interval: '1D')
+      series.load_from_raw(raw)
+      series.atr(atr_period)
+    end
+
     private
 
     def config
@@ -61,17 +72,6 @@ module OptionsBuying
 
     def atr_period
       (config[:atr_period] || DEFAULT_ATR_PERIOD).to_i
-    end
-
-    def compute_daily_atr
-      to_date = (Time.zone.today - 1).to_s
-      from_date = (Time.zone.today - 40).to_s
-      raw = @instrument.historical_ohlc(from_date: from_date, to_date: to_date)
-      return nil if raw.blank?
-
-      series = CandleSeries.new(symbol: @instrument.symbol_name, interval: '1D')
-      series.load_from_raw(raw)
-      series.atr(atr_period)
     end
 
     def today_session_range

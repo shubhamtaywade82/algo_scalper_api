@@ -6,6 +6,7 @@ module Entries
       include BaseGuard
 
       def self.call(context)
+        return PASS if Signal::FastEntryMode.enabled?
         return PASS unless OptionsBuying::Mode.rsi_bias_enabled?
 
         index_key = context.dig(:index_cfg, :key)

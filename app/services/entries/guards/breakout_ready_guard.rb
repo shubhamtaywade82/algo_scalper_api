@@ -6,6 +6,7 @@ module Entries
       include BaseGuard
 
       def self.call(context)
+        return PASS if Signal::FastEntryMode.enabled?
         return PASS unless OptionsBuying::Mode.breakout_enabled?
         return PASS if positional_carry_active?(context)
         return PASS if expiry_day_locked?(context)

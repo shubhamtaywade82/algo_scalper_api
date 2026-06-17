@@ -32,6 +32,12 @@ RSpec.describe Entries::Guards::BreakoutReadyGuard do
 
       expect(result[:blocked]).to include('breakout not armed')
     end
+
+    it 'passes when fast entry mode is enabled' do
+      allow(Signal::FastEntryMode).to receive(:enabled?).and_return(true)
+
+      expect(described_class.call(context)).to eq(Entries::EntryGuardPipeline::PASS)
+    end
   end
 
   context 'when breakout is armed' do

@@ -30,7 +30,7 @@ module Options
         return blocked('invalid_trend') if trend_sym && VALID_TRENDS.exclude?(trend_sym)
 
         # Check for institutional strike selection based on momentum (if provided)
-        if momentum_score.present?
+        if momentum_score.present? && !Signal::FastEntryMode.enabled?
           institutional_type = Options::StrikeSelector.strike_type_for_momentum(momentum_score)
           if institutional_type == :skip
             return blocked('weak_momentum_skip')

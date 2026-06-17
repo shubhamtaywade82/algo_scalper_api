@@ -886,6 +886,12 @@ signals:
   entry_strategy:
     primary: supertrend
 
+  # Lifecycle / paper testing: 1m Supertrend entries only (skips intraday breakout arm,
+  # RSI bias, weak-momentum strike skip, entry-quality veto). Exits and risk unchanged.
+  # Override at runtime: FAST_ENTRY_MODE=true|false (see .env.example).
+  fast_entry_mode:
+    enabled: false
+
   primary_timeframe: "1m"
   confirmation_timeframe: null
 
