@@ -4,11 +4,7 @@ import { A } from '@solidjs/router'
 import { useDashboardContext } from '../context/DashboardContext'
 import { useFlash } from '../stores/useFlash'
 import { confluenceLtfCompact, expiryBadgeMeta, subscribedRowByKey } from '../lib/expiryBadge'
-
-function inr(val) {
-  if (val == null) return '—'
-  return Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import AnimatedNumber from './AnimatedNumber'
 
 function formatNextDay(iso) {
   if (!iso) return ''
@@ -164,7 +160,7 @@ export default function Header(props) {
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Nifty 50</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${niftyFlash()}`}>
-                  {inr(props.indices?.nifty)}
+                  <AnimatedNumber value={props.indices?.nifty} decimals={2} nullDisplay="—" />
                 </span>
               </div>
               <div class="flex flex-col items-end gap-1">
@@ -199,7 +195,7 @@ export default function Header(props) {
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Bank Nifty</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${bankniftyFlash()}`}>
-                  {inr(props.indices?.banknifty)}
+                  <AnimatedNumber value={props.indices?.banknifty} decimals={2} nullDisplay="—" />
                 </span>
               </div>
               <div class="flex flex-col items-end gap-1">
@@ -234,7 +230,7 @@ export default function Header(props) {
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Sensex</span>
                 <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${sensexFlash()}`}>
-                  {inr(props.indices?.sensex)}
+                  <AnimatedNumber value={props.indices?.sensex} decimals={2} nullDisplay="—" />
                 </span>
               </div>
               <div class="flex flex-col items-end gap-1">

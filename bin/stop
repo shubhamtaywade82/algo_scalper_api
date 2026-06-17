@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+stop_pid_file() {
+  local file=$1
+  local name=$2
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+
+  local pid
+  pid="$(cat "$file" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    echo "Stopping $name (pid $pid)..."
+    kill "$pid" 2>/dev/null || true
+    sleep 1
+    kill -9 "$pid" 2>/dev/null || true
+  else
+    echo "Removing stale $name pid file ($pid not running)"
+  fi
+  rm -f "$file"
+}
+
+stop_pid_file "tmp/pids/server.pid" "Puma"
+
+stop_project_processes() {
+  local pattern=$1
+  local label=$2
+  mapfile -t pids < <(pgrep -f "$pattern" 2>/dev/null || true)
+  for pid in "${pids[@]:-}"; do
+    [[ -z "$pid" ]] && continue
+    local cwd
+    cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || echo "")"
+    [[ "$cwd" != "$ROOT" && "$cwd" != "$ROOT/"* ]] && continue
+    echo "Stopping $label (pid $pid)..."
+    kill "$pid" 2>/dev/null || true
+  done
+}
+
+for pattern in \
+  "rake trading:daemon" \
+  "bin/jobs" \
+  "dashboard/node_modules/.bin/vite"
+do
+  stop_project_processes "$pattern" "$(basename "$pattern")"
+done
+
+sleep 1
+
+force_stop_project_processes() {
+  local pattern=$1
+  mapfile -t pids < <(pgrep -f "$pattern" 2>/dev/null || true)
+  for pid in "${pids[@]:-}"; do
+    [[ -z "$pid" ]] && continue
+    local cwd
+    cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || echo "")"
+    [[ "$cwd" != "$ROOT" && "$cwd" != "$ROOT/"* ]] && continue
+    kill -9 "$pid" 2>/dev/null || true
+  done
+}
+
+for pattern in \
+  "rake trading:daemon" \
+  "bin/jobs" \
+  "dashboard/node_modules/.bin/vite"
+do
+  force_stop_project_processes "$pattern"
+done
+
+if command -v ss >/dev/null 2>&1; then
+  if ss -tlnp 2>/dev/null | grep -q ':3011'; then
+    echo "Warning: port 3011 still in use. Run: ss -tlnp | grep 3011"
+  fi
+fi
+
+echo "Done. Start fresh with: ./bin/dev"

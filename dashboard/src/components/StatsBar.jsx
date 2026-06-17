@@ -1,20 +1,12 @@
 import { createMemo } from 'solid-js'
 import { Show, For } from 'solid-js'
 import { useFlash } from '../stores/useFlash'
-
-function inr(val) {
-  if (val == null) return '0.00'
-  return Math.abs(Number(val)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import AnimatedNumber from './AnimatedNumber'
 
 function pnlClass(val) {
   const n = Number(val)
   if (!n) return 'from-gray-400 to-gray-500'
   return n >= 0 ? 'from-emerald-400 to-emerald-500' : 'from-rose-400 to-rose-500'
-}
-
-function sign(val) {
-  return Number(val) >= 0 ? '+' : '−'
 }
 
 async function resetDrawdown() {
@@ -50,7 +42,9 @@ export default function StatsBar(props) {
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Available Cash</span>
           <div class={`flex items-baseline gap-1 mt-1 transition-all duration-300 rounded-lg px-2 -ml-2 ${cashFlash()}`}>
-            <span class="text-2xl font-black text-white text-data tracking-tight">₹{inr(balance().cash)}</span>
+            <span class="text-2xl font-black text-white text-data tracking-tight">
+              <AnimatedNumber value={balance().cash} currency decimals={2} />
+            </span>
           </div>
           <div class="flex items-center justify-between gap-2 mt-4">
             <Show when={stats().is_blocked} fallback={
@@ -99,8 +93,12 @@ export default function StatsBar(props) {
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Net P&amp;L</span>
           <div class={`flex items-baseline gap-1 mt-1 transition-all duration-300 rounded-lg px-2 -ml-2 ${totalFlash()}`}>
-            <span class={`text-sm font-bold ${Number(stats().total_pnl_rupees) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{sign(stats().total_pnl_rupees)}</span>
-            <span class="text-3xl font-black text-white text-data tracking-tighter">₹{inr(stats().total_pnl_rupees)}</span>
+            <span class="text-sm font-bold">
+              <AnimatedNumber value={stats().total_pnl_rupees} signOnly pnlColor zeroPositive />
+            </span>
+            <span class="text-3xl font-black text-data tracking-tighter">
+              <AnimatedNumber value={stats().total_pnl_rupees} currency absolute decimals={2} pnlColor zeroPositive />
+            </span>
           </div>
           
           <div class="flex flex-col gap-1.5 mt-4">
@@ -132,8 +130,12 @@ export default function StatsBar(props) {
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Realized</span>
           <div class={`flex items-baseline gap-1 mt-1 transition-all duration-300 rounded-lg px-2 -ml-2 ${realizedFlash()}`}>
-            <span class={`text-xs font-bold ${Number(stats().realized_pnl_rupees) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{sign(stats().realized_pnl_rupees)}</span>
-            <span class="text-2xl font-black text-white text-data tracking-tight">₹{inr(stats().realized_pnl_rupees)}</span>
+            <span class="text-xs font-bold">
+              <AnimatedNumber value={stats().realized_pnl_rupees} signOnly pnlColor zeroPositive />
+            </span>
+            <span class="text-2xl font-black text-data tracking-tight">
+              <AnimatedNumber value={stats().realized_pnl_rupees} currency absolute decimals={2} pnlColor zeroPositive />
+            </span>
           </div>
           <div class="flex items-center gap-2 mt-4">
             <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">BOOKED P&L</span>
@@ -150,8 +152,12 @@ export default function StatsBar(props) {
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Active Unrealized</span>
           <div class={`flex items-baseline gap-1 mt-1 transition-all duration-300 rounded-lg px-2 -ml-2 ${unrealizedFlash()}`}>
-            <span class={`text-xs font-bold ${Number(stats().unrealized_pnl_rupees) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{sign(stats().unrealized_pnl_rupees)}</span>
-            <span class="text-2xl font-black text-white text-data tracking-tight">₹{inr(stats().unrealized_pnl_rupees)}</span>
+            <span class="text-xs font-bold">
+              <AnimatedNumber value={stats().unrealized_pnl_rupees} signOnly pnlColor zeroPositive />
+            </span>
+            <span class="text-2xl font-black text-data tracking-tight">
+              <AnimatedNumber value={stats().unrealized_pnl_rupees} currency absolute decimals={2} pnlColor zeroPositive />
+            </span>
           </div>
           <div class="flex items-center gap-2 mt-4">
             <span class="text-[9px] font-black text-primary-400 uppercase tracking-widest">LIVE TRACKING</span>
@@ -169,7 +175,9 @@ export default function StatsBar(props) {
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Daily Peak (HWM)</span>
           <div class="flex items-baseline gap-1 mt-1">
-            <span class="text-2xl font-black text-amber-400 text-data tracking-tight">₹{inr(stats().peak_pnl)}</span>
+            <span class="text-2xl font-black text-amber-400 text-data tracking-tight">
+              <AnimatedNumber value={stats().peak_pnl} currency decimals={2} />
+            </span>
           </div>
           <div class="flex items-center gap-2 mt-4">
             <span class="text-[9px] font-black text-amber-500 uppercase tracking-widest bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">HIGH WATERMARK</span>
@@ -183,7 +191,9 @@ export default function StatsBar(props) {
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Live Exposure</span>
           <div class="flex items-baseline gap-2 mt-2">
-            <span class="text-3xl font-black text-indigo-400 text-data">{stats().active_positions ?? 0}</span>
+            <span class="text-3xl font-black text-indigo-400 text-data">
+              <AnimatedNumber value={stats().active_positions ?? 0} integer decimals={0} />
+            </span>
             <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Active</span>
           </div>
           <div class="flex items-center gap-1 mt-4">
@@ -200,7 +210,9 @@ export default function StatsBar(props) {
         <div class="flex flex-col relative z-10">
           <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Day Volume</span>
           <div class="flex items-baseline gap-2 mt-2">
-            <span class="text-3xl font-black text-cyan-400 text-data">{stats().total_trades ?? 0}</span>
+            <span class="text-3xl font-black text-cyan-400 text-data">
+              <AnimatedNumber value={stats().total_trades ?? 0} integer decimals={0} />
+            </span>
             <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Trades</span>
           </div>
           <div class="mt-4 flex items-center gap-1">

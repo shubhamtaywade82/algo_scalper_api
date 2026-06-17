@@ -20,10 +20,10 @@ module Api
       render json: {
         signals: scope.map { |sig| serialize(sig) },
         meta: {
-          total:    total,
-          page:     current_page,
+          total: total,
+          page: current_page,
           per_page: per_page_value,
-          pages:    (total.to_f / per_page_value).ceil,
+          pages: (total.to_f / per_page_value).ceil,
           trading_mode: AlgoConfig.mode,
           fast_entry_mode: Signal::FastEntryMode.status
         }
@@ -42,17 +42,17 @@ module Api
 
       if params[:confidence_min].present?
         min = params[:confidence_min].to_f.clamp(0.0, 1.0)
-        scope = scope.where("confidence_score >= ?", min)
+        scope = scope.where(confidence_score: min..)
       end
 
       if params[:date_from].present?
         d = parse_date(params[:date_from])
-        scope = scope.where("signal_timestamp >= ?", d.beginning_of_day) if d
+        scope = scope.where(signal_timestamp: d.beginning_of_day..) if d
       end
 
       if params[:date_to].present?
         d = parse_date(params[:date_to])
-        scope = scope.where("signal_timestamp <= ?", d.end_of_day) if d
+        scope = scope.where(signal_timestamp: ..d.end_of_day) if d
       end
 
       scope
@@ -80,17 +80,17 @@ module Api
 
     def serialize(sig)
       {
-        id:                sig.id,
-        index_key:         sig.index_key,
-        direction:         sig.direction,
-        confidence_score:  sig.confidence_score&.to_f,
-        confidence_level:  sig.confidence_level,
-        timeframe:         sig.timeframe,
-        supertrend_value:  sig.supertrend_value&.to_f,
-        adx_value:         sig.adx_value&.to_f,
-        signal_timestamp:  sig.signal_timestamp&.iso8601,
-        candle_timestamp:  sig.candle_timestamp&.iso8601,
-        metadata:          sig.effective_metadata
+        id: sig.id,
+        index_key: sig.index_key,
+        direction: sig.direction,
+        confidence_score: sig.confidence_score&.to_f,
+        confidence_level: sig.confidence_level,
+        timeframe: sig.timeframe,
+        supertrend_value: sig.supertrend_value&.to_f,
+        adx_value: sig.adx_value&.to_f,
+        signal_timestamp: sig.signal_timestamp&.iso8601,
+        candle_timestamp: sig.candle_timestamp&.iso8601,
+        metadata: sig.effective_metadata
       }
     end
 
