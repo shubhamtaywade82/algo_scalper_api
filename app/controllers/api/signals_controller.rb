@@ -23,7 +23,9 @@ module Api
           total:    total,
           page:     current_page,
           per_page: per_page_value,
-          pages:    (total.to_f / per_page_value).ceil
+          pages:    (total.to_f / per_page_value).ceil,
+          trading_mode: AlgoConfig.mode,
+          fast_entry_mode: Signal::FastEntryMode.status
         }
       }
     end
@@ -88,7 +90,7 @@ module Api
         adx_value:         sig.adx_value&.to_f,
         signal_timestamp:  sig.signal_timestamp&.iso8601,
         candle_timestamp:  sig.candle_timestamp&.iso8601,
-        metadata:          sig.metadata || {}
+        metadata:          sig.effective_metadata
       }
     end
 
