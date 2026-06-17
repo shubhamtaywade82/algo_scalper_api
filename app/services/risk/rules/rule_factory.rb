@@ -16,6 +16,7 @@ module Risk
           TimeRegimeExitRule.new(config: risk_config),
           PercentagePnlRule.new(config: risk_config),
           ProfitFloorExitRule.new(config: risk_config),
+          DteZeroThetaFlatExitRule.new(config: risk_config),
           TakeProfitRule.new(config: risk_config),
           GreeksDecayExitRule.new(config: risk_config),
           FastProfitLockRule.new(config: risk_config),

@@ -377,6 +377,12 @@ risk:
         volume_velocity_multiplier: 2.0
         max_entry_time: "14:30"
 
+  # 0-DTE afternoon theta-flat exit — force-close stale 0-DTE positions after cutoff
+  dte_zero_exit:
+    enabled: true
+    after_time: "12:30"           # IST — matches 0-DTE max_entry_time
+    min_pnl_pct_to_hold: 0.03     # keep if >= +3%; trailing owns clear winners
+
   # Once trade was green, never ride back to full premium SL
   green_trade_cap:
     enabled: true
