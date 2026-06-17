@@ -31,6 +31,7 @@ module Entries
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
         Guards::VixGateGuard,
+        Guards::EarliestEntryGuard,
         Guards::MiddayQualityGuard,          # ADX >= 28 bypass covers all power-trend cases
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
