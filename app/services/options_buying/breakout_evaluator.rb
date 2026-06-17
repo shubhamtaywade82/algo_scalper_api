@@ -80,7 +80,7 @@ module OptionsBuying
 
       volume_delta = TickMetrics.volume_delta(option_ticks)
       oi_delta = TickMetrics.oi_delta(option_ticks)
-      volume_multiplier = (Mode.config.dig(:breakout, :volume_multiplier) || 2.0).to_f
+      volume_multiplier = volume_multiplier_for_index
       level_broken = direction == :bullish ? spot_ltp > level : spot_ltp < level
       return unless level_broken && volume_delta > (volume_baseline * volume_multiplier)
       return if require_oi_unwind? && !oi_delta.negative?
@@ -193,6 +193,22 @@ module OptionsBuying
 
     def compression_arm_required?
       Mode.intraday? && Mode.config.dig(:breakout, :compression_arm) == true
+    end
+
+    def volume_multiplier_for_index
+      dte = days_to_expiry_for_index
+      Trading::DteParameterResolver.volume_velocity_multiplier(dte: dte)
+    rescue StandardError
+      (Mode.config.dig(:breakout, :volume_multiplier) || 2.0).to_f
+    end
+
+    def days_to_expiry_for_index
+      expiry = Options::DerivativeChainAnalyzer.new(index_key: @index_key).nearest_expiry
+      return nil unless expiry
+
+      (expiry.to_date - Time.zone.today).to_i
+    rescue StandardError
+      nil
     end
   end
 end

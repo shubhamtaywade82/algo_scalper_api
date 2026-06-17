@@ -22,7 +22,7 @@ module Entries
         return PASS unless bid.positive? && ask.positive? && ask >= bid
 
         spread_pct = (ask - bid) / ltp
-        return PASS if spread_pct <= max_spread_pct
+        return PASS if spread_pct <= max_spread_pct(context)
 
         key = context.dig(:index_cfg, :key) || 'index'
         { blocked: "bid-ask spread too wide for #{key}: #{(spread_pct * 100).round(2)}%" }
@@ -33,14 +33,18 @@ module Entries
       end
 
       def self.guard_enabled?
-        spread_enabled? && max_spread_pct.positive?
+        spread_enabled? && max_spread_pct({}).positive?
       end
 
       def self.spread_enabled?
         OptionsBuying::Mode.config.dig(:execution, :spread_enabled) == true
       end
 
-      def self.max_spread_pct
+      def self.max_spread_pct(context = {})
+        index_cfg = context[:index_cfg] || {}
+        index_override = index_cfg.dig(:execution, :max_bid_ask_spread_pct)
+        return index_override.to_f if index_override
+
         (OptionsBuying::Mode.config.dig(:execution, :max_bid_ask_spread_pct) || 0.015).to_f
       rescue StandardError
         0.015

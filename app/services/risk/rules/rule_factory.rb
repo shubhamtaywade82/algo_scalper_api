@@ -8,6 +8,7 @@ module Risk
         [
           PortfolioFloorRule.new(config: risk_config),
           EmergencyPeakLossRule.new(config: risk_config),
+          VixForceExitRule.new(config: risk_config),
           GreenTradeCapRule.new(config: risk_config),
           EarlyTrendFailureRule.new(config: risk_config),
           SmcNavigatorRule.new(config: risk_config),

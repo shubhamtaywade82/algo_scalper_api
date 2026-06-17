@@ -18,6 +18,7 @@ RSpec.describe Risk::Rules::RuleFactory do
       rule_classes = rules.map(&:class)
 
       expect(rule_classes).to include(
+        Risk::Rules::VixForceExitRule,
         Risk::Rules::GreenTradeCapRule,
         Risk::Rules::ProfitFloorExitRule,
         Risk::Rules::PeakDrawdownRule,

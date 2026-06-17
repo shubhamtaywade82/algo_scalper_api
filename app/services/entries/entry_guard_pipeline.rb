@@ -30,6 +30,7 @@ module Entries
         Guards::DrawdownGuard,
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
+        Guards::VixGateGuard,
         Guards::MiddayQualityGuard,          # ADX >= 28 bypass covers all power-trend cases
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
@@ -46,6 +47,7 @@ module Entries
         Guards::RsiBiasGuard,
         Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
         Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block
+        Guards::DteEntryWindowGuard,
         Guards::BankniftyLastWeekGuard,
         Guards::WeeklyExpiryGuard,
         Guards::BosStructureGuard,

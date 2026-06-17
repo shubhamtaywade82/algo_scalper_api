@@ -68,7 +68,7 @@ options_buying:
     refresh_minutes: 30
     subscribe_sync_seconds: 30      # daemon polls radar set this often to subscribe strikes to the WS feed
   execution:
-    spread_enabled: false         # BidAskSpreadGuard only runs when true
+    spread_enabled: true          # BidAskSpreadGuard — per-index overrides in indices[].execution
     max_bid_ask_spread_pct: 0.015
     tcm_enabled: false            # TransactionCostGuard (pre-trade net-edge gate) only runs when true
     min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
@@ -178,6 +178,17 @@ dhanhq:
   enable_orders: false # Set to true for live order submission (false = dry-run logging only)
 
 # ============================================
+# MARKET REGIME (India VIX)
+# ============================================
+market:
+  vix_gate:
+    enabled: true
+    security_id: "21"       # India VIX on Dhan IDX_I — verify against instrument master
+    segment: IDX_I
+    entry_ceiling: 20.0     # block new entries when VIX above this
+    force_exit_above: 22.0  # force-exit all positions when VIX above this
+
+# ============================================
 # INDEX CONFIG (TREND-SCORE DRIVEN)
 # ============================================
 indices:
@@ -273,6 +284,9 @@ indices:
     segment: IDX_I
     sid: "51"
     capital_alloc_pct: 0.30
+    execution:
+      max_bid_ask_spread_pct: 0.025   # BSE FO — wider spreads than NSE
+      earliest_entry_time: "09:30"
     max_same_side: 1
     cooldown_sec: 180
     max_concurrent_per_index: 2
@@ -333,6 +347,34 @@ risk:
   sl_pct: 0.10 # -10% base premium SL — intraday options buying (tightened from 15%)
   tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
   per_trade_risk_pct: 0.40
+
+  # DTE-resolved intraday parameters — pinned into config_snapshot at entry
+  dte_parameters:
+    enabled: true
+    defaults:
+      sl_pct: 0.10
+      tp_pct: 0.45
+      trail_pct: 0.07
+      volume_velocity_multiplier: 2.0
+    by_dte:
+      "0":
+        sl_pct: 0.08
+        tp_pct: 0.25
+        trail_pct: 0.05
+        volume_velocity_multiplier: 2.5
+        max_entry_time: "12:30"
+      "1":
+        sl_pct: 0.10
+        tp_pct: 0.35
+        trail_pct: 0.08
+        volume_velocity_multiplier: 2.5
+        max_entry_time: "14:00"
+      "2":
+        sl_pct: 0.10
+        tp_pct: 0.40
+        trail_pct: 0.07
+        volume_velocity_multiplier: 2.0
+        max_entry_time: "14:30"
 
   # Once trade was green, never ride back to full premium SL
   green_trade_cap:

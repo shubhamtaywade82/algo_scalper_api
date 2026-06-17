@@ -195,13 +195,21 @@ module Entries
       end
 
       def build_base_meta(index_cfg:, pick:, direction:)
+        snapshot_fields = Entries::EntrySnapshotBuilder.build(index_cfg: index_cfg, pick: pick)
+
         {
           index_key: index_cfg[:key].to_s,
           symbol: pick[:symbol].to_s,
           direction: direction || pick[:direction],
           entry_at: Time.current.iso8601,
           config_version: AlgoConfig.version,
-          config_snapshot: AlgoConfig.position_snapshot
+          config_snapshot: snapshot_fields[:config_snapshot],
+          dte_at_entry: snapshot_fields[:dte_at_entry],
+          vix_at_entry: snapshot_fields[:vix_at_entry],
+          spread_guard_pct: snapshot_fields[:spread_guard_pct],
+          atm_strike: snapshot_fields[:atm_strike],
+          expiry_date: snapshot_fields[:expiry_date],
+          entry_context: snapshot_fields[:entry_context]
         }
       end
 
