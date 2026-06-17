@@ -83,17 +83,9 @@ module Positions
 
     def active_positions
       @active_positions ||= begin
-        cached = Positions::ActiveCache.instance.all_positions
-        if cached.any?
-          ids = cached.filter_map(&:tracker_id)
-          scope = PositionTracker.where(id: ids)
-          filter = resolved_paper_filter
-          filter.nil? ? scope.to_a : scope.where(paper: filter).to_a
-        else
-          scope = PositionTracker.where(status: :active)
-          filter = resolved_paper_filter
-          filter.nil? ? scope.to_a : scope.where(paper: filter).to_a
-        end
+        scope = PositionTracker.where(status: :active)
+        filter = resolved_paper_filter
+        filter.nil? ? scope.to_a : scope.where(paper: filter).to_a
       end
     end
 

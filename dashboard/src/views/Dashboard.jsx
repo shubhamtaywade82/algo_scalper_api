@@ -60,6 +60,7 @@ export default function Dashboard() {
     const total = realized + unrealized
     return {
       ...stats(),
+      active_positions: currentOpen.length,
       unrealized_pnl_rupees: unrealized,
       total_pnl_rupees: total,
       peak_pnl: runningPeakPnl()
