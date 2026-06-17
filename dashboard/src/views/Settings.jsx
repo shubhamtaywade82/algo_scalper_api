@@ -2,6 +2,7 @@ import { createSignal, onMount, For, Show } from 'solid-js'
 import RecursiveFormNode from '../components/settings/RecursiveFormNode'
 import CalibrationRunsPanel from '../components/settings/CalibrationRunsPanel'
 import NetworkStatusPanel from '../components/settings/NetworkStatusPanel'
+import FastEntryModePanel from '../components/settings/FastEntryModePanel'
 
 export default function Settings() {
   const [configRoot, setConfigRoot] = createSignal(null)
@@ -122,6 +123,8 @@ export default function Settings() {
             </button>
           </div>
         </div>
+
+        <FastEntryModePanel />
 
         <Show when={loading() && !configRoot()}>
           <div class="flex justify-center py-20">

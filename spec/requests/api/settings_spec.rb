@@ -114,4 +114,50 @@ RSpec.describe 'Api::Settings' do
       expect(json['limit']).to eq(200)
     end
   end
+
+  describe 'GET /api/settings/fast_entry_mode' do
+    it 'returns persisted and effective status' do
+      get '/api/settings/fast_entry_mode'
+      expect(response).to have_http_status(:ok)
+      json = response.parsed_body
+      expect(json['success']).to be(true)
+      expect(json['fast_entry_mode']).to include('persisted', 'effective', 'env_override')
+    end
+  end
+
+  describe 'PATCH /api/settings/fast_entry_mode' do
+    around do |example|
+      prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+      ENV.delete('SETTINGS_UPDATE_TOKEN')
+      example.run
+    ensure
+      if prior
+        ENV['SETTINGS_UPDATE_TOKEN'] = prior
+      else
+        ENV.delete('SETTINGS_UPDATE_TOKEN')
+      end
+    end
+
+    before do
+      Setting.put(doc_key, { signals: { fast_entry_mode: { enabled: false } } }.to_json)
+      AlgoConfig.reset!
+      Signal::FastEntryMode.reset!
+    end
+
+    it 'enables fast entry mode without daemon restart' do
+      patch '/api/settings/fast_entry_mode', params: { enabled: true }
+      expect(response).to have_http_status(:ok)
+      json = response.parsed_body
+      expect(json['success']).to be(true)
+      expect(json.dig('fast_entry_mode', 'persisted')).to be(true)
+      expect(json.dig('fast_entry_mode', 'effective')).to be(true)
+      expect(Signal::FastEntryMode.enabled?).to be(true)
+    end
+
+    it 'disables fast entry mode' do
+      patch '/api/settings/fast_entry_mode', params: { enabled: false }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig('fast_entry_mode', 'effective')).to be(false)
+    end
+  end
 end

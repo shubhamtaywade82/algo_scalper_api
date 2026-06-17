@@ -19,6 +19,33 @@ module Signal
         3
       end
 
+      def status
+        {
+          persisted: persisted_enabled?,
+          effective: enabled?,
+          env_override: env_override?
+        }
+      end
+
+      def persisted_enabled?
+        AlgoConfig.fetch.dig(:signals, :fast_entry_mode, :enabled) == true
+      rescue StandardError
+        false
+      end
+
+      def env_override?
+        env = ENV.fetch('FAST_ENTRY_MODE', nil)
+        return false if env.nil?
+
+        !env.to_s.strip.empty?
+      end
+
+      def reset!
+        @enabled = nil
+        @cached_at = nil
+        @logged = nil
+      end
+
       private
 
       def refresh_cache_if_stale

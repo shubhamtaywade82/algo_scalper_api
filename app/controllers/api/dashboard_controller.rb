@@ -29,7 +29,7 @@ module Api
             :enable_adx_filter, :adx, :enable_direction_gate,
             :enable_smc_confluence_digest, :enable_smc_confluence_gating, :smc_confluence_intervals
           ).compact.merge(
-            fast_entry_mode: Signal::FastEntryMode.enabled?
+            fast_entry_mode: Signal::FastEntryMode.status
           ),
           time_restrictions: AlgoConfig.fetch[:trading_time_restrictions],
           market_session: {

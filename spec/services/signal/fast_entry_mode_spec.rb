@@ -10,8 +10,11 @@ RSpec.describe Signal::FastEntryMode do
   end
 
   describe '.enabled?' do
+    before { described_class.reset! }
+
     context 'when config enables fast entry' do
       before do
+        allow(ENV).to receive(:fetch).and_call_original
         allow(ENV).to receive(:fetch).with('FAST_ENTRY_MODE', nil).and_return(nil)
         allow(AlgoConfig).to receive(:fetch).and_return({ signals: { fast_entry_mode: { enabled: true } } })
       end
@@ -23,6 +26,7 @@ RSpec.describe Signal::FastEntryMode do
 
     context 'when FAST_ENTRY_MODE env is set' do
       before do
+        allow(ENV).to receive(:fetch).and_call_original
         allow(ENV).to receive(:fetch).with('FAST_ENTRY_MODE', nil).and_return('true')
       end
 
@@ -45,6 +49,19 @@ RSpec.describe Signal::FastEntryMode do
       allow(described_class).to receive(:enabled?).and_return(false)
 
       expect(described_class.effective_momentum_score(1)).to eq(1)
+    end
+  end
+
+  describe '.reset!' do
+    it 'clears cached enabled state' do
+      allow(ENV).to receive(:fetch).with('FAST_ENTRY_MODE', nil).and_return('true')
+      expect(described_class.enabled?).to be(true)
+
+      described_class.reset!
+      allow(ENV).to receive(:fetch).with('FAST_ENTRY_MODE', nil).and_return(nil)
+      allow(AlgoConfig).to receive(:fetch).and_return({ signals: { fast_entry_mode: { enabled: false } } })
+
+      expect(described_class.enabled?).to be(false)
     end
   end
 end
