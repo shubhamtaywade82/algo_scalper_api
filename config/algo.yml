@@ -5,8 +5,15 @@ paper_trading:
   enabled: true
   balance: 100000
   # Wallet realized PnL: cumulative = all-time paper exits (carry capital day to day).
-  # daily = only exits on the current calendar day (legacy ₹1L + today’s closes).
+  # daily = only exits on the current calendar day (legacy ₹1L + today's closes).
   realized_scope: cumulative
+
+# Double-entry paper ledger (financial source of truth alongside position_trackers)
+ledger:
+  enabled: false          # when true, GatewayPaper wallet reads from ledger
+  paper_enabled: false    # alias gate for paper wallet reads
+  shadow_mode: true         # post journals + keep legacy wallet for drift checks
+  block_negative_cash: true
 
 # Realtime execution controls (tick-first architecture)
 realtime:
@@ -116,7 +123,7 @@ trading:
     cache_ttl_minutes: 15
 
 strike_cooldown_guard:
-  enabled: true
+  enabled: false
   cooldown_minutes: 20
 
 capital_allocator:

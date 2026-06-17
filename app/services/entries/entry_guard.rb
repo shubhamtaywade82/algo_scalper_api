@@ -141,7 +141,12 @@ module Entries
       end
 
       def extract_order_no(response)
+        Ledger::OrderResponse.extract_order_id(response) || legacy_extract_order_no(response)
+      end
+
+      def legacy_extract_order_no(response)
         return response[:order_id] || response['order_id'] if response.is_a?(Hash)
+
         response
       end
 

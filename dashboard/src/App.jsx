@@ -14,6 +14,7 @@ const Alpha = lazy(() => import('./views/Alpha'))
 const Analysis = lazy(() => import('./views/Analysis'))
 const Charts = lazy(() => import('./views/Charts'))
 const Settings = lazy(() => import('./views/Settings'))
+const Ledger = lazy(() => import('./views/Ledger'))
 
 function AppShell(props) {
   const {
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="/alpha" component={Alpha} />
         <Route path="/signals" component={Signals} />
         <Route path="/analysis" component={Analysis} />
+        <Route path="/ledger" component={Ledger} />
         <Route path="/settings" component={Settings} />
       </Route>
       {/* Fullscreen — own layout, no Header/footer chrome */}

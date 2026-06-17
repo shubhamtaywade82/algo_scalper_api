@@ -66,6 +66,20 @@ development:
     priority: 4
     description: "Post-session entry funnel report — signal skips, guard blocks, breakout alignment"
 
+  ledger_reconciliation:
+    class: Ledger::ReconciliationJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 12
+    description: "Compare ledger cash to legacy paper wallet during shadow mode"
+
+  ledger_daily_close:
+    class: Ledger::DailyCloseJob
+    schedule: at 3:35pm every day
+    queue_name: background
+    priority: 5
+    description: "Roll paper ledger balances into paper_daily_wallets snapshot"
+
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob
     schedule: at 9:15am every day
@@ -179,6 +193,20 @@ production:
     queue_name: background
     priority: 4
     description: "Post-session entry funnel report — signal skips, guard blocks, breakout alignment"
+
+  ledger_reconciliation:
+    class: Ledger::ReconciliationJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 12
+    description: "Compare ledger cash to legacy paper wallet during shadow mode"
+
+  ledger_daily_close:
+    class: Ledger::DailyCloseJob
+    schedule: at 3:35pm every weekday
+    queue_name: background
+    priority: 5
+    description: "Roll paper ledger balances into paper_daily_wallets snapshot"
 
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob

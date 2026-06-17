@@ -37,6 +37,15 @@ module Orders
     # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     # cash = free balance (like broker available); utilized/exposure = premium tied in open legs.
     def wallet_snapshot
+      return Ledger::WalletReader.snapshot(mode: :paper) if ledger_wallet_enabled?
+
+      legacy_wallet_snapshot
+    rescue StandardError => e
+      Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
+      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
+    end
+
+    def legacy_wallet_snapshot
       cfg = paper_trading_config
       base = (cfg[:balance] || 100_000).to_f
       realized = paper_realized_rupees(cfg)
@@ -50,10 +59,7 @@ module Orders
       exposure = utilized
       equity = (cash + utilized + mtm).round(2)
 
-      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0 }
-    rescue StandardError => e
-      Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
-      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
+      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0, source: 'legacy' }
     end
 
     def cancel_order(order_id)
@@ -108,6 +114,10 @@ module Orders
 
     def active_unrealized_rupees
       PositionTracker.paper.active.sum { |t| t.current_pnl_rupees.to_f }
+    end
+
+    def ledger_wallet_enabled?
+      Ledger::Config.paper_enabled?
     end
   end
 end

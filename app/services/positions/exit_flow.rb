@@ -49,6 +49,7 @@ module Positions
         register_cooldown!
         sync_final_pnl_to_database(cache_data)
         tracker.send(:broadcast_position_exited)
+        post_ledger_exit!(tracker)
       end
 
       tracker
@@ -96,6 +97,10 @@ module Positions
         cache[:hwm_pnl],
         cache[:hwm_pnl_pct]
       )
+    end
+
+    def post_ledger_exit!(tracker)
+      Ledger::ExitPoster.post!(tracker: tracker, exit_price: tracker.exit_price)
     end
 
     def resolve_final_pnl(exit_price:, cache_data:)
