@@ -35,7 +35,7 @@ RSpec.describe Positions::PaperStatsQuery do
     end
 
     it 'counts only database-active positions when in-memory cache is stale' do
-      stale = instance_double(Positions::ActiveCache::PositionData, tracker_id: 99_999)
+      stale = double('stale_position', tracker_id: 99_999)
       cache = instance_double(Positions::ActiveCache, all_positions: [stale])
       allow(Positions::ActiveCache).to receive(:instance).and_return(cache)
       PositionTracker.where(status: :active).update_all(status: :exited, exited_at: Time.current)
