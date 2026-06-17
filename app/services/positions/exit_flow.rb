@@ -30,6 +30,9 @@ module Positions
         metadata['exit_reason'] = resolved_reason
         metadata['exit_triggered_at'] ||= Time.current
         metadata['hwm_pnl_pct'] = cache_data[:hwm_pnl_pct] if cache_data[:hwm_pnl_pct]
+        metadata.merge!(
+          Positions::ExitAnalyticsBuilder.build(tracker: tracker, exit_price: exit_px).stringify_keys
+        )
 
         tracker.update!(
           status: :exited,
