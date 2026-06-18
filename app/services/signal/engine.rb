@@ -85,6 +85,8 @@ module Signal
           end
         end
 
+        quality_result ||= stock_quality_result
+
         nearest_expiry = resolve_nearest_expiry_date(index_cfg: index_cfg, no_trade_gate: nil)
         if entry_dte_guard_blocks?(index_cfg: index_cfg, signals_cfg: signals_cfg, nearest_expiry: nearest_expiry)
           Signal::StateTracker.reset(index_cfg[:key])
@@ -296,6 +298,10 @@ module Signal
 
       def stock_supertrend_entry?(signals_cfg)
         (signals_cfg.dig(:entry_strategy, :primary) || 'supertrend').to_s.strip.downcase == 'supertrend'
+      end
+
+      def stock_quality_result
+        { pass: true, score: 100, breakdown: { stock_mode: true } }
       end
 
       def perform_diagnostic_ta(index_cfg, signals_cfg)
@@ -1800,7 +1806,19 @@ module Signal
       def execute_options_analysis(index_cfg, instrument, final_direction, primary_series, effective_validation_mode,
                                    expiry_date: nil, chain_data: nil)
         expiry_blocked = expiry_trade_allowed?(index_cfg[:key]) == false
-        expiry_date  ||= Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
+        expiry_date ||= Options::DerivativeChainAnalyzer.new(index_key: index_cfg[:key]).nearest_expiry
+
+        if effective_validation_mode.to_s == 'stock'
+          return {
+            gamma_pressure: { score: 0.0, strike: nil },
+            iv_rank: { valid: true },
+            theta_risk: { valid: true },
+            expiry_blocked: expiry_blocked,
+            expiry_date: expiry_date,
+            chain_data: chain_data
+          }
+        end
+
         chain_data   ||= instrument.fetch_option_chain(expiry_date)
 
         gamma_pressure_result = if chain_data
@@ -1907,6 +1925,17 @@ module Signal
 
       def execute_entry_gate(index_cfg:, instrument:, signal:, final_direction:, primary_series:,
                              options_analysis:, momentum_score:, permission:, smc_decision:)
+        signals_cfg = AlgoConfig.fetch[:signals] || {}
+        if stock_supertrend_entry?(signals_cfg)
+          return execute_stock_entry_gate(
+            index_cfg: index_cfg,
+            signal: signal,
+            final_direction: final_direction,
+            options_analysis: options_analysis,
+            permission: permission
+          )
+        end
+
         expiry_blocked = options_analysis[:expiry_blocked]
         expiry_date    = options_analysis[:expiry_date]
         chain_data     = options_analysis[:chain_data]
@@ -2020,6 +2049,35 @@ module Signal
         end
 
         { picks: picks, market_context_extra: market_context_extra, execution_permission: permission }
+      end
+
+      def execute_stock_entry_gate(index_cfg:, signal:, final_direction:, options_analysis:, permission:)
+        if options_analysis[:expiry_blocked]
+          Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
+          record_signal_skip(
+            signal,
+            'expiry_midday_decay: Midday decay period blocked entry for this expiry',
+            stage: 'expiry_model',
+            code: 'expiry_midday_decay'
+          )
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: final_direction)
+        if picks.blank?
+          skip_reason = 'No ATM option strike available'
+          Rails.logger.warn("[Signal] #{skip_reason} for #{index_cfg[:key]} #{final_direction}")
+          record_signal_skip(signal, skip_reason, stage: 'strike_selection', code: 'no_strikes')
+          Signal::StateTracker.reset(index_cfg[:key])
+          return nil
+        end
+
+        Rails.logger.info(
+          "[Signal] Stock strike pick #{index_cfg[:key]}: #{picks.pluck(:symbol).join(', ')}"
+        )
+
+        { picks: picks, market_context_extra: {}, execution_permission: permission }
       end
 
       def trigger_entry_flow(index_cfg:, instrument:, signal:, picks:, final_direction:,

@@ -10,9 +10,9 @@ paper_trading:
 
 # Double-entry paper ledger (financial source of truth alongside position_trackers)
 ledger:
-  enabled: false          # when true, GatewayPaper wallet reads from ledger
-  paper_enabled: false    # alias gate for paper wallet reads
-  shadow_mode: true         # post journals + keep legacy wallet for drift checks
+  enabled: true           # paper wallet + sizing read from ledger cash balance
+  paper_enabled: true     # GatewayPaper.wallet_snapshot uses Ledger::WalletReader
+  shadow_mode: true       # post journals; reconciliation job compares ledger vs legacy
   block_negative_cash: true
 
 # Realtime execution controls (tick-first architecture)
