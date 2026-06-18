@@ -43,3 +43,24 @@ spec/failed_examples.txt
 dashboard/node_modules
 dashboard/dist
 dump.rdb
+
+# Graphify (Development Intelligence Layer)
+# Ignore all volatile/generated directories/files under graphify directories
+# (e.g., .graphify/ or graphify-out/)
+.graphify/cache/
+.graphify/memory/
+.graphify/sessions/
+.graphify/runs/
+.graphify/traces/
+.graphify/index/
+.graphify/embeddings/
+.graphify/output/
+.graphify/tmp/
+.graphify/checkpoints/
+.graphify/logs/
+.graphify/summaries/
+.graphify/graphs/
+
+# For this repository's graphify-out directory
+/graphify-out/
+

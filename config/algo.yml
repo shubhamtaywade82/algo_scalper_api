@@ -38,6 +38,55 @@ midday_guard:
   block_after_time: "15:00"
   trending_adx_bypass: 28    # skip guard entirely when ADX >= this (trending market)
 
+# Options buying framework — default intraday_scalper (see docs/options_buying_intraday_spec.md)
+options_buying:
+  mode: intraday_scalper          # intraday_scalper | positional
+  atr_compression:
+    enabled: true
+    atr_period: 14
+    max_setup_ratio: 0.30
+    setup_window_end: "11:15"
+  breakout:
+    enabled: true
+    timeframe_minutes: 1
+    volume_multiplier: 2.0
+    require_oi_unwind: true
+    compression_arm: true
+    ready_ttl_seconds: 300
+  chain_radar:
+    enabled: true
+    delta_min: 0.45
+    delta_max: 0.55
+    min_volume: 10000
+    refresh_minutes: 30
+    subscribe_sync_seconds: 30      # daemon polls radar set this often to subscribe strikes to the WS feed
+  execution:
+    spread_enabled: false         # BidAskSpreadGuard only runs when true
+    max_bid_ask_spread_pct: 0.015
+    tcm_enabled: false            # TransactionCostGuard (pre-trade net-edge gate) only runs when true
+    min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
+    expected_edge_pct: 0.30       # fallback expected premium edge when signal injects none (DECIMAL)
+    slippage_pct_per_side: 0.001  # modelled slippage per fill; charged on entry + exit
+  positional:
+    enabled: false
+    require_carry_allowed: true
+    min_carry_roi: 0.30           # DECIMAL: hold overnight only when ROI >= +30%
+    max_carry_positions: 3        # book-level cap: max simultaneous overnight carries (0 = unlimited)
+    max_carry_exposure_rupees: 150000  # book-level cap: max total carried premium outlay (0 = unlimited)
+  expiry_day:
+    lockout_after: "13:00"
+  rsi_bias:
+    enabled: true
+    timeframe: "15"
+  streams:
+    enabled: true
+    maxlen: 1000
+    window_seconds: 60
+    consumer_group: options_buying_evaluators
+    consumer_block_ms: 1000
+    telemetry_sink_enabled: true
+    legacy_zset_enabled: false
+
 # Expiry-week power trend mode: detects and holds high-conviction directional entries
 # during the final week before monthly expiry when ADX confirms a power trend.
 # Pattern: BANKNIFTY ADX=53 or NIFTY ADX=40+ locked since morning → enter 12:00-13:45
@@ -53,6 +102,18 @@ loss_streak_guard:
   enabled: true
   consecutive_losses_threshold: 2
   cooldown_minutes: 30
+
+segment_expectancy_guard:
+  enabled: true
+
+# Trading::SegmentExpectancyAnalyzer — realized win-rate/expectancy by (index, session-regime)
+# segment, computed from closed-trade history. Backs segment_expectancy_guard above.
+trading:
+  segment_expectancy:
+    lookback_days: 14
+    min_samples: 8                      # below this, a segment is "unproven" — never blocks
+    negative_expectancy_rupees: -150.0  # avg realized PnL/trade below this → negative edge
+    cache_ttl_minutes: 15
 
 strike_cooldown_guard:
   enabled: true
@@ -260,8 +321,8 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
-  sl_pct: 0.10 # -10% STOP LOSS (was 6%, too tight — frequent noise stops)
-  tp_pct: 0.25 # +25% TAKE PROFIT (was 12%, cut winners too short)
+  sl_pct: 0.15 # -15% STOP LOSS — intraday options buying (1:3 R:R with tp_pct)
+  tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
   per_trade_risk_pct: 0.40
 
   # --- New: Percentage-based PnL Exit ---
@@ -286,7 +347,7 @@ risk:
   # lock_pct scales with position size — ₹2k on a ₹28k BN position is only 7%, vs 18% on a ₹11k SX position.
   profit_floor:
     enabled: true
-    lock_pct: 0.10         # 10% - arm floor when net PnL >= 10% of capital_deployed (scales per position)
+    lock_pct: 0.05         # 5% - arm floor when net PnL >= 5% of capital_deployed (was 0.10 — too high, missed peaks like +7.3%/+₹2,320 that reversed to -₹3,608 unlocked)
     trail_pct: 0.70        # 70% - ratchet floor to 70% of HWM each cycle
     breakeven_at: 200      # mark breakeven when net PnL reaches ₹200 (rupees, not percentage)
     time_kill_minutes: 30  # give trailing more time to develop
@@ -516,6 +577,9 @@ risk:
   # Global Time-Based Overrides (CRITICAL - override everything)
   # All times are in IST (Indian Standard Time, UTC+5:30)
   time_overrides:
+    # Override 0: Ep-92 earliest entry (avoid opening auction noise)
+    earliest_entry_time: "09:30" # No new entries before this time IST
+
     # Override 1: No new trades after 15:05 IST (unless exceptional conditions)
     no_new_trades_after: "15:05" # No new trades after this time IST (unless ADX ≥ 25, massive expansion)
 
@@ -684,6 +748,16 @@ position_sizing:
       min_adx_to_hold: 15.0  # ADX floor; below this we consider the trend weak (TrailingStopRule)
       hard_floor_pct: 0.50   # 50% - hard loss floor even when spot trend is alive
 
+  # Greeks Decay Exit Rule: exits when the position's OWN contract greeks (fetched from
+  # the live, ~2min-cached option chain) show structural decay — theta burning a large
+  # fraction of premium per day, or delta having collapsed (option drifted OTM, thesis dead).
+  greeks_decay_exit:
+    enabled: true
+    theta_burn_pct_of_premium: 0.08    # |theta|/premium >= 8%/day → burn alarm
+    theta_burn_pnl_immunity_pct: 0.10  # positions up >=10% are immune to the theta leg
+    delta_floor: 0.20                  # |delta| below this while losing → collapse alarm
+    delta_collapse_pnl_ceiling_pct: -0.03  # only fires when pnl_pct <= this (i.e. losing)
+
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
   secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
   secure_profit_drawdown_pct: 0.03 # 3% - Tighter drawdown threshold (3%) when profit is secured
@@ -802,7 +876,8 @@ market_context:
 # ============================================
 signals:
   # exploratory = most permissive (research/paper). standard = use algo.yml as written (no tier overlay).
-  # selective = strict gates + higher quality bar (not a profit guarantee). Override: SIGNAL_TIER env.
+  # selective = strict gates + higher quality bar (not a profit guarantee).
+  # Single source of truth: this value (DB document). SIGNAL_TIER env is ignored unless SIGNAL_TIER_FORCE=true.
   # See config/signal_tier_presets.yml
   signal_tier: exploratory
 
@@ -810,6 +885,12 @@ signals:
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path
   entry_strategy:
     primary: supertrend
+
+  # Lifecycle / paper testing: 1m Supertrend entries only (skips intraday breakout arm,
+  # RSI bias, weak-momentum strike skip, entry-quality veto). Exits and risk unchanged.
+  # Override at runtime: FAST_ENTRY_MODE=true|false (see .env.example).
+  fast_entry_mode:
+    enabled: false
 
   primary_timeframe: "1m"
   confirmation_timeframe: null
@@ -999,6 +1080,10 @@ signals:
       adx_confirmation_min_strength: 30
       iv_rank_max: 0.6
       iv_rank_min: 0.15
+      # Relative IV gating (preferred once Options::IvRankTracker has enough history) —
+      # block the index's own top/bottom percentile range rather than an absolute band.
+      iv_percentile_max: 0.70
+      iv_percentile_min: 0.15
       theta_risk_cutoff_hour: 14
       theta_risk_cutoff_minute: 0
       require_trend_confirmation: true
@@ -1012,6 +1097,8 @@ signals:
       adx_confirmation_min_strength: 20
       iv_rank_max: 0.8
       iv_rank_min: 0.1
+      iv_percentile_max: 0.75
+      iv_percentile_min: 0.10
       theta_risk_cutoff_hour: 14
       theta_risk_cutoff_minute: 30
       require_trend_confirmation: true
@@ -1025,6 +1112,8 @@ signals:
       adx_confirmation_min_strength: 18
       iv_rank_max: 0.9
       iv_rank_min: 0.05
+      iv_percentile_max: 0.85
+      iv_percentile_min: 0.05
       theta_risk_cutoff_hour: 15
       theta_risk_cutoff_minute: 0
       require_trend_confirmation: false
@@ -1045,9 +1134,10 @@ signals:
   halt_on_validation_failure: false
 
   # Block new signals when nearest series expiry is too soon (0 = expiry day, 1 = tomorrow, etc.).
+  # -1 => reject only after expiry has passed, i.e. allow 0-DTE expiry-day entries.
   entry_dte_guard:
     enabled: true
-    reject_when_days_to_expiry_lte: 0
+    reject_when_days_to_expiry_lte: -1
 
   supertrend:
     period: 10
@@ -1117,6 +1207,7 @@ telegram:
   notify_daily_profit_target: true # Telegram when global daily profit cap is hit (entries blocked)
   include_stats_on_exit: true # Include trading stats summary in exit notifications
   notify_stats_at_market_close: true # Send daily trading stats at end of market session (3:30 PM IST)
+  notify_entry_funnel_at_market_close: true # Send entry funnel summary at 3:30 PM IST (Solid Queue job)
   # SMC Alert Settings
   smc_alert_cooldown_minutes: 30 # Cooldown between duplicate alerts (same instrument+decision)
   smc_max_alerts_per_session: 2 # Max alerts per instrument per trading session (prevents overtrading)
@@ -1164,11 +1255,11 @@ ai:
 # ===== ENTRY QUALITY FILTER =====
 entry_quality:
   enforce: true                      # false = log-only mode (no blocking)
-  min_score: 55                      # tightened minimum quality score (0-100)
+  min_score: 50                      # minimum quality score (0-100)
   gates:
-    min_adx: 25                      # hard gate: minimum ADX value
+    min_adx: 22                      # hard gate: minimum ADX value (catch emerging trends)
     block_choppy_regime: true        # hard gate: block CHOPPY regime
-    min_body_ratio: 0.40             # hard gate: minimum candle body/range ratio
+    min_body_ratio: 0.38             # hard gate: minimum candle body/range ratio
     require_momentum_confirm: true   # hard gate: close must be beyond Supertrend level
   scoring:
     candle_body_weight: 25           # max points for candle body strength
@@ -1178,9 +1269,44 @@ entry_quality:
     momentum_weight: 15              # max points for momentum strength
   session_overrides:
     chop_decay:
-      min_score: 60
+      min_score: 55
       gates:
-        min_adx: 30
+        min_adx: 27
   index_overrides:
     SENSEX:
       min_adx: 25                    # SENSEX keeps slightly higher ADX floor
+
+# ===== OPTIONS DECISION INFRASTRUCTURE =====
+options:
+  # Rolling-window IV history & percentile rank (Options::IvRankTracker, Redis-backed).
+  # Lets validate_iv_rank_real gate on "is IV cheap/expensive relative to THIS index's
+  # own recent range" rather than a flat absolute band — see signal/engine.rb.
+  iv_rank_tracker:
+    window_days: 20      # how long samples stay in the rolling window
+    max_samples: 500     # hard cap on samples per index (oldest trimmed first)
+    min_samples: 30      # below this, percentile_rank returns nil (cold start → fall back to absolute band)
+
+# ===== ALPHA INTELLIGENCE ENGINE =====
+alpha_strategies:
+  enabled: true
+  auto_execute_threshold: 0.75
+  ai_gate:
+    enabled: true
+  nifty:
+    momentum_alpha: true
+    vol_expansion_alpha: true
+    event_alpha: true
+    gamma_scalp_alpha: true
+    expiry_alpha: true
+  banknifty:
+    momentum_alpha: true
+    vol_expansion_alpha: true
+    event_alpha: true
+    gamma_scalp_alpha: true
+    expiry_alpha: true
+  sensex:
+    momentum_alpha: true
+    vol_expansion_alpha: true
+    event_alpha: true
+    gamma_scalp_alpha: true
+    expiry_alpha: true

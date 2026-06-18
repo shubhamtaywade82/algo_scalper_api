@@ -42,7 +42,7 @@ module Orders
 
     def config
       symbol = @position.symbol.to_s.upcase
-      risk_cfg = AlgoConfig.fetch[:risk] || {}
+      risk_cfg = Positions::ExitConfigResolver.for(@position)[:risk] || {}
       inst_cfg = risk_cfg[:institutional_trailing] || {}
 
       if symbol.include?('SENSEX')

@@ -10,7 +10,9 @@ import './style.css'
 const Dashboard = lazy(() => import('./views/Dashboard'))
 const Strategies = lazy(() => import('./views/Strategies'))
 const Signals = lazy(() => import('./views/Signals'))
+const Alpha = lazy(() => import('./views/Alpha'))
 const Analysis = lazy(() => import('./views/Analysis'))
+const Charts = lazy(() => import('./views/Charts'))
 const Settings = lazy(() => import('./views/Settings'))
 
 function AppShell(props) {
@@ -27,8 +29,14 @@ function AppShell(props) {
   const {
     mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
-    lastUpdated, recentSignals, config, marketStatus
+    lastUpdated, recentSignals, config, marketStatus, refresh: refreshDashboard
   } = useDashboard(() => fetchPositions())
+
+  async function closePositionAndRefresh(positionId) {
+    const result = await closeOpenPosition(positionId)
+    if (result?.ok) refreshDashboard()
+    return result
+  }
 
   const ctx = {
     mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, system,
@@ -36,7 +44,7 @@ function AppShell(props) {
     lastUpdated, recentSignals, config, marketStatus,
     open, closed,
     positionsConnected, positionsStale, positionsLastMessageAt,
-    fetchPositions, closeOpenPosition, closingPositionId
+    fetchPositions, closeOpenPosition: closePositionAndRefresh, closingPositionId
   }
 
   return (
@@ -74,12 +82,17 @@ function AppShell(props) {
 
 export default function App() {
   return (
-    <Router root={AppShell}>
-      <Route path="/" component={Dashboard} />
-      <Route path="/strategies" component={Strategies} />
-      <Route path="/signals" component={Signals} />
-      <Route path="/analysis" component={Analysis} />
-      <Route path="/settings" component={Settings} />
+    <Router>
+      <Route component={AppShell}>
+        <Route path="/" component={Dashboard} />
+        <Route path="/strategies" component={Strategies} />
+        <Route path="/alpha" component={Alpha} />
+        <Route path="/signals" component={Signals} />
+        <Route path="/analysis" component={Analysis} />
+        <Route path="/settings" component={Settings} />
+      </Route>
+      {/* Fullscreen — own layout, no Header/footer chrome */}
+      <Route path="/charts" component={Charts} />
     </Router>
   )
 }

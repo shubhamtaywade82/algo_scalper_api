@@ -35,7 +35,7 @@ RSpec.describe Options::AutoCalibrator do
 
     # Stub IndexConfigLoader
     allow(IndexConfigLoader).to receive(:load_indices).and_return([
-                                                                    { key: 'NIFTY', segment: 'NSE_FNO', sid: '13' }
+                                                                    { key: 'NIFTY', segment: 'IDX_I', sid: '13' }
                                                                   ])
 
     # Self-contained: do not depend on Derivative rows for weekly NIFTY expiries

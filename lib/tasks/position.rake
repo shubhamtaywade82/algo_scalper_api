@@ -1,6 +1,34 @@
 # frozen_string_literal: true
 
 namespace :position do
+  desc 'Reconcile exited position PnL from entry/exit truth (SINCE=7d default; IDS=5402,5403 optional)'
+  task reconcile_exited_pnl: :environment do
+    since = if ENV['SINCE'].blank?
+              Positions::ExitedPnlReconciler::DEFAULT_LOOKBACK.ago
+            elsif ENV['SINCE'].to_s.downcase == 'all'
+              Time.zone.at(0)
+            elsif (match = ENV['SINCE'].to_s.match(/\A(\d+)d\z/i))
+              match[1].to_i.days.ago
+            else
+              Time.zone.parse(ENV['SINCE']) || Positions::ExitedPnlReconciler::DEFAULT_LOOKBACK.ago
+            end
+
+    ids = (ENV['IDS'] || '').split(',').map(&:strip).reject(&:empty?).map(&:to_i)
+
+    if ids.any?
+      fixed = 0
+      PositionTracker.where(id: ids).find_each do |tracker|
+        result = Positions::ExitedPnlReconciler.call(tracker: tracker)
+        puts "id=#{tracker.id} fixed=#{result[:fixed]} reason=#{result[:reason] || 'ok'}"
+        fixed += 1 if result[:fixed]
+      end
+      puts "Done. fixed=#{fixed}/#{ids.size}"
+    else
+      stats = Positions::ExitedPnlReconciler.call(since: since)
+      puts "Scanned=#{stats[:scanned]} fixed=#{stats[:fixed]} aligned=#{stats[:aligned]} since=#{since}"
+    end
+  end
+
   desc 'Force-exit active position(s) by symbol. SYMBOL=NIFTY-Mar2026-23900-PE (exact) or SYMBOL=23900-PE (substring)'
   task force_exit: :environment do
     symbol_arg = ENV['SYMBOL'].to_s.strip

@@ -423,7 +423,7 @@ module Options
       {
         derivative: derivative,
         strike: derivative.strike_price.to_f,
-        type: derivative.option_type,
+        type: derivative.option_type.to_s.upcase,
         expiry: derivative.expiry_date,
         segment: exchange_seg, # Use exchange_segment for consistency
         security_id: derivative.security_id,
@@ -472,19 +472,22 @@ module Options
       max_iv = (@config[:max_iv] || 60.0).to_f
       max_spread_pct = (@config[:max_spread_pct] || 0.03).to_f
 
-      # Check if we have API data (OI/IV available) - if not, relax filters
+      # Only enforce OI/IV/spread gates when this leg has chain enrichment — batch LTP
+      # paths often have price only while a sibling strike carries OI from the API.
       has_api_data = chain.any? { |o| o[:oi].to_i.positive? || o[:iv].to_f.positive? }
 
       unless has_api_data
         Rails.logger.warn("[Options::DerivativeChainAnalyzer] No API data available - relaxing filters for #{@index_key}")
-        min_oi = 0 # Allow any OI if API data unavailable
-        min_iv = 0 # Allow any IV if API data unavailable
-        max_iv = 999.0 # Allow any IV if API data unavailable
+        min_oi = 0
+        min_iv = 0
+        max_iv = 999.0
       end
 
       candidates_with_ltp = 0
       candidates_filtered = 0
       result = chain.select { |o| o[:type] == option_type_key }.filter_map do |option|
+        option_has_api_data = option[:oi].to_i.positive? || option[:iv].to_f.positive?
+
         # Filter criteria
         strike_distance = (option[:strike] - spot).abs
         if strike_distance > max_distance * 2
@@ -502,15 +505,15 @@ module Options
 
         candidates_with_ltp += 1
 
-        # Only filter by OI/IV if we have API data
-        if has_api_data
-          next if option[:oi].to_i < min_oi
-          next if option[:iv].to_f < min_iv || option[:iv].to_f > max_iv
+        if option_has_api_data
+          next if option[:oi].to_i.positive? && option[:oi].to_i < min_oi
+
+          iv = option[:iv].to_f
+          next if iv.positive? && (iv < min_iv || iv > max_iv)
         end
 
         spread = calc_spread(option[:bid], option[:ask], option[:ltp])
-        # Only filter by spread if we have bid/ask data
-        next if spread && has_api_data && (spread > max_spread_pct)
+        next if spread && option_has_api_data && (spread > max_spread_pct)
 
         # Get flow score for this specific strike
         flow_score = flow_scores[option[:strike].to_f] || 1.0

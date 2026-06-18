@@ -171,6 +171,7 @@ export function useDashboard(onPositionChange) {
   return {
     mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config,
-    marketStatus
+    marketStatus,
+    refresh: fetchInitial
   }
 }

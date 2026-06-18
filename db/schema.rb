@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_13_123000) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_16_143000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -25,6 +25,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_13_123000) do
     t.datetime "updated_at", null: false
     t.index ["created_at"], name: "index_algo_config_change_logs_on_created_at"
     t.index ["source"], name: "index_algo_config_change_logs_on_source"
+  end
+
+  create_table "alpha_signals", force: :cascade do |t|
+    t.string "alpha_source", null: false
+    t.decimal "confidence", precision: 5, scale: 4
+    t.datetime "created_at", null: false
+    t.string "direction", null: false
+    t.decimal "expected_value", precision: 15, scale: 5
+    t.date "expiry_date"
+    t.string "index_key", null: false
+    t.text "iv_context"
+    t.string "order_id"
+    t.string "status", default: "pending"
+    t.decimal "strike_price", precision: 15, scale: 5
+    t.datetime "updated_at", null: false
+    t.index ["index_key", "alpha_source", "created_at"], name: "idx_on_index_key_alpha_source_created_at_2aa039ddff"
+    t.index ["status", "created_at"], name: "index_alpha_signals_on_status_and_created_at"
   end
 
   create_table "best_indicator_params", force: :cascade do |t|
@@ -168,6 +185,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_13_123000) do
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
   end
 
+  create_table "iv_snapshots", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.decimal "implied_volatility", precision: 8, scale: 4
+    t.string "index_key", null: false
+    t.string "option_type", limit: 2
+    t.date "snapshot_date", null: false
+    t.decimal "strike_price", precision: 15, scale: 5
+    t.decimal "underlying_ltp", precision: 15, scale: 5
+    t.datetime "updated_at", null: false
+    t.index ["index_key", "snapshot_date", "strike_price", "option_type"], name: "index_iv_snapshots_unique", unique: true
+    t.index ["index_key", "snapshot_date"], name: "index_iv_snapshots_on_index_key_and_snapshot_date"
+  end
+
   create_table "market_holidays", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "exchange", limit: 8, null: false
@@ -176,6 +206,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_13_123000) do
     t.datetime "updated_at", null: false
     t.index ["exchange", "observed_on"], name: "index_market_holidays_on_exchange_and_observed_on_unique", unique: true
     t.index ["observed_on"], name: "index_market_holidays_on_observed_on"
+  end
+
+  create_table "options_buying_signal_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.string "index_key", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "occurred_at", null: false
+    t.string "security_id"
+    t.datetime "updated_at", null: false
+    t.index ["event_type"], name: "index_options_buying_signal_events_on_event_type"
+    t.index ["index_key"], name: "index_options_buying_signal_events_on_index_key"
+    t.index ["metadata"], name: "index_options_buying_signal_events_on_metadata", using: :gin
+    t.index ["occurred_at"], name: "index_options_buying_signal_events_on_occurred_at"
   end
 
   create_table "paper_daily_wallets", force: :cascade do |t|

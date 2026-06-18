@@ -118,13 +118,8 @@ module Signal
 
     def process_index(index_cfg)
       regime_state = @regime_states[index_cfg[:key]] ||= Market::RegimeState.new
-      # Use run_for() which includes full No-Trade Engine integration
-      # run_for() handles: Phase 1 pre-check, TradingContext gate, signal generation, strike selection, Phase 2 validation, and entry
-      Signal::Engine.run_for(index_cfg, regime_state: regime_state)
-
-      # NOTE: run_for() handles entry internally, so we don't need process_signal() here
-      # The old flow (evaluate_supertrend_signal + process_signal) is bypassed
-      # This ensures No-Trade Engine validation is always applied
+      summary = Signal::Engine.run_for(index_cfg, regime_state: regime_state)
+      log_cycle_summary(summary)
     rescue StandardError => e
       Rails.logger.error("[SignalScheduler] process_index error #{index_cfg[:key]}: #{e.class} - #{e.message}")
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
@@ -197,6 +192,12 @@ module Signal
       Providers::DhanhqProvider.new
     rescue NameError
       nil
+    end
+
+    def log_cycle_summary(summary)
+      return unless summary.is_a?(Signal::CycleSummary)
+
+      Rails.logger.info(summary.log_line)
     end
 
     def evaluate_supertrend_signal(index_cfg)

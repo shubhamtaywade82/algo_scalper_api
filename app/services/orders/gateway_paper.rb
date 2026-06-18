@@ -23,7 +23,12 @@ module Orders
       order_no = meta[:client_order_id] || "PAPER-#{SecureRandom.hex(3)}"
 
       # Simulate broker ack only; domain services own tracker persistence.
-      { success: true, order_id: order_no, paper: true }
+      {
+        success: true,
+        order_id: order_no,
+        paper: true,
+        status: :accepted
+      }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] place_market failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
       { success: false, error: e.message, paper: true }

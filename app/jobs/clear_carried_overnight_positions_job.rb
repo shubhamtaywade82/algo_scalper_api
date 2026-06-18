@@ -13,19 +13,19 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
   def perform
     exit_engine = nil
     today_start = Time.zone.today.beginning_of_day
-    count = PositionTracker.active.where(created_at: ...today_start).count
-    if count.zero?
+    stale = PositionTracker.active.where(created_at: ...today_start).reject { |t| held_carry?(t) }
+    if stale.empty?
       Rails.logger.info('[ClearCarriedOvernightPositionsJob] No carried-overnight positions to clear')
       return
     end
 
-    Rails.logger.info("[ClearCarriedOvernightPositionsJob] Clearing #{count} carried-overnight position(s)")
+    Rails.logger.info("[ClearCarriedOvernightPositionsJob] Clearing #{stale.size} carried-overnight position(s)")
 
     router = TradingSystem::OrderRouter.new
     exit_engine = Live::ExitEngine.new(order_router: router)
     exit_engine.start
 
-    PositionTracker.active.where(created_at: ...today_start).find_each do |tracker|
+    stale.each do |tracker|
       execute_exit_with_retry(exit_engine, tracker)
     end
   ensure
@@ -33,6 +33,15 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
   end
 
   private
+
+  # Positional carries with carry still allowed (e.g. not yet expiry day) are
+  # intentionally held overnight — skip them. Once carry lapses they fall back in.
+  def held_carry?(tracker)
+    OptionsBuying::CarryPolicy.carry_still_valid?(tracker)
+  rescue StandardError => e
+    Rails.logger.warn("[ClearCarriedOvernightPositionsJob] carry check #{e.class} - #{e.message}")
+    false
+  end
 
   def execute_exit_with_retry(exit_engine, tracker)
     result = exit_engine.execute_exit(tracker, REASON)

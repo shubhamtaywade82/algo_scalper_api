@@ -4,7 +4,7 @@ module Api
   class AnalysisController < ApplicationController
     include Api::TokenAuthenticatable
 
-    before_action :authenticate_dashboard_token!, only: %i[show historical]
+    before_action :authenticate_dashboard_token!, only: %i[show historical risk_explorer]
     before_action :authenticate_operator_token!, only: %i[ai_snapshot]
 
     # GET /api/analysis/:index_key
@@ -53,6 +53,29 @@ module Api
       }
     rescue StandardError => e
       render_analysis_internal_error('show', e)
+    end
+
+    # GET /api/analysis/:index_key/risk_explorer
+    # Expected value & risk report for intraday long CE/PE (config SL/TP, historical variance, limits).
+    def risk_explorer
+      index_key = params[:index_key].to_s.upcase
+      return render json: { error: 'Index not found' }, status: :not_found unless index_known?(index_key)
+
+      weeks = (params[:weeks] || 8).to_i.clamp(1, 24)
+      win_p = params[:win_probability].presence&.to_f
+      reward_r = params[:reward_multiple].presence&.to_f
+
+      result = OptionsBuying::RiskExplorer.call(
+        index_key: index_key,
+        weeks: weeks,
+        win_probability: win_p,
+        reward_multiple: reward_r
+      )
+      return render json: { error: 'risk_explorer_failed' }, status: :internal_server_error if result.nil?
+
+      render json: result
+    rescue StandardError => e
+      render_analysis_internal_error('risk_explorer', e)
     end
 
     # GET /api/analysis/:index_key/historical
@@ -131,10 +154,14 @@ module Api
       )
     end
 
+    def index_known?(index_key)
+      IndexConfigLoader.load_indices.any? { |idx| idx[:key].to_s.upcase == index_key }
+    end
+
     def index_config_summary(index_key)
       cfg = AlgoConfig.fetch
       risk = cfg[:risk] || {}
-      index_cfg = (cfg[:indices] || []).find { |i| i[:key] == index_key } || {}
+      index_cfg = (cfg[:indices] || []).find { |i| i[:key].to_s.upcase == index_key.to_s.upcase } || {}
 
       {
         trailing: risk.dig(:institutional_trailing, index_key.downcase.to_sym),

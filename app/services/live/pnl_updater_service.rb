@@ -175,6 +175,15 @@ module Live
           next
         end
 
+        if tracker.exited?
+          begin
+            Live::RedisPnlCache.instance.clear_tracker(tracker_id)
+          rescue StandardError
+            nil
+          end
+          next
+        end
+
         # Resolve segment reliably (match PositionTracker.subscribe logic)
         seg = (tracker.segment.presence ||
                tracker.watchable&.exchange_segment ||
@@ -352,9 +361,8 @@ module Live
       pnl_pct_decimal = pnl_pct.to_f
       pnl_pct_as_percent = pnl_pct_decimal * 100.0
 
-      # Get notified milestones from tracker meta
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      notified_milestones = meta['telegram_notified_milestones'] || []
+      # Get notified milestones from runtime cache (no per-milestone DB write)
+      notified_milestones = Live::PositionRuntimeCache.instance.telegram_milestones_for(tracker)
 
       milestones.each do |milestone_pct|
         # Check if milestone reached (positive or negative); compare percentage to percentage
@@ -383,10 +391,9 @@ module Live
             pnl_pct: pnl_pct_as_percent
           )
 
-          # Mark milestone as notified
+          # Mark milestone as notified (Redis only until exit flush)
           milestone_key = pnl_pct_as_percent.positive? ? milestone_pct : -milestone_pct
-          notified_milestones << milestone_key
-          tracker.update!(meta: meta.merge('telegram_notified_milestones' => notified_milestones))
+          Live::PositionRuntimeCache.instance.append_telegram_milestone!(tracker, milestone_key)
         rescue StandardError => e
           @logger.error("[PnlUpdater] Failed to notify milestone for #{tracker.id}: #{e.class} - #{e.message}")
         end
@@ -412,7 +419,11 @@ module Live
         hwm_pnl: hwm.to_f.round(2),
         ltp_stale: false
       })
-      Rails.cache.delete("pnl_stale:#{tracker_id}") rescue nil
+      begin
+        Rails.cache.delete("pnl_stale:#{tracker_id}")
+      rescue StandardError
+        nil
+      end
     rescue StandardError => e
       @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
     end
@@ -446,7 +457,7 @@ module Live
         type: "stats",
         mode: AlgoConfig.mode,
         balance: safe_wallet_snapshot,
-        today: PositionTracker.paper_trading_stats_with_pct,
+        today: PositionTracker.trading_stats_with_pct,
         indices: {
           nifty: Live::TickCache.ltp('IDX_I', '13'),
           banknifty: Live::TickCache.ltp('IDX_I', '25'),

@@ -235,8 +235,9 @@ module Smc
       config = AlgoConfig.fetch[:signals] || {}
       max_days = config[:max_expiry_days] || 7
       max_days.to_i
-    rescue StandardError
-      7 # Default to 7 days if config unavailable
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::Scanner] max_expiry_days_from_config failed: #{e.class} - #{e.message}")
+      7
     end
 
     # Get scanner period from config
@@ -246,7 +247,8 @@ module Smc
       return nil unless period_seconds
 
       period_seconds.to_i
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::Scanner] period_from_config failed: #{e.class} - #{e.message}")
       nil
     end
 
@@ -255,7 +257,8 @@ module Smc
       return nil unless ENV['SMC_SCANNER_PERIOD']
 
       ENV['SMC_SCANNER_PERIOD'].to_i
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::Scanner] period_from_env failed: #{e.class} - #{e.message}")
       nil
     end
 
@@ -287,7 +290,8 @@ module Smc
 
     def event_store_enabled?
       AlgoConfig.fetch.dig(:signals, :smc_event_store_publish) == true
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::Scanner] event_store_enabled? check failed: #{e.class} - #{e.message}")
       false
     end
 

@@ -85,12 +85,6 @@ module Live
           hwm = tracker.high_water_mark_pnl || BigDecimal(0)
           hwm = [hwm, pnl].max
 
-          tracker.update!(
-            last_pnl_rupees: pnl,
-            last_pnl_pct: pnl_pct ? BigDecimal(pnl_pct.to_s) : nil,
-            high_water_mark_pnl: hwm
-          )
-
           update_pnl_in_redis(tracker, pnl, pnl_pct, ltp)
         rescue StandardError => e
           Rails.logger.error("[RiskManager] update_paper_positions_pnl failed for #{tracker.order_no}: #{e.class} - #{e.message}")

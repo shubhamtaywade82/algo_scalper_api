@@ -18,7 +18,8 @@ module Smc
 
         rejection = Avrz::Detector.new(ltf_series).rejection?
         rejection ? :expanding_early : :compressed
-      rescue StandardError
+      rescue StandardError => e
+        Rails.logger.warn("[Smc::AvrzStateResolver] Error resolving AVRZ state for #{symbol}: #{e.class} - #{e.message}")
         :compressed
       end
 

@@ -36,9 +36,19 @@ function getEntryOutcomeStyle(outcome) {
   switch (outcome) {
     case 'entered': return { cls: 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full', label: '● ENTERED' }
     case 'blocked': return { cls: 'text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full', label: '✗ BLOCKED' }
-    case 'skipped': return { cls: 'text-gray-500 bg-gray-500/10 border border-gray-500/20 rounded-full', label: '◌ SKIPPED' }
-    default: return { cls: 'text-gray-600', label: '— —' }
+    case 'skipped': return { cls: 'text-gray-400 bg-gray-500/10 border border-gray-500/20 rounded-full', label: '◌ SKIPPED' }
+    default: return { cls: 'text-gray-600', label: '— PENDING' }
   }
+}
+
+function formatEntryDetail(metadata) {
+  if (!metadata) return null
+  const reason = metadata.entry_blocked_reason
+  if (reason) return String(reason)
+  const stage = metadata.entry_skip_stage
+  const code = metadata.entry_skip_code
+  if (!stage && !code) return null
+  return [stage, code].filter(Boolean).join(' · ')
 }
 
 const SORT_COLS = [
@@ -68,7 +78,7 @@ const PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function Signals() {
   const [signals, setSignals] = createSignal([])
-  const [meta, setMeta] = createSignal({ total: 0, page: 1, per_page: 25, pages: 0 })
+  const [meta, setMeta] = createSignal({ total: 0, page: 1, per_page: 25, pages: 0, trading_mode: 'paper' })
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal(null)
 
@@ -163,6 +173,7 @@ export default function Signals() {
     signals().map(sig => {
       const outcome = sig.metadata?.entry_outcome || 'pending'
       const style = getEntryOutcomeStyle(outcome)
+      const entryDetail = formatEntryDetail(sig.metadata)
       return {
         ...sig,
         displayTime: formatTime(sig.signal_timestamp),
@@ -174,7 +185,7 @@ export default function Signals() {
         confidenceBars: Math.round((Number(sig.confidence_score) || 0) * 5),
         confidenceClass: getConfidenceClass(sig.confidence_level),
         entryOutcome: outcome,
-        entryBlockedReason: sig.metadata?.entry_blocked_reason || null,
+        entryDetail,
         entryOutcomeCls: style.cls,
         entryOutcomeLabel: style.label
       }
@@ -206,6 +217,13 @@ export default function Signals() {
               {meta().total} signals
             </span>
           </Show>
+          <span class={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${
+            meta().trading_mode === 'live'
+              ? 'text-rose-400 border-rose-500/30 bg-rose-500/10'
+              : 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10'
+          }`}>
+            {meta().trading_mode === 'live' ? 'LIVE' : 'PAPER'} MODE
+          </span>
           <button
             onClick={fetchSignals}
             disabled={loading()}
@@ -329,7 +347,7 @@ export default function Signals() {
                 <SortHeader col="index_key" label="Instrument" align="left" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
                 <SortHeader col="direction" label="Signal" align="left" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
                 <th class="p-4 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5">Strategy</th>
-                <th class="p-4 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5">Entry</th>
+                <th class="p-4 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5 min-w-[200px]">Entry / Reason</th>
                 <SortHeader col="adx_value" label="Analysis" align="left" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
                 <SortHeader col="confidence_score" label="Confidence" align="right" sortBy={sortBy()} sortDir={sortDir()} onSort={handleSort} />
               </tr>
@@ -361,13 +379,22 @@ export default function Signals() {
                       <td class="p-4">
                         <span class="text-[10px] font-black text-gray-300 uppercase tracking-wide bg-white/5 px-2 py-1 rounded">{sig.displayStrategy}</span>
                       </td>
-                      <td class="p-4">
-                        <span
-                          class={`px-3 py-1 text-[9px] font-black uppercase tracking-widest inline-block ${sig.entryOutcomeCls}`}
-                          title={sig.entryBlockedReason || ''}
-                        >
-                          {sig.entryOutcomeLabel}
-                        </span>
+                      <td class="p-4 max-w-xs">
+                        <div class="flex flex-col gap-1.5">
+                          <span
+                            class={`px-3 py-1 text-[9px] font-black uppercase tracking-widest inline-block w-fit ${sig.entryOutcomeCls}`}
+                          >
+                            {sig.entryOutcomeLabel}
+                          </span>
+                          <Show when={sig.entryDetail}>
+                            <span
+                              class="text-[9px] text-gray-400 leading-snug break-words"
+                              title={sig.entryDetail}
+                            >
+                              {sig.entryDetail}
+                            </span>
+                          </Show>
+                        </div>
                       </td>
                       <td class="p-4">
                         <div class="flex items-center gap-3">

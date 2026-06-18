@@ -2,6 +2,7 @@
   "name": "algo-scalper-dashboard",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -10,6 +11,7 @@
   "dependencies": {
     "@rails/actioncable": "^8.0.0",
     "@solidjs/router": "^0.15.3",
+    "lightweight-charts": "^5.2.0",
     "solid-js": "^1.9.3",
     "solid-toast": "^0.5.0"
   },

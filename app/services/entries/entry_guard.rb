@@ -111,7 +111,10 @@ module Entries
       end
 
       def find_instrument(index_cfg)
-        Instrument.find_by(security_id: index_cfg[:sid], segment: index_cfg[:segment])
+        Instrument.find_by_sid_and_segment(
+          security_id: index_cfg[:sid],
+          segment_code: index_cfg[:segment]
+        )
       end
 
       def cooldown_active_for_index?(index_key, cooldown)
@@ -191,7 +194,9 @@ module Entries
           index_key: index_cfg[:key].to_s,
           symbol: pick[:symbol].to_s,
           direction: direction || pick[:direction],
-          entry_at: Time.current.iso8601
+          entry_at: Time.current.iso8601,
+          config_version: AlgoConfig.version,
+          config_snapshot: AlgoConfig.position_snapshot
         }
       end
 

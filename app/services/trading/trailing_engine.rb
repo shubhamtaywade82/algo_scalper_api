@@ -60,10 +60,10 @@ module Trading
     private
 
     def update_hwm
-      if @ltp > @highest
-        @highest = @ltp
-        @tracker.update_columns(meta: @tracker.meta.merge('highest_price' => @highest)) # rubocop:disable Rails/SkipsModelValidations
-      end
+      return unless @ltp > @highest
+
+      @highest = @ltp
+      Live::PositionRuntimeCache.instance.update_highest_price!(@tracker, @highest)
     end
 
     def maybe_log_smc_exit_advisory

@@ -55,6 +55,8 @@ module Risk
 
         return skip_result unless time_limit
 
+        time_limit = apply_regime_decay_factor(time_limit)
+
         pnl_pct = context.pnl_pct.to_f
 
         # Any profitable or breakeven position is immune — trailing system owns winners.
@@ -138,6 +140,46 @@ module Risk
         # Trend trade: get index-specific limit
         index_key = tracker.meta&.dig('index_key') || 'NIFTY'
         limits[:trend][index_key] || limits[:trend]['NIFTY']
+      end
+
+      # Theta burn is convex — it accelerates hardest in the Chop/Theta zone (S3) and
+      # the Close/Gamma zone (S4). A flat time limit lets a "dead trade" opened at
+      # 13:50 ride the same 20 minutes as one opened at 10:00, even though the second
+      # half of that window is far more destructive to premium. Shrink the limit in
+      # those decay-dominant regimes so dead trades get cut sooner when it matters most.
+      def apply_regime_decay_factor(time_limit)
+        regime_service = Live::TimeRegimeService.instance
+        regime = regime_service.current_regime
+
+        factor = case regime
+                 when Live::TimeRegimeService::CHOP_DECAY then chop_decay_time_factor
+                 when Live::TimeRegimeService::CLOSE_GAMMA then close_gamma_time_factor
+                 else 1.0
+                 end
+
+        return time_limit if factor >= 1.0
+
+        [(time_limit * factor), minimum_time_limit_minutes].max.round(2)
+      rescue StandardError
+        time_limit
+      end
+
+      def chop_decay_time_factor
+        regime_decay_cfg.fetch(:chop_decay_factor, 0.6).to_f
+      end
+
+      def close_gamma_time_factor
+        regime_decay_cfg.fetch(:close_gamma_factor, 0.5).to_f
+      end
+
+      def minimum_time_limit_minutes
+        regime_decay_cfg.fetch(:minimum_minutes, 5).to_f
+      end
+
+      def regime_decay_cfg
+        AlgoConfig.fetch.dig(:risk, :time_stop, :regime_decay) || {}
+      rescue StandardError
+        {}
       end
 
       def spot_trend_alive?(tracker)

@@ -1,0 +1,32 @@
+name: Graph Impact
+
+on:
+  pull_request:
+
+jobs:
+  graph-impact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install graphify
+        run: uv tool install "graphifyy[ollama]"
+
+      - name: Update graph (AST-only)
+        run: graphify update . --no-cluster
+
+      - name: PR impact analysis
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          graphify prs ${{ github.event.pull_request.number }} \
+            --graph graphify-out/graph.json || true
+
+      - name: Check community conflicts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          graphify prs --conflicts --graph graphify-out/graph.json || true

@@ -51,6 +51,7 @@ class PositionTracker < ApplicationRecord
     def cleanup_exit_caches
       Live::PositionIndex.instance.remove(id, security_id)
       Live::RedisPnlCache.instance.clear_tracker(id)
+      Live::PositionRuntimeCache.instance.clear(id)
       Live::RedisTickCache.instance.clear_tick(segment, security_id)
       Live::TickCache.delete(segment, security_id)
     end

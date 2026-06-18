@@ -6,6 +6,14 @@ module Live
       include Live::UnderlyingLtpResolver
       include Live::StructureInvalidationEvaluator
 
+      # True once an exit has been requested/sent or finalized for this tracker.
+      # Guards blind meta read-modify-write paths (update_column/update_columns) from
+      # clobbering the authoritative meta (incl. exit_reason) that Positions::ExitFlow
+      # writes atomically under lock when the position exits mid-cycle.
+      def exit_in_flight?(tracker)
+        tracker.exit_requested_at.present? || tracker.exit_sent_at.present? || tracker.exited?
+      end
+
       # LAYER 1: DYNAMIC TRAILING SL
       # Purpose: Move SL up-only to capture trend moves (direct trailing)
       def enforce_dynamic_trailing_stops(exit_engine:)
@@ -355,7 +363,7 @@ module Live
       end
 
       def trailing_armed_for?(tracker, position_data)
-        trailing_cfg = AlgoConfig.fetch.dig(:risk, :trailing) || {}
+        trailing_cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :trailing) || {}
         return false if trailing_cfg[:enabled] == false
 
         activation = (trailing_cfg[:activation_pct] || 0.025).to_f
@@ -381,6 +389,7 @@ module Live
 
         Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
           next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+          next if carry_held?(tracker)
 
           reason = "MARKET_CLOSE (EOD #{market_close_time.strftime('%H:%M')} IST)"
           exit_path = 'eod_force_close'
@@ -390,6 +399,15 @@ module Live
         end
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_eod_force_close error: #{e.class} - #{e.message}")
+      end
+
+      # Skip EOD square-off for positional carries that are still valid to hold
+      # (tagged by OptionsBuying::EodCarryManager when ROI clears the threshold and
+      # carry is allowed for the index). Fails safe: any error → close as normal.
+      def carry_held?(tracker)
+        OptionsBuying::CarryPolicy.carry_still_valid?(tracker)
+      rescue StandardError
+        false
       end
 
       def enforce_time_based_exit(exit_engine:, position_data: nil)
@@ -507,7 +525,7 @@ module Live
         if trend_score > peak
           if pending_meta
             pending_meta['peak_trend_score'] = trend_score
-          else
+          elsif !exit_in_flight?(tracker)
             meta = tracker.meta || {}
             meta['peak_trend_score'] = trend_score
             tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
@@ -559,7 +577,7 @@ module Live
 
         if pending_meta
           pending_meta['profit_floor_rupees'] = dynamic_floor.to_i
-        else
+        elsif !exit_in_flight?(tracker)
           meta = (tracker.meta || {}).stringify_keys
           meta['profit_floor_rupees'] = dynamic_floor.to_i
           tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations

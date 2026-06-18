@@ -36,7 +36,8 @@ module Smc
           trap_resolved: false,
           follow_through: ltf_struct[:last_bos].present?
         }
-      rescue StandardError
+      rescue StandardError => e
+        Rails.logger.warn("[Smc::PermissionSnapshot] Error building snapshot: #{e.class} - #{e.message}")
         {}
       end
     end

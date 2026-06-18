@@ -37,7 +37,8 @@ module Smc
 
     def ai_enabled?
       AlgoConfig.fetch.dig(:ai, :enabled) == true && @ai_client.enabled?
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::AiAnalyzer] ai_enabled? check failed: #{e.class} - #{e.message}")
       false
     end
 
@@ -581,7 +582,8 @@ module Smc
       return obj.to_s unless obj.is_a?(Hash) || obj.is_a?(Array)
 
       JSON.pretty_generate(obj.deep_stringify_keys)
-    rescue StandardError
+    rescue StandardError => e
+      Rails.logger.warn("[Smc::AiAnalyzer] json_pretty failed: #{e.class} - #{e.message}")
       obj.to_json
     end
 
