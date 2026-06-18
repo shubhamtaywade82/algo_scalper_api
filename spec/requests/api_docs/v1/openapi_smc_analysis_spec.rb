@@ -152,7 +152,6 @@ RSpec.describe 'OpenAPI v1 — SMC & analysis', openapi_spec: 'v1/swagger.yaml' 
           allow(Instrument).to receive(:find_by_sid_and_segment).and_return(inst)
           allow(Live::TickCache).to receive(:ltp).and_return(22_450.0)
           allow(AnalysisStore).to receive(:read_all).and_return({})
-          allow(CalibrationRun).to receive(:where).and_return(CalibrationRun.none)
           client = instance_double(Services::Ai::OllamaClient, enabled?: false)
           allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
         end

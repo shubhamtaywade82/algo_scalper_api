@@ -7,8 +7,6 @@ module Ai
     class TaskRunner
       def self.run(solver_key, symbol, days = 30, dry_run: false)
         case solver_key.to_s
-        when 'calibration'
-          Ai::Calibration::Runner.call(symbol: symbol, days: days, dry_run: dry_run)
         when 'indicator_tuning'
           run_indicator_optimization(symbol, days, dry_run: dry_run)
         when 'trailing_optimization'

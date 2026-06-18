@@ -59,13 +59,12 @@ module Ai
           #{JSON.pretty_generate(audit_report)}
 
           AVAILABLE TOOLS:
-          1. "calibration": General adjustment of SL/TP/Entry Filters using Ollama. (Best for risk management issues).
-          2. "indicator_tuning": Retuning ADX/Supertrend/RSI parameters. (Best for signal accuracy/win rate issues).
-          3. "trailing_optimization": Fine-tuning trailing stop-loss based on MFE/MAE. (Best for profit capture issues).
+          1. "indicator_tuning": Retuning ADX/Supertrend/RSI parameters. (Best for signal accuracy/win rate issues).
+          2. "trailing_optimization": Fine-tuning trailing stop-loss based on MFE/MAE. (Best for profit capture issues).
 
           STRICT OUTPUT RULES:
           Return ONLY JSON with:
-          - "selected_solver": One of [calibration, indicator_tuning, trailing_optimization]
+          - "selected_solver": One of [indicator_tuning, trailing_optimization]
           - "reasoning": Why this tool is best for the current problems
           - "expected_outcome": What metric you expect to improve
 
@@ -84,7 +83,7 @@ module Ai
         end
       rescue StandardError => e
         Rails.logger.error("[Orchestrator] Strategy decision failed: #{e.message}")
-        { 'selected_solver' => 'calibration', 'reasoning' => "Fallback to broad calibration due to error: #{e.message}" }
+        { 'selected_solver' => 'indicator_tuning', 'reasoning' => "Fallback to indicator tuning due to error: #{e.message}" }
       end
     end
   end

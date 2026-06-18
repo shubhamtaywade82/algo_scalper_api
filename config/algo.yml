@@ -150,29 +150,6 @@ feature_flags:
   enable_peak_drawdown_activation: true
   auto_paper_on_insufficient_balance: false
 
-# Calibration: historical option behaviour (weekly) and optional AI trade-based patches.
-# Auto-apply merges proposed_patch into DB algo_config_document (same as POST …/apply).
-calibration:
-  auto_apply:
-    # Master switch. When false, runs only create CalibrationRun rows for manual review.
-    enabled: true
-    # After WeeklyCalibrationJob (DhanHQ expired ATM±1 stats).
-    historical_weekly: true
-    # After AiCalibrationJob (paper-trade dataset + Ollama). Keep false until validated.
-    ai_trades: true
-    # Skip auto-apply when RegimeDetector flags a shift (volatile vs prior runs).
-    reject_on_regime_shift: true
-    # Only auto-apply while paper_trading.enabled (recommended before going live).
-    require_paper_trading: true
-    # Historical path: minimum weekly expiries present in DB (see raw_stats weeks_available).
-    min_weeks_analyzed: 4
-    # AI path: minimum paper trades in dataset_meta.total_trades.
-    min_ai_trades: 15
-    # Skip apply if this symbol had a successful apply within N days (0 = no cooldown).
-    cooldown_days_between_applies: 7
-    # Telegram: append skip reason to weekly calibration message; AI job sends a short follow-up.
-    notify_on_skip: true
-
 # DhanHQ broker settings
 dhanhq:
   enable_orders: false # Set to true for live order submission (false = dry-run logging only)

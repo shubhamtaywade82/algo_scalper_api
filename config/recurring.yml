@@ -138,12 +138,6 @@ development:
     priority: 25
     description: "Persists public IP last-seen (throttled); dashboard no longer writes public_ip_logs"
 
-  ai_calibration:
-    class: AiCalibrationJob
-    queue: background
-    schedule: at 7:00am every day
-    description: "Daily AI-driven trading calibration — analyzes paper trades and proposes config patches"
-
   alpha_scanner:
     class: AlphaScanJob
     schedule: every 5 minutes
@@ -269,13 +263,6 @@ production:
     queue_name: background
     priority: 5
     description: "AI technical analysis for SENSEX - post-close scheduled run on weekdays; intraday flow is event-driven from tick events"
-
-  weekly_options_calibration:
-    class: WeeklyCalibrationJob
-    schedule: every Sunday at 6:00 am Asia/Kolkata
-    queue_name: background
-    priority: 3
-    description: "Weekly ATM±1 options calibration — generates config patch proposal for NIFTY and SENSEX"
 
   dhan_auto_ip_sync:
     class: Dhan::AutoIpUpdaterJob

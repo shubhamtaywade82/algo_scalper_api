@@ -60,13 +60,6 @@ Rails.application.routes.draw do
       get  :performance
     end
 
-    # Calibration runs — view and apply automated config patches
-    resources :calibration_runs, only: %i[index show] do
-      member do
-        post :apply
-      end
-    end
-
     # Ledger (paper double-entry)
     get  'ledger/balance', to: 'ledger#balance'
     get  'ledger/journal', to: 'ledger#journal'
