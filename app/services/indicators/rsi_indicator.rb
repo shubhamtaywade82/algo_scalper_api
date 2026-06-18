@@ -21,13 +21,7 @@ module Indicators
     end
 
     def calculate_at(index)
-      return nil unless ready?(index)
-      return nil unless trading_hours?(series.candles[index])
-
-      # Use existing CandleSeries#rsi method (uses RubyTechnicalAnalysis gem)
-      # Create partial series up to current index for accurate calculation at that point
-      partial_series = create_partial_series(index)
-      rsi_value = partial_series.rsi(@period)
+      rsi_value = rsi_value_at(index)
       return nil if rsi_value.nil?
 
       direction = determine_direction(rsi_value)
@@ -41,6 +35,15 @@ module Indicators
         direction: direction,
         confidence: confidence
       }
+    end
+
+    # Raw RSI numeric at index — used by anti-chase gates that need value in the neutral zone.
+    def rsi_value_at(index)
+      return nil unless ready?(index)
+      return nil unless trading_hours?(series.candles[index])
+
+      partial_series = create_partial_series(index)
+      partial_series.rsi(@period)
     end
 
     private

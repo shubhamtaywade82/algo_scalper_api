@@ -412,6 +412,15 @@ module Live
       entry_f = entry.to_f
       pnl_pct = entry_f.positive? ? (((ltp_f - entry_f) / entry_f) * 100).round(2) : 0.0
 
+      begin
+        pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker_id)
+        sl_price = pos_data&.sl_price || (entry_f.positive? ? entry_f * 0.70 : nil)
+        tp_price = pos_data&.tp_price || (entry_f.positive? ? entry_f * 1.60 : nil)
+      rescue StandardError
+        sl_price = entry_f.positive? ? entry_f * 0.70 : nil
+        tp_price = entry_f.positive? ? entry_f * 1.60 : nil
+      end
+
       ActionCable.server.broadcast("positions", {
         type: "pnl_update",
         id: tracker_id,
@@ -419,6 +428,8 @@ module Live
         pnl: pnl.to_f.round(2),
         pnl_pct: pnl_pct,
         hwm_pnl: hwm.to_f.round(2),
+        sl_price: sl_price&.to_f&.round(2),
+        tp_price: tp_price&.to_f&.round(2),
         ltp_stale: false
       })
       begin

@@ -47,6 +47,8 @@ export default function OpenPositions(props) {
                 <th class="text-right px-4 py-4 font-black">Size</th>
                 <th class="text-right px-4 py-4 font-black">Entry</th>
                 <th class="text-right px-4 py-4 font-black">Current</th>
+                <th class="text-right px-4 py-4 font-black">SL</th>
+                <th class="text-right px-4 py-4 font-black">TP</th>
                 <th class="text-right px-4 py-4 font-black">Net P&amp;L</th>
                 <th class="text-right px-4 py-4 font-black">% Change</th>
                 <th class="text-right px-4 py-4 font-black">Peak (HWM)</th>

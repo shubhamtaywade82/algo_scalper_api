@@ -1027,8 +1027,10 @@ module Signal
       def validate_rsi_gate(direction, series, mode_config)
         return { valid: true } unless mode_config[:require_rsi_check]
 
-        rsi_result = Indicators::RsiIndicator.new(series: series).calculate_at(-1)
-        rsi_val    = rsi_result[:value].to_f
+        rsi_val = Indicators::RsiIndicator.new(series: series).rsi_value_at(-1)
+        return { valid: true, note: 'RSI unavailable' } if rsi_val.nil?
+
+        rsi_val = rsi_val.to_f
 
         if direction == :bullish && rsi_val > mode_config.fetch(:rsi_overbought_block, 78).to_f
           return { valid: false, reason: "RSI overbought (#{rsi_val.round(1)}) — avoid chasing CE entry", check: :rsi_overbought }

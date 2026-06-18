@@ -58,6 +58,12 @@ export default function PositionRow(props) {
           </Show>
         </div>
       </td>
+      <td class="px-4 py-5 text-right text-rose-400/80 text-data text-xs font-bold">
+        <AnimatedNumber value={pos().sl_price} decimals={2} />
+      </td>
+      <td class="px-4 py-5 text-right text-emerald-400/80 text-data text-xs font-bold">
+        <AnimatedNumber value={pos().tp_price} decimals={2} />
+      </td>
       <td class={`px-4 py-5 text-right font-black text-data text-sm transition-all duration-300 rounded-lg ${pnlFlash()}`}>
         <AnimatedNumber value={pos().pnl} showSign currency absolute decimals={2} pnlColor />
       </td>

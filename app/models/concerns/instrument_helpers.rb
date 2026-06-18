@@ -282,16 +282,21 @@ module InstrumentHelpers
   end
 
   def historical_ohlc(from_date: nil, to_date: nil, oi: false) # rubocop:disable Naming/MethodParameterName
+    resolved_from, resolved_to = resolve_historical_date_range(from_date, to_date)
     DhanHQ::Models::HistoricalData.daily(
-      securityId: security_id,
-      exchangeSegment: exchange_segment,
-      instrument: instrument_type || resolve_instrument_code,
+      security_id: security_id.to_s,
+      exchange_segment: exchange_segment,
+      instrument: resolve_instrument_code,
       oi: oi,
-      fromDate: from_date || (Time.zone.today - 365).to_s,
-      toDate: to_date || (Time.zone.today - 1).to_s,
-      expiryCode: 0
+      from_date: resolved_from,
+      to_date: resolved_to,
+      expiry_code: 0
     )
   rescue StandardError => e
+    DhanhqErrorHandler.handle_dhanhq_error(
+      e,
+      context: "historical_ohlc(#{self.class.name} #{security_id})"
+    )
     Rails.logger.error("Failed to fetch Historical OHLC for #{self.class.name} #{security_id}: #{e.message}")
     nil
   end
@@ -359,6 +364,34 @@ module InstrumentHelpers
   end
 
   private
+
+  def resolve_historical_date_range(from_date, to_date)
+    if defined?(Market::Calendar) && Market::Calendar.respond_to?(:on_or_before_trading_day)
+      resolved_to = if to_date.present?
+                      Market::Calendar.on_or_before_trading_day(to_date)
+                    else
+                      Market::Calendar.trading_days_ago(1)
+                    end
+      resolved_from = if from_date.present?
+                        Market::Calendar.on_or_before_trading_day(from_date)
+                      else
+                        Market::Calendar.trading_days_before(resolved_to, 365)
+                      end
+      resolved_from = Market::Calendar.trading_days_before(resolved_to, 1) if resolved_from >= resolved_to
+    else
+      resolved_to = snap_calendar_weekday(to_date || (Time.zone.today - 1))
+      resolved_from = snap_calendar_weekday(from_date || (Time.zone.today - 365))
+      resolved_from = resolved_to - 1.day while resolved_from >= resolved_to
+    end
+
+    [resolved_from.to_s, resolved_to.to_s]
+  end
+
+  def snap_calendar_weekday(date)
+    candidate = date.is_a?(Date) ? date : Date.parse(date.to_s)
+    candidate -= 1.day while candidate.saturday? || candidate.sunday?
+    candidate
+  end
 
   def ltp_from_tick_cache_or_subscribe(segment:, security_id:, subscribe:)
     hub = Live::MarketFeedHub.instance

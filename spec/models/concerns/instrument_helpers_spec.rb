@@ -183,4 +183,39 @@ RSpec.describe InstrumentHelpers, type: :concern do
       expect(ws_hub).to have_received(:subscribe).with(seg: 'NSE_FNO', sid: '12345')
     end
   end
+
+  describe '#historical_ohlc' do
+    let(:banknifty_index) { create(:instrument, :banknifty_index) }
+
+    it 'calls DhanHQ daily API with snake_case params' do
+      allow(DhanHQ::Models::HistoricalData).to receive(:daily).and_return(
+        { open: [1.0], high: [1.0], low: [1.0], close: [1.0], volume: [1], timestamp: [1_700_000_000] }
+      )
+
+      banknifty_index.historical_ohlc(from_date: '2026-05-01', to_date: '2026-06-17')
+
+      expect(DhanHQ::Models::HistoricalData).to have_received(:daily).with(
+        hash_including(
+          security_id: '25',
+          exchange_segment: 'IDX_I',
+          instrument: 'INDEX',
+          from_date: '2026-05-01',
+          to_date: '2026-06-17',
+          expiry_code: 0
+        )
+      )
+    end
+
+    it 'snaps weekend from_date to the previous trading day' do
+      allow(DhanHQ::Models::HistoricalData).to receive(:daily).and_return(
+        { open: [1.0], high: [1.0], low: [1.0], close: [1.0], volume: [1], timestamp: [1_700_000_000] }
+      )
+
+      banknifty_index.historical_ohlc(from_date: '2026-05-09', to_date: '2026-06-17')
+
+      expect(DhanHQ::Models::HistoricalData).to have_received(:daily).with(
+        hash_including(from_date: '2026-05-08', to_date: '2026-06-17')
+      )
+    end
+  end
 end
