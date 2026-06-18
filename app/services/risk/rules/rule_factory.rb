@@ -13,6 +13,7 @@ module Risk
           EarlyTrendFailureRule.new(config: risk_config),
           SmcNavigatorRule.new(config: risk_config),
           StopLossRule.new(config: risk_config),
+          AdaptiveTrailRule.new(config: risk_config),
           TimeRegimeExitRule.new(config: risk_config),
           PercentagePnlRule.new(config: risk_config),
           ProfitFloorExitRule.new(config: risk_config),

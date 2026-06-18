@@ -528,6 +528,17 @@ risk:
     activation_profit_pct: 0.10 # 10% - don't start direct trailing from entry
     min_sl_offset_pct: -0.30 # -30% - never let SL go below -30% from entry
 
+  # Premium HWM trail with staged giveback bands and optional structure overrides.
+  adaptive_trailing:
+    enabled: true
+    supertrend_flip_exit: true
+    counter_candles: 3
+    stages:
+      - { name: entry_guard, min_profit: 0.0, trail_behind_peak: 0.40, hard_stop: -0.30 }
+      - { name: momentum_ride, min_profit: 0.20, trail_behind_peak: 0.35, hard_stop: null }
+      - { name: profit_lock, min_profit: 0.60, trail_behind_peak: 0.28, hard_stop: null }
+      - { name: runner_mode, min_profit: 1.20, trail_behind_peak: 0.22, hard_stop: null }
+
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP
   # Core Principle: ₹2k TP is a minimum extraction, not a cap
@@ -957,6 +968,21 @@ signals:
   # Override at runtime: FAST_ENTRY_MODE=true|false (see .env.example).
   fast_entry_mode:
     enabled: false
+
+  # Objective chop gate before 1m Supertrend entries.
+  # Score 0-2 = allow, 3-4 = caution metadata, 5+ = block.
+  chop_score:
+    enabled: true
+    block_threshold: 5
+    caution_threshold: 3
+    adx_threshold: 20.0
+    supertrend_flip_limit: 3
+    supertrend_window_candles: 15
+    opening_range_min_points:
+      NIFTY: 50
+      BANKNIFTY: 150
+      SENSEX: 150
+    bb_width_threshold: 0.005
 
   primary_timeframe: "1m"
   confirmation_timeframe: null

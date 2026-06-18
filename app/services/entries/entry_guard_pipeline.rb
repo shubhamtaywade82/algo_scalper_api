@@ -42,6 +42,7 @@ module Entries
         Guards::InstrumentLookupGuard,       # sets context[:instrument] — required by EPT guard
         Guards::CompressionSetupGuard,       # positional+carry: require ATR compression setup
         Guards::LtpResolutionGuard,
+        Guards::ChopScoreGuard,
         Guards::BidAskSpreadGuard,
         Guards::TransactionCostGuard,        # pre-trade TCM: block when fees+spread+slippage > expected edge
         Guards::BreakoutReadyGuard,          # intraday: 1m breakout + OI unwind armed
