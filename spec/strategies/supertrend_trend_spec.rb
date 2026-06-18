@@ -30,7 +30,7 @@ RSpec.describe SupertrendTrend do
           double('c', close: 102.0)
         ]
         line = [99.0, 105.0, 101.0]
-        series = double('series', closes: nil, candles: candles)
+        series = Struct.new(:candles).new(candles)
         result = described_class.direction(series: series, supertrend_result: { line: line })
         expect(result).to eq(:long)
       end
