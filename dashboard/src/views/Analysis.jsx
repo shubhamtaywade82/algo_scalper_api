@@ -6,6 +6,7 @@ import MarketOverview from '../components/analysis/MarketOverview'
 import SmcAnalysis from '../components/analysis/SmcAnalysis'
 import AiInsights from '../components/analysis/AiInsights'
 import HistoricalBehavior from '../components/analysis/HistoricalBehavior'
+import ExpectedValueRiskPanel from '../components/analysis/ExpectedValueRiskPanel'
 import CalibrationPanel from '../components/analysis/CalibrationPanel'
 
 const INDEX_LTP_KEY = { NIFTY: 'nifty', SENSEX: 'sensex', BANKNIFTY: 'banknifty' }
@@ -23,8 +24,8 @@ export default function Analysis() {
   const dashCtx = useDashboardContext()
   const {
     liveData, isLoading, getError,
-    fetchOne, fetchAll, fetchHistorical, fetchAiSnapshot, ensureAutoLoadedDetails,
-    activeIndex, historicalData, historicalLoading,
+    fetchOne, fetchAll, fetchHistorical, fetchRiskExplorer, fetchAiSnapshot, ensureAutoLoadedDetails,
+    activeIndex, historicalData, historicalLoading, riskExplorerData, riskExplorerLoading,
     snapshotLoading, snapshotData, snapshotError,
   } = useAnalysis()
 
@@ -145,6 +146,11 @@ export default function Analysis() {
             data={detailActiveForPanel() ? historicalData() : null}
             loading={detailActiveForPanel() ? historicalLoading() : false}
             onLoad={() => fetchHistorical(selectedTab())}
+          />
+          <ExpectedValueRiskPanel
+            data={detailActiveForPanel() ? riskExplorerData() : null}
+            loading={detailActiveForPanel() ? riskExplorerLoading() : false}
+            onLoad={() => fetchRiskExplorer(selectedTab())}
           />
           <Show when={detailActiveForPanel() && historicalData()}>
             <CalibrationPanel data={historicalData()} />

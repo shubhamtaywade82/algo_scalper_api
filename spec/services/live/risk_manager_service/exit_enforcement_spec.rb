@@ -68,4 +68,23 @@ RSpec.describe Live::RiskManagerService::ExitEnforcement do
       end
     end
   end
+
+  describe '#carry_held?' do
+    let(:tracker) { instance_double(PositionTracker) }
+
+    it 'is true when the tracker is a still-valid positional carry (skip EOD force-close)' do
+      allow(OptionsBuying::CarryPolicy).to receive(:carry_still_valid?).with(tracker).and_return(true)
+      expect(harness.send(:carry_held?, tracker)).to be(true)
+    end
+
+    it 'is false for a normal intraday position' do
+      allow(OptionsBuying::CarryPolicy).to receive(:carry_still_valid?).with(tracker).and_return(false)
+      expect(harness.send(:carry_held?, tracker)).to be(false)
+    end
+
+    it 'fails safe (false → still squares off) when the carry check raises' do
+      allow(OptionsBuying::CarryPolicy).to receive(:carry_still_valid?).and_raise(StandardError, 'boom')
+      expect(harness.send(:carry_held?, tracker)).to be(false)
+    end
+  end
 end

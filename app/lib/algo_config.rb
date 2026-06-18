@@ -4,6 +4,8 @@ class AlgoConfig
   CACHE_TTL = 30 # seconds
   ALLOWED_SIGNAL_TIERS = %i[exploratory standard selective].freeze
   SIGNAL_TIER_PRESETS_PATH = 'config/signal_tier_presets.yml'
+  # Credential-bearing sections excluded from the per-position snapshot persisted on trades.
+  SENSITIVE_SECTIONS = %i[dhanhq telegram ai].freeze
 
   class << self
     def fetch
@@ -25,6 +27,25 @@ class AlgoConfig
 
     def mode
       fetch[:mode]
+    end
+
+    # Identity of the effective config at this moment — stamped on signals/positions so a
+    # trade can be tied back to the exact gates/params that were active when it was taken.
+    def version
+      {
+        hash: Digest::SHA256.hexdigest(fetch.to_json)[0, 16],
+        change_log_id: latest_change_log_id
+      }
+    end
+
+    # Effective config minus credential sections — pinned on a position at entry so its
+    # exit/trailing math stays fixed for the life of the trade (see Positions::ExitConfigResolver).
+    def position_snapshot
+      fetch.except(*SENSITIVE_SECTIONS)
+    end
+
+    def paper_trading_enabled?
+      fetch.dig(:paper_trading, :enabled) != false
     end
 
     def reset!
@@ -76,6 +97,12 @@ class AlgoConfig
 
     private
 
+    def latest_change_log_id
+      AlgoConfigChangeLog.maximum(:id)
+    rescue StandardError
+      nil
+    end
+
     def truthy_signal_flag?(val)
       val == true || val.to_s.strip.casecmp('true').zero?
     end
@@ -105,22 +132,38 @@ class AlgoConfig
       Rails.logger.debug { "[AlgoConfig] signal_tier=#{tier}" }
     end
 
+    # Single source of truth: the config document's signals.signal_tier.
+    # ENV['SIGNAL_TIER'] is honored only as an explicit emergency override (SIGNAL_TIER_FORCE=true);
+    # otherwise a divergent env value is logged and ignored.
     def resolve_signal_tier(config)
-      env_raw = ENV.fetch('SIGNAL_TIER', nil)
-      env_tier = env_raw.to_s.strip.downcase
-      if env_raw.present?
-        return env_tier if ALLOWED_SIGNAL_TIERS.include?(env_tier.to_sym)
+      doc_tier = normalize_signal_tier(config.dig(:signals, :signal_tier))
+      env_tier = normalize_signal_tier(ENV.fetch('SIGNAL_TIER', nil))
+      return env_tier if env_tier && signal_tier_env_forced?
 
-        Rails.logger.warn("[AlgoConfig] Invalid SIGNAL_TIER=#{env_raw.inspect}; using config or standard")
-      end
+      effective = doc_tier || 'standard'
+      warn_ignored_signal_tier_env(env_tier, effective) if env_tier && env_tier != effective
+      effective
+    end
 
-      cfg_raw = config.dig(:signals, :signal_tier)
-      cfg_tier = cfg_raw.to_s.strip.downcase
-      return cfg_tier if cfg_raw.present? && ALLOWED_SIGNAL_TIERS.include?(cfg_tier.to_sym)
+    def normalize_signal_tier(raw)
+      return nil if raw.blank?
 
-      Rails.logger.warn("[AlgoConfig] Invalid signals.signal_tier=#{cfg_raw.inspect}; using standard") if cfg_raw.present?
+      tier = raw.to_s.strip.downcase
+      return tier if ALLOWED_SIGNAL_TIERS.include?(tier.to_sym)
 
-      'standard'
+      Rails.logger.warn("[AlgoConfig] Invalid signal_tier #{raw.inspect}; ignoring")
+      nil
+    end
+
+    def signal_tier_env_forced?
+      ActiveModel::Type::Boolean.new.cast(ENV.fetch('SIGNAL_TIER_FORCE', 'false'))
+    end
+
+    def warn_ignored_signal_tier_env(env_tier, effective)
+      Rails.logger.warn(
+        "[AlgoConfig] SIGNAL_TIER=#{env_tier} ignored (effective signal_tier=#{effective}); " \
+        'set SIGNAL_TIER_FORCE=true to override'
+      )
     end
 
     def load_signal_tier_presets

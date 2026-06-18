@@ -202,6 +202,39 @@ RSpec.describe Options::CalibrationAutoApplier do
       end
     end
 
+    context 'when proposed_patch fails validation' do
+      before do
+        run.update!(proposed_patch: { 'signals' => { 'min_confidence' => 999 } })
+        Setting.put(AlgoConfig::DocumentStore::DOCUMENT_KEY, { mode: 'paper', risk: {} }.to_json)
+        AlgoConfig.reset!
+        stub_config(
+          auto_apply: {
+            enabled: true,
+            historical_weekly: true,
+            require_paper_trading: false,
+            cooldown_days_between_applies: 0,
+            min_weeks_analyzed: 4
+          }
+        )
+      end
+
+      after do
+        Setting.where(key: AlgoConfig::DocumentStore::DOCUMENT_KEY).delete_all
+        AlgoConfigChangeLog.delete_all
+        AlgoConfig.reset!
+      end
+
+      it 'does not apply and leaves applied_at nil' do
+        expect do
+          result = described_class.call(run: run, source: :historical)
+          expect(result.applied).to be(false)
+          expect(result.reason).to match(/min_confidence/)
+        end.not_to change(AlgoConfigChangeLog, :count)
+
+        expect(run.reload.applied_at).to be_nil
+      end
+    end
+
     context 'when all gates pass' do
       before do
         Setting.put(AlgoConfig::DocumentStore::DOCUMENT_KEY, { mode: 'paper', risk: {} }.to_json)

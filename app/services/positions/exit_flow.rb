@@ -20,27 +20,24 @@ module Positions
 
         tracker.state_machine.transition_to!(:exited)
 
-        # 1. Fetch final stats from cache (if any)
         cache_data = Live::RedisPnlCache.instance.fetch_pnl(tracker.id) || {}
+        exit_px = resolved_exit_price
+        pnl_snapshot = resolve_final_pnl(exit_price: exit_px, cache_data: cache_data)
 
-        # 2. Build exit attributes without triggering persistence yet
-        final_pnl_rupees = cache_data[:pnl] || tracker.last_pnl_rupees
-        final_hwm_pnl = [tracker.high_water_mark_pnl.to_f, cache_data[:hwm_pnl].to_f, final_pnl_rupees.to_f].max
-
-        # 3. Build metadata (always persist a non-blank exit_reason for downstream analysis)
         metadata = tracker.meta.is_a?(Hash) ? tracker.meta.deep_stringify_keys.dup : {}
+        metadata = Live::PositionRuntimeCache.instance.flush_to_meta!(metadata, tracker.id)
         resolved_reason = resolve_exit_reason_string(metadata)
-        metadata["exit_reason"] = resolved_reason
-        metadata["exit_triggered_at"] ||= Time.current
-        metadata["hwm_pnl_pct"] = cache_data[:hwm_pnl_pct] if cache_data[:hwm_pnl_pct]
+        metadata['exit_reason'] = resolved_reason
+        metadata['exit_triggered_at'] ||= Time.current
+        metadata['hwm_pnl_pct'] = cache_data[:hwm_pnl_pct] if cache_data[:hwm_pnl_pct]
 
-        # 4. Final update! (This is atomic)
         tracker.update!(
           status: :exited,
-          exit_price: resolved_exit_price,
+          exit_price: exit_px,
           exited_at: resolved_exited_at,
-          last_pnl_rupees: final_pnl_rupees,
-          high_water_mark_pnl: final_hwm_pnl,
+          last_pnl_rupees: pnl_snapshot[:pnl],
+          last_pnl_pct: pnl_snapshot[:pnl_pct],
+          high_water_mark_pnl: pnl_snapshot[:hwm_pnl],
           exit_reason: resolved_reason,
           meta: metadata
         )
@@ -90,6 +87,7 @@ module Positions
 
     def sync_final_pnl_to_database(cache)
       return unless cache && cache[:pnl]
+      return if tracker.exited?
 
       Live::RedisPnlCache.instance.sync_pnl_to_database(
         tracker.id,
@@ -98,6 +96,45 @@ module Positions
         cache[:hwm_pnl],
         cache[:hwm_pnl_pct]
       )
+    end
+
+    def resolve_final_pnl(exit_price:, cache_data:)
+      priced = FinalPnl.from_exit_price(
+        entry_price: tracker.entry_price,
+        quantity: tracker.quantity,
+        exit_price: exit_price,
+        is_exited: true
+      )
+
+      if priced
+        hwm_pnl = [
+          tracker.high_water_mark_pnl.to_f,
+          cache_data[:hwm_pnl].to_f,
+          priced[:pnl].to_f
+        ].max
+
+        return {
+          pnl: priced[:pnl],
+          pnl_pct: priced[:pnl_pct],
+          hwm_pnl: hwm_pnl
+        }
+      end
+
+      fallback_pnl = cache_data[:pnl] || tracker.last_pnl_rupees
+      entry_bd = BigDecimal((tracker.entry_price || 0).to_s)
+      qty = tracker.quantity.to_i
+      capital = entry_bd * qty
+      fallback_pct = if capital.positive? && fallback_pnl.present?
+                       BigDecimal(fallback_pnl.to_s) / capital
+                     else
+                       tracker.last_pnl_pct
+                     end
+
+      {
+        pnl: fallback_pnl,
+        pnl_pct: fallback_pct,
+        hwm_pnl: [tracker.high_water_mark_pnl.to_f, cache_data[:hwm_pnl].to_f].max
+      }
     end
   end
 end

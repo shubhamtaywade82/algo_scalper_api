@@ -3,6 +3,26 @@
 require 'rails_helper'
 
 RSpec.describe Positions::TrailingConfig do
+  describe '.from' do
+    it 'uses pinned trailing tiers instead of live config' do
+      pinned = {
+        risk: {
+          trailing_tiers: [
+            { trigger_pct: 0.05, sl_offset_pct: -0.50 }
+          ]
+        }
+      }
+      allow(AlgoConfig).to receive(:fetch).and_return(
+        risk: { trailing_tiers: [{ trigger_pct: 0.05, sl_offset_pct: -0.01 }] }
+      )
+
+      view = described_class.from(pinned)
+
+      expect(view.sl_offset_for(0.10)).to eq(-0.50)
+      expect(described_class.sl_offset_for(0.10)).to eq(-0.01)
+    end
+  end
+
   describe '.sl_offset_for' do
     it 'returns nil below the first tier threshold' do
       expect(described_class.sl_offset_for(0)).to be_nil

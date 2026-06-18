@@ -32,7 +32,8 @@ module Live
                          end
       return false unless underlying_moved
 
-      peak_premium = tracker.meta&.dig('peak_premium').to_f
+      peak_premium = Live::PositionRuntimeCache.instance.peak_premium_for(tracker)
+      peak_premium = tracker.meta&.dig('peak_premium').to_f if peak_premium <= 0
       return false unless peak_premium.positive?
       return false unless current_premium.to_f.positive?
 

@@ -2,14 +2,31 @@
 
 module Positions
   class PaperStatsQuery < ApplicationService
-    def initialize(date: nil)
+    def initialize(date: nil, paper: :auto)
       @date = date
+      @paper = paper
     end
 
     def call
+      stats = build_stats
+      return stats if stats[:total_trades].positive? || paper != :auto
+
+      fallback = self.class.new(date: date, paper: :all).send(:build_stats)
+      return stats unless fallback[:total_trades].positive?
+
+      fallback.merge(stats_scope: 'all')
+    end
+
+    private
+
+    attr_reader :date, :paper
+
+    def build_stats
+      reset_memoized_scopes!
       total = total_pnl_rupees
-      Portfolio::PaperPeakTracker.observe!(total)
-      stored_peak = Portfolio::PaperPeakTracker.current_for
+      peak_mode = resolved_paper_filter.nil? ? AlgoConfig.paper_trading_enabled? : resolved_paper_filter
+      Portfolio::PaperPeakTracker.observe!(total, paper: peak_mode)
+      stored_peak = Portfolio::PaperPeakTracker.current_for(paper: peak_mode)
       peak = [stored_peak, total].max
 
       {
@@ -28,23 +45,48 @@ module Positions
         losers: losers_count,
         is_blocked: Portfolio::DrawdownGuard.triggered?,
         blocked_reason: Portfolio::DrawdownGuard.triggered? ? 'Drawdown Guard Active' : nil,
-        peak_pnl: peak.round(2)
+        peak_pnl: peak.round(2),
+        paper_mode: resolved_paper_filter.nil? ? nil : resolved_paper_filter,
+        stats_scope: stats_scope_label
       }
     end
 
-    private
+    def stats_scope_label
+      return 'all' if resolved_paper_filter.nil?
 
-    attr_reader :date
+      resolved_paper_filter ? 'paper' : 'live'
+    end
+
+    def reset_memoized_scopes!
+      @exited_scope = nil
+      @active_positions = nil
+      @realized_pnl_rupees = nil
+      @unrealized_pnl_rupees = nil
+      @winners_count = nil
+      @losers_count = nil
+    end
+
+    def resolved_paper_filter
+      return nil if paper == :all
+      return paper if paper.in?([true, false])
+
+      AlgoConfig.paper_trading_enabled?
+    end
 
     def exited_scope
       @exited_scope ||= begin
-        range = date_range
-        PositionTracker.exited_paper.where(exited_at: range)
+        scope = PositionTracker.where(status: :exited).where(exited_at: date_range)
+        filter = resolved_paper_filter
+        filter.nil? ? scope : scope.where(paper: filter)
       end
     end
 
     def active_positions
-      @active_positions ||= PositionTracker.paper.active.to_a
+      @active_positions ||= begin
+        scope = PositionTracker.where(status: :active)
+        filter = resolved_paper_filter
+        filter.nil? ? scope.to_a : scope.where(paper: filter).to_a
+      end
     end
 
     def realized_pnl_rupees
@@ -52,7 +94,15 @@ module Positions
     end
 
     def unrealized_pnl_rupees
-      @unrealized_pnl_rupees ||= active_positions.sum { |t| t.current_pnl_rupees.to_f }
+      @unrealized_pnl_rupees ||= begin
+        redis_pnl = Live::RedisPnlCache.instance.fetch_all
+        active_positions.sum do |tracker|
+          cached = redis_pnl[tracker.id]
+          next cached[:pnl].to_f if cached && cached[:pnl]
+
+          tracker.current_pnl_rupees.to_f
+        end
+      end
     end
 
     def total_pnl_rupees
@@ -84,7 +134,12 @@ module Positions
     def avg_unrealized_pnl_pct
       return 0.0 if active_positions.empty?
 
-      values = active_positions.map { |t| (t.current_pnl_pct || 0).to_f * 100.0 }
+      redis_pnl = Live::RedisPnlCache.instance.fetch_all
+      values = active_positions.map do |tracker|
+        cached = redis_pnl[tracker.id]
+        pct = cached&.dig(:pnl_pct) || tracker.current_pnl_pct || 0
+        pct.to_f * 100.0
+      end
       values.sum / values.size.to_f
     end
 

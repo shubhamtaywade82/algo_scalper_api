@@ -187,11 +187,9 @@ module Live
           high_water_mark_pnl: hwm ? BigDecimal(hwm.to_s) : tracker.high_water_mark_pnl
         }
 
-        # Store hwm_pnl_pct in meta if provided
+        # Store hwm_pnl_pct in runtime cache (flushed to DB meta on exit)
         if hwm_pnl_pct
-          meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-          meta['hwm_pnl_pct'] = hwm_pnl_pct.to_f
-          attrs[:meta] = meta
+          Live::PositionRuntimeCache.instance.merge(tracker_id, hwm_pnl_pct: hwm_pnl_pct.to_f)
         end
 
         tracker.update!(attrs)

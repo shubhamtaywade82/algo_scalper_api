@@ -363,7 +363,7 @@ module Live
       end
 
       def trailing_armed_for?(tracker, position_data)
-        trailing_cfg = AlgoConfig.fetch.dig(:risk, :trailing) || {}
+        trailing_cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :trailing) || {}
         return false if trailing_cfg[:enabled] == false
 
         activation = (trailing_cfg[:activation_pct] || 0.025).to_f
@@ -389,6 +389,7 @@ module Live
 
         Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
           next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+          next if carry_held?(tracker)
 
           reason = "MARKET_CLOSE (EOD #{market_close_time.strftime('%H:%M')} IST)"
           exit_path = 'eod_force_close'
@@ -398,6 +399,15 @@ module Live
         end
       rescue StandardError => e
         Rails.logger.error("[RiskManager] enforce_eod_force_close error: #{e.class} - #{e.message}")
+      end
+
+      # Skip EOD square-off for positional carries that are still valid to hold
+      # (tagged by OptionsBuying::EodCarryManager when ROI clears the threshold and
+      # carry is allowed for the index). Fails safe: any error → close as normal.
+      def carry_held?(tracker)
+        OptionsBuying::CarryPolicy.carry_still_valid?(tracker)
+      rescue StandardError
+        false
       end
 
       def enforce_time_based_exit(exit_engine:, position_data: nil)

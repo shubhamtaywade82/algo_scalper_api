@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_08_045609) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_16_143000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -206,6 +206,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_08_045609) do
     t.datetime "updated_at", null: false
     t.index ["exchange", "observed_on"], name: "index_market_holidays_on_exchange_and_observed_on_unique", unique: true
     t.index ["observed_on"], name: "index_market_holidays_on_observed_on"
+  end
+
+  create_table "options_buying_signal_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.string "index_key", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "occurred_at", null: false
+    t.string "security_id"
+    t.datetime "updated_at", null: false
+    t.index ["event_type"], name: "index_options_buying_signal_events_on_event_type"
+    t.index ["index_key"], name: "index_options_buying_signal_events_on_index_key"
+    t.index ["metadata"], name: "index_options_buying_signal_events_on_metadata", using: :gin
+    t.index ["occurred_at"], name: "index_options_buying_signal_events_on_occurred_at"
   end
 
   create_table "paper_daily_wallets", force: :cascade do |t|

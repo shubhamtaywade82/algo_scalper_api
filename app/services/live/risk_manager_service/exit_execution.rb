@@ -129,19 +129,20 @@ module Live
         entry_meta = {}
         unless meta['entry_path'] || meta['entry_strategy']
           # Try to find matching TradingSignal to get entry metadata
-          signal = TradingSignal.where("metadata->>'index_key' = ?", meta['index_key'] || tracker.index_key)
+          signal = TradingSignal.where(index_key: meta['index_key'] || tracker.index_key)
                                 .where(created_at: (tracker.created_at - 5.minutes)..)
                                 .where(created_at: ..(tracker.created_at + 1.minute))
                                 .order(created_at: :desc)
                                 .first
 
-          if signal && signal.metadata.is_a?(Hash)
-            entry_meta['entry_path'] = signal.metadata['entry_path']
-            entry_meta['entry_strategy'] = signal.metadata['strategy']
-            entry_meta['entry_strategy_mode'] = signal.metadata['strategy_mode']
-            entry_meta['entry_timeframe'] = signal.metadata['effective_timeframe'] || signal.metadata['primary_timeframe']
-            entry_meta['entry_confirmation_timeframe'] = signal.metadata['confirmation_timeframe']
-            entry_meta['entry_validation_mode'] = signal.metadata['validation_mode']
+          if signal
+            signal_meta = signal.effective_metadata
+            entry_meta['entry_path'] = signal_meta['entry_path']
+            entry_meta['entry_strategy'] = signal_meta['strategy']
+            entry_meta['entry_strategy_mode'] = signal_meta['strategy_mode']
+            entry_meta['entry_timeframe'] = signal_meta['effective_timeframe'] || signal_meta['primary_timeframe']
+            entry_meta['entry_confirmation_timeframe'] = signal_meta['confirmation_timeframe']
+            entry_meta['entry_validation_mode'] = signal_meta['validation_mode']
           end
         end
 

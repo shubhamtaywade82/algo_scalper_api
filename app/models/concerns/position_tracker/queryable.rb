@@ -25,6 +25,10 @@ class PositionTracker < ApplicationRecord
         Positions::PaperStatsQuery.call(date: date)
       end
 
+      def trading_stats_with_pct(date: nil)
+        paper_trading_stats_with_pct(date: date)
+      end
+
       def paper_positions_details(limit: Positions::PaperPositionsQuery::DEFAULT_LIMIT, offset: 0)
         Positions::PaperPositionsQuery.call(limit: limit, offset: offset)
       end

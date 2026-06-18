@@ -15,7 +15,8 @@ class PositionTracker < ApplicationRecord
                  :exit_path, :exit_reason, :highest_price, :lowest_price, :be_set, :profit_floor_rupees,
                  :profit_floor_set_at, :profit_zone_state, :secured_sl_price, :secured_sl_rupees,
                  :profit_zone_transitioned_at,
-                 :alpha_source, :signal_confidence, :expected_value, :signal_timestamp, :client_order_id
+                 :alpha_source, :signal_confidence, :expected_value, :signal_timestamp, :client_order_id,
+                 :carry_mode, :carry_marked_at, :carry_roi_pct
 
   after_update_commit :record_alpha_outcome!, if: :alpha_signal_just_exited?
 

@@ -8,5 +8,4 @@ vendor/* linguist-vendored
 config/credentials/*.yml.enc diff=rails_credentials
 config/credentials.yml.enc diff=rails_credentials
 
-# Graphify union-merge for parallel graph.json edits
-graphify-out/graph.json merge=graphify
+

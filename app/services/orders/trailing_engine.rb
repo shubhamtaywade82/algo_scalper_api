@@ -70,9 +70,9 @@ module Orders
               :nifty
             end
 
-      # Try to load from AlgoConfig
+      # Pinned to this position's entry snapshot (falls back to live config when absent).
       yml = begin
-        AlgoConfig.fetch.dig(:risk, :institutional_trailing)
+        Positions::ExitConfigResolver.for(@position).dig(:risk, :institutional_trailing)
       rescue StandardError
         nil
       end

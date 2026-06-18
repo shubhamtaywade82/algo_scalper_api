@@ -12,7 +12,6 @@ module Live
       @sleep_mutex = Mutex.new
       @sleep_cv = ConditionVariable.new
       @subscriptions = []
-      @last_db_sync = {}
     end
 
     def start
@@ -104,19 +103,6 @@ module Live
 
       hwm_pnl = [tracker.high_water_mark_pnl.to_d, pnl].max
       hwm_pnl_pct = invested_capital.positive? ? (hwm_pnl / invested_capital) : 0
-
-      # Throttle DB updates: only update DB every 30 seconds OR if PnL changed by > 5% milestone
-      last_sync = @last_db_sync[tracker.id]
-      pnl_milestone = (tracker.last_pnl_pct.to_f - pct.to_f).abs > 0.05
-
-      if last_sync.nil? || (Time.current - last_sync) > 30.seconds || pnl_milestone
-        tracker.update!(
-          last_pnl_rupees: pnl,
-          last_pnl_pct: pct ? BigDecimal(pct.to_s) : nil,
-          high_water_mark_pnl: hwm_pnl
-        )
-        @last_db_sync[tracker.id] = Time.current
-      end
 
       Live::RedisPnlCache.instance.store_pnl(
         tracker_id: tracker.id,

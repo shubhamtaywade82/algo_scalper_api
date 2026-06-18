@@ -29,8 +29,14 @@ function AppShell(props) {
   const {
     mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
-    lastUpdated, recentSignals, config, marketStatus
+    lastUpdated, recentSignals, config, marketStatus, refresh: refreshDashboard
   } = useDashboard(() => fetchPositions())
+
+  async function closePositionAndRefresh(positionId) {
+    const result = await closeOpenPosition(positionId)
+    if (result?.ok) refreshDashboard()
+    return result
+  }
 
   const ctx = {
     mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, system,
@@ -38,7 +44,7 @@ function AppShell(props) {
     lastUpdated, recentSignals, config, marketStatus,
     open, closed,
     positionsConnected, positionsStale, positionsLastMessageAt,
-    fetchPositions, closeOpenPosition, closingPositionId
+    fetchPositions, closeOpenPosition: closePositionAndRefresh, closingPositionId
   }
 
   return (

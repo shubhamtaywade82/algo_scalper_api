@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Entries::EntryGuard do
-  let(:index_cfg) { { key: 'NIFTY', segment: 'NSE_FNO', cooldown_sec: 0 } }
+  let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', cooldown_sec: 0 } }
   let(:pick) { { symbol: 'NIFTY24MAR22000CE', security_id: '12345', segment: 'NSE_FNO' } }
   let(:direction) { 'LONG' }
   let(:signal) { double('Signal', record_entry_outcome: true) }
@@ -16,6 +16,22 @@ RSpec.describe Entries::EntryGuard do
     
     # Mock order execution
     allow(Entries::OrderExecutionService).to receive(:call).and_return(instance_double(PositionTracker))
+  end
+
+  describe '.build_base_meta' do
+    subject(:meta) { described_class.send(:build_base_meta, index_cfg: index_cfg, pick: pick, direction: direction) }
+
+    it 'stamps the effective config version on the tracker meta' do
+      expect(meta[:config_version]).to include(:hash)
+    end
+
+    it 'pins a config snapshot for the position' do
+      expect(meta[:config_snapshot]).to be_a(Hash).and(include(:risk))
+    end
+
+    it 'excludes credential sections from the pinned snapshot' do
+      expect(meta[:config_snapshot].keys).not_to include(:dhanhq, :telegram, :ai)
+    end
   end
 
   describe '.try_enter' do

@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe Entries::Guards::LtpResolutionGuard do
   let(:instrument) { instance_double(Instrument) }
-  let(:index_cfg) { { key: 'NIFTY', segment: 'NSE_FNO' } }
+  let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I' } }
   let(:pick) { { symbol: 'NIFTY25000CE', security_id: '50074', segment: 'NSE_FNO', ltp: 98.0 } }
   let(:context) { { pick: pick, instrument: instrument, index_cfg: index_cfg } }
 
