@@ -49,6 +49,32 @@ RSpec.describe Market::VixGate do
     end
   end
 
+  describe '.ensure_evaluated!' do
+    it 'evaluates when gate is enabled and not yet evaluated' do
+      allow(Live::TickCache).to receive(:ltp).and_return(18.0)
+
+      expect(described_class.ensure_evaluated!).to be(true)
+      expect(described_class.evaluated?).to be(true)
+    end
+
+    it 'is a no-op when already evaluated' do
+      allow(Live::TickCache).to receive(:ltp).and_return(18.0)
+      described_class.evaluate!
+      allow(described_class).to receive(:evaluate!)
+
+      expect(described_class.ensure_evaluated!).to be(true)
+      expect(described_class).not_to have_received(:evaluate!)
+    end
+
+    it 'returns false when LTP is unavailable' do
+      allow(Live::TickCache).to receive(:ltp).and_return(nil)
+      allow(Instrument).to receive(:find_by_sid_and_segment).and_return(nil)
+
+      expect(described_class.ensure_evaluated!).to be(false)
+      expect(described_class.evaluated?).to be(false)
+    end
+  end
+
   describe '.evaluate!' do
     it 'locks entries when VIX is above ceiling' do
       allow(Live::TickCache).to receive(:ltp).and_return(21.5)

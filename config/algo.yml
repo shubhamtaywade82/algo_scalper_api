@@ -191,11 +191,10 @@ market:
 
 # ============================================
 # INDEX CONFIG (TREND-SCORE DRIVEN)
+# Identity, lot, fno_segment, execution defaults: config/india_index_registry.yml
 # ============================================
 indices:
   - key: NIFTY
-    segment: IDX_I
-    sid: "13"
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
@@ -238,8 +237,6 @@ indices:
         priority: 4
 
   - key: BANKNIFTY
-    segment: IDX_I
-    sid: "25"
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
@@ -282,12 +279,7 @@ indices:
         priority: 4
 
   - key: SENSEX
-    segment: IDX_I
-    sid: "51"
     capital_alloc_pct: 0.30
-    execution:
-      max_bid_ask_spread_pct: 0.025   # BSE FO — wider spreads than NSE
-      earliest_entry_time: "09:30"
     max_same_side: 1
     cooldown_sec: 180
     max_concurrent_per_index: 2

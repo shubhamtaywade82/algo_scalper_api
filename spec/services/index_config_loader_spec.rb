@@ -17,7 +17,9 @@ RSpec.describe IndexConfigLoader do
       before do
         create(:watchlist_item, :nifty_index, segment: 'NSE_FNO', watchable: instrument, label: 'NIFTY')
         allow(AlgoConfig).to receive(:fetch).and_return(
-          indices: [{ key: 'NIFTY', segment: 'IDX_I', sid: '13', lot: 75 }]
+          indices: IndiaIndexRegistry.merge_indices!(
+            [{ key: 'NIFTY', capital_alloc_pct: 0.30 }]
+          )
         )
       end
 
@@ -34,11 +36,13 @@ RSpec.describe IndexConfigLoader do
     context 'when watchlist is empty' do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return(
-          indices: [
-            { key: 'NIFTY', segment: 'IDX_I', sid: '13' },
-            { key: 'BANKNIFTY', segment: 'IDX_I', sid: '25' },
-            { key: 'SENSEX', segment: 'IDX_I', sid: '51' }
-          ]
+          indices: IndiaIndexRegistry.merge_indices!(
+            [
+              { key: 'NIFTY' },
+              { key: 'BANKNIFTY' },
+              { key: 'SENSEX' }
+            ]
+          )
         )
       end
 
@@ -46,10 +50,17 @@ RSpec.describe IndexConfigLoader do
         indices = described_class.load_indices
 
         expect(indices).to contain_exactly(
-          include(key: 'NIFTY', segment: 'IDX_I'),
-          include(key: 'BANKNIFTY', segment: 'IDX_I'),
-          include(key: 'SENSEX', segment: 'IDX_I')
+          include(key: 'NIFTY', segment: 'IDX_I', sid: '13', lot: 75),
+          include(key: 'BANKNIFTY', segment: 'IDX_I', sid: '25', lot: 15),
+          include(key: 'SENSEX', segment: 'IDX_I', sid: '51', lot: 10)
         )
+      end
+
+      it 'applies SENSEX execution defaults from registry' do
+        indices = described_class.load_indices
+        sensex = indices.find { |idx| idx[:key] == 'SENSEX' }
+
+        expect(sensex.dig(:execution, :max_bid_ask_spread_pct)).to eq(0.025)
       end
     end
   end

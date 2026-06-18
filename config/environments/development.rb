@@ -24,7 +24,12 @@ Rails.application.configure do
   end
 
   # Change to :null_store to avoid any caching.
-  config.cache_store = :memory_store
+  redis_url = ENV['REDIS_URL'].presence
+  config.cache_store = if redis_url
+                         [:redis_cache_store, { url: redis_url, namespace: "algo_scalper_api_#{Rails.env}_cache" }]
+                       else
+                         :memory_store
+                       end
 
   # ActionMailer disabled - API only app
   # config.action_mailer.raise_delivery_errors = false

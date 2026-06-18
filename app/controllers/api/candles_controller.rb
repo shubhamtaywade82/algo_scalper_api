@@ -49,15 +49,18 @@ module Api
     # the cache naturally refreshes roughly once per bar close. Keyed by today's date
     # so the cache can't bleed stale data across sessions.
     def fetch_bars(instrument, interval:, days:)
-      cache_key = "candles/#{instrument.security_id}/#{interval}/#{days}d/#{Time.zone.today}"
+      to_date = Market::Calendar.today_or_last_trading_day.to_s
+      from_date = Market::Calendar.trading_days_ago(days).to_s
+      cache_key = "candles/#{instrument.security_id}/#{interval}/#{days}d/#{to_date}"
+
       Rails.cache.fetch(cache_key, expires_in: cache_ttl(interval)) do
         DhanHQ::Models::HistoricalData.intraday(
           security_id: instrument.security_id,
           exchange_segment: instrument.exchange_segment,
           instrument: DhanHQ::Constants::InstrumentType::INDEX,
           interval: interval,
-          from_date: (Time.zone.today - days.days).to_s,
-          to_date: Time.zone.today.to_s
+          from_date: from_date,
+          to_date: to_date
         )
       end
     rescue StandardError => e

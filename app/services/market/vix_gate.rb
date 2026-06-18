@@ -10,6 +10,13 @@ module Market
     FORCE_EXIT_KEY = 'market:vix_gate:force_exit'
 
     class << self
+      def ensure_evaluated!
+        return true unless enabled?
+        return true if evaluated?
+
+        evaluate!.present?
+      end
+
       def evaluate!
         return unless enabled?
 

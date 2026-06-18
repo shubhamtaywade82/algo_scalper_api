@@ -1,0 +1,42 @@
+# Canonical identity, instrument, and execution defaults for Indian index options.
+# Strategy overlays (capital, premium_band, strategies, etc.) live in config/algo.yml
+# indices[] and are merged at runtime by IndiaIndexRegistry.
+
+version: 1
+
+indices:
+  NIFTY:
+    key: NIFTY
+    exchange: NSE
+    segment: IDX_I
+    sid: "13"
+    fno_segment: NSE_FNO
+    lot: 75
+    strike_step: 50
+    execution:
+      max_bid_ask_spread_pct: 0.015
+      earliest_entry_time: "09:30"
+
+  BANKNIFTY:
+    key: BANKNIFTY
+    exchange: NSE
+    segment: IDX_I
+    sid: "25"
+    fno_segment: NSE_FNO
+    lot: 15
+    strike_step: 100
+    execution:
+      max_bid_ask_spread_pct: 0.015
+      earliest_entry_time: "09:30"
+
+  SENSEX:
+    key: SENSEX
+    exchange: BSE
+    segment: IDX_I
+    sid: "51"
+    fno_segment: BSE_FNO
+    lot: 10
+    strike_step: 100
+    execution:
+      max_bid_ask_spread_pct: 0.025
+      earliest_entry_time: "09:30"
