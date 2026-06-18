@@ -29,11 +29,7 @@ module Signal
         enable_confirmation = context[:enable_confirmation]
         confirmation_tf = context[:confirmation_tf]
 
-        if entry_primary == 'supertrend'
-          result = execute_supertrend_only_flow(index_cfg, instrument, signals_cfg, primary_tf)
-        else
-          result = execute_standard_analysis_flow(index_cfg, instrument, signals_cfg, primary_tf, confirmation_tf)
-        end
+        result = execute_supertrend_only_flow(index_cfg, instrument, signals_cfg, primary_tf)
 
         return summary.finalize_pending! unless result
 
@@ -226,7 +222,7 @@ module Signal
       end
 
       def initialize_analysis_context(signals_cfg)
-        entry_primary = (signals_cfg.dig(:entry_strategy, :primary) || signals_cfg[:entry_strategy].to_s).to_s.strip.downcase
+        entry_primary = 'supertrend'
 
         primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '5m').to_s
         enable_confirmation = signals_cfg.fetch(:enable_confirmation_timeframe, true)
@@ -777,7 +773,7 @@ module Signal
         if mode_config[:require_iv_rank_check]
           effective_real_iv = real_iv.to_f.positive? ? real_iv : fetch_real_atm_iv(instrument: instrument, index_cfg: index_cfg, direction: direction)
 
-          iv_rank_result = if effective_real_iv && effective_real_iv.to_f > 0
+          iv_rank_result = if effective_real_iv&.to_f&.positive?
                              validate_iv_rank_real(effective_real_iv.to_f, mode_config, index_key: index_cfg[:key])
                            else
                              validate_iv_rank(index_cfg, series, mode_config)
@@ -1074,7 +1070,11 @@ module Signal
         zone = get_smc_zone(index_cfg)
         return true if zone == :equilibrium
 
-        zone_override_adx = AlgoConfig.fetch.dig(:signals, :smc, :zone_filter_adx_override).to_f rescue 30.0
+        zone_override_adx = begin
+                              AlgoConfig.fetch.dig(:signals, :smc, :zone_filter_adx_override).to_f
+        rescue StandardError
+                              30.0
+        end
 
         if direction == :bullish && zone == :premium
           return adx_value.to_f >= zone_override_adx
@@ -1095,7 +1095,11 @@ module Signal
         instrument = Instrument.find_by(tradingsymbol: index_cfg[:key])
         return :equilibrium unless instrument
 
-        series = instrument.candle_series(interval: '5') rescue nil
+        series = begin
+                   instrument.candle_series(interval: '5')
+        rescue StandardError
+                   nil
+        end
         return :equilibrium unless series
 
         pd = Smc::Detectors::PremiumDiscount.new(series)
@@ -1150,7 +1154,7 @@ module Signal
       # absolute band (iv_rank_max/iv_rank_min) when history is too thin (cold start).
       def validate_iv_rank_real(iv, mode_config, index_key: nil)
         iv_f = iv.to_f
-        return { valid: true } if iv_f.zero?  # No IV data — fail open
+        return { valid: true } if iv_f.zero? # No IV data — fail open
 
         percentile = index_key.present? ? Options::IvRankTracker.instance.percentile_rank(index_key: index_key, iv: iv_f) : nil
         return validate_iv_percentile(iv_f, percentile, mode_config) if percentile
@@ -1200,12 +1204,12 @@ module Signal
 
       # Returns +0.10 when MACD histogram direction aligns with entry direction.
       def macd_confidence_factor(direction, series)
-        result    = Indicators::MacdIndicator.new(series: series).calculate_at(-1)
+        result = Indicators::MacdIndicator.new(series: series).calculate_at(-1)
         return 0.0 if result.nil?
 
         histogram = result.dig(:value, :histogram).to_f
-        return 0.10 if direction == :bullish && histogram > 0
-        return 0.10 if direction == :bearish && histogram < 0
+        return 0.10 if direction == :bullish && histogram.positive?
+        return 0.10 if direction == :bearish && histogram.negative?
         0.0
       rescue StandardError => e
         Rails.logger.debug("[Signal::Engine] MACD factor error: #{e.message}")
@@ -1225,10 +1229,18 @@ module Signal
 
       # Resolves SMC bias direction for index_cfg → :bullish | :bearish | :neutral
       def get_smc_bias_direction(index_cfg)
-        instrument = Instrument.find_by(tradingsymbol: index_cfg[:key]) rescue nil
+        instrument = begin
+                       Instrument.find_by(tradingsymbol: index_cfg[:key])
+        rescue StandardError
+                       nil
+        end
         return :neutral unless instrument
 
-        decision = Smc::BiasEngine.new(instrument).decision rescue nil
+        decision = begin
+                     Smc::BiasEngine.new(instrument).decision
+        rescue StandardError
+                     nil
+        end
         case decision
         when :call then :bullish
         when :put  then :bearish
@@ -1272,7 +1284,7 @@ module Signal
         direction = primary_analysis[:direction]
         series    = primary_analysis[:series]
 
-        macd_factor     = series && direction ? macd_confidence_factor(direction, series)          : 0.0
+        macd_factor     = series && direction ? macd_confidence_factor(direction, series) : 0.0
         smc_factor      = index_cfg && direction ? smc_bias_confidence_factor(direction, index_cfg) : 0.0
 
         total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor + macd_factor + smc_factor
@@ -1643,6 +1655,13 @@ module Signal
       end
 
       def evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime)
+        if (AlgoConfig.fetch.dig(:signals, :entry_strategy, :primary) || 'supertrend').to_s == 'supertrend'
+          Rails.logger.info(
+            "[Signal] EntryQualityFilter SKIPPED #{index_cfg[:key]} #{final_direction} (stock supertrend path)"
+          )
+          return { pass: true, score: nil, breakdown: {}, gates: {}, reject_reason: nil }
+        end
+
         if FastEntryMode.enabled?
           Rails.logger.info(
             "[Signal] EntryQualityFilter SKIPPED #{index_cfg[:key]} #{final_direction} (fast_entry_mode)"

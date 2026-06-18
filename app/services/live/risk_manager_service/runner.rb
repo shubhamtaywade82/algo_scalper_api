@@ -136,30 +136,13 @@ module Live
         # Note: advance_trade_state_for might still do its own updates for state columns
         advance_trade_state_for(tracker, position_data: position_data, pending_meta: pending_meta)
 
-        # Layers will now update pending_meta instead of the DB directly
-        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_profit_floor_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_time_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
+        # Stock options-buying exit stack: hard stop, adaptive trail, fixed TP, then time close.
+        if (exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker))
+          reason = exit_decision[:reason]
+          track_exit_path(tracker, exit_decision[:path], reason)
+          dispatch_exit(exit_engine, tracker, reason)
+          return
+        end
 
         enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
       ensure

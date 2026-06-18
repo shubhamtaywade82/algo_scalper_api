@@ -42,19 +42,19 @@ midday_guard:
 options_buying:
   mode: intraday_scalper          # intraday_scalper | positional
   atr_compression:
-    enabled: true
+    enabled: false
     atr_period: 14
     max_setup_ratio: 0.30
     setup_window_end: "11:15"
   breakout:
-    enabled: true
+    enabled: false
     timeframe_minutes: 1
     volume_multiplier: 2.0
     require_oi_unwind: true
     compression_arm: true
     ready_ttl_seconds: 300
   chain_radar:
-    enabled: true
+    enabled: false
     delta_min: 0.45
     delta_max: 0.55
     min_volume: 10000
@@ -76,10 +76,10 @@ options_buying:
   expiry_day:
     lockout_after: "13:00"
   rsi_bias:
-    enabled: true
+    enabled: false
     timeframe: "15"
   streams:
-    enabled: true
+    enabled: false
     maxlen: 1000
     window_seconds: 60
     consumer_group: options_buying_evaluators
@@ -92,7 +92,7 @@ options_buying:
 # Pattern: BANKNIFTY ADX=53 or NIFTY ADX=40+ locked since morning → enter 12:00-13:45
 # → ride afternoon gamma explosion. Near-ATM options can return 3-6x on a 0.8-1.4% spot move.
 expiry_week_power_trend:
-  enabled: true
+  enabled: false
   adx_min: 40              # Power trend minimum (ADX >= 40 = confirmed strong trend)
   expiry_days_max: 5       # Only within 5 calendar days of monthly expiry
   entry_start: "12:00"     # Start of optimal entry window (after morning volatility)
@@ -327,7 +327,7 @@ risk:
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
-    enabled: true
+    enabled: false
     target_pct: 0.20 # 20% safety net for options
 
   # Underlying-context-aware trailing exit (tick-first path)
@@ -346,7 +346,7 @@ risk:
   # trail_pct: on each monitor cycle, floor = max(current_floor, hwm_pnl * trail_pct).
   # lock_pct scales with position size — ₹2k on a ₹28k BN position is only 7%, vs 18% on a ₹11k SX position.
   profit_floor:
-    enabled: true
+    enabled: false
     lock_pct: 0.05         # 5% - arm floor when net PnL >= 5% of capital_deployed (was 0.10 — too high, missed peaks like +7.3%/+₹2,320 that reversed to -₹3,608 unlocked)
     trail_pct: 0.70        # 70% - ratchet floor to 70% of HWM each cycle
     breakeven_at: 200      # mark breakeven when net PnL reaches ₹200 (rupees, not percentage)
@@ -355,13 +355,13 @@ risk:
   # RR-Based Profit Booking (Dynamic Exit)
   # Captures profits based on R multiples (Reward / Risk)
   rr_profit_booking:
-    enabled: true
+    enabled: false
     target_rr: 2.5        # Exit fully at 2.5R (e.g., if SL is 10%, TP at 25%)
 
   # Exit-layer overrides (optional). Price-based structure invalidation uses these when set.
   exits:
     structure_invalidation:
-      enabled: true           # Re-enabled with options-aware dual condition
+      enabled: false          # Trimmed: stock path uses hard stop + adaptive trail
       min_hold_seconds: 120   # No structure exit until position age >= this (reduces churn)
       buffer_pct: 0.004       # Legacy: require underlying to breach level by this fraction
       underlying_move_pct: 0.01  # Underlying must move 1%+ against trade direction
@@ -371,7 +371,7 @@ risk:
       min_hold_seconds: 120    # no SMC navigator exit before position age >= this
       min_confidence: 0.65     # minimum Navigator exit confidence to trigger
     premium_momentum_failure:
-      enabled: true
+      enabled: false
       default_stall_minutes: 2
       index_overrides:
         SENSEX:
@@ -385,7 +385,7 @@ risk:
   # Time Stop: Prevents holding dead trades beyond time limits
   # Previously hardcoded in Risk::Rules::TimeStopRule — now runtime-configurable
   time_stop:
-    enabled: true
+    enabled: false
     scalp:
       max_minutes: 8 # 8 mins max for scalps
       max_candles: 8
@@ -398,7 +398,7 @@ risk:
   # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
   # Parameters derived from avg max gain, avg post-peak retracement, and session stats
   institutional_trailing:
-    enabled: true
+    enabled: false
     session_aware: true           # Tighten trail distance in afternoon (0.75x after 13:00)
     expiry_day_tightening: 0.60   # 60% of normal trail on expiry day (Thursday)
 
@@ -457,10 +457,21 @@ risk:
 
   trailing_mode: 'direct' # Moving up only to capture profits
   direct_trailing:
-    enabled: true
+    enabled: false
     distance_pct: 0.08       # 8% - wider trail distance once active
     activation_profit_pct: 0.10 # 10% - don't start direct trailing from entry
     min_sl_offset_pct: -0.30 # -30% - never let SL go below -30% from entry
+
+  # Stock prop-desk trail: premium HWM floor with explicit stages and overrides.
+  adaptive_trailing:
+    enabled: true
+    supertrend_flip_exit: true
+    counter_candles: 3
+    stages:
+      - { name: entry_guard, min_profit: 0.0, trail_behind_peak: 0.40, hard_stop: -0.30 }
+      - { name: momentum_ride, min_profit: 0.20, trail_behind_peak: 0.35, hard_stop: null }
+      - { name: profit_lock, min_profit: 0.60, trail_behind_peak: 0.28, hard_stop: null }
+      - { name: runner_mode, min_profit: 1.20, trail_behind_peak: 0.22, hard_stop: null }
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP
@@ -892,6 +903,21 @@ signals:
   fast_entry_mode:
     enabled: false
 
+  # Objective chop gate before 1m Supertrend entries.
+  # Score 0-2 = allow, 3-4 = caution metadata, 5+ = block.
+  chop_score:
+    enabled: true
+    block_threshold: 5
+    caution_threshold: 3
+    adx_threshold: 20.0
+    supertrend_flip_limit: 3
+    supertrend_window_candles: 15
+    opening_range_min_points:
+      NIFTY: 50
+      BANKNIFTY: 150
+      SENSEX: 150
+    bb_width_threshold: 0.005
+
   primary_timeframe: "1m"
   confirmation_timeframe: null
 
@@ -982,7 +1008,7 @@ signals:
 
   # Trading context gate: regime score, stability, and :chop blocking (see Domain::TradingContext).
   # strict: production defaults; relaxed: allow signals on expiry/chop/low score (temporary / paper).
-  enable_trading_context_gate: true
+  enable_trading_context_gate: false
   trading_context_strictness: relaxed # strict | relaxed
 
   # Option pick must show favorable premium change vs prev_close (Signal::MomentumValidator).
@@ -998,14 +1024,14 @@ signals:
   # By default: 1m Supertrend signal is enabled (no config needed)
   # ADX filter and 5m confirmation are toggleable
   enable_supertrend_signal: true # Enable 1m Supertrend signal (default: true)
-  enable_adx_filter: true # Enabled to block weak trends (win rate 16.7% for ADX < 15)
+  enable_adx_filter: false # Supertrend-only entry; chop_score handles trend-strength gate.
   enable_confirmation_timeframe: false # Enable 5m HTF confirmation (default: false)
 
   # Optimized Parameters Configuration
   # Set to false to disable loading optimized indicator parameters from BestIndicatorParam
   # When disabled, uses hardcoded defaults from config/algo.yml (supertrend.period, supertrend.base_multiplier, etc.)
   # When enabled (default: true), automatically loads best-scoring parameters from optimization runs
-  use_optimized_params: true # Enable optimized parameters from BestIndicatorParam (default: true)
+  use_optimized_params: false # Stock implementation uses config/algo.yml Supertrend values.
 
   # Modular Indicator System Configuration
   # Use multi_indicator_strategy: true to enable modular indicator system

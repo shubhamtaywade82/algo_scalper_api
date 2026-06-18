@@ -4,17 +4,15 @@ A production-grade autonomous intraday options scalping system for Indian index 
 
 ## System Overview
 
-Algo Scalper API automates the entire trade lifecycle — from signal identification using technical analysis (Supertrend, ADX, SMC) through dynamic risk-managed exits. It runs as a **process-isolated execution engine**: the trading daemon operates separately from the web/dashboard processes to ensure low-latency tick processing and order execution.
+Algo Scalper API automates the intraday options-buying lifecycle — from 1m Supertrend direction to option strike selection, order execution, and risk-managed exits. It runs as a **process-isolated execution engine**: the trading daemon operates separately from the web/dashboard processes to ensure low-latency tick processing and order execution.
 
 ### Key Capabilities
 
-- **Multi-Strategy Signal Engine** — Supertrend + ADX with multi-timeframe confirmation, market regime detection, and dynamic validation modes (balanced/conservative). Optional **market context** (`MarketContext::RegimeComposer`, chain signal extraction, `Trading::MarketPermissionGate`) is configurable in `config/algo.yml` (`market_context`); see `docs/trading/market_context_and_permission_gate.md`.
-- **Smart Money Concepts (SMC)** — Order block detection, FVG analysis, break-of-structure entries, institutional flow scoring
+- **Stock Supertrend Signal Engine** — 1m Supertrend decides CE/PE direction; chop score blocks noisy entries before orders are placed.
 - **Real-time WebSocket Hub** — DhanHQ tick ingestion with write-through Redis caching, automatic reconnection, and per-position subscription management
-- **Institutional Risk Management** — Dual-path exit evaluation: per-tick `UnifiedExitChecker` (SL, TP, trailing, early trend failure, time-based) plus 5-second enforcement loop (premium R-stop, profit floor, structure invalidation, premium momentum failure, R:R booking, percentage PnL exit, time stop)
-- **Options Chain Intelligence** — ATM±1 strike selection with liquidity scoring, gamma ramp detection, expected move validation, per-index rules (NIFTY/BANKNIFTY/SENSEX)
-- **Expiry Week Power Trend** — ADX >= 40 + within 5 days of monthly expiry + 12:00-13:45 window → `ExpiryWeekPowerTrendGuard` enriches context to bypass chop-zone block
-- **20-Guard Entry Pipeline** — Full guard chain from DrawdownGuard through SmcNavigatorGuard
+- **Prop-Desk Risk Management** — Hard stop first, four-stage adaptive premium trail, fixed take profit, and 15:20 time close.
+- **Options Chain Selection** — ATM/near-ATM strike selection with basic liquidity controls for NIFTY/BANKNIFTY/SENSEX.
+- **Lean Entry Pipeline** — Drawdown/circuit/daily limits, instrument/LTP resolution, chop score, spread, expiry, exposure, cooldown, sizing, and risk policy guards.
 - **Paper & Live Trading** — Seamless toggle; both modes use real DhanHQ WebSocket data. Paper simulates fills; live submits to exchange via DhanHQ API
 - **Circuit Breaker** — Redis-backed singleton with API control (`GET/POST/DELETE /api/circuit_breaker/trip`); EntryGuard checks before every entry, RiskManager force-closes all positions when tripped
 - **AI Technical Analysis** — Local Ollama LLM integration (`ollama-client` gem `~> 1.1`); auto-selects best available model

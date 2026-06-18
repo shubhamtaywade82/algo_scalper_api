@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-18
+
+### Trading — Stock Supertrend options buyer cleanup
+
+- Trimmed default exit wiring to hard stop, four-stage adaptive premium trail, fixed take profit, and time close.
+- Added objective chop scoring before 1m Supertrend entries.
+- Disabled advanced options-buying gates by default: compression, breakout arming, chain radar streams, RSI bias, expiry-week power trend, profit floor, RR exits, premium momentum failure, time stop, and institutional/direct trailing.
+
 ## 2026-04-06
 
 ### Documentation — Align with AlgoConfig and signal engine (post run_mode removal)
