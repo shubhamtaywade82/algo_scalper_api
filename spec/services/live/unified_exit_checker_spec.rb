@@ -10,7 +10,7 @@ RSpec.describe Live::UnifiedExitChecker do
       active?: true,
       entry_price: 100.0,
       quantity: 10,
-      meta: {},
+      meta: { 'direction' => 'bullish' },
       instrument: nil,
       watchable: nil
     )
@@ -20,8 +20,13 @@ RSpec.describe Live::UnifiedExitChecker do
     described_class.instance_variable_set(:@exit_config, nil)
     described_class.instance_variable_set(:@exit_config_expires_at, nil)
     allow(AlgoConfig).to receive(:fetch).and_return(
-      risk: { sl_pct: 0.12, tp_pct: 0.50 },
-      exit: { stop_loss: { type: 'static', value: 0.12 }, take_profit: 0.50 }
+      risk: {
+        adaptive_trailing: {
+          enabled: true,
+          supertrend_flip_exit: false,
+          counter_candles: 0
+        }
+      }
     )
   end
 
@@ -32,58 +37,34 @@ RSpec.describe Live::UnifiedExitChecker do
       expect(described_class.check_exit_conditions(tracker)).to be_nil
     end
 
-    it 'returns stop loss exit when loss exceeds threshold' do
+    it 'returns adaptive hard stop when loss exceeds entry guard floor' do
       allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
-        { pnl_pct: -0.15, ltp: 85.0, pnl: -150.0, hwm_pnl: 0.0 }
+        { pnl_pct: -0.31, ltp: 69.0, pnl: -310.0, hwm_pnl: 0.0 }
       )
 
       result = described_class.check_exit_conditions(tracker)
 
-      expect(result[:reason]).to eq('STOP_LOSS')
-      expect(result[:path]).to eq('stop_loss')
+      expect(result[:reason]).to eq('ADAPTIVE_TRAIL_HARD_STOP')
+      expect(result[:path]).to eq('adaptive_trail')
     end
 
-    it 'returns take profit exit when gain exceeds threshold' do
+    it 'returns adaptive trail exit when giveback exceeds stage floor' do
       allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
-        { pnl_pct: 0.55, ltp: 155.0, pnl: 550.0, hwm_pnl: 550.0 }
+        { pnl_pct: 1.10, ltp: 210.0, pnl: 1100.0, hwm_pnl: 2000.0 }
       )
 
       result = described_class.check_exit_conditions(tracker)
 
-      expect(result[:reason]).to eq('TAKE_PROFIT')
-      expect(result[:path]).to eq('take_profit')
+      expect(result[:reason]).to eq('ADAPTIVE_TRAIL')
+      expect(result[:path]).to eq('adaptive_trail')
     end
 
-    it 'returns nil when pnl is inside stop and take profit bands' do
+    it 'returns nil when price remains above the trail floor' do
       allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
         { pnl_pct: 0.05, ltp: 105.0, pnl: 50.0, hwm_pnl: 50.0 }
       )
 
       expect(described_class.check_exit_conditions(tracker)).to be_nil
-    end
-  end
-
-  describe '.loss_limit_hit?' do
-    it 'uses pinned stop loss from tracker config snapshot' do
-      pinned_tracker = instance_double(
-        PositionTracker,
-        id: 2,
-        meta: {
-          'config_snapshot' => {
-            'risk' => { 'sl_pct' => 0.08 },
-            'exit' => { 'stop_loss' => { 'type' => 'static', 'value' => 0.08 } }
-          }
-        },
-        instrument: nil,
-        watchable: nil
-      )
-      allow(AlgoConfig).to receive(:fetch).and_return(
-        risk: { sl_pct: 0.50 },
-        exit: { stop_loss: { type: 'static', value: 0.50 } }
-      )
-
-      expect(described_class.loss_limit_hit?(pinned_tracker, { pnl_pct: -0.09 })).to be(true)
-      expect(described_class.loss_limit_hit?(pinned_tracker, { pnl_pct: -0.05 })).to be(false)
     end
   end
 end

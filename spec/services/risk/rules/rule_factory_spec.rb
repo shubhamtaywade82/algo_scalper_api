@@ -5,22 +5,20 @@ require 'rails_helper'
 RSpec.describe Risk::Rules::RuleFactory do
   let(:risk_config) do
     {
-      sl_pct: 0.10,
-      tp_pct: 0.45
+      adaptive_trailing: {
+        enabled: true,
+        supertrend_flip_exit: false,
+        counter_candles: 0
+      }
     }
   end
 
   describe '.exit_rules' do
-    it 'returns only hard stop-loss and take-profit rules' do
+    it 'returns only the prop-desk adaptive trail rule' do
       rules = described_class.exit_rules(risk_config)
       rule_classes = rules.map(&:class)
 
-      expect(rule_classes).to eq(
-        [
-          Risk::Rules::StopLossRule,
-          Risk::Rules::TakeProfitRule
-        ]
-      )
+      expect(rule_classes).to eq([Risk::Rules::AdaptiveTrailRule])
     end
   end
 
@@ -35,9 +33,9 @@ RSpec.describe Risk::Rules::RuleFactory do
 
     it 'passes config to all rules' do
       engine = described_class.create_engine(risk_config: risk_config)
-      sl_rule = engine.find_rule(Risk::Rules::StopLossRule)
+      trail_rule = engine.find_rule(Risk::Rules::AdaptiveTrailRule)
 
-      expect(sl_rule.config).to eq(risk_config)
+      expect(trail_rule.config).to eq(risk_config)
     end
   end
 end

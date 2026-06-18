@@ -8,14 +8,23 @@ RSpec.describe 'Config pinning on exit path' do
     Live::UnifiedExitChecker.instance_variable_set(:@exit_config_expires_at, nil)
   end
 
-  describe 'loss_limit_hit?' do
+  describe 'adaptive trail hard stop uses pinned config snapshot' do
     let(:tracker) do
       instance_double(
         PositionTracker,
+        id: 1,
+        active?: true,
+        entry_price: 100.0,
+        quantity: 1,
         meta: {
+          'direction' => 'bullish',
           'config_snapshot' => {
-            'risk' => { 'sl_pct' => 0.08 },
-            'exit' => { 'stop_loss' => { 'type' => 'static', 'value' => 0.08 } }
+            'risk' => {
+              'adaptive_trailing' => {
+                'enabled' => true,
+                'stages' => [{ 'min_profit' => 0.0, 'trail_behind_peak' => 0.40, 'hard_stop' => -0.20 }]
+              }
+            }
           }
         },
         instrument: nil,
@@ -25,21 +34,23 @@ RSpec.describe 'Config pinning on exit path' do
 
     before do
       allow(AlgoConfig).to receive(:fetch).and_return(
-        risk: { sl_pct: 0.50 },
-        exit: { stop_loss: { type: 'static', value: 0.50 } }
+        risk: {
+          adaptive_trailing: {
+            enabled: true,
+            stages: [{ min_profit: 0.0, trail_behind_peak: 0.40, hard_stop: -0.99 }]
+          }
+        }
+      )
+      allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).and_return(
+        { pnl_pct: -0.25, ltp: 75.0, pnl: -25.0, hwm_pnl: 0.0 }
       )
     end
 
-    it 'uses pinned stop loss when live config differs' do
-      snapshot = { pnl_pct: -0.09 }
+    it 'fires at pinned -20% hard stop rather than live -99%' do
+      result = Live::UnifiedExitChecker.check_exit_conditions(tracker)
 
-      expect(Live::UnifiedExitChecker.loss_limit_hit?(tracker, snapshot)).to be(true)
-    end
-
-    it 'does not fire when loss is below pinned stop' do
-      snapshot = { pnl_pct: -0.05 }
-
-      expect(Live::UnifiedExitChecker.loss_limit_hit?(tracker, snapshot)).to be(false)
+      expect(result).not_to be_nil
+      expect(result[:reason]).to eq('ADAPTIVE_TRAIL_HARD_STOP')
     end
   end
 end

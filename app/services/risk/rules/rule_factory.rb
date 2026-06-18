@@ -6,8 +6,7 @@ module Risk
     class RuleFactory
       def self.exit_rules(risk_config = {})
         [
-          StopLossRule.new(config: risk_config),
-          TakeProfitRule.new(config: risk_config)
+          AdaptiveTrailRule.new(config: risk_config)
         ]
       end
 

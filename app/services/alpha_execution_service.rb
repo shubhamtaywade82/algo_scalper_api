@@ -102,18 +102,27 @@ module AlphaExecutionService
     def fetch_current_index_ltp(index_key)
       instrument = Instrument.find_by(symbol_name: index_key.to_s.upcase, segment: 'index')
       return nil unless instrument
-      
-      cfg = AlphaStrategy::INDEX_CONFIG[index_key.to_sym]
-      return nil unless cfg
-      
-      instrument.resolve_ltp(segment: cfg[:exchange_segment], security_id: cfg[:security_id])
+
+      index_cfg = AlgoConfig.fetch[:indices]&.find { |row| row[:key].to_s.casecmp?(index_key.to_s) }
+      return instrument.resolve_ltp if index_cfg.blank?
+
+      instrument.resolve_ltp(segment: index_cfg[:segment], security_id: index_cfg[:sid])
     end
 
     def atm_strike(ltp, index_key)
-      cfg = AlphaStrategy::INDEX_CONFIG[index_key.to_sym]
-      return 0 unless cfg
-      step = cfg[:tick_step]
+      step = strike_step_for(index_key)
+      return 0 unless step.positive?
+
       (ltp.to_f / step).round * step
+    end
+
+    def strike_step_for(index_key)
+      case index_key.to_s.downcase
+      when 'nifty' then 50
+      when 'banknifty' then 100
+      when 'sensex' then 100
+      else 50
+      end
     end
 
     def conflicting_position?(signal)

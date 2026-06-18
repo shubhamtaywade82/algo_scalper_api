@@ -29,11 +29,7 @@ module Signal
         enable_confirmation = context[:enable_confirmation]
         confirmation_tf = context[:confirmation_tf]
 
-        if entry_primary == 'supertrend'
-          result = execute_supertrend_only_flow(index_cfg, instrument, signals_cfg, primary_tf)
-        else
-          result = execute_standard_analysis_flow(index_cfg, instrument, signals_cfg, primary_tf, confirmation_tf)
-        end
+        result = execute_supertrend_only_flow(index_cfg, instrument, signals_cfg, primary_tf)
 
         return summary.finalize_pending! unless result
 
@@ -51,7 +47,8 @@ module Signal
         use_strategy_recommendations = result[:use_strategy_recommendations] || false
 
         if signals_cfg.fetch(:halt_on_validation_failure, false) &&
-           validation_result.is_a?(Hash) && validation_result[:valid] == false
+           validation_result.is_a?(Hash) && validation_result[:valid] == false &&
+           !stock_supertrend_entry?(signals_cfg)
           Rails.logger.info(
             "[Signal] halt_on_validation_failure BLOCKED #{index_cfg[:key]}: #{validation_result[:reason]}"
           )
@@ -60,46 +57,52 @@ module Signal
           return summary
         end
 
-        # 5. Trading Context Gate
-        if trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, signals_cfg)
-          Signal::StateTracker.reset(index_cfg[:key])
-          record_cycle_block!('trading_context', regime: regime, direction: final_direction)
-          return summary
+        unless stock_supertrend_entry?(signals_cfg)
+          # Legacy multi-indicator gates — skipped for stock Supertrend-only mode.
+          if trading_context_blocked?(index_cfg, primary_series, primary_analysis, regime_result, regime_state, signals_cfg)
+            Signal::StateTracker.reset(index_cfg[:key])
+            record_cycle_block!('trading_context', regime: regime, direction: final_direction)
+            return summary
+          end
+
+          quality_result = evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime)
+          unless quality_result[:pass]
+            Signal::StateTracker.reset(index_cfg[:key])
+            record_cycle_block!('entry_quality', regime: regime, direction: final_direction)
+            return summary
+          end
+
+          no_trade_gate = execute_no_trade_gate(index_cfg: index_cfg, instrument: instrument, signals_cfg: signals_cfg)
+          unless no_trade_gate
+            record_cycle_block!('no_trade_engine', regime: regime, direction: final_direction)
+            return summary
+          end
+
+          gate_results = execute_execution_gates(index_cfg, instrument, primary_series, final_direction, signals_cfg)
+          unless gate_results
+            record_cycle_block!('execution_gates', regime: regime, direction: final_direction)
+            return summary
+          end
         end
 
-        # 6. Entry Quality Filter
-        quality_result = evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime)
-        unless quality_result[:pass]
-          Signal::StateTracker.reset(index_cfg[:key])
-          record_cycle_block!('entry_quality', regime: regime, direction: final_direction)
-          return summary
-        end
-
-        # 7. No-Trade Context Gate
-        no_trade_gate = execute_no_trade_gate(index_cfg: index_cfg, instrument: instrument, signals_cfg: signals_cfg)
-        unless no_trade_gate
-          record_cycle_block!('no_trade_engine', regime: regime, direction: final_direction)
-          return summary
-        end
-
-        nearest_expiry = resolve_nearest_expiry_date(index_cfg: index_cfg, no_trade_gate: no_trade_gate)
+        nearest_expiry = resolve_nearest_expiry_date(index_cfg: index_cfg, no_trade_gate: nil)
         if entry_dte_guard_blocks?(index_cfg: index_cfg, signals_cfg: signals_cfg, nearest_expiry: nearest_expiry)
           Signal::StateTracker.reset(index_cfg[:key])
           record_cycle_block!('entry_dte_guard', regime: regime, direction: final_direction)
           return summary
         end
 
-        # 8. Institutional and Permission Gates
-        gate_results = execute_execution_gates(index_cfg, instrument, primary_series, final_direction, signals_cfg)
-        unless gate_results
-          record_cycle_block!('execution_gates', regime: regime, direction: final_direction)
-          return summary
+        if stock_supertrend_entry?(signals_cfg)
+          permission = :scale_ready
+          smc_decision = final_direction == :bullish ? :call : :put
+          momentum_score = nil
+          smc_confluence_ltf_summary = nil
+        else
+          permission = gate_results[:permission]
+          smc_decision = gate_results[:smc_decision]
+          momentum_score = gate_results[:momentum_score]
+          smc_confluence_ltf_summary = gate_results[:smc_confluence_ltf_summary]
         end
-
-        permission = gate_results[:permission]
-        smc_decision = gate_results[:smc_decision]
-        momentum_score = gate_results[:momentum_score]
-        smc_confluence_ltf_summary = gate_results[:smc_confluence_ltf_summary]
 
         # 9. Persistence Pre-checks
         state_snapshot = Signal::StateTracker.record(
@@ -116,8 +119,8 @@ module Signal
           final_direction,
           primary_series,
           effective_validation_mode,
-          expiry_date: no_trade_gate[:expiry_date],
-          chain_data: no_trade_gate[:chain_data]
+          expiry_date: nearest_expiry,
+          chain_data: nil
         )
 
         # 11. Metadata Building
@@ -276,46 +279,23 @@ module Signal
         final_direction = trend_direction == :long ? :bullish : :bearish
         primary_series = primary_analysis[:series]
 
-        regime_result = MarketRegimeDetector.new(primary_series).detect
-        regime_sym = regime_result[:regime].to_s
-        effective_validation_mode = if %w[RANGING CHOPPY].include?(regime_sym)
-                                      'conservative'
-                                    else
-                                      (signals_cfg[:validation_mode] || 'balanced').to_s
-                                    end
-        if %w[RANGING CHOPPY].include?(regime_sym)
-          Rails.logger.info(
-            "[Signal] Switching to CONSERVATIVE validation for #{index_cfg[:key]} " \
-            "due to #{regime_sym} regime (supertrend path)"
-          )
-        end
-
-        if direction_gate_blocked?(index_cfg, signals_cfg, final_direction, regime_sym)
-          Signal::StateTracker.reset(index_cfg[:key])
-          return
-        end
-
-        validation_result = comprehensive_validation(
-          index_cfg, final_direction, primary_series,
-          primary_analysis[:supertrend], { value: primary_analysis[:adx_value] },
-          supertrend_only: true,
-          validation_mode: effective_validation_mode,
-          instrument: instrument
-        )
-
-        ta_result = perform_diagnostic_ta(index_cfg, signals_cfg)
-
         {
           direction: final_direction,
           primary_analysis: primary_analysis,
           confirmation_analysis: nil,
           primary_series: primary_series,
-          ta_result: ta_result,
-          regime_result: regime_result,
-          regime: regime_result[:regime],
-          validation_result: validation_result,
-          effective_validation_mode: effective_validation_mode
+          ta_result: nil,
+          regime_result: { regime: :trending },
+          regime: :trending,
+          validation_result: { valid: true },
+          effective_validation_mode: 'stock',
+          strategy_recommendation: nil,
+          use_strategy_recommendations: false
         }
+      end
+
+      def stock_supertrend_entry?(signals_cfg)
+        (signals_cfg.dig(:entry_strategy, :primary) || 'supertrend').to_s.strip.downcase == 'supertrend'
       end
 
       def perform_diagnostic_ta(index_cfg, signals_cfg)
