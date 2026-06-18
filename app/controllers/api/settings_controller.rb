@@ -8,7 +8,7 @@ module Api
 
     before_action :authenticate_dashboard_token!, only: %i[index change_logs]
     before_action :authenticate_operator_token!, only: :update_ip
-    before_action :authenticate_settings!, only: %i[update_bulk update_deep_merge]
+    before_action :authenticate_settings!, only: %i[update_bulk update_deep_merge update_fast_entry_mode]
 
     # Top-level keys allowed for algo config overrides (must match config/algo.yml structure)
     PERMITTED_SETTINGS_KEYS = %i[
@@ -99,6 +99,42 @@ module Api
       render json: { error: 'invalid_config', errors: e.errors }, status: :unprocessable_content
     rescue StandardError => e
       Rails.logger.error("[SettingsController] update_deep_merge error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
+    # GET /api/settings/fast_entry_mode
+    def fast_entry_mode
+      render json: { success: true, fast_entry_mode: Signal::FastEntryMode.status }
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] fast_entry_mode error: #{e.class} - #{e.message}")
+      render json: { error: e.message }, status: :internal_server_error
+    end
+
+    # PATCH /api/settings/fast_entry_mode
+    # Body: { "enabled": true|false } — persisted to algo_config_document; effective immediately (no daemon restart).
+    # FAST_ENTRY_MODE env, when set, overrides the DB value until removed and process restarted.
+    def update_fast_entry_mode
+      enabled = ActiveModel::Type::Boolean.new.cast(params.require(:enabled))
+
+      AlgoConfig::DocumentStore.apply_deep_merge_patch!(
+        { signals: { fast_entry_mode: { enabled: enabled } } },
+        source: 'api_fast_entry_mode',
+        actor: 'api',
+        request_id: request.request_id,
+        metadata: { remote_ip: request.remote_ip, enabled: enabled }
+      )
+
+      render json: {
+        success: true,
+        message: enabled ? 'Fast entry mode enabled' : 'Fast entry mode disabled',
+        fast_entry_mode: Signal::FastEntryMode.status
+      }
+    rescue ActionController::ParameterMissing => e
+      render json: { error: e.message }, status: :bad_request
+    rescue AlgoConfig::ValidationError => e
+      render json: { error: 'invalid_config', errors: e.errors }, status: :unprocessable_content
+    rescue StandardError => e
+      Rails.logger.error("[SettingsController] update_fast_entry_mode error: #{e.class} - #{e.message}")
       render json: { error: e.message }, status: :internal_server_error
     end
 

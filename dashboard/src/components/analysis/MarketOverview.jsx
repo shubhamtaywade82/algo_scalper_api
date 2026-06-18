@@ -1,5 +1,6 @@
 import { createMemo } from 'solid-js'
 import { Show, For } from 'solid-js'
+import AnimatedNumber from '../AnimatedNumber'
 
 function regimeColor(r) {
   const map = {
@@ -9,11 +10,6 @@ function regimeColor(r) {
     'CHOPPY': 'bg-amber-500/15 text-amber-400 border-amber-500/20'
   }
   return map[r] || 'bg-white/5 text-gray-400 border-white/10'
-}
-
-function inr(val) {
-  if (val == null) return '—'
-  return Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function validityLabel(v) {
@@ -68,7 +64,9 @@ export default function MarketOverview(props) {
 
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white/[0.03] rounded-xl p-4 border border-white/5 text-center">
-          <div class="text-2xl font-black text-data text-cyan-400">{inr(data()?.ltp)}</div>
+          <div class="text-2xl font-black text-data text-cyan-400">
+            <AnimatedNumber value={data()?.ltp} decimals={2} nullDisplay="—" />
+          </div>
           <div class="text-[9px] font-black text-gray-600 tracking-widest uppercase mt-1">LTP</div>
         </div>
         <div class="bg-white/[0.03] rounded-xl p-4 border border-white/5 text-center">
@@ -88,7 +86,9 @@ export default function MarketOverview(props) {
           <div class="text-[9px] font-black text-gray-600 tracking-widest uppercase mt-2">Time Session</div>
         </div>
         <div class="bg-white/[0.03] rounded-xl p-4 border border-white/5 text-center">
-          <div class="text-2xl font-black text-data text-primary-400">{data()?.active_positions ?? 0}</div>
+          <div class="text-2xl font-black text-data text-primary-400">
+            <AnimatedNumber value={data()?.active_positions ?? 0} integer decimals={0} />
+          </div>
           <div class="text-[9px] font-black text-gray-600 tracking-widest uppercase mt-1">Active Positions</div>
         </div>
       </div>
@@ -96,11 +96,15 @@ export default function MarketOverview(props) {
       <Show when={metrics()}>
         <div class="grid grid-cols-3 gap-3 mt-4">
           <div class="bg-white/[0.02] rounded-lg p-3 border border-white/5 text-center">
-            <div class="text-sm font-black text-data text-white">{metrics().adx_value?.toFixed(1)}</div>
+            <div class="text-sm font-black text-data text-white">
+              <AnimatedNumber value={metrics().adx_value} decimals={1} nullDisplay="—" />
+            </div>
             <div class="text-[8px] font-black text-gray-600 tracking-widest uppercase">ADX</div>
           </div>
           <div class="bg-white/[0.02] rounded-lg p-3 border border-white/5 text-center">
-            <div class="text-sm font-black text-data text-white">{(metrics().atr_percent * 100)?.toFixed(2)}%</div>
+            <div class="text-sm font-black text-data text-white">
+              <AnimatedNumber value={metrics().atr_percent != null ? metrics().atr_percent * 100 : null} suffix="%" decimals={2} nullDisplay="—" />
+            </div>
             <div class="text-[8px] font-black text-gray-600 tracking-widest uppercase">ATR %</div>
           </div>
           <div class="bg-white/[0.02] rounded-lg p-3 border border-white/5 text-center">

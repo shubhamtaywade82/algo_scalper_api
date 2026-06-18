@@ -63,7 +63,7 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
                                                       indices: {
                                                         nifty: {
                                                           key: 'nifty',
-                                                          segment: 'NSE_FNO',
+                                                          segment: 'IDX_I',
                                                           security_id: '12345',
                                                           timeframes: %w[5m 15m],
                                                           supertrend: {
@@ -78,7 +78,7 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
 
   describe 'Signal Engine Integration' do
     context 'when generating signals for single timeframe' do
-      let(:index_config) { { key: 'nifty', segment: 'NSE_FNO', security_id: '12345' } }
+      let(:index_config) { { key: 'nifty', segment: 'IDX_I', security_id: '12345' } }
 
       it 'generates bullish signal when conditions are met' do
         # Mock candle series with bullish data
@@ -150,7 +150,7 @@ RSpec.describe 'Signal Generation Strategies Integration', :vcr, type: :integrat
       let(:index_config) do
         {
           key: 'nifty',
-          segment: 'NSE_FNO',
+          segment: 'IDX_I',
           security_id: '12345',
           timeframes: %w[5m 15m]
         }

@@ -39,10 +39,13 @@ Rails.application.routes.draw do
     # Live AI analysis dashboard
     get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
     get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
+    get  'analysis/:index_key/risk_explorer', to: 'analysis#risk_explorer', as: :analysis_risk_explorer
     post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
 
     # Algo Settings
     get    'settings',              to: 'settings#index'
+    get    'settings/fast_entry_mode', to: 'settings#fast_entry_mode'
+    patch  'settings/fast_entry_mode', to: 'settings#update_fast_entry_mode'
     get    'settings/change_logs',  to: 'settings#change_logs'
     patch  'settings/bulk',         to: 'settings#update_bulk'
     patch  'settings/deep_merge',   to: 'settings#update_deep_merge'

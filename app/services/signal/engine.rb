@@ -175,7 +175,7 @@ module Signal
         end
 
         # 14. Trigger Entry
-        trigger_entry_flow(
+        entered = trigger_entry_flow(
           index_cfg: index_cfg, instrument: instrument, signal: signal,
           picks: gate_result[:picks], final_direction: final_direction,
           primary_series: primary_series, primary_tf: primary_tf,
@@ -185,7 +185,11 @@ module Signal
           market_context_extra: gate_result[:market_context_extra],
           execution_permission: gate_result[:execution_permission]
         )
-        summary.entered!(direction: final_direction, regime: regime)
+        if entered
+          summary.entered!(direction: final_direction, regime: regime)
+        else
+          record_cycle_block!('entry_guard', regime: regime, direction: final_direction)
+        end
         summary
       rescue StandardError => e
         Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
@@ -1272,7 +1276,11 @@ module Signal
         smc_factor      = index_cfg && direction ? smc_bias_confidence_factor(direction, index_cfg) : 0.0
 
         total_confidence = base_confidence + adx_factor + confirmation_factor + validation_factor + supertrend_factor + macd_factor + smc_factor
-        [total_confidence, 1.0].min # Cap at 1.0
+        capped = [total_confidence, 1.0].min
+        return capped if validation_result[:valid]
+
+        # Failed validation must not display as VERY HIGH on the dashboard.
+        [capped, 0.79].min
       end
 
       def analyze_with_recommended_strategy(index_cfg:, instrument:, timeframe:, strategy_recommendation:)
@@ -1635,6 +1643,13 @@ module Signal
       end
 
       def evaluate_entry_quality(index_cfg, primary_series, primary_analysis, final_direction, regime)
+        if FastEntryMode.enabled?
+          Rails.logger.info(
+            "[Signal] EntryQualityFilter SKIPPED #{index_cfg[:key]} #{final_direction} (fast_entry_mode)"
+          )
+          return { pass: true, score: nil, breakdown: {}, gates: {}, reject_reason: nil }
+        end
+
         quality_result = Signal::EntryQualityFilter.evaluate(
           series: primary_series,
           supertrend_result: primary_analysis[:supertrend],
@@ -1955,7 +1970,7 @@ module Signal
           direction: final_direction,
           permission: permission,
           expected_spot_move: expected_spot_move,
-          momentum_score: momentum_score
+          momentum_score: FastEntryMode.effective_momentum_score(momentum_score)
         )
 
         if strike_result.picks.blank?
@@ -2034,7 +2049,8 @@ module Signal
           entry_contract: supertrend_direct_entry ? 'supertrend_machine_v1' : 'bos_machine_v1',
           permission: execution_permission,
           entry_quality_score: quality_result[:score],
-          entry_quality_breakdown: quality_result[:breakdown]
+          entry_quality_breakdown: quality_result[:breakdown],
+          fast_entry_mode: FastEntryMode.enabled?
         )
 
         if supertrend_direct_entry
@@ -2055,8 +2071,9 @@ module Signal
               permission: execution_permission,
               signal: signal
             )
-            break if entered
+            return true if entered
           end
+          false
         else
           Entries::BosEntryEngine.run_for(
             index_cfg: index_cfg,
@@ -2066,7 +2083,7 @@ module Signal
             entry_metadata: entry_metadata,
             permission: execution_permission,
             signal: signal
-          )
+          ) == true
         end
       end
     end

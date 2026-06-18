@@ -109,14 +109,35 @@ class Instrument < ApplicationRecord
     end
 
     def find_by_sid_and_segment(security_id:, segment_code:, symbol_name: nil)
-      segment_key = segment_key_for(segment_code)
-      return nil unless security_id.present? && segment_key.present?
+      return nil unless security_id.present? && segment_code.present?
 
       sid = security_id.to_s
-      instrument = find_by(security_id: sid, segment: segment_key)
-      return instrument if instrument.present? || symbol_name.blank?
+      segment_keys_for(segment_code).each do |segment_key|
+        instrument = find_by(security_id: sid, segment: segment_key)
+        return instrument if instrument.present?
+      end
 
-      find_by(symbol_name: symbol_name.to_s, segment: segment_key)
+      return nil if symbol_name.blank?
+
+      segment_keys_for(segment_code).each do |segment_key|
+        instrument = find_by(symbol_name: symbol_name.to_s, segment: segment_key)
+        return instrument if instrument.present?
+      end
+
+      nil
+    end
+
+    def segment_keys_for(segment_code)
+      primary = segment_key_for(segment_code)
+      return [] if primary.blank?
+
+      keys = [primary]
+      case primary
+      when 'index' then keys.push('I', 'i')
+      when 'derivatives' then keys.push('D', 'd')
+      when 'equity' then keys.push('E', 'e')
+      end
+      keys.uniq
     end
   end
 

@@ -14,6 +14,8 @@ export function useAnalysis() {
   const [activeIndex, setActiveIndex] = createSignal(null)
   const [historicalData, setHistoricalData] = createSignal(null)
   const [historicalLoading, setHistoricalLoading] = createSignal(false)
+  const [riskExplorerData, setRiskExplorerData] = createSignal(null)
+  const [riskExplorerLoading, setRiskExplorerLoading] = createSignal(false)
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
   const [snapshotData, setSnapshotData]   = createSignal(null)
   const [snapshotError, setSnapshotError] = createSignal(null)
@@ -81,6 +83,21 @@ export function useAnalysis() {
     }
   }
 
+  async function fetchRiskExplorer(index, weeks = 8) {
+    setActiveIndex(index)
+    try {
+      setRiskExplorerLoading(true)
+      const res = await fetch(`/api/analysis/${index}/risk_explorer?weeks=${weeks}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setRiskExplorerData(await res.json())
+    } catch (e) {
+      console.error('[Analysis] risk_explorer fetch failed:', e)
+      setRiskExplorerData({ error: e.message })
+    } finally {
+      setRiskExplorerLoading(false)
+    }
+  }
+
   function ensureAutoLoadedDetails(index, { skipAiSnapshot = false } = {}) {
     if (!index || !INDICES.includes(index)) return
 
@@ -88,6 +105,7 @@ export function useAnalysis() {
     if (!histDone[index]) {
       setAutoHistoricalLoadedForIndex({ ...histDone, [index]: true })
       void fetchHistorical(index)
+      void fetchRiskExplorer(index)
     }
 
     if (skipAiSnapshot) return
@@ -143,11 +161,14 @@ export function useAnalysis() {
     fetchOne,
     fetchAll,
     fetchHistorical,
+    fetchRiskExplorer,
     fetchAiSnapshot,
     ensureAutoLoadedDetails,
     activeIndex,
     historicalData,
     historicalLoading,
+    riskExplorerData,
+    riskExplorerLoading,
     snapshotLoading,
     snapshotData,
     snapshotError,

@@ -111,7 +111,10 @@ module Entries
       end
 
       def find_instrument(index_cfg)
-        Instrument.find_by(security_id: index_cfg[:sid], segment: index_cfg[:segment])
+        Instrument.find_by_sid_and_segment(
+          security_id: index_cfg[:sid],
+          segment_code: index_cfg[:segment]
+        )
       end
 
       def cooldown_active_for_index?(index_key, cooldown)

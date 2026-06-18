@@ -156,6 +156,7 @@ class AlgoConfig
           metadata: metadata.deep_stringify_keys
         )
         AlgoConfig.reset!
+        Signal::FastEntryMode.reset!
         Rails.logger.info(
           "[AlgoConfig::DocumentStore] persisted #{DOCUMENT_KEY} source=#{source} " \
           "paths=#{Array(changed_paths).join(',')}"

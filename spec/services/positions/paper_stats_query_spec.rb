@@ -27,10 +27,22 @@ RSpec.describe Positions::PaperStatsQuery do
       result = described_class.call(paper: true)
 
       expect(result[:total_trades]).to eq(2)
+      expect(result[:active_positions]).to eq(1)
       expect(result[:winners]).to eq(1)
       expect(result[:losers]).to eq(1)
       expect(result[:stats_scope]).to eq('paper')
       expect(Portfolio::PaperPeakTracker).to have_received(:observe!).with(anything, paper: true)
+    end
+
+    it 'counts only database-active positions when in-memory cache is stale' do
+      stale = double('stale_position', tracker_id: 99_999)
+      cache = instance_double(Positions::ActiveCache, all_positions: [stale])
+      allow(Positions::ActiveCache).to receive(:instance).and_return(cache)
+      PositionTracker.where(status: :active).update_all(status: :exited, exited_at: Time.current)
+
+      result = described_class.call(paper: true)
+
+      expect(result[:active_positions]).to eq(0)
     end
 
     it 'falls back to all exits when auto scope is empty but day has live trades' do

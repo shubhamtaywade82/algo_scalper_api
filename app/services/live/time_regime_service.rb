@@ -140,6 +140,9 @@ module Live
       time ||= current_ist_time
       time_str = time.strftime('%H:%M')
 
+      earliest_entry = AlgoConfig.fetch.dig(:risk, :time_overrides, :earliest_entry_time) || '09:30'
+      return false if time_str < earliest_entry
+
       cfg_no_new_trades_after = AlgoConfig.fetch.dig(:risk, :time_overrides, :no_new_trades_after) || NO_NEW_TRADES_AFTER
       # No new trades after the config time IST (unless exceptional conditions)
       return false if time_str >= cfg_no_new_trades_after
