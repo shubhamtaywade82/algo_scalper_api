@@ -123,48 +123,20 @@ module Live
       end
 
       def run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
-        before_meta = nil
-        pending_meta = nil
         return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
-        before_meta = hydrate_meta_with_runtime(tracker)
-        pending_meta = before_meta.deep_dup
-
-        advance_trade_state_for(tracker, position_data: position_data, pending_meta: pending_meta)
-
-        # Layers will now update pending_meta instead of the DB directly
-        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
+        exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
+        return unless exit_decision&.dig(:exit)
 
-        enforce_profit_floor_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_time_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-      ensure
-        if pending_meta && !exit_requested_or_sent?(tracker) && !tracker.exited?
-          Positions::MetaPatch.apply!(tracker: tracker, before: before_meta, after: pending_meta)
-        end
+        path = exit_decision[:path] || exit_decision[:reason]
+        track_exit_path(tracker, path, exit_decision[:reason])
+        dispatch_exit(exit_engine, tracker, exit_decision[:reason])
       end
 
       def tick_stream_fresh?
@@ -180,17 +152,6 @@ module Live
 
         @last_realtime_skip_log_at = Time.current
         true
-      end
-
-      def hydrate_meta_with_runtime(tracker)
-        base = (tracker.meta || {}).deep_stringify_keys
-        runtime = Live::PositionRuntimeCache.instance.fetch(tracker.id)
-        return base if runtime.empty?
-
-        runtime.each do |key, value|
-          base[key.to_s] = value unless value.nil?
-        end
-        base
       end
 
       def exit_requested_or_sent?(tracker)

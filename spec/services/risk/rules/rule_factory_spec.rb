@@ -6,26 +6,20 @@ RSpec.describe Risk::Rules::RuleFactory do
   let(:risk_config) do
     {
       sl_pct: 0.10,
-      tp_pct: 0.45,
-      secure_profit_threshold_rupees: 600.0,
-      secure_profit_drawdown_pct: 0.025
+      tp_pct: 0.45
     }
   end
 
   describe '.exit_rules' do
-    it 'includes prop-desk give-back protection rules' do
+    it 'returns only hard stop-loss and take-profit rules' do
       rules = described_class.exit_rules(risk_config)
       rule_classes = rules.map(&:class)
 
-      expect(rule_classes).to include(
-        Risk::Rules::AdaptiveTrailRule,
-        Risk::Rules::VixForceExitRule,
-        Risk::Rules::DteZeroThetaFlatExitRule,
-        Risk::Rules::GreenTradeCapRule,
-        Risk::Rules::ProfitFloorExitRule,
-        Risk::Rules::PeakDrawdownRule,
-        Risk::Rules::SecureProfitRule,
-        Risk::Rules::FastProfitLockRule
+      expect(rule_classes).to eq(
+        [
+          Risk::Rules::StopLossRule,
+          Risk::Rules::TakeProfitRule
+        ]
       )
     end
   end

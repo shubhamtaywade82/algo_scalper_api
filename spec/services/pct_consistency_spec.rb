@@ -86,59 +86,7 @@ RSpec.describe 'Percentage format consistency across the trading pipeline' do
   end
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Layer 3: PercentagePnlRule uses DECIMAL threshold and DECIMAL pnl_pct
-  # ─────────────────────────────────────────────────────────────────────────
-  describe Risk::Rules::PercentagePnlRule do
-    let(:rule) do
-      described_class.new(config: {
-        percentage_pnl_exit: { enabled: true, target_pct: 0.30 }
-      })
-    end
-
-    def context_with(pnl_decimal)
-      instance_double(
-        Risk::Rules::RuleContext,
-        active?: true,
-        pnl_pct: BigDecimal(pnl_decimal.to_s),
-        risk_config: {}
-      )
-    end
-
-    it 'does NOT exit at 29.9% (pnl_pct DECIMAL 0.299)' do
-      result = rule.evaluate(context_with(0.299))
-      expect(result.exit?).to be false
-    end
-
-    it 'exits at exactly 30% (pnl_pct DECIMAL 0.30)' do
-      result = rule.evaluate(context_with(0.30))
-      expect(result.exit?).to be true
-    end
-
-    it 'exits above 30% (pnl_pct DECIMAL 0.45)' do
-      result = rule.evaluate(context_with(0.45))
-      expect(result.exit?).to be true
-    end
-
-    it 'does NOT fire on tiny gains (pnl_pct 0.009, threshold 0.30)' do
-      result = rule.evaluate(context_with(0.009))
-      expect(result.exit?).to be false
-    end
-
-    it 'does NOT fire when pnl is negative' do
-      result = rule.evaluate(context_with(-0.05))
-      expect(result.exit?).to be false
-    end
-
-    it 'reason string displays percentage (not decimal) for readability' do
-      result = rule.evaluate(context_with(0.30))
-      # Should say "30.0%" not "0.3"
-      expect(result.reason).to include('30.0%')
-      expect(result.reason).not_to include(' 0.3 ')
-    end
-  end
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # Layer 4: UnifiedExitChecker compares DECIMAL pnl_pct to DECIMAL thresholds
+  # Layer 3: UnifiedExitChecker compares DECIMAL pnl_pct to DECIMAL thresholds
   # ─────────────────────────────────────────────────────────────────────────
   describe Live::UnifiedExitChecker do
     let(:algo_cfg) do
@@ -158,6 +106,7 @@ RSpec.describe 'Percentage format consistency across the trading pipeline' do
       instance_double(
         PositionTracker,
         id: 1,
+        active?: true,
         entry_price: 100.0,
         quantity: 1,
         meta: nil,

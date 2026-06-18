@@ -125,37 +125,10 @@ module Live
         tracker = Positions::ActivePositionsCache.instance.active_trackers.find { |t| t.id == tracker_id }
         return unless tracker&.active?
 
-        # Evaluate immediate exits (Hard SL, TP, Trailing)
-        # We use UnifiedExitChecker for sub-second logic
-        exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
-
-        if exit_decision && exit_decision[:exit]
-          reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
-          Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
-
-          # Execute exit immediately
-          engine = @exit_engine || self
-          dispatch_exit(engine, tracker, reason)
-          return unless tracker.active?
-        end
-
-        # Portfolio-level profit lock evaluation
-        begin
-          Portfolio::PnlTracker.update_unrealized(
-            tracker_id: tracker_id,
-            pnl: event[:pnl].to_f
-          )
-          Portfolio::ProfitLockEngine.evaluate!
-        rescue StandardError => e
-          Rails.logger.error("[RiskManager] Portfolio::ProfitLockEngine error: #{e.class} - #{e.message}")
-        end
-
-        return unless realtime_tick_first_enabled?
-        return unless should_run_realtime_enforcement?(tracker_id)
-
-        # We need position_data for the rules
         position_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker_id)
         return unless position_data
+
+        return unless should_run_realtime_enforcement?(tracker_id)
 
         run_enforcement_for_tracker(tracker, @exit_engine || self, position_data: position_data)
       ensure

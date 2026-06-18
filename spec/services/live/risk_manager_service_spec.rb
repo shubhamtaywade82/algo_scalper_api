@@ -54,30 +54,22 @@ RSpec.describe Live::RiskManagerService do
   describe '#handle_pnl_event' do
     let(:tracker) { build_stubbed(:position_tracker, :active, id: 1) }
     let(:event) { { tracker_id: 1, pnl: 50.0, ltp: 100.0 } }
+    let(:position_data) { OpenStruct.new(current_ltp: 100.0, pnl: 50.0) }
 
     before do
       service.instance_variable_set(:@running, true)
       allow(active_cache).to receive(:active_trackers).and_return([tracker])
-      allow(Portfolio::PnlTracker).to receive(:update_unrealized)
-      allow(Portfolio::ProfitLockEngine).to receive(:evaluate!)
+      allow(Positions::ActiveCache.instance).to receive(:get_by_tracker_id).with(1).and_return(position_data)
+      allow(service).to receive(:should_run_realtime_enforcement?).and_return(true)
     end
 
-    it 'evaluates exit conditions via UnifiedExitChecker' do
-      expect(Live::UnifiedExitChecker).to receive(:check_exit_conditions).with(tracker).and_return({ exit: false })
+    it 'runs core exit enforcement for the tracker' do
+      expect(service).to receive(:run_enforcement_for_tracker).with(
+        tracker,
+        exit_engine,
+        position_data: position_data
+      )
       service.send(:handle_pnl_event, event)
-    end
-
-    context 'when exit is triggered' do
-      let(:exit_decision) { { exit: true, reason: 'Target Reached' } }
-
-      before do
-        allow(Live::UnifiedExitChecker).to receive(:check_exit_conditions).and_return(exit_decision)
-      end
-
-      it 'calls dispatch_exit on the exit engine' do
-        expect(service).to receive(:dispatch_exit).with(exit_engine, tracker, /Target Reached/)
-        service.send(:handle_pnl_event, event)
-      end
     end
   end
 
