@@ -198,9 +198,17 @@ module Live
       tracker ||= PositionTracker.find_by(id: tracker_id)
       return unless tracker
 
-      meta = (pending_meta || tracker.meta || {}).stringify_keys
-      old_highest = meta['highest_price'].to_f
-      old_lowest = meta['lowest_price']
+      meta = (pending_meta || {}).stringify_keys
+      old_highest = if pending_meta
+                      meta['highest_price'].to_f
+                    else
+                      tracker.runtime_meta_fetch('highest_price').to_f
+                    end
+      old_lowest = if pending_meta
+                     meta['lowest_price']
+                   else
+                     tracker.runtime_meta_fetch('lowest_price')
+                   end
 
       new_highest = [old_highest, highest_price].max
       new_lowest = old_lowest.nil? ? lowest_price : [old_lowest.to_f, lowest_price].min
@@ -215,7 +223,11 @@ module Live
         pending_meta['highest_price'] = new_highest
         pending_meta['lowest_price'] = new_lowest
       elsif tracker.exit_requested_at.blank? && tracker.exit_sent_at.blank? && !tracker.exited?
-        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+        Live::PositionRuntimeCache.instance.merge(
+          tracker_id,
+          highest_price: new_highest,
+          lowest_price: new_lowest
+        )
       end
     end
 

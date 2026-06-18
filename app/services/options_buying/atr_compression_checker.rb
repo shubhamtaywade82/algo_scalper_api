@@ -50,8 +50,8 @@ module OptionsBuying
     end
 
     def compute_daily_atr
-      to_date = (Time.zone.today - 1).to_s
-      from_date = (Time.zone.today - 40).to_s
+      to_date = Market::Calendar.trading_days_ago(1).to_s
+      from_date = Market::Calendar.trading_days_ago(40).to_s
       raw = @instrument.historical_ohlc(from_date: from_date, to_date: to_date)
       return nil if raw.blank?
 

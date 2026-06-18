@@ -80,6 +80,11 @@ module Risk
         )
       end
 
+      def enabled?(_context = nil)
+        cfg = AlgoConfig.fetch.dig(:risk, :fast_profit_lock) || {}
+        cfg.fetch(:enabled, true) != false
+      end
+
       private
 
       # Returns the most protective (highest-trigger) tier whose threshold the peak
@@ -96,11 +101,6 @@ module Risk
           raw.map { |t| { trigger_pct: t[:trigger_pct].to_f, lock_pct: t[:lock_pct].to_f } }
              .sort_by { |t| t[:trigger_pct] }
         end
-      end
-
-      def enabled?(_context = nil)
-        cfg = AlgoConfig.fetch.dig(:risk, :fast_profit_lock) || {}
-        cfg.fetch(:enabled, true) != false
       end
     end
   end

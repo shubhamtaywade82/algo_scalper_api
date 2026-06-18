@@ -51,4 +51,14 @@ RSpec.describe Market::Calendar do
       end
     end
   end
+
+  describe '.on_or_before_trading_day' do
+    it 'returns the same date on a weekday' do
+      expect(described_class.on_or_before_trading_day(Date.new(2026, 6, 18))).to eq(Date.new(2026, 6, 18))
+    end
+
+    it 'returns the previous Friday for a Saturday' do
+      expect(described_class.on_or_before_trading_day(Date.new(2026, 5, 9))).to eq(Date.new(2026, 5, 8))
+    end
+  end
 end

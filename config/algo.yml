@@ -5,8 +5,15 @@ paper_trading:
   enabled: true
   balance: 100000
   # Wallet realized PnL: cumulative = all-time paper exits (carry capital day to day).
-  # daily = only exits on the current calendar day (legacy ₹1L + today’s closes).
+  # daily = only exits on the current calendar day (legacy ₹1L + today's closes).
   realized_scope: cumulative
+
+# Double-entry paper ledger (financial source of truth alongside position_trackers)
+ledger:
+  enabled: false          # when true, GatewayPaper wallet reads from ledger
+  paper_enabled: false    # alias gate for paper wallet reads
+  shadow_mode: true         # post journals + keep legacy wallet for drift checks
+  block_negative_cash: true
 
 # Realtime execution controls (tick-first architecture)
 realtime:
@@ -61,7 +68,7 @@ options_buying:
     refresh_minutes: 30
     subscribe_sync_seconds: 30      # daemon polls radar set this often to subscribe strikes to the WS feed
   execution:
-    spread_enabled: false         # BidAskSpreadGuard only runs when true
+    spread_enabled: true          # BidAskSpreadGuard — per-index overrides in indices[].execution
     max_bid_ask_spread_pct: 0.015
     tcm_enabled: false            # TransactionCostGuard (pre-trade net-edge gate) only runs when true
     min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
@@ -116,8 +123,10 @@ trading:
     cache_ttl_minutes: 15
 
 strike_cooldown_guard:
-  enabled: true
-  cooldown_minutes: 20
+  enabled: false
+  after_any_exit: false
+  cooldown_minutes: 5
+  loss_cooldown_minutes: 5
 
 capital_allocator:
   post_peak_size_cut:
@@ -169,12 +178,23 @@ dhanhq:
   enable_orders: false # Set to true for live order submission (false = dry-run logging only)
 
 # ============================================
+# MARKET REGIME (India VIX)
+# ============================================
+market:
+  vix_gate:
+    enabled: true
+    fail_closed_entries: true  # block entries until first successful evaluate!
+    security_id: "21"       # India VIX (NSE IDX_I) — Dhan scrip master confirmed
+    segment: IDX_I
+    entry_ceiling: 20.0     # block new entries when VIX above this
+    force_exit_above: 22.0  # force-exit all positions when VIX above this
+
+# ============================================
 # INDEX CONFIG (TREND-SCORE DRIVEN)
+# Identity, lot, fno_segment, execution defaults: config/india_index_registry.yml
 # ============================================
 indices:
   - key: NIFTY
-    segment: IDX_I
-    sid: "13"
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
@@ -217,8 +237,6 @@ indices:
         priority: 4
 
   - key: BANKNIFTY
-    segment: IDX_I
-    sid: "25"
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
@@ -261,8 +279,6 @@ indices:
         priority: 4
 
   - key: SENSEX
-    segment: IDX_I
-    sid: "51"
     capital_alloc_pct: 0.30
     max_same_side: 1
     cooldown_sec: 180
@@ -321,9 +337,58 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
-  sl_pct: 0.15 # -15% STOP LOSS — intraday options buying (1:3 R:R with tp_pct)
+  sl_pct: 0.10 # -10% base premium SL — intraday options buying (tightened from 15%)
   tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
   per_trade_risk_pct: 0.40
+
+  # DTE-resolved intraday parameters — pinned into config_snapshot at entry
+  dte_parameters:
+    enabled: true
+    defaults:
+      sl_pct: 0.10
+      tp_pct: 0.45
+      trail_pct: 0.07
+      volume_velocity_multiplier: 2.0
+    by_dte:
+      "0":
+        sl_pct: 0.08
+        tp_pct: 0.25
+        trail_pct: 0.05
+        volume_velocity_multiplier: 2.5
+        max_entry_time: "12:30"
+      "1":
+        sl_pct: 0.10
+        tp_pct: 0.35
+        trail_pct: 0.08
+        volume_velocity_multiplier: 2.5
+        max_entry_time: "14:00"
+      "2":
+        sl_pct: 0.10
+        tp_pct: 0.40
+        trail_pct: 0.07
+        volume_velocity_multiplier: 2.0
+        max_entry_time: "14:30"
+
+  # 0-DTE afternoon theta-flat exit — force-close stale 0-DTE positions after cutoff
+  dte_zero_exit:
+    enabled: true
+    after_time: "14:00"           # IST — start at closing repricing (was 12:30)
+    min_pnl_pct_to_hold: 0.015    # keep if >= +1.5%; trailing owns clear winners (was 3%)
+
+  # Once trade was green, never ride back to full premium SL
+  green_trade_cap:
+    enabled: true
+    min_hwm_rupees: 300
+    max_adverse_pct: 0.08 # cap at -8% if HWM >= ₹300
+
+  fast_profit_lock:
+    enabled: true
+    tiers:
+      - { trigger_pct: 0.025, lock_pct: 0.005 } # +2.5% peak → lock +0.5%
+      - { trigger_pct: 0.04, lock_pct: 0.015 }   # +4% peak → lock +1.5%
+      - { trigger_pct: 0.06, lock_pct: 0.03 }    # +6% peak → lock +3%
+      - { trigger_pct: 0.10, lock_pct: 0.06 }    # +10% peak → lock +6%
+      - { trigger_pct: 0.15, lock_pct: 0.10 }    # +15% peak → lock +10%
 
   # --- New: Percentage-based PnL Exit ---
   percentage_pnl_exit:
@@ -344,13 +409,14 @@ risk:
 
   # Profit floor: once net PnL reaches lock_pct% of capital deployed, arms a TRAILING floor.
   # trail_pct: on each monitor cycle, floor = max(current_floor, hwm_pnl * trail_pct).
-  # lock_pct scales with position size — ₹2k on a ₹28k BN position is only 7%, vs 18% on a ₹11k SX position.
+  # Tuned for NIFTY/SENSEX intraday: arm later, allow more give-back before locking.
   profit_floor:
     enabled: true
-    lock_pct: 0.05         # 5% - arm floor when net PnL >= 5% of capital_deployed (was 0.10 — too high, missed peaks like +7.3%/+₹2,320 that reversed to -₹3,608 unlocked)
-    trail_pct: 0.70        # 70% - ratchet floor to 70% of HWM each cycle
-    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200 (rupees, not percentage)
-    time_kill_minutes: 30  # give trailing more time to develop
+    lock_pct: 0.03         # 3% of capital — arm floor later vs 2.5%
+    min_arm_rupees: 550    # ignore sub-₹550 spikes (was ₹350)
+    trail_pct: 0.82        # keep 82% of HWM (was 72% — less hair-trigger)
+    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200
+    time_kill_minutes: 35  # chop: slower stale-floor kill (was 20)
 
   # RR-Based Profit Booking (Dynamic Exit)
   # Captures profits based on R multiples (Reward / Risk)
@@ -524,7 +590,7 @@ risk:
     open_expansion:
       start: "09:15"
       end: "09:45"
-      sl_multiplier: 1.0 # Standard SL (SENSEX: ₹15-20, NIFTY: ₹8-12)
+      sl_multiplier: 0.85 # Tighter SL — fake breakouts common
       tp_multiplier: 1.0 # Fast TP (₹2k often hits in 1-3 candles)
       allow_trailing: false # No micro trailing (gets wicked out)
       allow_runners: false # No runners (enter fast, exit fast, no greed)
@@ -552,7 +618,7 @@ risk:
     chop_decay:
       start: "11:30"
       end: "13:45"
-      sl_multiplier: 1.0 # Restore room to breathe
+      sl_multiplier: 0.70 # Theta chop — cut losers faster (~7% effective SL)
       tp_multiplier: 0.8 # SMALL TP
       allow_trailing: false # Disable trailing
       allow_runners: false # No runners allowed
@@ -566,7 +632,7 @@ risk:
     close_gamma:
       start: "13:45"
       end: "15:15"
-      sl_multiplier: 1.0 # Restore room to breathe
+      sl_multiplier: 0.75 # Close gamma — tighter SL, book or cut
       tp_multiplier: 0.75 # FIXED TP (₹1.5k-₹2k)
       allow_trailing: false # No runners after 14:45
       allow_runners: false # Book profits aggressively
@@ -733,8 +799,8 @@ position_sizing:
     high: 0.012 # 1.2% - Peak 20-25%: 1.2% drawdown allowed
     very_high: 0.01 # 1% - Peak 25-30%: 1% drawdown allowed
     ultra_high: 0.008 # 0.8% - Peak >30%: 0.8% drawdown allowed (maximum protection)
-  peak_drawdown_activation_profit_pct: 0.10 # 10% - Reduced from 25.0 (activate earlier)
-  peak_drawdown_activation_sl_offset_pct: 0.05 # 5% - Reduced from 10.0 (activate with lower SL offset)
+  peak_drawdown_activation_profit_pct: 0.05 # 5% - activate peak drawdown earlier
+  peak_drawdown_activation_sl_offset_pct: 0.03 # 3% - activate with modest SL offset
 
   # Trailing activation: Configurable percentage-based activation threshold
   # Trailing rules (TrailingStopRule, PeakDrawdownRule) only activate when pnl_pct >= this value
@@ -742,8 +808,8 @@ position_sizing:
   # Examples: 0.06, 0.0666, 0.0999, 0.10, 0.1332, 0.15, 0.20
   trailing:
     enabled: true # Global trailing toggle (used by dashboard)
-    activation_pct: 0.10 # 10% - Activate trailing when profit >= 10% of buy value (configurable: 6%, 6.66%, 13.32%, etc.)
-    drawdown_pct: 0.03 # 3% - Exit if price drops this % from peak (used by trailing rules)
+    activation_pct: 0.05 # 5% - arm trailing / peak-drawdown on modest winners
+    drawdown_pct: 0.025 # 2.5% - exit if price drops this % from peak
     spot_anchored:
       min_adx_to_hold: 15.0  # ADX floor; below this we consider the trend weak (TrailingStopRule)
       hard_floor_pct: 0.50   # 50% - hard loss floor even when spot trend is alive
@@ -759,8 +825,8 @@ position_sizing:
     delta_collapse_pnl_ceiling_pct: -0.03  # only fires when pnl_pct <= this (i.e. losing)
 
   # Secure profit rule: Lock in profits above threshold while allowing positions to ride
-  secure_profit_threshold_rupees: 1000 # Activate tighter protection when profit >= ₹1000
-  secure_profit_drawdown_pct: 0.03 # 3% - Tighter drawdown threshold (3%) when profit is secured
+  secure_profit_threshold_rupees: 600 # Activate tighter protection when profit >= ₹600
+  secure_profit_drawdown_pct: 0.025 # 2.5% drawdown from peak when secured
 
   # Underlying-aware exit thresholds
   underlying_trend_score_threshold: 10.0 # Exit if underlying trend_score < this value
@@ -1187,7 +1253,9 @@ data_freshness:
 # Format: Array of strings "SEGMENT:SECURITY_ID" or empty array []
 # Example: ["NSE_EQ:11536", "NSE_EQ:11536"]
 # Can also be set via ENV['DHANHQ_WS_WATCHLIST'] as fallback
-watchlist: []
+watchlist:
+  - segment: IDX_I
+    security_id: "21"   # India VIX — keeps TickCache warm for VixGate
 
 # ============================================
 # TELEGRAM NOTIFICATIONS

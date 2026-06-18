@@ -51,6 +51,17 @@ module Live
         data['paper'] = (tracker.paper? ? '1' : '0')
         data['entry_timestamp'] = tracker.created_at.to_i.to_s if tracker.created_at.present?
 
+        # Cache active Stop Loss and Take Profit levels
+        begin
+          pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+          sl_price = pos_data&.sl_price || (tracker.entry_price.present? ? tracker.entry_price.to_f * 0.70 : nil)
+          tp_price = pos_data&.tp_price || (tracker.entry_price.present? ? tracker.entry_price.to_f * 1.60 : nil)
+          data['sl_price'] = sl_price.to_f.round(2).to_s if sl_price
+          data['tp_price'] = tp_price.to_f.round(2).to_s if tp_price
+        rescue StandardError
+          nil
+        end
+
         # Calculated fields
         if tracker.entry_price.present? && ltp.to_f.positive?
           price_change = ((ltp.to_f - tracker.entry_price.to_f) / tracker.entry_price.to_f * 100.0)
@@ -132,7 +143,9 @@ module Live
         drawdown_rupees: raw['drawdown_rupees']&.to_f,
         drawdown_pct: raw['drawdown_pct']&.to_f,
         index_key: raw['index_key'],
-        direction: raw['direction']&.to_sym
+        direction: raw['direction']&.to_sym,
+        sl_price: raw['sl_price']&.to_f,
+        tp_price: raw['tp_price']&.to_f
       }
     rescue StandardError => e
       Rails.logger.error("[RedisPnL] fetch_pnl error: #{e.message}") if defined?(Rails)

@@ -69,8 +69,7 @@ module TradingSystem
         return
       end
 
-      @supervisor.start_all
-      subscribe_active_positions!
+      start_full_trading_services!
     end
 
     def start_market_open_poller!
@@ -81,12 +80,17 @@ module TradingSystem
           next if TradingSession::Service.market_closed?
 
           Rails.logger.info('[TradingDaemon] Market opened - starting remaining services')
-          @supervisor.start_all
-          subscribe_active_positions!
+          start_full_trading_services!
           Rails.logger.info('[TradingDaemon] Full services started')
           break
         end
       end
+    end
+
+    def start_full_trading_services!
+      @supervisor.start_all
+      subscribe_active_positions!
+      TradingSystem::Bootstrap.boot_market_gates!
     end
 
     def subscribe_active_positions!

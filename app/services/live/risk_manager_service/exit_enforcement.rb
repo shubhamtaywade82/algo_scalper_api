@@ -284,26 +284,32 @@ module Live
         lock_rupees_static = cfg[:lock_rupees]
         breakeven_at = cfg[:breakeven_at]
         time_kill_minutes = cfg[:time_kill_minutes]
+        trail_pct = cfg[:trail_pct]
         exit_fee = BrokerFeeCalculator.fee_per_order
 
         # Compute lock threshold
         lock_rupees = if lock_pct
                         capital = safe_big_decimal(position_data.capital_deployed)
-                        capital&.positive? ? (capital * BigDecimal(lock_pct.to_s)).ceil : lock_rupees_static
+                        pct_arm = capital&.positive? ? (capital * BigDecimal(lock_pct.to_s)).ceil : nil
+                        min_arm = cfg[:min_arm_rupees] ? BigDecimal(cfg[:min_arm_rupees].to_s) : nil
+                        candidates = [pct_arm, min_arm, lock_rupees_static&.then { |v| BigDecimal(v.to_s) }].compact
+                        candidates.empty? ? nil : candidates.min
                       else
                         lock_rupees_static
                       end
 
-        mark_breakeven_reached!(tracker, net_pnl, threshold_rupees: breakeven_at) if breakeven_at
-        arm_profit_floor!(tracker, net_pnl, lock_rupees: lock_rupees) if lock_rupees
- 
+        mark_breakeven_reached!(tracker, net_pnl, threshold_rupees: breakeven_at, pending_meta: pending_meta) if breakeven_at
+        if lock_rupees
+          peak_for_arm = hwm_pnl_for_arm(position_data, net_pnl)
+          arm_profit_floor!(tracker, peak_for_arm, lock_rupees: lock_rupees, trail_pct: trail_pct, pending_meta: pending_meta)
+        end
+
         # Ratchet the floor upward as HWM PnL grows (trailing floor).
-        trail_pct = cfg[:trail_pct]
         if trail_pct && (pending_meta || tracker.meta || {})['profit_floor_rupees'].present?
           hwm_pnl = safe_big_decimal(position_data.high_water_mark)
           update_trailing_floor!(tracker, hwm_pnl, trail_pct: trail_pct, pending_meta: pending_meta)
         end
- 
+
         floor = (pending_meta || tracker.meta || {})['profit_floor_rupees'] || tracker.profit_floor_rupees
         return unless floor
 
@@ -344,10 +350,10 @@ module Live
         if trailing_armed_for?(tracker, position_data)
           return
         end
- 
+
         ltp = position_data.current_ltp
         return unless ltp
- 
+
         premium_stop = (pending_meta || tracker.meta || {})['premium_stop_price']
         return unless premium_stop
 
@@ -431,7 +437,7 @@ module Live
 
         # Use passed position_data or fetch from cache if not provided
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
-        
+
         # We can use PnL from position_data instead of hydration
         pnl_rupees = position_data ? position_data.pnl : tracker.current_pnl_rupees.to_f
 
@@ -460,10 +466,10 @@ module Live
         # Use passed position_data or fetch from ActiveCache if not provided
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
- 
+
         entry_risk_rupees = (pending_meta || tracker.meta || {})['entry_risk_rupees']
         risk_value = safe_big_decimal(entry_risk_rupees)
- 
+
         # Ensure we always update peak trend score if possible
         update_peak_trend_score(tracker, position_data, pending_meta: pending_meta)
 
@@ -497,7 +503,7 @@ module Live
       def update_peak_trend_score(tracker, position_data, pending_meta: nil)
         # Use trend score from position_data if available (from ActiveCache)
         trend_score = position_data.respond_to?(:underlying_trend_score) ? position_data.underlying_trend_score : nil
-        
+
         # Fallback to calculation only if not in position_data
         if trend_score.nil?
           instrument = tracker.instrument || tracker.watchable&.instrument
@@ -521,48 +527,73 @@ module Live
           trend_score = val.to_f + momentum_score(series.candles)
         end
 
-        peak = (pending_meta || tracker.meta || {})['peak_trend_score'] || 0
-        if trend_score > peak
+        peak = pending_meta&.dig('peak_trend_score') || tracker.runtime_meta_fetch('peak_trend_score') || 0
+        if trend_score > peak.to_f
           if pending_meta
             pending_meta['peak_trend_score'] = trend_score
           elsif !exit_in_flight?(tracker)
-            meta = tracker.meta || {}
-            meta['peak_trend_score'] = trend_score
-            tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+            Live::PositionRuntimeCache.instance.merge(tracker.id, peak_trend_score: trend_score)
           end
         end
       rescue StandardError
         nil
       end
 
-      def mark_breakeven_reached!(tracker, net_pnl, threshold_rupees:)
-        return if tracker.be_set?
+      def mark_breakeven_reached!(tracker, net_pnl, threshold_rupees:, pending_meta: nil)
+        be_already = (pending_meta || {})['be_set'] || tracker.be_set?
+        return if ActiveModel::Type::Boolean.new.cast(be_already)
         return unless BigDecimal(threshold_rupees.to_s) <= net_pnl
 
-        tracker.update!(be_set: true)
+        if pending_meta
+          pending_meta['be_set'] = true
+        else
+          Positions::MetaPatch.merge_meta!(tracker.id, 'be_set' => true)
+        end
       rescue StandardError => e
         Rails.logger.warn("[RiskManager] mark_breakeven_reached! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
 
-      def arm_profit_floor!(tracker, net_pnl, lock_rupees:)
-        return if tracker.profit_floor_rupees.present?
-        return unless BigDecimal(lock_rupees.to_s) <= net_pnl
+      def arm_profit_floor!(tracker, peak_pnl, lock_rupees:, trail_pct: nil, pending_meta: nil)
+        floor_present = (pending_meta || {})['profit_floor_rupees'].present? || tracker.profit_floor_rupees.present?
+        return if floor_present
+        return unless BigDecimal(lock_rupees.to_s) <= peak_pnl
 
-        tracker.update!(
-          profit_floor_rupees: Integer(lock_rupees),
-          profit_floor_set_at: Time.current
-        )
-        Rails.logger.info("[RiskManager] Profit floor armed for #{tracker.order_no}: ₹#{lock_rupees}")
+        initial_floor = if trail_pct
+                          dynamic = (BigDecimal(peak_pnl.to_s) * BigDecimal(trail_pct.to_s)).ceil
+                          [dynamic, Integer(lock_rupees)].max
+                        else
+                          Integer(lock_rupees)
+                        end
+
+        floor_patch = {
+          'profit_floor_rupees' => initial_floor,
+          'profit_floor_set_at' => Time.current.iso8601
+        }
+
+        if pending_meta
+          pending_meta.merge!(floor_patch)
+        else
+          Positions::MetaPatch.merge_meta!(tracker.id, floor_patch)
+        end
+
+        Rails.logger.info("[RiskManager] Profit floor armed for #{tracker.order_no}: ₹#{initial_floor}")
       rescue StandardError => e
         Rails.logger.error("[RiskManager] arm_profit_floor! failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
 
+      def hwm_pnl_for_arm(position_data, net_pnl)
+        hwm = safe_big_decimal(position_data.high_water_mark)
+        return net_pnl unless hwm&.positive?
+
+        [hwm, net_pnl].max
+      end
+
       def profit_floor_time_kill?(tracker, time_kill_minutes:, pending_meta: nil)
         return false unless time_kill_minutes
-        
+
         floor_set_at = (pending_meta || tracker.meta || {})['profit_floor_set_at'] || tracker.profit_floor_set_at
         return false unless floor_set_at
- 
+
         (Time.current - floor_set_at) >= time_kill_minutes.minutes
       rescue StandardError
         false
@@ -572,15 +603,16 @@ module Live
         return unless hwm_pnl&.positive?
 
         dynamic_floor = (BigDecimal(hwm_pnl.to_s) * BigDecimal(trail_pct.to_s)).ceil
-        current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
+        floor_raw = (pending_meta || {})['profit_floor_rupees'] || tracker.profit_floor_rupees
+        return if floor_raw.blank?
+
+        current_floor = BigDecimal(floor_raw.to_s)
         return if dynamic_floor <= current_floor
 
         if pending_meta
           pending_meta['profit_floor_rupees'] = dynamic_floor.to_i
         elsif !exit_in_flight?(tracker)
-          meta = (tracker.meta || {}).stringify_keys
-          meta['profit_floor_rupees'] = dynamic_floor.to_i
-          tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+          Positions::MetaPatch.merge_meta!(tracker.id, 'profit_floor_rupees' => dynamic_floor.to_i)
         end
 
         Rails.logger.info(

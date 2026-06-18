@@ -52,6 +52,7 @@ module Live
           enabled: raw[:enabled] == true,
           lock_pct: float_or_nil(raw[:lock_pct]),
           lock_rupees: integer_or_nil(raw[:lock_rupees]),
+          min_arm_rupees: integer_or_nil(raw[:min_arm_rupees]),
           trail_pct: float_or_nil(raw[:trail_pct]),
           breakeven_at: integer_or_nil(raw[:breakeven_at]),
           time_kill_minutes: integer_or_nil(raw[:time_kill_minutes])

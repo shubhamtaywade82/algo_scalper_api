@@ -38,6 +38,20 @@ development:
     priority: 2
     description: "Seed daily ATR metrics for options buying compression radar"
 
+  market_vix_gate_open:
+    class: Market::VixGateJob
+    schedule: at 9:01am every day
+    queue_name: background
+    priority: 1
+    description: "Fetch India VIX and set entry/force-exit gates before open"
+
+  market_vix_gate_refresh:
+    class: Market::VixGateJob
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 6
+    description: "Refresh India VIX gate during session (RBI/macro spikes)"
+
   options_buying_chain_radar_open:
     class: OptionsBuying::ChainRadarJob
     schedule: at 9:16am every day
@@ -65,6 +79,20 @@ development:
     queue_name: background
     priority: 4
     description: "Post-session entry funnel report — signal skips, guard blocks, breakout alignment"
+
+  ledger_reconciliation:
+    class: Ledger::ReconciliationJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 12
+    description: "Compare ledger cash to legacy paper wallet during shadow mode"
+
+  ledger_daily_close:
+    class: Ledger::DailyCloseJob
+    schedule: at 3:35pm every day
+    queue_name: background
+    priority: 5
+    description: "Roll paper ledger balances into paper_daily_wallets snapshot"
 
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob
@@ -152,6 +180,20 @@ production:
     priority: 2
     description: "Seed daily ATR metrics for options buying compression radar"
 
+  market_vix_gate_open:
+    class: Market::VixGateJob
+    schedule: at 9:01am every weekday
+    queue_name: background
+    priority: 1
+    description: "Fetch India VIX and set entry/force-exit gates before open"
+
+  market_vix_gate_refresh:
+    class: Market::VixGateJob
+    schedule: every 15 minutes during market hours
+    queue_name: background
+    priority: 6
+    description: "Refresh India VIX gate during session (RBI/macro spikes)"
+
   options_buying_chain_radar_open:
     class: OptionsBuying::ChainRadarJob
     schedule: at 9:16am every weekday
@@ -179,6 +221,20 @@ production:
     queue_name: background
     priority: 4
     description: "Post-session entry funnel report — signal skips, guard blocks, breakout alignment"
+
+  ledger_reconciliation:
+    class: Ledger::ReconciliationJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 12
+    description: "Compare ledger cash to legacy paper wallet during shadow mode"
+
+  ledger_daily_close:
+    class: Ledger::DailyCloseJob
+    schedule: at 3:35pm every weekday
+    queue_name: background
+    priority: 5
+    description: "Roll paper ledger balances into paper_daily_wallets snapshot"
 
   clear_carried_overnight:
     class: ClearCarriedOvernightPositionsJob

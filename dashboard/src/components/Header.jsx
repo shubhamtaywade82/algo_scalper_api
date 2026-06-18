@@ -138,6 +138,7 @@ export default function Header(props) {
   const navLinkInactive = 'text-gray-500 hover:bg-white/[0.02]'
   const navLinkActive = 'bg-primary-500/10 text-primary-300 border-primary-500/25 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
   const navLinkSettingsActive = 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
+  const navLinkLedgerActive = 'bg-violet-500/10 text-violet-300 border-violet-500/25 shadow-[0_0_15px_rgba(139,92,246,0.15)]'
 
   return (
     <div class="sticky top-0 z-50">
@@ -289,6 +290,14 @@ export default function Header(props) {
               <path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             Analysis
+          </A>
+          <A href="/ledger" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkLedgerActive} inactiveClass="">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M8 7h8M8 11h8M8 15h4" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+            Ledger
           </A>
           <A href="/settings" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkSettingsActive} inactiveClass="">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

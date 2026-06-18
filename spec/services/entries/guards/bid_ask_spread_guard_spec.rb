@@ -54,4 +54,23 @@ RSpec.describe Entries::Guards::BidAskSpreadGuard do
       expect(result[:blocked]).to include('bid-ask spread too wide')
     end
   end
+
+  context 'when index override allows wider spread' do
+    let(:context) do
+      {
+        index_cfg: { key: 'SENSEX', segment: 'IDX_I', execution: { max_bid_ask_spread_pct: 0.025 } },
+        pick: { security_id: '123', segment: 'BSE_FNO' },
+        ltp: 100.0
+      }
+    end
+
+    before do
+      tick = instance_double(MarketTick, bid: 97.6, ask: 100.0)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+    end
+
+    it 'passes within the Sensex-specific threshold' do
+      expect(described_class.call(context)).to eq(Entries::EntryGuardPipeline::PASS)
+    end
+  end
 end

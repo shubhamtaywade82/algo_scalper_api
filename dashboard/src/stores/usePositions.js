@@ -123,6 +123,8 @@ export function usePositions() {
     if (pos.pnl_pct != null)   live.pnl_pct   = pos.pnl_pct
     if (pos.hwm_pnl != null)   live.hwm_pnl   = pos.hwm_pnl
     if (pos.ltp_stale != null) live.ltp_stale = pos.ltp_stale
+    if (pos.sl_price != null)  live.sl_price  = pos.sl_price
+    if (pos.tp_price != null)  live.tp_price  = pos.tp_price
     return live
   }
 
@@ -160,6 +162,8 @@ export function usePositions() {
         markFresh()
         if (data.type === 'pnl_stale') {
           applyPnlStale(data)
+        } else if (data.type === 'keepalive') {
+          // markFresh() above resets WS stale timer
         } else {
           applyPnlUpdate(data)
         }

@@ -12,49 +12,7 @@ end
 # Dhan index segment is IDX_I; common security_ids:
 #   NIFTY index value: 13
 #   BANKNIFTY index value: 25
-#   SENSEX index value: 1 (placeholder; update if mapping differs)
-
-module DbSeeds
-  module_function
-
-  def seed_default_index_watchlist
-    queries = [
-      { label: "NIFTY",      exchange: "NSE", symbol_like: "%NIFTY%" },
-      { label: "BANKNIFTY",  exchange: "NSE", symbol_like: "%BANKNIFTY%" },
-      { label: "SENSEX",     exchange: "BSE", symbol_like: "%SENSEX%" }
-    ]
-
-    created = 0
-    queries.each do |q|
-      instrument = Instrument
-                   .where(exchange: q[:exchange])
-                   .where(segment: "I")
-                   .where("(instrument_code = ? OR instrument_type = ?)", "INDEX", "INDEX")
-                   .where("symbol_name ILIKE ?", q[:symbol_like])
-                   .order(Arel.sql("LENGTH(symbol_name) ASC"))
-                   .first
-
-      if instrument.nil?
-        Rails.logger.debug do
-          "Skipping #{q[:label]}: Instrument not found (exchange=#{q[:exchange]} " \
-            "segment=INDEX symbol_name ILIKE #{q[:symbol_like]})"
-        end
-        next
-      end
-
-      seg_code = instrument.exchange_segment
-      wl = WatchlistItem.find_or_initialize_by(segment: seg_code, security_id: instrument.security_id)
-      wl.label = q[:label]
-      wl.kind  = :index_value
-      wl.active = true
-      wl.watchable = instrument
-      wl.save!
-      created += 1 if wl.persisted?
-    end
-
-    Rails.logger.debug { "Seeded/Ensured #{created} index watchlist items with associations" }
-  end
-end
+#   SENSEX index value: 51
 
 # Ensure instrument import is present and recent before adding watchlist
 last_import_raw = Setting.fetch('instruments.last_imported_at')

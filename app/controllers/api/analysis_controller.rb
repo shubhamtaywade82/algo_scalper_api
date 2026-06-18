@@ -35,6 +35,7 @@ module Api
         index_key: index_key,
         symbol: instrument.symbol_name,
         ltp: ltp&.to_f,
+        instruments_imported: instrument.persisted?,
         timestamp: Time.current.iso8601,
         session: {
           market_closed: market_closed,
@@ -148,10 +149,7 @@ module Api
       index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == index_key }
       return nil unless index_cfg
 
-      Instrument.find_by_sid_and_segment(
-        security_id: index_cfg[:sid],
-        segment_code: index_cfg[:segment]
-      )
+      IndexInstrumentCache.instance.get_or_fetch(index_cfg)
     end
 
     def index_known?(index_key)

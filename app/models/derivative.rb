@@ -151,11 +151,12 @@ class Derivative < ApplicationRecord
         product_type: product_type
       }
     )
-    return nil unless order.respond_to?(:order_id) && order.order_id.present?
+    order_no = Ledger::OrderResponse.extract_order_id(order)
+    return nil if order_no.blank?
 
     side_label = option_type.to_s.upcase == 'CE' ? 'long_ce' : 'long_pe'
 
-    after_order_track!(
+    tracker = after_order_track!(
       instrument: instrument,
       order_no: order.order_id,
       segment: segment_code,
@@ -167,6 +168,15 @@ class Derivative < ApplicationRecord
       index_key: (index_cfg || {})[:key],
       meta: meta.slice(:alpha_source, :signal_confidence, :expected_value, :entry_strategy, :signal_timestamp, :direction, :client_order_id)
     )
+
+    if Ledger::OrderResponse.paper?(order) || (order.is_a?(Hash) && order[:paper])
+      Ledger::EntryPoster.post!(
+        tracker: tracker,
+        fill_price: ltp,
+        quantity: quantity,
+        order_no: order_no
+      )
+    end
 
     order
   end

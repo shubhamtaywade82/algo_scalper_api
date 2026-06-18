@@ -30,6 +30,9 @@ module Positions
         metadata['exit_reason'] = resolved_reason
         metadata['exit_triggered_at'] ||= Time.current
         metadata['hwm_pnl_pct'] = cache_data[:hwm_pnl_pct] if cache_data[:hwm_pnl_pct]
+        metadata.merge!(
+          Positions::ExitAnalyticsBuilder.build(tracker: tracker, exit_price: exit_px).stringify_keys
+        )
 
         tracker.update!(
           status: :exited,
@@ -49,6 +52,7 @@ module Positions
         register_cooldown!
         sync_final_pnl_to_database(cache_data)
         tracker.send(:broadcast_position_exited)
+        post_ledger_exit!(tracker)
       end
 
       tracker
@@ -96,6 +100,10 @@ module Positions
         cache[:hwm_pnl],
         cache[:hwm_pnl_pct]
       )
+    end
+
+    def post_ledger_exit!(tracker)
+      Ledger::ExitPoster.post!(tracker: tracker, exit_price: tracker.exit_price)
     end
 
     def resolve_final_pnl(exit_price:, cache_data:)

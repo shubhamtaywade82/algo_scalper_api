@@ -25,6 +25,7 @@ module Live
       @sleep_mutex = Mutex.new
       @sleep_cv = ConditionVariable.new
       @last_heartbeat_at = nil
+      @last_positions_keepalive_at = nil
     end
 
     # Accept arbitrary payload fields; last-wins for a tracker id
@@ -123,6 +124,7 @@ module Live
 
         processed = flush!
         maybe_broadcast_heartbeat
+        maybe_broadcast_positions_keepalive
         sleep_duration = next_interval(queue_empty: !processed && queue_empty?)
         wait_for_interval(sleep_duration)
       end
@@ -410,6 +412,15 @@ module Live
       entry_f = entry.to_f
       pnl_pct = entry_f.positive? ? (((ltp_f - entry_f) / entry_f) * 100).round(2) : 0.0
 
+      begin
+        pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker_id)
+        sl_price = pos_data&.sl_price || (entry_f.positive? ? entry_f * 0.70 : nil)
+        tp_price = pos_data&.tp_price || (entry_f.positive? ? entry_f * 1.60 : nil)
+      rescue StandardError
+        sl_price = entry_f.positive? ? entry_f * 0.70 : nil
+        tp_price = entry_f.positive? ? entry_f * 1.60 : nil
+      end
+
       ActionCable.server.broadcast("positions", {
         type: "pnl_update",
         id: tracker_id,
@@ -417,6 +428,8 @@ module Live
         pnl: pnl.to_f.round(2),
         pnl_pct: pnl_pct,
         hwm_pnl: hwm.to_f.round(2),
+        sl_price: sl_price&.to_f&.round(2),
+        tp_price: tp_price&.to_f&.round(2),
         ltp_stale: false
       })
       begin
@@ -450,6 +463,17 @@ module Live
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")
+    end
+
+    # Keep the positions WS channel warm when ticks are quiet (illiquid strikes).
+    def maybe_broadcast_positions_keepalive
+      return if @last_positions_keepalive_at && (Time.current.to_f - @last_positions_keepalive_at) < 3.0
+      return unless Positions::ActivePositionsCache.instance.active_trackers.any?
+
+      @last_positions_keepalive_at = Time.current.to_f
+      ActionCable.server.broadcast("positions", { type: 'keepalive', timestamp: Time.current.iso8601 })
+    rescue StandardError => e
+      @logger.debug("[PnlUpdater] positions keepalive broadcast failed: #{e.message}")
     end
 
     def build_dashboard_stats

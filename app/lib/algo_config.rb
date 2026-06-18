@@ -19,6 +19,7 @@ class AlgoConfig
       apply_signal_tier_preset!(base_config)
       apply_live_trading_env_override!(base_config)
       apply_paper_research_overrides!(base_config)
+      apply_india_index_registry!(base_config)
 
       @cached_config = base_config
       @cache_expires_at = Time.current + CACHE_TTL
@@ -51,6 +52,7 @@ class AlgoConfig
     def reset!
       @cached_config = nil
       @cache_expires_at = nil
+      IndiaIndexRegistry.reset!
     end
 
     # Tick-triggered AI (+Smc::TickAi::AnalysisService+) or explicit event-driven mode.
@@ -193,6 +195,15 @@ class AlgoConfig
       signals = (config[:signals] || {}).dup
       signals[:enable_direction_gate] = false
       config[:signals] = signals
+    end
+
+    def apply_india_index_registry!(config)
+      indices = Array(config[:indices])
+      return if indices.empty?
+
+      config[:indices] = IndiaIndexRegistry.merge_indices!(indices)
+    rescue StandardError => e
+      Rails.logger.error("[AlgoConfig] Failed to apply india_index_registry: #{e.class} - #{e.message}")
     end
 
     def paper_strict_direction_gate?

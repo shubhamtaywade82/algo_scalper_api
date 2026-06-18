@@ -6,6 +6,24 @@ RSpec.describe Signal::Scheduler do
   let(:index_cfg) { { key: 'NIFTY', segment: 'IDX_I', sid: '13' } }
   let(:scheduler) { described_class.new(period: 1) }
 
+  describe '#ensure_vix_gate_evaluated!' do
+    it 'calls VixGate.ensure_evaluated! when gate is not evaluated' do
+      allow(Market::VixGate).to receive_messages(evaluated?: false, ensure_evaluated!: 14.2)
+
+      scheduler.send(:ensure_vix_gate_evaluated!)
+
+      expect(Market::VixGate).to have_received(:ensure_evaluated!)
+    end
+
+    it 'skips evaluation when gate is already evaluated' do
+      allow(Market::VixGate).to receive_messages(evaluated?: true, ensure_evaluated!: 14.2)
+
+      scheduler.send(:ensure_vix_gate_evaluated!)
+
+      expect(Market::VixGate).not_to have_received(:ensure_evaluated!)
+    end
+  end
+
   describe '#process_index' do
     before do
       allow(Signal::Engine).to receive(:run_for)

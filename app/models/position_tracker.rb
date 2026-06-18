@@ -112,6 +112,15 @@ class PositionTracker < ApplicationRecord
     BigDecimal(entry_price.to_s) * quantity.to_i * BigDecimal(trail_step_pct.to_s)
   end
 
+  def runtime_meta_fetch(key)
+    key_s = key.to_s
+    cached = Live::PositionRuntimeCache.instance.fetch(id)
+    sym = key_s.to_sym
+    return cached[sym] if cached.key?(sym)
+
+    meta_hash[key_s]
+  end
+
   private
 
   def alpha_signal_just_exited?
