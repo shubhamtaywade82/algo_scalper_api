@@ -41,7 +41,7 @@ module Ai
         def run_trailing_optimization(symbol, dry_run: false)
           optimizer = Optimization::TrailingOptimizer.new(index_key: symbol)
           result = optimizer.optimize
-          
+
           if result && result[:best_params]
             # We need to apply these to algo.yml as TrailingOptimizer doesn't self-persist yet
             apply_trailing_params(symbol, result[:best_params], dry_run: dry_run)
@@ -51,23 +51,24 @@ module Ai
 
         def apply_trailing_params(symbol, params, dry_run: false)
           if dry_run
-            Rails.logger.info("[TaskRunner] [DRY_RUN] Would apply trailing params to algo.yml for #{symbol}: #{params.inspect}")
+            Rails.logger.info("[TaskRunner] [DRY_RUN] Would apply trailing params to database overrides for #{symbol}: #{params.inspect}")
             return
           end
 
-          # Reusing logic from optimize_trailing.rake but in a service context
-          config_path = Rails.root.join('config/algo.yml')
-          config = YAML.safe_load(File.read(config_path))
-          
-          idx_key = symbol.downcase
-          if config['risk'] && config['risk']['institutional_trailing']
-            config['risk']['institutional_trailing'][idx_key] ||= {}
-            params.each do |k, v|
-              config['risk']['institutional_trailing'][idx_key][k.to_s] = v
-            end
-            File.write(config_path, config.to_yaml)
-            Rails.logger.info("[TaskRunner] Applied trailing params to algo.yml for #{symbol}")
+          idx_key = symbol.to_s.downcase
+          current = JSON.parse(Setting.find_by(key: 'algo_config_overrides')&.value || '{}')
+
+          current['risk'] ||= {}
+          current['risk']['institutional_trailing'] ||= {}
+          current['risk']['institutional_trailing'][idx_key] ||= {}
+
+          params.each do |k, v|
+            current['risk']['institutional_trailing'][idx_key][k.to_s] = v
           end
+
+          Setting.put('algo_config_overrides', current.to_json)
+          AlgoConfig.reset!
+          Rails.logger.info("[TaskRunner] Applied trailing params to database overrides for #{symbol}")
         end
       end
     end

@@ -27,20 +27,29 @@ module Entries
     def default_handlers
       [
         Guards::DrawdownGuard,
+        Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
         Guards::VixGateGuard,
         Guards::EarliestEntryGuard,
+        Guards::EdgeFailureGuard,
+        Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
         Guards::MaxConcurrentGuard,
         Guards::InstrumentLookupGuard,
         Guards::LtpResolutionGuard,
+        Guards::ExpiryWeekPowerTrendGuard,
+        Guards::TimeRegimeGuard,
+        Guards::MiddayQualityGuard,
+        Guards::BankniftyLastWeekGuard,
         Guards::ChopScoreGuard,
         Guards::DteEntryWindowGuard,
         Guards::WeeklyExpiryGuard,
+        Guards::BosStructureGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
         Guards::SizingGuard,
-        Guards::RiskPolicyGuard
+        Guards::RiskPolicyGuard,
+        Guards::SmcNavigatorGuard
       ]
     end
   end

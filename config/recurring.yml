@@ -145,6 +145,13 @@ development:
     priority: 10
     description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
 
+  autonomous_optimization:
+    class: Ai::Autonomous::OptimizationJob
+    schedule: at 4:30pm every day
+    queue_name: background
+    priority: 15
+    description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
+
 production:
   instruments_import:
     class: InstrumentsImportJob
@@ -284,3 +291,10 @@ production:
     queue_name: background
     priority: 10
     description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
+
+  autonomous_optimization:
+    class: Ai::Autonomous::OptimizationJob
+    schedule: at 4:30pm every weekday
+    queue_name: background
+    priority: 15
+    description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
