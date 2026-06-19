@@ -41,6 +41,7 @@ module Entries
         Guards::LtpResolutionGuard,
         Guards::ExpiryWeekPowerTrendGuard,
         Guards::TimeRegimeGuard,
+        Guards::SegmentExpectancyGuard,
         Guards::MiddayQualityGuard,
         Guards::BankniftyLastWeekGuard,
         Guards::ChopScoreGuard,

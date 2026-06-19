@@ -163,6 +163,7 @@ class AlgoConfig
         )
         AlgoConfig.reset!
         Signal::FastEntryMode.reset!
+        AlgoConfig::CacheBroadcaster.publish!(source: source)
         Rails.logger.info(
           "[AlgoConfig::DocumentStore] persisted #{DOCUMENT_KEY} source=#{source} " \
           "paths=#{Array(changed_paths).join(',')}"

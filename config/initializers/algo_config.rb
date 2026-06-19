@@ -1,13 +1,12 @@
 # frozen_string_literal: true
 
-# Load algo configuration from config/algo.yml
+# Canonical runtime config is AlgoConfig.fetch (DB document via AlgoConfig::DocumentStore).
+# config/algo.yml is seed-only; do not read it at boot for trading logic.
 Rails.application.configure do
-  begin
-    algo_config = YAML.load_file(Rails.root.join('config', 'algo.yml'), aliases: true)
-    config.x.algo = ActiveSupport::InheritableOptions.new(algo_config.deep_symbolize_keys)
-    # Rails.logger.info("[AlgoConfig] Loaded algo configuration with #{algo_config[:indices]&.size || 0} indices")
-  rescue StandardError => e
-    # Rails.logger.error("[AlgoConfig] Failed to load algo configuration: #{e.message}")
-    config.x.algo = ActiveSupport::InheritableOptions.new({})
-  end
+  config.x.algo = ActiveSupport::InheritableOptions.new({})
+end
+
+# Subscribe to Redis invalidation so web/trading/jobs pick up DB config changes immediately.
+Rails.application.config.after_initialize do
+  AlgoConfig::CacheBroadcaster.start_subscriber!
 end

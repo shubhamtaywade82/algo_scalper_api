@@ -359,9 +359,10 @@ class IndexTechnicalAnalyzer < ApplicationService
     # Fetch OHLC data for each timeframe
     indicators_data = {}
     timeframes.each do |tf|
-      # Use instrument.candles() method which returns CandleSeries
-      # This may internally call intraday_ohlc() which uses DhanhqErrorHandler
-      series = instrument.candles(interval: tf.to_s)
+      # Use CandleSeriesCache (Redis-backed) in live trading to avoid redundant
+      # DhanHQ REST calls on every analysis cycle.
+      # Falls back transparently to backfill when the cache is cold (< 20 candles).
+      series = Live::CandleSeriesCache.fetch(instrument: instrument, interval: tf.to_i, backfill: true)
       next unless series&.candles&.any?
 
       # Compute indicators using CandleSeries methods with configured periods

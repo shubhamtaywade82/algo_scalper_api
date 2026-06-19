@@ -594,7 +594,7 @@ Tick Received
     ▼
 ┌────────────────────┐
 │ SMC Indicator calculations (structure, liquidity, displacement, volume)
-│ - Uses 1-min and 5-min aggregations
+│ - Computed from live WebSocket ticks + higher-timeframe context
 └────────────────────┘
     │
     ▼
@@ -1368,6 +1368,130 @@ def check_exits(tick)
   end
 end
 ```
+
+---
+
+## 15. Historical OHLC Backfill & Gap Recovery
+
+### 15.1 Why Backfill Matters
+
+The live WebSocket feed provides **tick-by-tick** data, but it is ephemeral. If the connection drops for 3 minutes during a volatile move, those 3 minutes of OHLC data are permanently lost from the tick cache unless a backfill mechanism retrieves them.
+
+**Scenarios where backfill is critical:**
+
+| Scenario | Impact Without Backfill | Impact With Backfill |
+|----------|------------------------|---------------------|
+| WebSocket drops mid-session | Missing 1–5 min bars in `StateStore`; `BreakoutEvaluator` sees a gap | Missing bars fetched from DhanHQ on reconnect; continuous series |
+| New strike selected mid-session | Radar strike has zero history; indicators (RSI, Supertrend) can't compute | Last 30+ minutes fetched and hydrated in <2s |
+| Daemon restart at 11:00 IST | All live tick data lost since 09:15 | Index spot OHLC backfilled on boot; option strikes warmed as they tick |
+
+### 15.2 On-Demand Backfill Service
+
+**Service:** `app/services/live/historical_backfill_service.rb`
+**Source:** DhanHQ `POST /v2/charts/intraday` (1/5/15/25/60 min intervals)
+
+```ruby
+# Core interface
+Live::HistoricalBackfillService.new.backfill(
+  instrument: nift_24500_ce,
+  interval: 1,
+  from_date: '2026-06-19 10:15:00',
+  to_date: '2026-06-19 10:20:00',
+  reason: :reconnect
+)
+# => { success: true, candles_fetched: 5, min_bucket: ..., max_bucket: ... }
+```
+
+**Backfill triggers:**
+
+| Trigger | Condition | Action |
+|---------|-----------|--------|
+| **Reconnect gap** | WebSocket down > 120s, then reconnects | `backfill_all(interval: 1)` for all active positions + watchlist indices |
+| **New radar strike** | First tick on a security_id not seen this session | `backfill(instrument:, interval: 1, reason: :warmup)` for last 30 min |
+| **Explicit request** | Signal engine detects empty bucket | Direct service call with specific date range |
+
+### 15.3 CandleSeries Cache
+
+**Service:** `app/services/live/candle_series_cache.rb`
+
+A Redis-backed `CandleSeries` that merges **backfilled historical candles + live ticks** into one continuous series for indicator calculations.
+
+```ruby
+# In signal engine / technical analyzer (replaces instrument.intraday_ohlc)
+series = Live::CandleSeriesCache.fetch(
+  instrument: instrument,
+  interval: 5,       # 5-min candles
+  backfill: true     # Auto-fetch from DhanHQ if < 20 candles in cache
+)
+
+# Update forming candle on every live tick
+Live::CandleSeriesCache.append_tick(
+  instrument: instrument,
+  tick: tick,
+  interval: 5
+)
+```
+
+**Redis key:** `live:candles:<security_id>:<interval>`
+**TTL:** 3600 seconds (auto-expire after session)
+**Max candles:** 200 per series (same as `CandleSeries::MAX_CANDLES`)
+
+**Data flow:**
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│               CANDLE DATA UNIFICATION                                 │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  DhanHQHistorical  ──►  HistoricalBackfillService  ──►  Redis Cache  │
+│  (/charts/intraday)                                                  │
+│                                                                      │
+│  WebSocket Ticks  ──►  Live::CandleSeriesCache     ──►  Redis Cache  │
+│  (MarketFeedHub)     (incrementally updates)                         │
+│                                                                      │
+│  Redis Cache  ──►  CandleSeries instance  ──►  Indicators            │
+│  (live:candles:*)                                                      │
+│                    • Supertrend                                       │
+│                    • ADX                                              │
+│                    • ATR                                              │
+│                    • RSI                                              │
+│                    • MACD                                             │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### 15.4 Synthetic Tick Translation
+
+Historical OHLC candles are **completed** bars. To make them compatible with the existing tick-based `StateStore` (which `BreakoutEvaluator` reads), each fetched candle is translated into **2 synthetic ticks**:
+
+```ruby
+def translate_to_tick_payloads(candle, interval)
+  bucket = candle_timestamp.to_i - (candle_timestamp.to_i % (interval * 60))
+
+  open_tick   = { ts: bucket, ltp: candle[:open], oi: candle[:oi], vol: candle[:volume] / 2 }
+  close_tick  = { ts: bucket + (interval * 60) - 1, ltp: candle[:close], oi: candle[:oi], vol: candle[:volume] / 2 }
+
+  [open_tick, close_tick]
+end
+```
+
+> **Tradeoff:** You lose the exact minute-by-minute movement *inside* the bar, but `BreakoutEvaluator` gets the open, close, and approximate volume/oi for pattern detection. For true sub-minute confluence, the live WebSocket must be connected.
+
+### 15.5 Rate Limiting & Safety
+
+| Guard | Value | Rationale |
+|-------|-------|-----------|
+| Max candles per backfill | 100 | Prevents Redis bloat; DhanHQ returns up to 90 days but we only ask for what's needed |
+| Backfill request rate | 1 request / 2 seconds | DhanHQ data API rate limit tolerance |
+| Retry policy | 1 retry with 2s exponential backoff | Handle transient `DH-908` / network errors |
+| Circuit breaker | 3 consecutive failures → pause for 60s | Prevents hammering DhanHQ if IP/token is invalid |
+| Storage TTL | 3600s (1 hour) | Redis auto-cleanup after market close |
+
+### 15.6 Integration Points
+
+1. **MarketFeedHub** — after reconnect, detect gap > 120s → trigger `backfill_all`
+2. **MinuteBarAggregator** — on first-seen security_id → trigger `backfill` for last 30 min
+3. **IndexTechnicalAnalyzer** — replace `instrument.candles(interval:)` with `CandleSeriesCache.fetch`
+4. **BreakoutEvaluator** — reads same `StateStore.minute_ticks` keys; no code changes needed
 
 ---
 

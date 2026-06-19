@@ -168,25 +168,5 @@ module Api
     rescue StandardError => e
       render json: { success: false, error: e.message }, status: :internal_server_error
     end
-
-    private
-
-    def authenticate_settings!
-      return if Rails.env.development?
-
-      if Rails.env.production? && ENV['SETTINGS_UPDATE_TOKEN'].blank?
-        Rails.logger.error('[SettingsController] SETTINGS_UPDATE_TOKEN must be set in production for bulk updates')
-        render json: { error: 'settings_update_unconfigured' }, status: :service_unavailable
-        return
-      end
-
-      expected = ENV['SETTINGS_UPDATE_TOKEN'].presence
-      return if expected.nil?
-
-      provided = request.headers['X-Settings-Update-Token'].presence || params[:token].presence
-      return if provided && ActiveSupport::SecurityUtils.secure_compare(provided, expected)
-
-      render json: { error: 'unauthorized' }, status: :unauthorized
-    end
   end
 end

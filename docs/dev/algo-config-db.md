@@ -25,7 +25,26 @@ bundle exec rake algo_config:migrate_legacy_overrides
 bundle exec rake algo_config:verify_canonical
 ```
 
-Restart the trading daemon after code deploys; DB-only changes propagate within 30 seconds.
+Restart the trading daemon after code deploys. DB-only changes propagate within **~1 second** via
+Redis pub/sub (`algo_config:invalidate`); without Redis, allow up to 30 seconds for
+`AlgoConfig.fetch` cache TTL.
+
+## Calibration Loop
+
+Closed-trade / historical optimizers propose patches as pending `calibration_runs` records.
+Apply via API after review:
+
+```bash
+GET  /api/calibration_runs
+POST /api/calibration_runs/:id/apply   # requires X-Settings-Update-Token when set
+```
+
+Trailing optimizer (proposes, does not auto-apply by default):
+
+```bash
+bundle exec rake optimize:trailing
+APPLY=1 bundle exec rake optimize:trailing   # auto-apply after propose
+```
 
 ## Audit
 

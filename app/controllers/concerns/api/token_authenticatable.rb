@@ -20,6 +20,28 @@ module Api
       require_api_token!(ENV.fetch('API_OPERATOR_TOKEN', nil), tier: :operator)
     end
 
+    def authenticate_settings!
+      return if Rails.env.development?
+
+      if Rails.env.production? && ENV['SETTINGS_UPDATE_TOKEN'].blank?
+        Rails.logger.error(
+          "[#{self.class.name}] SETTINGS_UPDATE_TOKEN must be set in production for settings updates"
+        )
+        render json: { error: 'settings_update_unconfigured' }, status: :service_unavailable
+        return
+      end
+
+      expected = ENV['SETTINGS_UPDATE_TOKEN'].presence
+      return if expected.nil?
+
+      provided = request.headers['X-Settings-Update-Token'].presence || params[:token].presence
+      if provided && token_matches?(provided, expected)
+        return
+      end
+
+      render json: { error: 'unauthorized' }, status: :unauthorized
+    end
+
     def require_api_token!(expected, tier:)
       expected = expected.presence
 

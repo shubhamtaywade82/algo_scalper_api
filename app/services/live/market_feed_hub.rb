@@ -421,6 +421,13 @@ module Live
       is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
       MarketData::MarketCache.update_ltp(symbol, ltp, is_index: is_index)
 
+      # Keep CandleSeriesCache forming candle up-to-date for index instruments.
+      # Only index spots (IDX_I segment) feed the 5-min cache used by indicators.
+      if is_index
+        instrument = Instrument.find_by(security_id: tick[:security_id].to_s)
+        Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 5) if instrument
+      end
+
       return unless tick[:oi].present? || tick[:volume].present?
 
       MarketData::MarketCache.update_option_data(symbol, {
@@ -721,6 +728,16 @@ module Live
           rescue StandardError => e
             Rails.logger.error("[MarketFeedHub] Failed to resubscribe position #{tracker.id}: #{e.class} - #{e.message}")
           end
+        end
+        # Trigger historical backfill when reconnecting after a gap > 2 minutes.
+        # This recovers missing minute bars in the Redis tick store so BreakoutEvaluator
+        # and indicators see a continuous series.
+        if @last_tick_at && (Time.current - @last_tick_at) > 120.seconds
+          gap_seconds = (Time.current - @last_tick_at).round
+          Rails.logger.info(
+            "[MarketFeedHub] Detected #{gap_seconds}s WebSocket gap — triggering historical backfill"
+          )
+          Live::HistoricalBackfillService.new.backfill_all(interval: 1)
         end
       ensure
         @resubscribing = false

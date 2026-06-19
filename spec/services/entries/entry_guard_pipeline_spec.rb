@@ -9,7 +9,9 @@ RSpec.describe Entries::EntryGuardPipeline do
 
       expect(handlers).to include(Entries::Guards::MiddayQualityGuard)
       expect(handlers).to include(Entries::Guards::LossStreakGuard)
+      expect(handlers).to include(Entries::Guards::SegmentExpectancyGuard)
       expect(handlers.index(Entries::Guards::MiddayQualityGuard)).to be > handlers.index(Entries::Guards::TimeRegimeGuard)
+      expect(handlers.index(Entries::Guards::SegmentExpectancyGuard)).to be > handlers.index(Entries::Guards::TimeRegimeGuard)
       expect(handlers.index(Entries::Guards::LossStreakGuard)).to be > handlers.index(Entries::Guards::EdgeFailureGuard)
     end
   end

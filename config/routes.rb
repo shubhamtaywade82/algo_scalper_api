@@ -53,6 +53,10 @@ Rails.application.routes.draw do
     patch  'settings/deep_merge',   to: 'settings#update_deep_merge'
     post   'settings/update_ip',    to: 'settings#update_ip'
 
+    resources :calibration_runs, only: %i[index show] do
+      post :apply, on: :member
+    end
+
     # Alpha Engine
     namespace :alpha do
       get  :status
