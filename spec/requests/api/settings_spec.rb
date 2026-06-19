@@ -81,6 +81,49 @@ RSpec.describe 'Api::Settings' do
     end
   end
 
+  describe 'PATCH /api/settings/deep_merge' do
+    around do |example|
+      prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+      ENV.delete('SETTINGS_UPDATE_TOKEN')
+      example.run
+    ensure
+      if prior
+        ENV['SETTINGS_UPDATE_TOKEN'] = prior
+      else
+        ENV.delete('SETTINGS_UPDATE_TOKEN')
+      end
+    end
+
+    before do
+      yaml_keys = YAML.load_file(Rails.root.join('config/algo.yml')).keys
+      seed = yaml_keys.index_with { {} }
+      seed['risk'] = { sl_pct: 0.02 }
+      Setting.put(doc_key, seed.to_json)
+      AlgoConfig.reset!
+    end
+
+    it 'deep-merges previously blocked options_buying key' do
+      patch '/api/settings/deep_merge',
+            params: { patch: { options_buying: { mode: 'intraday_scalper' } } }
+      expect(response).to have_http_status(:ok)
+      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
+      expect(doc.dig('options_buying', 'mode')).to eq('intraday_scalper')
+    end
+
+    it 'deep-merges entry_quality key' do
+      patch '/api/settings/deep_merge',
+            params: { patch: { entry_quality: { min_score: 55 } } }
+      expect(response).to have_http_status(:ok)
+      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
+      expect(doc.dig('entry_quality', 'min_score').to_i).to eq(55)
+    end
+
+    it 'rejects credential sections' do
+      patch '/api/settings/deep_merge', params: { patch: { dhanhq: { client_id: 'x' } } }
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
   describe 'GET /api/settings/change_logs' do
     before do
       AlgoConfigChangeLog.create!(
@@ -127,14 +170,21 @@ RSpec.describe 'Api::Settings' do
 
   describe 'PATCH /api/settings/fast_entry_mode' do
     around do |example|
-      prior = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+      prior_token = ENV.fetch('SETTINGS_UPDATE_TOKEN', nil)
+      prior_fast = ENV.fetch('FAST_ENTRY_MODE', nil)
       ENV.delete('SETTINGS_UPDATE_TOKEN')
+      ENV.delete('FAST_ENTRY_MODE')
       example.run
     ensure
-      if prior
-        ENV['SETTINGS_UPDATE_TOKEN'] = prior
+      if prior_token
+        ENV['SETTINGS_UPDATE_TOKEN'] = prior_token
       else
         ENV.delete('SETTINGS_UPDATE_TOKEN')
+      end
+      if prior_fast
+        ENV['FAST_ENTRY_MODE'] = prior_fast
+      else
+        ENV.delete('FAST_ENTRY_MODE')
       end
     end
 

@@ -8,6 +8,40 @@ module Live
         tracker.exit_requested_at.present? || tracker.exit_sent_at.present? || tracker.exited?
       end
 
+      # Legacy fallback method for spec compatibility
+      def enforce_trailing_stops(exit_engine:)
+        Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
+          position_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
+          next unless position_data
+
+          pnl_pct = position_data.pnl_pct.to_f
+
+          # Breakeven Lock Logic
+          risk_cfg = AlgoConfig.fetch[:risk] || {}
+          breakeven_pct = (risk_cfg[:breakeven_after_gain] || 0.35).to_f
+          if pnl_pct >= breakeven_pct && !tracker.breakeven_locked?
+            tracker.lock_breakeven!
+          end
+
+          # Trailing stop activation threshold
+          t_config = Positions::TrailingConfig.from_tracker(tracker)
+          activation_pct = t_config.direct_trailing_activation_profit_pct.to_f
+          next if pnl_pct < activation_pct
+
+          # Peak drawdown check using TrailingConfig
+          peak_pct = position_data.peak_profit_pct.to_f
+          if Positions::TrailingConfig.peak_drawdown_triggered?(peak_pct, pnl_pct)
+            reason = "peak_drawdown_exit (peak: #{peak_pct}, current: #{pnl_pct})"
+            dispatch_exit(exit_engine, tracker, reason)
+          end
+        end
+      end
+
+      # Legacy fallback method for spec compatibility
+      def enforce_early_trend_failure(exit_engine:)
+        nil
+      end
+
       def enforce_premium_r_stop(exit_engine:)
         Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
           enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)

@@ -14,7 +14,7 @@ module Live
 
           # ONLY record realized PnL if the exit was successful and NOT already processed
           # This prevents double-counting PnL when multiple ticks trigger the same exit
-          if result[:success] && !%w[already_exited exit_lock_held].include?(result[:reason])
+          if result.is_a?(Hash) && result[:success] && %w[already_exited exit_lock_held].exclude?(result[:reason])
             begin
               pnl = Live::RedisPnlCache.instance.fetch_pnl(tracker.id)&.dig(:pnl) ||
                     tracker.last_pnl_rupees.to_f
@@ -24,7 +24,7 @@ module Live
                 "[RiskManager] Portfolio::PnlTracker.mark_realized failed for tracker=#{tracker.id}: #{e.message}"
               )
             end
-          elsif result[:success] && result[:reason] == 'already_exited'
+          elsif result.is_a?(Hash) && result[:success] && result[:reason] == 'already_exited'
              Rails.logger.debug("[RiskManager] Tracker #{tracker.id} already exited, skipping mark_realized in dispatch_exit")
           end
         else

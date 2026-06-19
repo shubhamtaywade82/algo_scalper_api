@@ -51,24 +51,26 @@ module Ai
 
         def apply_trailing_params(symbol, params, dry_run: false)
           if dry_run
-            Rails.logger.info("[TaskRunner] [DRY_RUN] Would apply trailing params to database overrides for #{symbol}: #{params.inspect}")
+            Rails.logger.info("[TaskRunner] [DRY_RUN] Would apply trailing params to algo_config_document for #{symbol}: #{params.inspect}")
             return
           end
 
           idx_key = symbol.to_s.downcase
-          current = JSON.parse(Setting.find_by(key: 'algo_config_overrides')&.value || '{}')
+          patch = {
+            risk: {
+              institutional_trailing: {
+                idx_key.to_sym => params.transform_keys(&:to_sym)
+              }
+            }
+          }
 
-          current['risk'] ||= {}
-          current['risk']['institutional_trailing'] ||= {}
-          current['risk']['institutional_trailing'][idx_key] ||= {}
-
-          params.each do |k, v|
-            current['risk']['institutional_trailing'][idx_key][k.to_s] = v
-          end
-
-          Setting.put('algo_config_overrides', current.to_json)
-          AlgoConfig.reset!
-          Rails.logger.info("[TaskRunner] Applied trailing params to database overrides for #{symbol}")
+          AlgoConfig::DocumentStore.apply_deep_merge_patch!(
+            patch,
+            source: 'ai_autonomous_trailing',
+            actor: 'TaskRunner',
+            metadata: { index_key: idx_key }
+          )
+          Rails.logger.info("[TaskRunner] Applied trailing params to algo_config_document for #{symbol}")
         end
       end
     end

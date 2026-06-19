@@ -120,6 +120,8 @@ module Positions
   class ActiveCache
     include Singleton
 
+    PositionData = Positions::PositionData
+
     def initialize
       @cache = Concurrent::Map.new # composite_key => PositionData
       @tracker_index = Concurrent::Map.new # tracker_id => composite_key

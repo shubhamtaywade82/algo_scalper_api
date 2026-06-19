@@ -170,15 +170,19 @@ module Entries
           parsed = expiry_list.filter_map do |raw|
             case raw
             when Date then raw
-            when String then Date.parse(raw) rescue nil
+            when String
+              begin
+                Date.parse(raw)
+              rescue ArgumentError, TypeError
+                nil
+              end
             when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
             end
           end.sort
 
-          monthly_expiries = parsed
-            .group_by { |d| [d.year, d.month] }
-            .map { |_, dates| dates.max }
-            .sort
+          monthly_expiries = parsed.group_by { |d| [d.year, d.month] }
+                                   .map { |_, dates| dates.max }
+                                   .sort
 
           nearest = monthly_expiries.find { |d| d >= today }
           return nearest if nearest
@@ -206,6 +210,7 @@ module Entries
           config_snapshot: snapshot_fields[:config_snapshot],
           dte_at_entry: snapshot_fields[:dte_at_entry],
           vix_at_entry: snapshot_fields[:vix_at_entry],
+          iv_at_entry: pick[:iv] || pick['iv'] || pick[:implied_volatility] || pick['implied_volatility'],
           spread_guard_pct: snapshot_fields[:spread_guard_pct],
           atm_strike: snapshot_fields[:atm_strike],
           expiry_date: snapshot_fields[:expiry_date],

@@ -14,11 +14,17 @@ RSpec.describe Risk::Rules::RuleFactory do
   end
 
   describe '.exit_rules' do
-    it 'returns only the prop-desk adaptive trail rule' do
+    it 'returns the registered exit rules' do
       rules = described_class.exit_rules(risk_config)
       rule_classes = rules.map(&:class)
 
-      expect(rule_classes).to eq([Risk::Rules::AdaptiveTrailRule])
+      expect(rule_classes).to contain_exactly(
+        Risk::Rules::StopLossRule,
+        Risk::Rules::AdaptiveTrailRule,
+        Risk::Rules::TakeProfitRule,
+        Risk::Rules::TimeStopRule,
+        Risk::Rules::IvCollapseRule
+      )
     end
   end
 

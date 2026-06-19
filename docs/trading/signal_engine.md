@@ -2,7 +2,7 @@
 
 The Signal Engine is the central decision-making component that identifies trading opportunities based on market data, technical indicators, and market structure.
 
-Implementation: `Signal::Engine.run_for` in `app/services/signal/engine.rb`. Config is always the **effective** hash from `AlgoConfig.fetch` (YAML → DB `algo_config_overrides` → `config/signal_tier_presets.yml` → `LIVE_TRADING` paper flag).
+Implementation: `Signal::Engine.run_for` in `app/services/signal/engine.rb`. Config is always the **effective** hash from `AlgoConfig.fetch` (DB `algo_config_document` → DB `signal_tier_presets` → DB `india_index_registry` merge → `LIVE_TRADING` paper flag). See [docs/dev/algo-config-db.md](../dev/algo-config-db.md).
 
 ## Core Architecture
 

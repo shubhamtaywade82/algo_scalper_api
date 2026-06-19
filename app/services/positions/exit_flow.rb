@@ -48,7 +48,7 @@ module Positions
         # 5. Post-exit side effects
         Positions::DailyPnlRecorder.call(tracker: tracker)
         cleanup_exit_caches
-        Positions::FeedSubscription.unsubscribe(tracker: tracker)
+        tracker.unsubscribe
         register_cooldown!
         sync_final_pnl_to_database(cache_data)
         tracker.send(:broadcast_position_exited)

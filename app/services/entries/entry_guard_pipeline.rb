@@ -30,6 +30,8 @@ module Entries
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
         Guards::VixGateGuard,
+        Guards::IvVolGateGuard,
+        Guards::OptionVolumeVelocityGuard,
         Guards::EarliestEntryGuard,
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,

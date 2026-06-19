@@ -74,6 +74,11 @@ options_buying:
     min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
     expected_edge_pct: 0.30       # fallback expected premium edge when signal injects none (DECIMAL)
     slippage_pct_per_side: 0.001  # modelled slippage per fill; charged on entry + exit
+    limit_chasing:
+      enabled: true
+      max_chase_seconds: 15
+      tick_interval_seconds: 2
+      fallback_to_market: true
   positional:
     enabled: false
     require_carry_allowed: true
@@ -317,6 +322,14 @@ risk:
   sl_pct: 0.10 # -10% base premium SL — intraday options buying (tightened from 15%)
   tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
   per_trade_risk_pct: 0.40
+
+  iv_vol_gate:
+    enabled: true
+    max_iv_rank: 0.80
+    min_iv_rank: 0.10
+
+  volume_velocity_gate:
+    enabled: true
 
   # DTE-resolved intraday parameters — pinned into config_snapshot at entry
   dte_parameters:
@@ -639,7 +652,7 @@ risk:
 
     # Override 2: IV collapse detection
     iv_collapse:
-      enabled: false # Set to true when IV data is available
+      enabled: true # Set to true when IV data is available
       collapse_threshold: 0.15 # Exit if IV drops >15% suddenly (time irrelevant)
 
     # Override 3: Price stall detection (especially after ₹2k profit)

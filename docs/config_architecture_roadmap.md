@@ -15,12 +15,15 @@ not built.
 `AlgoConfig.fetch` (30s in-process cache) builds the effective config in this order
 (`app/lib/algo_config.rb`):
 
-1. **`DocumentStore.current_mutable_document`** — canonical base. The **DB document**
-   (`settings.algo_config_document`, full snapshot). `config/algo.yml` only *seeds* it on
-   first use; legacy `algo_config_overrides` merged once at bootstrap.
-2. **Signal tier preset** (`config/signal_tier_presets.yml`) deep-merged on top.
-3. **`LIVE_TRADING`** env → forces `paper_trading.enabled`.
-4. **`PAPER_STRICT_DIRECTION_GATE`** env → paper-mode direction-gate relax.
+1. **`DocumentStore.current_mutable_document`** — canonical base (`settings.algo_config_document`).
+   `config/algo.yml` seeds via `algo_config:bootstrap_document` only.
+2. **Signal tier preset** — `settings.signal_tier_presets` (seeded from YAML via
+   `algo_config:bootstrap_auxiliary`).
+3. **`IndiaIndexRegistry`** — `settings.india_index_registry` merged into `indices[]`.
+4. **`LIVE_TRADING`** env → forces `paper_trading.enabled`.
+5. **`PAPER_STRICT_DIRECTION_GATE`** env → paper-mode direction-gate relax.
+
+Operator guide: [docs/dev/algo-config-db.md](dev/algo-config-db.md).
 
 All mutations funnel through `DocumentStore#persist!` → `Setting.put` +
 `AlgoConfigChangeLog` audit row + `AlgoConfig.reset!`.

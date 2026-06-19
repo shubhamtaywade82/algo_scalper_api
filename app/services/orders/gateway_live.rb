@@ -29,6 +29,21 @@ module Orders
     # ------------ ENTRY (BUY/SELL) -----
     def place_market(side:, segment:, security_id:, qty:, meta: {})
       validate_side!(side)
+      if side.to_s.downcase == 'buy'
+        Orders::LimitChaser.place_and_chase(
+          side: side,
+          segment: segment,
+          security_id: security_id,
+          qty: qty,
+          meta: meta,
+          gateway: self
+        )
+      else
+        place_market_direct(side: side, segment: segment, security_id: security_id, qty: qty, meta: meta)
+      end
+    end
+
+    def place_market_direct(side:, segment:, security_id:, qty:, meta: {})
       coid = meta[:client_order_id] || generate_client_order_id(side, security_id)
 
       with_retries do

@@ -303,7 +303,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       end
 
       it 'handles gracefully without crashing' do
-        allow(PositionTracker).to receive(:active).and_return(double(find_each: [].each))
+        allow(PositionTracker).to receive(:active).and_return(double(includes: double(to_a: []), find_each: [].each))
         expect { service.send(:run_interval_enforcement_if_needed, exit_engine) }.not_to raise_error
         expect { service.enforce_trailing_stops(exit_engine: exit_engine) }.not_to raise_error
         expect { service.enforce_early_trend_failure(exit_engine: exit_engine) }.not_to raise_error
