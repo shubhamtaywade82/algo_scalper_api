@@ -47,9 +47,9 @@ module OptionsBuying
       bucket = ts - (ts % 60)
 
       StateStore.append_minute_tick(security_id, bucket, {
-        ts:  ts,
+        ts: ts,
         ltp: ltp,
-        oi:  @tick[:oi].to_i,
+        oi: @tick[:oi].to_i,
         vol: @tick[:volume].to_i
       })
 
@@ -72,12 +72,12 @@ module OptionsBuying
       instrument = Instrument.find_by(security_id: security_id)
       return unless instrument
 
-      from_date = (Time.current - 30.minutes).strftime("%Y-%m-%d %H:%M:%S")
+      from_date = 30.minutes.ago.strftime("%Y-%m-%d %H:%M:%S")
       Live::HistoricalBackfillService.new.backfill(
         instrument: instrument,
-        interval:   1,
-        from_date:  from_date,
-        reason:     :warmup
+        interval: 1,
+        from_date: from_date,
+        reason: :warmup
       )
     rescue StandardError => e
       Rails.logger.warn(
@@ -93,9 +93,9 @@ module OptionsBuying
       return unless index_key
 
       OptionsBuying::BreakoutEvaluator.evaluate!(
-        index_key:   index_key,
+        index_key: index_key,
         security_id: security_id,
-        bucket:      bucket
+        bucket: bucket
       )
     end
 

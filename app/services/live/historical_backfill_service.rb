@@ -132,7 +132,11 @@ module Live
       instruments = []
 
       # 1. Active position instruments
-      active_trackers = Positions::ActivePositionsCache.instance.active_trackers rescue []
+      active_trackers = begin
+                          Positions::ActivePositionsCache.instance.active_trackers
+      rescue StandardError
+                          []
+      end
       active_trackers.each do |tracker|
         inst = tracker.instrument || Instrument.find_by(security_id: tracker.security_id)
         instruments << inst if inst
@@ -140,7 +144,11 @@ module Live
 
       # 2. Watchlist index instruments (NIFTY, BANKNIFTY, SENSEX spot)
       IndexConfigLoader.load_indices.each do |cfg|
-        inst = IndexInstrumentCache.instance.get_or_fetch(cfg) rescue nil
+        inst = begin
+                 IndexInstrumentCache.instance.get_or_fetch(cfg)
+        rescue StandardError
+                 nil
+        end
         instruments << inst if inst
       end
 
@@ -231,10 +239,10 @@ module Live
       buckets = []
 
       candles.each do |candle|
-        ts      = parse_candle_timestamp(candle[:timestamp])
+        ts = parse_candle_timestamp(candle[:timestamp])
         next unless ts
 
-        bucket  = bucket_for(ts, interval)
+        bucket = bucket_for(ts, interval)
         payloads = translate_to_tick_payloads(candle, bucket, interval)
 
         payloads.each do |payload|
@@ -255,16 +263,16 @@ module Live
       oi  = candle[:oi].to_i
 
       open_tick = {
-        ts:  bucket,
+        ts: bucket,
         ltp: candle[:open].to_f,
-        oi:  oi,
+        oi: oi,
         vol: vol
       }
 
       close_tick = {
-        ts:  bucket + (interval * 60) - 1,
+        ts: bucket + (interval * 60) - 1,
         ltp: candle[:close].to_f,
-        oi:  oi,
+        oi: oi,
         vol: vol
       }
 

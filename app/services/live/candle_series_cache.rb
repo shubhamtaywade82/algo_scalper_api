@@ -118,12 +118,12 @@ module Live
           # Start a new forming candle
           new_candle = {
             "timestamp" => bucket_iso,
-            "open"      => ltp,
-            "high"      => ltp,
-            "low"       => ltp,
-            "close"     => ltp,
-            "volume"    => tick[:volume].to_i,
-            "oi"        => tick[:oi].to_i
+            "open" => ltp,
+            "high" => ltp,
+            "low" => ltp,
+            "close" => ltp,
+            "volume" => tick[:volume].to_i,
+            "oi" => tick[:oi].to_i
           }
           candles << new_candle
           # Enforce max candles — drop oldest
@@ -161,12 +161,12 @@ module Live
 
           by_ts[ts] = {
             "timestamp" => ts,
-            "open"      => c[:open].to_f,
-            "high"      => c[:high].to_f,
-            "low"       => c[:low].to_f,
-            "close"     => c[:close].to_f,
-            "volume"    => c[:volume].to_i,
-            "oi"        => c[:oi].to_i
+            "open" => c[:open].to_f,
+            "high" => c[:high].to_f,
+            "low" => c[:low].to_f,
+            "close" => c[:close].to_f,
+            "volume" => c[:volume].to_i,
+            "oi" => c[:oi].to_i
           }
         end
 
@@ -185,8 +185,8 @@ module Live
       def trigger_backfill(instrument, interval)
         Live::HistoricalBackfillService.new.backfill(
           instrument: instrument,
-          interval:   interval,
-          reason:     :warmup
+          interval: interval,
+          reason: :warmup
         )
       end
 
@@ -196,11 +196,11 @@ module Live
           series.add_candle(
             Candle.new(
               timestamp: parse_ts(c["timestamp"]),
-              open:      c["open"].to_f,
-              high:      c["high"].to_f,
-              low:       c["low"].to_f,
-              close:     c["close"].to_f,
-              volume:    c["volume"].to_i
+              open: c["open"].to_f,
+              high: c["high"].to_f,
+              low: c["low"].to_f,
+              close: c["close"].to_f,
+              volume: c["volume"].to_i
             )
           )
         end
