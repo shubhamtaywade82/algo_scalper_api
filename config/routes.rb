@@ -36,6 +36,8 @@ Rails.application.routes.draw do
     # OHLC candle series for dashboard charting (read-only)
     get 'candles/:index_key', to: 'candles#index', as: :candles
 
+    get 'market/vix', to: 'market#vix'
+
     # Live AI analysis dashboard
     get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
     get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical

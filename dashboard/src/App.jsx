@@ -15,6 +15,7 @@ const Analysis = lazy(() => import('./views/Analysis'))
 const Charts = lazy(() => import('./views/Charts'))
 const Settings = lazy(() => import('./views/Settings'))
 const Ledger = lazy(() => import('./views/Ledger'))
+const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
 
 function AppShell(props) {
   const {
@@ -95,6 +96,7 @@ export default function App() {
       </Route>
       {/* Fullscreen — own layout, no Header/footer chrome */}
       <Route path="/charts" component={Charts} />
+      <Route path="/trail-engine" component={TrailEngine} />
     </Router>
   )
 }
