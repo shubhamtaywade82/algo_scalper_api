@@ -79,7 +79,7 @@ module Options
         otm2_stats: otm2_result ? { ce: otm2_result[:ce], pe: otm2_result[:pe] } : nil
       )
 
-      strike_mode = (otm1_result || otm2_result) ? 'atm_plus_minus' : 'atm_only'
+      strike_mode = otm1_result || otm2_result ? 'atm_plus_minus' : 'atm_only'
       [combined_stats, strike_mode, weeks]
     end
 
@@ -172,11 +172,11 @@ module Options
 
     def cycle_stats(candles)
       entry = candles.first[:open].to_f
-      max_high = candles.map { |c| c[:high] }.max.to_f
-      min_low = candles.map { |c| c[:low] }.min.to_f
+      max_high = candles.pluck(:high).max.to_f
+      min_low = candles.pluck(:low).min.to_f
       final_close = candles.last[:close].to_f
       peak_index = candles.index { |c| c[:high] == max_high } || 0
-      pullback_low = candles[peak_index..].map { |c| c[:low] }.min.to_f
+      pullback_low = candles[peak_index..].pluck(:low).min.to_f
 
       {
         entry: entry.round(2),

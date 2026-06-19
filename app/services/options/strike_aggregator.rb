@@ -13,7 +13,7 @@ module Options
     end
 
     def combine
-      available = @entries.reject { |_, value| value.nil? }
+      available = @entries.compact
       return fallback_empty if available.empty?
 
       total_weight = available.keys.sum { |key| WEIGHTS[key] }
@@ -35,8 +35,8 @@ module Options
 
     private
 
-    def weighted_avg(entries, &block)
-      entries.sum { |(key, weight)| weight * block.call(@entries[key]).to_f }.round(4)
+    def weighted_avg(entries, &)
+      entries.sum { |(key, weight)| weight * yield(@entries[key]).to_f }.round(4)
     end
 
     def avg_ce_pe(stats, key)

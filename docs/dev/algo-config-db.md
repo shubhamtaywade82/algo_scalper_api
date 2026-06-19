@@ -46,6 +46,14 @@ bundle exec rake optimize:trailing
 APPLY=1 bundle exec rake optimize:trailing   # auto-apply after propose
 ```
 
+Weekly historical calibration (Solid Queue, Sundays 6 AM production):
+
+```bash
+WeeklyCalibrationJob.perform_later           # NIFTY + SENSEX, 52 weeks
+WeeklyCalibrationJob.perform_later('NIFTY', 8)
+rails solid_queue:load_recurring             # after recurring.yml changes
+```
+
 ## Audit
 
 ```bash
