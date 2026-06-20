@@ -150,6 +150,21 @@ RSpec.describe AlgoConfig do
         cfg = described_class.fetch
         expect(cfg.dig(:entry_quality, :min_score)).to eq(38)
       end
+
+      it 'lets DB overrides take precedence over tier preset defaults' do
+        # User manually disabled block_choppy_regime while in selective tier
+        Setting.put(
+          doc_key,
+          {
+            signals: { signal_tier: 'selective' },
+            entry_quality: { gates: { block_choppy_regime: false } }
+          }.to_json
+        )
+        described_class.reset!
+        cfg = described_class.fetch
+        expect(cfg.dig(:entry_quality, :gates, :block_choppy_regime)).to be(false)
+        # Preset default for selective is true, but DB override wins
+      end
     end
   end
 

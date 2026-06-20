@@ -152,6 +152,32 @@ RSpec.describe TradingSession::Service do
       end
     end
 
+    context 'when trading time restrictions are enabled' do
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return(
+          trading_time_restrictions: {
+            enabled: true,
+            avoid_periods: ['11:00-13:45'],
+            block_exits: false
+          }
+        )
+      end
+
+      it 'blocks entry during avoid period' do
+        travel_to Time.zone.parse('2025-01-15 12:00:00 +05:30') do
+          result = described_class.entry_allowed?
+          expect(result[:allowed]).to be false
+          expect(result[:reason]).to include('11:00-13:45')
+        end
+      end
+
+      it 'allows entry outside avoid period' do
+        travel_to Time.zone.parse('2025-01-15 10:30:00 +05:30') do
+          expect(described_class.entry_allowed?[:allowed]).to be true
+        end
+      end
+    end
+
     context 'when after entry end time (3:15 PM)' do
       it 'returns false at 3:15 PM IST' do
         travel_to Time.zone.parse('2025-01-15 15:15:00 +05:30') do

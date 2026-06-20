@@ -122,6 +122,25 @@ RSpec.describe 'Api::Settings' do
       patch '/api/settings/deep_merge', params: { patch: { dhanhq: { client_id: 'x' } } }
       expect(response).to have_http_status(:unprocessable_content)
     end
+
+    it 'deep-merges trading_time_restrictions for session discipline' do
+      patch '/api/settings/deep_merge',
+            params: {
+              patch: {
+                trading_time_restrictions: {
+                  enabled: true,
+                  avoid_periods: ['11:00-13:45'],
+                  block_exits: false
+                },
+                signals: { signal_tier: 'selective' }
+              }
+            }
+      expect(response).to have_http_status(:ok)
+      doc = JSON.parse(Setting.find_by!(key: doc_key).value)
+      expect(doc.dig('trading_time_restrictions', 'enabled').to_s).to eq('true')
+      expect(doc.dig('trading_time_restrictions', 'avoid_periods')).to eq(['11:00-13:45'])
+      expect(doc.dig('signals', 'signal_tier')).to eq('selective')
+    end
   end
 
   describe 'GET /api/settings/change_logs' do

@@ -9,6 +9,7 @@ module Risk
           StopLossRule.new(config: risk_config),
           AdaptiveTrailRule.new(config: risk_config),
           TakeProfitRule.new(config: risk_config),
+          ZeroHwmFalseEntryRule.new(config: risk_config),
           TimeStopRule.new(config: risk_config),
           IvCollapseRule.new(config: risk_config)
         ]

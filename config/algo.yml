@@ -30,8 +30,8 @@ realtime:
 # Format: "HH:MM-HH:MM" (24-hour format, IST timezone)
 # Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
 trading_time_restrictions:
-  enabled: false # Set to true to enable time-based restrictions
-  avoid_periods: ["10:00-12:30"] # Block mid-morning churn session as per analysis
+  enabled: true # Profitability Slice 2 — midday blackout via DB/API (rollback: algo_config:rollback_slice2)
+  avoid_periods: ["11:00-13:45"] # Block mid-morning churn / midday chop (IST)
   block_exits: false # Set to true to block automated exits (SL/TP/Trailing) during blackout
   # Example based on analysis results:
   # avoid_periods:
@@ -280,7 +280,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 2
+      max_trades_per_day: 0
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -319,7 +319,7 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
-  sl_pct: 0.10 # -10% base premium SL — intraday options buying (tightened from 15%)
+  sl_pct: 0.08 # -8% base premium SL — aligned with adaptive_trail entry_guard hard_stop
   tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
   per_trade_risk_pct: 0.40
 
@@ -403,9 +403,9 @@ risk:
   profit_floor:
     enabled: true
     lock_pct: 0.03         # 3% of capital — arm floor later vs 2.5%
-    min_arm_rupees: 550    # ignore sub-₹550 spikes (was ₹350)
-    trail_pct: 0.82        # keep 82% of HWM (was 72% — less hair-trigger)
-    breakeven_at: 200      # mark breakeven when net PnL reaches ₹200
+    min_arm_rupees: 200    # ↓ was 550 — arm earlier so scalp wins get protected
+    trail_pct: 0.75        # ↓ was 0.82 — lock more of the HWM on the way up
+    breakeven_at: 100      # ↓ was 200 — mark breakeven at ₹100 net PnL
     time_kill_minutes: 35  # chop: slower stale-floor kill (was 20)
 
   # RR-Based Profit Booking (Dynamic Exit)
@@ -450,7 +450,16 @@ risk:
       BANKNIFTY: 15   # minutes
       SENSEX: 15      # minutes (raised from 10 — avg max gain 30-69%, needs time to develop)
 
+  # False Entry Fast-Exit: exit positions that never made a profit (HWM ≈ 0) within the grace period.
+  # Prevents slow-bleed losses like ID=21 (-₹6,150 over 40 min with HWM=₹0 throughout).
+  # Rule: ZeroHwmFalseEntryRule (priority 15, fires before TimeStopRule).
+  zero_hwm_false_entry:
+    enabled: true
+    min_hold_seconds: 120       # grace period — don't fire before 2 minutes
+    hwm_threshold_rupees: 0     # exit if HWM is ≤ ₹0 after grace period
+
   # Institutional Trailing System (3-Phase)
+
   # Calibrated from 16-week historical ATM intraday options data (DhanHQ)
   # Parameters derived from avg max gain, avg post-peak retracement, and session stats
   institutional_trailing:
@@ -524,10 +533,14 @@ risk:
     supertrend_flip_exit: true
     counter_candles: 3
     stages:
-      - { name: entry_guard, min_profit: 0.0, trail_behind_peak: 0.40, hard_stop: -0.30 }
+      # entry_guard: only arms once trade is 3%+ in profit (was 0%) so normal
+      # intrabar retraces at entry don't prematurely close a winning position.
+      # trail_behind_peak widened to 0.55 (was 0.40) — gives the option room to
+      # breathe before locking. hard_stop unchanged at -0.08 for catastrophic protection.
+      - { name: entry_guard,   min_profit: 0.03, trail_behind_peak: 0.55, hard_stop: -0.08 }
       - { name: momentum_ride, min_profit: 0.20, trail_behind_peak: 0.35, hard_stop: null }
-      - { name: profit_lock, min_profit: 0.60, trail_behind_peak: 0.28, hard_stop: null }
-      - { name: runner_mode, min_profit: 1.20, trail_behind_peak: 0.22, hard_stop: null }
+      - { name: profit_lock,   min_profit: 0.60, trail_behind_peak: 0.28, hard_stop: null }
+      - { name: runner_mode,   min_profit: 1.20, trail_behind_peak: 0.22, hard_stop: null }
 
   # Post-Profit Zone Management (State Machine)
   # Implements sophisticated profit zone management after ₹2k TP
@@ -946,7 +959,7 @@ signals:
   # selective = strict gates + higher quality bar (not a profit guarantee).
   # Single source of truth: this value (DB document). SIGNAL_TIER env is ignored unless SIGNAL_TIER_FORCE=true.
   # See config/signal_tier_presets.yml
-  signal_tier: exploratory
+  signal_tier: selective # Profitability Slice 2 — was exploratory; override via SIGNAL_TIER_FORCE only
 
   # Entry strategy selection (code enforces behavior; no strategy logic in YAML)
   # primary: supertrend => Supertrend flip only; omit or use other value for legacy multi-indicator path

@@ -143,7 +143,7 @@ class AlgoConfig
 
       return if preset.blank?
 
-      merged = deep_merge_hashes_with_arrays(config, preset)
+      merged = deep_merge_hashes_with_arrays(preset, config)
       config.replace(merged)
       Rails.logger.debug { "[AlgoConfig] signal_tier=#{tier}" }
     end

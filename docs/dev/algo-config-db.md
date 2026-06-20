@@ -54,6 +54,61 @@ WeeklyCalibrationJob.perform_later('NIFTY', 8)
 rails solid_queue:load_recurring             # after recurring.yml changes
 ```
 
+## Profitability Slice 2 — Session Discipline
+
+Midday entry blackout + selective signal tier (config-only behavior change):
+
+```bash
+# Apply to DB document (instant via Redis pub/sub)
+bundle exec rake algo_config:apply_slice2
+
+# Or via API
+PATCH /api/settings/deep_merge
+# patch: { trading_time_restrictions: { enabled: true, avoid_periods: ["11:00-13:45"] },
+#          signals: { signal_tier: "selective" } }
+
+# Rollback
+bundle exec rake algo_config:rollback_slice2
+```
+
+Requires `TradingTimeRestrictionGuard` in the entry pipeline (blocks 11:00–13:45 IST when enabled).
+Validate with `bundle exec rake trading:entry_funnel DATE=YYYY-MM-DD` — zero entries in blackout window.
+
+## Profitability Slice 3 — Pause SENSEX
+
+Pause SENSEX entries via per-index trade limit (requires `IndexTradeLimitGuard` in entry pipeline):
+
+```bash
+bundle exec rake algo_config:apply_slice3
+
+# Or via API
+PATCH /api/settings/deep_merge
+# patch: { indices: [{ key: "SENSEX", trade_limits: { max_trades_per_day: 0 } }] }
+
+bundle exec rake algo_config:rollback_slice3
+```
+
+Validate with `bundle exec rake trading:entry_funnel DATE=YYYY-MM-DD` — zero SENSEX entries.
+
+## Profitability Slice 4 — Tighten Catastrophic Exit
+
+Cap worst-case premium bleed via adaptive trail entry_guard hard_stop and aligned sl_pct:
+
+```bash
+bundle exec rake algo_config:apply_slice4
+
+# Or via API
+PATCH /api/settings/deep_merge
+# patch: { risk: { sl_pct: 0.08, adaptive_trailing: { stages: [
+#   { name: "entry_guard", min_profit: 0.0, trail_behind_peak: 0.40, hard_stop: -0.08 },
+#   ... remaining stages unchanged ...
+# ] } } }
+
+bundle exec rake algo_config:rollback_slice4
+```
+
+Validate with `bundle exec rake trading:exit_optimization_report DAYS=3` — smaller worst-case losses.
+
 ## Audit
 
 ```bash
