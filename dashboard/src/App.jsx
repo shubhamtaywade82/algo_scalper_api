@@ -29,7 +29,7 @@ function AppShell(props) {
   } = usePositions()
 
   const {
-    mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, system,
+    mode, connected, isStale: dashboardStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, config, marketStatus, refresh: refreshDashboard
   } = useDashboard(() => fetchPositions())
@@ -41,7 +41,7 @@ function AppShell(props) {
   }
 
   const ctx = {
-    mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, system,
+    mode, connected, dashboardStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, config, marketStatus,
     open, closed,
@@ -57,6 +57,7 @@ function AppShell(props) {
           mode={mode()}
           indices={indices()}
           subscribedIndices={subscribedIndices()}
+          optionsBuying={optionsBuying()}
           system={system()}
           connected={connected()}
           isStale={dashboardStale()}

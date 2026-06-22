@@ -487,6 +487,11 @@ module Live
           banknifty: Live::TickCache.ltp('IDX_I', '25'),
           sensex: Live::TickCache.ltp('IDX_I', '51')
         },
+        options_buying: {
+          nifty: build_options_buying_state('NIFTY'),
+          banknifty: build_options_buying_state('BANKNIFTY'),
+          sensex: build_options_buying_state('SENSEX')
+        },
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
           pnl_updater_running: running?,
@@ -494,8 +499,25 @@ module Live
         ),
         timestamp: Time.current.iso8601
       }
-    rescue StandardError
+    rescue StandardError => e
+      @logger.error("[PnlUpdater] build_dashboard_stats failed: #{e.message}")
       { type: "stats", error: true, timestamp: Time.current.iso8601 }
+    end
+
+    def build_options_buying_state(index_key)
+      direction = if OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bullish)
+                    'BULLISH'
+                  elsif OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bearish)
+                    'BEARISH'
+                  end
+      {
+        regime: OptionsBuying::RegimeClassifier.detect(index_key),
+        breakout_ready: !direction.nil?,
+        direction: direction
+      }
+    rescue StandardError => e
+      @logger.warn("[PnlUpdater] failed to build options_buying state for #{index_key}: #{e.message}")
+      { regime: 'UNKNOWN', breakout_ready: false, direction: nil }
     end
 
     def safe_wallet_snapshot

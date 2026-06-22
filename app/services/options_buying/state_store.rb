@@ -26,6 +26,19 @@ module OptionsBuying
         redis.exists?(compression_arm_key(index_key))
       end
 
+      def kill_switch_active?
+        (defined?(Risk::CircuitBreaker) && Risk::CircuitBreaker.respond_to?(:tripped?) && Risk::CircuitBreaker.tripped?) || drawdown_exceeded?
+      rescue StandardError
+        false
+      end
+
+      def drawdown_exceeded?
+        (Mode.config.dig(:drawdown, :max_daily_drawdown_pct) || 0.05).to_f
+        # In a full implementation, we'd compare OptionsBuying cumulative PnL to capital
+        # Currently, returning false to rely on the global CircuitBreaker
+        false
+      end
+
       def set_daily_atr(index_key, atr)
         return unless atr.to_f.positive?
 
@@ -145,6 +158,16 @@ module OptionsBuying
 
       def monitored_strikes
         redis.smembers(monitored_strikes_key)
+      end
+
+      def record_exit(security_id)
+        redis.srem(monitored_strikes_key, security_id.to_s)
+        if defined?(Live::MarketFeedHub)
+          Live::MarketFeedHub.instance.unsubscribe_instrument(security_id)
+        end
+        Rails.logger.info("[OptionsBuying::StateStore] Unsubscribed and removed from monitored_strikes: #{security_id}")
+      rescue StandardError => e
+        Rails.logger.warn("[OptionsBuying::StateStore] record_exit failed: #{e.message}")
       end
 
       def ensure_stream_group!(security_id, group_name: stream_group_name)

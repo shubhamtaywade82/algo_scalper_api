@@ -116,6 +116,24 @@ function MarketStatusBanner(props) {
 }
 
 export default function Header(props) {
+  const OptionsBuyingStatePills = (p) => {
+    const ob = () => props.optionsBuying?.[p.indexKey] || {}
+    return (
+      <div class="flex items-center gap-1 mt-0.5">
+        <Show when={ob().regime && ob().regime !== 'UNKNOWN' && ob().regime !== 'RANGING'}>
+          <span class="text-[6px] font-black uppercase tracking-tight px-1 py-0.5 rounded border leading-none bg-blue-500/10 text-blue-400 border-blue-500/20">
+            {ob().regime}
+          </span>
+        </Show>
+        <Show when={ob().breakout_ready}>
+          <span class={`text-[6px] font-black uppercase tracking-tight px-1 py-0.5 rounded border leading-none ${ob().direction === 'BULLISH' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+            ARMED: {ob().direction}
+          </span>
+        </Show>
+      </div>
+    )
+  }
+
   const { publicIpv4, publicIpv6, registeredIps } = useDashboardContext()
 
   const isIpVerified = createMemo(() => {
@@ -180,6 +198,7 @@ export default function Header(props) {
                           {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}
                         </span>
                       </Show>
+                      <OptionsBuyingStatePills indexKey="nifty" />
                     </>
                   )
                 })()}
@@ -215,6 +234,7 @@ export default function Header(props) {
                           {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}
                         </span>
                       </Show>
+                      <OptionsBuyingStatePills indexKey="banknifty" />
                     </>
                   )
                 })()}
@@ -250,6 +270,7 @@ export default function Header(props) {
                           {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}
                         </span>
                       </Show>
+                      <OptionsBuyingStatePills indexKey="sensex" />
                     </>
                   )
                 })()}

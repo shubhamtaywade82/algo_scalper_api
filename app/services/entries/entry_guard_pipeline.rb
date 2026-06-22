@@ -53,6 +53,7 @@ module Entries
         Guards::ExposureGuard,
         Guards::CooldownGuard,
         Guards::SizingGuard,
+        Guards::BreakoutReadyGuard,
         Guards::RiskPolicyGuard,
         Guards::SmcNavigatorGuard
       ]
