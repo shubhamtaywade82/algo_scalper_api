@@ -100,12 +100,21 @@ export default function PriceChart(props) {
     // when price moved fast. The live-tick effect already extends targetBar's
     // high/low the instant a new extreme prints, so the true range is always
     // known up front — the lerp only needs to animate `close` toward it.
+    const isUp = targetBar.close >= targetBar.open
+    // Highlight the active forming candle to make it pop against historical bars.
+    // It will revert to the standard theme color when the minute rolls over and
+    // the backbone fetch replaces it via setData.
+    const highlightColor = isUp ? '#38bdf8' : '#fb923c' // Bright Blue for up, Bright Orange for down
+
     const liveBar = {
       time: targetBar.time,
       open: targetBar.open,
       high: targetBar.high,
       low: targetBar.low,
-      close: renderedClose
+      close: renderedClose,
+      color: highlightColor,
+      wickColor: highlightColor,
+      borderColor: highlightColor
     }
 
     candleSeries.update(liveBar)

@@ -70,14 +70,34 @@ export default function Charts() {
   // Backbone refresh — picks up newly-closed bars. The actual real-time motion
   // comes from the WS LTP stream below. To prevent spamming the API and hitting
   // rate limits, we align the fetch exactly to the top of the minute (+2s buffer
-  // to allow the broker to finalize the candle).
+  // to allow the broker to finalize the candle), and we ONLY fetch if the current
+  // minute matches the boundary for the selected timeframe.
   let pollId
+
+  function isCandleBoundary(intervalStr, date) {
+    const ival = parseInt(intervalStr, 10) || 5
+    if (ival === 1) return true
+    if (ival === 5) return date.getMinutes() % 5 === 0
+    if (ival === 15) return date.getMinutes() % 15 === 0
+    if (ival === 60) return date.getMinutes() === 15 // Hourly candles close at xx:15 in India
+
+    // Convert current time to IST to accurately calculate 25m boundaries from 09:15
+    const utcMs = date.getTime() + (date.getTimezoneOffset() * 60000)
+    const istDate = new Date(utcMs + (330 * 60000))
+    const minsSinceOpen = (istDate.getHours() * 60 + istDate.getMinutes()) - (9 * 60 + 15)
+    
+    if (minsSinceOpen < 0) return true
+    return minsSinceOpen % ival === 0
+  }
+
   function scheduleNextMinuteFetch() {
     const now = new Date()
     const msUntilNextMinute = 60000 - (now.getSeconds() * 1000 + now.getMilliseconds())
-    // Wait until the minute rolls over, plus 2 seconds for broker processing
+    
     pollId = setTimeout(() => {
-      refetch()
+      if (isCandleBoundary(interval(), new Date())) {
+        refetch()
+      }
       scheduleNextMinuteFetch()
     }, msUntilNextMinute + 2000)
   }
