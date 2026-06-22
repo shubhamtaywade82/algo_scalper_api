@@ -333,10 +333,9 @@ export default function PriceChart(props) {
 
       const prev = entry.config
       const restyled = !prev || prev.color !== cfg.color
-      const recompute = !prev || prev.type !== cfg.type || prev.period !== cfg.period
 
       if (restyled) entry.series.applyOptions({ color: cfg.color })
-      if (recompute) entry.series.setData(computeFn(lastCandles, cfg.period))
+      entry.series.setData(computeFn(lastCandles, cfg.period))
       entry.config = { ...cfg }
     }
 
