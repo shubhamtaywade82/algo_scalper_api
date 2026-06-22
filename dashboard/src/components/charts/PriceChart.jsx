@@ -74,6 +74,9 @@ export default function PriceChart(props) {
   const indicatorSeries = new Map() // id -> { series, config }
   let positionMarkers          // ISeriesMarkersPluginApi — entry-point arrows
   const positionLines = new Map() // id -> price line (entry price)
+  let supportLine = null
+  let resistanceLine = null
+  const radarLines = new Map()
   const [capsules, setCapsules] = createSignal([]) // floating detail cards anchored to entry-price Y
 
   // Animation state for the live (last) candle + LTP line
@@ -425,6 +428,18 @@ export default function PriceChart(props) {
     onCleanup(() => {
       if (rafId !== null) cancelAnimationFrame(rafId)
       ro?.disconnect()
+      if (supportLine && candleSeries) {
+        candleSeries.removePriceLine(supportLine)
+        supportLine = null
+      }
+      if (resistanceLine && candleSeries) {
+        candleSeries.removePriceLine(resistanceLine)
+        resistanceLine = null
+      }
+      for (const line of radarLines.values()) {
+        if (candleSeries) candleSeries.removePriceLine(line)
+      }
+      radarLines.clear()
       chart?.remove()
       chart = null
     })
@@ -534,6 +549,94 @@ export default function PriceChart(props) {
     targetBar.high = Math.max(targetBar.high, ltp)
     targetBar.low = Math.min(targetBar.low, ltp)
     kickAnimation()
+  })
+
+  // Render support & resistance lines, styling them dynamically when a breakout is armed.
+  createEffect(() => {
+    if (!chart || !candleSeries) return
+    const s = props.support ? props.support() : null
+    const r = props.resistance ? props.resistance() : null
+    const isArmed = props.breakoutReady ? props.breakoutReady() : false
+    const dir = props.direction ? props.direction() : ''
+
+    // Clean up old support line
+    if (supportLine) {
+      candleSeries.removePriceLine(supportLine)
+      supportLine = null
+    }
+    // Clean up old resistance line
+    if (resistanceLine) {
+      candleSeries.removePriceLine(resistanceLine)
+      resistanceLine = null
+    }
+
+    if (s != null && Number.isFinite(s)) {
+      const isBearishArmed = isArmed && dir?.toUpperCase() === 'BEARISH'
+      supportLine = candleSeries.createPriceLine({
+        price: s,
+        color: isBearishArmed ? '#10b981' : 'rgba(16, 185, 129, 0.6)', // Bright green if armed, translucent green if not
+        lineWidth: isBearishArmed ? 2 : 1,
+        lineStyle: isBearishArmed ? 0 : 2, // Solid if armed, dashed if not
+        axisLabelVisible: true,
+        title: isBearishArmed ? 'SUPPORT (BREAKOUT ARMED!)' : 'Support'
+      })
+    }
+
+    if (r != null && Number.isFinite(r)) {
+      const isBullishArmed = isArmed && dir?.toUpperCase() === 'BULLISH'
+      resistanceLine = candleSeries.createPriceLine({
+        price: r,
+        color: isBullishArmed ? '#f43f5e' : 'rgba(244, 63, 94, 0.6)', // Bright rose if armed, translucent rose if not
+        lineWidth: isBullishArmed ? 2 : 1,
+        lineStyle: isBullishArmed ? 0 : 2, // Solid if armed, dashed if not
+        axisLabelVisible: true,
+        title: isBullishArmed ? 'RESISTANCE (BREAKOUT ARMED!)' : 'Resistance'
+      })
+    }
+  })
+
+  // Render radar strikes as horizontal reference lines
+  createEffect(() => {
+    if (!chart || !candleSeries) return
+    const strikes = props.radarStrikes ? props.radarStrikes() : []
+    const seenSids = new Set()
+
+    for (const strike of strikes) {
+      if (typeof strike !== 'object' || strike == null) continue
+      const sid = strike.security_id
+      if (!sid) continue
+      seenSids.add(sid)
+
+      const price = Number(strike.strike)
+      if (!Number.isFinite(price)) continue
+
+      const isCall = strike.type === 'CE'
+      const color = isCall ? 'rgba(56, 189, 248, 0.35)' : 'rgba(251, 146, 60, 0.35)' // Light Sky Blue for CE, Light Orange for PE
+      
+      let line = radarLines.get(sid)
+      const lineOpts = {
+        price: price,
+        color: color,
+        lineWidth: 1,
+        lineStyle: 3, // Dotted
+        axisLabelVisible: true,
+        title: `Radar ${strike.type} ${price}`
+      }
+      if (!line) {
+        line = candleSeries.createPriceLine(lineOpts)
+        radarLines.set(sid, line)
+      } else {
+        line.applyOptions(lineOpts)
+      }
+    }
+
+    // Clean up removed strikes
+    for (const [sid, line] of radarLines) {
+      if (!seenSids.has(sid)) {
+        candleSeries.removePriceLine(line)
+        radarLines.delete(sid)
+      }
+    }
   })
 
   return (

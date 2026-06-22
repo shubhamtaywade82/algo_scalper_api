@@ -513,7 +513,12 @@ module Live
       {
         regime: OptionsBuying::RegimeClassifier.detect(index_key),
         breakout_ready: !direction.nil?,
-        direction: direction
+        direction: direction,
+        compression_armed: OptionsBuying::StateStore.compression_armed?(index_key),
+        support: OptionsBuying::StateStore.support(index_key),
+        resistance: OptionsBuying::StateStore.resistance(index_key),
+        daily_atr: OptionsBuying::StateStore.daily_atr(index_key),
+        radar_strikes: OptionsBuying::StateStore.radar_strikes(index_key)
       }
     rescue StandardError => e
       @logger.warn("[PnlUpdater] failed to build options_buying state for #{index_key}: #{e.message}")

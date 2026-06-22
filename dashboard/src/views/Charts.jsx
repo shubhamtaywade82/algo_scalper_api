@@ -49,6 +49,9 @@ export default function Charts() {
   const initialSymbol = (searchParams.symbol || localStorage.getItem('chart_symbol') || 'NIFTY').toUpperCase()
   const [indexKey, setIndexKey] = createSignal(initialSymbol)
   
+  const { liveUpdates, optionsBuying } = useDashboard()
+  const buyingState = createMemo(() => optionsBuying() ? optionsBuying()[indexKey().toLowerCase()] : null)
+  
   const savedInterval = localStorage.getItem('chart_interval') || '5'
   const [interval, setInterval_] = createSignal(savedInterval)
   
@@ -234,7 +237,7 @@ export default function Charts() {
         </div>
       </Show>
 
-      <div class="flex-1 min-h-0 p-4">
+      <div class="flex-1 min-h-0 p-4 relative">
         <Show when={candles.loading && !candles()}>
           <div class="h-full flex items-center justify-center text-sm text-gray-500">Loading candles…</div>
         </Show>
@@ -244,7 +247,53 @@ export default function Charts() {
           </div>
         </Show>
         <Show when={(candles() && candles().length > 0) || (!candles.loading && !candles.error)}>
-          <div class="h-full rounded-2xl border border-white/5 bg-gray-900/40 overflow-hidden">
+          <div class="h-full rounded-2xl border border-white/5 bg-gray-900/40 overflow-hidden relative group">
+            
+            {/* Options Buying HUD Overlay */}
+            <Show when={buyingState()}>
+              <div class="absolute top-4 left-4 z-10 p-4 rounded-xl bg-gray-900/80 backdrop-blur-md border border-white/10 shadow-2xl pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity">
+                <div class="flex items-center gap-2 mb-3">
+                  <div class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                  <span class="text-xs font-bold text-gray-300 uppercase tracking-widest">Options Buyer Core</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div class="text-gray-500">Regime</div>
+                  <div class={`font-mono font-bold text-right ${
+                    buyingState().regime?.includes('BULL') ? 'text-emerald-400' :
+                    buyingState().regime?.includes('BEAR') ? 'text-rose-400' : 'text-amber-400'
+                  }`}>{buyingState().regime || 'UNKNOWN'}</div>
+
+                  <div class="text-gray-500">Breakout State</div>
+                  <div class={`font-mono font-bold text-right ${buyingState().breakout_ready ? 'text-emerald-400' : 'text-gray-400'}`}>
+                    {buyingState().breakout_ready ? `[ARMED: ${buyingState().direction}]` : '[RANGING]'}
+                  </div>
+
+                  <div class="text-gray-500">ATR Compressed</div>
+                  <div class={`font-mono font-bold text-right ${buyingState().compression_armed ? 'text-emerald-400' : 'text-gray-400'}`}>
+                    {buyingState().compression_armed ? 'YES' : 'NO'}
+                  </div>
+
+                  <div class="text-gray-500">Daily ATR</div>
+                  <div class="font-mono text-gray-300 text-right">{buyingState().daily_atr ? buyingState().daily_atr.toFixed(2) : '--'}</div>
+
+                  <Show when={buyingState().support && buyingState().resistance}>
+                    <div class="text-gray-500">Key Levels</div>
+                    <div class="font-mono text-gray-300 text-right">
+                      S: <span class="text-emerald-400">{buyingState().support?.toFixed(0)}</span> / R: <span class="text-rose-400">{buyingState().resistance?.toFixed(0)}</span>
+                    </div>
+                  </Show>
+
+                  <Show when={buyingState().radar_strikes?.length > 0}>
+                    <div class="text-gray-500">Radar Strikes</div>
+                    <div class="font-mono text-indigo-300 text-right font-bold">
+                      {buyingState().radar_strikes.map(s => typeof s === 'object' && s ? `${s.strike} ${s.type}` : s).join(', ')}
+                    </div>
+                  </Show>
+                </div>
+              </div>
+            </Show>
+
             <PriceChart
               candles={() => candles() || []}
               liveLtp={liveLtp}
@@ -252,6 +301,11 @@ export default function Charts() {
               positions={chartPositions}
               theme={theme().config}
               interval={interval()}
+              support={() => buyingState()?.support}
+              resistance={() => buyingState()?.resistance}
+              radarStrikes={() => buyingState()?.radar_strikes || []}
+              breakoutReady={() => buyingState()?.breakout_ready}
+              direction={() => buyingState()?.direction}
               height={null}
               fullHeight
             />
