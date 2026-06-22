@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createResource, For, Show, onMount, onCleanup } from 'solid-js'
+import { createSignal, createMemo, createResource, createEffect, For, Show, onMount, onCleanup } from 'solid-js'
 import { A, useSearchParams } from '@solidjs/router'
 import { dashboardApiHeaders } from '../lib/dashboardApi'
 import { useDashboard } from '../stores/useDashboard'
@@ -46,12 +46,27 @@ async function fetchCandles({ indexKey, interval }) {
  */
 export default function Charts() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialSymbol = (searchParams.symbol || 'NIFTY').toUpperCase()
+  const initialSymbol = (searchParams.symbol || localStorage.getItem('chart_symbol') || 'NIFTY').toUpperCase()
   const [indexKey, setIndexKey] = createSignal(initialSymbol)
-  const [interval, setInterval_] = createSignal('5')
-  const [theme, setTheme] = createSignal(THEMES[0])
-  const [indicators, setIndicators] = createSignal(DEFAULT_INDICATORS)
+  
+  const savedInterval = localStorage.getItem('chart_interval') || '5'
+  const [interval, setInterval_] = createSignal(savedInterval)
+  
+  const savedThemeId = localStorage.getItem('chart_theme') || 'modern'
+  const savedTheme = THEMES.find(t => t.id === savedThemeId) || THEMES[0]
+  const [theme, setTheme] = createSignal(savedTheme)
+  
+  const savedIndicators = JSON.parse(localStorage.getItem('chart_indicators') || 'null') || DEFAULT_INDICATORS
+  const [indicators, setIndicators] = createSignal(savedIndicators)
+  
   const [showIndicatorPanel, setShowIndicatorPanel] = createSignal(false)
+
+  createEffect(() => {
+    localStorage.setItem('chart_symbol', indexKey())
+    localStorage.setItem('chart_interval', interval())
+    localStorage.setItem('chart_theme', theme().id)
+    localStorage.setItem('chart_indicators', JSON.stringify(indicators()))
+  })
 
   function toggleIndicator(id) {
     setIndicators(list => list.map(i => (i.id === id ? { ...i, enabled: !i.enabled } : i)))
@@ -236,6 +251,7 @@ export default function Charts() {
               indicators={indicators}
               positions={chartPositions}
               theme={theme().config}
+              interval={interval()}
               height={null}
               fullHeight
             />

@@ -83,6 +83,7 @@ export default function PriceChart(props) {
   let targetBar = null       // latest known OHLC for the live bar
   let staticBars = []        // all-but-last bars, painted once via setData
   let didInitialFit = false  // only auto-zoom on the very first data load
+  let lastRenderedInterval = props.interval // track timeframe changes
 
   function animate() {
     if (!chart || !candleSeries || !targetBar) {
@@ -437,6 +438,11 @@ export default function PriceChart(props) {
 
   // Sync historical bar data
   createEffect(() => {
+    if (props.interval !== lastRenderedInterval) {
+      didInitialFit = false
+      lastRenderedInterval = props.interval
+    }
+
     const candles = props.candles ? props.candles() : []
     if (!chart || !candleSeries) return
 
