@@ -4,6 +4,7 @@ import { dashboardApiHeaders } from '../lib/dashboardApi'
 import { useDashboard } from '../stores/useDashboard'
 import { usePositions } from '../stores/usePositions'
 import PriceChart from '../components/charts/PriceChart'
+import { useAnalysis } from '../stores/useAnalysis'
 
 const INDICES = ['NIFTY', 'BANKNIFTY', 'SENSEX']
 const LTP_KEY = { NIFTY: 'nifty', BANKNIFTY: 'banknifty', SENSEX: 'sensex' }
@@ -21,7 +22,11 @@ const INTERVALS = [
 const DEFAULT_INDICATORS = [
   { id: 'sma20', type: 'sma', label: 'SMA', period: 20, color: '#fbbf24', enabled: true },
   { id: 'sma50', type: 'sma', label: 'SMA', period: 50, color: '#a78bfa', enabled: true },
-  { id: 'ema21', type: 'ema', label: 'EMA', period: 21, color: '#38bdf8', enabled: false }
+  { id: 'ema21', type: 'ema', label: 'EMA', period: 21, color: '#38bdf8', enabled: false },
+  { id: 'smc_ob', type: 'smc_ob', label: 'SMC Order Blocks', color: '#10b981', enabled: true },
+  { id: 'smc_fvg', type: 'smc_fvg', label: 'SMC Fair Value Gaps', color: '#2dd4bf', enabled: false },
+  { id: 'smc_eq', type: 'smc_eq', label: 'SMC Equilibrium & Zones', color: '#eab308', enabled: false },
+  { id: 'smc_swing', type: 'smc_swing', label: 'SMC Swing Structure (BOS)', color: '#a855f7', enabled: false }
 ]
 
 const THEMES = [
@@ -50,7 +55,21 @@ export default function Charts() {
   const [indexKey, setIndexKey] = createSignal(initialSymbol)
   
   const { liveUpdates, optionsBuying } = useDashboard()
+  const { liveData } = useAnalysis()
+
   const buyingState = createMemo(() => optionsBuying() ? optionsBuying()[indexKey().toLowerCase()] : null)
+  
+  const smcContext = createMemo(() => {
+    const data = liveData(indexKey())
+    const smc = data?.smc
+    if (!smc || !smc.timeframes) return null
+    
+    const currentIval = interval()
+    if (currentIval === '1' || currentIval === '5') return smc.timeframes.ltf?.context
+    if (currentIval === '15' || currentIval === '25') return smc.timeframes.mtf?.context
+    if (currentIval === '60') return smc.timeframes.htf?.context
+    return null
+  })
   
   const savedInterval = localStorage.getItem('chart_interval') || '5'
   const [interval, setInterval_] = createSignal(savedInterval)
@@ -224,13 +243,15 @@ export default function Charts() {
                   <span class="w-2.5 h-2.5 rounded-full" style={{ background: ind.color }} />
                   <span class="text-xs font-bold text-gray-300">{ind.label}</span>
                 </button>
-                <input
-                  type="number"
-                  min="1"
-                  value={ind.period}
-                  class="w-14 bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs text-gray-200 text-center"
-                  onInput={e => setIndicatorPeriod(ind.id, e.currentTarget.value)}
-                />
+                <Show when={ind.period != null}>
+                  <input
+                    type="number"
+                    min="1"
+                    value={ind.period}
+                    class="w-14 bg-transparent border border-white/10 rounded px-1.5 py-0.5 text-xs text-gray-200 text-center"
+                    onInput={e => setIndicatorPeriod(ind.id, e.currentTarget.value)}
+                  />
+                </Show>
               </div>
             )}
           </For>
@@ -295,6 +316,7 @@ export default function Charts() {
             </Show>
 
             <PriceChart
+              symbol={indexKey()}
               candles={() => candles() || []}
               liveLtp={liveLtp}
               indicators={indicators}
@@ -306,6 +328,7 @@ export default function Charts() {
               radarStrikes={() => buyingState()?.radar_strikes || []}
               breakoutReady={() => buyingState()?.breakout_ready}
               direction={() => buyingState()?.direction}
+              smcContext={smcContext}
               height={null}
               fullHeight
             />
