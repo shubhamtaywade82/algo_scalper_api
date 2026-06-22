@@ -24,6 +24,13 @@ const DEFAULT_INDICATORS = [
   { id: 'ema21', type: 'ema', label: 'EMA', period: 21, color: '#38bdf8', enabled: false }
 ]
 
+const THEMES = [
+  { id: 'modern', label: 'Modern', config: { upColor: '#34d399', downColor: '#fb7185', borderVisible: false, wickUpColor: '#34d399', wickDownColor: '#fb7185' } },
+  { id: 'hollow', label: 'Hollow', config: { upColor: 'transparent', downColor: '#fb7185', borderVisible: true, borderColor: '#34d399', borderUpColor: '#34d399', borderDownColor: '#fb7185', wickUpColor: '#34d399', wickDownColor: '#fb7185' } },
+  { id: 'monochrome', label: 'Mono', config: { upColor: '#ffffff', downColor: '#52525b', borderVisible: false, wickUpColor: '#ffffff', wickDownColor: '#52525b' } },
+  { id: 'cyberpunk', label: 'Cyber', config: { upColor: '#0ea5e9', downColor: '#ec4899', borderVisible: false, wickUpColor: '#0ea5e9', wickDownColor: '#ec4899' } }
+]
+
 async function fetchCandles({ indexKey, interval }) {
   const res = await fetch(`/api/candles/${indexKey}?interval=${interval}&days=5`, {
     headers: dashboardApiHeaders()
@@ -42,6 +49,7 @@ export default function Charts() {
   const initialSymbol = (searchParams.symbol || 'NIFTY').toUpperCase()
   const [indexKey, setIndexKey] = createSignal(initialSymbol)
   const [interval, setInterval_] = createSignal('5')
+  const [theme, setTheme] = createSignal(THEMES[0])
   const [indicators, setIndicators] = createSignal(DEFAULT_INDICATORS)
   const [showIndicatorPanel, setShowIndicatorPanel] = createSignal(false)
 
@@ -139,6 +147,21 @@ export default function Charts() {
             </For>
           </div>
 
+          <div class="flex rounded-xl overflow-hidden border border-white/10 hidden md:flex">
+            <For each={THEMES}>
+              {opt => (
+                <button
+                  class={`px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
+                    theme().id === opt.id ? 'bg-indigo-500/20 text-indigo-300' : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                  onClick={() => setTheme(opt)}
+                >
+                  {opt.label}
+                </button>
+              )}
+            </For>
+          </div>
+
           <button
             class={`px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-wider transition-colors ${
               showIndicatorPanel() ? 'bg-primary-500/20 border-primary-500/30 text-primary-300' : 'border-white/10 text-gray-400 hover:text-gray-200'
@@ -192,6 +215,7 @@ export default function Charts() {
               liveLtp={liveLtp}
               indicators={indicators}
               positions={chartPositions}
+              theme={theme().config}
               height={null}
               fullHeight
             />

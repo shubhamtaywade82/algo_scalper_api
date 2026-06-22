@@ -360,11 +360,13 @@ export default function PriceChart(props) {
     })
 
     candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#34d399',
-      downColor: '#fb7185',
-      borderVisible: false,
-      wickUpColor: '#34d399',
-      wickDownColor: '#fb7185',
+      ...(props.theme || {
+        upColor: '#34d399',
+        downColor: '#fb7185',
+        borderVisible: false,
+        wickUpColor: '#34d399',
+        wickDownColor: '#fb7185'
+      }),
       // Built-in last-value label disabled — the `ltpSeries` LTP tail's own
       // axis label already shows current price; both together would duplicate it.
       lastValueVisible: false,
@@ -419,6 +421,12 @@ export default function PriceChart(props) {
     })
   })
 
+  createEffect(() => {
+    if (!candleSeries || !props.theme) return
+    candleSeries.applyOptions(props.theme)
+  })
+
+  // Sync historical bar data
   createEffect(() => {
     const candles = props.candles ? props.candles() : []
     if (!chart || !candleSeries) return
