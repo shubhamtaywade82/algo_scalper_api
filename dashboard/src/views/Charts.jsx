@@ -59,13 +59,25 @@ export default function Charts() {
     fetchCandles
   )
 
-  // Backbone refresh — picks up newly-closed bars / late prints. The actual
-  // real-time motion comes from the WS LTP stream below, not this poll.
+  // Backbone refresh — picks up newly-closed bars. The actual real-time motion
+  // comes from the WS LTP stream below. To prevent spamming the API and hitting
+  // rate limits, we align the fetch exactly to the top of the minute (+2s buffer
+  // to allow the broker to finalize the candle).
   let pollId
+  function scheduleNextMinuteFetch() {
+    const now = new Date()
+    const msUntilNextMinute = 60000 - (now.getSeconds() * 1000 + now.getMilliseconds())
+    // Wait until the minute rolls over, plus 2 seconds for broker processing
+    pollId = setTimeout(() => {
+      refetch()
+      scheduleNextMinuteFetch()
+    }, msUntilNextMinute + 2000)
+  }
+
   onMount(() => {
-    pollId = setInterval(() => refetch(), 15000)
+    scheduleNextMinuteFetch()
   })
-  onCleanup(() => clearInterval(pollId))
+  onCleanup(() => clearTimeout(pollId))
 
   // Live LTP via ActionCable (DashboardChannel) — same feed Header/Terminal use.
   // Drives the forming candle's close + price line every tick for true real-time motion.
@@ -165,7 +177,7 @@ export default function Charts() {
       </Show>
 
       <div class="flex-1 min-h-0 p-4">
-        <Show when={candles.loading}>
+        <Show when={candles.loading && !candles()}>
           <div class="h-full flex items-center justify-center text-sm text-gray-500">Loading candles…</div>
         </Show>
         <Show when={candles.error}>
@@ -173,7 +185,7 @@ export default function Charts() {
             Failed to load candles: {candles.error?.message}
           </div>
         </Show>
-        <Show when={!candles.loading && !candles.error}>
+        <Show when={(candles() && candles().length > 0) || (!candles.loading && !candles.error)}>
           <div class="h-full rounded-2xl border border-white/5 bg-gray-900/40 overflow-hidden">
             <PriceChart
               candles={() => candles() || []}
