@@ -54,7 +54,7 @@ options_buying:
     max_setup_ratio: 0.30
     setup_window_end: "11:15"
   breakout:
-    enabled: true
+    enabled: false
     timeframe_minutes: 1
     volume_multiplier: 2.0
     require_oi_unwind: true
@@ -316,7 +316,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 0
+      max_trades_per_day: 2
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:

@@ -45,7 +45,6 @@ module Entries
         Guards::TimeRegimeGuard,
         Guards::SegmentExpectancyGuard,
         Guards::MiddayQualityGuard,
-        Guards::BankniftyLastWeekGuard,
         Guards::ChopScoreGuard,
         Guards::DteEntryWindowGuard,
         Guards::WeeklyExpiryGuard,
