@@ -31,7 +31,7 @@ realtime:
 # Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
 trading_time_restrictions:
   enabled: true # Profitability Slice 2 — midday blackout via DB/API (rollback: algo_config:rollback_slice2)
-  avoid_periods: ["11:00-13:45"] # Block mid-morning churn / midday chop (IST)
+  avoid_periods: [] # Disabled midday blackout; re-enable if churn returns
   block_exits: false # Set to true to block automated exits (SL/TP/Trailing) during blackout
   # Example based on analysis results:
   # avoid_periods:
@@ -361,8 +361,8 @@ risk:
 
   iv_vol_gate:
     enabled: true
-    max_iv_rank: 0.80
-    min_iv_rank: 0.10
+    max_iv_rank: 1.0
+    min_iv_rank: 0.05
 
   volume_velocity_gate:
     enabled: true
@@ -632,7 +632,7 @@ risk:
   #
   # Each regime gets different SL/TP/trailing rules based on Greek behavior
   time_regimes:
-    enabled: true # Time-regime rules active — TP/SL adjust by market session
+    enabled: false # disabled so entries aren't blocked by session regimes
 
     # S1: OPEN EXPANSION (09:15 – 09:45)
     # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
