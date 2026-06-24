@@ -46,6 +46,7 @@ module Entries
         Guards::TimeRegimeGuard,
         Guards::SegmentExpectancyGuard,
         Guards::MiddayQualityGuard,
+        Guards::RegimeGuard,
         Guards::ChopScoreGuard,
         Guards::CompressionSetupGuard,
         Guards::DteEntryWindowGuard,

@@ -2,31 +2,30 @@
 
 module Entries
   module Guards
-    # Unified momentum gate wrapper for pre-trade validation.
-    #
-    # Composes three independent detectors into one guard:
-    #   1. Bollinger Band breakout on 15-min candles
-    #   2. Opening Range Break (ORB) breakout from OptionsBuying::Strategies::OrbBreakout
-    #   3. Volume surge confirmation (co-located in the ORB strategy)
-    #
-    # Entry is allowed if ANY one detector confirms momentum.
     class MomentumGateGuard
       include BaseGuard
+
+      DEFAULT_ADX_THRESHOLD = 25
 
       def self.call(context)
         return PASS unless enabled?
 
-        market_state = context[:market_state]
         index_key = (context[:index_cfg] || {})[:key].to_s.upcase
-        direction = (context[:pick] || {})[:direction] || (context[:direction] || :bullish)
+        return PASS if index_key.blank?
 
-        bb_pass = bb_breakout?(index_key)
-        orb_pass = orb_breakout?(index_key, direction, market_state)
+        instrument = context[:instrument]
+        return PASS unless instrument
+
+        series_15m = instrument.candle_series(interval: "15")
+        return PASS unless series_15m&.candles&.size&.>= 20
+
+        bb_pass = bb_breakout?(series_15m)
+        adx_pass = adx_strong?(series_15m)
 
         return PASS if bb_pass
-        return PASS if orb_pass
+        return PASS if adx_pass
 
-        { blocked: "No momentum signal: BB breakout=false, ORB breakout=false" }
+        { blocked: "No momentum: BB breakout=false, ADX=#{format_adx(series_15m)} (threshold: #{adx_threshold})" }
       rescue StandardError => e
         Rails.logger.warn("[MomentumGateGuard] Error: #{e.class} - #{e.message}")
         PASS
@@ -37,18 +36,30 @@ module Entries
         cfg.fetch(:enabled, false)
       end
 
-      def self.bb_breakout?(index_key)
-        detector = MarketRegimeDetector.new(index_key: index_key, timeframe: '15')
+      def self.bb_breakout?(series)
+        detector = MarketRegimeDetector.new(series)
         detector.bollinger_band_breakout?
       rescue StandardError
         false
       end
 
-      def self.orb_breakout?(index_key, direction, market_state)
-        strategy = OptionsBuying::Strategies::OrbBreakout.new(index_key: index_key)
-        !!strategy.check_entry(market_state || {})
+      def self.adx_strong?(series)
+        adx = series.adx(14)
+        adx && adx.to_f >= adx_threshold
       rescue StandardError
         false
+      end
+
+      def self.adx_threshold
+        cfg = AlgoConfig.fetch.dig(:risk, :momentum_gate) || {}
+        (cfg[:adx_threshold] || DEFAULT_ADX_THRESHOLD).to_f
+      end
+
+      def self.format_adx(series)
+        adx = series.adx(14)
+        adx ? adx.round(1) : "N/A"
+      rescue StandardError
+        "N/A"
       end
     end
   end
