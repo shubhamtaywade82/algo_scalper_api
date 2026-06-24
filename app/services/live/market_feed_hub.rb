@@ -38,13 +38,15 @@ module Live
       @lock.synchronize do
         return true if running?
 
+        unless acquire_budget!('market_feed_hub')
+          return false
+        end
+
         @watchlist = load_watchlist || []
         refresh_watchlist_keys!
         Rails.logger.info("[MarketFeedHub] Loaded watchlist: #{@watchlist.count} instruments")
 
         @ws_client = build_client
-
-        # Set up event handlers for connection monitoring
         setup_connection_handlers
 
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
@@ -56,9 +58,16 @@ module Live
         @connection_state = :connecting
         @last_error = nil
 
-        # NOTE: Connection state will be updated to :connected when first tick is received
-
         start_watchdog!
+        subscribe_watchlist
+
+        Rails.logger.info("[MarketFeedHub] DhanHQ market feed started (watchlist=#{@watchlist.count} instruments)")
+        true
+      rescue StandardError => e
+        Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
+        release_budget!('market_feed_hub')
+        stop!
+        false
       end
 
       # Subscribe to watchlist OUTSIDE the lock to avoid deadlock
@@ -69,12 +78,14 @@ module Live
       true
     rescue StandardError => e
       Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
+      release_budget!('market_feed_hub')
       stop!
       false
     end
 
     def stop!
       @lock.synchronize do
+        release_budget!('market_feed_hub')
         @running = false
         @connection_state = :disconnected
         return unless @ws_client
@@ -360,6 +371,20 @@ module Live
     end
 
     private
+
+    def acquire_budget!(connection_id)
+      WsConnectionBudget.acquire!(connection_id)
+    rescue WsConnectionBudget::BudgetExceeded
+      Rails.logger.warn("[MarketFeedHub] WebSocket connection budget exhausted - cannot start feed (#{connection_id})")
+      false
+    end
+
+    def release_budget!(connection_id)
+      WsConnectionBudget.release!(connection_id)
+    rescue StandardError => e
+      Rails.logger.warn("[MarketFeedHub] Failed to release connection budget for #{connection_id}: #{e.message}")
+      false
+    end
 
     def enabled?
       # Disable in script/backtest mode

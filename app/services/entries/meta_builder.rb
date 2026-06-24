@@ -2,12 +2,12 @@
 
 module Entries
   class MetaBuilder
-    SUPERTREND_CONTRACT = 'supertrend_machine_v1'
+    SUPERTREND_CONTRACT = "supertrend_machine_v1"
 
     def self.call(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)
       return unless bos_context
 
-      contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
+      contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ""
       sl_decimal = supertrend_sl_decimal
       premium_r = entry_price.to_f * sl_decimal
       qty_int = SafeNumeric.to_non_negative_integer(quantity)
@@ -46,6 +46,8 @@ module Entries
         meta_hash[:entry_distance_r] = entry_metadata[:entry_distance_r] if entry_metadata.key?(:entry_distance_r)
         meta_hash[:entry_tf] = entry_metadata[:entry_tf]
         meta_hash[:htf_tf] = entry_metadata[:htf_tf]
+        meta_hash[:iv_percentile] = entry_metadata[:iv_percentile] if entry_metadata.key?(:iv_percentile)
+        meta_hash[:momentum_score] = entry_metadata[:momentum_score] if entry_metadata.key?(:momentum_score)
       end
     end
 

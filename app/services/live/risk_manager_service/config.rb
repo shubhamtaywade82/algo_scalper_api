@@ -112,6 +112,13 @@ module Live
         true
       end
 
+      def structural_kill_switch_enabled?
+        config = algo_config.dig(:risk, :exits, :structural_kill_switch) || {}
+        config.fetch(:enabled, true) # Default: enabled
+      rescue StandardError
+        true
+      end
+
       def premium_momentum_failure_enabled?
         config = algo_config.dig(:risk, :exits, :premium_momentum_failure) || {}
         config.fetch(:enabled, true) # Default: enabled

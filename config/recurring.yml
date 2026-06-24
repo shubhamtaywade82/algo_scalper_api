@@ -10,6 +10,13 @@
 #     schedule: at 5am every day
 
 development:
+  pre_market_iv_baseline:
+    class: PreMarketIvBaselineJob
+    schedule: at 8:30am every day
+    queue_name: background
+    priority: 1
+    description: "Seeds IvRankTracker with historical ATM IV samples from expired options (pre-market baseline)"
+
   instruments_import:
     class: InstrumentsImportJob
     schedule: at 8:45am every day
@@ -153,6 +160,13 @@ development:
     description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
 
 production:
+  pre_market_iv_baseline:
+    class: PreMarketIvBaselineJob
+    schedule: at 8:30am every weekday
+    queue_name: background
+    priority: 1
+    description: "Seeds IvRankTracker with historical ATM IV samples from expired options (pre-market baseline)"
+
   instruments_import:
     class: InstrumentsImportJob
     schedule: at 8:45am every weekday
