@@ -252,8 +252,6 @@ module Live
         execution_meta['classified_as'] = classification
         meta['execution'] = execution_meta
 
-        meta['exit_reason'] ||= reason
-
         tracker.update!(meta: meta, exit_reason: build_final_reason(reason, execution_meta))
       end
 
@@ -264,14 +262,10 @@ module Live
       return if reason.blank?
 
       tracker.reload
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta.deep_dup : {}
-      meta = meta.deep_stringify_keys
-      current = meta['exit_reason'].to_s.strip.presence
-      return if current.present?
+      return if tracker.exit_reason.to_s.strip.present?
 
-      meta['exit_reason'] = reason.to_s
-      col = tracker.exit_reason.to_s.strip.presence || reason.to_s
-      tracker.update!(meta: meta, exit_reason: col)
+      col = reason.to_s
+      tracker.update!(exit_reason: col)
     rescue StandardError => e
       Rails.logger.warn("[ExitEngine] ensure_exit_reason_on_meta! failed for #{tracker&.order_no}: #{e.class} - #{e.message}")
     end

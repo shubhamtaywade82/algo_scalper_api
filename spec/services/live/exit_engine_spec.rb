@@ -85,7 +85,7 @@ RSpec.describe Live::ExitEngine do
 
         expect(result[:success]).to be true
         expect(result[:exit_price]).to eq(101.5)
-        expect(result[:reason]).to eq('stop_loss')
+        expect(result[:reason]).to start_with('stop_loss')
         expect(result[:client_order_id]).to be_present
       end
 

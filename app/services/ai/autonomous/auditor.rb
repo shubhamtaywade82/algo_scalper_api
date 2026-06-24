@@ -59,9 +59,9 @@ module Ai
 
       def exit_diagnostics
         reasons = PositionTracker
-                  .where("meta->>'index_key' = ?", @symbol)
+                  .where(index_key: @symbol)
                   .where(exited_at: @start_time..)
-                  .group("meta->>'exit_reason'")
+                  .group(:exit_reason)
                   .count
 
         total = reasons.values.sum.to_f
@@ -91,7 +91,7 @@ module Ai
         analytics = TradeAnalytic
                     .joins(:position_tracker)
                     .where(position_trackers: { paper: true })
-                    .where("position_trackers.meta->>'index_key' = ?", @symbol)
+                    .where(position_trackers: { index_key: @symbol })
                     .where(position_trackers: { exited_at: @start_time.. })
 
         count = analytics.count
@@ -166,7 +166,7 @@ module Ai
       def exited_scope
         PositionTracker
           .where(paper: true, status: :exited)
-          .where("meta->>'index_key' = ?", @symbol)
+          .where(index_key: @symbol)
           .where(exited_at: @start_time..)
       end
     end

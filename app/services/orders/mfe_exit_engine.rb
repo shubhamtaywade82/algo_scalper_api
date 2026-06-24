@@ -57,22 +57,24 @@ module Orders
     def update_extremes
       updated = false
       meta = (@position.meta || {}).dup
+      lowest = (meta['lowest_price'] || @entry_price).to_f
 
       if @ltp > @highest
         @highest = @ltp
-        meta['highest_price'] = @highest
         updated = true
       end
 
-      # Track lowest_price as well (for analytics/future use)
-      lowest = (meta['lowest_price'] || @entry_price).to_f
       if @ltp < lowest
-        meta['lowest_price'] = @ltp
+        lowest = @ltp
         updated = true
       end
 
       if updated
-        @position.update!(meta: meta)
+        @position.update!(
+          highest_price: @highest,
+          lowest_price: lowest,
+          meta: meta
+        )
       end
     end
   end

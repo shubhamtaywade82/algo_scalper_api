@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_19_052450) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_25_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -371,41 +371,81 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_19_052450) do
     t.datetime "updated_at", null: false
   end
 
-  create_table "position_trackers", force: :cascade do |t|
-    t.decimal "avg_price", precision: 12, scale: 4
+  create_table "position_meta_snapshots", force: :cascade do |t|
+    t.integer "config_change_log_id"
+    t.jsonb "config_snapshot", default: {}, null: false
+    t.string "config_version_hash", null: false
     t.datetime "created_at", null: false
+    t.datetime "entry_at"
+    t.bigint "position_tracker_id", null: false
+    t.string "snapshot_kind", default: "entry_config"
+    t.datetime "updated_at", null: false
+    t.index ["position_tracker_id"], name: "index_position_meta_snapshots_on_position_tracker_id", unique: true
+  end
+
+  create_table "position_trackers", force: :cascade do |t|
+    t.string "alpha_source"
+    t.decimal "avg_price", precision: 12, scale: 4
+    t.boolean "be_set", default: false, null: false
+    t.boolean "breakeven_locked", default: false, null: false
+    t.datetime "carry_marked_at"
+    t.string "carry_mode"
+    t.decimal "carry_roi_pct", precision: 8, scale: 4
+    t.string "client_order_id"
+    t.datetime "created_at", null: false
+    t.string "direction"
+    t.string "entry_path"
     t.decimal "entry_price", precision: 12, scale: 4
+    t.string "entry_strategy"
     t.string "exit_coid"
     t.string "exit_order_id"
+    t.string "exit_path"
     t.decimal "exit_price", precision: 12, scale: 4
+    t.string "exit_reason"
     t.datetime "exit_requested_at"
     t.datetime "exit_sent_at"
     t.datetime "exited_at"
     t.datetime "expansion_at"
+    t.decimal "expected_value", precision: 12, scale: 4
     t.decimal "high_water_mark_pnl", precision: 12, scale: 4, default: "0.0"
+    t.decimal "highest_price", precision: 12, scale: 4
+    t.string "index_key"
     t.bigint "instrument_id", null: false
     t.decimal "last_pnl_pct", precision: 8, scale: 4
     t.decimal "last_pnl_rupees", precision: 12, scale: 4
+    t.decimal "lowest_price", precision: 12, scale: 4
     t.jsonb "meta", default: {}
     t.string "order_no", null: false
     t.boolean "paper", default: false, null: false
+    t.decimal "profit_floor_rupees", precision: 12, scale: 4
+    t.datetime "profit_floor_set_at"
+    t.string "profit_zone_state"
+    t.datetime "profit_zone_transitioned_at"
     t.integer "quantity"
+    t.decimal "secured_sl_price", precision: 12, scale: 4
+    t.decimal "secured_sl_rupees", precision: 12, scale: 4
     t.string "security_id", null: false
     t.string "segment"
     t.string "side"
+    t.decimal "signal_confidence", precision: 8, scale: 4
+    t.datetime "signal_timestamp"
     t.string "status", default: "pending", null: false
     t.string "symbol"
     t.string "trade_state"
+    t.decimal "trailing_stop_price", precision: 12, scale: 4
     t.datetime "updated_at", null: false
     t.datetime "validated_at"
     t.bigint "watchable_id", null: false
     t.string "watchable_type", null: false
     t.index "((meta ->> 'index_key'::text))", name: "index_position_trackers_on_meta_index_key"
+    t.index ["carry_mode"], name: "index_position_trackers_on_carry_mode"
+    t.index ["client_order_id"], name: "index_position_trackers_on_client_order_id"
     t.index ["created_at"], name: "index_position_trackers_on_created_at"
     t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
     t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
     t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
     t.index ["exited_at", "status"], name: "index_position_trackers_on_exited_at_and_status"
+    t.index ["index_key"], name: "index_position_trackers_on_index_key"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"
     t.index ["order_no"], name: "index_position_trackers_on_order_no", unique: true
     t.index ["paper"], name: "index_position_trackers_on_paper"
@@ -652,6 +692,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_19_052450) do
   add_foreign_key "paper_positions", "paper_orders"
   add_foreign_key "paper_trades", "paper_orders"
   add_foreign_key "paper_trades", "paper_positions"
+  add_foreign_key "position_meta_snapshots", "position_trackers"
   add_foreign_key "position_trackers", "instruments"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade

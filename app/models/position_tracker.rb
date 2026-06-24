@@ -10,17 +10,39 @@ class PositionTracker < ApplicationRecord
   include PositionTracker::Broadcastable
   include PositionTracker::Lifecycle
 
-  # Attribute accessors
-  store_accessor :meta, :breakeven_locked, :trailing_stop_price, :index_key, :direction, :entry_path, :entry_strategy,
-                 :exit_path, :exit_reason, :highest_price, :lowest_price, :be_set, :profit_floor_rupees,
-                 :profit_floor_set_at, :profit_zone_state, :secured_sl_price, :secured_sl_rupees,
-                 :profit_zone_transitioned_at,
-                 :alpha_source, :signal_confidence, :expected_value, :signal_timestamp, :client_order_id,
-                 :carry_mode, :carry_marked_at, :carry_roi_pct
+  PROMOTED_META_KEYS = %w[
+    breakeven_locked trailing_stop_price index_key direction entry_path entry_strategy
+    exit_path exit_reason highest_price lowest_price be_set profit_floor_rupees
+    profit_floor_set_at profit_zone_state profit_zone_transitioned_at secured_sl_price
+    secured_sl_rupees carry_mode carry_marked_at carry_roi_pct alpha_source
+    signal_confidence expected_value signal_timestamp client_order_id
+  ].freeze
+
+  BOOLEAN_PROMOTED_KEYS = %w[breakeven_locked be_set].freeze
+
+  PROMOTED_META_KEYS.each do |key|
+    define_method(key) do
+      val = self[key]
+      val.nil? && meta.is_a?(Hash) && meta.key?(key) ? meta[key] : val
+    end
+
+    define_method("#{key}=") do |val|
+      casted = BOOLEAN_PROMOTED_KEYS.include?(key) ? ActiveModel::Type::Boolean.new.cast(val) : val
+      self[key] = casted
+    end
+  end
+
+  BOOLEAN_PROMOTED_KEYS.each do |key|
+    define_method("#{key}?") do
+      ActiveModel::Type::Boolean.new.cast(send(key))
+    end
+  end
 
   after_update_commit :record_alpha_outcome!, if: :alpha_signal_just_exited?
 
-  # Enums
+  has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy
+  delegate :config_snapshot, :config_version_hash, :entry_at, to: :meta_snapshot, allow_nil: true
+
   enum :status, {
     pending: 'pending',
     active: 'active',
@@ -28,19 +50,16 @@ class PositionTracker < ApplicationRecord
     cancelled: 'cancelled'
   }
 
-  # Validations
   validates :order_no, presence: true, uniqueness: true
   validates :security_id, presence: true
   validate :segment_must_be_tradable
 
-  # Associations
   belongs_to :instrument, optional: false, inverse_of: :position_trackers
   belongs_to :watchable, polymorphic: true, optional: false
   has_one :trade_analytic, dependent: :destroy, inverse_of: :position_tracker
   has_one :trade_telemetry, class_name: 'TradeTelemetry', foreign_key: :tracker_id, dependent: :destroy,
                             inverse_of: :tracker
 
-  # Instance Methods
   def metadata_for_index
     {
       id: id,
@@ -61,14 +80,6 @@ class PositionTracker < ApplicationRecord
 
   def live?
     !paper?
-  end
-
-  def be_set?
-    ActiveModel::Type::Boolean.new.cast(be_set)
-  end
-
-  def breakeven_locked?
-    ActiveModel::Type::Boolean.new.cast(meta_hash.fetch('breakeven_locked', false))
   end
 
   def lock_breakeven!

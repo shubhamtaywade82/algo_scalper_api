@@ -37,9 +37,25 @@ module Positions
         sanitized = normalize_hash(patch)
         return if sanitized.empty?
 
-        PositionTracker.where(id: tracker_id).update_all( # rubocop:disable Rails/SkipsModelValidations
-          ["meta = COALESCE(meta, '{}'::jsonb) || ?::jsonb", sanitized.to_json]
-        )
+        column_updates = {}
+        meta_patch = sanitized.dup
+        PositionTracker::PROMOTED_META_KEYS.each do |key|
+          next unless meta_patch.key?(key)
+          column_updates[key] = cast_value(key, meta_patch[key])
+          meta_patch.except!(key)
+        end
+
+        if column_updates.any?
+          PositionTracker.where(id: tracker_id).update_all( # rubocop:disable Rails/SkipsModelValidations
+            column_updates.merge('updated_at' => Time.current)
+          )
+        end
+
+        if meta_patch.any?
+          PositionTracker.where(id: tracker_id).update_all( # rubocop:disable Rails/SkipsModelValidations
+            ["meta = COALESCE(meta, '{}'::jsonb) || ?::jsonb", meta_patch.to_json]
+          )
+        end
       end
 
       private
@@ -52,6 +68,21 @@ module Positions
 
       def values_equal?(left, right)
         left == right
+      end
+
+      def cast_value(key, val)
+        if PositionTracker::BOOLEAN_PROMOTED_KEYS.include?(key)
+          ActiveModel::Type::Boolean.new.cast(val)
+        elsif %w[signal_confidence expected_value carry_roi_pct].include?(key)
+          BigDecimal(val.to_s)
+        elsif %w[highest_price lowest_price trailing_stop_price profit_floor_rupees
+                 secured_sl_price secured_sl_rupees].include?(key)
+          BigDecimal(val.to_s)
+        elsif %w[profit_floor_set_at profit_zone_transitioned_at carry_marked_at signal_timestamp].include?(key)
+          val.is_a?(String) ? Time.zone.parse(val) : val
+        else
+          val.to_s
+        end
       end
     end
   end

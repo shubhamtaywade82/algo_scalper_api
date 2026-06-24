@@ -68,7 +68,11 @@ module Entries
         meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        PositionTracker.create!(
+        snapshot = meta_hash.delete('config_snapshot')
+        version = meta_hash.delete('config_version') || {}
+        entry_at = meta_hash.delete('entry_at')
+
+        tracker = PositionTracker.create!(
           order_no: order_no,
           instrument: instrument,
           watchable: instrument,
@@ -83,13 +87,25 @@ module Entries
           paper: false,
           meta: meta_hash
         )
+
+        tracker.create_position_meta_snapshot!(
+          config_version_hash: version['hash'].to_s,
+          config_change_log_id: version['change_log_id'],
+          config_snapshot: snapshot,
+          entry_at: entry_at
+        )
+
+        tracker
       end
 
       def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata:, bos_context:)
         meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        PositionTracker.create!(
+        snapshot = meta_hash.delete('config_snapshot')
+        version = meta_hash.delete('config_version') || {}
+
+        tracker = PositionTracker.create!(
           order_no: order_no,
           instrument: instrument,
           watchable: instrument,
@@ -104,6 +120,14 @@ module Entries
           paper: true,
           meta: meta_hash
         )
+
+        tracker.create_position_meta_snapshot!(
+          config_version_hash: version['hash'].to_s,
+          config_change_log_id: version['change_log_id'],
+          config_snapshot: snapshot
+        )
+
+        tracker
       end
 
       def build_client_order_id(index_cfg:, pick:)

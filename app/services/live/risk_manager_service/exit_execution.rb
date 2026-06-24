@@ -38,8 +38,10 @@ module Live
 
       # Persist reason metadata
       def store_exit_reason(tracker, reason)
-        metadata = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-        tracker.update!(meta: metadata.merge('exit_reason' => reason, 'exit_triggered_at' => Time.current))
+        tracker.update!(
+          exit_reason: reason,
+          meta: (tracker.meta.is_a?(Hash) ? tracker.meta.merge('exit_triggered_at' => Time.current) : {})
+        )
       rescue StandardError => e
         Rails.logger.warn("[RiskManager] store_exit_reason failed for #{tracker.order_no}: #{e.class} - #{e.message}")
       end
