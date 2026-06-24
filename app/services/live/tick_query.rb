@@ -37,6 +37,8 @@ module Live
           oi_change: tick_data&.dig(:oi_change).to_i,
           bid: tick_data&.dig(:bid)&.to_f,
           ask: tick_data&.dig(:ask)&.to_f,
+          bid_qty: (tick_data&.dig(:bid_qty) || tick_data&.dig(:bid_quantity)).to_i,
+          ask_qty: (tick_data&.dig(:ask_qty) || tick_data&.dig(:ask_quantity)).to_i,
           volume: tick_data&.dig(:volume).to_i,
           prev_close: tick_data&.dig(:prev_close)&.to_f
         )

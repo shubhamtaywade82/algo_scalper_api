@@ -386,9 +386,16 @@ module Orders
         nil
       end
 
-      def with_token_auto_heal(context:)
+      def with_order_rate_limit(context: nil, &)
+        rate_limiter.consume!(&)
+      rescue TokenBucket::RateLimited => e
+        Rails.logger.warn("[Orders::Placer] rate limited: #{e.message}")
+        nil
+      end
+
+      def with_token_auto_heal(context:, &)
         retried = false
-        yield
+        with_order_rate_limit(&)
       rescue StandardError => e
         Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
 
@@ -435,24 +442,8 @@ module Orders
         "#{base}-#{digest}"
       end
 
-      def order_rate_limit_enabled?
-        (ENV["ORDER_RATE_LIMIT_ENABLED"] || "false").to_s.casecmp("true").zero?
-      end
-
       def rate_limiter
-        Thread.current[:order_rate_limiter] ||= TokenBucket.new(rate: 10, per: 1.second)
-      end
-
-      def with_order_rate_limit(context:)
-        callback = Proc.new
-        if order_rate_limit_enabled?
-          rate_limiter.consume! { with_token_auto_heal(context: context, &callback) }
-        else
-          with_token_auto_heal(context: context, &callback)
-        end
-      rescue TokenBucket::RateLimited => e
-        Rails.logger.warn("[Orders::Placer] #{context} rate limited: #{e.message}")
-        nil
+        @rate_limiter ||= TokenBucket.new(rate: 10, per: 1.second)
       end
 
       def segment_tradable?(segment)

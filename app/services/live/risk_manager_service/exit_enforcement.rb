@@ -55,13 +55,13 @@ module Live
         ltp = position_data.current_ltp
         return unless ltp
 
-        premium_stop = (pending_meta || tracker.meta || {})['premium_stop_price']
+        premium_stop = (pending_meta || tracker.meta || {})["premium_stop_price"]
         return unless premium_stop
 
         return unless ltp.to_f <= premium_stop.to_f
 
         reason = "PREMIUM_R_STOP (ltp: #{ltp}, stop: #{premium_stop})"
-        exit_path = 'premium_r_stop'
+        exit_path = "premium_r_stop"
         Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
         track_exit_path(tracker, exit_path, reason)
         dispatch_exit(exit_engine, tracker, reason)
@@ -71,7 +71,7 @@ module Live
 
       def enforce_eod_force_close(exit_engine:, position_data: nil)
         risk = risk_config
-        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || "15:30")
         return unless market_close_time
 
         now = Time.current
@@ -82,7 +82,7 @@ module Live
           next if carry_held?(tracker)
 
           reason = "MARKET_CLOSE (EOD #{market_close_time.strftime('%H:%M')} IST)"
-          exit_path = 'eod_force_close'
+          exit_path = "eod_force_close"
           Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
           track_exit_path(tracker, exit_path, reason)
           dispatch_exit(exit_engine, tracker, reason)
@@ -92,9 +92,23 @@ module Live
       end
 
       def carry_held?(tracker)
-        OptionsBuying::CarryPolicy.carry_still_valid?(tracker)
+        return true if trackers_profitable?(tracker) && OptionsBuying::Mode.intraday?
+        return true if OptionsBuying::CarryPolicy.carry_still_valid?(tracker)
+
+        false
       rescue StandardError
         false
+      end
+
+      # All positions use product_type NORMAL (not INTRADAY) so DhanHQ RMS never
+      # auto-squares them.  At EOD we only force-close positions in loss; profitable
+      # positions survive and carry to the next session.
+      def trackers_profitable?(tracker)
+        return false unless tracker.active?
+        return false if tracker.exited?
+        return false if tracker.last_pnl_pct.nil?
+
+        tracker.last_pnl_pct.to_f.positive?
       end
     end
   end
