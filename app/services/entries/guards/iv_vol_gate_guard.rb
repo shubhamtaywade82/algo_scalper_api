@@ -57,7 +57,7 @@ module Entries
 
       def self.max_iv_rank
         cfg = AlgoConfig.fetch.dig(:risk, :iv_vol_gate) || {}
-        (cfg[:max_iv_rank] || 0.80).to_f
+        (cfg[:max_iv_rank] || 0.50).to_f
       end
 
       def self.min_iv_rank

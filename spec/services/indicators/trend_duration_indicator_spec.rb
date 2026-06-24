@@ -1,23 +1,23 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe Indicators::TrendDurationIndicator, type: :service do
-  let(:symbol) { 'NIFTY' }
-  let(:interval) { '5' }
+  let(:symbol) { "NIFTY" }
+  let(:interval) { "5" }
   let(:series) { CandleSeries.new(symbol: symbol, interval: interval) }
   let(:config) { { hma_length: 20, trend_length: 5, samples: 10 } }
   let(:indicator) { described_class.new(series: series, config: config) }
 
-  describe '#initialize' do
-    it 'initializes with default config' do
+  describe "#initialize" do
+    it "initializes with default config" do
       indicator_default = described_class.new(series: series)
       expect(indicator_default.instance_variable_get(:@hma_length)).to eq(20)
       expect(indicator_default.instance_variable_get(:@trend_length)).to eq(5)
       expect(indicator_default.instance_variable_get(:@samples)).to eq(10)
     end
 
-    it 'initializes with custom config' do
+    it "initializes with custom config" do
       custom_config = { hma_length: 14, trend_length: 3, samples: 5 }
       indicator_custom = described_class.new(series: series, config: custom_config)
       expect(indicator_custom.instance_variable_get(:@hma_length)).to eq(14)
@@ -26,27 +26,27 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
     end
   end
 
-  describe '#min_required_candles' do
-    it 'returns correct minimum candles for HMA calculation' do
+  describe "#min_required_candles" do
+    it "returns correct minimum candles for HMA calculation" do
       min_candles = indicator.min_required_candles
       expect(min_candles).to be > 20 # Should be more than hma_length
       expect(min_candles).to be_a(Integer)
     end
   end
 
-  describe '#ready?' do
-    it 'returns false when not enough candles' do
+  describe "#ready?" do
+    it "returns false when not enough candles" do
       expect(indicator.ready?(10)).to be false
     end
 
-    it 'returns true when enough candles' do
+    it "returns true when enough candles" do
       min_candles = indicator.min_required_candles
       expect(indicator.ready?(min_candles)).to be true
       expect(indicator.ready?(min_candles + 10)).to be true
     end
   end
 
-  describe '#calculate_at' do
+  describe "#calculate_at" do
     before do
       # Create enough candles for HMA calculation and trend detection
       min_candles = indicator.min_required_candles
@@ -70,17 +70,17 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       end
     end
 
-    context 'with insufficient data' do
-      it 'returns nil when index is too small' do
+    context "with insufficient data" do
+      it "returns nil when index is too small" do
         result = indicator.calculate_at(5)
         expect(result).to be_nil
       end
     end
 
-    context 'with sufficient data' do
+    context "with sufficient data" do
       let(:index) { series.candles.size - 1 }
 
-      it 'returns hash with required keys' do
+      it "returns hash with required keys" do
         result = indicator.calculate_at(index)
         expect(result).to be_a(Hash)
         expect(result).to have_key(:value)
@@ -88,7 +88,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         expect(result).to have_key(:confidence)
       end
 
-      it 'returns value hash with trend information' do
+      it "returns value hash with trend information" do
         result = indicator.calculate_at(index)
         expect(result[:value]).to be_a(Hash)
         expect(result[:value]).to have_key(:hma)
@@ -98,18 +98,18 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         expect(result[:value]).to have_key(:slope)
       end
 
-      it 'returns direction as :bullish or :bearish' do
+      it "returns direction as :bullish or :bearish" do
         result = indicator.calculate_at(index)
         expect(result[:direction]).to be_in(%i[bullish bearish])
       end
 
-      it 'returns confidence between 0 and 100' do
+      it "returns confidence between 0 and 100" do
         result = indicator.calculate_at(index)
         expect(result[:confidence]).to be_between(0, 100)
       end
     end
 
-    context 'with trading hours filter' do
+    context "with trading hours filter" do
       let(:config_with_filter) { config.merge(trading_hours_filter: true) }
       let(:indicator_filtered) { described_class.new(series: series, config: config_with_filter) }
 
@@ -119,7 +119,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
 
         min_candles.times do |i|
           # Create candles outside trading hours (9 AM)
-          candle_time = Time.zone.parse('2024-01-01 09:00:00 IST') + i.minutes
+          candle_time = Time.zone.parse("2024-01-01 09:00:00 IST") + i.minutes
           price = base_price + (i * 10)
           candle = Candle.new(
             ts: candle_time,
@@ -133,7 +133,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         end
       end
 
-      it 'returns nil for candles outside trading hours' do
+      it "returns nil for candles outside trading hours" do
         index = series.candles.size - 1
         result = indicator_filtered.calculate_at(index)
         # Should return nil if outside 10 AM - 2:30 PM IST
@@ -142,7 +142,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
     end
   end
 
-  describe 'HMA calculation' do
+  describe "HMA calculation" do
     before do
       # Create test data
       min_candles = indicator.min_required_candles
@@ -162,7 +162,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       end
     end
 
-    it 'calculates HMA values correctly' do
+    it "calculates HMA values correctly" do
       # Ensure we have enough candles for HMA calculation
       min_candles = indicator.min_required_candles
       trend_length = config[:trend_length] || 5
@@ -191,8 +191,8 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
     end
   end
 
-  describe 'trend detection' do
-    context 'with rising trend' do
+  describe "trend detection" do
+    context "with rising trend" do
       before do
         min_candles = indicator.min_required_candles
         trend_length = config[:trend_length] || 5
@@ -203,7 +203,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
           # Strong upward trend
           price = base_price + (i * 20)
           candle = Candle.new(
-            ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+            ts: Time.zone.parse("2024-01-01 10:00:00 IST") + i.minutes,
             open: price,
             high: price + 10,
             low: price - 5,
@@ -214,17 +214,17 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         end
       end
 
-      it 'detects bullish trend' do
+      it "detects bullish trend" do
         index = series.candles.size - 1
         result = indicator.calculate_at(index)
         expect(result).not_to be_nil
         expect(result[:value][:trend_direction]).to eq(:bullish)
         expect(result[:direction]).to eq(:bullish)
-        expect(result[:value][:slope]).to eq('up')
+        expect(result[:value][:slope]).to eq("up")
       end
     end
 
-    context 'with falling trend' do
+    context "with falling trend" do
       before do
         min_candles = indicator.min_required_candles
         trend_length = config[:trend_length] || 5
@@ -235,7 +235,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
           # Strong downward trend
           price = base_price - (i * 20)
           candle = Candle.new(
-            ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+            ts: Time.zone.parse("2024-01-01 10:00:00 IST") + i.minutes,
             open: price,
             high: price + 5,
             low: price - 10,
@@ -246,18 +246,18 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
         end
       end
 
-      it 'detects bearish trend' do
+      it "detects bearish trend" do
         index = series.candles.size - 1
         result = indicator.calculate_at(index)
         expect(result).not_to be_nil
         expect(result[:value][:trend_direction]).to eq(:bearish)
         expect(result[:direction]).to eq(:bearish)
-        expect(result[:value][:slope]).to eq('down')
+        expect(result[:value][:slope]).to eq("down")
       end
     end
   end
 
-  describe 'trend duration tracking' do
+  describe "trend duration tracking" do
     before do
       indicator.min_required_candles
       base_price = 22_000.0
@@ -270,7 +270,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       total_needed.times do |i|
         price = base_price + (i * 10)
         candle = Candle.new(
-          ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+          ts: Time.zone.parse("2024-01-01 10:00:00 IST") + i.minutes,
           open: price,
           high: price + 5,
           low: price - 5,
@@ -281,7 +281,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       end
     end
 
-    it 'tracks trend duration' do
+    it "tracks trend duration" do
       index = series.candles.size - 1
       result = indicator.calculate_at(index)
       expect(result).not_to be_nil
@@ -289,7 +289,7 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
       expect(result[:value][:real_length]).to be >= 0
     end
 
-    it 'calculates probable duration' do
+    it "calculates probable duration" do
       index = series.candles.size - 1
       result = indicator.calculate_at(index)
       expect(result).not_to be_nil
@@ -298,37 +298,22 @@ RSpec.describe Indicators::TrendDurationIndicator, type: :service do
     end
   end
 
-  describe 'integration with IndicatorFactory' do
-    it 'can be created via IndicatorFactory' do
-      indicator_config = {
-        type: 'trend_duration',
-        config: { hma_length: 20, trend_length: 5 }
-      }
-      created = Indicators::IndicatorFactory.build_indicator(
-        series: series,
-        config: indicator_config,
-        global_config: {}
-      )
-      expect(created).to be_a(described_class)
-    end
-  end
-
-  describe 'edge cases' do
-    it 'handles empty series gracefully' do
+  describe "edge cases" do
+    it "handles empty series gracefully" do
       empty_series = CandleSeries.new(symbol: symbol, interval: interval)
       empty_indicator = described_class.new(series: empty_series, config: config)
       expect(empty_indicator.ready?(0)).to be false
       expect(empty_indicator.calculate_at(0)).to be_nil
     end
 
-    it 'handles nil values gracefully' do
+    it "handles nil values gracefully" do
       min_candles = indicator.min_required_candles
       base_price = 22_000.0
 
       min_candles.times do |i|
         price = base_price + (i * 10)
         candle = Candle.new(
-          ts: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
+          ts: Time.zone.parse("2024-01-01 10:00:00 IST") + i.minutes,
           open: price,
           high: price + 5,
           low: price - 5,

@@ -31,7 +31,7 @@ realtime:
 # Example: ["10:30-11:30", "14:00-15:00"] blocks trading from 10:30 AM to 11:30 AM and 2:00 PM to 3:00 PM
 trading_time_restrictions:
   enabled: true # Profitability Slice 2 — midday blackout via DB/API (rollback: algo_config:rollback_slice2)
-  avoid_periods: ["11:00-13:45"] # Block mid-morning churn / midday chop (IST)
+  avoid_periods: [] # Disabled midday blackout; re-enable if churn returns
   block_exits: false # Set to true to block automated exits (SL/TP/Trailing) during blackout
   # Example based on analysis results:
   # avoid_periods:
@@ -54,7 +54,7 @@ options_buying:
     max_setup_ratio: 0.30
     setup_window_end: "11:15"
   breakout:
-    enabled: true
+    enabled: false
     timeframe_minutes: 1
     volume_multiplier: 2.0
     require_oi_unwind: true
@@ -316,7 +316,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 0
+      max_trades_per_day: 2
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -361,11 +361,21 @@ risk:
 
   iv_vol_gate:
     enabled: true
-    max_iv_rank: 0.80
-    min_iv_rank: 0.10
+    max_iv_rank: 1.0
+    min_iv_rank: 0.05
 
   volume_velocity_gate:
     enabled: true
+
+  momentum_gate:
+    enabled: true
+    adx_threshold: 25
+
+  regime_guard:
+    enabled: true
+    block_regimes:
+      - CHOPPY
+    bypass_adx: 25
 
   # DTE-resolved intraday parameters — pinned into config_snapshot at entry
   dte_parameters:
@@ -632,7 +642,7 @@ risk:
   #
   # Each regime gets different SL/TP/trailing rules based on Greek behavior
   time_regimes:
-    enabled: true # Time-regime rules active — TP/SL adjust by market session
+    enabled: false # disabled so entries aren't blocked by session regimes
 
     # S1: OPEN EXPANSION (09:15 – 09:45)
     # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
@@ -1012,7 +1022,7 @@ signals:
   # Score 0-2 = allow, 3-4 = caution metadata, 5+ = block.
   chop_score:
     enabled: true
-    block_threshold: 5
+    block_threshold: 4
     caution_threshold: 3
     adx_threshold: 20.0
     supertrend_flip_limit: 3

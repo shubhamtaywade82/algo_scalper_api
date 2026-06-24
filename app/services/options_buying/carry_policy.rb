@@ -68,7 +68,7 @@ module OptionsBuying
       private
 
       def tracker_index_key(tracker)
-        key = tracker.try(:index_key) || tracker.meta&.dig('index_key')
+        key = tracker.try(:index_key) || tracker.meta&.dig("index_key")
         key.to_s.upcase.presence
       end
 

@@ -34,6 +34,20 @@ module Orders
       { success: false, error: e.message, paper: true }
     end
 
+    def place_ioc_limit(side:, segment:, security_id:, qty:, price:, meta: {})
+      # Paper mode: IOC always fills at the given price
+      {
+        success: true,
+        order_id: "PAPER-IOC-#{SecureRandom.hex(3)}",
+        paper: true,
+        status: :accepted,
+        fill_price: price.to_f
+      }
+    rescue StandardError => e
+      Rails.logger.error("[GatewayPaper] place_ioc_limit failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
+      { success: false, error: e.message, paper: true }
+    end
+
     # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     # cash = free balance (like broker available); utilized/exposure = premium tied in open legs.
     def wallet_snapshot
@@ -59,7 +73,7 @@ module Orders
       exposure = utilized
       equity = (cash + utilized + mtm).round(2)
 
-      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0, source: 'legacy' }
+      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0, source: "legacy" }
     end
 
     def cancel_order(order_id)
@@ -74,8 +88,8 @@ module Orders
       tracker = PositionTracker.paper.active.find_by(segment: segment, security_id: security_id.to_s)
       return nil unless tracker
 
-      is_long = tracker.side.to_s.upcase.start_with?('LONG') || tracker.side.to_s.upcase == 'BUY'
-      position_type = is_long ? 'LONG' : 'SHORT'
+      is_long = tracker.side.to_s.upcase.start_with?("LONG") || tracker.side.to_s.upcase == "BUY"
+      position_type = is_long ? "LONG" : "SHORT"
       ltp = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)&.ltp
       upnl = BigDecimal((tracker.current_pnl_rupees || 0).to_s)
 
@@ -102,13 +116,13 @@ module Orders
     def paper_realized_rupees(cfg)
       scope = cfg[:realized_scope].to_s.strip.downcase
       rel = PositionTracker.exited_paper
-      rel = rel.where(exited_at: Time.zone.today.all_day) if scope == 'daily'
+      rel = rel.where(exited_at: Time.zone.today.all_day) if scope == "daily"
 
       rel.sum(:last_pnl_rupees).to_f
     end
 
     def deployed_premium_rupees
-      sql = 'ABS(COALESCE(entry_price, 0) * COALESCE(quantity, 0))'
+      sql = "ABS(COALESCE(entry_price, 0) * COALESCE(quantity, 0))"
       PositionTracker.paper.active.sum(Arel.sql(sql)).to_f
     end
 

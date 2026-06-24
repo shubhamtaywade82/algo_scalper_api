@@ -73,4 +73,50 @@ RSpec.describe Entries::Guards::BidAskSpreadGuard do
       expect(described_class.call(context)).to eq(Entries::EntryGuardPipeline::PASS)
     end
   end
+
+  context 'when quantity filter is enabled and tick is shallow' do
+    before do
+      allow(OptionsBuying::Mode).to receive(:config).and_return(
+        execution: { spread_enabled: true, max_bid_ask_spread_pct: 0.015, min_bid_qty: 100, min_ask_qty: 100 }
+      )
+    end
+
+    it 'blocks on shallow bid quantity' do
+      tick = instance_double(MarketTick, bid: 99.5, ask: 100.0, bid_qty: 50, ask_qty: 500)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+
+      result = described_class.call(context)
+      expect(result[:blocked]).to include('bid quantity too shallow')
+    end
+
+    it 'blocks on shallow ask quantity' do
+      tick = instance_double(MarketTick, bid: 99.5, ask: 100.0, bid_qty: 500, ask_qty: 50)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+
+      result = described_class.call(context)
+      expect(result[:blocked]).to include('ask quantity too shallow')
+    end
+
+    it 'passes when both bid and ask quantities are sufficient' do
+      tick = instance_double(MarketTick, bid: 99.5, ask: 100.0, bid_qty: 200, ask_qty: 300)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+
+      expect(described_class.call(context)).to eq(Entries::EntryGuardPipeline::PASS)
+    end
+  end
+
+  context 'when quantity filter is enabled but tick lacks quantity data' do
+    before do
+      allow(OptionsBuying::Mode).to receive(:config).and_return(
+        execution: { spread_enabled: true, max_bid_ask_spread_pct: 0.015, min_bid_qty: 100, min_ask_qty: 100 }
+      )
+    end
+
+    it 'passes open when quantity fields are missing' do
+      tick = instance_double(MarketTick, bid: 99.5, ask: 100.0)
+      allow(Live::TickQuery).to receive(:for_security).and_return(tick)
+
+      expect(described_class.call(context)).to eq(Entries::EntryGuardPipeline::PASS)
+    end
+  end
 end

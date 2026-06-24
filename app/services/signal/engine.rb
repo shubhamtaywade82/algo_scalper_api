@@ -9,13 +9,13 @@ module Signal
         Thread.current[:signal_cycle_summary] = summary
 
         unless tradable_session?(index_cfg)
-          summary.skip!('market_closed')
+          summary.skip!("market_closed")
           return summary
         end
 
         instrument = fetch_instrument(index_cfg)
         unless instrument
-          summary.block!('missing_instrument')
+          summary.block!("missing_instrument")
           return summary
         end
 
@@ -40,7 +40,7 @@ module Signal
         nearest_expiry = resolve_nearest_expiry_date(index_cfg: index_cfg)
         if entry_dte_guard_blocks?(index_cfg: index_cfg, signals_cfg: signals_cfg, nearest_expiry: nearest_expiry)
           Signal::StateTracker.reset(index_cfg[:key])
-          record_cycle_block!('entry_dte_guard', regime: regime, direction: final_direction)
+          record_cycle_block!("entry_dte_guard", regime: regime, direction: final_direction)
           return summary
         end
 
@@ -88,6 +88,26 @@ module Signal
           metadata: diagnostic_metadata
         )
 
+        if signals_cfg.dig(:setup_validator, :enabled)
+          validator = SetupValidator.new(
+            underlying: index_cfg[:key],
+            direction: final_direction,
+            series: primary_analysis[:series],
+            supertrend_result: primary_analysis[:supertrend],
+            index_cfg: index_cfg
+          )
+          setup_result = validator.valid?
+          unless setup_result.valid
+            Rails.logger.info("[Signal] SetupValidator blocked #{index_cfg[:key]}: #{setup_result.reason}")
+            record_signal_skip(signal, setup_result.reason, stage: "setup_validator", code: setup_result.reason)
+            Signal::StateTracker.reset(index_cfg[:key])
+            record_cycle_block!("setup_validator", regime: regime, direction: final_direction)
+            return summary
+          end
+          diagnostic_metadata[:iv_percentile] = setup_result.metadata[:iv_percentile]
+          diagnostic_metadata[:momentum_score] = setup_result.metadata[:momentum_score]
+        end
+
         gate_result = execute_stock_entry_gate(
           index_cfg: index_cfg,
           signal: signal,
@@ -96,7 +116,7 @@ module Signal
           permission: permission
         )
         unless gate_result
-          record_cycle_block!('entry_gate', regime: regime, direction: final_direction)
+          record_cycle_block!("entry_gate", regime: regime, direction: final_direction)
           return summary
         end
 
@@ -114,13 +134,13 @@ module Signal
         if entered
           summary.entered!(direction: final_direction, regime: regime)
         else
-          record_cycle_block!('entry_guard', regime: regime, direction: final_direction)
+          record_cycle_block!("entry_guard", regime: regime, direction: final_direction)
         end
         summary
       rescue StandardError => e
         Rails.logger.fatal("[FATAL_SIGNAL_ERROR] #{e.class}: #{e.message}\n#{e.backtrace.first(10).join(%(\n))}")
         Rails.logger.error("[Signal] #{index_cfg[:key]} #{e.class} #{e.message}")
-        summary&.block!('error')
+        summary&.block!("error")
         summary
       ensure
         Thread.current[:signal_cycle_summary] = nil
@@ -141,7 +161,7 @@ module Signal
         Rails.logger.info(
           "\n\n[Signal] ----------------------------------------------------- " \
           "Starting analysis for #{index_cfg[:key]} (IDX_I) " \
-          '--------------------------------------------------------'
+          "--------------------------------------------------------"
         )
         true
       end
@@ -153,7 +173,7 @@ module Signal
       end
 
       def initialize_analysis_context(signals_cfg)
-        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || '1m').to_s
+        primary_tf = (signals_cfg[:primary_timeframe] || signals_cfg[:timeframe] || "1m").to_s
         { primary_tf: primary_tf }
       end
 
@@ -161,7 +181,7 @@ module Signal
         supertrend_cfg = signals_cfg[:supertrend]
         unless supertrend_cfg
           Rails.logger.error("[Signal] Supertrend configuration missing for #{index_cfg[:key]}")
-          record_cycle_block!('supertrend_config_missing')
+          record_cycle_block!("supertrend_config_missing")
           return
         end
 
@@ -177,7 +197,7 @@ module Signal
             "[Signal] Primary timeframe analysis unavailable for #{index_cfg[:key]}: #{primary_analysis[:message]}"
           )
           Signal::StateTracker.reset(index_cfg[:key])
-          record_cycle_block!('analysis_unavailable')
+          record_cycle_block!("analysis_unavailable")
           return
         end
 
@@ -188,11 +208,27 @@ module Signal
         if trend_direction == :none
           Rails.logger.info("[Signal] SupertrendTrend :none — no trade for #{index_cfg[:key]}")
           Signal::StateTracker.reset(index_cfg[:key])
-          record_cycle_block!('supertrend_none')
+          record_cycle_block!("supertrend_none")
           return
         end
 
         final_direction = trend_direction == :long ? :bullish : :bearish
+
+        if signals_cfg.dig(:confirmation_filter, :enabled)
+          last_candle = primary_analysis[:series]&.candles&.last
+          confirmation = ConfirmationFilter.confirm(
+            initial_signal: final_direction,
+            last_close_price: last_candle&.close,
+            instrument: instrument,
+            index_key: index_cfg[:key]
+          )
+          unless confirmation[:confirmed]
+            Rails.logger.info("[Signal] ConfirmationFilter blocked #{index_cfg[:key]}: #{confirmation[:reason]}")
+            Signal::StateTracker.reset(index_cfg[:key])
+            record_cycle_block!("confirmation_filter")
+            return
+          end
+        end
 
         {
           direction: final_direction,
@@ -200,7 +236,7 @@ module Signal
           primary_series: primary_analysis[:series],
           regime: :trending,
           validation_result: { valid: true },
-          effective_validation_mode: 'stock'
+          effective_validation_mode: "stock"
         }
       end
 
@@ -255,7 +291,7 @@ module Signal
         return if timeframe.blank?
 
         cleaned = timeframe.to_s.strip.downcase
-        digits = cleaned.gsub(/[^0-9]/, '')
+        digits = cleaned.gsub(/[^0-9]/, "")
         digits.presence
       end
 
@@ -354,7 +390,7 @@ module Signal
       end
 
       def expiry_trade_allowed?(symbol)
-        expiry_model = 'Strategies::ExpiryModel'.safe_constantize
+        expiry_model = "Strategies::ExpiryModel".safe_constantize
         return true unless expiry_model
 
         expiry_model.trade_allowed?(symbol: symbol)
@@ -425,16 +461,16 @@ module Signal
           smc_decision: smc_decision,
           permission: permission,
           smc_confluence_ltf_summary: nil,
-          strategy_name: 'supertrend',
-          strategy_mode: 'stock'
+          strategy_name: "supertrend",
+          strategy_mode: "stock"
         )
       end
 
       def record_signal_skip(signal, reason, stage: nil, code: nil)
         extra = {}
-        extra['entry_skip_stage'] = stage.to_s if stage.present?
-        extra['entry_skip_code'] = code.to_s if code.present?
-        signal&.record_entry_outcome('skipped', reason, extra_metadata: extra.presence)
+        extra["entry_skip_stage"] = stage.to_s if stage.present?
+        extra["entry_skip_code"] = code.to_s if code.present?
+        signal&.record_entry_outcome("skipped", reason, extra_metadata: extra.presence)
       end
 
       def execute_stock_entry_gate(index_cfg:, signal:, final_direction:, options_analysis:, permission:)
@@ -442,9 +478,9 @@ module Signal
           Rails.logger.info("[Signal] ExpiryModel BLOCKED #{index_cfg[:key]}: Midday decay period")
           record_signal_skip(
             signal,
-            'expiry_midday_decay: Midday decay period blocked entry for this expiry',
-            stage: 'expiry_model',
-            code: 'expiry_midday_decay'
+            "expiry_midday_decay: Midday decay period blocked entry for this expiry",
+            stage: "expiry_model",
+            code: "expiry_midday_decay"
           )
           Signal::StateTracker.reset(index_cfg[:key])
           return nil
@@ -452,9 +488,9 @@ module Signal
 
         picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: final_direction)
         if picks.blank?
-          skip_reason = 'No ATM option strike available'
+          skip_reason = "No ATM option strike available"
           Rails.logger.warn("[Signal] #{skip_reason} for #{index_cfg[:key]} #{final_direction}")
-          record_signal_skip(signal, skip_reason, stage: 'strike_selection', code: 'no_strikes')
+          record_signal_skip(signal, skip_reason, stage: "strike_selection", code: "no_strikes")
           Signal::StateTracker.reset(index_cfg[:key])
           return nil
         end

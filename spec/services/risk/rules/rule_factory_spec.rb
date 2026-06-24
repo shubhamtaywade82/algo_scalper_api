@@ -22,8 +22,11 @@ RSpec.describe Risk::Rules::RuleFactory do
         Risk::Rules::StopLossRule,
         Risk::Rules::AdaptiveTrailRule,
         Risk::Rules::TakeProfitRule,
+        Risk::Rules::ZeroHwmFalseEntryRule,
+        Risk::Rules::TimeDecayRule,
         Risk::Rules::TimeStopRule,
-        Risk::Rules::IvCollapseRule
+        Risk::Rules::IvCollapseRule,
+        Risk::Rules::StructuralKillSwitchRule
       )
     end
   end

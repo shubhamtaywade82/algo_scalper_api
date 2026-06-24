@@ -102,6 +102,9 @@ group :development, :test do
   gem 'annotate'
 
   gem "debride"
+
+  # N+1 query detection
+  gem 'bullet'
 end
 
 gem "json_schemer", "~> 2.4"

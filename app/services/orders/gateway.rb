@@ -12,6 +12,11 @@ module Orders
       raise NotImplementedError, "#{self.class} must implement place_market"
     end
 
+    # IOC limit order — fills immediately or cancels (thin-book fallback)
+    def place_ioc_limit(side:, segment:, security_id:, qty:, price:, meta: {})
+      raise NotImplementedError, "#{self.class} must implement place_ioc_limit"
+    end
+
     # ----------- WALLET ------------------------
     def wallet_snapshot
       raise NotImplementedError, "#{self.class} must implement wallet_snapshot"

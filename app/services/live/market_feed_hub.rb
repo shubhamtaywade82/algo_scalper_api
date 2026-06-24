@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require 'singleton'
-require 'concurrent/array'
-require 'concurrent/set'
+require "singleton"
+require "concurrent/array"
+require "concurrent/set"
 
 module Live
   class MarketFeedHub
@@ -26,39 +26,48 @@ module Live
 
     def start!
       unless enabled?
-        Rails.logger.warn('[MarketFeedHub] Not enabled - missing credentials (DHAN_CLIENT_ID/CLIENT_ID or DHAN_ACCESS_TOKEN/ACCESS_TOKEN)')
+        Rails.logger.warn("[MarketFeedHub] Not enabled - missing credentials (DHAN_CLIENT_ID/CLIENT_ID or DHAN_ACCESS_TOKEN/ACCESS_TOKEN)")
         return false
       end
 
       if running?
-        Rails.logger.debug('[MarketFeedHub] Already running, skipping start')
+        Rails.logger.debug("[MarketFeedHub] Already running, skipping start")
         return true
       end
 
       @lock.synchronize do
         return true if running?
 
+        unless acquire_budget!("market_feed_hub")
+          return false
+        end
+
         @watchlist = load_watchlist || []
         refresh_watchlist_keys!
         Rails.logger.info("[MarketFeedHub] Loaded watchlist: #{@watchlist.count} instruments")
 
         @ws_client = build_client
-
-        # Set up event handlers for connection monitoring
         setup_connection_handlers
 
         @ws_client.on(:tick) { |tick| handle_tick(tick) }
         @ws_client.start
-        Rails.logger.info('[MarketFeedHub] WebSocket client started')
+        Rails.logger.info("[MarketFeedHub] WebSocket client started")
 
         @running = true
         @started_at = Time.current
         @connection_state = :connecting
         @last_error = nil
 
-        # NOTE: Connection state will be updated to :connected when first tick is received
-
         start_watchdog!
+        subscribe_watchlist
+
+        Rails.logger.info("[MarketFeedHub] DhanHQ market feed started (watchlist=#{@watchlist.count} instruments)")
+        true
+      rescue StandardError => e
+        Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
+        release_budget!("market_feed_hub")
+        stop!
+        false
       end
 
       # Subscribe to watchlist OUTSIDE the lock to avoid deadlock
@@ -69,12 +78,14 @@ module Live
       true
     rescue StandardError => e
       Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
+      release_budget!("market_feed_hub")
       stop!
       false
     end
 
     def stop!
       @lock.synchronize do
+        release_budget!("market_feed_hub")
         @running = false
         @connection_state = :disconnected
         return unless @ws_client
@@ -117,6 +128,13 @@ module Live
       false
     end
 
+    # Seconds since last tick, or nil if never received one
+    def seconds_since_last_tick
+      return nil unless @last_tick_at
+
+      Time.current - @last_tick_at
+    end
+
     # Get connection health status
     def health_status
       {
@@ -137,8 +155,8 @@ module Live
       result = {
         hub_status: status,
         credentials: {
-          client_id: ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence ? '✅ Set' : '❌ Missing',
-          access_token: ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence ? '✅ Set' : '❌ Missing'
+          client_id: ENV["DHAN_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence ? "✅ Set" : "❌ Missing",
+          access_token: ENV["DHAN_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence ? "✅ Set" : "❌ Missing"
         },
         mode: mode,
         enabled: enabled?
@@ -148,7 +166,7 @@ module Live
         seconds_ago = (Time.current - status[:last_tick_at]).round(1)
         result[:last_tick] = "#{seconds_ago} seconds ago"
       else
-        result[:last_tick] = 'Never'
+        result[:last_tick] = "Never"
       end
 
       result[:last_error_details] = status[:last_error] if status[:last_error]
@@ -171,7 +189,7 @@ module Live
       if segment.blank? || security_id.blank?
         Rails.logger.error("[MarketFeedHub] Invalid subscription: segment=#{segment.inspect}, security_id=#{security_id.inspect}")
         return { segment: segment, security_id: security_id, already_subscribed: false,
-                 error: 'Invalid segment or security_id' }
+                 error: "Invalid segment or security_id" }
       end
 
       # Create composite key for tracking
@@ -201,7 +219,7 @@ module Live
       ensure_running!
 
       if instruments.empty?
-        Rails.logger.warn('[MarketFeedHub] subscribe_many called with empty instruments list')
+        Rails.logger.warn("[MarketFeedHub] subscribe_many called with empty instruments list")
         return []
       end
 
@@ -300,8 +318,8 @@ module Live
       # Convert to format expected by DhanHQ client: ExchangeSegment and SecurityId keys
       normalized_list = list.map do |item|
         {
-          ExchangeSegment: item[:segment] || item['segment'],
-          SecurityId: (item[:security_id] || item['security_id']).to_s
+          ExchangeSegment: item[:segment] || item["segment"],
+          SecurityId: (item[:security_id] || item["security_id"]).to_s
         }
       end
 
@@ -311,7 +329,7 @@ module Live
     end
 
     def on_tick(&block)
-      raise ArgumentError, 'block required' unless block
+      raise ArgumentError, "block required" unless block
 
       @callbacks << block
     end
@@ -361,22 +379,36 @@ module Live
 
     private
 
+    def acquire_budget!(connection_id)
+      WsConnectionBudget.acquire!(connection_id)
+    rescue WsConnectionBudget::BudgetExceeded
+      Rails.logger.warn("[MarketFeedHub] WebSocket connection budget exhausted - cannot start feed (#{connection_id})")
+      false
+    end
+
+    def release_budget!(connection_id)
+      WsConnectionBudget.release!(connection_id)
+    rescue StandardError => e
+      Rails.logger.warn("[MarketFeedHub] Failed to release connection budget for #{connection_id}: #{e.message}")
+      false
+    end
+
     def enabled?
       # Disable in script/backtest mode
-      return false if ENV['BACKTEST_MODE'] == '1' || ENV['SCRIPT_MODE'] == '1'
-      return false if ENV['DISABLE_TRADING_SERVICES'] == '1'
-      return false if defined?($PROGRAM_NAME) && $PROGRAM_NAME.include?('runner') # rubocop:disable Style/GlobalVars
+      return false if ENV["BACKTEST_MODE"] == "1" || ENV["SCRIPT_MODE"] == "1"
+      return false if ENV["DISABLE_TRADING_SERVICES"] == "1"
+      return false if defined?($PROGRAM_NAME) && $PROGRAM_NAME.include?("runner") # rubocop:disable Style/GlobalVars
 
       # Always enabled - just check for credentials
       # Support both naming conventions: CLIENT_ID/DHAN_CLIENT_ID and ACCESS_TOKEN/DHAN_ACCESS_TOKEN
-      client_id = ENV['DHAN_CLIENT_ID'].presence || ENV['CLIENT_ID'].presence
-      access    = ENV['DHAN_ACCESS_TOKEN'].presence || ENV['ACCESS_TOKEN'].presence
+      client_id = ENV["DHAN_CLIENT_ID"].presence || ENV["CLIENT_ID"].presence
+      access = ENV["DHAN_ACCESS_TOKEN"].presence || ENV["ACCESS_TOKEN"].presence
       client_id.present? && access.present?
     end
 
     def ensure_running!
       start! unless running?
-      raise 'DhanHQ market feed is not running' unless running?
+      raise "DhanHQ market feed is not running" unless running?
     end
 
     def handle_tick(tick)
@@ -418,7 +450,7 @@ module Live
       return unless ltp.positive?
 
       symbol = tick[:symbol] || tick[:security_id]
-      is_index = tick[:instrument_type].to_s.upcase == 'INDEX' || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
+      is_index = tick[:instrument_type].to_s.upcase == "INDEX" || %w[NIFTY SENSEX BANKNIFTY].include?(symbol.to_s.upcase)
       MarketData::MarketCache.update_ltp(symbol, ltp, is_index: is_index)
 
       # Keep CandleSeriesCache forming candle up-to-date for index instruments.
@@ -439,7 +471,7 @@ module Live
     end
 
     def notify_subscribers!(tick)
-      ActiveSupport::Notifications.instrument('dhanhq.tick', tick)
+      ActiveSupport::Notifications.instrument("dhanhq.tick", tick)
       @callbacks.each { |callback| safe_invoke(callback, tick) }
     end
 
@@ -469,7 +501,7 @@ module Live
       return if @watchdog_thread&.alive?
 
       @watchdog_thread = Thread.new do
-        Thread.current.name = 'ws-market-feed-watchdog' if Thread.current.respond_to?(:name=)
+        Thread.current.name = "ws-market-feed-watchdog" if Thread.current.respond_to?(:name=)
 
         loop do
           sleep 5
@@ -495,7 +527,7 @@ module Live
       )
 
       begin
-        Live::FeedHealthService.instance.mark_failure!(:ticks, error: RuntimeError.new('ticks feed stale'))
+        Live::FeedHealthService.instance.mark_failure!(:ticks, error: RuntimeError.new("ticks feed stale"))
       rescue StandardError
         nil
       end
@@ -524,7 +556,7 @@ module Live
       refresh_watchlist_keys!
 
       if @watchlist.empty?
-        Rails.logger.warn('[MarketFeedHub] Watchlist is empty, skipping subscription')
+        Rails.logger.warn("[MarketFeedHub] Watchlist is empty, skipping subscription")
         return
       end
 
@@ -540,7 +572,7 @@ module Live
       end
 
       unless connected?
-        Rails.logger.warn('[MarketFeedHub] WebSocket not connected yet, attempting watchlist subscription anyway')
+        Rails.logger.warn("[MarketFeedHub] WebSocket not connected yet, attempting watchlist subscription anyway")
       end
 
       # Use subscribe_many for efficient batch subscription (up to 100 instruments per message)
@@ -552,29 +584,29 @@ module Live
 
     def load_watchlist
       # Prefer DB watchlist if present; fall back to ENV for bootstrap-only
-      if ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items') &&
+      if ActiveRecord::Base.connection.schema_cache.data_source_exists?("watchlist_items") &&
          WatchlistItem.exists?
         # Only load active watchlist items for subscription
         scope = WatchlistItem.active
 
         pairs = if scope.respond_to?(:order) && scope.respond_to?(:pluck)
-                  scope.order(:segment, :security_id).pluck(:segment, :security_id)
+          scope.order(:segment, :security_id).pluck(:segment, :security_id)
                 else
-                  Array(scope).filter_map do |record|
-                    seg = if record.respond_to?(:exchange_segment)
-                            record.exchange_segment
-                          elsif record.is_a?(Hash)
-                            record[:exchange_segment] || record[:segment]
-                          end
-                    sid = if record.respond_to?(:security_id)
-                            record.security_id
-                          elsif record.is_a?(Hash)
-                            record[:security_id]
-                          end
-                    next if seg.blank? || sid.blank?
-
-                    [seg, sid]
+          Array(scope).filter_map do |record|
+            seg = if record.respond_to?(:exchange_segment)
+              record.exchange_segment
+                  elsif record.is_a?(Hash)
+              record[:exchange_segment] || record[:segment]
                   end
+            sid = if record.respond_to?(:security_id)
+              record.security_id
+                  elsif record.is_a?(Hash)
+              record[:security_id]
+                  end
+            next if seg.blank? || sid.blank?
+
+            [seg, sid]
+          end
                 end
 
         # Filter out any pairs with blank segment or security_id and convert to hash format
@@ -592,18 +624,18 @@ module Live
       watchlist_config = AlgoConfig.fetch[:watchlist] || []
       return watchlist_config if watchlist_config.present?
 
-      raw = ENV.fetch('DHANHQ_WS_WATCHLIST', '').strip
+      raw = ENV.fetch("DHANHQ_WS_WATCHLIST", "").strip
       return [] if raw.blank?
 
       raw.split(/[;\n,]/)
          .map(&:strip)
          .compact_blank
          .filter_map do |entry|
-           segment, security_id = entry.split(':', 2)
-           next if segment.blank? || security_id.blank?
+         segment, security_id = entry.split(":", 2)
+         next if segment.blank? || security_id.blank?
 
-           { segment: segment.strip, security_id: security_id.strip }
-         end
+         { segment: segment.strip, security_id: security_id.strip }
+      end
     end
 
     def build_client
@@ -686,7 +718,7 @@ module Live
 
     def option_segment?(segment)
       seg = segment.to_s.upcase
-      seg.include?('FNO') || seg.include?('COMM') || seg.include?('CUR')
+      seg.include?("FNO") || seg.include?("COMM") || seg.include?("CUR")
     end
 
     # Resubscribe all active positions and watchlist items after WebSocket reconnect
@@ -707,7 +739,7 @@ module Live
 
         # Skip resubscribing active positions if market is closed
         if TradingSession::Service.market_closed?
-          Rails.logger.debug('[MarketFeedHub] Market closed - skipping resubscribe of active positions')
+          Rails.logger.debug("[MarketFeedHub] Market closed - skipping resubscribe of active positions")
           return
         end
 
