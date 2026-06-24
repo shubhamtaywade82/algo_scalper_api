@@ -55,7 +55,7 @@
 
 # frozen_string_literal: true
 
-require 'bigdecimal'
+require "bigdecimal"
 
 class Instrument < ApplicationRecord
   include InstrumentHelpers
@@ -64,9 +64,9 @@ class Instrument < ApplicationRecord
   has_many :position_trackers, dependent: :restrict_with_error
   accepts_nested_attributes_for :derivatives, allow_destroy: true
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
-  has_one  :watchlist_item,  lambda {
+  has_one :watchlist_item, lambda {
     where(active: true)
-  }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
+  }, as: :watchable, class_name: "WatchlistItem", dependent: :nullify, inverse_of: :watchable
 
   scope :enabled, -> { where(enabled: true) }
 
@@ -83,21 +83,21 @@ class Instrument < ApplicationRecord
   end
 
   SEGMENT_FROM_EXCHANGE = {
-    'IDX_I' => 'index',
-    'BSE_IDX' => 'index',
-    'NSE_IDX' => 'index',
-    'I' => 'index',
-    'NSE_EQ' => 'equity',
-    'BSE_EQ' => 'equity',
-    'E' => 'equity',
-    'NSE_FNO' => 'derivatives',
-    'BSE_FNO' => 'derivatives',
-    'D' => 'derivatives',
-    'NSE_CURRENCY' => 'currency',
-    'BSE_CURRENCY' => 'currency',
-    'C' => 'currency',
-    'MCX_COMM' => 'commodity',
-    'M' => 'commodity'
+    "IDX_I" => "index",
+    "BSE_IDX" => "index",
+    "NSE_IDX" => "index",
+    "I" => "index",
+    "NSE_EQ" => "equity",
+    "BSE_EQ" => "equity",
+    "E" => "equity",
+    "NSE_FNO" => "derivatives",
+    "BSE_FNO" => "derivatives",
+    "D" => "derivatives",
+    "NSE_CURRENCY" => "currency",
+    "BSE_CURRENCY" => "currency",
+    "C" => "currency",
+    "MCX_COMM" => "commodity",
+    "M" => "commodity"
   }.freeze
 
   class << self
@@ -133,9 +133,9 @@ class Instrument < ApplicationRecord
 
       keys = [primary]
       case primary
-      when 'index' then keys.push('I', 'i')
-      when 'derivatives' then keys.push('D', 'd')
-      when 'equity' then keys.push('E', 'e')
+      when "index" then keys.push("I", "i")
+      when "derivatives" then keys.push("D", "d")
+      when "equity" then keys.push("E", "e")
       end
       keys.uniq
     end
@@ -154,18 +154,18 @@ class Instrument < ApplicationRecord
   # @param product_type [String]
   # @param meta [Hash]
   # @return [Object, nil] Order response from gateway
-  def buy_market!(qty: nil, product_type: 'INTRADAY', meta: {})
+  def buy_market!(qty: nil, product_type: "NORMAL", meta: {})
     segment_code = exchange_segment
     security = security_id.to_s
-    raise 'Instrument missing segment/security_id' if segment_code.blank? || security.blank?
+    raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
 
     ltp = resolve_ltp(segment: segment_code, security_id: security, meta: meta)
-    raise 'LTP unavailable' unless ltp
+    raise "LTP unavailable" unless ltp
 
     quantity = qty.to_i.positive? ? qty.to_i : 1
 
     order = Orders.config.gateway.place_market(
-      side: 'buy',
+      side: "buy",
       segment: segment_code,
       security_id: security,
       qty: quantity,
@@ -182,7 +182,7 @@ class Instrument < ApplicationRecord
       order_no: order.order_id,
       segment: segment_code,
       security_id: security,
-      side: 'LONG',
+      side: "LONG",
       qty: quantity,
       entry_price: ltp,
       symbol: symbol_name || display_name,
@@ -200,20 +200,20 @@ class Instrument < ApplicationRecord
   def sell_market!(qty: nil, meta: {})
     segment_code = exchange_segment
     security = security_id.to_s
-    raise 'Instrument missing segment/security_id' if segment_code.blank? || security.blank?
+    raise "Instrument missing segment/security_id" if segment_code.blank? || security.blank?
 
     quantity = if qty.to_i.positive?
-                 qty.to_i
+      qty.to_i
                else
-                 PositionTracker.active.where(
-                   "(watchable_type = 'Instrument' AND watchable_id = ?) OR instrument_id = ?",
-                   id, id
-                 ).where(security_id: security).sum(:quantity).to_i
+      PositionTracker.active.where(
+        "(watchable_type = 'Instrument' AND watchable_id = ?) OR instrument_id = ?",
+        id, id
+      ).where(security_id: security).sum(:quantity).to_i
                end
     return nil if quantity <= 0
 
     Orders.config.gateway.place_market(
-      side: 'sell',
+      side: "sell",
       segment: segment_code,
       security_id: security,
       qty: quantity,
@@ -270,14 +270,14 @@ class Instrument < ApplicationRecord
 
     filtered_data = filter_option_chain_data(normalized)
 
-    { last_price: data['last_price'], oc: filtered_data }
+    { last_price: data["last_price"], oc: filtered_data }
   rescue StandardError => e
     DhanhqErrorHandler.handle_dhanhq_error(
       e,
       context: "fetch_option_chain(Instrument #{security_id}, expiry: #{expiry})"
     )
     msg = "Failed to fetch Option Chain for Instrument #{security_id}: #{e.message}"
-    Notifications::TelegramNotifier.instance.notify_error(msg, context: 'Instrument')
+    Notifications::TelegramNotifier.instance.notify_error(msg, context: "Instrument")
     Rails.logger.error(msg)
     nil
   end
@@ -300,38 +300,38 @@ class Instrument < ApplicationRecord
   # Returns: Hash with string strike keys and ce/pe sub-hashes
   def normalize_option_chain_response(data)
     # Legacy format — already a hash keyed by strike
-    return data if data['oc'].is_a?(Hash)
+    return data if data["oc"].is_a?(Hash)
 
     # DhanHQ 2.7.0+ format — array of strike objects
-    strikes = data['strikes']
-    return data if strikes.nil? && data['oc']
+    strikes = data["strikes"]
+    return data if strikes.nil? && data["oc"]
 
     return nil unless strikes.is_a?(Array)
 
     oc_hash = {}
     strikes.each do |strike_obj|
-      key = strike_obj['strike'].to_f.to_s
+      key = strike_obj["strike"].to_f.to_s
       oc_hash[key] = {
-        'ce' => strike_obj['call'],
-        'pe' => strike_obj['put']
+        "ce" => strike_obj["call"],
+        "pe" => strike_obj["put"]
       }
     end
 
-    data.merge('oc' => oc_hash)
+    data.merge("oc" => oc_hash)
   end
 
   def filter_option_chain_data(data)
-    oc = data['oc']
+    oc = data["oc"]
     return {} unless oc.is_a?(Hash)
 
     oc.select do |_strike, option_data|
-      call_data = option_data['ce']
-      put_data = option_data['pe']
+      call_data = option_data["ce"]
+      put_data = option_data["pe"]
 
-      has_call_values = call_data && call_data.except('implied_volatility').values.any? do |v|
+      has_call_values = call_data && call_data.except("implied_volatility").values.any? do |v|
         numeric_value?(v) && v.to_f.positive?
       end
-      has_put_values = put_data && put_data.except('implied_volatility').values.any? do |v|
+      has_put_values = put_data && put_data.except("implied_volatility").values.any? do |v|
         numeric_value?(v) && v.to_f.positive?
       end
 

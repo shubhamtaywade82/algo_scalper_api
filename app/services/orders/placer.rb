@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "token_bucket"
 
 module Orders
   class Placer
@@ -20,7 +21,7 @@ module Orders
     ].freeze
 
     class << self
-      def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: "INTRADAY", price: nil,
+      def buy_market!(seg:, sid:, qty:, client_order_id:, product_type: "NORMAL", price: nil,
                       target_price: nil, stop_loss_price: nil, trailing_jump: nil)
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
@@ -53,7 +54,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_token_auto_heal(context: "orders.buy_market") do
+          order = with_order_rate_limit(context: "orders.buy_market") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
@@ -104,7 +105,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] SELL payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_token_auto_heal(context: "orders.sell_market") do
+          order = with_order_rate_limit(context: "orders.sell_market") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}") if order
@@ -117,7 +118,7 @@ module Orders
         order
       end
 
-      def buy_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "INTRADAY")
+      def buy_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
 
@@ -147,7 +148,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] BUY LIMIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_token_auto_heal(context: "orders.buy_limit") do
+          order = with_order_rate_limit(context: "orders.buy_limit") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] BUY LIMIT response: #{order.inspect}") if order
@@ -160,7 +161,7 @@ module Orders
         order
       end
 
-      def buy_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "INTRADAY")
+      def buy_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
 
@@ -190,7 +191,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] BUY IOC LIMIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_token_auto_heal(context: "orders.buy_ioc_limit") do
+          order = with_order_rate_limit(context: "orders.buy_ioc_limit") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] BUY IOC LIMIT response: #{order.inspect}") if order
@@ -205,7 +206,7 @@ module Orders
 
       # Market order first; fall back to IOC limit if market returns nil (e.g. PLACE_ORDER disabled
       # or broker rejected). This keeps the entry pipeline resilient without changing live code paths.
-      def buy_entry_with_fallback!(seg:, sid:, qty:, client_order_id:, product_type: "INTRADAY")
+      def buy_entry_with_fallback!(seg:, sid:, qty:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
         return nil unless seg && sid && qty && normalized_id
 
@@ -219,7 +220,7 @@ module Orders
         buy_ioc_limit!(seg: seg, sid: sid, qty: qty, client_order_id: normalized_id, product_type: product_type)
       end
 
-      def sell_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "INTRADAY")
+      def sell_ioc_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
 
@@ -249,7 +250,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] SELL IOC LIMIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_token_auto_heal(context: "orders.sell_ioc_limit") do
+          order = with_order_rate_limit(context: "orders.sell_ioc_limit") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] SELL IOC LIMIT response: #{order.inspect}") if order
@@ -262,7 +263,7 @@ module Orders
         order
       end
 
-      def sell_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "INTRADAY")
+      def sell_limit!(seg:, sid:, qty:, price:, client_order_id:, product_type: "NORMAL")
         normalized_id = normalize_client_order_id(client_order_id)
         return nil if duplicate?(normalized_id)
 
@@ -292,7 +293,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] SELL LIMIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_token_auto_heal(context: "orders.sell_limit") do
+          order = with_order_rate_limit(context: "orders.sell_limit") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] SELL LIMIT response: #{order.inspect}") if order
@@ -352,7 +353,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_token_auto_heal(context: "orders.exit_position") do
+          order = with_order_rate_limit(context: "orders.exit_position") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
@@ -432,6 +433,26 @@ module Orders
         digest = Digest::SHA1.hexdigest(value)[0, 6]
         base = value[0, 23]
         "#{base}-#{digest}"
+      end
+
+      def order_rate_limit_enabled?
+        (ENV["ORDER_RATE_LIMIT_ENABLED"] || "false").to_s.casecmp("true").zero?
+      end
+
+      def rate_limiter
+        Thread.current[:order_rate_limiter] ||= TokenBucket.new(rate: 10, per: 1.second)
+      end
+
+      def with_order_rate_limit(context:)
+        callback = Proc.new
+        if order_rate_limit_enabled?
+          rate_limiter.consume! { with_token_auto_heal(context: context, &callback) }
+        else
+          with_token_auto_heal(context: context, &callback)
+        end
+      rescue TokenBucket::RateLimited => e
+        Rails.logger.warn("[Orders::Placer] #{context} rate limited: #{e.message}")
+        nil
       end
 
       def segment_tradable?(segment)

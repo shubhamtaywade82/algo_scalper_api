@@ -13,7 +13,7 @@ module Trading
       # @param index_key [String, nil]
       # @param meta [Hash]
       # @return [Object, nil]
-      def buy_derivative!(derivative_id:, qty: nil, product_type: 'INTRADAY', index_key: nil, meta: {})
+      def buy_derivative!(derivative_id:, qty: nil, product_type: "NORMAL", index_key: nil, meta: {})
         derivative = Derivative.find(derivative_id)
         derivative.buy_option!(
           qty: qty,

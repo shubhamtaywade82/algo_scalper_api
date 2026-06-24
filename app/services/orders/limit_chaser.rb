@@ -46,12 +46,12 @@ module Orders
           qty: qty,
           price: midpoint,
           client_order_id: client_order_id,
-          product_type: meta[:product_type] || 'INTRADAY'
+          product_type: meta[:product_type] || "NORMAL"
         )
 
         return nil unless order
 
-        order_id = order.respond_to?(:order_id) ? order.order_id : (order[:order_id] || order['order_id'])
+        order_id = order.respond_to?(:order_id) ? order.order_id : (order[:order_id] || order["order_id"])
         return order unless order_id # If no order_id (mock), return order
 
         # 6. Chase loop
@@ -110,11 +110,11 @@ module Orders
             qty: qty,
             price: new_midpoint,
             client_order_id: new_client_id,
-            product_type: meta[:product_type] || 'INTRADAY'
+            product_type: meta[:product_type] || "NORMAL"
           )
 
           if new_order
-            current_order_id = new_order.respond_to?(:order_id) ? new_order.order_id : (new_order[:order_id] || new_order['order_id'])
+            current_order_id = new_order.respond_to?(:order_id) ? new_order.order_id : (new_order[:order_id] || new_order["order_id"])
             current_limit_price = new_midpoint
             order = new_order
           else
