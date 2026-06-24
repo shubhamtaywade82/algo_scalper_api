@@ -18,7 +18,7 @@ module Live
 
           # Breakeven Lock Logic
           risk_cfg = AlgoConfig.fetch[:risk] || {}
-          breakeven_pct = (risk_cfg[:breakeven_after_gain] || 0.35).to_f
+          breakeven_pct = (risk_cfg[:breakeven_after_gain] || 0.15).to_f
           if pnl_pct >= breakeven_pct && !tracker.breakeven_locked?
             tracker.lock_breakeven!
           end

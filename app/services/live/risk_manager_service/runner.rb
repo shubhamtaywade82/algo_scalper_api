@@ -84,7 +84,7 @@ module Live
         end
 
         risk = risk_config
-        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:20')
         if market_close_time && Time.current >= market_close_time
           enforce_eod_force_close(exit_engine: exit_engine)
           return
