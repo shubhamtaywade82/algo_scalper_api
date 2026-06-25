@@ -11,7 +11,7 @@ paper_trading:
 # Double-entry paper ledger (financial source of truth alongside position_trackers)
 ledger:
   enabled: true           # paper wallet + sizing read from ledger cash balance
-  paper_enabled: true     # GatewayPaper.wallet_snapshot uses Ledger::WalletReader
+  paper_enabled: false    # wallet uses legacy calculation; ledger posts for reconciliation only
   shadow_mode: true       # post journals; reconciliation job compares ledger vs legacy
   block_negative_cash: true
 
