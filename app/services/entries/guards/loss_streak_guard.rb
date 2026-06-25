@@ -75,10 +75,6 @@ module Entries
             .limit(loss_threshold)
         end
 
-        def position_scope
-          paper_trading_mode? ? PositionTracker.paper : PositionTracker.live
-        end
-
         def paper_trading_mode?
           AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
         rescue StandardError
