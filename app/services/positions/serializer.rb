@@ -53,7 +53,7 @@ module Positions
       {
         id: tracker.id,
         order_no: tracker.order_no,
-        symbol: tracker.symbol,
+        symbol: tracker.symbol.presence || fallback_symbol(tracker),
         side: tracker.side,
         quantity: tracker.quantity.to_i,
         index_key: tracker.index_key,
@@ -62,6 +62,27 @@ module Positions
         paper: tracker.paper?,
         created_at: tracker.created_at.iso8601
       }
+    end
+
+    def fallback_symbol(tracker)
+      meta_sym = tracker.meta&.dig('symbol')
+      return meta_sym if meta_sym.present?
+
+      tradable = tracker.tradable
+      if tradable.respond_to?(:symbol_name) && tradable.symbol_name.present?
+        return tradable.symbol_name
+      end
+      if tradable.respond_to?(:display_name) && tradable.display_name.present?
+        return tradable.display_name
+      end
+
+      inst = tracker.instrument
+      if inst && inst != tradable
+        return inst.symbol_name if inst.respond_to?(:symbol_name) && inst.symbol_name.present?
+        return inst.display_name if inst.respond_to?(:display_name) && inst.display_name.present?
+      end
+
+      nil
     end
 
     def net_pnl_pct(net_pnl, entry, qty)

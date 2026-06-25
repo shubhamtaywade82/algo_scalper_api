@@ -189,7 +189,12 @@ module Live
       Rails.logger.warn("[ReconciliationService] Auto-correcting stuck exit for #{tracker.order_no}")
 
       # Try the standard ExitEngine path first to ensure proper routing
-      exit_engine = Rails.application.config.x.trading_supervisor&.dig(:exit_manager)
+      supervisor = Rails.application.config.x.trading_supervisor
+      exit_engine = if supervisor.respond_to?(:exit_manager)
+                      supervisor.exit_manager
+                    elsif supervisor.is_a?(Hash)
+                      supervisor.dig(:exit_manager)
+                    end
 
       if exit_engine
         # The engine will check stale_exit_intent? and allow a retry

@@ -79,7 +79,7 @@ module Api
         .pluck(Arel.sql("DATE(exited_at)"))
         .map(&:to_s)
     rescue StandardError
-      [Time.zone.today.to_s]
+      [Positions::IstScope.today_start.to_date.to_s]
     end
 
     # Day-level summary (ignores secondary filters — always for the full selected date).
@@ -95,12 +95,12 @@ module Api
     end
 
     def filter_date
-      @filter_date ||= Time.zone.today
+      @filter_date ||= Positions::IstScope.today_start.to_date
     end
 
     def assign_filter_date!
       if params[:date].blank?
-        @filter_date = Time.zone.today
+        @filter_date = Positions::IstScope.today_start.to_date
         return
       end
 

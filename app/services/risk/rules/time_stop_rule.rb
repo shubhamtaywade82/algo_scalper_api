@@ -53,11 +53,12 @@ module Risk
 
       def days_to_expiry(tracker)
         watchable = tracker.watchable
-        if watchable.respond_to?(:expiry_date) && watchable.expiry_date
-          (watchable.expiry_date - Date.current).to_i
-        else
-          7 # Fallback to 7 days if not available
-        end
+        return 7 unless watchable.respond_to?(:expiry_date)
+
+        expiry = watchable.expiry_date
+        return 7 unless expiry && expiry > Date.new(2000, 1, 1)
+
+        [(expiry - Date.current).to_i, 0].max
       end
 
       def base_time_limit_minutes(context)
