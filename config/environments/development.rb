@@ -46,7 +46,9 @@ Rails.application.configure do
     "#{severity[0]}, [#{time.strftime('%Y-%m-%dT%H:%M:%S.%6N')} ##{Process.pid}]  #{severity} -- : #{msg}\n"
   end
 
-  file_logger = ActiveSupport::Logger.new(Rails.root.join('log', "#{Rails.env}.log"), 'daily')
+  log_path = Rails.root.join('log', "#{Rails.env}.log")
+  FileUtils.mkdir_p(log_path.dirname)
+  file_logger = ActiveSupport::Logger.new(log_path, 'daily')
   file_logger.formatter = log_formatter
   file_logger.level = config.log_level || :debug
 
