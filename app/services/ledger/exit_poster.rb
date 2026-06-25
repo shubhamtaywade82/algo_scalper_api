@@ -6,6 +6,7 @@ module Ledger
       def post!(tracker:, exit_price: nil)
         return nil unless paper_posting?(tracker)
         return nil unless Config.posting_enabled_for_paper?
+        return nil unless LedgerJournalEntry.exists?(idempotency_key: "entry:#{tracker.id}")
 
         Seeder.ensure_ready!
 

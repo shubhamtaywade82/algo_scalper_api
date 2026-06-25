@@ -58,7 +58,12 @@ module Orders
     # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
     # cash = free balance (like broker available); utilized/exposure = premium tied in open legs.
     def wallet_snapshot
-      return Ledger::WalletReader.snapshot(mode: :paper) if ledger_wallet_enabled?
+      if ledger_wallet_enabled?
+        ledger = Ledger::WalletReader.snapshot(mode: :paper)
+        return ledger if ledger[:utilized] >= 0
+
+        Rails.logger.warn("[GatewayPaper] ledger wallet state invalid (utilized=#{ledger[:utilized]}), falling back to legacy")
+      end
 
       legacy_wallet_snapshot
     rescue StandardError => e

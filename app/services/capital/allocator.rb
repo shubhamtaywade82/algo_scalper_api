@@ -76,6 +76,15 @@ module Capital
 
       private
 
+      # Returns the available cash for allocation, applying a safety buffer of 1% when
+      # the cash exceeds $100,000. This guards against over‑allocation due to stale
+      # balances or rounding errors.
+      def available_cash
+        cash = fetch_available_cash
+        cash = cash * 0.99 if cash > 100_000
+        cash
+      end
+
       # Max fraction of available cash for position buy value (percentage path and rupee-based cap).
       # Order: per-index capital_alloc_pct → sizing.allocation_cap_pct → deployment band alloc_pct.
       def effective_allocation_pct(index_cfg, capital_available)
