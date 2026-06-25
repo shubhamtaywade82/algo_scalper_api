@@ -53,6 +53,7 @@ module Entries
 
         # Success - Tracker created
         signal&.record_entry_outcome('entered')
+        validate_entry_price!(execution_result, context)
         true
       rescue StandardError => e
         signal&.record_entry_outcome('blocked', "exception: #{e.class}")
@@ -188,6 +189,48 @@ module Entries
           return hours * 60
         end
         str.gsub(/[^0-9]/, '').to_i
+      end
+
+      def validate_entry_price!(tracker, context)
+        return unless tracker.respond_to?(:watchable)
+
+        instrument = tracker.watchable
+        return unless instrument.respond_to?(:intraday_ohlc)
+
+        ohlc = instrument.intraday_ohlc(interval: '1', days: 1)
+        return if ohlc.blank?
+
+        series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1')
+        series.load_from_raw(ohlc)
+        current_minute = Time.current.beginning_of_minute
+        candle = series.candles.find { |c| c.timestamp == current_minute }
+        return unless candle
+
+        price = tracker.entry_price.to_f
+        return if price.between?(candle.low, candle.high)
+
+        deviation = if price > candle.high
+                      ((price - candle.high) / candle.high * 100).round(2)
+                    else
+                      ((price - candle.low) / candle.low * 100).round(2)
+                    end
+        tag = deviation.positive? ? 'above' : 'below'
+        Observability::StructuredLog.warn(
+          event: 'entry_price_outside_candle',
+          payload: {
+            tracker_id: tracker.id,
+            symbol: tracker.symbol,
+            side: tracker.side,
+            paper: tracker.paper,
+            entry_price: price,
+            candle_low: candle.low,
+            candle_high: candle.high,
+            deviation_pct: deviation,
+            deviation_tag: tag
+          }
+        )
+      rescue StandardError => e
+        Rails.logger.warn("[EntryGuard] validate_entry_price! failed: #{e.class} - #{e.message}")
       end
 
       private

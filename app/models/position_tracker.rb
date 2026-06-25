@@ -54,6 +54,19 @@ class PositionTracker < ApplicationRecord
   has_one :meta_snapshot, class_name: 'PositionMetaSnapshot', dependent: :destroy
   delegate :config_snapshot, :config_version_hash, :entry_at, to: :meta_snapshot, allow_nil: true
 
+  def peak_premium
+    highest_price
+  end
+
+  def create_position_meta_snapshot!(config_version_hash:, config_change_log_id: nil, config_snapshot:, entry_at: nil)
+    create_meta_snapshot!(
+      config_version_hash: config_version_hash,
+      config_change_log_id: config_change_log_id,
+      config_snapshot: config_snapshot,
+      entry_at: entry_at
+    )
+  end
+
   enum :status, {
     pending: 'pending',
     active: 'active',

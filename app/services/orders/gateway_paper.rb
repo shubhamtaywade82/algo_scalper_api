@@ -22,12 +22,19 @@ module Orders
     def place_market(side:, segment:, security_id:, qty:, meta: {})
       order_no = meta[:client_order_id] || "PAPER-#{SecureRandom.hex(3)}"
 
-      # Simulate broker ack only; domain services own tracker persistence.
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)
+      fill_price = if tick&.bid.to_f.positive? && tick&.ask.to_f.positive?
+                     side.to_s.downcase == 'buy' ? tick.ask.to_f : tick.bid.to_f
+                   else
+                     (meta[:ltp] || meta[:price] || 0).to_f
+                   end
+
       {
         success: true,
         order_id: order_no,
         paper: true,
-        status: :accepted
+        status: :accepted,
+        fill_price: fill_price
       }
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] place_market failed for #{segment}-#{security_id}: #{e.class} - #{e.message}")
