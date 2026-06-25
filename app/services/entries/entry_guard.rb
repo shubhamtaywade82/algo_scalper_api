@@ -85,6 +85,7 @@ module Entries
           quantity: quantity,
           entry_price: ltp,
           avg_price: ltp,
+          symbol: pick[:symbol],
           status: :active,
           paper: false,
           **tracker_attrs,
@@ -107,6 +108,7 @@ module Entries
 
         snapshot = meta_hash.delete('config_snapshot')
         version = meta_hash.delete('config_version') || {}
+        entry_at = meta_hash.delete('entry_at')
 
         tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
 
@@ -120,12 +122,12 @@ module Entries
           quantity: quantity,
           entry_price: ltp,
           avg_price: ltp,
+          symbol: pick[:symbol],
           status: :active,
           paper: true,
           **tracker_attrs,
           meta: legacy_meta
         )
-
         tracker.create_position_meta_snapshot!(
           config_version_hash: version['hash'].to_s,
           config_change_log_id: version['change_log_id'],

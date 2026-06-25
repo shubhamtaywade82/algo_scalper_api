@@ -289,6 +289,8 @@ module Options
               oi_change: 0,
               bid: nil,
               ask: nil,
+              bid_qty: 0,
+              ask_qty: 0,
               volume: 0,
               prev_close: nil
             )
