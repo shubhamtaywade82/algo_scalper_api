@@ -118,10 +118,14 @@ class PositionTracker < ApplicationRecord
     def initialize_extremes_in_meta
       return if entry_price.blank?
 
-      meta = meta_hash.dup
-      meta['highest_price'] ||= entry_price.to_f
-      meta['lowest_price'] ||= entry_price.to_f
-      update!(meta: meta) if meta != meta_hash
+      updates = {}
+      updates[:highest_price] = entry_price.to_f if highest_price.blank?
+      updates[:lowest_price] = entry_price.to_f if lowest_price.blank?
+      return if updates.empty?
+
+      # rubocop:disable Rails/SkipsModelValidations
+      update_columns(updates.merge(updated_at: Time.current))
+      # rubocop:enable Rails/SkipsModelValidations
     rescue StandardError => e
       Rails.logger.debug("[PositionTracker] initialize_extremes_in_meta failed for #{order_no}: #{e.class} - #{e.message}")
     end

@@ -193,10 +193,10 @@ module Live
 
       if exit_engine
         # The engine will check stale_exit_intent? and allow a retry
-        exit_engine.execute_exit(tracker, tracker.meta['exit_reason'] || 'AUTO_RECONCILED_EXIT')
+        exit_engine.execute_exit(tracker, tracker.exit_reason.presence || 'AUTO_RECONCILED_EXIT')
       else
         # Fallback if supervisor/engine isn't available
-        tracker.mark_exited!(exit_reason: tracker.meta['exit_reason'] || 'AUTO_RECONCILED_EXIT')
+        tracker.mark_exited!(exit_reason: tracker.exit_reason.presence || 'AUTO_RECONCILED_EXIT')
       end
     rescue StandardError => e
       Rails.logger.error("[ReconciliationService] Failed to auto-correct stuck exit for #{tracker.order_no}: #{e.class} - #{e.message}")

@@ -72,11 +72,12 @@ module Entries
         version = meta_hash.delete('config_version') || {}
         entry_at = meta_hash.delete('entry_at')
 
+        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+
         tracker = PositionTracker.create!(
           order_no: order_no,
           instrument: instrument,
           watchable: instrument,
-          symbol: pick[:symbol],
           security_id: pick[:security_id],
           segment: pick[:segment] || index_cfg[:segment],
           side: side,
@@ -85,7 +86,8 @@ module Entries
           avg_price: ltp,
           status: :active,
           paper: false,
-          meta: meta_hash
+          **tracker_attrs,
+          meta: legacy_meta
         )
 
         tracker.create_position_meta_snapshot!(
@@ -105,11 +107,12 @@ module Entries
         snapshot = meta_hash.delete('config_snapshot')
         version = meta_hash.delete('config_version') || {}
 
+        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+
         tracker = PositionTracker.create!(
           order_no: order_no,
           instrument: instrument,
           watchable: instrument,
-          symbol: pick[:symbol],
           security_id: pick[:security_id],
           segment: pick[:segment] || index_cfg[:segment],
           side: side,
@@ -118,7 +121,8 @@ module Entries
           avg_price: ltp,
           status: :active,
           paper: true,
-          meta: meta_hash
+          **tracker_attrs,
+          meta: legacy_meta
         )
 
         tracker.create_position_meta_snapshot!(
@@ -246,6 +250,22 @@ module Entries
         # Simplification: logic moved partially to service, but meta building kept here for now
         # Call the existing implementation or refactor it into a dedicated MetaBuilder
         Entries::MetaBuilder.call(meta_hash, bos_context, entry_metadata, entry_price: entry_price, quantity: quantity)
+      end
+
+      def split_meta_hash(meta_hash)
+        promoted = {}
+        legacy = {}
+
+        meta_hash.each do |key, val|
+          str_key = key.to_s
+          if PositionTracker::PROMOTED_META_KEYS.include?(str_key)
+            promoted[str_key] = val
+          else
+            legacy[key] = val
+          end
+        end
+
+        [promoted, legacy]
       end
     end
   end

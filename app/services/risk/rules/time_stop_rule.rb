@@ -75,7 +75,7 @@ module Risk
         if is_scalp
           (cfg.dig(:scalp, :max_minutes) || 8).to_f
         else
-          index_key = (tracker.meta&.dig('index_key') || tracker.underlying_instrument&.symbol_name || 'NIFTY').to_s.upcase
+          index_key = (tracker.index_key || tracker.underlying_instrument&.symbol_name || 'NIFTY').to_s.upcase
           trend_cfg = cfg[:trend] || {}
           (trend_cfg[index_key] || trend_cfg[index_key.to_sym] || 15).to_f
         end

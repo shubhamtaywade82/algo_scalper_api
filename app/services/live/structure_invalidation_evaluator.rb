@@ -15,10 +15,10 @@ module Live
     # @param si_cfg [Hash] structure invalidation config with :underlying_move_pct and :premium_drop_pct
     # @return [Boolean]
     def dual_condition_met?(tracker, underlying_ltp, current_premium, si_cfg)
-      entry_underlying = tracker.meta&.dig('entry_underlying_price').to_f
+      entry_underlying = tracker.entry_underlying_price.to_f
       return false unless entry_underlying.positive?
 
-      direction = tracker.meta&.dig('direction').to_s
+      direction = tracker.direction.to_s
       move_pct = si_cfg[:underlying_move_pct].to_f
       return false unless move_pct.positive?
 

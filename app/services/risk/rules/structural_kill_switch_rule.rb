@@ -25,7 +25,7 @@ module Risk
         underlying_ltp = current_underlying_ltp(tracker)
         return no_action_result unless underlying_ltp&.positive?
 
-        direction = (tracker.meta || {})['direction'].to_s
+        direction = tracker.direction.to_s
         return no_action_result if direction.blank?
 
         index_instrument = resolve_index_instrument(tracker)
@@ -83,7 +83,7 @@ module Risk
 
       def resolve_index_instrument(tracker)
         meta = tracker.meta || {}
-        index_key = meta['index_key'].to_s
+        index_key = (meta['index_key'] || tracker.index_key).to_s
         return nil if index_key.blank?
 
         if tracker.respond_to?(:watchable) && tracker.watchable.respond_to?(:instrument)

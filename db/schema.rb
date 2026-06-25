@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_25_000002) do
+ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -385,18 +385,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_000002) do
 
   create_table "position_trackers", force: :cascade do |t|
     t.string "alpha_source"
+    t.decimal "atm_strike", precision: 12, scale: 4
     t.decimal "avg_price", precision: 12, scale: 4
     t.boolean "be_set", default: false, null: false
+    t.integer "bos_age_at_entry"
     t.boolean "breakeven_locked", default: false, null: false
     t.datetime "carry_marked_at"
     t.string "carry_mode"
     t.decimal "carry_roi_pct", precision: 8, scale: 4
     t.string "client_order_id"
+    t.string "continuation_body_position"
     t.datetime "created_at", null: false
+    t.jsonb "decision", default: {}
     t.string "direction"
+    t.integer "dte_at_entry"
+    t.jsonb "entry_context", default: {}
+    t.decimal "entry_distance_r", precision: 12, scale: 4
     t.string "entry_path"
     t.decimal "entry_price", precision: 12, scale: 4
+    t.decimal "entry_risk_rupees", precision: 12, scale: 4
     t.string "entry_strategy"
+    t.string "entry_tf"
+    t.decimal "entry_underlying_price", precision: 12, scale: 4
+    t.jsonb "execution", default: {}
     t.string "exit_coid"
     t.string "exit_order_id"
     t.string "exit_path"
@@ -404,24 +415,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_000002) do
     t.string "exit_reason"
     t.datetime "exit_requested_at"
     t.datetime "exit_sent_at"
+    t.datetime "exit_triggered_at"
     t.datetime "exited_at"
     t.datetime "expansion_at"
     t.decimal "expected_value", precision: 12, scale: 4
+    t.date "expiry_date"
     t.decimal "high_water_mark_pnl", precision: 12, scale: 4, default: "0.0"
     t.decimal "highest_price", precision: 12, scale: 4
+    t.string "htf_tf"
+    t.decimal "hwm_pnl_pct", precision: 12, scale: 6
     t.string "index_key"
     t.bigint "instrument_id", null: false
+    t.decimal "iv_at_entry", precision: 8, scale: 4
+    t.decimal "iv_percentile", precision: 8, scale: 4
     t.decimal "last_pnl_pct", precision: 8, scale: 4
     t.decimal "last_pnl_rupees", precision: 12, scale: 4
     t.decimal "lowest_price", precision: 12, scale: 4
     t.jsonb "meta", default: {}
     t.string "order_no", null: false
     t.boolean "paper", default: false, null: false
+    t.datetime "peak_premium_at"
+    t.decimal "premium_stop_price", precision: 12, scale: 4
     t.decimal "profit_floor_rupees", precision: 12, scale: 4
     t.datetime "profit_floor_set_at"
     t.string "profit_zone_state"
     t.datetime "profit_zone_transitioned_at"
+    t.integer "pullback_candles"
     t.integer "quantity"
+    t.decimal "retrace_pct", precision: 8, scale: 4
     t.decimal "secured_sl_price", precision: 12, scale: 4
     t.decimal "secured_sl_rupees", precision: 12, scale: 4
     t.string "security_id", null: false
@@ -429,12 +450,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_000002) do
     t.string "side"
     t.decimal "signal_confidence", precision: 8, scale: 4
     t.datetime "signal_timestamp"
+    t.decimal "spread_guard_pct", precision: 8, scale: 4
     t.string "status", default: "pending", null: false
+    t.string "strategy_profile"
     t.string "symbol"
+    t.string "time_from_bos_to_entry"
     t.string "trade_state"
     t.decimal "trailing_stop_price", precision: 12, scale: 4
     t.datetime "updated_at", null: false
     t.datetime "validated_at"
+    t.decimal "vix_at_entry", precision: 8, scale: 4
     t.bigint "watchable_id", null: false
     t.string "watchable_type", null: false
     t.index "((meta ->> 'index_key'::text))", name: "index_position_trackers_on_meta_index_key"
@@ -444,6 +469,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_000002) do
     t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
     t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
     t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
+    t.index ["exit_triggered_at"], name: "index_position_trackers_on_exit_triggered_at"
     t.index ["exited_at", "status"], name: "index_position_trackers_on_exited_at_and_status"
     t.index ["index_key"], name: "index_position_trackers_on_index_key"
     t.index ["instrument_id"], name: "index_position_trackers_on_instrument_id"

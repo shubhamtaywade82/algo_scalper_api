@@ -78,7 +78,7 @@ module Risk
         snapshot = context.tracker_snapshot || {}
         qty = [context.tracker.quantity.to_i, 1].max
         hwm_peak = entry + (snapshot[:hwm_pnl].to_f / qty)
-        meta_peak = context.tracker.meta&.dig('peak_premium').to_f
+        meta_peak = context.tracker.peak_premium.to_f
         [entry, ltp, hwm_peak, meta_peak].max
       end
 
@@ -97,7 +97,7 @@ module Risk
       def supertrend_flipped?(context)
         return false unless adaptive_config.fetch(:supertrend_flip_exit, true)
 
-        direction = context.tracker.meta&.dig('direction').to_s
+        direction = context.tracker.direction.to_s
         series = underlying_series(context, '1')
         return false unless direction.present? && series&.candles&.any?
 
@@ -114,7 +114,7 @@ module Risk
         needed = adaptive_config.fetch(:counter_candles, 3).to_i
         return false unless needed.positive?
 
-        direction = context.tracker.meta&.dig('direction').to_s
+        direction = context.tracker.direction.to_s
         candles = underlying_series(context, '1')&.candles&.last(needed)
         return false unless direction.present? && candles&.size == needed
 
@@ -129,7 +129,7 @@ module Risk
       end
 
       def underlying_series(context, interval)
-        index_key = context.tracker.meta&.dig('index_key')
+        index_key = context.tracker.index_key
         instrument = context.tracker.instrument || context.tracker.watchable
         return instrument&.candle_series(interval: interval) unless index_key
 

@@ -83,7 +83,7 @@ module Live
       cached = fetch(tracker.id)[:highest_price]
       return cached.to_f if cached.present?
 
-      tracker.highest_price.to_f.nonzero? || tracker.meta&.dig('highest_price').to_f
+      tracker.highest_price.to_f.nonzero? || tracker.highest_price.to_f
     end
 
     def update_highest_price!(tracker, price)

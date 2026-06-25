@@ -137,27 +137,24 @@ module Live
         end
 
         coid = tracker.exit_coid.presence || deterministic_exit_coid(tracker)
-        metadata = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
-
-        metadata['exit_reason'] = reason
-        metadata['exit_triggered_at'] = Time.current
 
         snapshot = safe_pnl_snapshot(tracker)
         decision_pnl_pct = if snapshot && snapshot[:pnl_pct]
                              (snapshot[:pnl_pct].to_f * 100.0).round(2)
                            end
 
-        decision_meta = (metadata['decision'].is_a?(Hash) ? metadata['decision'].dup : {})
+        decision_meta = (tracker.decision.is_a?(Hash) ? tracker.decision.dup : {})
         decision_meta['type'] = reason.to_s
         decision_meta['path'] ||= 'unknown'
         decision_meta['decided_at'] = Time.current.iso8601
         decision_meta['pnl_pct_at_decision'] = decision_pnl_pct if decision_pnl_pct
-        metadata['decision'] = decision_meta
 
         tracker.update!(
           exit_requested_at: Time.current,
           exit_coid: coid,
-          meta: metadata
+          exit_reason: reason,
+          exit_triggered_at: Time.current,
+          decision: decision_meta
         )
       end
 
@@ -204,7 +201,7 @@ module Live
         order_no: tracker.order_no,
         reason: normalized_reason,
         exit_price: exit_price,
-        index_key: tracker.meta&.dig('index_key') || tracker.index_key
+        index_key: tracker.index_key
       })
 
       record_trade_telemetry(tracker, exit_price, normalized_reason)
@@ -244,15 +241,13 @@ module Live
 
       tracker.transaction do
         tracker.lock!
-        meta = tracker.meta.is_a?(Hash) ? tracker.meta.dup : {}
+        execution = tracker.execution.is_a?(Hash) ? tracker.execution.dup : {}
 
-        execution_meta = (meta['execution'].is_a?(Hash) ? meta['execution'].dup : {})
-        execution_meta['type'] = reason.to_s
-        execution_meta['final_pnl_pct'] = pnl_pct_decimal.round(2)
-        execution_meta['classified_as'] = classification
-        meta['execution'] = execution_meta
+        execution['type'] = reason.to_s
+        execution['final_pnl_pct'] = pnl_pct_decimal.round(2)
+        execution['classified_as'] = classification
 
-        tracker.update!(meta: meta, exit_reason: build_final_reason(reason, execution_meta))
+        tracker.update!(execution: execution, exit_reason: build_final_reason(reason, execution))
       end
 
       tracker.exit_reason
@@ -389,7 +384,7 @@ module Live
       return unless tracker&.exited?
       return if TradeTelemetry.exists?(tracker_id: tracker.id)
 
-      entry_risk_rupees = tracker.meta&.dig('entry_risk_rupees')
+      entry_risk_rupees = tracker.entry_risk_rupees
       return if entry_risk_rupees.nil?
 
       entry_risk = BigDecimal(entry_risk_rupees.to_s)
@@ -403,20 +398,20 @@ module Live
 
       TradeTelemetry.create!(
         tracker_id: tracker.id,
-        index_key: tracker.meta&.dig('index_key') || tracker.index_key,
+        index_key: tracker.index_key,
         entry_time: tracker.created_at,
         exit_time: tracker.exited_at || Time.current,
         entry_tf: resolved_entry_tf(tracker),
-        htf_tf: tracker.meta&.dig('htf_tf') || '15m', # Default to 15m if missing
-        bos_age_at_entry: tracker.meta&.dig('bos_age_at_entry'),
-        retrace_pct: tracker.meta&.dig('retrace_pct'),
-        pullback_candles: tracker.meta&.dig('pullback_candles'),
-        entry_distance_r: tracker.meta&.dig('entry_distance_r'),
-        continuation_body_position: tracker.meta&.dig('continuation_body_position'),
-        time_from_bos_to_entry: tracker.meta&.dig('time_from_bos_to_entry'),
+        htf_tf: tracker.htf_tf || '15m', # Default to 15m if missing
+        bos_age_at_entry: tracker.bos_age_at_entry,
+        retrace_pct: tracker.retrace_pct,
+        pullback_candles: tracker.pullback_candles,
+        entry_distance_r: tracker.entry_distance_r,
+        continuation_body_position: tracker.continuation_body_position,
+        time_from_bos_to_entry: tracker.time_from_bos_to_entry,
         max_r_reached: max_r&.round(3),
         exit_r: exit_r&.round(3),
-        exit_path: tracker.meta&.dig('exit_path') || reason,
+        exit_path: tracker.exit_path.presence || reason,
         pnl_rupees: final_pnl,
         trade_state_at_exit: tracker.trade_state
       )
@@ -425,7 +420,7 @@ module Live
     end
 
     def resolved_entry_tf(tracker)
-      tf = tracker.meta&.dig('entry_tf') || tracker.meta&.dig('timeframe')
+      tf = tracker.entry_tf || tracker.meta&.dig('timeframe')
       return tf if tf.present?
 
       '1m'

@@ -50,7 +50,7 @@ RSpec.describe Positions::MetaPatch do
       end
 
       update_sql = sql_calls.find { |sql| sql.include?('UPDATE') }
-      expect(update_sql).to include('meta = COALESCE(meta').and include('||')
+      expect(update_sql).to include('"entry_context"')
       expect(update_sql).not_to include('config_snapshot')
     end
 

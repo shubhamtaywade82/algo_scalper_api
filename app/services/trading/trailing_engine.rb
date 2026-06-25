@@ -90,7 +90,7 @@ module Trading
     end
 
     def merge_strategy_profile_override!(base)
-      raw = @tracker.meta&.dig('strategy_profile') || @tracker.meta&.dig(:strategy_profile)
+      raw = @tracker.strategy_profile
       profile = raw&.to_sym
       return base unless profile
 

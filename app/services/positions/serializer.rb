@@ -32,8 +32,8 @@ module Positions
       exit_p = tracker.exit_price.to_f
       qty = tracker.quantity.to_i
       net_pnl = tracker.last_pnl_rupees.to_f
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      execution_meta = meta['execution'].is_a?(Hash) ? meta['execution'] : {}
+
+      execution_meta = tracker.execution.is_a?(Hash) ? tracker.execution : {}
       classification = execution_meta['classified_as']
 
       base_attributes(tracker).merge(
@@ -42,8 +42,8 @@ module Positions
         pnl: net_pnl.round(2),
         pnl_pct: net_pnl_pct(net_pnl, entry, qty),
         hwm_pnl: tracker.high_water_mark_pnl.to_f.round(2),
-        exit_reason: tracker.exit_reason || meta['exit_reason'],
-        exit_path: meta['exit_path'],
+        exit_reason: tracker.exit_reason,
+        exit_path: tracker.exit_path,
         exit_classification: classification,
         exited_at: tracker.exited_at&.iso8601
       )
@@ -56,8 +56,8 @@ module Positions
         symbol: tracker.symbol,
         side: tracker.side,
         quantity: tracker.quantity.to_i,
-        index_key: tracker.index_key || tracker.meta&.dig('index_key'),
-        direction: tracker.direction || tracker.meta&.dig('direction'),
+        index_key: tracker.index_key,
+        direction: tracker.direction,
         segment: tracker.segment,
         paper: tracker.paper?,
         created_at: tracker.created_at.iso8601

@@ -26,7 +26,7 @@ module Ledger
             security_id: tracker.security_id,
             gross_premium: gross.to_f,
             fee: fee.to_f,
-            iv_percentile: tracker.meta&.dig("iv_percentile")
+            iv_percentile: tracker.iv_percentile
           }.compact,
           lines: [
             { account_code: "premium_deployed", debit: gross },

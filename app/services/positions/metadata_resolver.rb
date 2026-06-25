@@ -5,8 +5,7 @@ module Positions
     module_function
 
     def index_key(tracker)
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      key = meta['index_key'] || meta[:index_key]
+      key = tracker.index_key if tracker.respond_to?(:index_key)
       return key if key.present?
 
       derivative = tracker.watchable if tracker.watchable.is_a?(Derivative)
@@ -22,9 +21,8 @@ module Positions
     end
 
     def direction(tracker)
-      meta = tracker.meta.is_a?(Hash) ? tracker.meta : {}
-      direction = tracker.direction || meta['direction'] || meta[:direction]
-      return direction.to_s.downcase.to_sym if direction.present?
+      dir = tracker.direction if tracker.respond_to?(:direction)
+      return dir.to_s.downcase.to_sym if dir.present?
 
       side = tracker.side.to_s.downcase
       return :bearish if side.include?('sell') || side.include?('short')

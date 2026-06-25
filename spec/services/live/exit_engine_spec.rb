@@ -102,7 +102,7 @@ RSpec.describe Live::ExitEngine do
 
         tracker.reload
         expect(tracker.status).to eq('exited')
-        expect(tracker.meta['exit_reason']).to eq('take_profit')
+        expect(tracker.exit_reason).to start_with('take_profit')
       end
 
       it 'calls router exit_market' do
@@ -117,7 +117,7 @@ RSpec.describe Live::ExitEngine do
 
         tracker.reload
         expect(tracker.status).to eq('exited')
-        expect(tracker.meta['exit_reason']).to eq('paper exit')
+        expect(tracker.exit_reason).to start_with('paper exit')
         expect(result).to include(success: true, reason: 'already_exited')
       end
 
@@ -129,7 +129,7 @@ RSpec.describe Live::ExitEngine do
       end
 
       it 'returns already_exited when tracker is already exited' do
-        tracker.update!(status: 'exited', meta: { 'exit_reason' => 'previous_exit' })
+        tracker.update!(status: 'exited', exit_reason: 'previous_exit')
         result = engine.execute_exit(tracker, 'new_exit')
 
         expect(result[:success]).to be true
@@ -453,7 +453,6 @@ RSpec.describe Live::ExitEngine do
       engine.send(:normalize_exit_reason_with_final_pnl, tracker, 'MANUAL_HALT')
 
       tracker.reload
-      expect(tracker.meta['exit_reason']).to eq('MANUAL_HALT')
       expect(tracker.exit_reason).to eq('MANUAL_HALT')
     end
   end

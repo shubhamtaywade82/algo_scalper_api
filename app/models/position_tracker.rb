@@ -10,12 +10,21 @@ class PositionTracker < ApplicationRecord
   include PositionTracker::Broadcastable
   include PositionTracker::Lifecycle
 
+  # `meta` accessor is the persisted thin shim (no config_snapshot blobs).
+  # Promoted store_accessor readers fall back to this hash when the column is nil,
+  # preserving backward compatibility for legacy read paths.
+
   PROMOTED_META_KEYS = %w[
     breakeven_locked trailing_stop_price index_key direction entry_path entry_strategy
     exit_path exit_reason highest_price lowest_price be_set profit_floor_rupees
     profit_floor_set_at profit_zone_state profit_zone_transitioned_at secured_sl_price
     secured_sl_rupees carry_mode carry_marked_at carry_roi_pct alpha_source
     signal_confidence expected_value signal_timestamp client_order_id
+    decision execution entry_context dte_at_entry vix_at_entry iv_at_entry
+    iv_percentile spread_guard_pct atm_strike expiry_date bos_age_at_entry
+    retrace_pct pullback_candles entry_distance_r continuation_body_position
+    time_from_bos_to_entry premium_stop_price entry_risk_rupees entry_tf htf_tf
+    strategy_profile entry_underlying_price hwm_pnl_pct peak_premium_at
   ].freeze
 
   BOOLEAN_PROMOTED_KEYS = %w[breakeven_locked be_set].freeze
@@ -23,7 +32,9 @@ class PositionTracker < ApplicationRecord
   PROMOTED_META_KEYS.each do |key|
     define_method(key) do
       val = self[key]
-      val.nil? && meta.is_a?(Hash) && meta.key?(key) ? meta[key] : val
+      return val unless val.nil?
+
+      meta_hash[key.to_s]
     end
 
     define_method("#{key}=") do |val|
@@ -83,10 +94,9 @@ class PositionTracker < ApplicationRecord
   end
 
   def lock_breakeven!
-    Positions::MetaUpdater.new(tracker: self).update! do |meta|
-      meta['breakeven_locked'] = true
-      meta
-    end
+    # rubocop:disable Rails/SkipsModelValidations
+    update_columns(breakeven_locked: true, updated_at: Time.current)
+    # rubocop:enable Rails/SkipsModelValidations
   end
 
   def tradable
