@@ -68,13 +68,8 @@ module OptionsBuying
       end
 
       def evaluate_ema_breakout(spot_ltp)
-        index_sid = IndexConfigLoader.load_indices.find { |c| c[:key].to_s.upcase == @index_key }&.dig(:sid).to_s
-        return nil unless index_sid
-
-        candles = Market::CandleSeries.new(
-          security_id: index_sid, segment: 'IDX_I', timeframe: '15'
-        ).fetch(limit: 20)
-        return nil if candles.size < 20
+        candles = StateStore.index_candles(@index_key, '15')
+        return nil if candles.blank? || candles.size < 20
 
         closes = candles.map { |c| c[:close].to_f }
         ema20 = calculate_ema(closes, 20)

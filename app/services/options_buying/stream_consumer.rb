@@ -41,11 +41,19 @@ module OptionsBuying
     private
 
     def consume_loop
+      empty_reads = 0
       while @running
         begin
           ensure_groups_for_monitored_strikes!
           processed = read_batch
-          sleep(0.05) if processed.zero?
+          if processed.zero?
+            empty_reads += 1
+            # Exponential backoff: 0.1s, 0.2s, 0.4s, 0.8s, 1.6s, max 2s
+            backoff = [0.1 * (2 ** (empty_reads - 1)), 2.0].min
+            sleep(backoff)
+          else
+            empty_reads = 0
+          end
         rescue StandardError => e
           Rails.logger.warn("[OptionsBuying::StreamConsumer] #{e.class} - #{e.message}")
           sleep(0.25)
@@ -56,7 +64,7 @@ module OptionsBuying
     def read_batch
       count = 0
       StateStore.monitored_strikes.each do |security_id|
-        messages = StateStore.xreadgroup(security_id, consumer_name: CONSUMER_NAME, count: 5, block_ms: 0)
+        messages = StateStore.xreadgroup(security_id, consumer_name: CONSUMER_NAME, count: 5)
         next if messages.blank?
 
         stream_messages = messages[StateStore.stream_key_for(security_id)] || messages.values.first

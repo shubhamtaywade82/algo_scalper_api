@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../lib/options_buying/redis_pool'
+
 module OptionsBuying
   class StateStore
     PREFIX = 'options_buying'
@@ -274,12 +276,13 @@ module OptionsBuying
       def cache_key(security_id) = "#{PREFIX}:cache:#{security_id}"
       def monitored_strikes_key = "#{PREFIX}:monitored_strikes"
 
-      # Per-thread connection. StreamConsumer (own thread), the BreakoutWatcher
-      # tick callback thread, and Solid Queue job threads all reach StateStore
-      # concurrently; a redis-rb client is not safe to share across threads.
+      # Connection pool for thread-safe Redis access across:
+      # - BreakoutWatcher tick callback thread
+      # - StreamConsumer thread
+      # - Solid Queue job threads
+      # - RiskManagerService monitor loop
       def redis
-        Thread.current[:options_buying_redis] ||=
-          Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
+        RedisPool.instance
       end
 
       def breakout_ttl
@@ -296,6 +299,21 @@ module OptionsBuying
       def volume_rate_baseline_key(security_id) = "#{PREFIX}:volume_rate_baseline:#{security_id}"
       def rsi_bias_key(index_key) = "#{PREFIX}:rsi_bias:#{index_key}"
       def minute_ticks_key(security_id, bucket) = "#{PREFIX}:ticks:#{security_id}:#{bucket}"
+
+      def index_candles_key(index_key, timeframe) = "#{PREFIX}:candles:#{index_key}:#{timeframe}"
+
+      def cache_index_candles(index_key, timeframe, candles, ttl: 300)
+        redis.set(index_candles_key(index_key, timeframe), candles.to_json, ex: ttl)
+      end
+
+      def index_candles(index_key, timeframe)
+        raw = redis.get(index_candles_key(index_key, timeframe))
+        return nil if raw.blank?
+
+        JSON.parse(raw, symbolize_names: true)
+      rescue JSON::ParserError
+        nil
+      end
     end
   end
 end

@@ -23,6 +23,7 @@ gem 'solid_cache'
 gem 'solid_queue'
 
 gem 'concurrent-ruby'
+gem 'connection_pool', '~> 2.4'
 gem 'json', '>= 2.19.2'
 gem 'redis'
 gem 'ruby-technical-analysis'
