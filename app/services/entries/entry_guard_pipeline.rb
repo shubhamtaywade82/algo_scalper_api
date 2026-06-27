@@ -53,9 +53,9 @@ module Entries
         Guards::DteEntryWindowGuard,
         Guards::WeeklyExpiryGuard,
         Guards::BosStructureGuard,
+        Guards::SizingGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
-        Guards::SizingGuard,
         Guards::BreakoutReadyGuard,
         Guards::RiskPolicyGuard,
         Guards::SmcNavigatorGuard

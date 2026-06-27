@@ -356,6 +356,11 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
+  max_exposure_rupees:
+    NIFTY: 500000
+    BANKNIFTY: 300000
+    SENSEX: 300000
+    default: 200000
   # LEGACY FALLBACKS — Effective SL/TP resolved by DTE via risk.dte_parameters.by_dte
   # These are used by risk_explorer, meta_builder as fallback when DTE resolution unavailable
   sl_pct: 0.08 # -8% base premium SL — aligned with adaptive_trail entry_guard hard_stop

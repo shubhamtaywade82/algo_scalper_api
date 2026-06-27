@@ -69,7 +69,7 @@ end
 
 RSpec.describe Entries::Guards::ExposureGuard do
   describe '.exposure_ok?' do
-    let(:db_instrument) { create(:instrument) }
+    let(:db_instrument) { create(:instrument, segment: 'derivatives') }
 
     it 'returns true when under limit' do
       expect(described_class.exposure_ok?(instrument: db_instrument, side: 'long_ce', max_same_side: 3)).to be true
@@ -78,6 +78,37 @@ RSpec.describe Entries::Guards::ExposureGuard do
     it 'returns false when at limit' do
       create_list(:position_tracker, 2, instrument: db_instrument, status: 'active', side: 'long_ce', segment: 'NSE_FNO', security_id: '999')
       expect(described_class.exposure_ok?(instrument: db_instrument, side: 'long_ce', max_same_side: 2)).to be false
+    end
+
+    context 'with rupee-based exposure limit configured' do
+      let(:context) do
+        {
+          index_cfg: { key: 'NIFTY' },
+          quantity: 100,
+          ltp: 150.0 # proposed outlay = 150 * 100 = 15,000
+        }
+      end
+
+      before do
+        allow(AlgoConfig).to receive(:fetch).and_return({
+          risk: {
+            max_exposure_rupees: {
+              'NIFTY' => 20000.0
+            }
+          }
+        })
+      end
+
+      it 'returns true if total exposure is under limit' do
+        expect(described_class.exposure_ok?(instrument: db_instrument, side: 'long_ce', max_same_side: 3, context: context)).to be true
+      end
+
+      it 'returns false if total exposure exceeds limit' do
+        # Create an existing active position of NIFTY options with outlay of 10,000
+        create(:position_tracker, instrument: db_instrument, status: 'active', index_key: 'NIFTY', segment: 'NSE_FNO', quantity: 100, entry_price: 100.0)
+        # Total = 10,000 (current) + 15,000 (proposed) = 25,000 > 20,000 limit
+        expect(described_class.exposure_ok?(instrument: db_instrument, side: 'long_ce', max_same_side: 3, context: context)).to be false
+      end
     end
   end
 end
