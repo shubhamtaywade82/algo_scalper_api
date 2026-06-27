@@ -79,6 +79,14 @@ options_buying:
       max_chase_seconds: 15
       tick_interval_seconds: 2
       fallback_to_market: true
+    order_slicing:
+      enabled: true
+      delay_ms: 500
+      freeze_limits:
+        NIFTY: 1800
+        BANKNIFTY: 900
+        SENSEX: 1000
+        default: 1800
   positional:
     enabled: false
     require_carry_allowed: true
