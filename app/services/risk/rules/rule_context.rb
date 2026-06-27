@@ -49,7 +49,7 @@ module Risk
       # Check if position is active
       # @return [Boolean] true if active, false otherwise
       def active?
-        tracker&.active? && position
+        !!(tracker&.active? && position)
       end
 
       # Get a config value with optional default
@@ -79,7 +79,7 @@ module Risk
         value = config_value(key)
         return default unless value
 
-        Time.zone.parse(value.to_s)
+        Time.zone.parse(value.to_s) || default
       rescue StandardError
         default
       end

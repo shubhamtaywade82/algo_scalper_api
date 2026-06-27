@@ -12,6 +12,7 @@ module OptionsBuying
       @running = false
       @last_compression_check = {}
       @sync_thread = nil
+      @index_threads = Concurrent::Map.new
     end
 
     def start
@@ -21,13 +22,15 @@ module OptionsBuying
         return
       end
 
-      @hub.on_tick { |tick| handle_tick(tick) }
+      # Register per-index tick handlers for parallel processing
+      register_index_handlers!
       start_subscription_sync!
-      Rails.logger.info('[OptionsBuying::BreakoutWatcher] on_tick callback registered')
+      Rails.logger.info('[OptionsBuying::BreakoutWatcher] Per-index handlers registered')
     end
 
     def stop
       @running = false
+      stop_index_handlers!
       if @sync_thread
         @sync_thread.join(2) if @sync_thread.alive?
         @sync_thread = nil
@@ -39,6 +42,37 @@ module OptionsBuying
 
     def feature_enabled?
       Mode.breakout_enabled?
+    end
+
+    # Register per-index tick callbacks for parallel processing
+    def register_index_handlers!
+      IndexConfigLoader.load_indices.each do |idx|
+        index_key = idx[:key].to_s.upcase
+        sid = idx[:sid].to_s
+        segment = idx[:segment].to_s
+
+        # Register index-level tick handler (for underlying structure evaluation)
+        @hub.on_tick_for(segment: segment, security_id: sid) do |tick|
+          handle_index_tick(index_key, tick)
+        end
+
+        # Also register for radar strikes (option tick handlers)
+        StateStore.radar_strikes(index_key).each do |strike|
+          opt_sid = strike[:security_id].to_s
+          opt_segment = strike[:segment].to_s
+          next if opt_sid.blank? || opt_segment.blank?
+
+          @hub.on_tick_for(segment: opt_segment, security_id: opt_sid) do |tick|
+            handle_option_tick(index_key, opt_sid, tick)
+          end
+        end
+      end
+    end
+
+    def stop_index_handlers!
+      # MarketFeedHub doesn't support unregistering specific callbacks easily,
+      # so we rely on @running flag to stop processing
+      @index_threads.clear
     end
 
     # ChainRadarJob runs in the Solid Queue worker process and only writes radar
@@ -83,25 +117,32 @@ module OptionsBuying
       (Mode.config.dig(:chain_radar, :subscribe_sync_seconds) || DEFAULT_SUBSCRIBE_SYNC_SECONDS).to_i
     end
 
-    def handle_tick(tick)
+    def handle_index_tick(index_key, tick)
       return unless @running
       return unless feature_enabled?
 
       OptionsBuying::StreamWriter.record!(tick)
       OptionsBuying::MinuteBarAggregator.record_tick!(tick) unless OptionsBuying::Mode.streams_enabled?
-      update_compression_arm(tick)
+      update_compression_arm_for_index(index_key, tick)
     rescue StandardError => e
-      Rails.logger.warn("[OptionsBuying::BreakoutWatcher] #{e.class} - #{e.message}")
+      Rails.logger.warn("[BreakoutWatcher] index #{index_key} #{e.class} - #{e.message}")
     end
 
-    def update_compression_arm(tick)
+    def handle_option_tick(index_key, security_id, tick)
+      return unless @running
+      return unless feature_enabled?
+
+      OptionsBuying::StreamWriter.record!(tick)
+      OptionsBuying::MinuteBarAggregator.record_tick!(tick) unless OptionsBuying::Mode.streams_enabled?
+    rescue StandardError => e
+      Rails.logger.warn("[BreakoutWatcher] option #{security_id} #{e.class} - #{e.message}")
+    end
+
+    def update_compression_arm_for_index(index_key, tick)
       return unless Mode.compression_enabled?
       return unless Mode.config.dig(:breakout, :compression_arm) == true
 
-      return unless compression_check_due?(tick[:security_id].to_s)
-
-      index_key = index_key_for_tick(tick)
-      return unless index_key
+      return unless compression_check_due?(index_key)
 
       instrument = instrument_for_index(index_key)
       return unless instrument
@@ -110,14 +151,70 @@ module OptionsBuying
       StateStore.set_compression_arm!(index_key)
     end
 
-    def compression_check_due?(security_id)
-      return false if security_id.blank?
+    def compression_check_due?(index_key)
+      return false if index_key.blank?
 
+      now = Time.current.to_i
+      last = @last_compression_check[index_key]
+      return false if last && (now - last) < COMPRESSION_CHECK_INTERVAL
+
+      @last_compression_check[index_key] = now
+      true
+    end
+
+    def instrument_for_index(index_key)
+      idx = IndexConfigLoader.load_indices.find { |c| c[:key].to_s.upcase == index_key.to_s }
+      return unless idx
+
+      Instrument.find_by_sid_and_segment(
+        security_id: idx[:sid],
+        segment_code: idx[:segment]
+      )
+    end
+
+    # Backward-compatible API for tests and existing callers
+    def handle_tick(tick)
+      return unless @running
+      return unless feature_enabled?
+
+      index_key = index_key_for_tick(tick)
+      if index_key
+        handle_index_tick(index_key, tick)
+      else
+        handle_option_tick(nil, tick[:security_id].to_s, tick)
+      end
+    end
+
+    def update_compression_arm(tick)
+      index_key = index_key_for_tick(tick)
+      return unless index_key
+
+      update_compression_arm_for_index(index_key, tick)
+    end
+
+    def compression_check_due?(security_id)
+      index_key = IndexConfigLoader.load_indices.find { |c| c[:sid].to_s == security_id.to_s }&.dig(:key)
+      return compression_check_due_for_index(index_key) if index_key
+
+      # Fallback for option strikes - check per security_id
       now = Time.current.to_i
       last = @last_compression_check[security_id]
       return false if last && (now - last) < COMPRESSION_CHECK_INTERVAL
 
       @last_compression_check[security_id] = now
+      true
+    end
+
+    private
+
+    def compression_check_due_for_index(index_key)
+      return false if index_key.blank?
+
+      now = Time.current.to_i
+      last = @last_compression_check[index_key]
+      return false if last && (now - last) < COMPRESSION_CHECK_INTERVAL
+
+      @last_compression_check[index_key] = now
       true
     end
 
@@ -130,16 +227,6 @@ module OptionsBuying
         return entry[:key] if StateStore.radar_strikes(entry[:key]).any? { |s| s[:security_id].to_s == sid }
       end
       nil
-    end
-
-    def instrument_for_index(index_key)
-      idx = IndexConfigLoader.load_indices.find { |c| c[:key].to_s == index_key.to_s }
-      return unless idx
-
-      Instrument.find_by_sid_and_segment(
-        security_id: idx[:sid],
-        segment_code: idx[:segment]
-      )
     end
   end
 end

@@ -18,7 +18,7 @@ module Live
         cfg[:take_profit_pct] = raw[:take_profit_pct] || raw[:tp_pct]
         cfg[:sl_pct] = cfg[:stop_loss_pct]
         cfg[:tp_pct] = cfg[:take_profit_pct]
-        cfg[:breakeven_after_gain] = raw.key?(:breakeven_after_gain) ? raw[:breakeven_after_gain] : 0
+        cfg[:breakeven_after_gain] = raw.key?(:breakeven_after_gain) ? raw[:breakeven_after_gain] : 0.15
         cfg[:trail_step_pct] = raw[:trail_step_pct] if raw.key?(:trail_step_pct)
         cfg[:exit_drop_pct] = raw[:exit_drop_pct] if raw.key?(:exit_drop_pct)
         cfg[:time_exit_hhmm] = raw[:time_exit_hhmm] if raw.key?(:time_exit_hhmm)
@@ -107,6 +107,13 @@ module Live
 
       def structure_invalidation_enabled?
         config = algo_config.dig(:risk, :exits, :structure_invalidation) || {}
+        config.fetch(:enabled, true) # Default: enabled
+      rescue StandardError
+        true
+      end
+
+      def structural_kill_switch_enabled?
+        config = algo_config.dig(:risk, :exits, :structural_kill_switch) || {}
         config.fetch(:enabled, true) # Default: enabled
       rescue StandardError
         true

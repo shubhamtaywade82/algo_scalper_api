@@ -14,7 +14,7 @@ def run_backtest
   service = BacktestService.run(
     symbol: symbol,
     days_back: days,
-    strategy: InstitutionalMomentumStrategy
+    strategy: SupertrendBacktestStrategy
   )
   summary = service.summary
 

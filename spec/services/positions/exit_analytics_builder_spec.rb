@@ -8,11 +8,9 @@ RSpec.describe Positions::ExitAnalyticsBuilder do
       PositionTracker,
       segment: 'NSE_FNO',
       security_id: '12345',
-      meta: {
-        'expiry_date' => Date.current.to_s,
-        'exit_path' => 'dte_zero_theta_flat',
-        'exit_reason' => 'DTE_ZERO_THETA_FLAT (0-DTE after 12:30 IST)'
-      }
+      expiry_date: Date.current,
+      exit_path: 'dte_zero_theta_flat',
+      exit_reason: 'DTE_ZERO_THETA_FLAT (0-DTE after 12:30 IST)'
     )
   end
 

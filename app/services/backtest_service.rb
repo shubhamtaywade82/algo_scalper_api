@@ -4,7 +4,7 @@
 class BacktestService
   attr_reader :instrument, :interval, :days_back, :strategy_class, :results
 
-  def initialize(symbol:, interval: '5', days_back: 90, strategy: SimpleMomentumStrategy)
+  def initialize(symbol:, interval: '5', days_back: 90, strategy: SupertrendBacktestStrategy)
     @interval = interval
     @days_back = days_back
     @strategy_class = strategy
@@ -25,7 +25,7 @@ class BacktestService
     instrument_event('initialized', strategy: strategy_name)
   end
 
-  def self.run(symbol:, interval: '5', days_back: 90, strategy: SimpleMomentumStrategy)
+  def self.run(symbol:, interval: '5', days_back: 90, strategy: SupertrendBacktestStrategy)
     service = new(symbol: symbol, interval: interval, days_back: days_back, strategy: strategy)
     service.execute
     service

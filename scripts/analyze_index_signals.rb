@@ -23,55 +23,23 @@ indices.each do |index_cfg|
 
   puts "  ✅ Instrument found: #{instrument.symbol_name}"
 
-  # Analyze signal
+  # Analyze signal (stock Supertrend path)
   begin
-    result = Signal::Engine.analyze_multi_timeframe(index_cfg: index_cfg, instrument: instrument)
+    signals_cfg = AlgoConfig.fetch[:signals] || {}
+    primary_tf = signals_cfg[:primary_timeframe] || '1m'
+    result = Signal::Engine.send(:execute_supertrend_only_flow, index_cfg, instrument, signals_cfg, primary_tf)
 
-    if result[:status] == :ok
-      puts '  ✅ Signal analysis successful'
-      puts "  Primary Direction: #{result[:primary_direction]}"
-      puts "  Confirmation Direction: #{result[:confirmation_direction] || 'N/A'}"
-      puts "  Final Direction: #{result[:final_direction]}"
+    if result
+      puts '  ✅ Supertrend analysis successful'
+      puts "  Direction: #{result[:direction]}"
+      adx = result.dig(:primary_analysis, :adx_value)
+      trend = result.dig(:primary_analysis, :supertrend, :trend)
+      puts "  ADX: #{adx&.round(2) || 'N/A'} | Supertrend: #{trend || 'N/A'}"
 
-      if result[:final_direction] == :avoid
-        puts '  ⚠️  FINAL DIRECTION IS :avoid - This is why no positions were created!'
-
-        # Check why it's avoid
-        primary = result.dig(:timeframe_results, :primary)
-        confirmation = result.dig(:timeframe_results, :confirmation)
-
-        if primary
-          puts '  Primary Timeframe Analysis:'
-          puts "    Direction: #{primary[:direction]}"
-          puts "    ADX Value: #{primary[:adx_value]&.round(2) || 'N/A'}"
-          puts "    Supertrend: #{primary.dig(:supertrend, :trend) || 'N/A'}"
-
-          puts '    ⚠️  Primary timeframe returned :avoid' if primary[:direction] == :avoid
-        end
-
-        if confirmation
-          puts '  Confirmation Timeframe Analysis:'
-          puts "    Direction: #{confirmation[:direction]}"
-          puts "    ADX Value: #{confirmation[:adx_value]&.round(2) || 'N/A'}"
-          puts "    Supertrend: #{confirmation.dig(:supertrend, :trend) || 'N/A'}"
-
-          puts '    ⚠️  Confirmation timeframe returned :avoid' if confirmation[:direction] == :avoid
-        end
-
-        # Check if directions mismatch
-        if primary && confirmation && primary[:direction] != confirmation[:direction] &&
-           primary[:direction] != :avoid && confirmation[:direction] != :avoid
-          puts "  ⚠️  Directions mismatch: Primary=#{primary[:direction]}, Confirmation=#{confirmation[:direction]}"
-        end
-      else
-        puts "  ✅ Final direction is #{result[:final_direction]} - Should create positions"
-
-        # Check if there are any positions
-        positions = PositionTracker.paper.where("meta->>'index_key' = ?", index_cfg[:key])
-        puts "  Current positions: #{positions.count} (Active: #{positions.active.count}, Exited: #{positions.exited.count})"
-      end
+      positions = PositionTracker.paper.where("meta->>'index_key' = ?", index_cfg[:key])
+      puts "  Current positions: #{positions.count} (Active: #{positions.active.count}, Exited: #{positions.exited.count})"
     else
-      puts "  ❌ Signal analysis failed: #{result[:message]}"
+      puts '  ⚠️  No trade signal (Supertrend :none or analysis blocked)'
     end
   rescue StandardError => e
     puts "  ❌ Error during analysis: #{e.class} - #{e.message}"

@@ -13,7 +13,8 @@ module OptionsBuying
     def scan!
       return unless Mode.chain_radar_enabled?
 
-      analyzer = Options::DerivativeChainAnalyzer.new(index_key: @index_key)
+      target_expiry = determine_target_expiry
+      analyzer = Options::DerivativeChainAnalyzer.new(index_key: @index_key, expiry: target_expiry)
       spot = analyzer.spot_ltp
       return unless spot&.positive?
 
@@ -54,6 +55,40 @@ module OptionsBuying
     end
 
     private
+
+    def determine_target_expiry
+      config = Mode.config[:expiry] || {}
+      return nil unless config[:prefer_monthly]
+
+      min_dte = (Mode.positional_active? ? config[:positional_min_dte] : config[:min_dte]) || 7
+
+      idx_cfg = IndexConfigLoader.load_indices.find { |c| c[:key].to_s.upcase == @index_key }
+      return nil unless idx_cfg
+
+      instrument = IndexInstrumentCache.instance.get_or_fetch(idx_cfg)
+      return nil unless instrument
+
+      expiry_list = instrument.expiry_list
+      return nil unless expiry_list&.any?
+
+      today = Time.zone.today
+      valid_dates = expiry_list.filter_map do |raw|
+        if raw.is_a?(String)
+  begin
+                              Date.parse(raw)
+  rescue StandardError
+                              nil
+  end
+        else
+  raw.try(:to_date)
+        end
+      end
+
+      valid_dates.select { |d| d >= today && (d - today).to_i >= min_dte }.min
+    rescue StandardError => e
+      Rails.logger.warn("[ChainRadar] determine_target_expiry failed: #{e.message}")
+      nil
+    end
 
     def radar_config
       Mode.config[:chain_radar] || {}

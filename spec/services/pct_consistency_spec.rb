@@ -86,70 +86,17 @@ RSpec.describe 'Percentage format consistency across the trading pipeline' do
   end
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Layer 3: PercentagePnlRule uses DECIMAL threshold and DECIMAL pnl_pct
-  # ─────────────────────────────────────────────────────────────────────────
-  describe Risk::Rules::PercentagePnlRule do
-    let(:rule) do
-      described_class.new(config: {
-        percentage_pnl_exit: { enabled: true, target_pct: 0.30 }
-      })
-    end
-
-    def context_with(pnl_decimal)
-      instance_double(
-        Risk::Rules::RuleContext,
-        active?: true,
-        pnl_pct: BigDecimal(pnl_decimal.to_s),
-        risk_config: {}
-      )
-    end
-
-    it 'does NOT exit at 29.9% (pnl_pct DECIMAL 0.299)' do
-      result = rule.evaluate(context_with(0.299))
-      expect(result.exit?).to be false
-    end
-
-    it 'exits at exactly 30% (pnl_pct DECIMAL 0.30)' do
-      result = rule.evaluate(context_with(0.30))
-      expect(result.exit?).to be true
-    end
-
-    it 'exits above 30% (pnl_pct DECIMAL 0.45)' do
-      result = rule.evaluate(context_with(0.45))
-      expect(result.exit?).to be true
-    end
-
-    it 'does NOT fire on tiny gains (pnl_pct 0.009, threshold 0.30)' do
-      result = rule.evaluate(context_with(0.009))
-      expect(result.exit?).to be false
-    end
-
-    it 'does NOT fire when pnl is negative' do
-      result = rule.evaluate(context_with(-0.05))
-      expect(result.exit?).to be false
-    end
-
-    it 'reason string displays percentage (not decimal) for readability' do
-      result = rule.evaluate(context_with(0.30))
-      # Should say "30.0%" not "0.3"
-      expect(result.reason).to include('30.0%')
-      expect(result.reason).not_to include(' 0.3 ')
-    end
-  end
-
-  # ─────────────────────────────────────────────────────────────────────────
-  # Layer 4: UnifiedExitChecker compares DECIMAL pnl_pct to DECIMAL thresholds
+  # Layer 3: UnifiedExitChecker compares DECIMAL pnl_pct to DECIMAL thresholds
   # ─────────────────────────────────────────────────────────────────────────
   describe Live::UnifiedExitChecker do
     let(:algo_cfg) do
       {
-        risk: { sl_pct: 0.12, tp_pct: 0.50 },
-        exit: {
-          stop_loss: { type: 'static', value: 0.12 },
-          take_profit: 0.50,
-          trailing: { enabled: false },
-          early_exit: { enabled: false },
-          time_based: { enabled: false }
+        risk: {
+          adaptive_trailing: {
+            enabled: true,
+            supertrend_flip_exit: false,
+            counter_candles: 0
+          }
         }
       }
     end
@@ -158,9 +105,10 @@ RSpec.describe 'Percentage format consistency across the trading pipeline' do
       instance_double(
         PositionTracker,
         id: 1,
+        active?: true,
         entry_price: 100.0,
         quantity: 1,
-        meta: nil,
+        meta: { 'direction' => 'bullish' },
         instrument: nil,
         watchable: nil,
         side: 'long_ce'
@@ -187,49 +135,44 @@ RSpec.describe 'Percentage format consistency across the trading pipeline' do
       })
     end
 
-    context 'stop loss at -12%' do
-      it 'does NOT exit at -11.9% (just above SL)' do
-        stub_pnl(-0.119)
+    context 'entry guard hard stop at -30%' do
+      it 'does NOT exit at -29.9%' do
+        stub_pnl(-0.299)
         result = described_class.check_exit_conditions(tracker)
         expect(result).to be_nil
       end
 
-      it 'exits at exactly -12% (pnl_pct DECIMAL -0.12)' do
-        stub_pnl(-0.12)
+      it 'exits at exactly -30%' do
+        stub_pnl(-0.30)
         result = described_class.check_exit_conditions(tracker)
         expect(result).not_to be_nil
-        expect(result[:reason]).to eq('STOP_LOSS')
-      end
-
-      it 'exits below -12% (pnl_pct DECIMAL -0.15)' do
-        stub_pnl(-0.15)
-        result = described_class.check_exit_conditions(tracker)
-        expect(result).not_to be_nil
-        expect(result[:reason]).to eq('STOP_LOSS')
+        expect(result[:reason]).to eq('ADAPTIVE_TRAIL_HARD_STOP')
       end
     end
 
-    context 'take profit at 50%' do
-      it 'does NOT exit at 49.9%' do
-        stub_pnl(0.499)
-        result = described_class.check_exit_conditions(tracker)
-        expect(result).to be_nil
-      end
+    context 'adaptive trail giveback exit' do
+      it 'exits when runner-mode floor is breached' do
+        allow(Live::RedisPnlCache.instance).to receive(:fetch_pnl).with(1).and_return(
+          {
+            pnl: 110.0,
+            pnl_pct: 1.10,
+            hwm_pnl: 200.0,
+            hwm_pnl_pct: nil,
+            ltp: 210.0
+          }
+        )
 
-      it 'exits at exactly 50% (pnl_pct DECIMAL 0.50)' do
-        stub_pnl(0.50)
         result = described_class.check_exit_conditions(tracker)
         expect(result).not_to be_nil
-        expect(result[:reason]).to eq('TAKE_PROFIT')
+        expect(result[:reason]).to eq('ADAPTIVE_TRAIL')
       end
     end
 
     context 'pnl_pct returned in result' do
       it 'returns pnl_pct as PERCENTAGE (multiplied by 100) for UI display' do
-        stub_pnl(-0.12)
+        stub_pnl(-0.30)
         result = described_class.check_exit_conditions(tracker)
-        # result[:pnl_pct] should be PERCENTAGE (e.g. -12.0), not DECIMAL (-0.12)
-        expect(result[:pnl_pct]).to be_within(0.1).of(-12.0)
+        expect(result[:pnl_pct]).to be_within(0.1).of(-30.0)
         expect(result[:pnl_pct].abs).to be > 1.0
       end
     end

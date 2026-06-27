@@ -15,7 +15,6 @@ RSpec.describe 'POST /api/analysis/:index_key/ai_snapshot' do # rubocop:disable 
       smc: { data: { 'trend' => 'bullish' } },
       regime: { data: { 'label' => 'trending' } }
     })
-    allow(CalibrationRun).to receive(:where).and_return(CalibrationRun.none)
     allow(Ai::GenerativeAiMarketGate).to receive(:skip?).and_return(false)
   end
 

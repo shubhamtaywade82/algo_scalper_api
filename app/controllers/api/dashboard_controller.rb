@@ -17,6 +17,7 @@ module Api
         public_ipv4: ip_info[:public_ipv4],
         public_ipv6: ip_info[:public_ipv6],
         registered_ips: ip_info[:registered_ips],
+        options_buying: build_options_buying_payload,
         recent_signals: recent_signals_payload,
         circuit_breaker: Risk::CircuitBreaker.instance.status,
         system: Live::SystemStatusCache.instance.all_statuses.merge(
@@ -97,6 +98,35 @@ module Api
           smc_confluence_ltf: confluence_ltf_from_analysis_store(key)
         )
       end
+    end
+
+    def build_options_buying_payload
+      {
+        nifty: build_options_buying_state('NIFTY'),
+        banknifty: build_options_buying_state('BANKNIFTY'),
+        sensex: build_options_buying_state('SENSEX')
+      }
+    end
+
+    def build_options_buying_state(index_key)
+      direction = if OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bullish)
+                    'BULLISH'
+                  elsif OptionsBuying::StateStore.breakout_ready?(index_key, direction: :bearish)
+                    'BEARISH'
+                  end
+      {
+        regime: OptionsBuying::RegimeClassifier.detect(index_key),
+        breakout_ready: !direction.nil?,
+        direction: direction,
+        compression_armed: OptionsBuying::StateStore.compression_armed?(index_key),
+        support: OptionsBuying::StateStore.support(index_key),
+        resistance: OptionsBuying::StateStore.resistance(index_key),
+        daily_atr: OptionsBuying::StateStore.daily_atr(index_key),
+        radar_strikes: OptionsBuying::StateStore.radar_strikes(index_key)
+      }
+    rescue StandardError => e
+      Rails.logger.warn("[DashboardController] failed to build options_buying state for #{index_key}: #{e.message}")
+      { regime: 'UNKNOWN', breakout_ready: false, direction: nil }
     end
 
     def confluence_ltf_from_analysis_store(index_key)

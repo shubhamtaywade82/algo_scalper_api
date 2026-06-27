@@ -64,18 +64,18 @@ class Derivative < ApplicationRecord
 
   belongs_to :instrument, optional: false, inverse_of: :derivatives
   has_many :watchlist_items, as: :watchable, dependent: :nullify, inverse_of: :watchable
-  has_one  :watchlist_item,  lambda {
+  has_one :watchlist_item, lambda {
     where(active: true)
-  }, as: :watchable, class_name: 'WatchlistItem', dependent: :nullify, inverse_of: :watchable
+  }, as: :watchable, class_name: "WatchlistItem", dependent: :nullify, inverse_of: :watchable
   has_many :position_trackers, as: :watchable, dependent: :destroy, inverse_of: :watchable
 
   validates :security_id, presence: true, uniqueness: { scope: %i[symbol_name exchange segment] }
   validates :option_type, inclusion: { in: %w[CE PE], allow_blank: true }
 
-  scope :options, -> { where.not(option_type: [nil, '']) }
-  scope :futures, -> { where(option_type: [nil, '']) }
-  scope :ce, -> { where(option_type: 'CE') }
-  scope :pe, -> { where(option_type: 'PE') }
+  scope :options, -> { where.not(option_type: [nil, ""]) }
+  scope :futures, -> { where(option_type: [nil, ""]) }
+  scope :ce, -> { where(option_type: "CE") }
+  scope :pe, -> { where(option_type: "PE") }
   scope :current_expiry, -> { where(expiry_date: Date.current) }
 
   # Find derivative by underlying symbol, strike price, expiry date, and option type
@@ -119,29 +119,29 @@ class Derivative < ApplicationRecord
   # @param index_cfg [Hash, nil]
   # @param meta [Hash]
   # @return [Object, nil]
-  def buy_option!(qty: nil, product_type: 'INTRADAY', index_cfg: nil, meta: {})
+  def buy_option!(qty: nil, product_type: "NORMAL", index_cfg: nil, meta: {})
     segment_code = exchange_segment
     security = security_id.to_s
-    raise 'Derivative missing segment/security_id' if segment_code.blank? || security.blank?
+    raise "Derivative missing segment/security_id" if segment_code.blank? || security.blank?
 
     ltp = resolve_ltp(segment: segment_code, security_id: security, meta: meta)
-    raise 'LTP unavailable' unless ltp
+    raise "LTP unavailable" unless ltp
 
     quantity = if qty.to_i.positive?
-                 qty.to_i
+      qty.to_i
                else
-                 config = index_cfg || { key: underlying_symbol, segment: segment_code }
-                 Capital::Allocator.qty_for(
-                   index_cfg: config,
-                   entry_price: ltp.to_f,
-                   derivative_lot_size: lot_size.to_i,
-                   scale_multiplier: 1
-                 )
+      config = index_cfg || { key: underlying_symbol, segment: segment_code }
+      Capital::Allocator.qty_for(
+        index_cfg: config,
+        entry_price: ltp.to_f,
+        derivative_lot_size: lot_size.to_i,
+        scale_multiplier: 1
+      )
                end
     return nil if quantity.to_i <= 0
 
     order = Orders.config.gateway.place_market(
-      side: 'buy',
+      side: "buy",
       segment: segment_code,
       security_id: security,
       qty: quantity,
@@ -154,7 +154,7 @@ class Derivative < ApplicationRecord
     order_no = Ledger::OrderResponse.extract_order_id(order)
     return nil if order_no.blank?
 
-    side_label = option_type.to_s.upcase == 'CE' ? 'long_ce' : 'long_pe'
+    side_label = option_type.to_s.upcase == "CE" ? "long_ce" : "long_pe"
 
     tracker = after_order_track!(
       instrument: instrument,
@@ -188,20 +188,20 @@ class Derivative < ApplicationRecord
   def sell_option!(qty: nil, meta: {})
     segment_code = exchange_segment
     security = security_id.to_s
-    raise 'Derivative missing segment/security_id' if segment_code.blank? || security.blank?
+    raise "Derivative missing segment/security_id" if segment_code.blank? || security.blank?
 
     quantity = if qty.to_i.positive?
-                 qty.to_i
+      qty.to_i
                else
-                 PositionTracker.active.where(
-                   "(watchable_type = 'Derivative' AND watchable_id = ?) OR instrument_id = ?",
-                   id, instrument_id
-                 ).where(security_id: security).sum(:quantity).to_i
+      PositionTracker.active.where(
+        "(watchable_type = 'Derivative' AND watchable_id = ?) OR instrument_id = ?",
+        id, instrument_id
+      ).where(security_id: security).sum(:quantity).to_i
                end
     return nil if quantity <= 0
 
     Orders.config.gateway.place_market(
-      side: 'sell',
+      side: "sell",
       segment: segment_code,
       security_id: security,
       qty: quantity,

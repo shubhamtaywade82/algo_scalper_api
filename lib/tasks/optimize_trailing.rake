@@ -1,46 +1,61 @@
 # frozen_string_literal: true
 
 namespace :optimize do
-  desc 'Optimize trailing stop parameters based on MFE/MAE analytics'
+  desc 'Optimize trailing stop parameters based on MFE/MAE analytics (proposes CalibrationRun for approval)'
   task trailing: :environment do
     indices = %w[NIFTY SENSEX BANKNIFTY]
-    results = {}
+    auto_apply = ActiveModel::Type::Boolean.new.cast(ENV.fetch('APPLY', 'false'))
+    created_runs = []
 
     indices.each do |index|
       puts "Optimizing #{index}..."
       optimizer = Optimization::TrailingOptimizer.new(index_key: index)
       res = optimizer.optimize
-      if res
-        results[index.downcase] = res[:best_params]
-        puts "Best for #{index}: #{res[:best_params]} (Score: #{res[:score].round(4)} from #{res[:trade_count]} trades)"
-      else
+      unless res
         puts "No data for #{index}"
+        next
       end
+
+      puts "Best for #{index}: #{res[:best_params]} (Score: #{res[:score].round(4)} from #{res[:trade_count]} trades)"
+
+      patch = Options::CalibrationConfigPatchBuilder.from_trailing_params(
+        symbol: index,
+        params: res[:best_params]
+      )
+      if patch.blank?
+        puts "No significant trailing changes for #{index} (below 10% threshold)"
+        next
+      end
+
+      run = CalibrationRun.create!(
+        symbol: index,
+        weeks_analyzed: 0,
+        strike_mode: 'trailing_optimizer',
+        raw_stats: {
+          source: 'trailing_optimizer',
+          trade_count: res[:trade_count],
+          score: res[:score],
+          best_params: res[:best_params]
+        },
+        proposed_patch: patch
+      )
+      run.propose_config!
+      created_runs << run
+      puts "Created CalibrationRun ##{run.id} for #{index} (pending approval)"
     end
 
-    if results.any?
-      update_config(results)
+    if created_runs.empty?
+      puts 'No optimization results to propose.'
+      next
+    end
+
+    if auto_apply
+      created_runs.each do |run|
+        run.apply!(applied_by: 'rake_optimize_trailing')
+        puts "Applied CalibrationRun ##{run.id} for #{run.symbol}"
+      end
     else
-      puts "No optimization results to apply."
+      puts 'Proposed patches saved. Apply via POST /api/calibration_runs/:id/apply or rerun with APPLY=1.'
     end
-  end
-
-  def update_config(results)
-    config_path = Rails.root.join('config/algo.yml')
-    config = YAML.safe_load(File.read(config_path))
-
-    results.each do |index, params|
-      # Update institutional_trailing in config
-      # Match the structure in algo.yml: risk -> institutional_trailing -> index
-      if config['risk'] && config['risk']['institutional_trailing'] && config['risk']['institutional_trailing'][index]
-        params.each do |key, value|
-          config['risk']['institutional_trailing'][index][key.to_s] = value
-        end
-        puts "Updated #{index} in config/algo.yml"
-      end
-    end
-
-    File.write(config_path, config.to_yaml)
-    puts "Configuration saved to config/algo.yml"
   end
 end

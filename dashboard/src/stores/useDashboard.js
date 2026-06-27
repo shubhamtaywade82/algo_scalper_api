@@ -22,6 +22,8 @@ export function useDashboard(onPositionChange) {
   })
   const [balance, setBalance] = createSignal({ cash: 0, equity: 0, mtm: 0, exposure: 0 })
   const [indices, setIndices] = createSignal({ nifty: null, banknifty: null, sensex: null })
+  const [subscribedIndices, setSubscribedIndices] = createSignal([])
+  const [optionsBuying, setOptionsBuying] = createSignal({ nifty: {}, banknifty: {}, sensex: {} })
   const [system, setSystem] = createSignal({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
   const [publicIpv4, setPublicIpv4] = createSignal('Unknown')
   const [publicIpv6, setPublicIpv6] = createSignal('Unknown')
@@ -30,7 +32,6 @@ export function useDashboard(onPositionChange) {
   const [lastUpdated, setLastUpdated] = createSignal(null)
   const [recentSignals, setRecentSignals] = createSignal([])
   const [config, setConfig] = createSignal({ risk: {}, signals: {}, time_restrictions: {} })
-  const [subscribedIndices, setSubscribedIndices] = createSignal([])
   const [marketStatus, setMarketStatus] = createSignal(null)
 
   let subscription = null
@@ -117,6 +118,7 @@ export function useDashboard(onPositionChange) {
     if (data.recent_signals) setRecentSignals(data.recent_signals)
     if (data.config) setConfig(data.config)
     if (data.subscribed_indices) setSubscribedIndices(data.subscribed_indices)
+    if (data.options_buying) setOptionsBuying(data.options_buying)
     if (data.market_status) setMarketStatus(data.market_status)
 
     setLastUpdated(data.timestamp || new Date().toISOString())
@@ -169,7 +171,7 @@ export function useDashboard(onPositionChange) {
   })
 
   return {
-    mode, connected, isStale, stats, balance, indices, subscribedIndices, system,
+    mode, connected, isStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
     publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config,
     marketStatus,
     refresh: fetchInitial

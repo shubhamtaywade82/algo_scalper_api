@@ -1,113 +1,101 @@
 # frozen_string_literal: true
+
 require 'rails_helper'
 
 RSpec.describe Risk::Rules::TimeStopRule do
   let(:tracker) do
     instance_double(
       PositionTracker,
-      id: 42,
-      created_at: 20.minutes.ago,
-      meta: { 'index_key' => 'NIFTY', 'entry_path' => '1m_scalp' },
-      instrument: nil,
-      watchable: nil
+      active?: true,
+      created_at: 10.minutes.ago,
+      entry_strategy: 'alpha_scalp',
+      entry_path: 'scalp',
+      meta: {},
+      index_key: 'NIFTY',
+      watchable: double('watchable', expiry_date: Date.current),
+      underlying_instrument: double('instrument', symbol_name: 'NIFTY')
     )
   end
 
-  let(:position) do
-    instance_double('Positions::ActiveCache::PositionData', pnl_pct: pnl_pct_value)
-  end
-
   let(:context) do
-    instance_double(
-      Risk::Rules::RuleContext,
+    Risk::Rules::RuleContext.new(
+      position: OpenStruct.new(pnl_pct: 0.05),
       tracker: tracker,
-      position: position,
-      active?: true,
-      pnl_pct: pnl_pct_value,
-      tracker_snapshot: { pnl_pct: pnl_pct_value, ltp: 100.0 }
+      risk_config: {
+        time_stop: {
+          enabled: true,
+          scalp: { max_minutes: 8 },
+          trend: { NIFTY: 20 }
+        }
+      }
     )
   end
 
   let(:rule) { described_class.new(config: {}) }
 
-  before do
-    allow(AlgoConfig).to receive(:fetch).and_return({
-      risk: {
-        time_stop: {
-          scalp: { max_minutes: 15, max_candles: 15 },
-          trend: { 'NIFTY' => 30, 'BANKNIFTY' => 25, 'SENSEX' => 25 }
-        },
-        exits: { trailing: { spot_anchored: { min_adx_to_hold: 15 } } }
-      }
-    })
-  end
-
-  describe 'profitable position bypass' do
-    context 'when pnl_pct is 0.0 (breakeven)' do
-      let(:pnl_pct_value) { 0.0 }
-
-      it 'does NOT time-stop a breakeven position (>= 0.0 is immune)' do
+  describe '#evaluate' do
+    context 'when 0-DTE scalp trade' do
+      it 'triggers time stop when elapsed time exceeds dynamic DTE-scaled limit (minimum floor)' do
+        # 0-DTE means scale_factor = 0, so allowed is minimum floor (3 minutes / 180 seconds)
+        # tracker is created 10 minutes ago, so elapsed (600s) > allowed (180s)
         result = rule.evaluate(context)
-        expect(result.exit?).to be false
+        expect(result).to be_exit
+        expect(result.reason).to eq('TIME_STOP')
+        expect(result.metadata[:allowed_seconds]).to eq(180.0)
+      end
+
+      it 'does not exit if elapsed time is below the floor' do
+        allow(tracker).to receive(:created_at).and_return(1.minute.ago)
+        result = rule.evaluate(context)
+        expect(result).to be_no_action
       end
     end
 
-    context 'when pnl_pct is 0.02 (+2% profit, was NOT bypassed before)' do
-      let(:pnl_pct_value) { 0.02 }
-
-      it 'bypasses time stop for any profitable position' do
-        result = rule.evaluate(context)
-        expect(result.exit?).to be false
-      end
-    end
-
-    context 'when pnl_pct is -0.20 (-20%, 20 minutes elapsed, scalp type)' do
-      let(:pnl_pct_value) { -0.20 }
-
-      it 'fires TIME_STOP (losing scalp past 15 min)' do
-        result = rule.evaluate(context)
-        expect(result.exit?).to be true
-        expect(result.reason).to include('TIME_STOP')
-      end
-    end
-  end
-
-  describe 'spot trend bypass' do
-    let(:pnl_pct_value) { -0.03 }  # Losing position
-    let(:instrument)    { instance_double('Instrument') }
-    let(:series)        { instance_double('CandleSeries', candles: []) }
-    let(:structure)     { instance_double('Smc::Detectors::Structure') }
-
-    before do
-      allow(tracker).to receive(:instrument).and_return(instrument)
-      allow(instrument).to receive(:candle_series).and_return(series)
-      allow(Smc::Detectors::Structure).to receive(:new).and_return(structure)
-      allow(structure).to receive(:choch?).and_return(false)
-    end
-
-    context 'when spot trend is intact (supertrend ok, ADX ok, no CHOCH)' do
+    context 'when weekly DTE (7 days) trend trade' do
       before do
-        allow(instrument).to receive(:supertrend_signal).and_return(:long_entry)
-        allow(instrument).to receive(:adx).and_return(20.0)
-        allow(tracker).to receive(:side).and_return('long_ce')
+        allow(tracker).to receive_messages(
+          entry_strategy: 'trend_buying',
+          entry_path: 'trend',
+          watchable: double('watchable', expiry_date: 7.days.from_now.to_date)
+        )
       end
 
-      it 'skips time stop (spot trend still alive)' do
+      it 'scalesallowed time stop to exactly the base limit (20 minutes)' do
+        # 7-DTE means scale_factor = 7 / 7 = 1.0, allowed = 20 minutes (1200 seconds)
+        # tracker is 10 minutes ago (600s), so elapsed (600s) < allowed (1200s)
         result = rule.evaluate(context)
-        expect(result.exit?).to be false
+        expect(result).to be_no_action
+      end
+
+      it 'exits when elapsed time exceeds scaled limit' do
+        allow(tracker).to receive(:created_at).and_return(25.minutes.ago)
+        result = rule.evaluate(context)
+        expect(result).to be_exit
+        expect(result.reason).to eq('TIME_STOP')
+        expect(result.metadata[:allowed_seconds]).to eq(1200.0)
       end
     end
 
-    context 'when spot trend is broken (supertrend flipped, ADX collapsed)' do
+    context 'when watchable expiry_date is blank/invalid' do
       before do
-        allow(instrument).to receive(:supertrend_signal).and_return(:short_entry)
-        allow(instrument).to receive(:adx).and_return(10.0)
-        allow(tracker).to receive(:side).and_return('long_ce')
+        allow(tracker).to receive_messages(
+          entry_strategy: 'trend_buying',
+          entry_path: 'trend',
+          watchable: double('watchable', expiry_date: Date.new(1))
+        )
       end
 
-      it 'allows time stop to fire (spot confirms trade is dead)' do
+      it 'falls back to 7 DTE and uses base limit' do
+        # tracker is 10 minutes ago (600s), fallback 7-DTE => scale=1 => allowed=1200s
         result = rule.evaluate(context)
-        expect(result.exit?).to be true
+        expect(result).to be_no_action
+
+        # Force exceed to confirm fallback DTE produced the expected allowed window
+        allow(tracker).to receive(:created_at).and_return(25.minutes.ago)
+        result = rule.evaluate(context)
+        expect(result).to be_exit
+        expect(result.reason).to eq('TIME_STOP')
+        expect(result.metadata[:allowed_seconds]).to eq(1200.0)
       end
     end
   end

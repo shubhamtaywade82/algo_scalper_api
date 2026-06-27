@@ -79,12 +79,6 @@ module Entries
           paper_trading_mode? ? PositionTracker.paper : PositionTracker.live
         end
 
-        def paper_trading_mode?
-          AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-        rescue StandardError
-          false
-        end
-
         def loss_exit?(position)
           position.last_pnl_rupees.to_f.negative?
         end

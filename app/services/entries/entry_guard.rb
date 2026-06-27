@@ -53,6 +53,7 @@ module Entries
 
         # Success - Tracker created
         signal&.record_entry_outcome('entered')
+        validate_entry_price!(execution_result, context)
         true
       rescue StandardError => e
         signal&.record_entry_outcome('blocked', "exception: #{e.class}")
@@ -68,42 +69,72 @@ module Entries
         meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        PositionTracker.create!(
+        snapshot = meta_hash.delete('config_snapshot')
+        version = meta_hash.delete('config_version') || {}
+        entry_at = meta_hash.delete('entry_at')
+
+        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+
+        tracker = PositionTracker.create!(
           order_no: order_no,
           instrument: instrument,
           watchable: instrument,
-          symbol: pick[:symbol],
           security_id: pick[:security_id],
           segment: pick[:segment] || index_cfg[:segment],
           side: side,
           quantity: quantity,
           entry_price: ltp,
           avg_price: ltp,
+          symbol: pick[:symbol],
           status: :active,
           paper: false,
-          meta: meta_hash
+          **tracker_attrs,
+          meta: legacy_meta
         )
+
+        tracker.create_position_meta_snapshot!(
+          config_version_hash: version['hash'].to_s,
+          config_change_log_id: version['change_log_id'],
+          config_snapshot: snapshot,
+          entry_at: entry_at
+        )
+
+        tracker
       end
 
       def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata:, bos_context:)
         meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
         apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        PositionTracker.create!(
+        snapshot = meta_hash.delete('config_snapshot')
+        version = meta_hash.delete('config_version') || {}
+        entry_at = meta_hash.delete('entry_at')
+
+        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+
+        tracker = PositionTracker.create!(
           order_no: order_no,
           instrument: instrument,
           watchable: instrument,
-          symbol: pick[:symbol],
           security_id: pick[:security_id],
           segment: pick[:segment] || index_cfg[:segment],
           side: side,
           quantity: quantity,
           entry_price: ltp,
           avg_price: ltp,
+          symbol: pick[:symbol],
           status: :active,
           paper: true,
-          meta: meta_hash
+          **tracker_attrs,
+          meta: legacy_meta
         )
+        tracker.create_position_meta_snapshot!(
+          config_version_hash: version['hash'].to_s,
+          config_change_log_id: version['change_log_id'],
+          config_snapshot: snapshot
+        )
+
+        tracker
       end
 
       def build_client_order_id(index_cfg:, pick:)
@@ -162,6 +193,48 @@ module Entries
         str.gsub(/[^0-9]/, '').to_i
       end
 
+      def validate_entry_price!(tracker, context)
+        return unless tracker.respond_to?(:watchable)
+
+        instrument = tracker.watchable
+        return unless instrument.respond_to?(:intraday_ohlc)
+
+        ohlc = instrument.intraday_ohlc(interval: '1', days: 1)
+        return if ohlc.blank?
+
+        series = CandleSeries.new(symbol: instrument.symbol_name, interval: '1')
+        series.load_from_raw(ohlc)
+        current_minute = Time.current.beginning_of_minute
+        candle = series.candles.find { |c| c.timestamp == current_minute }
+        return unless candle
+
+        price = tracker.entry_price.to_f
+        return if price.between?(candle.low, candle.high)
+
+        deviation = if price > candle.high
+                      ((price - candle.high) / candle.high * 100).round(2)
+                    else
+                      ((price - candle.low) / candle.low * 100).round(2)
+                    end
+        tag = deviation.positive? ? 'above' : 'below'
+        Observability::StructuredLog.warn(
+          event: 'entry_price_outside_candle',
+          payload: {
+            tracker_id: tracker.id,
+            symbol: tracker.symbol,
+            side: tracker.side,
+            paper: tracker.paper,
+            entry_price: price,
+            candle_low: candle.low,
+            candle_high: candle.high,
+            deviation_pct: deviation,
+            deviation_tag: tag
+          }
+        )
+      rescue StandardError => e
+        Rails.logger.warn("[EntryGuard] validate_entry_price! failed: #{e.class} - #{e.message}")
+      end
+
       private
 
       def banknifty_monthly_expiry(instrument, today)
@@ -170,15 +243,19 @@ module Entries
           parsed = expiry_list.filter_map do |raw|
             case raw
             when Date then raw
-            when String then Date.parse(raw) rescue nil
+            when String
+              begin
+                Date.parse(raw)
+              rescue ArgumentError, TypeError
+                nil
+              end
             when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
             end
           end.sort
 
-          monthly_expiries = parsed
-            .group_by { |d| [d.year, d.month] }
-            .map { |_, dates| dates.max }
-            .sort
+          monthly_expiries = parsed.group_by { |d| [d.year, d.month] }
+                                   .map { |_, dates| dates.max }
+                                   .sort
 
           nearest = monthly_expiries.find { |d| d >= today }
           return nearest if nearest
@@ -206,6 +283,7 @@ module Entries
           config_snapshot: snapshot_fields[:config_snapshot],
           dte_at_entry: snapshot_fields[:dte_at_entry],
           vix_at_entry: snapshot_fields[:vix_at_entry],
+          iv_at_entry: pick[:iv] || pick['iv'] || pick[:implied_volatility] || pick['implied_volatility'],
           spread_guard_pct: snapshot_fields[:spread_guard_pct],
           atm_strike: snapshot_fields[:atm_strike],
           expiry_date: snapshot_fields[:expiry_date],
@@ -217,6 +295,22 @@ module Entries
         # Simplification: logic moved partially to service, but meta building kept here for now
         # Call the existing implementation or refactor it into a dedicated MetaBuilder
         Entries::MetaBuilder.call(meta_hash, bos_context, entry_metadata, entry_price: entry_price, quantity: quantity)
+      end
+
+      def split_meta_hash(meta_hash)
+        promoted = {}
+        legacy = {}
+
+        meta_hash.each do |key, val|
+          str_key = key.to_s
+          if PositionTracker::PROMOTED_META_KEYS.include?(str_key)
+            promoted[str_key] = val
+          else
+            legacy[key] = val
+          end
+        end
+
+        [promoted, legacy]
       end
     end
   end

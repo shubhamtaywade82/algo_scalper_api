@@ -73,6 +73,7 @@ RSpec.describe AlgoConfig do
         else
           ENV['PAPER_STRICT_DIRECTION_GATE'] = prior_strict
         end
+        Setting.where(key: AlgoConfig::DocumentStore::DOCUMENT_KEY).delete_all
         described_class.reset!
       end
 
@@ -82,6 +83,13 @@ RSpec.describe AlgoConfig do
       end
 
       it 'keeps direction gate enabled when PAPER_STRICT_DIRECTION_GATE is true' do
+        Setting.put(
+          AlgoConfig::DocumentStore::DOCUMENT_KEY,
+          {
+            paper_trading: { enabled: true },
+            signals: { signal_tier: 'standard', enable_direction_gate: true }
+          }.to_json
+        )
         ENV['PAPER_STRICT_DIRECTION_GATE'] = 'true'
         described_class.reset!
         expect(described_class.fetch.dig(:signals, :enable_direction_gate)).to be(true)
@@ -142,6 +150,74 @@ RSpec.describe AlgoConfig do
         cfg = described_class.fetch
         expect(cfg.dig(:entry_quality, :min_score)).to eq(38)
       end
+
+      it 'lets DB overrides take precedence over tier preset defaults' do
+        # User manually disabled block_choppy_regime while in selective tier
+        Setting.put(
+          doc_key,
+          {
+            signals: { signal_tier: 'selective' },
+            entry_quality: { gates: { block_choppy_regime: false } }
+          }.to_json
+        )
+        described_class.reset!
+        cfg = described_class.fetch
+        expect(cfg.dig(:entry_quality, :gates, :block_choppy_regime)).to be(false)
+        # Preset default for selective is true, but DB override wins
+      end
+    end
+  end
+
+  describe '.permitted_settings_keys' do
+    it 'excludes credential sections from YAML seed keys' do
+      keys = described_class.permitted_settings_keys
+      expect(keys).not_to include(:dhanhq, :telegram, :ai)
+      expect(keys).to include(:risk, :signals, :options_buying)
+    end
+  end
+
+  describe 'tier presets from DB' do
+    let(:tier_key) { AlgoConfig::TIER_PRESETS_SETTING_KEY }
+    let(:doc_key) { AlgoConfig::DocumentStore::DOCUMENT_KEY }
+
+    after do
+      Setting.where(key: tier_key).delete_all
+      Setting.where(key: doc_key).delete_all
+      described_class.reset!
+    end
+
+    it 'loads tier presets from settings instead of YAML file' do
+      Setting.put(
+        tier_key,
+        {
+          selective: {
+            signals: { validation_mode: 'conservative_from_db' }
+          }
+        }.to_json
+      )
+      Setting.put(doc_key, { signals: { signal_tier: 'selective' }, paper_trading: { enabled: true } }.to_json)
+      described_class.reset!
+
+      expect(described_class.fetch.dig(:signals, :validation_mode)).to eq('conservative_from_db')
+    end
+  end
+
+  describe 'bootstrap document coverage' do
+    let(:doc_key) { AlgoConfig::DocumentStore::DOCUMENT_KEY }
+
+    after do
+      Setting.where(key: doc_key).delete_all
+      AlgoConfigChangeLog.delete_all
+      described_class.reset!
+    end
+
+    it 'includes all top-level keys from config/algo.yml after bootstrap' do
+      yaml_keys = YAML.load_file(Rails.root.join('config/algo.yml')).keys.map(&:to_sym)
+      AlgoConfig::DocumentStore.force_bootstrap!
+      described_class.reset!
+
+      doc_keys = JSON.parse(Setting.find_by!(key: doc_key).value).keys.map(&:to_sym)
+      expect(doc_keys).to match_array(yaml_keys)
     end
   end
 

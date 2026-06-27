@@ -14,11 +14,9 @@ RSpec.describe Positions::Serializer do
         quantity: 10,
         last_pnl_rupees: 20.0,
         exited_at: Time.zone.parse('2026-06-18 10:00:00 +05:30'),
-        meta: {
-          'exit_reason' => 'PROFIT_FLOOR_TICK (hwm: ₹350)',
-          'exit_path' => 'profit_floor_tick',
-          'execution' => { 'classified_as' => 'profit' }
-        }
+        execution: { 'classified_as' => 'profit' },
+        exit_reason: 'PROFIT_FLOOR_TICK (hwm: ₹350)',
+        exit_path: 'profit_floor_tick'
       )
     end
 

@@ -33,6 +33,7 @@ RSpec.describe Live::RiskManagerService do
         allow(service).to receive(:ensure_all_positions_subscribed)
         allow(service).to receive(:process_trailing_for_all_positions)
         allow(service).to receive(:enforce_session_end_exit)
+        allow(service).to receive(:skip_enforcement_due_to_market_closed?).and_return(true)
       end
 
       it 'continues monitoring for exits' do
@@ -50,6 +51,7 @@ RSpec.describe Live::RiskManagerService do
         allow(service).to receive(:ensure_all_positions_subscribed)
         allow(service).to receive(:process_trailing_for_all_positions)
         allow(service).to receive(:enforce_session_end_exit)
+        allow(service).to receive(:skip_enforcement_due_to_market_closed?).and_return(true)
       end
 
       it 'performs normal monitoring' do

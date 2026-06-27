@@ -8,12 +8,12 @@ module Live
       # Start watchdog thread to ensure service thread is restarted if it dies
       def start_watchdog
         @watchdog_thread = Thread.new do
-          Thread.current.name = 'risk-manager-watchdog'
+          Thread.current.name = "risk-manager-watchdog"
           loop do
             break unless @running # Exit if service is stopped
 
             unless @thread&.alive?
-              Rails.logger.warn('[RiskManagerService] Watchdog detected dead thread — restarting...')
+              Rails.logger.warn("[RiskManagerService] Watchdog detected dead thread — restarting...")
               # Reset running flag if thread is dead or nil
               @running = false
               start
@@ -44,7 +44,7 @@ module Live
             if active_count.zero?
               # Market closed and no active positions - no need to monitor
               # Mark as checked and return early - won't check again until market opens
-              Rails.logger.debug('[RiskManager] Market closed with no positions - skipping monitoring until market opens')
+              Rails.logger.debug("[RiskManager] Market closed with no positions - skipping monitoring until market opens")
               return
             end
             # Market closed but positions exist - continue monitoring (needed for exits)
@@ -73,6 +73,35 @@ module Live
         run_interval_enforcement_if_needed(exit_engine)
       end
 
+      # Zombie trade watchdog: flatten all positions if the WebSocket feed has been
+      # stale for more than 15 seconds.  Without ticks we cannot monitor or protect
+      # positions, so force-close everything and let the next session start clean.
+      # Only fires during the trading window (9:20–15:30 IST) — outside those hours
+      # a stale feed is expected.
+      def flatten_if_feed_dead!(exit_engine)
+        seconds_stale = MarketFeedHub.instance.seconds_since_last_tick
+        return unless seconds_stale
+        return unless seconds_stale > 15
+
+        active = Positions::ActivePositionsCache.instance.active_trackers
+        return if active.empty?
+
+        Rails.logger.warn(
+          "[RiskManager] ZOMBIE WATCHDOG — feed stale for #{seconds_stale.round(1)}s, " \
+          "force-closing #{active.size} position(s)"
+        )
+
+        active.each do |tracker|
+          next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+
+          reason = "ZOMBIE_WATCHDOG (feed stale #{seconds_stale.round(1)}s)"
+          track_exit_path(tracker, "zombie_watchdog", reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] flatten_if_feed_dead! error: #{e.class} - #{e.message}")
+      end
+
       # Interval fallback enforcement when realtime tick-first path is stale/unavailable.
       # EOD force-close runs every loop when at/past market close so it is never skipped by tick-first.
       # When outside trading window (pre 9:20 or post 15:30): run EOD only in 15:30–16:00; skip all enforcement otherwise.
@@ -84,25 +113,27 @@ module Live
         end
 
         risk = risk_config
-        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || "15:20")
         if market_close_time && Time.current >= market_close_time
           enforce_eod_force_close(exit_engine: exit_engine)
           return
         end
 
+        flatten_if_feed_dead!(exit_engine)
+
         return run_enforcement_cycle(exit_engine) unless realtime_tick_first_enabled?
 
         if tick_stream_fresh?
-          Rails.logger.debug('[RiskManager] Tick-first mode active; skipping interval exit scan') if should_log_realtime_skip?
+          Rails.logger.debug("[RiskManager] Tick-first mode active; skipping interval exit scan") if should_log_realtime_skip?
           return
         end
 
         unless realtime_fallback_enabled?
-          Rails.logger.warn('[RiskManager] Tick stream stale and fallback disabled; skipping interval exit scan')
+          Rails.logger.warn("[RiskManager] Tick stream stale and fallback disabled; skipping interval exit scan")
           return
         end
 
-        Rails.logger.warn('[RiskManager] Tick stream stale; running interval fallback exit scan')
+        Rails.logger.warn("[RiskManager] Tick stream stale; running interval fallback exit scan")
         run_enforcement_cycle(exit_engine)
       end
 
@@ -114,7 +145,7 @@ module Live
         enforce_eod_force_close(exit_engine: exit_engine)
 
         risk = risk_config
-        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || "15:30")
         return if market_close_time && Time.current >= market_close_time
 
         Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
@@ -123,48 +154,20 @@ module Live
       end
 
       def run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
-        before_meta = nil
-        pending_meta = nil
         return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
-        before_meta = hydrate_meta_with_runtime(tracker)
-        pending_meta = before_meta.deep_dup
-
-        advance_trade_state_for(tracker, position_data: position_data, pending_meta: pending_meta)
-
-        # Layers will now update pending_meta instead of the DB directly
-        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
+        enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
         return if exit_requested_or_sent?(tracker)
 
-        enforce_dynamic_trailing_stops_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
+        exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
+        return unless exit_decision&.dig(:exit)
 
-        enforce_profit_floor_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_structure_invalidation_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_premium_momentum_failure_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_rr_profit_booking_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_percentage_pnl_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_time_stop_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-        return if exit_requested_or_sent?(tracker)
-
-        enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data, pending_meta: pending_meta)
-      ensure
-        if pending_meta && !exit_requested_or_sent?(tracker) && !tracker.exited?
-          Positions::MetaPatch.apply!(tracker: tracker, before: before_meta, after: pending_meta)
-        end
+        path = exit_decision[:path] || exit_decision[:reason]
+        track_exit_path(tracker, path, exit_decision[:reason])
+        dispatch_exit(exit_engine, tracker, exit_decision[:reason])
       end
 
       def tick_stream_fresh?
@@ -182,17 +185,6 @@ module Live
         true
       end
 
-      def hydrate_meta_with_runtime(tracker)
-        base = (tracker.meta || {}).deep_stringify_keys
-        runtime = Live::PositionRuntimeCache.instance.fetch(tracker.id)
-        return base if runtime.empty?
-
-        runtime.each do |key, value|
-          base[key.to_s] = value unless value.nil?
-        end
-        base
-      end
-
       def exit_requested_or_sent?(tracker)
         # Check object state first. If it's already set, definitely true.
         tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
@@ -203,9 +195,9 @@ module Live
         return false unless restrictions&.[](:enabled) && restrictions[:block_exits]
         return false if restrictions[:avoid_periods].blank?
 
-        current_hm = Time.zone.now.strftime('%H:%M')
+        current_hm = Time.zone.now.strftime("%H:%M")
         restrictions[:avoid_periods].any? do |period|
-          start_time, end_time = period.split('-')
+          start_time, end_time = period.split("-")
           current_hm >= start_time && current_hm < end_time
         end
       rescue StandardError => e

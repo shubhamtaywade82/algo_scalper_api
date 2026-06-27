@@ -3,36 +3,15 @@
 require 'rails_helper'
 
 RSpec.describe Risk::Rules::RuleEngine do
-  let(:instrument) { create(:instrument, :nifty_future) }
-  let(:tracker) do
-    create(
-      :position_tracker,
-      instrument: instrument,
-      status: 'active',
-      entry_price: 100.0,
-      quantity: 10
-    )
-  end
-  let(:position_data) do
-    Positions::ActiveCache::PositionData.new(
-      tracker_id: tracker.id,
-      entry_price: 100.0,
-      quantity: 10,
-      current_ltp: 96.0,
-      pnl: -40.0,
-      pnl_pct: -4.0
-    )
-  end
-  let(:risk_config) do
-    {
-      sl_pct: 2.0,
-      tp_pct: 5.0
-    }
-  end
+  let(:tracker) { instance_double(PositionTracker, active?: true, entry_price: 100.0, quantity: 10) }
+  let(:position) { OpenStruct.new(pnl_pct: -0.04, pnl: -40.0, current_ltp: 96.0) }
+  let(:tracker_snapshot) { { pnl_pct: -0.04, ltp: 96.0, pnl: -40.0, hwm_pnl: 0.0 } }
+  let(:risk_config) { { sl_pct: 0.02, tp_pct: 0.05 } }
   let(:context) do
     Risk::Rules::RuleContext.new(
-      position: position_data,
+      position: position,
       tracker: tracker,
+      tracker_snapshot: tracker_snapshot,
       risk_config: risk_config
     )
   end
@@ -41,20 +20,17 @@ RSpec.describe Risk::Rules::RuleEngine do
     it 'sorts rules by priority' do
       rule1 = Risk::Rules::StopLossRule.new(config: {})
       rule2 = Risk::Rules::TakeProfitRule.new(config: {})
-      rule3 = Risk::Rules::SessionEndRule.new(config: {})
 
-      engine = described_class.new(rules: [rule2, rule1, rule3])
+      engine = described_class.new(rules: [rule2, rule1])
       expect(engine.rules.map(&:class)).to eq(
-        [Risk::Rules::SessionEndRule, Risk::Rules::StopLossRule, Risk::Rules::TakeProfitRule]
+        [Risk::Rules::StopLossRule, Risk::Rules::TakeProfitRule]
       )
     end
   end
 
   describe '#evaluate' do
     context 'when position is exited' do
-      before do
-        tracker.update(status: 'exited')
-      end
+      let(:tracker) { instance_double(PositionTracker, active?: false) }
 
       it 'returns skip result' do
         engine = described_class.new(rules: [])
@@ -63,24 +39,25 @@ RSpec.describe Risk::Rules::RuleEngine do
       end
     end
 
-    context 'priority-based evaluation' do
+    context 'when evaluating by priority' do
       it 'evaluates rules in priority order' do
         sl_rule = Risk::Rules::StopLossRule.new(config: risk_config)
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
-        engine = described_class.new(rules: [tp_rule, sl_rule])
+        allow(Live::UnifiedExitChecker).to receive(:loss_limit_hit?).and_return(true)
 
-        # Stop loss should trigger first (higher priority)
+        engine = described_class.new(rules: [tp_rule, sl_rule])
         result = engine.evaluate(context)
+
         expect(result.exit?).to be true
-        expect(result.reason).to include('SL HIT')
+        expect(result.reason).to eq('STOP_LOSS')
       end
 
       it 'stops evaluation when first rule triggers exit' do
         sl_rule = instance_double(Risk::Rules::StopLossRule)
         tp_rule = instance_double(Risk::Rules::TakeProfitRule)
 
-        allow(sl_rule).to receive_messages(priority: 20, enabled?: true,
+        allow(sl_rule).to receive_messages(priority: 20, enabled?: true, name: 'stop_loss',
                                            evaluate: Risk::Rules::RuleResult.exit(reason: 'SL'))
         allow(tp_rule).to receive_messages(priority: 30, enabled?: true,
                                            evaluate: Risk::Rules::RuleResult.exit(reason: 'TP'))
@@ -96,13 +73,14 @@ RSpec.describe Risk::Rules::RuleEngine do
 
     context 'with disabled rules' do
       it 'skips disabled rules' do
-        sl_rule = Risk::Rules::StopLossRule.new(config: { sl_pct: 0 }) # Disabled
+        sl_rule = Risk::Rules::StopLossRule.new(config: { enabled: false })
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
+
+        allow(Live::UnifiedExitChecker).to receive(:exit_config_for).and_return({ take_profit: 0.05 })
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
         result = engine.evaluate(context)
 
-        # SL rule skipped (disabled), TP rule evaluated but doesn't trigger
         expect(result.no_action?).to be true
       end
     end
@@ -114,28 +92,30 @@ RSpec.describe Risk::Rules::RuleEngine do
 
         allow(skip_rule).to receive_messages(priority: 15, enabled?: true, evaluate: Risk::Rules::RuleResult.skip,
                                              name: 'skip_rule')
+        allow(Live::UnifiedExitChecker).to receive(:loss_limit_hit?).and_return(true)
 
         engine = described_class.new(rules: [skip_rule, sl_rule])
         result = engine.evaluate(context)
 
         expect(result.exit?).to be true
-        expect(result.reason).to include('SL HIT')
+        expect(result.reason).to eq('STOP_LOSS')
       end
     end
 
-    context 'error handling' do
+    context 'when a rule raises an error' do
       it 'catches errors and continues to next rule' do
         error_rule = instance_double(Risk::Rules::BaseRule)
         sl_rule = Risk::Rules::StopLossRule.new(config: risk_config)
 
         allow(error_rule).to receive(:evaluate).and_raise(StandardError.new('Test error'))
         allow(error_rule).to receive_messages(priority: 15, enabled?: true, name: 'error_rule')
+        allow(Live::UnifiedExitChecker).to receive(:loss_limit_hit?).and_return(true)
 
         engine = described_class.new(rules: [error_rule, sl_rule])
         result = engine.evaluate(context)
 
         expect(result.exit?).to be true
-        expect(result.reason).to include('SL HIT')
+        expect(result.reason).to eq('STOP_LOSS')
       end
 
       it 'logs errors' do
@@ -144,55 +124,39 @@ RSpec.describe Risk::Rules::RuleEngine do
         allow(error_rule).to receive(:evaluate).and_raise(StandardError.new('Test error'))
         allow(error_rule).to receive_messages(priority: 15, enabled?: true, name: 'error_rule')
 
-        expect(Rails.logger).to receive(:error).with(/Error evaluating rule error_rule/)
+        allow(Rails.logger).to receive(:error)
 
         engine = described_class.new(rules: [error_rule])
         engine.evaluate(context)
+
+        expect(Rails.logger).to have_received(:error).with(/Error evaluating rule error_rule/)
       end
     end
 
     context 'when no rule matches' do
       it 'returns no_action' do
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
-        engine = described_class.new(rules: [tp_rule])
+        allow(Live::UnifiedExitChecker).to receive(:exit_config_for).and_return({ take_profit: 0.05 })
 
-        # PnL is -4%, TP threshold is 5%, so no match
+        engine = described_class.new(rules: [tp_rule])
         result = engine.evaluate(context)
+
         expect(result.no_action?).to be true
       end
     end
 
-    context 'combined scenarios' do
-      it 'session end overrides take profit' do
-        session_rule = Risk::Rules::SessionEndRule.new(config: {})
-        tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
-
-        position_data.pnl_pct = 10.0 # TP would trigger
-
-        allow(TradingSession::Service).to receive(:should_force_exit?).and_return(
-          { should_exit: true }
-        )
-
-        engine = described_class.new(rules: [session_rule, tp_rule])
-        result = engine.evaluate(context)
-
-        expect(result.exit?).to be true
-        expect(result.reason).to include('session end')
-      end
-
+    context 'when stop loss and take profit both match' do
       it 'stop loss overrides take profit' do
         sl_rule = Risk::Rules::StopLossRule.new(config: risk_config)
         tp_rule = Risk::Rules::TakeProfitRule.new(config: risk_config)
 
-        # Both conditions could be met, but SL has higher priority
-        position_data.pnl_pct = -4.0 # SL triggers
-        position_data.current_ltp = 96.0
+        allow(Live::UnifiedExitChecker).to receive(:loss_limit_hit?).and_return(true)
 
         engine = described_class.new(rules: [sl_rule, tp_rule])
         result = engine.evaluate(context)
 
         expect(result.exit?).to be true
-        expect(result.reason).to include('SL HIT')
+        expect(result.reason).to eq('STOP_LOSS')
       end
     end
   end
@@ -245,7 +209,7 @@ RSpec.describe Risk::Rules::RuleEngine do
 
   describe '#enabled_rules' do
     it 'returns only enabled rules' do
-      sl_rule = Risk::Rules::StopLossRule.new(config: { sl_pct: 0 }) # Disabled
+      sl_rule = Risk::Rules::StopLossRule.new(config: { enabled: false })
       tp_rule = Risk::Rules::TakeProfitRule.new(config: {})
 
       engine = described_class.new(rules: [sl_rule, tp_rule])

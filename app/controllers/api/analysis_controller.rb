@@ -103,8 +103,6 @@ module Api
       ltp    = Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)
       stored = AnalysisStore.read_all(index_key)
 
-      latest_run = CalibrationRun.where(symbol: index_key).order(created_at: :desc).first
-
       client = Services::Ai::OllamaClient.instance
       unless client.enabled?
         return render json: { error: 'AI service not configured' }, status: :service_unavailable
@@ -123,7 +121,7 @@ module Api
         ltp: ltp&.to_f,
         smc: stored[:smc]&.dig(:data),
         regime: stored[:regime]&.dig(:data),
-        calibration_stats: latest_run&.raw_stats
+        calibration_stats: nil
       )
 
       ai_response = client.chat(messages: messages, temperature: 0.3)

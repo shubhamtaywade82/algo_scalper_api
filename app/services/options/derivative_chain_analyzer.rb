@@ -289,6 +289,8 @@ module Options
               oi_change: 0,
               bid: nil,
               ask: nil,
+              bid_qty: 0,
+              ask_qty: 0,
               volume: 0,
               prev_close: nil
             )
@@ -471,6 +473,8 @@ module Options
       min_iv = (@config[:min_iv] || 5.0).to_f
       max_iv = (@config[:max_iv] || 60.0).to_f
       max_spread_pct = (@config[:max_spread_pct] || 0.03).to_f
+      min_volume = (@config[:min_volume] || 0).to_i
+      top_by_oi_limit = (@config[:top_by_oi_limit] || 0).to_i
 
       # Only enforce OI/IV/spread gates when this leg has chain enrichment — batch LTP
       # paths often have price only while a sibling strike carries OI from the API.
@@ -507,6 +511,7 @@ module Options
 
         if option_has_api_data
           next if option[:oi].to_i.positive? && option[:oi].to_i < min_oi
+          next if min_volume.positive? && option[:volume].to_i < min_volume
 
           iv = option[:iv].to_f
           next if iv.positive? && (iv < min_iv || iv > max_iv)
@@ -545,6 +550,16 @@ module Options
       end
 
       Rails.logger.debug { "[Options::DerivativeChainAnalyzer] Scoring: #{candidates_with_ltp} with LTP, #{candidates_filtered} filtered, #{result.size} scored for #{@index_key}" }
+
+      unless has_api_data
+        Rails.logger.warn("[Options::DerivativeChainAnalyzer] No API data available - skipping OI ranking for #{@index_key}")
+        return result
+      end
+      if top_by_oi_limit.positive? && result.size > top_by_oi_limit
+        ranked = result.sort_by { |r| -(r[:oi] || 0) }
+        result = ranked.first(top_by_oi_limit)
+      end
+
       result
     end
     # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity

@@ -41,7 +41,7 @@ RSpec.describe Positions::ExitFlow do
     end
 
     context 'when exit_reason is missing everywhere' do
-      it 'persists EXIT_REASON_UNSPECIFIED on meta and column' do
+      it 'persists EXIT_REASON_UNSPECIFIED on exit_reason and exit_triggered_at' do
         tracker = create(:position_tracker, :option_position, **base_tracker_attrs, meta: {})
         cache = instance_double(
           Live::RedisPnlCache,
@@ -57,18 +57,18 @@ RSpec.describe Positions::ExitFlow do
         described_class.call(tracker: tracker, exit_price: BigDecimal('100'))
 
         tracker.reload
-        expect(tracker.meta['exit_reason']).to eq(Positions::ExitFlow::FALLBACK_EXIT_REASON)
         expect(tracker.exit_reason).to eq(Positions::ExitFlow::FALLBACK_EXIT_REASON)
+        expect(tracker.exit_triggered_at).to be_present
       end
     end
 
     context 'when exit completes' do
-      it 'stamps exit analytics on meta' do
+      it 'stamps exit analytics on decision' do
         tracker = create(
           :position_tracker,
           :option_position,
           **base_tracker_attrs,
-          meta: { 'expiry_date' => Date.current.to_s, 'exit_path' => 'manual' }
+          meta: {}
         )
         cache = instance_double(
           Live::RedisPnlCache,
@@ -89,9 +89,9 @@ RSpec.describe Positions::ExitFlow do
         described_class.call(tracker: tracker, exit_price: BigDecimal('100'))
 
         tracker.reload
-        expect(tracker.meta['vix_at_exit']).to eq(13.2)
-        expect(tracker.meta['dte_at_exit']).to eq(0)
-        expect(tracker.meta['tier_at_exit']).to eq('standard')
+        expect(tracker.decision['vix_at_exit']).to eq(13.2)
+        expect(tracker.decision['dte_at_exit']).to eq(0)
+        expect(tracker.decision['tier_at_exit']).to eq('standard')
       end
     end
 
@@ -117,7 +117,7 @@ RSpec.describe Positions::ExitFlow do
         described_class.call(tracker: tracker, exit_price: BigDecimal('100'))
 
         tracker.reload
-        expect(tracker.meta['exit_reason']).to eq(Positions::ExitFlow::FALLBACK_EXIT_REASON)
+        expect(tracker.exit_reason).to eq(Positions::ExitFlow::FALLBACK_EXIT_REASON)
       end
     end
     context 'when redis cache has stale peak pnl' do
