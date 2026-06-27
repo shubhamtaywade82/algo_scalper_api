@@ -84,12 +84,11 @@
 - [x] Min/max bounds: lot-aligned constraints, safety caps, affordability check
 
 ### 9. Implement MaxExposureChecker
-- [ ] Create `app/engines/risk/checkers/max_exposure_checker.rb`
-- [ ] Per index: `max_exposure_nifty: 500000`, `max_exposure_banknifty: 300000`
-- [ ] Exposure = sum of `quantity * price * lot_size` for open positions
-- [ ] Proposed exposure + current < limit
-- [ ] Consider: delta-adjusted exposure for options
-- [ ] Output: `passed`, `current_exposure`, `proposed_exposure`, `limit`
+- [x] Integrated inside `Entries::Guards::ExposureGuard` to check rupee-based limits
+- [x] Per index: configurable limits in `config/algo.yml` (e.g. NIFTY: 500,000, BANKNIFTY: 300,000)
+- [x] Exposure calculated as sum of `quantity * entry_price` for open positions
+- [x] Proposed exposure + current exposure < limit
+- [x] Pipeline re-ordered so SizingGuard runs before ExposureGuard, exposing proposed quantity
 
 ### 10. Add TimeFilterChecker
 - [ ] Create `app/engines/risk/checkers/time_filter_checker.rb`
