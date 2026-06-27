@@ -39,7 +39,7 @@ module Ai
           total = scope.count
 
           if total.zero?
-            { count: 0 }
+            { total_trades: 0 }
           else
             # Use DB-level aggregates — no need to load all records into memory
             total_pnl = scope.sum(:last_pnl_rupees).to_f
@@ -107,7 +107,7 @@ module Ai
 
       def detect_leakages
         stats = performance_stats # memoized — no extra query
-        return [] if stats[:count].zero?
+        return [] if stats[:total_trades].to_i.zero?
 
         leaks = []
         leaks << "Low win rate (#{stats[:win_rate]}%)" if stats[:win_rate] < 40
