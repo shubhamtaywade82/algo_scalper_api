@@ -42,14 +42,14 @@
 - [x] Persist score history events to `options_buying_signal_events` DB table
 
 ### 8. Add ScoreExplanation Generator
-- [ ] Create `app/engines/explainers/score_explainer.rb`
-- [ ] Generate human-readable explanation for AI Gateway
-- [ ] Top 3 positive factors, top 3 negative factors
-- [ ] Output: `explanation_text`, `key_factors`, `risk_warnings`
+- [x] Create `app/engines/explainers/score_explainer.rb`
+- [x] Generate human-readable explanation for AI Gateway
+- [x] Top 3 positive factors, top 3 negative factors
+- [x] Output: `explanation_text`, `key_factors`, `risk_warnings`
 
 ### 9. Create ScoreConfidence Modifier
-- [ ] Create `app/engines/calculators/score_confidence_modifier.rb`
-- [ ] Quality modifier based on tick lag and stale feeds
+- [x] Create `app/engines/calculators/score_confidence_modifier.rb`
+- [x] Quality modifier based on tick lag and stale feeds
 
 ### 10. Write Tests Verifying Exact Math
 - [x] Create `spec/services/options_buying/trade_scoring_engine_spec.rb`
@@ -61,16 +61,16 @@
 ---
 
 ## Acceptance Criteria
-- [ ] Engine scores trade in < 10ms
-- [ ] Weighted aggregation mathematically correct
-- [ ] Configurable weight profiles per strategy
-- [ ] Threshold validation with strategy-specific values
-- [ ] ScoreBreakdown provides full audit trail
-- [ ] Confidence modifier adjusts for data quality
-- [ ] Explanation generator produces readable output
-- [ ] Score history tracks for learning
-- [ ] All math tests pass with exact verification
-- [ ] Output feeds RiskValidationEngine (gate) and AI Gateway (context)
+- [x] Engine scores trade in < 10ms
+- [x] Weighted aggregation mathematically correct
+- [x] Configurable weight profiles per strategy
+- [x] Threshold validation with strategy-specific values
+- [x] ScoreBreakdown provides full audit trail
+- [x] Confidence modifier adjusts for data quality
+- [x] Explanation generator produces readable output
+- [x] Score history tracks for learning
+- [x] All math tests pass with exact verification
+- [x] Output feeds RiskValidationEngine (gate) and AI Gateway (context)
 
 ---
 

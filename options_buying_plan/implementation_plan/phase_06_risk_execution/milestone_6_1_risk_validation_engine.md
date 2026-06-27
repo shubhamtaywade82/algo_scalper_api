@@ -68,43 +68,43 @@
 - [x] Logged to database signals and console alerts via loggerne
 
 ### 15. Add EmergencyStop
-- [ ] Create `app/engines/risk/emergency_stop.rb`
-- [ ] Triggers:
+- [x] Create `app/engines/risk/emergency_stop.rb`
+- [x] Triggers:
   - Daily loss limit hit
   - Weekly loss limit hit
   - Monthly loss > 75% limit
   - System error (data feed down, broker disconnect)
   - Manual activation via API
-- [ ] Actions:
+- [x] Actions:
   - Cancel all pending orders
   - Close all positions at market (configurable)
   - Block all new trade validation
   - Alert via Telegram/Email
   - Require manual reset (admin API)
-- [ ] State persisted in Redis (survives restart)
+- [x] State persisted in Redis (survives restart)
 
 ### 16. Write Tests for Each Risk Rule
-- [ ] Create `spec/engines/risk_validation_engine_spec.rb`
-- [ ] Test each checker in isolation with boundary values
-- [ ] Test combinations: daily + weekly + monthly limits
-- [ ] Test position sizing with different methods
-- [ ] Test emergency stop triggers and blocks new trades
-- [ ] Test expiry day rules
-- [ ] Test correlation detection
-- [ ] Integration: full validation pipeline with mock account state
+- [x] Create `spec/engines/risk_validation_engine_spec.rb`
+- [x] Test each checker in isolation with boundary values
+- [x] Test combinations: daily + weekly + monthly limits
+- [x] Test position sizing with different methods
+- [x] Test emergency stop triggers and blocks new trades
+- [x] Test expiry day rules
+- [x] Test correlation detection
+- [x] Integration: full validation pipeline with mock account state
 
 ---
 
 ## Acceptance Criteria
-- [ ] Engine validates trade in < 15ms
-- [ ] All 12 checkers integrated and tested
-- [ ] Daily/weekly/monthly limits enforce correctly
-- [ ] Position sizing respects all constraints
-- [ ] Emergency stop activates and blocks trades
-- [ ] Risk events logged for audit trail
-- [ ] Margin checks use real broker data
-- [ ] Expiry rules prevent overnight risk
-- [ ] Correlation checker prevents concentration
+- [x] Engine validates trade in < 15ms
+- [x] All 12 checkers integrated and tested
+- [x] Daily/weekly/monthly limits enforce correctly
+- [x] Position sizing respects all constraints
+- [x] Emergency stop activates and blocks trades
+- [x] Risk events logged for audit trail
+- [x] Margin checks use real broker data
+- [x] Expiry rules prevent overnight risk
+- [x] Correlation checker prevents concentration
 
 ---
 
