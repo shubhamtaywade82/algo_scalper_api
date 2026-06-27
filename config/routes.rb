@@ -43,6 +43,7 @@ Rails.application.routes.draw do
     get  'analysis/:index_key/historical', to: 'analysis#historical',  as: :analysis_historical
     get  'analysis/:index_key/risk_explorer', to: 'analysis#risk_explorer', as: :analysis_risk_explorer
     post 'analysis/:index_key/ai_snapshot', to: 'analysis#ai_snapshot', as: :analysis_ai_snapshot
+    post 'analysis/:index_key/optimize',    to: 'analysis#optimize',    as: :analysis_optimize
 
     # Algo Settings
     get    'settings',              to: 'settings#index'

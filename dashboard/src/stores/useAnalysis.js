@@ -19,6 +19,9 @@ export function useAnalysis() {
   const [snapshotLoading, setSnapshotLoading] = createSignal(false)
   const [snapshotData, setSnapshotData]   = createSignal(null)
   const [snapshotError, setSnapshotError] = createSignal(null)
+  const [optimizationLoading, setOptimizationLoading] = createSignal(false)
+  const [optimizationData, setOptimizationData] = createSignal(null)
+  const [optimizationError, setOptimizationError] = createSignal(null)
   const [autoHistoricalLoadedForIndex, setAutoHistoricalLoadedForIndex] = createSignal({})
   const [autoSnapshotLoadedForIndex, setAutoSnapshotLoadedForIndex] = createSignal({})
 
@@ -138,6 +141,31 @@ export function useAnalysis() {
     }
   }
 
+  async function runOptimization(index, lookbackDays = 5, indicator = 'all') {
+    setActiveIndex(index)
+    setOptimizationLoading(true)
+    setOptimizationError(null)
+    setOptimizationData(null)
+    try {
+      const res = await fetch(`/api/analysis/${index}/optimize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lookback_days: lookback_days, indicator: indicator })
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        const msg = data.message || data.error || `HTTP ${res.status}`
+        throw new Error(msg)
+      }
+      const data = await res.json()
+      setOptimizationData(data.results)
+    } catch (e) {
+      setOptimizationError(e.message || 'Optimization failed')
+    } finally {
+      setOptimizationLoading(false)
+    }
+  }
+
   onMount(() => {
     fetchAll()
     pollTimer = setInterval(fetchAll, POLL_INTERVAL_MS)
@@ -163,6 +191,7 @@ export function useAnalysis() {
     fetchHistorical,
     fetchRiskExplorer,
     fetchAiSnapshot,
+    runOptimization,
     ensureAutoLoadedDetails,
     activeIndex,
     historicalData,
@@ -172,5 +201,8 @@ export function useAnalysis() {
     snapshotLoading,
     snapshotData,
     snapshotError,
+    optimizationLoading,
+    optimizationData,
+    optimizationError,
   }
 }

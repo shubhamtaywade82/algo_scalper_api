@@ -141,6 +141,50 @@ module Api
       render json: { error: 'AI service unavailable' }, status: :service_unavailable
     end
 
+    # POST /api/analysis/:index_key/optimize
+    # Runs indicator parameter sweeps or trailing stop calibrations
+    def optimize
+      index_key  = params[:index_key].to_s.upcase
+      instrument = find_instrument(index_key)
+      return render json: { error: 'Index not found' }, status: :not_found unless instrument
+
+      lookback_days = (params[:lookback_days] || 5).to_i
+      interval      = params[:interval] || '5'
+      indicator     = params[:indicator] || 'all'
+
+      results = {}
+      if %w[all trailing].include?(indicator)
+        # Run Trailing stop optimizer
+        optimizer = Optimization::TrailingOptimizer.new(index_key: index_key)
+        results[:trailing] = optimizer.optimize
+      end
+
+      if indicator == 'all' || %w[adx rsi macd supertrend].include?(indicator)
+        # Run specific technical indicator optimization
+        to_run = indicator == 'all' ? %i[adx rsi macd supertrend] : [indicator.to_sym]
+        results[:indicators] = {}
+        to_run.each do |ind|
+          optimizer = Optimization::SingleIndicatorOptimizer.new(
+            instrument: instrument,
+            interval: interval,
+            indicator: ind,
+            lookback_days: lookback_days,
+            dry_run: params[:dry_run] == 'true'
+          )
+          results[:indicators][ind] = optimizer.run
+        end
+      end
+
+      render json: {
+        index_key: index_key,
+        results: results,
+        optimized_at: Time.current.iso8601
+      }
+    rescue StandardError => e
+      Rails.logger.error("[AnalysisController] optimize error: #{e.class} - #{e.message}")
+      render json: { error: "Optimization failed: #{e.message}" }, status: :unprocessable_content
+    end
+
     private
 
     def find_instrument(index_key)
