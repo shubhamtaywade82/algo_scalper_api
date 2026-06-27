@@ -945,6 +945,16 @@ position_sizing:
     s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
 
 # ============================================
+# KELLY CRITERION POSITION SIZING
+# ============================================
+kelly_sizing:
+  enabled: false
+  safety_factor: 0.5 # Fractional Kelly (e.g. 0.5 = Half Kelly)
+  max_capital_allocation_pct: 0.20 # Cap at 20% of capital per trade
+  default_win_rate: 0.55
+  default_payout_ratio: 1.5
+
+# ============================================
 # PORTFOLIO-LEVEL PROFIT LOCK ENGINE
 # ============================================
 # Protects accumulated intraday gains using a monotonic profit floor.

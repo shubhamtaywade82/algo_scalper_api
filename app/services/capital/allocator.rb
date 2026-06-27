@@ -484,18 +484,31 @@ module Capital
         entry_bd = BigDecimal(entry_price.to_s)
         return 0 unless entry_bd.finite? && entry_bd.positive?
 
-        # p = confidence (0.0 to 1.0)
-        p = (index_cfg[:confidence] || 0.55).to_f
-        # r = Reward-to-Risk ratio
-        risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || (entry_bd * 0.98)).to_s)).abs
-        reward = (BigDecimal((index_cfg[:target] || (entry_bd * 1.04)).to_s) - entry_bd).abs
-        r = risk.positive? ? (reward / risk).to_f : 1.0
+        # Attempt to load dynamic historical stats
+        strategy_name = index_cfg[:entry_strategy] || index_cfg[:strategy]
+        index_key = index_cfg[:key] || @index_key
+        stats = OptionsBuying::PerformanceDb.stats_for(strategy_name, index_key)
+
+        if stats
+          p = stats[:win_rate].to_f
+          r = stats[:payout_ratio].to_f
+          Rails.logger.info("[Allocator] KELLY_BASED using database stats: p=#{p.round(4)}, r=#{r.round(4)} (n=#{stats[:sample_size]})")
+        else
+          # Fallback: p = confidence (0.0 to 1.0)
+          p = (index_cfg[:confidence] || sizing_cfg[:default_win_rate] || 0.55).to_f
+          # r = Reward-to-Risk ratio
+          risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || (entry_bd * 0.98)).to_s)).abs
+          reward = (BigDecimal((index_cfg[:target] || (entry_bd * 1.04)).to_s) - entry_bd).abs
+          r = risk.positive? ? (reward / risk).to_f : (sizing_cfg[:default_payout_ratio] || 1.5).to_f
+          Rails.logger.info("[Allocator] KELLY_BASED using fallback defaults: p=#{p.round(4)}, r=#{r.round(4)}")
+        end
 
         # Calculate Kelly fraction f*
-        kelly_f = p - ((1 - p) / r)
+        kelly_f = p - ((1.0 - p) / r)
         # Apply safety factor (Half-Kelly or Fractional Kelly)
-        safety_factor = sizing_cfg[:safety_factor] || 0.5
-        f_star = [kelly_f * safety_factor, 0.20].min # Cap at 20% of capital per trade
+        safety_factor = (sizing_cfg[:safety_factor] || 0.5).to_f
+        max_alloc = (sizing_cfg[:max_capital_allocation_pct] || 0.20).to_f
+        f_star = [kelly_f * safety_factor, max_alloc].min
 
         return 0 if f_star <= 0
 
@@ -525,9 +538,11 @@ module Capital
       end
 
       def kelly_based_sizing_enabled?(index_cfg)
-        return false unless index_cfg[:confidence] # Requires signal confidence
         cfg = AlgoConfig.fetch[:kelly_sizing]
-        cfg && cfg[:enabled] == true
+        return false unless cfg && cfg[:enabled] == true
+
+        index_cfg[:confidence].present? ||
+          OptionsBuying::PerformanceDb.stats_for(index_cfg[:entry_strategy] || index_cfg[:strategy], index_cfg[:key]).present?
       end
 
       def position_sizing_config
