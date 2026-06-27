@@ -75,14 +75,13 @@
 - [ ] Output: `max_quantity`, `risk_per_lot`, `risk_pct`, `capital_base`
 
 ### 8. Add PositionSizingCalculator
-- [ ] Create `app/engines/risk/calculators/position_sizing_calculator.rb`
-- [ ] Methods:
-  - Fixed fractional: `capital * risk_pct / risk_per_lot`
-  - Kelly criterion variant: `win_rate - (1-win_rate)/avg_rr` (capped at 2%)
-  - Volatility-adjusted: `base_size * (target_vol / current_vol)`
-- [ ] Config: `sizing_method` (:fixed_fractional, :kelly, :vol_adjusted)
-- [ ] Min/max bounds: `min_lots: 1`, `max_lots: 50`
-- [ ] Output: `recommended_lots`, `method_used`, `risk_amount`
+- [x] Integrated inside `Capital::Allocator` (queries `OptionsBuying::PerformanceDb` for historical win rate and payout ratios)
+- [x] Methods:
+  - Fixed fractional: standard capital allocation
+  - Kelly criterion variant: `p - (1-p)/r` (capped at max_capital_allocation_pct)
+  - Volatility/Decay-adjusted sizing
+- [x] Config: `kelly_sizing.enabled` in `config/algo.yml`
+- [x] Min/max bounds: lot-aligned constraints, safety caps, affordability check
 
 ### 9. Implement MaxExposureChecker
 - [ ] Create `app/engines/risk/checkers/max_exposure_checker.rb`
