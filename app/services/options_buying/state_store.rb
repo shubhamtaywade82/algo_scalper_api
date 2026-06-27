@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative '../lib/options_buying/redis_pool'
-
 module OptionsBuying
   class StateStore
     PREFIX = 'options_buying'

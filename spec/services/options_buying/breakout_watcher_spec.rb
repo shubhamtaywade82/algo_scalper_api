@@ -85,14 +85,14 @@ RSpec.describe OptionsBuying::BreakoutWatcher do
   end
 
   describe '#compression_check_due?' do
-    it 'allows the first check, throttles the next within the interval, per security_id' do
-      expect(watcher.send(:compression_check_due?, 'a')).to be(true)
-      expect(watcher.send(:compression_check_due?, 'a')).to be(false)
-      expect(watcher.send(:compression_check_due?, 'b')).to be(true)
+    it 'allows the first check, throttles the next within the interval, per index_key' do
+      expect(watcher.send(:compression_check_due_for_index, 'NIFTY')).to be(true)
+      expect(watcher.send(:compression_check_due_for_index, 'NIFTY')).to be(false)
+      expect(watcher.send(:compression_check_due_for_index, 'BANKNIFTY')).to be(true)
     end
 
-    it 'never schedules a check for a blank security_id' do
-      expect(watcher.send(:compression_check_due?, '')).to be(false)
+    it 'never schedules a check for a blank index_key' do
+      expect(watcher.send(:compression_check_due_for_index, '')).to be(false)
     end
   end
 

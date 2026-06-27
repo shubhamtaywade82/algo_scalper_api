@@ -49,6 +49,9 @@ gem 'thruster', require: false
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
 gem 'DhanHQ', '2.8.0'
 
+# MCP adapter for DhanHQ tool specs and validated routing
+gem 'dhanhq-mcp', path: '/home/nemesis/project/trading-workspace/dhanhq-mcp'
+
 # TOTP generation for Dhan TOTP auth strategy
 gem 'rotp', '~> 6.3'
 
@@ -110,4 +113,4 @@ end
 
 gem "json_schemer", "~> 2.4"
 
-gem "rswag", "~> 2.17", groups: [:development, :test]
+gem "rswag", "~> 2.17", groups: %i[development test]

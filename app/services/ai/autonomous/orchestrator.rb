@@ -2,8 +2,6 @@
 
 module Ai
   module Autonomous
-    # The "System Brain" that orchestrates the Observe-Think-Act loop.
-    # Uses LLM to diagnose performance leaks and select the optimal remediation tool.
     class Orchestrator
       def self.call(symbol:, days: 30, dry_run: false)
         new(symbol: symbol, days: days, dry_run: dry_run).call
@@ -18,7 +16,6 @@ module Ai
       def call
         Rails.logger.info("[Orchestrator] 🧠 Starting Autonomous Optimization for #{@symbol} (Dry Run: #{@dry_run})")
 
-        # 1. OBSERVE: Run Audit
         audit_report = Ai::Autonomous::Auditor.report(symbol: @symbol, days: @days)
 
         if audit_report[:performance][:total_trades].to_i < 5
@@ -26,19 +23,17 @@ module Ai
           return { status: :skipped, reason: 'insufficient_data' }
         end
 
-        # 2. THINK: Ask AI for strategy
         strategy = decide_strategy(audit_report)
 
         Rails.logger.info("[Orchestrator] 🎯 AI Selected Strategy: #{strategy['selected_solver']} - #{strategy['reasoning']}")
 
-        # 3. ACT: Execute Solver via TaskRunner
         solver_key = strategy['selected_solver']
-        
+
         result = TaskRunner.run(solver_key, @symbol, @days, dry_run: @dry_run)
-        
-        { 
-          status: :success, 
-          strategy: strategy, 
+
+        {
+          status: :success,
+          strategy: strategy,
           solver_result: result,
           audit: audit_report,
           dry_run: @dry_run
@@ -72,13 +67,11 @@ module Ai
         PROMPT
 
         response = Services::Ai::OllamaClient.new.generate(prompt: prompt)
-        
-        # Robust parsing: find the first { and last }
+
         json_match = response.match(/\{.*\}/m)
         if json_match
           JSON.parse(json_match[0])
         else
-          # Fallback to direct parse if no brackets found (unlikely but safe)
           JSON.parse(response.gsub(/```json|```/, '').strip)
         end
       rescue StandardError => e

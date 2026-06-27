@@ -340,6 +340,7 @@ indices:
 
 trade_limits:
   global_max_trades_per_day: 8
+  global_max_concurrent_positions: 6 # Portfolio-level cap across all indices
 
 # ============================================
 # BROKER FEES
@@ -355,6 +356,8 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
+  # LEGACY FALLBACKS — Effective SL/TP resolved by DTE via risk.dte_parameters.by_dte
+  # These are used by risk_explorer, meta_builder as fallback when DTE resolution unavailable
   sl_pct: 0.08 # -8% base premium SL — aligned with adaptive_trail entry_guard hard_stop
   tp_pct: 0.45 # +45% TAKE PROFIT — capture convexity outliers
   per_trade_risk_pct: 0.40

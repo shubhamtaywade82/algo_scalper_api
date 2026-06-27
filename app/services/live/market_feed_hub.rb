@@ -334,6 +334,23 @@ module Live
       @callbacks << block
     end
 
+    # Register a callback for specific instrument ticks (segment + security_id)
+    # Returns a subscription ID that can be used to unregister
+    def on_tick_for(segment:, security_id:, &block)
+      raise ArgumentError, "block required" unless block
+      raise ArgumentError, "segment and security_id required" if segment.blank? || security_id.blank?
+
+      key = "#{segment}:#{security_id}"
+      wrapper = lambda do |tick|
+        return unless tick[:security_id].to_s == security_id.to_s && tick[:segment].to_s == segment.to_s
+
+        block.call(tick)
+      end
+
+      @callbacks << wrapper
+      key
+    end
+
     def subscribe_instrument(segment:, security_id:)
       return unless option_segment?(segment)
       return if watchlist_instrument?(segment, security_id)

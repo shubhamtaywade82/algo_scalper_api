@@ -40,6 +40,7 @@ module Entries
         Guards::DailyLimitsGuard,
         Guards::IndexTradeLimitGuard,
         Guards::MaxConcurrentGuard,
+        Guards::GlobalMaxConcurrentGuard,
         Guards::InstrumentLookupGuard,
         Guards::LtpResolutionGuard,
         Guards::ExpiryWeekPowerTrendGuard,
