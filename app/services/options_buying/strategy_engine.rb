@@ -89,16 +89,20 @@ module OptionsBuying
       option_sid = signal[:option_security_id]
       spot_ltp = signal[:metrics][:spot_ltp]
 
-      # Gamma Wall Check
-      unless GammaWallDetector.new(@index_key).safe_to_enter?(spot_ltp, direction)
-        Rails.logger.info("[StrategyEngine] Blocked entry by Gamma Wall for #{@index_key} #{direction}")
-        return nil
-      end
+      # Run composite TradeScoringEngine
+      score_result = TradeScoringEngine.score!(
+        index_key: @index_key,
+        direction: direction,
+        option_security_id: option_sid,
+        strategy_name: strategy.name,
+        spot_ltp: spot_ltp
+      )
 
-      # NOTE: We won't block purely on SlippageChecker here if it's strict,
-      # because depth may not be available yet. If we want to be strict:
-      segment = StateStore.radar_strikes(@index_key).find { |s| s[:security_id] == option_sid }&.dig(:segment) || 'NFO'
-      unless SlippageChecker.safe_to_enter?(option_sid, segment)
+      unless score_result[:passed]
+        Rails.logger.info(
+          "[StrategyEngine] Blocked entry for #{@index_key} #{direction} " \
+          "due to low composite score: #{score_result[:score]}/#{score_result.dig(:breakdown, :threshold)}"
+        )
         return nil
       end
 
@@ -111,7 +115,7 @@ module OptionsBuying
 
       unless already_armed
         Rails.logger.info(
-          "[StrategyEngine] entry_ready #{direction} #{@index_key} strategy=#{strategy.name} sec=#{option_sid}"
+          "[StrategyEngine] entry_ready #{direction} #{@index_key} strategy=#{strategy.name} sec=#{option_sid} score=#{score_result[:score]}"
         )
       end
 
