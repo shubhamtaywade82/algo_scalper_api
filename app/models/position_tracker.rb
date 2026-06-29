@@ -29,6 +29,8 @@ class PositionTracker < ApplicationRecord
 
   BOOLEAN_PROMOTED_KEYS = %w[breakeven_locked be_set].freeze
 
+  scope :by_index_key, ->(key) { where("index_key = ? OR meta->>'index_key' = ?", key, key) }
+
   PROMOTED_META_KEYS.each do |key|
     define_method(key) do
       val = self[key]

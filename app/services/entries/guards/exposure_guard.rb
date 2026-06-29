@@ -149,7 +149,7 @@ module Entries
         end
 
         def active_supertrend_position?(index_key)
-          PositionTracker.active.where("(meta->>'index_key') = ?", index_key.to_s).exists?
+          PositionTracker.active.by_index_key(index_key.to_s).exists?
         end
 
         def max_exposure_limit_for(index_key)

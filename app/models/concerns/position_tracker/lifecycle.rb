@@ -109,7 +109,7 @@ class PositionTracker < ApplicationRecord
 
       Rails.cache.write("reentry:#{symbol}", Time.current, expires_in: 8.hours)
 
-      idx_key = meta&.dig('index_key')
+      idx_key = index_key || meta&.dig('index_key')
       return if idx_key.blank?
 
       Rails.cache.write("reentry:index:#{idx_key}", Time.current, expires_in: 8.hours)

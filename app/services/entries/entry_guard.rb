@@ -54,6 +54,14 @@ module Entries
         # Success - Tracker created
         signal&.record_entry_outcome('entered')
         validate_entry_price!(execution_result, context)
+
+        # Record trade in DailyLimits
+        begin
+          Live::DailyLimits.new.record_trade(index_key: index_cfg[:key])
+        rescue StandardError => e
+          Rails.logger.error("[EntryGuard] Failed to record trade in DailyLimits: #{e.class} - #{e.message}")
+        end
+
         true
       rescue StandardError => e
         signal&.record_entry_outcome('blocked', "exception: #{e.class}")

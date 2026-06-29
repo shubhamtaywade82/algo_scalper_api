@@ -128,7 +128,7 @@ module AlphaExecutionService
     def conflicting_position?(signal)
       # Check if an active position exists in the OPPOSITE direction for the same index
       opposite_direction = signal[:direction].to_s.downcase == "ce" ? "pe" : "ce"
-      PositionTracker.active.where("meta->>'index_key' = ? AND meta->>'direction' = ?", signal[:index_key].to_s, opposite_direction).exists?
+      PositionTracker.active.where("(index_key = ? OR meta->>'index_key' = ?) AND (direction = ? OR meta->>'direction' = ?)", signal[:index_key].to_s, signal[:index_key].to_s, opposite_direction, opposite_direction).exists?
     end
 
     def existing_tracker?(derivative)

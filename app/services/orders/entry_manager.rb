@@ -113,10 +113,6 @@ module Orders
         Rails.logger.warn("[Orders::EntryManager] Bracket placement failed for #{tracker.order_no}: #{bracket_result[:error]}")
       end
 
-      # NEW: Record trade in DailyLimits
-      daily_limits = Live::DailyLimits.new
-      daily_limits.record_trade(index_key: index_cfg[:key])
-
       # Emit entry_filled event
       emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price, risk_pct)
 

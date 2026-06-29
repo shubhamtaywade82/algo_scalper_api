@@ -24,9 +24,7 @@ module Api
       # Fast lookups (no cache needed — instant)
       ltp = Live::TickCache.ltp(instrument.exchange_segment, instrument.security_id)
       time_regime = safe_call('time_regime') { Live::TimeRegimeService.instance.current_regime }
-      active_positions = PositionTracker.active.where(
-        "meta->>'index_key' = ?", index_key
-      ).count
+      active_positions = PositionTracker.active.by_index_key(index_key).count
 
       market_closed = TradingSession::Service.market_closed?
       generative_ai_gated = Ai::GenerativeAiMarketGate.skip?(force: false)

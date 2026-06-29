@@ -33,7 +33,8 @@ RSpec.describe Orders::EntryManager do
       direction: nil,
       side: 'long_ce',
       paper?: false,
-      index_key: nil
+      index_key: nil,
+      premium_stop_price: nil
     )
   end
   let(:position_data) { instance_double(Positions::ActiveCache::PositionData) }
