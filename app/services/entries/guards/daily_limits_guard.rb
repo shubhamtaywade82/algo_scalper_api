@@ -36,7 +36,11 @@ module Entries
         end
 
         def daily_limits_enabled?
-          AlgoConfig.fetch.dig(:risk, :daily_limits, :enabled) == true
+          config = AlgoConfig.fetch
+          limits = config.dig(:position_sizing, :daily_limits) || config.dig(:risk, :daily_limits)
+          return false unless limits
+
+          limits[:enable] == true || limits[:enabled] == true
         rescue StandardError
           false
         end

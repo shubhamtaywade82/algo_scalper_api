@@ -74,75 +74,79 @@ module Entries
 
       # Used by OrderExecutionService
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata:, bos_context:)
-        meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
-        apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
+        PositionTracker.transaction do
+          meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
+          apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        snapshot = meta_hash.delete('config_snapshot')
-        version = meta_hash.delete('config_version') || {}
-        entry_at = meta_hash.delete('entry_at')
+          snapshot = meta_hash.delete(:config_snapshot)
+          version = meta_hash.delete(:config_version) || {}
+          entry_at = meta_hash.delete(:entry_at)
 
-        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+          tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
 
-        tracker = PositionTracker.create!(
-          order_no: order_no,
-          instrument: instrument,
-          watchable: instrument,
-          security_id: pick[:security_id],
-          segment: pick[:segment] || index_cfg[:segment],
-          side: side,
-          quantity: quantity,
-          entry_price: ltp,
-          avg_price: ltp,
-          symbol: pick[:symbol],
-          status: :active,
-          paper: false,
-          **tracker_attrs,
-          meta: legacy_meta
-        )
+          tracker = PositionTracker.create!(
+            order_no: order_no,
+            instrument: instrument,
+            watchable: instrument,
+            security_id: pick[:security_id],
+            segment: pick[:segment] || index_cfg[:segment],
+            side: side,
+            quantity: quantity,
+            entry_price: ltp,
+            avg_price: ltp,
+            symbol: pick[:symbol],
+            status: :active,
+            paper: false,
+            **tracker_attrs,
+            meta: legacy_meta
+          )
 
-        tracker.create_position_meta_snapshot!(
-          config_version_hash: version['hash'].to_s,
-          config_change_log_id: version['change_log_id'],
-          config_snapshot: snapshot,
-          entry_at: entry_at
-        )
+          tracker.create_position_meta_snapshot!(
+            config_version_hash: version['hash'].to_s,
+            config_change_log_id: version['change_log_id'],
+            config_snapshot: snapshot,
+            entry_at: entry_at
+          )
 
-        tracker
+          tracker
+        end
       end
 
       def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata:, bos_context:)
-        meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
-        apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
+        PositionTracker.transaction do
+          meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
+          apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        snapshot = meta_hash.delete('config_snapshot')
-        version = meta_hash.delete('config_version') || {}
-        entry_at = meta_hash.delete('entry_at')
+          snapshot = meta_hash.delete(:config_snapshot)
+          version = meta_hash.delete(:config_version) || {}
+          entry_at = meta_hash.delete(:entry_at)
 
-        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+          tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
 
-        tracker = PositionTracker.create!(
-          order_no: order_no,
-          instrument: instrument,
-          watchable: instrument,
-          security_id: pick[:security_id],
-          segment: pick[:segment] || index_cfg[:segment],
-          side: side,
-          quantity: quantity,
-          entry_price: ltp,
-          avg_price: ltp,
-          symbol: pick[:symbol],
-          status: :active,
-          paper: true,
-          **tracker_attrs,
-          meta: legacy_meta
-        )
-        tracker.create_position_meta_snapshot!(
-          config_version_hash: version['hash'].to_s,
-          config_change_log_id: version['change_log_id'],
-          config_snapshot: snapshot
-        )
+          tracker = PositionTracker.create!(
+            order_no: order_no,
+            instrument: instrument,
+            watchable: instrument,
+            security_id: pick[:security_id],
+            segment: pick[:segment] || index_cfg[:segment],
+            side: side,
+            quantity: quantity,
+            entry_price: ltp,
+            avg_price: ltp,
+            symbol: pick[:symbol],
+            status: :active,
+            paper: true,
+            **tracker_attrs,
+            meta: legacy_meta
+          )
+          tracker.create_position_meta_snapshot!(
+            config_version_hash: version['hash'].to_s,
+            config_change_log_id: version['change_log_id'],
+            config_snapshot: snapshot
+          )
 
-        tracker
+          tracker
+        end
       end
 
       def build_client_order_id(index_cfg:, pick:)

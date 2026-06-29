@@ -459,10 +459,13 @@ module Live
       MarketData::MarketCache.update_ltp(symbol, ltp, is_index: is_index)
 
       # Keep CandleSeriesCache forming candle up-to-date for index instruments.
-      # Only index spots (IDX_I segment) feed the 5-min cache used by indicators.
+      # Feed both 1-min and 5-min caches used by exit/trailing engines and indicators.
       if is_index
         instrument = Instrument.find_by(security_id: tick[:security_id].to_s)
-        Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 5) if instrument
+        if instrument
+          Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 5)
+          Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 1)
+        end
       end
 
       return unless tick[:oi].present? || tick[:volume].present?
