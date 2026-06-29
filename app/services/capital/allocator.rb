@@ -68,22 +68,15 @@ module Capital
 
       def available_cash
         wallet = Orders.config.gateway.wallet_snapshot
-        convert_to_bigdecimal(wallet.fetch(:cash, 0))
+        cash = convert_to_bigdecimal(wallet.fetch(:cash, 0))
+        cash *= 0.99 if cash > 100_000
+        cash
       rescue StandardError => e
         log_balance_fetch_error(e)
         BigDecimal(0)
       end
 
       private
-
-      # Returns the available cash for allocation, applying a safety buffer of 1% when
-      # the cash exceeds $100,000. This guards against over‑allocation due to stale
-      # balances or rounding errors.
-      def available_cash
-        cash = fetch_available_cash
-        cash = cash * 0.99 if cash > 100_000
-        cash
-      end
 
       # Max fraction of available cash for position buy value (percentage path and rupee-based cap).
       # Order: per-index capital_alloc_pct → sizing.allocation_cap_pct → deployment band alloc_pct.
