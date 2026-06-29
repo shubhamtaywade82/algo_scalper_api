@@ -22,12 +22,7 @@ module Orders
     def place_market(side:, segment:, security_id:, qty:, meta: {})
       order_no = meta[:client_order_id] || "PAPER-#{SecureRandom.hex(3)}"
 
-      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)
-      fill_price = if tick&.bid.to_f.positive? && tick&.ask.to_f.positive?
-                     side.to_s.downcase == 'buy' ? tick.ask.to_f : tick.bid.to_f
-                   else
-                     (meta[:ltp] || meta[:price] || 0).to_f
-                   end
+      fill_price = resolve_fill_price(side, segment, security_id, meta)
 
       {
         success: true,
@@ -120,6 +115,27 @@ module Orders
     end
 
     private
+
+    # Uses the guard-validated LTP (meta[:ltp]) as the primary fill price in paper
+    # mode.  Falls back to tick bid/ask only when meta[:ltp] is unavailable AND the
+    # tick data is provably fresh (so we don't accidentally fill at stale prices).
+    def resolve_fill_price(side, segment, security_id, meta)
+      return meta[:ltp].to_f if meta[:ltp].to_f.positive?
+
+      tick = Live::TickQuery.for_security(segment: segment, security_id: security_id.to_s)
+      if tick&.bid.to_f.positive? && tick&.ask.to_f.positive? && tick_fresh?(tick)
+        return side.to_s.downcase == 'buy' ? tick.ask.to_f : tick.bid.to_f
+      end
+
+      (meta[:price] || 0).to_f
+    end
+
+    def tick_fresh?(tick, max_age_seconds: 2.0)
+      age = Time.current - tick.timestamp
+      age.between?(0, max_age_seconds)
+    rescue StandardError
+      false
+    end
 
     def paper_trading_config
       AlgoConfig.fetch[:paper_trading] || {}
