@@ -39,10 +39,9 @@ module OptionsBuying
     end
 
     def cache_candles(index_key, sid, segment, timeframe)
-      candles = Market::CandleSeries.new(
-        security_id: sid,
-        segment: segment,
-        timeframe: timeframe
+      candles = CandleSeries.new(
+        symbol: sid,
+        interval: timeframe
       ).fetch(limit: LIMITS[timeframe])
 
       return if candles.blank?

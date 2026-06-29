@@ -69,18 +69,6 @@ module Live
         stop!
         false
       end
-
-      # Subscribe to watchlist OUTSIDE the lock to avoid deadlock
-      # (subscribe_many calls ensure_running! which might try to acquire the lock)
-      subscribe_watchlist
-
-      Rails.logger.info("[MarketFeedHub] DhanHQ market feed started (watchlist=#{@watchlist.count} instruments)")
-      true
-    rescue StandardError => e
-      Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
-      release_budget!("market_feed_hub")
-      stop!
-      false
     end
 
     def stop!
