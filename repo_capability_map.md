@@ -182,8 +182,8 @@ Legend:
 
 ## 9. Analytics, Calibration, and Configuration
 - `app/services/analytics/` (`auto_rule_engine.rb`, `best_setups_extractor.rb`, `strategy_evaluator.rb`, `trade_breakdown.rb`, `threshold_optimizer.rb`)
-- `app/services/algo_config/` (`audit.rb`, `validator.rb`, `document_store.rb`, `cache_broadcaster.rb`, `legacy_migrator.rb`, `merge_util.rb`, `profitability_slice{2,3,4}.rb`, `auxiliary_bootstrap.rb`)
-- ✅ specs: validator, audit, document_store, cache_broadcaster, legacy_migrator, merge_util, slice2/3/4
+- `app/services/algo_config/` (`audit.rb`, `validator.rb`, `document_store.rb`, `cache_broadcaster.rb`, `legacy_migrator.rb`, `merge_util.rb`, `auxiliary_bootstrap.rb`)
+- ✅ specs: validator, audit, document_store, cache_broadcaster, legacy_migrator, merge_util
 - `app/services/indicators/` (`calculator.rb`, `cached_indicator_source.rb`, `adx`, `ema_direction`, `macd`, `rsi`, `supertrend`, `supertrend_indicator`, `ml_adaptive_supertrend`, `threshold_config`, `trend_duration_indicator`, `holy_grail`)
 - config: `config/algo.yml`, `config/algo_organized.yml`, `config/strategy_config.yml`, `config/signal_tier_presets.yml`
 - docs: `docs/ALPHA*.md`, `docs/NEW_ANALYTICS_AND_STRATEGY_LAYER.md`, `docs/options_buying_*.md`
@@ -286,7 +286,6 @@ Legend:
 - `.github/workflows/ci.yml`
 - `.github/dependabot.yml`
 - `lib/tasks/` — many rake task files
-- `backtest_runner.rb`
 - `lib/testing/service_test_runner.rb` (`lib/testing/README.md`, `lib/testing/quick_start.rb`)
 - `scripts/test_services/` — suite of ruby-based service tests
 - `spec/support/` test helpers (database_cleaner, vcr, webmock, factory_bot, shoulda, trading_services_helper)
