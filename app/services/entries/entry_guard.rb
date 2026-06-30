@@ -79,7 +79,7 @@ module Entries
           apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
           snapshot = meta_hash.delete(:config_snapshot)
-          version = meta_hash.delete(:config_version) || {}
+          version = (meta_hash.delete(:config_version) || {}).with_indifferent_access
           entry_at = meta_hash.delete(:entry_at)
 
           tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
@@ -118,7 +118,7 @@ module Entries
           apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
           snapshot = meta_hash.delete(:config_snapshot)
-          version = meta_hash.delete(:config_version) || {}
+          version = (meta_hash.delete(:config_version) || {}).with_indifferent_access
           entry_at = meta_hash.delete(:entry_at)
 
           tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
@@ -142,7 +142,8 @@ module Entries
           tracker.create_position_meta_snapshot!(
             config_version_hash: version['hash'].to_s,
             config_change_log_id: version['change_log_id'],
-            config_snapshot: snapshot
+            config_snapshot: snapshot,
+            entry_at: entry_at
           )
 
           tracker
