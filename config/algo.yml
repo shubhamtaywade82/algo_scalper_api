@@ -240,7 +240,7 @@ indices:
       weak_trend_pct: 0.005
 
     trade_limits:
-      max_trades_per_day: 2
+      max_trades_per_day: 5
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:

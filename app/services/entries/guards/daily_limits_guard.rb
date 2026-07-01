@@ -21,7 +21,7 @@ module Entries
           symbol = index_cfg[:key].to_s.upcase
           if %w[NIFTY SENSEX BANKNIFTY].include?(symbol)
             trades_today = daily_limits.get_daily_trades(symbol)
-            return false if trades_today >= 3
+            return false if trades_today >= 6
           end
 
           return true if result[:allowed]

@@ -205,7 +205,7 @@ All percentage values use **DECIMAL format** (0.12 = 12%).
 
 AI analysis uses a local Ollama server via the `ollama-client` gem (`~> 1.1`). The `lib/services/ai/ollama_client.rb` wrapper provides chat, generate, and streaming interfaces. OpenAI / ruby-openai gems have been removed.
 
-ENV: `OLLAMA_MODEL` (default: `llama3.2:3b`), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: `http://localhost:11434`), `OLLAMA_TIMEOUT` (default: 120s).
+ENV: `OLLAMA_MODEL` (default: `qwen3.5:4b`), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: `http://localhost:11434`), `OLLAMA_TIMEOUT` (default: 120s).
 
 ## Token Management
 

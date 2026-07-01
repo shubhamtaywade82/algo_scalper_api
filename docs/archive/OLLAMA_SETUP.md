@@ -281,7 +281,7 @@ The system **automatically fetches and selects the best model** from your Ollama
    - **7B models** (good for CPU-only with 16GB RAM)
      - `mistral:7b`, `mistral`, `mistral:instruct`
    - **3B models** (excellent for CPU-only, good balance)
-     - `llama3.2:3b`, `llama3.2:3b-instruct`, `llama3:3b`
+     - `qwen3.5:4b`, `qwen3.5:4b-instruct`, `llama3:3b`
    - **Small models** (fastest for CPU-only)
      - `phi3:mini`, `phi3`, `phi3:medium`
      - `qwen2.5:1.5b-instruct`, `gemma:2b`, `gemma`
@@ -293,7 +293,7 @@ The system **automatically fetches and selects the best model** from your Ollama
 3. First available model (if no priority match)
 
 **Note for CPU-Only Mode:**
-- System prioritizes 3B models (`llama3.2:3b`) over 8B models for CPU-only setups
+- System prioritizes 3B models (`qwen3.5:4b`) over 8B models for CPU-only setups
 - Smaller models (`phi3:mini`, `qwen2.5:1.5b-instruct`) are preferred for speed
 
 ### List Available Models
@@ -324,13 +324,13 @@ Best model: llama3
 #### For GPU Mode (4GB+ VRAM)
 - **llama3.1:8b** - Best balance of capability and speed (recommended)
 - **mistral:7b** - Good alternative 7B model
-- **llama3.2:3b** - Faster, good for quick queries
+- **qwen3.5:4b** - Faster, good for quick queries
 
 #### For CPU-Only Mode (16GB RAM, Limited/No GPU)
 
 **Best Models (in priority order):**
 
-1. **llama3.2:3b** ⭐ (Recommended)
+1. **qwen3.5:4b** ⭐ (Recommended)
    - RAM: ~7GB
    - Speed: Good (3-5 tokens/s on CPU)
    - Capability: Excellent for trading analysis
@@ -365,7 +365,7 @@ Best model: llama3
 docker exec -it ollama ollama run phi3:mini <<< "Hello!"
 
 # If successful, try larger models
-docker exec -it ollama ollama run llama3.2:3b <<< "Analyze NIFTY"
+docker exec -it ollama ollama run qwen3.5:4b <<< "Analyze NIFTY"
 ```
 
 ## Usage
@@ -746,14 +746,14 @@ response = client.chat(
    ```
 
 5. **Recommended models for CPU-only:**
-   - `llama3.2:3b` (~7GB RAM) - Best balance
+   - `qwen3.5:4b` (~7GB RAM) - Best balance
    - `phi3:mini` (~5GB RAM) - Fastest
    - `qwen2.5:1.5b-instruct` (~4GB RAM) - Lightest
 
 ### GPU Mode
 
 1. **Model Selection**: Match model to GPU VRAM
-   - 4GB VRAM: `llama3.2:3b`, `phi3:mini`
+   - 4GB VRAM: `qwen3.5:4b`, `phi3:mini`
    - 8GB+ VRAM: `llama3.1:8b`, `mistral:7b`
    - 16GB+ VRAM: `llama3:70b`
 

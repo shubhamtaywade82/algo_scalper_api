@@ -43,7 +43,7 @@ module Smc
     end
 
     def select_model
-      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'llama3.2:3b'
+      @ai_client.selected_model || ENV['OLLAMA_MODEL'] || 'qwen3.5:4b'
     end
 
     # Pre-fetch all required data upfront to avoid redundant API calls

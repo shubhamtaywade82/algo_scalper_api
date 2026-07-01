@@ -194,7 +194,7 @@ Run by `Entries::EntryGuardPipeline#run`. First block wins. Current order:
 - **Provider**: Ollama (local LLM) via `ollama-client` gem (`~> 1.1`). **OpenAI/ruby-openai gems have been removed.**
 - **Client**: `lib/services/ai/ollama_client.rb` — wraps `Ollama::Client`; provides `chat`, `generate`, `chat_stream`.
 - **Model selection**: If `OLLAMA_MODEL` env var set and available, uses it. Otherwise auto-selects from available models (prefers llama3.1:8b).
-- **ENV**: `OLLAMA_MODEL` (default: llama3.2:3b), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: http://localhost:11434), `OLLAMA_TIMEOUT` (default: 120s).
+- **ENV**: `OLLAMA_MODEL` (default: qwen3.5:4b), `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` (default: http://localhost:11434), `OLLAMA_TIMEOUT` (default: 120s).
 - **Agent**: `lib/services/ai/technical_analysis_agent.rb` runs multi-turn LLM analysis for NIFTY and SENSEX every 15 minutes via `AiTechnicalAnalysisJob`.
 
 ---
