@@ -37,7 +37,8 @@ module Entries
 
         def daily_limits_enabled?
           config = AlgoConfig.fetch
-          limits = config.dig(:position_sizing, :daily_limits) || config.dig(:risk, :daily_limits)
+          # Check both top-level daily_limits and nested position_sizing/risk paths
+          limits = config[:daily_limits] || config.dig(:position_sizing, :daily_limits) || config.dig(:risk, :daily_limits)
           return false unless limits
 
           limits[:enable] == true || limits[:enabled] == true

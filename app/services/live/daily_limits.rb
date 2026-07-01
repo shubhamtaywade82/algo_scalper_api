@@ -42,7 +42,17 @@ module Live
 
       # 1. Check daily loss limit (per-index)
       daily_loss = get_daily_loss(index_key)
-      max_daily_loss = risk_config[:max_daily_loss_pct] || risk_config[:daily_loss_limit_pct]
+      # Check per-index limit from daily_limits.per_index config
+      per_index_limits = risk_config.dig(:daily_limits, :per_index) || {}
+      max_daily_loss_pct = per_index_limits[index_key.to_sym] || per_index_limits[index_key.to_s] ||
+                           risk_config[:max_daily_loss_pct] || risk_config[:daily_loss_limit_pct]
+      # Convert percentage to absolute rupees using account equity
+      if max_daily_loss_pct.is_a?(Numeric) && max_daily_loss_pct < 1.0
+        equity = AlgoConfig.fetch.dig(:paper_trading, :balance) || 100_000.0
+        max_daily_loss = equity * max_daily_loss_pct
+      else
+        max_daily_loss = max_daily_loss_pct
+      end
       if max_daily_loss && (daily_loss >= max_daily_loss.to_f)
         return {
           allowed: false,
@@ -323,7 +333,12 @@ module Live
 
     # Load risk configuration from AlgoConfig
     def load_risk_config
-      AlgoConfig.fetch[:risk] || {}
+      config = AlgoConfig.fetch
+      risk = config[:risk] || {}
+      # Merge daily_limits from top-level config into risk for backward compatibility
+      daily_limits = config[:daily_limits] || {}
+      risk[:daily_limits] = daily_limits if daily_limits.any?
+      risk
     rescue StandardError => e
       Rails.logger.error("[DailyLimits] Failed to load risk config: #{e.class} - #{e.message}")
       {}

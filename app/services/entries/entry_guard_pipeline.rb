@@ -54,6 +54,7 @@ module Entries
         Guards::WeeklyExpiryGuard,
         Guards::BosStructureGuard,
         Guards::SizingGuard,
+        Guards::PremiumBandGuard,
         Guards::ExposureGuard,
         Guards::CooldownGuard,
         Guards::BreakoutReadyGuard,

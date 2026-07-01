@@ -122,7 +122,8 @@ module Ai
         messages = [
           { role: 'system', content: PromptBuilder.system_prompt }
         ]
-        messages.concat(conversation) if conversation.any?
+        # When pre-fetching, skip old conversation — fresh data is all that matters
+        messages.concat(conversation) unless prefetched
         messages << { role: 'user', content: user_content }
 
         # If we have pre-fetched data, skip tools entirely — model analyzes directly
