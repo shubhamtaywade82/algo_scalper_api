@@ -488,6 +488,16 @@ RSpec.describe CandleSeries do
       signal = series.supertrend_signal
       expect(signal).to be_in([:long_entry, :short_entry, nil])
     end
+
+    it 'accepts custom supertrend parameters' do
+      expect(Indicators::Supertrend).to receive(:new).with(
+        series: series,
+        period: 10,
+        base_multiplier: 2.5
+      ).and_call_original
+
+      series.supertrend_signal(period: 10, multiplier: 2.5)
+    end
   end
 
   describe '#bollinger_bands' do

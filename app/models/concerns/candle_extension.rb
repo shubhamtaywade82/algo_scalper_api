@@ -107,9 +107,9 @@ module CandleExtension
       cs&.adx(period)
     end
 
-    def supertrend_signal(interval: '5')
+    def supertrend_signal(interval: '5', **kwargs)
       cs = candles(interval: interval)
-      cs&.supertrend_signal
+      cs&.supertrend_signal(**kwargs)
     end
 
     def liquidity_grab_up?(interval: '5')

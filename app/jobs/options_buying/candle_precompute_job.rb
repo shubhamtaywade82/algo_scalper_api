@@ -45,10 +45,14 @@ module OptionsBuying
       instrument = Instrument.find_by(security_id: sid.to_i)
       return unless instrument
 
-      raw_candles = instrument.intraday_ohlc(
-        interval: timeframe,
-        days: days_for_timeframe(timeframe)
-      )
+      raw_candles = if timeframe == 'D'
+                      instrument.historical_ohlc
+                    else
+                      instrument.intraday_ohlc(
+                        interval: timeframe,
+                        days: days_for_timeframe(timeframe)
+                      )
+                    end
       return if raw_candles.blank?
 
       series = CandleSeries.new(symbol: sid, interval: timeframe)

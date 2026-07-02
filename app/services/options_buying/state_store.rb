@@ -230,8 +230,6 @@ module OptionsBuying
         strikes.max_by { |s| s[:volume].to_i }
       end
 
-      private
-
       def stream_fields(payload)
         {
           'ltp' => payload[:ltp].to_f,
@@ -312,6 +310,8 @@ module OptionsBuying
       rescue JSON::ParserError
         nil
       end
+
+      private
     end
   end
 end
