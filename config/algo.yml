@@ -156,8 +156,8 @@ expiry_week_power_trend:
 
 loss_streak_guard:
   enabled: true
-  consecutive_losses_threshold: 1
-  cooldown_minutes: 60
+  consecutive_losses_threshold: 3
+  cooldown_minutes: 20
 
 segment_expectancy_guard:
   enabled: true
@@ -282,7 +282,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 1
+      max_trades_per_day: 10
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -324,7 +324,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 2
+      max_trades_per_day: 4
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -347,7 +347,7 @@ indices:
         priority: 4
 
 trade_limits:
-  global_max_trades_per_day: 8
+  global_max_trades_per_day: 12
   global_max_concurrent_positions: 6 # Portfolio-level cap across all indices
 
 # ============================================
@@ -913,13 +913,13 @@ position_sizing:
   daily_limits:
     enable: true
     per_index:
-      NIFTY: 0.02 # 2% max loss for NIFTY (already DECIMAL)
-      BANKNIFTY: 0.04 # 4% max loss for BANKNIFTY (already DECIMAL)
-      SENSEX: 0.01 # 1% max loss for SENSEX (already DECIMAL)
-    global_limit_pct: 0.04 # 4% (already DECIMAL)
+      NIFTY: 0.03 # 3% max loss for NIFTY (increased from 2%)
+      BANKNIFTY: 0.05 # 5% max loss for BANKNIFTY (increased from 4%)
+      SENSEX: 0.03 # 3% max loss for SENSEX (increased from 2%)
+    global_limit_pct: 0.06 # 6% (increased from 5%)
 
   # Daily profit target: Stop trading when daily profit reaches this amount
-  max_daily_profit: 20000 # ₹20,000 daily profit target (trading stops when reached)
+  max_daily_profit: 30000 # ₹30,000 daily profit target (increased from ₹20,000)
   # Alternative config key: daily_profit_target (also supported)
 
   # Edge Failure Detector (Quality/Regime Detector - NOT a loss cap)
