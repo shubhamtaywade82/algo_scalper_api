@@ -41,7 +41,17 @@ module Entries
 
         def config_enabled?
           # Enabled by default if any index has a premium_band configured
-          indices.values.any? { |v| v.is_a?(Hash) && v[:premium_band].is_a?(Hash) }
+          idx = indices
+          return false if idx.blank?
+
+          case idx
+          when Hash
+            idx.values.any? { |v| v.is_a?(Hash) && v[:premium_band].is_a?(Hash) }
+          when Array
+            idx.any? { |v| v.is_a?(Hash) && v[:premium_band].is_a?(Hash) }
+          else
+            false
+          end
         end
 
         def indices
@@ -49,7 +59,15 @@ module Entries
         end
 
         def premium_band_for(index_key)
-          index_cfg = indices[index_key] || {}
+          idx = indices
+          index_cfg = case idx
+                      when Hash
+                        idx[index_key] || {}
+                      when Array
+                        idx.find { |entry| entry.is_a?(Hash) && entry[:key].to_s.upcase == index_key.to_s.upcase } || {}
+                      else
+                        {}
+                      end
           band = index_cfg[:premium_band]
           return band if band.is_a?(Hash)
 

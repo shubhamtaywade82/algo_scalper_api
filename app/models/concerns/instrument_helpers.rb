@@ -330,11 +330,13 @@ module InstrumentHelpers
       to_date: to_date || (Time.zone.today - 1).to_s
     )
   rescue StandardError => e
+    params_used = { security_id: security_id, exchange_segment: exchange_segment, instrument: instrument_code,
+                    interval: interval, oi: oi, from_date: from_date, to_date: to_date }
     DhanhqErrorHandler.handle_dhanhq_error(
       e,
-      context: "intraday_ohlc(#{self.class.name} #{security_id})"
+      context: "intraday_ohlc(#{self.class.name} #{security_id}) params=#{params_used}"
     )
-    Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message}")
+    Rails.logger.error("Failed to fetch Intraday OHLC for #{self.class.name} #{security_id}: #{e.message} | params=#{params_used}")
     nil
   end
 
