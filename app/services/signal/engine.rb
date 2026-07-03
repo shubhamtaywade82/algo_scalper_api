@@ -565,14 +565,11 @@ module Signal
                          detector.ramp_strike(direction: direction)&.dig(:strike)
                        end
 
-        atm_iv = if chain_data[:oc].is_a?(Hash) && chain_data[:oc].any?
-                   side = (direction == :bullish ? 'ce' : 'pe')
-                   atm_strike = chain_data[:last_price].to_f.round(-2)
-                   strike_hit = chain_data[:oc].keys.map(&:to_f).min_by { |s| (s - atm_strike).abs }
-                   strike_data = chain_data[:oc][strike_hit.to_s]
-                   strike_data&.[](side)&.dig('implied_volatility')&.to_f ||
-                     strike_data&.[](side)&.dig('implied_volatility_f')&.to_f
-                 end || 0.0
+        side = (direction == :bullish ? 'ce' : 'pe')
+        atm_strike_data = nearest_strike_data(chain_data, side)
+
+        atm_iv = atm_strike_data&.dig('implied_volatility')&.to_f ||
+                 atm_strike_data&.dig('implied_volatility_f')&.to_f
         atm_iv = nil if atm_iv.to_f.zero?
 
         iv_rank_proxy = if atm_iv
@@ -587,13 +584,7 @@ module Signal
                         end ||
                         chain_data[:oc]&.values&.first&.dig('ce', 'implied_volatility')&.to_f
 
-        atm_theta = if chain_data[:oc].is_a?(Hash) && chain_data[:oc].any?
-                      side = (direction == :bullish ? 'ce' : 'pe')
-                      atm_strike = chain_data[:last_price].to_f.round(-2)
-                      strike_hit = chain_data[:oc].keys.map(&:to_f).min_by { |s| (s - atm_strike).abs }
-                      strike_data = chain_data[:oc][strike_hit.to_s]
-                      strike_data&.[](side)&.dig('greeks', 'theta')&.to_f
-                    end
+        atm_theta = atm_strike_data&.dig('greeks', 'theta')&.to_f
 
         {
           gamma_pressure: { score: gamma_score || 0.0, strike: gamma_strike, implemented: has_chain },
@@ -612,6 +603,20 @@ module Signal
           expiry_date: expiry_date,
           chain_data: nil
         }
+      end
+
+      # Finds the option-chain strike nearest the underlying's last price and
+      # returns its side-specific data (ce/pe). Compares keys as floats but looks
+      # the value back up by the ORIGINAL key string — chain_data[:oc] keys are
+      # strings like "23000", not "23000.0", so round-tripping through to_f/to_s
+      # silently misses every lookup.
+      def nearest_strike_data(chain_data, side)
+        oc = chain_data[:oc]
+        return nil unless oc.is_a?(Hash) && oc.any?
+
+        atm_strike = chain_data[:last_price].to_f.round(-2)
+        nearest_key = oc.keys.min_by { |k| (k.to_f - atm_strike).abs }
+        oc[nearest_key]&.[](side)
       end
 
       def build_diagnostic_metadata(index_cfg:, final_direction:, primary_analysis:, regime:, options_analysis:,
