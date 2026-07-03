@@ -56,7 +56,7 @@ module Orders
           Rails.logger.info("[Orders::Placer] BUY payload: #{payload.inspect}")
 
           if order_placement_enabled?
-            slice_order = with_order_rate_limit(context: "orders.buy_market") do
+            slice_order = with_token_auto_heal(context: "orders.buy_market") do
               DhanHQ::Models::Order.create(payload)
             end
             Rails.logger.info("[Orders::Placer] BUY response: #{slice_order.inspect}") if slice_order
@@ -110,7 +110,7 @@ module Orders
           Rails.logger.info("[Orders::Placer] SELL payload: #{payload.inspect}")
 
           if order_placement_enabled?
-            slice_order = with_order_rate_limit(context: "orders.sell_market") do
+            slice_order = with_token_auto_heal(context: "orders.sell_market") do
               DhanHQ::Models::Order.create(payload)
             end
             Rails.logger.info("[Orders::Placer] SELL response: #{slice_order.inspect}") if slice_order
@@ -156,7 +156,7 @@ module Orders
           Rails.logger.info("[Orders::Placer] BUY LIMIT payload: #{payload.inspect}")
 
           if order_placement_enabled?
-            slice_order = with_order_rate_limit(context: "orders.buy_limit") do
+            slice_order = with_token_auto_heal(context: "orders.buy_limit") do
               DhanHQ::Models::Order.create(payload)
             end
             Rails.logger.info("[Orders::Placer] BUY LIMIT response: #{slice_order.inspect}") if slice_order
@@ -202,7 +202,7 @@ module Orders
           Rails.logger.info("[Orders::Placer] BUY IOC LIMIT payload: #{payload.inspect}")
 
           if order_placement_enabled?
-            slice_order = with_order_rate_limit(context: "orders.buy_ioc_limit") do
+            slice_order = with_token_auto_heal(context: "orders.buy_ioc_limit") do
               DhanHQ::Models::Order.create(payload)
             end
             Rails.logger.info("[Orders::Placer] BUY IOC LIMIT response: #{slice_order.inspect}") if slice_order
@@ -264,7 +264,7 @@ module Orders
           Rails.logger.info("[Orders::Placer] SELL IOC LIMIT payload: #{payload.inspect}")
 
           if order_placement_enabled?
-            slice_order = with_order_rate_limit(context: "orders.sell_ioc_limit") do
+            slice_order = with_token_auto_heal(context: "orders.sell_ioc_limit") do
               DhanHQ::Models::Order.create(payload)
             end
             Rails.logger.info("[Orders::Placer] SELL IOC LIMIT response: #{slice_order.inspect}") if slice_order
@@ -310,7 +310,7 @@ module Orders
           Rails.logger.info("[Orders::Placer] SELL LIMIT payload: #{payload.inspect}")
 
           if order_placement_enabled?
-            slice_order = with_order_rate_limit(context: "orders.sell_limit") do
+            slice_order = with_token_auto_heal(context: "orders.sell_limit") do
               DhanHQ::Models::Order.create(payload)
             end
             Rails.logger.info("[Orders::Placer] SELL LIMIT response: #{slice_order.inspect}") if slice_order
@@ -371,7 +371,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] EXIT payload: #{payload.inspect}")
 
         if order_placement_enabled?
-          order = with_order_rate_limit(context: "orders.exit_position") do
+          order = with_token_auto_heal(context: "orders.exit_position") do
             DhanHQ::Models::Order.create(payload)
           end
           Rails.logger.info("[Orders::Placer] EXIT response: #{order.inspect}") if order
@@ -413,23 +413,25 @@ module Orders
 
       def with_token_auto_heal(context:, &)
         retried = false
-        with_order_rate_limit(&)
-      rescue StandardError => e
-        Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
+        begin
+          with_order_rate_limit(context: context, &)
+        rescue StandardError => e
+          Rails.logger.error("[Orders::Placer] #{context} failed: #{e.class} - #{e.message}")
 
-        unless DhanhqErrorHandler.token_expired?(e)
-          return nil
+          unless DhanhqErrorHandler.token_expired?(e)
+            return nil
+          end
+
+          if retried
+            Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
+            return nil
+          end
+
+          Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
+          Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
+          retried = true
+          retry
         end
-
-        if retried
-          Rails.logger.error("[Orders::Placer] #{context} retry failed: #{e.class} - #{e.message}")
-          return nil
-        end
-
-        Rails.logger.warn("[Orders::Placer] #{context} unauthorized; refreshing token and retrying once")
-        Dhan::TokenManager.refresh! if defined?(Dhan::TokenManager)
-        retried = true
-        retry
       end
 
       def order_placement_enabled?
@@ -481,6 +483,7 @@ module Orders
         Rails.logger.info("[Orders::Placer] Slicing quantity #{qty} into #{slices.inspect} for index=#{index_key} (limit=#{Slicer.freeze_limit_for(index_key)})")
 
         last_order = nil
+        filled_qty = 0
         slices.each_with_index do |slice_qty, index|
           slice_coid = "#{client_order_id}_#{index + 1}"
 
@@ -488,9 +491,31 @@ module Orders
           sleep(Slicer.delay_seconds) if index.positive?
 
           last_order = yield(slice_qty, slice_coid)
+
+          if last_order.nil?
+            alert_partial_slice_failure(
+              client_order_id: client_order_id,
+              filled_qty: filled_qty,
+              total_qty: qty,
+              failed_slice_number: index + 1,
+              total_slices: slices.size
+            )
+            break
+          end
+
+          filled_qty += slice_qty
         end
 
         last_order
+      end
+
+      def alert_partial_slice_failure(client_order_id:, filled_qty:, total_qty:, failed_slice_number:, total_slices:)
+        message = "[Orders::Placer] Slice #{failed_slice_number}/#{total_slices} failed for #{client_order_id}: " \
+                  "filled #{filled_qty}/#{total_qty} before failure — position is PARTIAL, no further slices will be sent"
+        Rails.logger.error(message)
+        Notifications::TelegramNotifier.instance.notify_error(message, context: 'Orders::Placer#place_order_with_slicing')
+      rescue StandardError => e
+        Rails.logger.error("[Orders::Placer] alert_partial_slice_failure failed: #{e.message}")
       end
 
       def resolve_index_key(sid)

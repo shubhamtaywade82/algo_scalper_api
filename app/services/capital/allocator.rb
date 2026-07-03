@@ -293,9 +293,26 @@ module Capital
       def calculate_max_by_risk(capital_available_f, entry_price_f, lot_size, effective_risk_pct, multiplier)
         risk_capital = capital_available_f * effective_risk_pct
         risk_capital_scaled = [risk_capital * multiplier, capital_available_f].min
-        stop_loss_per_share = entry_price_f * 0.30
+        stop_loss_per_share = entry_price_f * configured_sl_pct
 
         (risk_capital_scaled / stop_loss_per_share).floor * lot_size
+      end
+
+      # Single source of truth for stop-loss percentage, shared with
+      # Live::UnifiedExitChecker#build_exit_config so risk-based sizing is
+      # calibrated to the same stop distance the exit engine will actually use.
+      def configured_sl_pct
+        algo_cfg = AlgoConfig.fetch
+        risk_cfg = algo_cfg[:risk] || {}
+        exit_cfg = algo_cfg[:exit] || {}
+        (risk_cfg[:sl_pct] || exit_cfg.dig(:stop_loss, :value) || 0.12).to_f
+      end
+
+      def configured_tp_pct
+        algo_cfg = AlgoConfig.fetch
+        risk_cfg = algo_cfg[:risk] || {}
+        exit_cfg = algo_cfg[:exit] || {}
+        (exit_cfg[:take_profit] || risk_cfg[:tp_pct] || 0.50).to_f
       end
 
       def apply_quantity_safety_checks(quantity:, entry_price_f:, lot_size:, capital_available_f:)
@@ -489,9 +506,13 @@ module Capital
         else
           # Fallback: p = confidence (0.0 to 1.0)
           p = (index_cfg[:confidence] || sizing_cfg[:default_win_rate] || 0.55).to_f
-          # r = Reward-to-Risk ratio
-          risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || (entry_bd * 0.98)).to_s)).abs
-          reward = (BigDecimal((index_cfg[:target] || (entry_bd * 1.04)).to_s) - entry_bd).abs
+          # r = Reward-to-Risk ratio. Option premiums swing far more than equity-style
+          # 2%/4% defaults, so fall back to the actual configured SL/TP percentages
+          # (same source as calculate_max_by_risk and Live::UnifiedExitChecker).
+          default_stop_price = entry_bd * (1 - configured_sl_pct)
+          default_target_price = entry_bd * (1 + configured_tp_pct)
+          risk = (entry_bd - BigDecimal((index_cfg[:stop_loss] || default_stop_price).to_s)).abs
+          reward = (BigDecimal((index_cfg[:target] || default_target_price).to_s) - entry_bd).abs
           r = risk.positive? ? (reward / risk).to_f : (sizing_cfg[:default_payout_ratio] || 1.5).to_f
           Rails.logger.info("[Allocator] KELLY_BASED using fallback defaults: p=#{p.round(4)}, r=#{r.round(4)}")
         end

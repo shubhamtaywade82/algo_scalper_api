@@ -312,8 +312,9 @@ module Live
       @redis ||= Redis.new(url: ENV.fetch('REDIS_URL', 'redis://127.0.0.1:6379/0'))
       @redis.set(key, '1', nx: true, ex: ttl)
     rescue StandardError => e
-      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message}")
-      true
+      Rails.logger.error("[ExitEngine] acquire_exit_lock failed for tracker=#{tracker_id}: #{e.class} - #{e.message} — failing CLOSED (skipping this exit attempt)")
+      alert_exit_lock_unavailable(tracker_id, e)
+      false # fail closed: Redis outage must not allow a duplicate exit race; DB exit_sent_at is the backstop, next 5s loop retries
     end
 
     # Releases Redis exit lock immediately so the next close/exits are not blocked for the TTL window.
@@ -324,6 +325,15 @@ module Live
       @redis.del("exit_lock:#{tracker_id}")
     rescue StandardError => e
       Rails.logger.warn("[ExitEngine] release_exit_lock failed tracker=#{tracker_id}: #{e.class} - #{e.message}")
+    end
+
+    def alert_exit_lock_unavailable(tracker_id, error)
+      Notifications::TelegramNotifier.instance.notify_error(
+        "ExitEngine exit lock unavailable (Redis: #{error.message}) for tracker=#{tracker_id} — exit attempt skipped this cycle",
+        context: 'ExitEngine#acquire_exit_lock'
+      )
+    rescue StandardError => e
+      Rails.logger.error("[ExitEngine] alert_exit_lock_unavailable failed: #{e.message}")
     end
 
     def stale_exit_intent?(tracker)

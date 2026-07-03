@@ -16,53 +16,58 @@ module Entries
       end
 
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil)
-        # 1. Pipeline Execution
-        context = {
-          index_cfg: index_cfg,
-          pick: pick,
-          direction: direction,
-          scale_multiplier: scale_multiplier,
-          entry_metadata: entry_metadata || {},
-          permission: permission,
-          is_paper: entry_metadata&.dig(:paper) || Rails.env.local?
-        }
+        # Serialize the guard decision + tracker creation per index so concurrent
+        # callers (scheduler, manual API, BOS engine) can't both pass exposure/
+        # max-concurrent checks before either commits.
+        Entries::AdvisoryLock.with_index_lock(index_cfg[:key]) do
+          # 1. Pipeline Execution
+          context = {
+            index_cfg: index_cfg,
+            pick: pick,
+            direction: direction,
+            scale_multiplier: scale_multiplier,
+            entry_metadata: entry_metadata || {},
+            permission: permission,
+            is_paper: entry_metadata&.dig(:paper) || Rails.env.local?
+          }
 
-        result = entry_guard_pipeline.run(context)
-        if result != EntryGuardPipeline::PASS
-          reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
-          Observability::StructuredLog.info(
-            event: 'entry_blocked',
-            payload: {
-              service: 'Entries::EntryGuard',
-              index_key: index_cfg[:key].to_s,
-              symbol: pick[:symbol].to_s,
-              reason: reason
-            }
-          )
-          signal&.record_entry_outcome('blocked', reason)
-          return false
+          result = entry_guard_pipeline.run(context)
+          if result != EntryGuardPipeline::PASS
+            reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
+            Observability::StructuredLog.info(
+              event: 'entry_blocked',
+              payload: {
+                service: 'Entries::EntryGuard',
+                index_key: index_cfg[:key].to_s,
+                symbol: pick[:symbol].to_s,
+                reason: reason
+              }
+            )
+            signal&.record_entry_outcome('blocked', reason)
+            next false
+          end
+
+          # 2. Order Execution
+          execution_result = OrderExecutionService.call(context)
+
+          if execution_result.is_a?(Hash) && execution_result[:error]
+            signal&.record_entry_outcome('blocked', execution_result[:error])
+            next false
+          end
+
+          # Success - Tracker created
+          signal&.record_entry_outcome('entered')
+          validate_entry_price!(execution_result, context)
+
+          # Record trade in DailyLimits
+          begin
+            Live::DailyLimits.new.record_trade(index_key: index_cfg[:key])
+          rescue StandardError => e
+            Rails.logger.error("[EntryGuard] Failed to record trade in DailyLimits: #{e.class} - #{e.message}")
+          end
+
+          true
         end
-
-        # 2. Order Execution
-        execution_result = OrderExecutionService.call(context)
-
-        if execution_result.is_a?(Hash) && execution_result[:error]
-          signal&.record_entry_outcome('blocked', execution_result[:error])
-          return false
-        end
-
-        # Success - Tracker created
-        signal&.record_entry_outcome('entered')
-        validate_entry_price!(execution_result, context)
-
-        # Record trade in DailyLimits
-        begin
-          Live::DailyLimits.new.record_trade(index_key: index_cfg[:key])
-        rescue StandardError => e
-          Rails.logger.error("[EntryGuard] Failed to record trade in DailyLimits: #{e.class} - #{e.message}")
-        end
-
-        true
       rescue StandardError => e
         signal&.record_entry_outcome('blocked', "exception: #{e.class}")
         bt = e.backtrace&.first(12)&.join("\n")

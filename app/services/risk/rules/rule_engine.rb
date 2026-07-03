@@ -52,7 +52,9 @@ module Risk
             Rails.logger.error(
               "[RuleEngine] Error evaluating rule #{rule.name}: #{e.class} - #{e.message}\n#{e.backtrace.first(5).join("\n")}"
             )
-            # Continue to next rule on error
+            alert_rule_error(rule, context, e)
+            # Continue to next rule on error — a broken rule must not silently disable
+            # all exit checks for a position; remaining rules still get a chance to trigger.
             next
           end
         end
@@ -73,6 +75,17 @@ module Risk
       # @return [BaseRule, nil] Found rule or nil
       def find_rule(rule_class)
         @rules.find { |r| r.is_a?(rule_class) }
+      end
+
+      private
+
+      def alert_rule_error(rule, _context, error)
+        Notifications::TelegramNotifier.instance.notify_error(
+          "RuleEngine: #{rule.name} raised #{error.class} - #{error.message} — skipped, other rules still evaluated",
+          context: 'Risk::Rules::RuleEngine#evaluate'
+        )
+      rescue StandardError => e
+        Rails.logger.error("[RuleEngine] alert_rule_error failed: #{e.message}")
       end
     end
   end

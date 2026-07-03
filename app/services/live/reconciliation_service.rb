@@ -200,8 +200,14 @@ module Live
         # The engine will check stale_exit_intent? and allow a retry
         exit_engine.execute_exit(tracker, tracker.exit_reason.presence || 'AUTO_RECONCILED_EXIT')
       else
-        # Fallback if supervisor/engine isn't available
-        tracker.mark_exited!(exit_reason: tracker.exit_reason.presence || 'AUTO_RECONCILED_EXIT')
+        # No exit_engine reference means we cannot confirm a broker fill — marking the
+        # tracker exited here would be a data-integrity lie (position may still be live
+        # at the broker). Escalate instead of silently papering over a critical fault.
+        message = "ReconciliationService: stuck exit for #{tracker.order_no} (tracker=#{tracker.id}) " \
+                  'but no exit_engine reference available — CANNOT confirm broker fill, ' \
+                  'tracker NOT marked exited. Manual intervention required.'
+        Rails.logger.error("[ReconciliationService] #{message}")
+        Notifications::TelegramNotifier.instance.notify_error(message, context: 'Live::ReconciliationService#fix_stuck_exit')
       end
     rescue StandardError => e
       Rails.logger.error("[ReconciliationService] Failed to auto-correct stuck exit for #{tracker.order_no}: #{e.class} - #{e.message}")

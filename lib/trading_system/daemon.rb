@@ -149,6 +149,8 @@ module TradingSystem
       return if @stopping
       @stopping = true
 
+      alert_shutdown_with_open_positions!
+
       if @market_open_thread&.alive?
         @market_open_thread.kill
         @market_open_thread = nil
@@ -163,6 +165,21 @@ module TradingSystem
       end
     rescue StandardError => e
       warn "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
+    end
+
+    # Positions are NOT force-flattened on shutdown — they remain open at the broker.
+    # This only alerts so an operator knows to watch them until the process restarts
+    # and Live::ReconciliationService picks the exit/risk monitoring back up.
+    def alert_shutdown_with_open_positions!
+      count = PositionTracker.active.count
+      return if count.zero?
+
+      message = "TradingDaemon shutting down with #{count} open position(s) — " \
+                'they remain live at the broker UNMONITORED until the process restarts and reconciliation resumes'
+      warn "[TradingDaemon] #{message}"
+      Notifications::TelegramNotifier.instance.notify_error(message, context: 'TradingSystem::Daemon#safe_stop!')
+    rescue StandardError => e
+      warn "[TradingDaemon] alert_shutdown_with_open_positions! failed: #{e.class} - #{e.message}"
     end
 
     def keep_process_alive!

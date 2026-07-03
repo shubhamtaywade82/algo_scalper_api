@@ -10,7 +10,7 @@ module AlgoScalper
           vwap_periods: [5, 15, 60],
           ema_periods: [9, 20, 50],
           rsi_period: 14,
-          atr_period: { |period: 14,
+          atr_period: 14,
           lookback_bars: 100
         }.merge(config)
 

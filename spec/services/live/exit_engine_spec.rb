@@ -275,6 +275,23 @@ RSpec.describe Live::ExitEngine do
         expect(second[:reason]).not_to eq('exit_lock_held')
         expect(calls).to eq(2)
       end
+
+      it 'fails CLOSED (skips the exit) when the Redis lock cannot be acquired' do
+        fake_redis = instance_double(Redis)
+        allow(fake_redis).to receive(:set).and_raise(Redis::BaseError, 'connection refused')
+        engine.instance_variable_set(:@redis, fake_redis)
+        allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
+
+        result = engine.execute_exit(tracker, 'stop_loss')
+
+        expect(result[:success]).to be false
+        expect(result[:reason]).to eq('exit_lock_held')
+        expect(router).not_to have_received(:exit_market)
+        expect(Notifications::TelegramNotifier.instance).to have_received(:notify_error).with(
+          a_string_matching(/exit lock unavailable/i),
+          context: 'ExitEngine#acquire_exit_lock'
+        )
+      end
     end
 
     context 'with success detection improvements' do

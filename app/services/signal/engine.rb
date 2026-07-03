@@ -240,8 +240,11 @@ module Signal
         }
       end
 
+      # Stock-mode quality scoring is not implemented — this always passes with no
+      # real assessment. score is left nil (not a fake 100) so it can't be mistaken
+      # for a measured entry_quality_score by downstream analytics.
       def stock_quality_result
-        { pass: true, score: 100, breakdown: { stock_mode: true } }
+        { pass: true, score: nil, breakdown: { stock_mode: true, implemented: false } }
       end
 
       def analyze_timeframe(index_cfg:, instrument:, timeframe:, supertrend_cfg:, adx_min_strength:)
@@ -427,9 +430,12 @@ module Signal
         false
       end
 
+      # IV rank / theta risk / gamma pressure are not implemented — no live measurement
+      # feeds these. score/valid are left nil/true-but-unused rather than a fake computed
+      # value so downstream metadata/analytics can't mistake this for a real risk gate.
       def execute_options_analysis(index_cfg, expiry_date:, expiry_blocked:)
         {
-          gamma_pressure: { score: 0.0, strike: nil },
+          gamma_pressure: { score: nil, strike: nil },
           iv_rank: { valid: true },
           theta_risk: { valid: true },
           expiry_blocked: expiry_blocked,
