@@ -27,7 +27,7 @@ No existing service assembles a live "ATM±5 chain with OI/IV/greeks" view, and 
 - Live LTP: WS ticker/compact mode (not full depth) — consistent with the Sniper doctrine
 - OI/IV/greeks: REST poll, staggered per index (3-5s cadence, respects Dhan's 1 req/sec quote-API limit)
 - Positions/orderbook panel: reuse existing `OpenPositions`/`PositionRow` + `PositionsChannel` — no new backend for this part
-- Subscription lifecycle: WS legs subscribed only while the view has an active channel subscriber; unsubscribed when the last viewer disconnects
+- Subscription lifecycle: `ChainWatchService` runs always-on as a trading-daemon service (one instance per index), independent of whether any browser tab is watching — see Process Boundary Correction below
 - Out of scope: automated order placement, full market depth on ATM±5 legs, pending-order (as opposed to position) query service, any index beyond the three named, any expiry beyond nearest
 
 ## Design
@@ -43,21 +43,25 @@ Options::ChainAnalyzer / DhanAdapter REST poll  ─┘   (OI, IV, greeks per leg
 Existing PositionsChannel + OpenPositions component ──> reused as-is for the positions/orderbook panel
 ```
 
+### Process Boundary Correction
+
+`Live::MarketFeedHub` and the trading daemon run in a separate OS process from the Rails web/ActionCable process — they share only Postgres and Redis, never in-process objects (per `CLAUDE.md`). This means an `OptionChainChannel` `subscribed`/`unsubscribed` callback (which fires in the web process) cannot directly start or stop a service/thread living in the trading process. The existing precedent (`Live::PnlUpdaterService`) resolves this the same way: it runs always-on inside the trading daemon and calls `ActionCable.server.broadcast` unconditionally — Solid Cable's broadcast plumbing (not in-process pubsub) is what actually reaches web-process-served browser connections. `ChainWatchService` follows the same shape: always-on trading-daemon service, not gated by channel subscriber count.
+
 ### Backend: `Options::ChainWatchService`
 
-One instance per index (NIFTY/BANKNIFTY/SENSEX), lifecycle tied to `OptionChainChannel` subscription (started on first subscriber, stopped when the last one disconnects — mirrors how position-scoped WS subscriptions are already gated elsewhere in the codebase):
+One instance per index (NIFTY/BANKNIFTY/SENSEX), registered in `lib/trading_system/bootstrap.rb`'s supervisor alongside the other 11 trading-daemon services, started/stopped with the daemon's lifecycle (not per-browser-tab):
 
 1. Resolve ATM from `Live::TickQuery.for_security` (underlying) or REST fallback if cache miss, matching the pattern already used in `Options::DerivativeChainAnalyzer#spot_ltp`.
-2. `Derivatives::AtmOptions.call(symbol:, atm:, range:)` → static ATM±5 leg rows (security_id, strike, option_type).
+2. Query `Derivative` directly for ATM±5 strikes (own query, not `Derivatives::AtmOptions` — that query object hard-limits to 5 total rows and assumes `current_expiry`, both wrong fits here).
 3. `Live::MarketFeedHub.instance.subscribe_many` for underlying + all resolved legs, ticker mode.
-4. Background timer polls `Options::ChainAnalyzer`/`DhanAdapter#fetch_chain` every 3-5s, staggered across the three index services so REST calls don't collide against the 1 req/sec quote-API limit.
-5. Merges live tick LTP (`Live::TickQuery`) with REST OI/IV/greeks into a per-index, per-expiry cache (Redis, consistent with `Live::TickCache`'s write-through pattern — avoids re-fetching REST state on every WS push).
+4. Background thread polls `Options::DerivativeChainAnalyzer#fetch_api_chain` (public method, reused as-is — do not touch `load_chain_for_expiry`'s internals, it's LOCKED infra and hard-caps its strike window at ±2) every 3-5s, staggered across the three index services so REST calls don't collide against the 1 req/sec quote-API limit.
+5. Merges live tick LTP (`Live::TickQuery`) with REST OI/IV/greeks into a per-index, per-expiry in-memory cache within the service instance.
 6. Re-checks ATM each poll cycle; if it shifts enough to change the ±5 band, diffs old/new strike sets and calls `subscribe`/`unsubscribe` on `MarketFeedHub` for the changed legs only.
-7. On last channel subscriber leaving, calls `unsubscribe` for all legs it added — WS budget returns to baseline.
+7. Broadcasts merged state via `ActionCable.server.broadcast("option_chain_#{index_key}", payload)` every ~1s regardless of whether any browser tab is currently subscribed — cheap at this data volume (33 legs total across 3 indices), consistent with `PnlUpdaterService`'s always-on precedent.
 
 ### Backend: `OptionChainChannel`
 
-New ActionCable channel, `stream_from "option_chain_#{index_key}"`. Broadcasts merged chain state (spot, ATM, per-leg LTP/OI/OI-change/IV/greeks/last-updated) at a throttled ~1s cadence — option-chain data moves slower than PnL, so this can be less aggressive than `PositionsChannel`'s 250ms. `subscribed`/`unsubscribed` callbacks start/stop the corresponding `Options::ChainWatchService` instance for that index.
+New ActionCable channel. Client subscribes with `{channel: "OptionChainChannel", index_key: "NIFTY"}`; `subscribed` calls `stream_from "option_chain_#{params[:index_key]}"`. No service start/stop here — `ChainWatchService` is already always running in the trading daemon (see Process Boundary Correction); the channel is purely a stream router. Broadcasts merged chain state (spot, ATM, per-leg LTP/OI/OI-change/IV/greeks/last-updated) at a throttled ~1s cadence — option-chain data moves slower than PnL, so this can be less aggressive than `PositionsChannel`'s 250ms.
 
 ### Frontend
 
@@ -65,17 +69,17 @@ New ActionCable channel, `stream_from "option_chain_#{index_key}"`. Broadcasts m
 - New store `dashboard/src/stores/useOptionChain.js` — same WS+poll-merge/staleness pattern as `usePositions.js` (subscribes `OptionChainChannel` per selected index via `cable.js`, marks data stale past a threshold with no update).
 - New component `OptionChainTable.jsx` — strike rows × CE/PE columns (LTP, OI, OI∆, IV, delta), ATM row highlighted.
 - Positions/orderbook panel: embed existing `OpenPositions` component directly — no new component or backend needed here per scope decision.
-- Index selector (NIFTY/BANKNIFTY/SENSEX tabs) drives which `OptionChainChannel` stream the store subscribes to; switching tabs unsubscribes the old stream and subscribes the new one (keeps only one index's `ChainWatchService` warm per open browser tab, though multiple tabs/indices can be active system-wide).
+- Index selector (NIFTY/BANKNIFTY/SENSEX tabs) drives which `OptionChainChannel` stream the store subscribes to; switching tabs unsubscribes the old stream and subscribes the new one. All three `ChainWatchService` instances keep running server-side regardless of tab selection (always-on trading-daemon services); the tab switch only changes which stream this browser tab listens to.
 
 ### Error Handling
 
 - WS feed gap: if `Live::TickQuery` returns nil/stale past a threshold for a subscribed leg, mark that leg `feed_stale: true` in the broadcast payload; frontend renders a stale badge instead of freezing the last number silently.
 - REST chain poll failure (rate-limit/network): log, keep last-known OI/IV/greeks, mark `chain_stale: true` after consecutive-failure threshold.
-- ATM shift resolution failure (new strike not found in `Derivatives::AtmOptions`): log and skip that leg only, don't crash the index's `ChainWatchService`.
-- Channel disconnect/reconnect: `unsubscribed` callback must reliably tear down `MarketFeedHub` subscriptions to avoid leaking WS subscriptions across reconnects — guard with idempotent unsubscribe.
+- ATM shift resolution failure (new strike not found in `Derivative` table): log and skip that leg only, don't crash the index's `ChainWatchService`.
+- Browser reconnect: purely a channel re-subscribe (`stream_from`) on the existing always-on broadcast — no server-side subscription state to reconcile.
 
 ### Testing
 
 - RSpec unit tests for `Options::ChainWatchService`'s merge logic (tick update, REST chain update, ATM-shift leg diffing) using fixture ticks/chain payloads — no live API dependency, follows existing repo test conventions (`docs/development/testing.md`).
-- RSpec channel test for `OptionChainChannel` subscribe/unsubscribe lifecycle (service start/stop wiring), mocking `Options::ChainWatchService`.
-- Manual smoke test during market hours: verify all three indices populate, ATM/greeks look sane, tab switching correctly subscribes/unsubscribes, positions panel unaffected. No automated live-market integration test, consistent with existing project convention for feed-dependent behavior.
+- RSpec channel test for `OptionChainChannel` verifying `subscribed` streams from the index-specific stream name derived from `params[:index_key]`.
+- Manual smoke test during market hours: verify all three indices populate, ATM/greeks look sane, tab switching correctly changes which stream is displayed, positions panel unaffected. No automated live-market integration test, consistent with existing project convention for feed-dependent behavior.
