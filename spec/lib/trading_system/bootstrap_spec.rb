@@ -49,4 +49,16 @@ RSpec.describe TradingSystem::Bootstrap do
       end
     end
   end
+
+  describe '.build_supervisor' do
+    it 'registers a ChainWatchService for each of NIFTY, BANKNIFTY, SENSEX' do
+      supervisor = described_class.build_supervisor
+      registered = supervisor.instance_variable_get(:@services)
+
+      expect(registered.keys).to include(:chain_watch_nifty, :chain_watch_banknifty, :chain_watch_sensex)
+      expect(registered[:chain_watch_nifty]).to be_a(Options::ChainWatchService)
+      expect(registered[:chain_watch_banknifty]).to be_a(Options::ChainWatchService)
+      expect(registered[:chain_watch_sensex]).to be_a(Options::ChainWatchService)
+    end
+  end
 end

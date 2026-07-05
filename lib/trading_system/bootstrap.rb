@@ -80,6 +80,9 @@ module TradingSystem
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
       supervisor.register(:smc_scanner, Smc::Scanner.new)
+      supervisor.register(:chain_watch_nifty, Options::ChainWatchService.new(index_key: 'NIFTY'))
+      supervisor.register(:chain_watch_banknifty, Options::ChainWatchService.new(index_key: 'BANKNIFTY'))
+      supervisor.register(:chain_watch_sensex, Options::ChainWatchService.new(index_key: 'SENSEX'))
 
       supervisor
     end

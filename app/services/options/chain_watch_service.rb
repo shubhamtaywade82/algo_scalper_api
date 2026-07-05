@@ -42,6 +42,12 @@ module Options
       unsubscribe_current_legs!
     end
 
+    # Non-bang aliases so this service satisfies TradingSystem::Supervisor's
+    # lifecycle contract (#start / #stop), without renaming the bang methods
+    # that Tasks 1-3's tests depend on.
+    alias start start!
+    alias stop stop!
+
     def resolve_atm_legs(spot:, expiry:)
       increment = strike_increment_for(spot)
       atm = (spot / increment).round * increment
