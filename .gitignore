@@ -64,3 +64,4 @@ dump.rdb
 # For this repository's graphify-out directory
 /graphify-out/
 
+.superpowers/
