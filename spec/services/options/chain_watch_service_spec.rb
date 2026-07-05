@@ -37,4 +37,53 @@ RSpec.describe Options::ChainWatchService do
       expect(strikes).to eq((24550.0..25050.0).step(50).to_a)
     end
   end
+
+  describe '#merge_tick_data' do
+    it 'fills LTP/OI/bid/ask from TickQuery and clears feed_stale when a tick exists' do
+      legs = [{ strike: 24800.0, type: 'CE', security_id: '24800CE', segment: 'NSE_FNO', feed_stale: true, ltp: nil, oi: nil, bid: nil, ask: nil }]
+      tick = MarketTick.new(segment: 'NSE_FNO', security_id: '24800CE', ltp: 120.5, oi: 45_000, oi_change: 1200, bid: 120.0, ask: 121.0, timestamp: Time.current)
+      allow(Live::TickQuery).to receive(:for_security).with(segment: 'NSE_FNO', security_id: '24800CE').and_return(tick)
+
+      service = described_class.new(index_key: 'NIFTY')
+      result = service.send(:merge_tick_data, legs)
+
+      expect(result.first).to include(ltp: 120.5, oi: 45_000, oi_change: 1200, bid: 120.0, ask: 121.0, feed_stale: false)
+    end
+
+    it 'marks feed_stale true when TickQuery returns nil' do
+      legs = [{ strike: 24800.0, type: 'CE', security_id: '24800CE', segment: 'NSE_FNO', feed_stale: false, ltp: 100.0, oi: 1, bid: 1, ask: 1 }]
+      allow(Live::TickQuery).to receive(:for_security).and_return(nil)
+
+      service = described_class.new(index_key: 'NIFTY')
+      result = service.send(:merge_tick_data, legs)
+
+      expect(result.first[:feed_stale]).to be(true)
+      expect(result.first[:ltp]).to eq(100.0) # keeps last-known value
+    end
+  end
+
+  describe '#merge_chain_data' do
+    it 'fills OI/IV/greeks from the API chain matching by strike and type' do
+      legs = [{ strike: 24800.0, type: 'CE', iv: nil, delta: nil, gamma: nil, theta: nil, vega: nil, oi: nil }]
+      api_chain = {
+        '24800.000000' => {
+          'ce' => { 'oi' => 50_000, 'implied_volatility' => 14.2, 'greeks' => { 'delta' => 0.52, 'gamma' => 0.002, 'theta' => -8.1, 'vega' => 12.3 } }
+        }
+      }
+
+      service = described_class.new(index_key: 'NIFTY')
+      result = service.send(:merge_chain_data, legs, api_chain)
+
+      expect(result.first).to include(oi: 50_000, iv: 14.2, delta: 0.52, gamma: 0.002, theta: -8.1, vega: 12.3)
+    end
+
+    it 'leaves legs unchanged when api_chain is nil' do
+      legs = [{ strike: 24800.0, type: 'CE', iv: nil, oi: nil }]
+
+      service = described_class.new(index_key: 'NIFTY')
+      result = service.send(:merge_chain_data, legs, nil)
+
+      expect(result).to eq(legs)
+    end
+  end
 end

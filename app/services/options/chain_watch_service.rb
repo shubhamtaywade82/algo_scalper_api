@@ -43,6 +43,41 @@ module Options
       end
     end
 
+    def merge_tick_data(legs)
+      legs.map do |leg|
+        tick = Live::TickQuery.for_security(segment: leg[:segment], security_id: leg[:security_id])
+        if tick&.ltp&.positive?
+          leg.merge(
+            ltp: tick.ltp.to_f, oi: tick.oi.to_i, oi_change: tick.oi_change.to_i,
+            bid: tick.bid, ask: tick.ask, feed_stale: false
+          )
+        else
+          leg.merge(feed_stale: true)
+        end
+      end
+    end
+
+    def merge_chain_data(legs, api_chain)
+      return legs unless api_chain
+
+      legs.map do |leg|
+        strike_formats = [
+          format('%<v>.6f', v: leg[:strike]), leg[:strike].to_s, leg[:strike].to_i.to_s
+        ].uniq
+        option_type_lower = leg[:type].to_s.downcase
+        api_data = strike_formats.filter_map { |sf| api_chain.dig(sf, option_type_lower) }.first
+        next leg unless api_data
+
+        greeks = api_data['greeks'] || {}
+        leg.merge(
+          oi: api_data['oi']&.to_i || leg[:oi],
+          iv: api_data['implied_volatility']&.to_f,
+          delta: greeks['delta']&.to_f, gamma: greeks['gamma']&.to_f,
+          theta: greeks['theta']&.to_f, vega: greeks['vega']&.to_f
+        )
+      end
+    end
+
     private
 
     def strike_increment_for(spot)
