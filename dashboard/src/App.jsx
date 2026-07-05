@@ -16,6 +16,7 @@ const Charts = lazy(() => import('./views/Charts'))
 const Settings = lazy(() => import('./views/Settings'))
 const Ledger = lazy(() => import('./views/Ledger'))
 const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
+const OptionScalper = lazy(() => import('./views/OptionScalper'))
 
 function AppShell(props) {
   const {
@@ -91,6 +92,7 @@ export default function App() {
         <Route path="/strategies" component={Strategies} />
         <Route path="/alpha" component={Alpha} />
         <Route path="/signals" component={Signals} />
+        <Route path="/option-scalper" component={OptionScalper} />
         <Route path="/analysis" component={Analysis} />
         <Route path="/ledger" component={Ledger} />
         <Route path="/settings" component={Settings} />
