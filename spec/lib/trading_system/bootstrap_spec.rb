@@ -51,6 +51,16 @@ RSpec.describe TradingSystem::Bootstrap do
   end
 
   describe '.build_supervisor' do
+    before do
+      allow(IndexConfigLoader).to receive(:load_indices).and_return(
+        [
+          { key: 'NIFTY', segment: 'IDX_I', sid: '13' },
+          { key: 'BANKNIFTY', segment: 'IDX_I', sid: '25' },
+          { key: 'SENSEX', segment: 'IDX_I', sid: '51' }
+        ]
+      )
+    end
+
     it 'registers a ChainWatchService for each of NIFTY, BANKNIFTY, SENSEX' do
       supervisor = described_class.build_supervisor
       registered = supervisor.instance_variable_get(:@services)
