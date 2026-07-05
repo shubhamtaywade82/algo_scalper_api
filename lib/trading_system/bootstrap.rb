@@ -80,11 +80,24 @@ module TradingSystem
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
       supervisor.register(:smc_scanner, Smc::Scanner.new)
-      supervisor.register(:chain_watch_nifty, Options::ChainWatchService.new(index_key: 'NIFTY'))
-      supervisor.register(:chain_watch_banknifty, Options::ChainWatchService.new(index_key: 'BANKNIFTY'))
-      supervisor.register(:chain_watch_sensex, Options::ChainWatchService.new(index_key: 'SENSEX'))
+
+      register_chain_watch(supervisor, :chain_watch_nifty, 'NIFTY')
+      register_chain_watch(supervisor, :chain_watch_banknifty, 'BANKNIFTY')
+      register_chain_watch(supervisor, :chain_watch_sensex, 'SENSEX')
 
       supervisor
     end
+
+    # Registers a per-index ChainWatchService, tolerating an operator having
+    # disabled that index in the DB watchlist (IndexConfigLoader won't return
+    # it, and the constructor raises `unknown_index:...`). Without this
+    # rescue, one disabled index would abort build_supervisor and prevent
+    # every other service from booting too.
+    def register_chain_watch(supervisor, key, index_key)
+      supervisor.register(key, Options::ChainWatchService.new(index_key: index_key))
+    rescue StandardError => e
+      Rails.logger.warn("[Bootstrap] Skipping #{key} registration: #{e.class} - #{e.message}")
+    end
+    private :register_chain_watch
   end
 end

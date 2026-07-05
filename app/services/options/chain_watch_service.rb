@@ -6,6 +6,11 @@ module Options
     POLL_INTERVAL_SECONDS = 4
     BROADCAST_INTERVAL_SECONDS = 1
 
+    # Ordinal used to stagger each index's REST chain-poll phase so all three
+    # ChainWatchService instances don't hit Dhan's option-chain endpoint in
+    # the same tick (finding #2). Unknown index_keys default to ordinal 0.
+    POLL_STAGGER_ORDER = { 'NIFTY' => 0, 'BANKNIFTY' => 1, 'SENSEX' => 2 }.freeze
+
     def initialize(index_key:)
       @index_key = index_key.to_s.upcase
       @index_cfg = IndexConfigLoader.load_indices.find { |idx| idx[:key].to_s.upcase == @index_key }
@@ -69,7 +74,7 @@ module Options
     private
 
     def run_loop
-      last_poll_at = Time.at(0)
+      last_poll_at = initial_last_poll_at
 
       while running?
         begin
@@ -112,17 +117,45 @@ module Options
       old_keys = @subscribed_legs
 
       to_add = new_keys - old_keys
-      to_remove = old_keys - new_keys
+      to_remove = removable_legs(old_keys - new_keys)
 
       Live::MarketFeedHub.instance.subscribe_many(to_add) if to_add.any?
-      Live::MarketFeedHub.instance.unsubscribe_many(to_remove) if to_remove.any?
+      unsubscribe_legs(to_remove)
 
-      @subscribed_legs = new_keys
+      # Legs protected by an active position stay marked as subscribed so we
+      # don't re-issue subscribe_many for them next cycle even though they
+      # dropped out of the ATM±5 window (finding #1).
+      protected_keys = (old_keys - new_keys) - to_remove
+      @subscribed_legs = new_keys | protected_keys
     end
 
     def unsubscribe_current_legs!
-      Live::MarketFeedHub.instance.unsubscribe_many(@subscribed_legs) if @subscribed_legs.any?
-      @subscribed_legs = []
+      to_remove = removable_legs(@subscribed_legs)
+      unsubscribe_legs(to_remove)
+      @subscribed_legs -= to_remove
+    end
+
+    # Filters out any leg whose security_id is still relied upon by an open
+    # trading position — unsubscribing it would silently kill that
+    # position's live tick feed (finding #1).
+    def removable_legs(keys)
+      keys.reject { |key| Live::PositionIndex.instance.trackers_for(key[:security_id]).any? }
+    end
+
+    # Uses the singular #unsubscribe (not #unsubscribe_many) because only the
+    # singular method correctly untracks @subscribed_keys on MarketFeedHub;
+    # unsubscribe_many leaves it tracked, causing a later subscribe_many for
+    # the same leg to be silently skipped as a false "already subscribed"
+    # dedup hit (finding #3).
+    def unsubscribe_legs(keys)
+      keys.each do |key|
+        Live::MarketFeedHub.instance.unsubscribe(segment: key[:segment], security_id: key[:security_id])
+      end
+    end
+
+    def initial_last_poll_at
+      ordinal = POLL_STAGGER_ORDER.fetch(@index_key, 0)
+      Time.current - POLL_INTERVAL_SECONDS + (ordinal * POLL_INTERVAL_SECONDS / 3.0)
     end
 
     def nearest_atm(spot, legs)

@@ -60,5 +60,31 @@ RSpec.describe TradingSystem::Bootstrap do
       expect(registered[:chain_watch_banknifty]).to be_a(Options::ChainWatchService)
       expect(registered[:chain_watch_sensex]).to be_a(Options::ChainWatchService)
     end
+
+    context 'when one index is disabled/unknown and ChainWatchService.new raises for it' do
+      it 'still registers every other service instead of aborting the whole build' do
+        original_new = Options::ChainWatchService.method(:new)
+        allow(Options::ChainWatchService).to receive(:new) do |index_key:|
+          raise "unknown_index:#{index_key}" if index_key == 'BANKNIFTY'
+
+          original_new.call(index_key: index_key)
+        end
+
+        supervisor = nil
+        expect { supervisor = described_class.build_supervisor }.not_to raise_error
+
+        registered = supervisor.instance_variable_get(:@services)
+
+        expect(registered.keys).to include(:chain_watch_nifty, :chain_watch_sensex)
+        expect(registered.keys).not_to include(:chain_watch_banknifty)
+        # Every non-chain-watch service should still be present.
+        expect(registered.keys).to include(
+          :market_feed, :tick_smc_ai, :options_buying_breakout, :options_buying_stream_consumer,
+          :signal_scheduler, :risk_manager, :position_heartbeat, :order_router,
+          :paper_pnl_refresher, :exit_manager, :active_cache, :reconciliation,
+          :stats_notifier, :smc_scanner
+        )
+      end
+    end
   end
 end

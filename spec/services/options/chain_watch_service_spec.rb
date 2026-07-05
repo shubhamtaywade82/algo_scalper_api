@@ -8,6 +8,8 @@ RSpec.describe Options::ChainWatchService do
     allow(IndexConfigLoader).to receive(:load_indices).and_return([index_cfg])
     allow(Live::MarketFeedHub.instance).to receive(:subscribe_many).and_return([])
     allow(Live::MarketFeedHub.instance).to receive(:unsubscribe_many).and_return([])
+    allow(Live::MarketFeedHub.instance).to receive(:unsubscribe).and_return(true)
+    allow(Live::PositionIndex.instance).to receive(:trackers_for).and_return([])
   end
 
   describe '#resolve_atm_legs' do
@@ -87,13 +89,100 @@ RSpec.describe Options::ChainWatchService do
     end
   end
 
+  describe '#resubscribe_legs! (position-aware unsubscribe)' do
+    let(:service) { described_class.new(index_key: 'NIFTY') }
+
+    before do
+      # Seed @subscribed_legs as if both legs were already subscribed from a
+      # prior cycle, then feed a new ATM window that drops both of them.
+      service.instance_variable_set(:@subscribed_legs, [
+                                      { segment: 'NSE_FNO', security_id: '24700CE' },
+                                      { segment: 'NSE_FNO', security_id: '24900PE' }
+                                    ])
+      allow(Live::PositionIndex.instance).to receive(:trackers_for).with('24700CE')
+                                                                   .and_return([{ id: 1, security_id: '24700CE' }])
+      allow(Live::PositionIndex.instance).to receive(:trackers_for).with('24900PE').and_return([])
+    end
+
+    it 'does not unsubscribe a leg with an active position tracker' do
+      expect(Live::MarketFeedHub.instance).not_to receive(:unsubscribe).with(segment: 'NSE_FNO', security_id: '24700CE')
+
+      service.send(:resubscribe_legs!, [])
+    end
+
+    it 'unsubscribes a leg without an active position via the singular #unsubscribe method' do
+      expect(Live::MarketFeedHub.instance).to receive(:unsubscribe).with(segment: 'NSE_FNO', security_id: '24900PE')
+      expect(Live::MarketFeedHub.instance).not_to receive(:unsubscribe_many)
+
+      service.send(:resubscribe_legs!, [])
+    end
+
+    it 'keeps the position-protected leg tracked as subscribed for future cycles' do
+      service.send(:resubscribe_legs!, [])
+
+      expect(service.instance_variable_get(:@subscribed_legs)).to include(segment: 'NSE_FNO', security_id: '24700CE')
+    end
+  end
+
+  describe '#unsubscribe_current_legs! (position-aware, called from #stop!)' do
+    let(:service) { described_class.new(index_key: 'NIFTY') }
+
+    before do
+      service.instance_variable_set(:@subscribed_legs, [
+                                      { segment: 'NSE_FNO', security_id: '24700CE' },
+                                      { segment: 'NSE_FNO', security_id: '24900PE' }
+                                    ])
+      allow(Live::PositionIndex.instance).to receive(:trackers_for).with('24700CE')
+                                                                   .and_return([{ id: 1, security_id: '24700CE' }])
+      allow(Live::PositionIndex.instance).to receive(:trackers_for).with('24900PE').and_return([])
+    end
+
+    it 'leaves the position-protected leg subscribed and unsubscribes only the free leg' do
+      expect(Live::MarketFeedHub.instance).not_to receive(:unsubscribe).with(segment: 'NSE_FNO', security_id: '24700CE')
+      expect(Live::MarketFeedHub.instance).to receive(:unsubscribe).with(segment: 'NSE_FNO', security_id: '24900PE')
+
+      service.send(:unsubscribe_current_legs!)
+
+      expect(service.instance_variable_get(:@subscribed_legs)).to eq([{ segment: 'NSE_FNO', security_id: '24700CE' }])
+    end
+  end
+
+  describe 'REST poll staggering' do
+    it 'assigns different initial last_poll_at offsets to different index_keys' do
+      nifty_service = described_class.new(index_key: 'NIFTY')
+
+      banknifty_cfg = { key: 'BANKNIFTY', segment: 'IDX_I', sid: '25' }
+      allow(IndexConfigLoader).to receive(:load_indices).and_return([banknifty_cfg])
+      banknifty_service = described_class.new(index_key: 'BANKNIFTY')
+
+      now = Time.zone.local(2026, 7, 5, 9, 30, 0)
+      allow(Time).to receive(:current).and_return(now)
+
+      nifty_offset = nifty_service.send(:initial_last_poll_at)
+      banknifty_offset = banknifty_service.send(:initial_last_poll_at)
+
+      expect(nifty_offset).not_to eq(banknifty_offset)
+      expect(banknifty_offset - nifty_offset).to be_within(0.001).of(
+        Options::ChainWatchService::POLL_INTERVAL_SECONDS / 3.0
+      )
+    end
+
+    it 'defaults unknown index_keys to ordinal 0 without raising' do
+      unknown_cfg = { key: 'FOO', segment: 'IDX_I', sid: '99' }
+      allow(IndexConfigLoader).to receive(:load_indices).and_return([unknown_cfg])
+      service = described_class.new(index_key: 'FOO')
+
+      expect { service.send(:initial_last_poll_at) }.not_to raise_error
+    end
+  end
+
   describe '#start! and #stop!' do
     let(:analyzer) { instance_double(Options::DerivativeChainAnalyzer) }
 
     before do
       allow(Options::DerivativeChainAnalyzer).to receive(:new).and_return(analyzer)
       allow(analyzer).to receive_messages(
-        spot_ltp: 24_800.0, find_nearest_expiry: '2026-07-10', fetch_api_chain: {}
+        spot_ltp: 24800.0, find_nearest_expiry: '2026-07-10', fetch_api_chain: {}
       )
       allow(ActionCable.server).to receive(:broadcast)
     end
@@ -124,7 +213,7 @@ RSpec.describe Options::ChainWatchService do
       # by its own examples above) to hand the loop a canned leg list instead, keeping
       # this example deterministic and focused on the subscribe wiring.
       service = described_class.new(index_key: 'NIFTY')
-      fake_legs = [{ strike: 24_800.0, type: 'CE', security_id: '24800CE', segment: 'NSE_FNO', lot_size: 50 }]
+      fake_legs = [{ strike: 24800.0, type: 'CE', security_id: '24800CE', segment: 'NSE_FNO', lot_size: 50 }]
       allow(service).to receive(:resolve_atm_legs).and_return(fake_legs)
 
       subscribed = Queue.new
