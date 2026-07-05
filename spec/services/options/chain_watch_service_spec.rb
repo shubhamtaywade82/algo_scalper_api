@@ -86,4 +86,62 @@ RSpec.describe Options::ChainWatchService do
       expect(result).to eq(legs)
     end
   end
+
+  describe '#start! and #stop!' do
+    let(:analyzer) { instance_double(Options::DerivativeChainAnalyzer) }
+
+    before do
+      allow(Options::DerivativeChainAnalyzer).to receive(:new).and_return(analyzer)
+      allow(analyzer).to receive_messages(
+        spot_ltp: 24_800.0, find_nearest_expiry: '2026-07-10', fetch_api_chain: {}
+      )
+      allow(ActionCable.server).to receive(:broadcast)
+    end
+
+    it 'is not running before start! and running after' do
+      service = described_class.new(index_key: 'NIFTY')
+      expect(service.running?).to be(false)
+
+      service.start!
+      expect(service.running?).to be(true)
+
+      service.stop!
+      expect(service.running?).to be(false)
+    end
+
+    it 'is idempotent — calling start! twice does not raise' do
+      service = described_class.new(index_key: 'NIFTY')
+      service.start!
+      expect { service.start! }.not_to raise_error
+      service.stop!
+    end
+
+    it 'subscribes resolved legs on MarketFeedHub when starting' do
+      # NOTE: DatabaseCleaner runs specs inside a per-test transaction (see
+      # spec/support/database_cleaner.rb). Rows created on the test's DB connection are
+      # invisible to the background thread's own connection, so real Derivative rows
+      # can never be observed cross-thread here. Stub #resolve_atm_legs (already covered
+      # by its own examples above) to hand the loop a canned leg list instead, keeping
+      # this example deterministic and focused on the subscribe wiring.
+      service = described_class.new(index_key: 'NIFTY')
+      fake_legs = [{ strike: 24_800.0, type: 'CE', security_id: '24800CE', segment: 'NSE_FNO', lot_size: 50 }]
+      allow(service).to receive(:resolve_atm_legs).and_return(fake_legs)
+
+      subscribed = Queue.new
+      allow(Live::MarketFeedHub.instance).to receive(:subscribe_many) do |legs|
+        subscribed << legs
+        []
+      end
+
+      service.start!
+      result = begin
+        Timeout.timeout(2) { subscribed.pop }
+      rescue Timeout::Error
+        nil
+      end
+      service.stop!
+
+      expect(result).to eq([{ segment: 'NSE_FNO', security_id: '24800CE' }])
+    end
+  end
 end
