@@ -96,5 +96,33 @@ RSpec.describe TradingSystem::Bootstrap do
         )
       end
     end
+
+    it 'registers each ChainWatchService instance in Options::ChainWatchRegistry' do
+      described_class.build_supervisor
+
+      expect(Options::ChainWatchRegistry.snapshot_for('NIFTY')).not_to be_nil
+      expect(Options::ChainWatchRegistry.snapshot_for('BANKNIFTY')).not_to be_nil
+      expect(Options::ChainWatchRegistry.snapshot_for('SENSEX')).not_to be_nil
+    ensure
+      Options::ChainWatchRegistry.reset!
+    end
+
+    context 'when one index is disabled/unknown and ChainWatchService.new raises for it' do
+      it 'does not register that index in the registry either' do
+        original_new = Options::ChainWatchService.method(:new)
+        allow(Options::ChainWatchService).to receive(:new) do |index_key:|
+          raise "unknown_index:#{index_key}" if index_key == 'BANKNIFTY'
+
+          original_new.call(index_key: index_key)
+        end
+
+        described_class.build_supervisor
+
+        expect(Options::ChainWatchRegistry.snapshot_for('NIFTY')).not_to be_nil
+        expect(Options::ChainWatchRegistry.snapshot_for('BANKNIFTY')).to be_nil
+      ensure
+        Options::ChainWatchRegistry.reset!
+      end
+    end
   end
 end

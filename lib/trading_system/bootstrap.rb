@@ -94,7 +94,9 @@ module TradingSystem
     # rescue, one disabled index would abort build_supervisor and prevent
     # every other service from booting too.
     def register_chain_watch(supervisor, key, index_key)
-      supervisor.register(key, Options::ChainWatchService.new(index_key: index_key))
+      service = Options::ChainWatchService.new(index_key: index_key)
+      supervisor.register(key, service)
+      Options::ChainWatchRegistry.register(index_key, service)
     rescue StandardError => e
       Rails.logger.warn("[Bootstrap] Skipping #{key} registration: #{e.class} - #{e.message}")
     end
