@@ -329,36 +329,26 @@ export default function Backtester() {
             <div class="text-[10px] space-y-3.5">
               <div class="flex justify-between items-center">
                 <span class="text-gray-500 font-bold uppercase">Total Trades</span>
-                <span class="font-black text-white text-data">76</span>
+                <span class="font-black text-white text-data">{metrics().totalTrades}</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-500 font-bold uppercase">Winning Trades</span>
-                <span class="font-black text-emerald-400 text-data">48 (63.21%)</span>
+                <span class="font-black text-emerald-400 text-data">{metrics().winningTrades} ({metrics().winRate}%)</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-500 font-bold uppercase">Losing Trades</span>
-                <span class="font-black text-rose-500 text-data">28 (36.79%)</span>
+                <span class="font-black text-rose-500 text-data">{metrics().losingTrades} {metrics().winRate ? `(${(100 - metrics().winRate).toFixed(2)}%)` : ''}</span>
               </div>
-              <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold uppercase">Largest Win</span>
-                <span class="font-black text-emerald-400 text-data">+₹8,450</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold uppercase">Largest Loss</span>
-                <span class="font-black text-rose-500 text-data">-₹4,250</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold uppercase">Sharpe Ratio</span>
-                <span class="font-black text-white text-data">1.42</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold uppercase">Sortino Ratio</span>
-                <span class="font-black text-white text-data">2.31</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold uppercase">Calmar Ratio</span>
-                <span class="font-black text-white text-data">1.53</span>
-              </div>
+              <Show when={btResult().trades && btResult().trades.length > 0}>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-500 font-bold uppercase">Avg Win</span>
+                  <span class="font-black text-emerald-400 text-data">+{metrics().avgWinPct}%</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-500 font-bold uppercase">Avg Loss</span>
+                  <span class="font-black text-rose-500 text-data">{metrics().avgLossPct}%</span>
+                </div>
+              </Show>
             </div>
           </div>
         </div>
