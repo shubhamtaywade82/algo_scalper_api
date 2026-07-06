@@ -1,9 +1,15 @@
-import { For, Show } from 'solid-js'
+import { For, Show, onMount } from 'solid-js'
+import { useEquityCurve } from '../stores/useEquityCurve'
+import EquityCurve from '../components/charts/EquityCurve'
+import DrawdownChart from '../components/charts/DrawdownChart'
 import AnimatedNumber from '../components/AnimatedNumber'
 
 export default function Reports() {
   const [activeTab, setActiveTab] = createSignal('summary')
-  const [activeTimeframe, setActiveTimeframe] = createSignal('daily')
+
+  const { data: curveData, fetchCurve } = useEquityCurve()
+
+  onMount(() => fetchCurve())
 
   // KPI Period Metrics
   const metrics = [
@@ -165,33 +171,13 @@ export default function Reports() {
         <div class="lg:col-span-9 space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Equity Curve */}
-            <div class="glass p-5 rounded-2xl h-[280px] flex flex-col justify-between">
-              <div class="flex items-center justify-between border-b border-white/5 pb-2 text-[10px]">
-                <span class="font-black text-gray-400 uppercase tracking-widest">Equity Curve</span>
-                <div class="flex items-center gap-2 text-[8px] font-bold">
-                  <span class="text-emerald-400 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Equity</span>
-                  <span class="text-gray-600 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-gray-500" /> Buy & Hold</span>
-                </div>
-              </div>
-              <div class="flex-1 py-4 relative">
-                <svg viewBox="0 0 250 100" class="w-full h-full">
-                  <path d="M0,90 L50,92 L100,75 L150,80 L200,60 L250,55" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
-                  <path d="M0,90 Q40,80 80,60 T160,55 T250,30" fill="none" stroke="rgb(16, 185, 129)" stroke-width="2" />
-                </svg>
-              </div>
+            <div class="glass rounded-2xl overflow-hidden h-[280px]">
+              <EquityCurve data={() => curveData()} height={280} />
             </div>
 
             {/* Drawdown Curve */}
-            <div class="glass p-5 rounded-2xl h-[280px] flex flex-col justify-between">
-              <div class="flex items-center justify-between border-b border-white/5 pb-2 text-[10px]">
-                <span class="font-black text-gray-400 uppercase tracking-widest">Drawdown Curve</span>
-                <span class="text-[8px] text-rose-500 font-bold uppercase">Max: 1.87%</span>
-              </div>
-              <div class="flex-1 py-4 relative">
-                <svg viewBox="0 0 250 100" class="w-full h-full">
-                  <path d="M0,5 Q50,20 100,15 T200,45 T250,60" fill="none" stroke="rgb(239, 68, 68)" stroke-width="1.5" />
-                </svg>
-              </div>
+            <div class="glass rounded-2xl overflow-hidden h-[280px]">
+              <DrawdownChart data={() => curveData()} height={280} />
             </div>
           </div>
         </div>

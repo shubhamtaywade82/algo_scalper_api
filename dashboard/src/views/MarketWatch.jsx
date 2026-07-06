@@ -1,9 +1,16 @@
-// Market Watch page — real-time quotes via existing /api/dashboard + ActionCable DashboardChannel
-// Data flows through useDashboard which already provides indices, quotes, marketStatus
-import { createMemo, For } from 'solid-js'
+import { createMemo, createSignal, createEffect, For } from 'solid-js'
 import { Show } from 'solid-js'
 import { useDashboardContext } from '../context/DashboardContext'
+import { useDepth } from '../stores/useDepth'
+import OrderBook from '../components/trading/OrderBook'
+import MarketDepth from '../components/trading/MarketDepth'
 import AnimatedNumber from '../components/AnimatedNumber'
+
+const SYMBOLS = [
+  { key: 'NIFTY', label: 'Nifty 50' },
+  { key: 'BANKNIFTY', label: 'Bank Nifty' },
+  { key: 'SENSEX', label: 'Sensex' },
+]
 
 function QuoteCard(props) {
   return (
@@ -23,8 +30,14 @@ function QuoteCard(props) {
 
 export default function MarketWatch() {
   const { indices, marketStatus } = useDashboardContext()
+  const [selectedSymbol, setSelectedSymbol] = createSignal('NIFTY')
+  const { depth, loading, error, fetchDepth } = useDepth(selectedSymbol())
 
-  // Data-driven from existing dashboard API — no additional endpoints needed
+  createEffect(() => {
+    const symbol = selectedSymbol()
+    fetchDepth()
+  })
+
   const quoteCards = createMemo(() => [
     { label: 'Nifty 50', value: indices()?.nifty, isPositive: true, changePct: 0 },
     { label: 'Bank Nifty', value: indices()?.banknifty, isPositive: true, changePct: 0 },
@@ -33,6 +46,7 @@ export default function MarketWatch() {
 
   return (
     <div class="space-y-6">
+      {/* Market Status Header */}
       <div class="flex items-center justify-between mb-2">
         <div>
           <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
@@ -49,10 +63,37 @@ export default function MarketWatch() {
         </Show>
       </div>
 
+      {/* Quote Cards */}
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <For each={quoteCards()}>
           {(card) => <QuoteCard {...card} />}
         </For>
+      </div>
+
+      {/* Symbol Selector for Depth */}
+      <div class="flex items-center gap-3">
+        <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">Depth:</span>
+        <select
+          class="glass-select text-[10px] px-3 py-1.5 rounded-lg border border-white/5 bg-white/[0.03] text-white font-bold"
+          value={selectedSymbol()}
+          onChange={e => setSelectedSymbol(e.target.value)}
+        >
+          <For each={SYMBOLS}>
+            {s => <option value={s.key}>{s.label}</option>}
+          </For>
+        </select>
+        <Show when={loading()}>
+          <span class="text-[9px] text-gray-500 animate-pulse">Loading...</span>
+        </Show>
+        <Show when={error()}>
+          <span class="text-[9px] text-rose-400">Error: {error()}</span>
+        </Show>
+      </div>
+
+      {/* Order Book + Market Depth */}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <OrderBook depth={depth()} symbol={selectedSymbol()} />
+        <MarketDepth depth={depth()} />
       </div>
     </div>
   )
