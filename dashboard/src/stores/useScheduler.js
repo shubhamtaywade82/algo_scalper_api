@@ -1,6 +1,6 @@
-// DEPENDENCY: backend endpoints GET /api/scheduler/tasks, POST /api/scheduler/tasks/:id/execute
-// Expected shape: [{ id, name, cron, status, last_run_at, next_run_at, description }]
-// TODO: Wire to ActionCable SchedulerChannel when available
+// Backend: GET /api/scheduler/tasks, POST /api/scheduler/tasks/:id/execute
+// WebSocket: ActionCable SchedulerChannel TBD
+// Data shape: [{ id, name, cron, status, last_run_at, next_run_at, description }]
 
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import { apiClient } from '../lib/api'
@@ -29,7 +29,8 @@ export function useScheduler() {
   async function executeTask(taskId) {
     try {
       const res = await apiClient.post(`/scheduler/tasks/${taskId}/execute`)
-      toast.success(`Task ${res.data?.name || taskId} triggered`)
+      const taskName = res.data?.message ? `Job enqueued` : `Task ${taskId} triggered`
+      toast.success(taskName)
       await fetchTasks()
       return { ok: true }
     } catch (e) {

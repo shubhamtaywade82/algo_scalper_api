@@ -9,7 +9,8 @@ const POLL_MS = 30000
 
 export function useFunds() {
   const [funds, setFunds] = createSignal({
-    cash: 0, margin_used: 0, available: 0, total_collateral: 0, day_pnl: 0
+    cash: 0, equity: 0, mtm: 0, exposure: 0,
+    margin_used: 0, available: 0, total_collateral: 0, day_pnl: 0
   })
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal(null)

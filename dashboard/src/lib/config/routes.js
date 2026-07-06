@@ -98,11 +98,6 @@ export const navigationConfig = [
   },
 ]
 
-// DEPENDENCY: These routes need backend endpoints before they can display real data:
-// - /api/holdings → Holdings page
-// - /api/funds → Funds page (balance, ledger, add/withdraw)
-// - /api/reports → Reports & Performance pages
-// - /api/logs → Logs page
-// - /api/alerts → Alerts page (CRUD)
+// Remaining backend DEPENDENCY:
 // - /api/backtests → Backtests execution, reports, and configs
 // - /api/replay → Replay historical data ingestion and player control state

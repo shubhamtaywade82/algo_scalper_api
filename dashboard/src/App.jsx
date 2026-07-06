@@ -23,7 +23,7 @@ const OptionChain = lazy(() => import('./views/OptionChain'))
 const Backtester = lazy(() => import('./views/Backtester'))
 const Replay = lazy(() => import('./views/Replay'))
 
-// New TDD routes — backend DEPENDENCY stubs
+// New TDD routes — all backends implemented
 const MarketWatch = lazy(() => import('./views/MarketWatch'))
 const Holdings = lazy(() => import('./views/Holdings'))
 const Funds = lazy(() => import('./views/Funds'))
@@ -139,17 +139,11 @@ export default function App() {
           <Route path="/replay" component={Replay} />
           {/* New routes from TDD layout */}
           <Route path="/market-watch" component={MarketWatch} />
-          {/* DEPENDENCY: backend — /api/holdings */}
           <Route path="/holdings" component={Holdings} />
-          {/* DEPENDENCY: backend — /api/funds */}
           <Route path="/funds" component={Funds} />
-          {/* DEPENDENCY: backend — /api/reports */}
           <Route path="/reports" component={Reports} />
-          {/* DEPENDENCY: backend — /api/alerts */}
           <Route path="/alerts" component={Alerts} />
-          {/* Backend: /api/scheduler/tasks exists */}
           <Route path="/scheduler" component={Scheduler} />
-          {/* DEPENDENCY: backend — /api/logs */}
           <Route path="/logs" component={Logs} />
         </Route>
       </Route>
