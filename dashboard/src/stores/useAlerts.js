@@ -1,9 +1,8 @@
 // Backend endpoints: GET /api/alerts, POST /api/alerts, PATCH /api/alerts/:id, DELETE /api/alerts/:id
-// Response shape: [{ id, type, severity, message, read, created_at }]
-// TODO: Wire to ActionCable AlertsChannel when available
-
+// WebSocket: AlertsChannel — receives { alert: { ... } } for real-time push
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import { apiClient } from '../lib/api'
+import cable from '../cable'
 import toast from 'solid-toast'
 
 const POLL_MS = 10000
@@ -12,6 +11,9 @@ export function useAlerts() {
   const [alerts, setAlerts] = createSignal([])
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal(null)
+
+  let subscription = null
+  let pollTimer = null
 
   async function fetchAlerts() {
     setLoading(true)
@@ -30,7 +32,6 @@ export function useAlerts() {
     try {
       const res = await apiClient.post('/alerts', data)
       toast.success('Alert created')
-      await fetchAlerts()
       return { ok: true, data: res.data }
     } catch (e) {
       toast.error(`Failed to create alert: ${e.message}`)
@@ -41,7 +42,7 @@ export function useAlerts() {
   async function updateAlert(id, data) {
     try {
       const res = await apiClient.patch(`/alerts/${id}`, data)
-      await fetchAlerts()
+      setAlerts(prev => prev.map(a => a.id === id ? { ...a, ...res.data } : a))
       return { ok: true, data: res.data }
     } catch (e) {
       toast.error(`Failed to update alert: ${e.message}`)
@@ -52,8 +53,8 @@ export function useAlerts() {
   async function deleteAlert(id) {
     try {
       await apiClient.delete(`/alerts/${id}`)
+      setAlerts(prev => prev.filter(a => a.id !== id))
       toast.success('Alert deleted')
-      await fetchAlerts()
       return { ok: true }
     } catch (e) {
       toast.error(`Failed to delete alert: ${e.message}`)
@@ -67,8 +68,24 @@ export function useAlerts() {
 
   onMount(() => {
     fetchAlerts()
-    const timer = setInterval(fetchAlerts, POLL_MS)
-    onCleanup(() => clearInterval(timer))
+    pollTimer = setInterval(fetchAlerts, POLL_MS)
+
+    subscription = cable.subscriptions.create('AlertsChannel', {
+      connected() {
+        console.log('✅ [WS:Alerts] Connected')
+      },
+      received(data) {
+        console.debug('⚡ [WS:Alerts] Update:', data)
+        if (data.alert) {
+          setAlerts(prev => [data.alert, ...prev].slice(0, 100))
+        }
+      }
+    })
+  })
+
+  onCleanup(() => {
+    subscription?.unsubscribe()
+    clearInterval(pollTimer)
   })
 
   return { alerts, loading, error, fetchAlerts, createAlert, updateAlert, deleteAlert, markRead }

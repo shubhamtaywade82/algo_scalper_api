@@ -1,9 +1,8 @@
 // Backend endpoint: GET /api/holdings
-// Expected shape: [{ id, symbol, quantity, avg_price, ltp, pnl, pnl_pct, segment }]
-// TODO: Wire to ActionCable HoldingsChannel when available
-
+// WebSocket: HoldingsChannel — receives { type: "holdings_changed" } signals to refetch
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import { apiClient } from '../lib/api'
+import cable from '../cable'
 
 const POLL_MS = 15000
 
@@ -11,6 +10,9 @@ export function useHoldings() {
   const [holdings, setHoldings] = createSignal([])
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal(null)
+
+  let subscription = null
+  let pollTimer = null
 
   async function fetchHoldings() {
     setLoading(true)
@@ -27,8 +29,22 @@ export function useHoldings() {
 
   onMount(() => {
     fetchHoldings()
-    const timer = setInterval(fetchHoldings, POLL_MS)
-    onCleanup(() => clearInterval(timer))
+    pollTimer = setInterval(fetchHoldings, POLL_MS)
+
+    subscription = cable.subscriptions.create('HoldingsChannel', {
+      connected() {
+        console.log('✅ [WS:Holdings] Connected')
+      },
+      received(data) {
+        console.debug('⚡ [WS:Holdings] Update:', data)
+        if (data.type === 'holdings_changed') fetchHoldings()
+      }
+    })
+  })
+
+  onCleanup(() => {
+    subscription?.unsubscribe()
+    clearInterval(pollTimer)
   })
 
   return { holdings, loading, error, fetchHoldings }

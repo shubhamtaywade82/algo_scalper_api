@@ -1,9 +1,8 @@
 // Backend endpoints: GET /api/funds, POST /api/funds/add, POST /api/funds/withdraw
-// Response shape: { cash, equity, mtm, exposure, margin_used, available, total_collateral, day_pnl }
-// TODO: Wire to ActionCable FundsChannel when available
-
+// WebSocket: FundsChannel — receives { type: "funds_changed" } signals to refetch
 import { createSignal, onMount, onCleanup } from 'solid-js'
 import { apiClient } from '../lib/api'
+import cable from '../cable'
 import toast from 'solid-toast'
 
 const POLL_MS = 30000
@@ -14,6 +13,9 @@ export function useFunds() {
   })
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal(null)
+
+  let subscription = null
+  let pollTimer = null
 
   async function fetchFunds() {
     setLoading(true)
@@ -54,8 +56,22 @@ export function useFunds() {
 
   onMount(() => {
     fetchFunds()
-    const timer = setInterval(fetchFunds, POLL_MS)
-    onCleanup(() => clearInterval(timer))
+    pollTimer = setInterval(fetchFunds, POLL_MS)
+
+    subscription = cable.subscriptions.create('FundsChannel', {
+      connected() {
+        console.log('✅ [WS:Funds] Connected')
+      },
+      received(data) {
+        console.debug('⚡ [WS:Funds] Update:', data)
+        if (data.type === 'funds_changed') fetchFunds()
+      }
+    })
+  })
+
+  onCleanup(() => {
+    subscription?.unsubscribe()
+    clearInterval(pollTimer)
   })
 
   return { funds, loading, error, fetchFunds, addFunds, withdrawFunds }

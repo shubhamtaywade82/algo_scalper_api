@@ -36,6 +36,7 @@ module Api
           { account_code: 'opening_equity', credit: amount }
         ]
       )
+      ActionCable.server.broadcast("funds", { type: "funds_changed", timestamp: Time.current.iso8601 })
       render json: { success: true, cash: paper_snapshot[:cash] }
     rescue StandardError => e
       Rails.logger.error("[Api::FundsController] add failed: #{e.message}")
@@ -63,6 +64,7 @@ module Api
           { account_code: 'opening_equity', debit: amount }
         ]
       )
+      ActionCable.server.broadcast("funds", { type: "funds_changed", timestamp: Time.current.iso8601 })
       render json: { success: true, cash: paper_snapshot[:cash] }
     rescue StandardError => e
       Rails.logger.error("[Api::FundsController] withdraw failed: #{e.message}")
