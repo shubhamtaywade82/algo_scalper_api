@@ -4,7 +4,9 @@ import { DashboardContext } from './context/DashboardContext'
 import { Toaster } from 'solid-toast'
 import { useDashboard } from './stores/useDashboard'
 import { usePositions } from './stores/usePositions'
+import { useUIStore } from './stores/ui.store'
 import Header from './components/Header'
+import Sidebar from './components/layout/Sidebar'
 import './style.css'
 
 const Dashboard = lazy(() => import('./views/Dashboard'))
@@ -17,6 +19,15 @@ const Settings = lazy(() => import('./views/Settings'))
 const Ledger = lazy(() => import('./views/Ledger'))
 const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
 const OptionScalper = lazy(() => import('./views/OptionScalper'))
+
+// New TDD routes — backend DEPENDENCY stubs
+const MarketWatch = lazy(() => import('./views/MarketWatch'))
+const Holdings = lazy(() => import('./views/Holdings'))
+const Funds = lazy(() => import('./views/Funds'))
+const Reports = lazy(() => import('./views/Reports'))
+const Alerts = lazy(() => import('./views/Alerts'))
+const Scheduler = lazy(() => import('./views/Scheduler'))
+const Logs = lazy(() => import('./views/Logs'))
 
 function AppShell(props) {
   const {
@@ -34,6 +45,8 @@ function AppShell(props) {
     publicIpv4, publicIpv6, registeredIps, circuitBreaker,
     lastUpdated, recentSignals, config, marketStatus, refresh: refreshDashboard
   } = useDashboard(() => fetchPositions())
+
+  const { sidebarCollapsed, toggleSidebar } = useUIStore()
 
   async function closePositionAndRefresh(positionId) {
     const result = await closeOpenPosition(positionId)
@@ -63,22 +76,29 @@ function AppShell(props) {
           connected={connected()}
           isStale={dashboardStale()}
           marketStatus={marketStatus()}
+          onToggleSidebar={toggleSidebar}
+          sidebarCollapsed={sidebarCollapsed()}
         />
-        <main class="p-6 max-w-screen-2xl mx-auto pb-20">
-          {props.children}
+        <div class="flex">
+          <Sidebar collapsed={sidebarCollapsed()} />
+          <main class={`flex-1 transition-all duration-300 pt-14 pb-20 ${sidebarCollapsed() ? 'ml-16' : 'ml-56'}`}>
+            <div class="p-6 max-w-screen-2xl mx-auto">
+              {props.children}
 
-          <Show when={lastUpdated()}>
-            <footer class="flex items-center justify-center gap-6 pt-20 pb-10 border-t border-white/5 mt-10">
-              <div class="flex items-center gap-2.5 px-5 py-2.5 rounded-full glass border border-white/5 text-[10px] text-gray-500 font-black tracking-[0.2em] uppercase">
-                <span class="w-1.5 h-1.5 rounded-full bg-primary-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse"></span>
-                Vault Sync Active
-              </div>
-              <div class="text-[10px] text-gray-600 font-black uppercase tracking-[0.2em]">
-                Refreshed: {new Date(lastUpdated()).toLocaleTimeString('en-IN')}
-              </div>
-            </footer>
-          </Show>
-        </main>
+              <Show when={lastUpdated()}>
+                <footer class="flex items-center justify-center gap-6 pt-20 pb-10 border-t border-white/5 mt-10">
+                  <div class="flex items-center gap-2.5 px-5 py-2.5 rounded-full glass border border-white/5 text-[10px] text-gray-500 font-black tracking-[0.2em] uppercase">
+                    <span class="w-1.5 h-1.5 rounded-full bg-primary-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] animate-pulse"></span>
+                    Vault Sync Active
+                  </div>
+                  <div class="text-[10px] text-gray-600 font-black uppercase tracking-[0.2em]">
+                    Refreshed: {new Date(lastUpdated()).toLocaleTimeString('en-IN')}
+                  </div>
+                </footer>
+              </Show>
+            </div>
+          </main>
+        </div>
       </div>
     </DashboardContext.Provider>
   )
@@ -96,6 +116,20 @@ export default function App() {
         <Route path="/analysis" component={Analysis} />
         <Route path="/ledger" component={Ledger} />
         <Route path="/settings" component={Settings} />
+        {/* New routes from TDD layout */}
+        <Route path="/market-watch" component={MarketWatch} />
+        {/* DEPENDENCY: backend — /api/holdings */}
+        <Route path="/holdings" component={Holdings} />
+        {/* DEPENDENCY: backend — /api/funds */}
+        <Route path="/funds" component={Funds} />
+        {/* DEPENDENCY: backend — /api/reports */}
+        <Route path="/reports" component={Reports} />
+        {/* DEPENDENCY: backend — /api/alerts */}
+        <Route path="/alerts" component={Alerts} />
+        {/* Backend: /api/scheduler/tasks exists */}
+        <Route path="/scheduler" component={Scheduler} />
+        {/* DEPENDENCY: backend — /api/logs */}
+        <Route path="/logs" component={Logs} />
       </Route>
       {/* Fullscreen — own layout, no Header/footer chrome */}
       <Route path="/charts" component={Charts} />
