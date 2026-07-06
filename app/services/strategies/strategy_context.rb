@@ -7,10 +7,10 @@ module Strategies
   # ActiveRecord, Redis, or any platform service — only this facade.
   class StrategyContext
     attr_reader :instrument_key, :candles, :indicators, :session,
-                :position, :params, :clock, :config
+                :position, :params, :clock, :config, :logger
 
     def initialize(instrument_key:, candles:, indicators:, session:,
-                   position:, params:, clock:, config: {})
+                   position:, params:, clock:, config: {}, logger: nil)
       @instrument_key = instrument_key
       @candles = candles
       @indicators = indicators
@@ -19,6 +19,7 @@ module Strategies
       @params = params
       @clock = clock
       @config = config
+      @logger = logger
       freeze
     end
   end

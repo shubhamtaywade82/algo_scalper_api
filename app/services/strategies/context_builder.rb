@@ -22,7 +22,10 @@ module Strategies
       @position_cache = position_cache || Object.const_get(DEFAULT_POSITIONS).instance
       @session_service = session_service || Object.const_get(DEFAULT_SESSION)
       @clock = clock
+      @logger = nil
     end
+
+    attr_writer :logger
 
     # Build a context snapshot for the given instrument and strategy.
     #
@@ -44,7 +47,8 @@ module Strategies
         position: build_position(instrument),
         params: params.freeze,
         clock: @clock,
-        config: config.freeze
+        config: config.freeze,
+        logger: @logger
       )
     end
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_06_120001) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_06_120002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -397,10 +397,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120001) do
     t.text "description"
     t.jsonb "json_value"
     t.string "key", null: false
+    t.string "scope", default: "global", null: false
+    t.boolean "secret", default: false, null: false
+    t.bigint "strategy_id"
     t.text "string_value"
     t.datetime "updated_at", null: false
     t.string "value_type", default: "string", null: false
     t.index ["key"], name: "index_platform_variables_on_key", unique: true
+    t.index ["scope", "strategy_id", "key"], name: "idx_platform_variables_on_scope_strategy_key", unique: true
   end
 
   create_table "position_meta_snapshots", force: :cascade do |t|

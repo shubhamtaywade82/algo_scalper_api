@@ -113,6 +113,25 @@ Rails.application.routes.draw do
     resource :drawdown_guard, only: [], controller: 'drawdown_guard' do
       delete :reset, on: :member
     end
+
+    # Strategy Platform (Phases 2–5)
+    resources :strategies, param: :slug, only: %i[index show create] do
+      member do
+        post :deploy, :start, :stop, :restart
+        get  :versions, :signals, :logs
+        get  :variables
+        put  :variables, action: :update_variables
+      end
+    end
+
+    # Global platform variables
+    get  'variables', to: 'variables#index'
+    put  'variables', to: 'variables#update'
+
+    # Strategy subsystem health
+    get  'strategies/health/pool',     to: 'strategies/health#pool'
+    get  'strategies/health/session',  to: 'strategies/health#session'
+    get  'strategies/health/backtest', to: 'strategies/health#backtest'
   end
 
   # Redis UI (development only)

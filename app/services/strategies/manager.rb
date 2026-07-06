@@ -24,6 +24,7 @@ module Strategies
       @running = false
       @mutex = Mutex.new
       @bus = Core::EventBus.instance
+      @log_streams = {} # slug => LogStream
     end
 
     def start
@@ -104,14 +105,29 @@ module Strategies
     def heartbeat_runners
       now = Time.current.to_i
       @mutex.synchronize do
-        @runners.each_value do |state|
+        @runners.each do |slug, state|
           next unless state[:thread]&.alive?
           next if (now - (state[:last_heartbeat] || 0)) < HEARTBEAT_INTERVAL
 
           state[:last_heartbeat] = now
           state[:run]&.update_column(:stats, state[:run].stats.merge(last_heartbeat: now)) # rubocop:disable Rails/SkipsModelValidations
+          broadcast_heartbeat(slug, "running")
         end
       end
+    end
+
+    def broadcast_heartbeat(slug, status)
+      state = @runners[slug]
+      return unless state
+
+      ActionCable.server.broadcast("strategy_status", {
+        slug: slug,
+        status: status,
+        heartbeat_at: Time.current.iso8601,
+        error_count: state[:errors]
+      })
+    rescue StandardError => e
+      Rails.logger.warn("[Strategies::Manager] broadcast_heartbeat failed for #{slug}: #{e.message}")
     end
 
     def subscribe_to_events
@@ -137,6 +153,9 @@ module Strategies
       strategy_class = Loader.load_version(version)
       strategy_instance = strategy_class.new
 
+      log_stream = LogStream.new(strategy_record.slug)
+      @context_builder.logger = log_stream
+
       run_record = strategy_record.runs.create!(
         strategy_version: version,
         started_at: Time.current,
@@ -149,6 +168,7 @@ module Strategies
         version_id: version.id,
         strategy: strategy_instance,
         run: run_record,
+        log_stream: log_stream,
         errors: [],
         error_timestamps: [],
         backoff_until: nil,
@@ -161,11 +181,14 @@ module Strategies
       state[:status] = "running"
 
       @mutex.synchronize { @runners[strategy_record.slug] = state }
+      @log_streams[strategy_record.slug] = log_stream
+
       @bus.publish(:strategy_status_change,
                    slug: strategy_record.slug, status: "running",
                    version_id: version.id,
                    run_id: run_record.id)
-      Rails.logger.info("[Strategies::Manager] started runner for #{strategy_record.slug} (v#{version.version})")
+      broadcast_heartbeat(strategy_record.slug, "running")
+      log_stream.info("Runner started (v#{version.version})")
     end
 
     def stop_runner(slug, reason)
@@ -173,6 +196,7 @@ module Strategies
       return unless state
 
       state[:status] = "stopping"
+      state[:log_stream]&.info("Runner stopping (#{reason})")
       state[:thread]&.kill
 
       state[:run]&.update!(
@@ -187,8 +211,9 @@ module Strategies
       Runtime.remove(slug.camelize)
 
       @runners.delete(slug)
+      @log_streams.delete(slug)
       @bus.publish(:strategy_status_change, slug: slug, status: "stopped", reason: reason)
-      Rails.logger.info("[Strategies::Manager] stopped runner for #{slug} (reason: #{reason})")
+      broadcast_heartbeat(slug, "stopped")
     end
 
     def runner_loop(state, slug)
@@ -210,7 +235,10 @@ module Strategies
       return unless instrument
 
       # Check circuit breaker
-      return if Risk::CircuitBreaker.instance.tripped?
+      if Risk::CircuitBreaker.instance.tripped?
+        state[:log_stream]&.warn("Circuit breaker tripped — skipping #{instrument_key}")
+        return
+      end
 
       context = @context_builder.build(
         instrument: instrument,
@@ -220,10 +248,11 @@ module Strategies
       )
 
       signal = state[:strategy].call(context)
+      state[:log_stream]&.info("#{instrument_key} → #{signal.class.name.demodulize}")
 
       persist_signal(state, slug, instrument_key, signal)
     rescue StandardError => e
-      Rails.logger.warn("[Strategies::Manager] #{slug} #{instrument_key} error: #{e.message}")
+      state[:log_stream]&.error("#{instrument_key} error: #{e.message}")
       handle_crash(state, slug, e)
     end
 
@@ -252,6 +281,8 @@ module Strategies
       state[:error_timestamps] << Time.current.to_i
       state[:error_timestamps].reject! { |t| t < Time.current.to_i - ERROR_WINDOW }
 
+      state[:log_stream]&.error("Crash ##{state[:errors]}: #{exception.message}")
+
       state[:run]&.update_column(:stats, state[:run].stats.merge( # rubocop:disable Rails/SkipsModelValidations
                                    error_count: state[:errors],
                                    last_error: exception.message,
@@ -261,7 +292,7 @@ module Strategies
       @bus.publish(:strategy_error, slug: slug, error: exception.message)
 
       if state[:errors] >= ERROR_LIMIT && state[:error_timestamps].size >= ERROR_LIMIT
-        Rails.logger.error("[Strategies::Manager] #{slug} error limit reached (#{state[:errors]} errors in #{ERROR_WINDOW}s) — auto-stopping")
+        state[:log_stream]&.error("Error limit reached — auto-stopping")
         @mutex.synchronize do
           stop_runner(slug, "error_limit")
           Strategies::Record.find_by(slug: slug)&.update!(status: "errored")
@@ -271,7 +302,7 @@ module Strategies
 
       backoff = [2**(state[:errors] - 1), BACKOFF_CAP].min
       state[:backoff_until] = Time.current.to_i + backoff
-      Rails.logger.warn("[Strategies::Manager] #{slug} crashed (error ##{state[:errors]}), backing off #{backoff}s")
+      state[:log_stream]&.warn("Backing off #{backoff}s")
       sleep backoff
     end
 

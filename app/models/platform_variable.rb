@@ -5,8 +5,12 @@ class PlatformVariable < ApplicationRecord
 
   VALUE_TYPES = %w[string decimal boolean json].freeze
 
-  validates :key, presence: true, uniqueness: true
+  validates :key, presence: true, uniqueness: { scope: %i[scope strategy_id] }
   validates :value_type, presence: true, inclusion: { in: VALUE_TYPES }
+  validates :scope, presence: true, inclusion: { in: %w[global strategy] }
+
+  scope :global, -> { where(scope: "global", strategy_id: nil) }
+  scope :for_strategy, ->(strategy_id) { where(scope: "strategy", strategy_id: strategy_id) }
 
   def value
     case value_type
