@@ -211,7 +211,7 @@ export default function Backtester() {
                     </tr>
                   </thead>
                   <tbody>
-                    <For each={trades}>
+                    <For each={trades()}>
                       {(t, idx) => (
                         <tr
                           onClick={() => setSelectedTradeIndex(idx())}
@@ -300,31 +300,23 @@ export default function Backtester() {
             <div class="text-[10px] space-y-3.5">
               <div class="flex justify-between items-center">
                 <span class="text-gray-500 font-bold uppercase">Strategy</span>
-                <span class="font-black text-white uppercase tracking-wider">{selectedStrategy()}</span>
+                <span class="font-black text-white uppercase tracking-wider">{config().strategy || selectedStrategy()}</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-500 font-bold uppercase">Timeframe</span>
-                <span class="font-black text-white text-data">1 Minute</span>
+                <span class="font-black text-white text-data">{config().interval || '1 Minute'}</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-500 font-bold uppercase">Instruments</span>
-                <span class="font-black text-white text-data">NIFTY</span>
+                <span class="font-black text-white text-data">{config().symbol || 'NIFTY'}</span>
               </div>
               <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold uppercase">Date Range</span>
-                <span class="font-black text-white text-data">01 Apr - 31 Aug 2024</span>
+                <span class="text-gray-500 font-bold uppercase">Period</span>
+                <span class="font-black text-white text-data">{config().days_back || '90'} days</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-gray-500 font-bold uppercase">Initial Capital</span>
-                <span class="font-black text-white text-data">₹10,00,000</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold uppercase">Slippage</span>
-                <span class="font-black text-white text-data">₹1.00</span>
-              </div>
-              <div class="flex justify-between items-center">
-                <span class="text-gray-500 font-bold uppercase">Brokerage</span>
-                <span class="font-black text-white text-data">₹20 per order</span>
+                <span class="font-black text-white text-data">₹{(config().initial_capital || 250000).toLocaleString('en-IN')}</span>
               </div>
             </div>
           </div>
