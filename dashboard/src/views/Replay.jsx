@@ -1,47 +1,23 @@
 import { createSignal, createMemo, For, Show } from 'solid-js'
 import AnimatedNumber from '../components/AnimatedNumber'
+import { useReplay } from '../stores/useReplay'
 
 export default function Replay() {
   const [isPlaying, setIsPlaying] = createSignal(false)
   const [playbackSpeed, setPlaybackSpeed] = createSignal('1x')
   const [activeTab, setActiveTab] = createSignal('trades')
+  const { result, loading, error, loadReplay } = useReplay()
 
-  // Replay Metrics
-  const metrics = {
-    netPnl: 24350,
-    netPnlPct: 2.48,
-    totalTrades: 76,
-    winRate: 63.21,
-    winTrades: 48,
-    profitFactor: 2.18,
-    maxDrawdown: 18750,
-    maxDrawdownPct: 1.87,
-    avgTrade: 320.39,
-    expectancy: 1639.47,
-    sharpeRatio: 1.42,
-    sortinoRatio: 2.31
-  }
+  const metrics = createMemo(() => result()?.metrics || {
+    netPnl: 0, netPnlPct: 0, totalTrades: 0, winRate: 0,
+    winningTrades: 0, losingTrades: 0, profitFactor: 0,
+    maxDrawdown: 0, maxDrawdownPct: 0, avgTrade: 0,
+    expectancy: 0, signalCount: 0, signalWinRate: 0
+  })
 
-  // Events timeline mock
-  const events = [
-    { time: '09:00:00', text: 'Market Open', type: 'system' },
-    { time: '09:05:00', text: 'Opening Range Building', type: 'strategy' },
-    { time: '09:15:00', text: 'Buy Signal Generated', type: 'signal' },
-    { time: '09:15:02', text: 'Order Placed', type: 'order' },
-    { time: '09:15:04', text: 'Order Filled @ 134.50', type: 'order' },
-    { time: '09:37:45', text: 'Exit Signal Generated', type: 'signal' },
-    { time: '09:37:45', text: 'Order Placed', type: 'order' },
-    { time: '09:37:47', text: 'Order Filled @ 142.80', type: 'order' }
-  ]
-
-  // Replay trades mock
-  const replayTrades = [
-    { id: 1, time: '03 Jun 09:15:00', type: 'BUY', inst: 'NIFTY 06 JUN 22100 CE', qty: 75, entry: 134.50, exit: 142.80, pnl: 830, pnlPct: 6.17, status: 'WIN' },
-    { id: 2, time: '03 Jun 09:37:45', type: 'SELL', inst: 'NIFTY 06 JUN 22100 CE', qty: 75, entry: 134.50, exit: 142.80, pnl: 830, pnlPct: 6.17, status: 'WIN' },
-    { id: 3, time: '03 Jun 10:12:00', type: 'BUY', inst: 'NIFTY 06 JUN 22150 CE', qty: 75, entry: 128.40, exit: 123.20, pnl: -390, pnlPct: -4.05, status: 'LOSS' },
-    { id: 4, time: '03 Jun 10:32:30', type: 'SELL', inst: 'NIFTY 06 JUN 22150 CE', qty: 75, entry: 128.40, exit: 123.20, pnl: -390, pnlPct: -4.05, status: 'LOSS' },
-    { id: 5, time: '03 Jun 11:05:00', type: 'BUY', inst: 'NIFTY 06 JUN 22200 CE', qty: 75, entry: 110.25, exit: 118.70, pnl: 635, pnlPct: 7.66, status: 'WIN' }
-  ]
+  const events = createMemo(() => result()?.events || [])
+  const replayTrades = createMemo(() => result()?.trades || [])
+  const candles = createMemo(() => result()?.candles || [])
 
   // Strategy State Indicators
   const strategyState = [
@@ -82,67 +58,85 @@ export default function Replay() {
           <div class="flex flex-col">
             <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">Date</span>
             <div class="text-[10px] bg-white/[0.02] border border-white/5 px-2.5 py-1.5 rounded-lg text-white font-mono">
-              01 Apr 2024 - 03 Jun 2024
+               {result() ? `${result().days_back}d` : 'Not loaded'}
             </div>
           </div>
         </div>
 
         <div class="flex items-center gap-2.5 mt-2 md:mt-0">
-          <button class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all">
-            Load Data
-          </button>
           <button
-            onClick={() => setIsPlaying(!isPlaying())}
-            class={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg transition-all flex items-center gap-1.5 ${
-              isPlaying() ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'
-            }`}
+            onClick={() => loadReplay({ symbol: 'NIFTY', days_back: 30 })}
+            disabled={loading()}
+            class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all disabled:opacity-40"
           >
-            <span>{isPlaying() ? '⏸' : '▶'}</span> {isPlaying() ? 'Pause Replay' : 'Start Replay'}
+            {loading() ? 'Loading...' : 'Load Data'}
           </button>
+          <Show when={result()}>
+            <button
+              onClick={() => setIsPlaying(!isPlaying())}
+              class={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg transition-all flex items-center gap-1.5 ${
+                isPlaying() ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'
+              }`}
+            >
+              <span>{isPlaying() ? '⏸' : '▶'}</span> {isPlaying() ? 'Pause Replay' : 'Start Replay'}
+            </button>
+          </Show>
         </div>
       </div>
 
+      <Show when={error()}>
+        <div class="bg-rose-500/10 border border-rose-500/25 rounded-xl p-3 text-xs text-rose-300 font-bold">
+          {error()}
+        </div>
+      </Show>
+
+      <Show when={!result() && !loading()}>
+        <div class="flex items-center justify-center h-40 bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
+          <span class="text-xs text-gray-600 font-bold uppercase tracking-wider">Click "Load Data" to start replay</span>
+        </div>
+      </Show>
+
       {/* Replay Metrics Row */}
       <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
-        <div class="glass p-4 rounded-xl">
-          <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Net P&L</span>
-          <div class="text-base font-black text-emerald-400 text-data">+₹{metrics.netPnl.toLocaleString('en-IN')}</div>
-          <span class="text-[8px] font-bold text-emerald-500 mt-1 block">+{metrics.netPnlPct}%</span>
+          <div class="glass p-4 rounded-xl">
+            <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Net P&L</span>
+            <div class="text-base font-black text-emerald-400 text-data">+₹{metrics().netPnl.toLocaleString('en-IN')}</div>
+            <span class="text-[8px] font-bold text-emerald-500 mt-1 block">+{metrics().netPnlPct}%</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Total Trades</span>
-          <div class="text-base font-black text-white text-data">{metrics.totalTrades}</div>
+            <div class="text-base font-black text-white text-data">{metrics().totalTrades}</div>
           <span class="text-[8px] font-bold text-gray-500 mt-1 block">Buy/Sell logs</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Win Rate</span>
-          <div class="text-base font-black text-white text-data">{metrics.winRate}%</div>
-          <span class="text-[8px] font-bold text-gray-500 mt-1 block">({metrics.winTrades} / {metrics.totalTrades})</span>
+          <div class="text-base font-black text-white text-data">{metrics().winRate}%</div>
+            <span class="text-[8px] font-bold text-gray-500 mt-1 block">({metrics().winningTrades} / {metrics().totalTrades})</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Profit Factor</span>
-          <div class="text-base font-black text-white text-data">{metrics.profitFactor}</div>
+          <div class="text-base font-black text-white text-data">{metrics().profitFactor}</div>
           <span class="text-[8px] font-bold text-gray-500 mt-1 block">Gross PnL Ratio</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Max Drawdown</span>
-          <div class="text-base font-black text-rose-500 text-data">₹{metrics.maxDrawdown.toLocaleString('en-IN')}</div>
-          <span class="text-[8px] font-bold text-rose-500 mt-1 block">{metrics.maxDrawdownPct}%</span>
+          <div class="text-base font-black text-rose-500 text-data">₹{metrics().maxDrawdown.toLocaleString('en-IN')}</div>
+            <span class="text-[8px] font-bold text-rose-500 mt-1 block">{metrics().maxDrawdownPct}%</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Avg Trade</span>
-          <div class="text-base font-black text-emerald-400 text-data">+₹{metrics.avgTrade}</div>
+          <div class="text-base font-black text-emerald-400 text-data">+₹{metrics().avgTrade}</div>
           <span class="text-[8px] font-bold text-emerald-500 mt-1 block">Wins & Losses</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Expectancy</span>
-          <div class="text-base font-black text-white text-data">₹{metrics.expectancy.toFixed(0)}</div>
+          <div class="text-base font-black text-white text-data">₹{metrics().expectancy.toFixed(0)}</div>
           <span class="text-[8px] font-bold text-gray-500 mt-1 block">Per Position</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Sharpe Ratio</span>
-          <div class="text-base font-black text-white text-data">{metrics.sharpeRatio}</div>
-          <span class="text-[8px] font-bold text-gray-500 mt-1 block">Sortino: {metrics.sortinoRatio}</span>
+          <div class="text-base font-black text-white text-data">{metrics().signalCount}</div>
+            <span class="text-[8px] font-bold text-gray-500 mt-1 block">{metrics().signalWinRate}% wr</span>
         </div>
       </div>
 
@@ -281,7 +275,7 @@ export default function Replay() {
             <button class="text-[8px] font-black uppercase text-gray-500 hover:text-white transition-colors">Jump to Event</button>
           </div>
           <div class="flex-1 overflow-y-auto max-h-[160px] mt-2 divide-y divide-white/5">
-            <For each={events}>
+            <For each={events()}>
               {(e) => (
                 <div class="py-2.5 flex items-start gap-3 text-[10px]">
                   <span class="text-gray-500 font-mono mt-0.5">{e.time}</span>
@@ -328,7 +322,7 @@ export default function Replay() {
                 </tr>
               </thead>
               <tbody>
-                <For each={replayTrades}>
+                <For each={replayTrades()}>
                   {(t) => (
                     <tr class="border-b border-white/5 hover:bg-white/[0.01]">
                       <td class="py-2.5 text-gray-500 font-mono">{t.time}</td>
