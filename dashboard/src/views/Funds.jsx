@@ -1,49 +1,31 @@
-// DEPENDENCY: backend — requires /api/funds endpoint (not yet implemented)
-import { createSignal, onMount } from 'solid-js'
 import { Show } from 'solid-js'
+import { useFunds } from '../stores/useFunds'
+import Button from '../components/ui/Button'
 
 export default function Funds() {
-  const [funds, setFunds] = createSignal(null)
-  const [loading, setLoading] = createSignal(true)
-  const [error, setError] = createSignal(null)
-
-  async function fetchFunds() {
-    setLoading(true)
-    setError(null)
-    try {
-      // TODO: backend — implement GET /api/funds returning fund details
-      // Expected response: { cash, equity, mtm, exposure, margin_used }
-      const res = await fetch('/api/funds')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setFunds(await res.json())
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  onMount(fetchFunds)
+  const { funds, loading, error, fetchFunds } = useFunds()
 
   return (
     <div class="space-y-6">
       <div class="flex items-center justify-between">
         <h1 class="text-lg font-black text-white uppercase tracking-widest">Funds</h1>
-        <button
-          onClick={fetchFunds}
+        <Button
+          variant="ghost"
           class="text-[10px] font-bold text-gray-500 hover:text-gray-300 uppercase tracking-wider"
+          onClick={fetchFunds}
+          loading={loading()}
+          leftIcon={<span>↻</span>}
         >
-          {loading() ? '↻' : '↻'} Refresh
-        </button>
+          {loading() ? 'Loading...' : 'Refresh'}
+        </Button>
       </div>
 
-      {/* DEPENDENCY: backend */}
       <div class="glass rounded-2xl p-6 border border-amber-500/20 bg-amber-500/5">
         <p class="text-[10px] font-bold text-amber-400 uppercase tracking-widest">
           ⚠ Backend Dependency: GET /api/funds not yet implemented
         </p>
         <p class="text-[9px] text-gray-500 mt-2">
-          Planned endpoints: GET /api/funds/balance, POST /api/funds/add, POST /api/funds/withdraw
+          Planned endpoints: GET /api/funds, POST /api/funds/add, POST /api/funds/withdraw
         </p>
       </div>
 
