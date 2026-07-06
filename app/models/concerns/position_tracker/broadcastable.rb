@@ -20,6 +20,9 @@ class PositionTracker < ApplicationRecord
           created_at: created_at&.iso8601
         }
       })
+
+      ActionCable.server.broadcast("holdings", { type: "holdings_changed", timestamp: Time.current.iso8601 })
+      ActionCable.server.broadcast("funds", { type: "funds_changed", timestamp: Time.current.iso8601 })
     rescue StandardError => e
       Rails.logger.debug("[PositionTracker] broadcast_position_activated failed: #{e.message}")
     end
@@ -47,6 +50,9 @@ class PositionTracker < ApplicationRecord
         type: "position_exited",
         id: id
       })
+
+      ActionCable.server.broadcast("holdings", { type: "holdings_changed", timestamp: Time.current.iso8601 })
+      ActionCable.server.broadcast("funds", { type: "funds_changed", timestamp: Time.current.iso8601 })
     rescue StandardError => e
       Rails.logger.debug("[PositionTracker] broadcast_position_exited failed: #{e.message}")
     end

@@ -17,6 +17,7 @@ module Api
       attr_reader :alerts, :mutex, :next_id
 
       def push_alert(type:, severity:, message:)
+        alert = nil
         mutex.synchronize do
           id = @next_id
           @next_id += 1
@@ -30,8 +31,10 @@ module Api
           }
           @alerts.unshift(alert)
           @alerts.pop if @alerts.size > 100 # cap at 100
-          alert
         end
+
+        ActionCable.server.broadcast("alerts", { alert: alert })
+        alert
       end
 
       def system_alert(message, severity: 'info')
