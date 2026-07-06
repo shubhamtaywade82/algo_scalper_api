@@ -16,13 +16,12 @@ module Api
           cron: config["schedule"],
           status: "pending", # Solid Queue recurring tasks are dispatched on schedule
           last_run_at: nil,
-          class_name: config["class"],
-          args: config["args"],
+          next_run_at: nil,
           description: config["description"] || "Scheduled background system job"
         }
       end
 
-      render json: { success: true, tasks: tasks }
+      render json: tasks
     end
 
     def execute
