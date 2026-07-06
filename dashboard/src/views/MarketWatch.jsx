@@ -33,10 +33,9 @@ export default function MarketWatch() {
 
   return (
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between mb-2">
         <div>
-          <h1 class="text-lg font-black text-white uppercase tracking-widest">Market Watch</h1>
-          <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mt-1">
+          <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
             <Show when={marketStatus()?.market_open} fallback="Market Closed">
               Market Open — Live Quotes
             </Show>

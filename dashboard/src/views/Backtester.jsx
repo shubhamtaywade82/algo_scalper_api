@@ -43,20 +43,6 @@ export default function Backtester() {
 
   return (
     <div class="space-y-6">
-      {/* Page Title Row */}
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-xl font-black text-white uppercase tracking-widest">Backtester</h1>
-          <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Test your strategies on historical data</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span class="text-[9px] font-black uppercase text-gray-400">Market: NSE</span>
-          </div>
-          <div class="text-[9px] font-black uppercase text-gray-500">09:15 AM - 03:30 PM</div>
-        </div>
-      </div>
 
       {/* Action Bar */}
       <div class="flex flex-wrap items-center justify-between gap-4 bg-white/[0.01] border border-white/5 rounded-2xl p-4">

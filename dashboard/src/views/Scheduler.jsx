@@ -18,8 +18,7 @@ export default function Scheduler() {
 
   return (
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <h1 class="text-lg font-black text-white uppercase tracking-widest">Scheduler</h1>
+      <div class="flex items-center justify-end">
         <Button
           variant="ghost"
           class="text-[10px] font-bold text-gray-500 hover:text-gray-300 uppercase tracking-wider"

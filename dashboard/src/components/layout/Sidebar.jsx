@@ -136,8 +136,8 @@ export default function Sidebar(props) {
   const user = () => auth.user()
 
   return (
-    <aside class={`fixed left-0 top-14 bottom-0 bg-gray-900/80 backdrop-blur-xl border-r border-white/5 transition-all duration-300 z-40 overflow-y-auto overflow-x-hidden ${collapsed() ? 'w-16' : 'w-56'}`}>
-      <div class="p-2 space-y-4">
+    <aside class={`fixed left-0 top-14 bottom-0 bg-gray-900/80 backdrop-blur-xl border-r border-white/5 transition-all duration-300 z-40 flex flex-col justify-between overflow-hidden ${collapsed() ? 'w-16' : 'w-56'}`}>
+      <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-4">
         <For each={navigationConfig}>
           {(section) => (
             <div>
@@ -159,7 +159,7 @@ export default function Sidebar(props) {
       </div>
 
       {/* User profile footer */}
-      <div class={`absolute bottom-0 left-0 right-0 border-t border-white/5 bg-gray-900/90 backdrop-blur-xl ${collapsed() ? 'p-2' : 'p-3'}`}>
+      <div class={`shrink-0 border-t border-white/5 bg-gray-900/90 backdrop-blur-xl ${collapsed() ? 'p-2' : 'p-3'}`}>
         <Show when={!collapsed() && user()} fallback={
           <A href="/login" class="flex items-center justify-center gap-2 text-gray-500 hover:text-gray-300 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

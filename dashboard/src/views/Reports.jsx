@@ -21,7 +21,7 @@ export default function Reports() {
 
   return (
     <div class="space-y-6">
-      <h1 class="text-lg font-black text-white uppercase tracking-widest">Reports</h1>
+
 
       <div class="glass rounded-2xl p-6 border border-amber-500/20 bg-amber-500/5">
         <p class="text-[10px] font-bold text-amber-400 uppercase tracking-widest">

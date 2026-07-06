@@ -57,21 +57,6 @@ export default function Replay() {
 
   return (
     <div class="space-y-6">
-      {/* Page Title Row */}
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-xl font-black text-white uppercase tracking-widest">Replay</h1>
-          <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Replay historical market data and see how your strategies performed</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 text-[9px] font-black uppercase text-gray-400">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span>Market: NSE</span>
-            <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse ml-2" />
-            <span class="text-rose-400">Live: Off (Replay)</span>
-          </div>
-        </div>
-      </div>
 
       {/* Control & Configuration Bar */}
       <div class="flex flex-wrap items-center justify-between gap-4 bg-white/[0.01] border border-white/5 rounded-2xl p-4">
