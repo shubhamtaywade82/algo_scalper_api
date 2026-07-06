@@ -74,7 +74,7 @@ export const navigationConfig = [
     section: NAV_SECTIONS.MARKET,
     items: [
       { id: 'market-watch', label: 'Market Watch', href: ROUTES.MARKET_WATCH, icon: 'marketWatch' },
-      { id: 'option-chain', label: 'Option Chain', href: ROUTES.OPTION_SCALPER, icon: 'optionChain' }, // Maps to option scalper chain
+      { id: 'option-chain', label: 'Option Chain', href: ROUTES.OPTION_CHAIN, icon: 'optionChain' }, // Maps to option chain
       { id: 'market-data', label: 'Market Data', href: ROUTES.CHARTS, icon: 'charts' } // Maps to charts
     ],
   },

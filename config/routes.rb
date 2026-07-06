@@ -28,15 +28,23 @@ Rails.application.routes.draw do
     get "public_ip/audit", to: "public_ip#audit"
     get :positions, to: "positions#index"
     post "positions/:id/close", to: "positions#close"
-    get :signals,   to: "signals#index"
+    get :signals, to: "signals#index"
     get :dhan_access_token, to: "dhan_access_token#show"
 
     get :holdings, to: "holdings#index"
     get :funds,    to: "funds#index"
-    get :reports,  to: "reports#index"
+    post "funds/add", to: "funds#add"
+    post "funds/withdraw", to: "funds#withdraw"
+    get :reports, to: "reports#index"
     get "reports/pnl", to: "reports#pnl"
+    get "reports/trades", to: "reports#trades"
+    get "reports/performance", to: "reports#performance"
+    get "reports/export", to: "reports#export"
     get :logs,     to: "logs#index"
     get :alerts,   to: "alerts#index"
+    post :alerts,  to: "alerts#create"
+    patch "alerts/:id", to: "alerts#update"
+    delete "alerts/:id", to: "alerts#destroy"
     get "scheduler/tasks", to: "scheduler#index"
     post "scheduler/tasks/:id/execute", to: "scheduler#execute"
 
@@ -55,7 +63,7 @@ Rails.application.routes.draw do
     post 'analysis/:index_key/optimize',    to: 'analysis#optimize',    as: :analysis_optimize
 
     # Algo Settings
-    get    'settings',              to: 'settings#index'
+    get    'settings', to: 'settings#index'
     get    'settings/fast_entry_mode', to: 'settings#fast_entry_mode'
     patch  'settings/fast_entry_mode', to: 'settings#update_fast_entry_mode'
     get    'settings/change_logs',  to: 'settings#change_logs'

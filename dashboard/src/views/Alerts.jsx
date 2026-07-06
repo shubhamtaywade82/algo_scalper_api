@@ -28,17 +28,13 @@ export default function Alerts() {
         </Button>
       </div>
 
-      <div class="glass rounded-2xl p-6 border border-amber-500/20 bg-amber-500/5">
-        <p class="text-[10px] font-bold text-amber-400 uppercase tracking-widest">
-          ⚠ Backend Dependency: /api/alerts CRUD endpoints not yet implemented
-        </p>
-      </div>
-
       <Show when={error()}>
-        <div class="text-rose-400 text-xs">{error()}</div>
+        <div class="glass rounded-2xl p-6 border border-rose-500/20">
+          <p class="text-xs text-rose-400">{error()}</p>
+        </div>
       </Show>
 
-      <Show when={alerts().length === 0 && !loading()}>
+      <Show when={alerts().length === 0 && !loading() && !error()}>
         <div class="glass rounded-2xl p-12 text-center">
           <div class="text-3xl mb-3">🔔</div>
           <p class="text-xs font-bold text-gray-600 uppercase tracking-widest">No alerts configured</p>

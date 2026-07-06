@@ -19,17 +19,10 @@ export default function Funds() {
         </Button>
       </div>
 
-      <div class="glass rounded-2xl p-6 border border-amber-500/20 bg-amber-500/5">
-        <p class="text-[10px] font-bold text-amber-400 uppercase tracking-widest">
-          ⚠ Backend Dependency: GET /api/funds not yet implemented
-        </p>
-        <p class="text-[9px] text-gray-500 mt-2">
-          Planned endpoints: GET /api/funds, POST /api/funds/add, POST /api/funds/withdraw
-        </p>
-      </div>
-
       <Show when={error()}>
-        <div class="text-rose-400 text-xs">{error()}</div>
+        <div class="glass rounded-2xl p-6 border border-rose-500/20">
+          <p class="text-xs text-rose-400">{error()}</p>
+        </div>
       </Show>
 
       <Show when={funds()}>

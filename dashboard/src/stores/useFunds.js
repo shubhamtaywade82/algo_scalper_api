@@ -1,5 +1,5 @@
-// DEPENDENCY: backend endpoints GET /api/funds, POST /api/funds/add, POST /api/funds/withdraw
-// Expected shape: { cash, margin_used, available, total_collateral, day_pnl }
+// Backend endpoints: GET /api/funds, POST /api/funds/add, POST /api/funds/withdraw
+// Response shape: { cash, equity, mtm, exposure, margin_used, available, total_collateral, day_pnl }
 // TODO: Wire to ActionCable FundsChannel when available
 
 import { createSignal, onMount, onCleanup } from 'solid-js'

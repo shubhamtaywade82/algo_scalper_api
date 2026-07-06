@@ -1,5 +1,5 @@
-// DEPENDENCY: backend endpoints GET/POST/PATCH/DELETE /api/alerts
-// Expected shape: [{ id, type, severity, message, read, created_at }]
+// Backend endpoints: GET /api/alerts, POST /api/alerts, PATCH /api/alerts/:id, DELETE /api/alerts/:id
+// Response shape: [{ id, type, severity, message, read, created_at }]
 // TODO: Wire to ActionCable AlertsChannel when available
 
 import { createSignal, onMount, onCleanup } from 'solid-js'

@@ -25,7 +25,17 @@ module Api
       return render json: { error: 'invalid_amount', message: 'Amount must be positive' }, status: :unprocessable_content unless amount.positive?
 
       Ledger::Seeder.ensure_ready!
-      Ledger::WalletReader.credit!(amount, mode: :paper, note: "Dashboard add funds")
+      Ledger::PostingService.post!(
+        idempotency_key: "funds:add:#{SecureRandom.uuid}",
+        event_type: 'fund_adjustment',
+        mode: :paper,
+        trading_date: Time.zone.today,
+        meta: { note: 'Dashboard add funds' },
+        lines: [
+          { account_code: 'cash', debit: amount },
+          { account_code: 'opening_equity', credit: amount }
+        ]
+      )
       render json: { success: true, cash: paper_snapshot[:cash] }
     rescue StandardError => e
       Rails.logger.error("[Api::FundsController] add failed: #{e.message}")
@@ -42,7 +52,17 @@ module Api
       snapshot = Ledger::WalletReader.snapshot(mode: :paper)
       return render json: { error: 'insufficient_funds', message: "Available cash: #{snapshot[:cash].to_f}" }, status: :unprocessable_content if amount > snapshot[:cash]
 
-      Ledger::WalletReader.debit!(amount, mode: :paper, note: "Dashboard withdraw funds")
+      Ledger::PostingService.post!(
+        idempotency_key: "funds:withdraw:#{SecureRandom.uuid}",
+        event_type: 'fund_adjustment',
+        mode: :paper,
+        trading_date: Time.zone.today,
+        meta: { note: 'Dashboard withdraw funds' },
+        lines: [
+          { account_code: 'cash', credit: amount },
+          { account_code: 'opening_equity', debit: amount }
+        ]
+      )
       render json: { success: true, cash: paper_snapshot[:cash] }
     rescue StandardError => e
       Rails.logger.error("[Api::FundsController] withdraw failed: #{e.message}")

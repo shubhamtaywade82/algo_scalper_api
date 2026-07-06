@@ -1,4 +1,4 @@
-import { createSignal, createMemo, For, Show } from 'solid-js'
+import { For, Show } from 'solid-js'
 import AnimatedNumber from '../components/AnimatedNumber'
 
 export default function Reports() {

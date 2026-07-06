@@ -28,14 +28,10 @@ export default function Logs() {
         </Button>
       </div>
 
-      <div class="glass rounded-2xl p-6 border border-amber-500/20 bg-amber-500/5">
-        <p class="text-[10px] font-bold text-amber-400 uppercase tracking-widest">
-          ⚠ Backend Dependency: GET /api/logs not yet implemented
-        </p>
-      </div>
-
       <Show when={error()}>
-        <div class="text-rose-400 text-xs">{error()}</div>
+        <div class="glass rounded-2xl p-6 border border-rose-500/20">
+          <p class="text-xs text-rose-400">{error()}</p>
+        </div>
       </Show>
 
       <Show when={!loading() && !error() && logs().length === 0}>

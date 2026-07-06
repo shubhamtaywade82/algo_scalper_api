@@ -19,6 +19,7 @@ const Settings = lazy(() => import('./views/Settings'))
 const Ledger = lazy(() => import('./views/Ledger'))
 const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
 const OptionScalper = lazy(() => import('./views/OptionScalper'))
+const OptionChain = lazy(() => import('./views/OptionChain'))
 const Backtester = lazy(() => import('./views/Backtester'))
 const Replay = lazy(() => import('./views/Replay'))
 
@@ -130,6 +131,7 @@ export default function App() {
           <Route path="/alpha" component={Alpha} />
           <Route path="/signals" component={Signals} />
           <Route path="/option-scalper" component={OptionScalper} />
+          <Route path="/option-chain" component={OptionChain} />
           <Route path="/analysis" component={Analysis} />
           <Route path="/ledger" component={Ledger} />
           <Route path="/settings" component={Settings} />

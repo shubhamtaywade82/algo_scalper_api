@@ -1,5 +1,5 @@
-// DEPENDENCY: backend endpoint GET /api/logs?level=&source=&page=&per_page=
-// Expected shape: { logs: [{id, timestamp, level, source, message}], meta: {total, page, per_page, pages} }
+// Backend endpoint: GET /api/logs?level=&source=&page=&per_page=
+// Response shape: { logs: [{id, timestamp, level, source, message}], meta: {total, page, per_page, pages} }
 // TODO: Wire to ActionCable LogsChannel when available
 
 import { createSignal, onMount, onCleanup } from 'solid-js'

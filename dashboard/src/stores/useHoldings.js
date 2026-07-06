@@ -1,5 +1,5 @@
-// DEPENDENCY: backend endpoint GET /api/holdings
-// Expected shape: [{ id, symbol, quantity, avg_price, ltp, pnl, pnl_pct, exchange }]
+// Backend endpoint: GET /api/holdings
+// Expected shape: [{ id, symbol, quantity, avg_price, ltp, pnl, pnl_pct, segment }]
 // TODO: Wire to ActionCable HoldingsChannel when available
 
 import { createSignal, onMount, onCleanup } from 'solid-js'
