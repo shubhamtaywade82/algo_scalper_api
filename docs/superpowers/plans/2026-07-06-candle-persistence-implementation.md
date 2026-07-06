@@ -701,7 +701,7 @@ git commit -m "feat: persist finalized 1m index candles via Candles::Persister o
 
 **Interfaces:**
 - Consumes: `Candles::Record` (Task 1).
-- Produces: `Candles::Repository.series(instrument_key:, timeframe: "1m", from:, to:)` → `Array<Hash>` ordered by `:ts` ascending, each `{ ts:, open:, high:, low:, close:, volume:, oi: }` (symbol keys, numeric values). Raises `ArgumentError` for an unsupported `timeframe` string (must match `/\A\d+m\z/`).
+- Produces: `Candles::Repository.series(instrument_key:, timeframe: "1m", from:, to:)` → `Array<Hash>` ordered by `:ts` ascending, each `{ ts:, open:, high:, low:, close:, volume:, oi: }` (symbol keys, numeric values). Raises `ArgumentError` for an unsupported `timeframe` string (must match `/\A([1-9]\d*)m\z/` — a fix during Task 4 review excluded `"0m"`, which the original `/\A\d+m\z/` incorrectly accepted and then divided by zero on).
 
 - [ ] **Step 1: Write the failing spec**
 

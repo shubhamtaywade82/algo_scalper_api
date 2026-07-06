@@ -37,6 +37,10 @@ module Candles
           end
       end
 
+      # NOTE: `from` should be bucket-aligned for the requested timeframe.
+      # `.between(from, to)` is inclusive over raw 1m rows, so an unaligned
+      # `from` (e.g. "3m" starting at :16 instead of :15) yields a leading
+      # bucket built from a partial set of 1m bars.
       def derive(instrument_key:, timeframe:, from:, to:)
         minutes = minutes_for(timeframe)
         base = base_series(instrument_key: instrument_key, from: from, to: to)
