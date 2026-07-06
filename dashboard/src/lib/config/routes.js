@@ -61,38 +61,35 @@ export const navigationConfig = [
     items: [
       { id: 'dashboard', label: 'Dashboard', href: ROUTES.DASHBOARD, icon: 'dashboard', end: true },
       { id: 'strategies', label: 'Strategies', href: ROUTES.STRATEGIES, icon: 'strategies' },
-      { id: 'alpha', label: 'Alpha', href: ROUTES.ALPHA, icon: 'alpha' },
-      { id: 'signals', label: 'Signals', href: ROUTES.SIGNALS, icon: 'signals' },
-      { id: 'option-scalper', label: 'Option Scalper', href: ROUTES.OPTION_SCALPER, icon: 'optionScalper' },
-      { id: 'analysis', label: 'Analysis', href: ROUTES.ANALYSIS, icon: 'analysis' },
+      { id: 'backtester', label: 'Backtester', href: ROUTES.BACKTESTER, icon: 'strategies' }, // reuses strategies icon/similar
+      { id: 'replay', label: 'Replay', href: ROUTES.REPLAY, icon: 'alpha' },
+      { id: 'reports', label: 'Reports', href: ROUTES.REPORTS, icon: 'reports' }
     ],
   },
   {
     section: NAV_SECTIONS.MARKET,
     items: [
       { id: 'market-watch', label: 'Market Watch', href: ROUTES.MARKET_WATCH, icon: 'marketWatch' },
-      { id: 'option-chain', label: 'Option Chain', href: ROUTES.OPTION_SCALPER, icon: 'optionChain' },
-      { id: 'charts', label: 'Charts', href: ROUTES.CHARTS, icon: 'charts' },
+      { id: 'option-chain', label: 'Option Chain', href: ROUTES.OPTION_SCALPER, icon: 'optionChain' }, // Maps to option scalper chain
+      { id: 'market-data', label: 'Market Data', href: ROUTES.CHARTS, icon: 'charts' } // Maps to charts
     ],
   },
   {
     section: NAV_SECTIONS.PORTFOLIO,
     items: [
-      { id: 'positions', label: 'Positions', href: ROUTES.DASHBOARD, icon: 'positions' },
-      { id: 'ledger', label: 'Ledger', href: ROUTES.LEDGER, icon: 'ledger' },
-      // DEPENDENCY: backend — need /api/holdings and /api/funds endpoints
-      { id: 'holdings', label: 'Holdings', href: ROUTES.HOLDINGS, icon: 'holdings', dependency: 'backend: /api/holdings' },
-      { id: 'funds', label: 'Funds', href: ROUTES.FUNDS, icon: 'funds', dependency: 'backend: /api/funds' },
+      { id: 'positions', label: 'Positions', href: ROUTES.DASHBOARD, icon: 'positions' }, // Existing positions are on dashboard
+      { id: 'orders', label: 'Orders', href: ROUTES.LEDGER, icon: 'ledger' }, // Ledger acts as orders or trades log
+      { id: 'holdings', label: 'Holdings', href: ROUTES.HOLDINGS, icon: 'holdings' },
+      { id: 'funds', label: 'Funds', href: ROUTES.FUNDS, icon: 'funds' }
     ],
   },
   {
     section: NAV_SECTIONS.SYSTEM,
     items: [
-      { id: 'reports', label: 'Reports', href: ROUTES.REPORTS, icon: 'reports', dependency: 'backend: /api/reports' },
-      { id: 'logs', label: 'Logs', href: ROUTES.LOGS, icon: 'logs', dependency: 'backend: /api/logs' },
-      { id: 'alerts', label: 'Alerts', href: ROUTES.ALERTS, icon: 'alerts', dependency: 'backend: /api/alerts' },
-      { id: 'scheduler', label: 'Scheduler', href: ROUTES.SCHEDULER, icon: 'scheduler', dependency: 'backend: /api/scheduler/tasks' },
-      { id: 'settings', label: 'Settings', href: ROUTES.SETTINGS, icon: 'settings' },
+      { id: 'logs', label: 'Logs', href: ROUTES.LOGS, icon: 'logs' },
+      { id: 'alerts', label: 'Alerts', href: ROUTES.ALERTS, icon: 'alerts' },
+      { id: 'scheduler', label: 'Scheduler', href: ROUTES.SCHEDULER, icon: 'scheduler' },
+      { id: 'settings', label: 'Settings', href: ROUTES.SETTINGS, icon: 'settings' }
     ],
   },
 ]

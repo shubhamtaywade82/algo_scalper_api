@@ -31,6 +31,15 @@ Rails.application.routes.draw do
     get :signals,   to: "signals#index"
     get :dhan_access_token, to: "dhan_access_token#show"
 
+    get :holdings, to: "holdings#index"
+    get :funds,    to: "funds#index"
+    get :reports,  to: "reports#index"
+    get "reports/pnl", to: "reports#pnl"
+    get :logs,     to: "logs#index"
+    get :alerts,   to: "alerts#index"
+    get "scheduler/tasks", to: "scheduler#index"
+    post "scheduler/tasks/:id/execute", to: "scheduler#execute"
+
     get 'smc/decision', to: 'smc#decision'
 
     # OHLC candle series for dashboard charting (read-only)

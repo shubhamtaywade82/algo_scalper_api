@@ -1,5 +1,8 @@
 import { For, Show, createMemo } from 'solid-js'
 import { useAlpha } from '../stores/useAlpha'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
+import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 
 function formatTime(timestamp) {
   if (!timestamp) return '—'
@@ -30,23 +33,22 @@ export default function Alpha() {
       <div class="flex items-center justify-between">
         <div class="flex flex-col gap-1">
           <h1 class="text-2xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
-            <span class="w-3 h-3 rounded-full bg-primary-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]"></span>
+            <span class="w-3 h-3 rounded-full bg-primary-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
             Alpha Intelligence
           </h1>
           <p class="text-xs font-bold text-gray-500 uppercase tracking-widest">Autonomous Strategy Orchestrator</p>
         </div>
 
         <div class="flex items-center gap-4">
-          <button
+          <Button
+            variant={scanning() ? 'secondary' : 'default'}
+            class={`text-[10px] font-black uppercase tracking-[0.2em] ${scanning() ? '' : '!bg-primary-600 hover:!bg-primary-500 border border-primary-400/50 shadow-lg shadow-primary-900/20'}`}
             onClick={triggerScan}
             disabled={scanning()}
-            class={`px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all duration-300 border flex items-center gap-3 ${scanning() ? 'bg-gray-800 border-white/5 text-gray-500' : 'bg-primary-600 hover:bg-primary-500 border-primary-400/50 text-white shadow-lg shadow-primary-900/20'}`}
+            loading={scanning()}
           >
-            <Show when={scanning()}>
-              <span class="w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></span>
-            </Show>
             {scanning() ? 'Scanning Market...' : 'Trigger Live Scan'}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -55,9 +57,9 @@ export default function Alpha() {
         <div class="glass rounded-3xl p-6 border border-white/5 flex flex-col gap-6">
           <div class="flex items-center justify-between">
             <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Risk Guardrails</h3>
-            <span class={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${status().enabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+            <Badge variant={status().enabled ? 'success' : 'danger'} class="text-[8px] font-black uppercase tracking-widest">
               {status().enabled ? 'Active' : 'Halted'}
-            </span>
+            </Badge>
           </div>
 
           <div class="flex flex-col gap-4">
@@ -67,7 +69,7 @@ export default function Alpha() {
                 <span class="text-xs font-black text-white">{status().risk_stats?.trades_count || 0} / {status().risk_limits?.daily_max_trades || 0}</span>
               </div>
               <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                <div class="h-full bg-primary-500 transition-all duration-1000" style={`width: ${riskPercent()}%`}></div>
+                <div class="h-full bg-primary-500 transition-all duration-1000" style={`width: ${riskPercent()}%`} />
               </div>
             </div>
 
@@ -89,7 +91,7 @@ export default function Alpha() {
         {/* Strategy Performance */}
         <div class="lg:col-span-2 glass rounded-3xl p-6 border border-white/5 flex flex-col gap-6">
           <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Strategy Performance Attribution</h3>
-          
+
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <For each={Object.entries(performance().by_source)}>
               {([source, stats]) => (
@@ -118,79 +120,86 @@ export default function Alpha() {
           <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Recent Intelligence Signals</h3>
           <span class="text-[10px] font-bold text-gray-600 uppercase tracking-tighter">{history().length} signals cached</span>
         </div>
-        
+
         <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse">
-            <thead>
-              <tr class="text-[9px] font-black text-gray-500 uppercase tracking-widest bg-white/[0.02]">
-                <th class="p-4 pl-6">Time</th>
-                <th class="p-4">Strategy</th>
-                <th class="p-4">Instrument</th>
-                <th class="p-4 text-center">Direction</th>
-                <th class="p-4 text-right">Confidence</th>
-                <th class="p-4 text-center">Status</th>
-                <th class="p-4 text-right">PnL</th>
-                <th class="p-4 pr-6 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-white/5">
+          <Table>
+            <TableHeader>
+              <TableRow class="text-[9px] font-black text-gray-500 uppercase tracking-widest bg-white/[0.02]">
+                <TableHead class="p-4 pl-6">Time</TableHead>
+                <TableHead class="p-4">Strategy</TableHead>
+                <TableHead class="p-4">Instrument</TableHead>
+                <TableHead class="p-4 text-center">Direction</TableHead>
+                <TableHead class="p-4 text-right">Confidence</TableHead>
+                <TableHead class="p-4 text-center">Status</TableHead>
+                <TableHead class="p-4 text-right">PnL</TableHead>
+                <TableHead class="p-4 pr-6 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody class="divide-y divide-white/5">
               <For each={history()}>
                 {(sig) => (
-                  <tr class="hover:bg-white/[0.02] transition-colors group">
-                    <td class="p-4 pl-6">
+                  <TableRow class="hover:bg-white/[0.02] transition-colors group">
+                    <TableCell class="p-4 pl-6">
                       <span class="text-[10px] font-bold text-gray-500 font-mono">{formatTime(sig.created_at)}</span>
-                    </td>
-                    <td class="p-4">
+                    </TableCell>
+                    <TableCell class="p-4">
                       <span class="text-[10px] font-black text-white uppercase tracking-wider">{sig.alpha_source.replace(/_/g, ' ')}</span>
-                    </td>
-                    <td class="p-4">
+                    </TableCell>
+                    <TableCell class="p-4">
                       <div class="flex flex-col">
                         <span class="text-xs font-black text-white">{sig.index_key.toUpperCase()}</span>
                         <span class="text-[9px] font-bold text-gray-500">Strike: {sig.strike_price}</span>
                       </div>
-                    </td>
-                    <td class="p-4 text-center">
-                      <span class={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${sig.direction.toLowerCase() === 'ce' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                    </TableCell>
+                    <TableCell class="p-4 text-center">
+                      <Badge
+                        variant={sig.direction.toLowerCase() === 'ce' ? 'success' : 'danger'}
+                        class="text-[9px] font-black uppercase tracking-widest"
+                      >
                         {sig.direction}
-                      </span>
-                    </td>
-                    <td class="p-4 text-right">
+                      </Badge>
+                    </TableCell>
+                    <TableCell class="p-4 text-right">
                       <span class="text-xs font-black text-white">{(sig.confidence * 100).toFixed(0)}%</span>
-                    </td>
-                    <td class="p-4 text-center">
-                      <span class={`text-[9px] font-black uppercase tracking-widest ${sig.status === 'executed' ? 'text-primary-400' : sig.status === 'failed' ? 'text-rose-500' : 'text-gray-500'}`}>
+                    </TableCell>
+                    <TableCell class="p-4 text-center">
+                      <Badge
+                        variant={sig.status === 'executed' ? 'info' : sig.status === 'failed' ? 'danger' : 'outline'}
+                        class="text-[9px] font-black uppercase tracking-widest"
+                      >
                         {sig.status}
-                      </span>
-                    </td>
-                    <td class="p-4 text-right">
+                      </Badge>
+                    </TableCell>
+                    <TableCell class="p-4 text-right">
                       <Show when={sig.pnl != null} fallback={<span class="text-gray-700">—</span>}>
                         <span class={`text-xs font-black ${sig.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {inr(sig.pnl)}
                         </span>
                       </Show>
-                    </td>
-                    <td class="p-4 pr-6 text-right">
+                    </TableCell>
+                    <TableCell class="p-4 pr-6 text-right">
                       <Show when={sig.status === 'pending'}>
-                        <button
+                        <Button
+                          variant="outline"
+                          class="text-[9px] font-black uppercase tracking-widest rounded-lg hover:!bg-primary-500 hover:!text-white"
                           onClick={() => executeSignal(sig)}
-                          class="px-3 py-1 bg-white/5 hover:bg-primary-500 hover:text-white border border-white/10 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
                         >
                           Execute
-                        </button>
+                        </Button>
                       </Show>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
               </For>
               <Show when={history().length === 0}>
-                <tr>
-                  <td colspan="8" class="p-20 text-center text-gray-600 text-[10px] font-black uppercase tracking-[0.2em]">
+                <TableRow>
+                  <TableCell colspan="8" class="p-20 text-center text-gray-600 text-[10px] font-black uppercase tracking-[0.2em]">
                     Intelligence archive empty
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               </Show>
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>
