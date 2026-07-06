@@ -7,15 +7,20 @@ module Strategies
   # All platform dependencies are injected at construction time so the
   # builder is testable without a full Rails boot.
   class ContextBuilder
-    def initialize(candle_repository: Candles::Repository,
-                   indicator_calculator: Indicators::Calculator,
-                   position_cache: Positions::ActiveCache.instance,
-                   session_service: TradingSession::Service,
+    DEFAULT_REPO      = "Candles::Repository"
+    DEFAULT_CALC      = "Indicators::Calculator"
+    DEFAULT_POSITIONS = "Positions::ActiveCache"
+    DEFAULT_SESSION   = "TradingSession::Service"
+
+    def initialize(candle_repository: nil,
+                   indicator_calculator: nil,
+                   position_cache: nil,
+                   session_service: nil,
                    clock: -> { Time.current })
-      @candle_repo = candle_repository
-      @indicator_calculator = indicator_calculator
-      @position_cache = position_cache
-      @session_service = session_service
+      @candle_repo = candle_repository || Object.const_get(DEFAULT_REPO)
+      @indicator_calculator = indicator_calculator || Object.const_get(DEFAULT_CALC)
+      @position_cache = position_cache || Object.const_get(DEFAULT_POSITIONS).instance
+      @session_service = session_service || Object.const_get(DEFAULT_SESSION)
       @clock = clock
     end
 
@@ -111,9 +116,9 @@ module Strategies
       @service = service
     end
 
-    def market_open? = @service.market_open?
+    delegate :market_open?, to: :@service
     def entry_allowed? = @service.entry_allowed?[:allowed]
     def seconds_until_close = @service.seconds_until_session_end
-    def should_force_exit? = @service.should_force_exit?
+    delegate :should_force_exit?, to: :@service
   end
 end

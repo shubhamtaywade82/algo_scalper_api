@@ -1,0 +1,16 @@
+# frozen_string_literal: true
+
+class <%= class_name %> < Strategies::Base
+  class << self
+    def timeframes = %w[1m]
+    def instruments = %w[NIFTY]
+    def params_schema = {}
+  end
+
+  def call(context)
+    # series = context.candles.call("1m")
+    # return Signals::Hold.new(reason: "no_data") unless series&.candles&.any?
+
+    Signals::Hold.new(reason: "not_implemented")
+  end
+end

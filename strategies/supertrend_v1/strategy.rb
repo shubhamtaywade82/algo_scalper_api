@@ -13,11 +13,13 @@ class SupertrendV1 < Strategies::Base
   class << self
     def timeframes = %w[1m]
     def instruments = %w[NIFTY BANKNIFTY SENSEX]
-    def params_schema = {
+    def params_schema
+  {
       supertrend_period: { type: "integer", default: 10 },
       supertrend_multiplier: { type: "float", default: 2.0 },
       adx_min: { type: "float", default: 20.0 }
     }
+    end
   end
 
   def call(context)
@@ -34,7 +36,7 @@ class SupertrendV1 < Strategies::Base
     trend_direction = resolve_trend(series, st)
     return Signals::Hold.new(reason: "trend_none") if trend_direction == :none
 
-    direction = (trend_direction == :long) ? :bullish : :bearish
+    direction = trend_direction == :long ? :bullish : :bearish
     confidence = compute_confidence(direction, adx, st)
 
     case direction

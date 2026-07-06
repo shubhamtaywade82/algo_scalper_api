@@ -36,3 +36,7 @@ else
     end
   end
 end
+
+if ActiveRecord::Base.connection.data_source_exists?('trading_strategies')
+  load Rails.root.join('db/seeds/trading_strategies.rb')
+end

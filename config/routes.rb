@@ -103,6 +103,13 @@ Rails.application.routes.draw do
       delete :trip, action: :reset, on: :member
     end
 
+    # Trading Strategies (Strategy Creator)
+    resources :trading_strategies, only: %i[index show create update destroy] do
+      member do
+        post :validate
+      end
+    end
+
     resource :drawdown_guard, only: [], controller: 'drawdown_guard' do
       delete :reset, on: :member
     end

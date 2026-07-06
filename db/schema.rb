@@ -714,6 +714,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120000) do
     t.index ["metadata"], name: "index_trading_signals_on_metadata", using: :gin
   end
 
+  create_table "trading_strategies", force: :cascade do |t|
+    t.string "author", default: "System"
+    t.jsonb "backtest_results", default: {}
+    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
+    t.text "code", default: ""
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.jsonb "instruments", default: []
+    t.string "name", null: false
+    t.jsonb "parameters", default: []
+    t.string "runtime", default: "Ruby"
+    t.string "status", default: "draft"
+    t.jsonb "tags", default: []
+    t.string "timeframe", default: "1m"
+    t.string "trade_direction", default: "both"
+    t.datetime "updated_at", null: false
+    t.string "version", default: "1.0.0"
+    t.index ["name"], name: "index_trading_strategies_on_name"
+    t.index ["status"], name: "index_trading_strategies_on_status"
+  end
+
   create_table "watchlist_items", force: :cascade do |t|
     t.boolean "active", default: true, null: false
     t.datetime "created_at", null: false
