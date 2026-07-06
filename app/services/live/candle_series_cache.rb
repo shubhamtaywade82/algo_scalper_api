@@ -116,8 +116,13 @@ module Live
           last["oi"]     = tick[:oi].to_i if tick[:oi].to_i.positive?
         else
           # The previous forming candle (if any) is now finalized — hand it off
-          # for durable persistence before starting the new one.
-          Candles::Persister.enqueue(instrument: instrument, interval: interval, candles: [last], source: "live") if last
+          # for durable persistence before starting the new one. A persistence
+          # hiccup must never block or abort the Redis write below.
+          begin
+            Candles::Persister.enqueue(instrument: instrument, interval: interval, candles: [last], source: "live") if last
+          rescue StandardError => e
+            Rails.logger.error("[CandleSeriesCache] append_tick persist enqueue error: #{e.class} - #{e.message}")
+          end
 
           # Start a new forming candle
           new_candle = {

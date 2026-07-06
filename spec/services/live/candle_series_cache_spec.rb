@@ -182,6 +182,39 @@ RSpec.describe Live::CandleSeriesCache do
         described_class.append_tick(instrument: index_instrument, tick: tick, interval: 1)
       end
     end
+
+    context 'when Candles::Persister.enqueue raises' do
+      let(:existing_payload) do
+        {
+          'updated_at' => 1.minute.ago.to_i,
+          'candles' => [
+            { 'timestamp' => 1.minute.ago.beginning_of_minute.utc.iso8601(3),
+              'open' => 25_000.0, 'high' => 25_020.0, 'low' => 24_990.0, 'close' => 25_005.0,
+              'volume' => 500, 'oi' => 0 }
+          ]
+        }
+      end
+
+      before do
+        allow(redis_double).to receive(:get).and_return(existing_payload.to_json)
+        allow(Candles::Persister).to receive(:enqueue).and_raise(StandardError, 'enqueue boom')
+      end
+
+      it 'does not propagate the error out of append_tick' do
+        expect do
+          described_class.append_tick(instrument: index_instrument, tick: tick, interval: 1)
+        end.not_to raise_error
+      end
+
+      it 'still writes the new forming candle to Redis' do
+        described_class.append_tick(instrument: index_instrument, tick: tick, interval: 1)
+
+        expect(redis_double).to have_received(:set) do |_key, value, **_opts|
+          candles = JSON.parse(value)['candles']
+          expect(candles.last['close']).to eq(tick[:ltp])
+        end
+      end
+    end
   end
 
   describe '.refresh' do
