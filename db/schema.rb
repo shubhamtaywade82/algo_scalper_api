@@ -391,7 +391,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120001) do
   end
 
   create_table "platform_variables", force: :cascade do |t|
-    t.boolean "boolean_value"
+    t.boolean "boolean_value", default: false, null: false
     t.datetime "created_at", null: false
     t.decimal "decimal_value", precision: 16, scale: 8
     t.text "description"

@@ -7,12 +7,18 @@ module Strategies
       eval instance_eval class_eval module_eval
     ].freeze
 
-    BLOCKER_CALL_PATTERNS = [
-      /\AFile\.(write|open|rename|delete|chmod|chown|mkdir|rm|cp|mv)\z/,
-      /\AFileUtils\./,
-      /\ANet::HTTP\z/,
-      /\A(TCPSocket|UDPSocket|Socket)\z/,
-      /\AThread\.(new|start|fork)\z/,
+    BLOCKER_RECEIVER_CALLS = {
+      "File" => %w[write open rename delete chmod chown mkdir rm cp mv symlink link unlink chdir],
+      "FileUtils" => %w[cp mv rm mkdir rmdir rm_r rm_f rm_rf remove_entry remove_entry_secure
+                        touch chmod chown ln ln_s cp_r],
+      "Thread" => %w[new start fork],
+      "TCPSocket" => %w[new open],
+      "UDPSocket" => %w[new open],
+      "Socket" => %w[new open open_tcp open_udp]
+    }.freeze
+
+    BLOCKER_CONST_PREFIXES = %w[
+      Net:: HTTP:: Faraday:: Redis
     ].freeze
 
     BLOCKER_CONST_REFERENCES = %w[
@@ -52,9 +58,10 @@ module Strategies
 
       case node.type
       when :FCALL, :VCALL then check_method_call(node)
+      when :CALL then check_receiver_call(node)
       when :CONST then check_const_ref(node)
       when :OPCALL then check_operator_call(node)
-      when :BACKTICK then check_backtick(node)
+      when :BACKTICK, :XSTR then check_backtick(node)
       end
 
       node.children.each { |child| walk(child) }
@@ -69,13 +76,21 @@ module Strategies
       end
 
       if WARNING_METHODS.include?(name)
-        return add_finding("warning", "Uses #{name} (may block)", line)
+        add_finding("warning", "Uses #{name} (may block)", line)
+      end
+    end
+
+    def check_receiver_call(node)
+      receiver = resolve_receiver_name(node)
+      method_name = node.children[1].to_s
+      return unless receiver
+
+      if BLOCKER_RECEIVER_CALLS[receiver]&.include?(method_name)
+        add_finding("blocker", "Uses #{receiver}.#{method_name}", node.first_lineno)
       end
 
-      BLOCKER_CALL_PATTERNS.each do |pattern|
-        if name.match?(pattern)
-          return add_finding("blocker", "Uses #{name}", line)
-        end
+      if BLOCKER_CONST_PREFIXES.any? { |p| receiver.start_with?(p) }
+        add_finding("blocker", "Uses #{receiver}", node.first_lineno)
       end
     end
 
@@ -100,6 +115,20 @@ module Strategies
 
     def check_backtick(node)
       add_finding("blocker", "Uses backtick execution", node.first_lineno)
+    end
+
+    def resolve_receiver_name(node)
+      receiver = node.children[0]
+      return nil unless receiver.is_a?(RubyVM::AbstractSyntaxTree::Node)
+
+      case receiver.type
+      when :CONST then receiver.children.first.to_s
+      when :COLON2
+        parts = []
+        resolve_const(receiver, parts)
+        parts.join("::")
+      when :SELF then "self"
+      end
     end
 
     def resolve_const(node, parts)

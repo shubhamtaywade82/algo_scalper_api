@@ -7,9 +7,12 @@ module Strategies
     ACTIONS = %w[buy_call buy_put exit hold].freeze
     OUTCOMES = %w[executed blocked_by_guard ignored_hold shadow].freeze
 
-    belongs_to :strategy, class_name: "Strategies::Record"
-    belongs_to :strategy_version, class_name: "Strategies::Version"
-    belongs_to :strategy_run, class_name: "Strategies::Run"
+    belongs_to :strategy_record, class_name: "Strategies::Record", foreign_key: :strategy_id,
+                                 inverse_of: :signals
+    belongs_to :strategy_version, class_name: "Strategies::Version",
+                                  inverse_of: :signals
+    belongs_to :strategy_run, class_name: "Strategies::Run",
+                              inverse_of: :signals
     belongs_to :position_tracker, optional: true
 
     validates :instrument_key, presence: true

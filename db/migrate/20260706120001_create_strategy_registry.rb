@@ -39,7 +39,7 @@ class CreateStrategyRegistry < ActiveRecord::Migration[7.1]
       t.references :strategy_version, null: false
       t.references :strategy_run, null: false
       t.string     :instrument_key, null: false
-      t.string     :action,   null: false
+      t.string     :action, null: false
       t.float      :confidence
       t.string     :reason
       t.jsonb      :metadata, default: {}
@@ -56,7 +56,7 @@ class CreateStrategyRegistry < ActiveRecord::Migration[7.1]
       t.string  :value_type, null: false, default: "string"
       t.text    :string_value
       t.decimal :decimal_value, precision: 16, scale: 8
-      t.boolean :boolean_value
+      t.boolean :boolean_value, default: false, null: false
       t.jsonb   :json_value
       t.text    :description
       t.timestamps
