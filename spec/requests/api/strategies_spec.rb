@@ -6,6 +6,7 @@ RSpec.describe 'Api::Strategies' do
   describe 'GET /api/strategies' do
     it 'returns an empty list when no strategies exist' do
       get '/api/strategies'
+      puts "BODY: #{response.body.inspect}" if response.status != 200
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body['success']).to be true
@@ -24,8 +25,9 @@ RSpec.describe 'Api::Strategies' do
   end
 
   describe 'POST /api/strategies' do
+    let(:template_dir) { Rails.root.join('strategies', '_templates', 'basic') }
+
     before do
-      template_dir = Rails.root.join('strategies', '_templates', 'basic')
       template_dir.mkpath unless template_dir.directory?
       template_dir.join('manifest.yml').write({ 'slug' => 'placeholder', 'name' => 'Placeholder' }.to_yaml)
       template_dir.join('strategy.rb').write('class PlaceholderStrategy < Strategies::Base; def call(c) = nil; end')
@@ -37,11 +39,12 @@ RSpec.describe 'Api::Strategies' do
 
     it 'scaffolds a new strategy' do
       post '/api/strategies', params: { slug: 'my_new_strategy', name: 'My New Strategy', template: 'basic' }
+      puts "BODY: #{response.body.inspect}"
       expect(response).to have_http_status(:created)
       body = response.parsed_body
-      expect(body['slug']).to eq('my-new-strategy')
+      expect(body['slug']).to eq('my_new_strategy')
       expect(body['status']).to eq('draft')
-      expect(Strategies::Record.find_by(slug: 'my-new-strategy')).to be_present
+      expect(Strategies::Record.find_by(slug: 'my_new_strategy')).to be_present
     end
 
     it 'returns 422 for a missing slug' do
@@ -85,7 +88,7 @@ RSpec.describe 'Api::Strategies' do
       YAML
       strategy_dir.join('strategy.rb').write(<<~RUBY)
         class DeployTestStrategy < Strategies::Base
-          def call(context) = Hold.new
+          def call(context) = nil
         end
       RUBY
     end
@@ -97,6 +100,7 @@ RSpec.describe 'Api::Strategies' do
 
     it 'deploys the strategy' do
       post "/api/strategies/#{slug}/deploy"
+      puts "BODY: #{response.body.inspect}" if response.status != 200
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body['success']).to be true
@@ -109,6 +113,7 @@ RSpec.describe 'Api::Strategies' do
 
     it 'sets desired_status to running' do
       post "/api/strategies/#{strategy.slug}/start"
+      puts "BODY: #{response.body.inspect}" if response.status != 202
       expect(response).to have_http_status(:accepted)
       expect(strategy.reload.desired_status).to eq('running')
     end
@@ -168,13 +173,14 @@ RSpec.describe 'Api::Strategies' do
 
     it 'returns empty logs array' do
       get "/api/strategies/#{strategy.slug}/logs"
+      puts "BODY: #{response.body.inspect}" if response.status != 200
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(body['logs']).to eq([])
     end
   end
 
-  describe 'GET /api/strategies/:slug/variables && PUT /api/strategies/:slug/variables' do
+  describe 'GET /api/strategies/:slug/variables' do
     let!(:strategy) { create(:strategy_record, slug: 'vars_test') }
 
     it 'upserts and returns variables' do

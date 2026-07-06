@@ -11,7 +11,7 @@ module Api
 
     # GET /api/variables
     def index
-      vars = PlatformVariable.global.order(:key)
+      vars = ::PlatformVariable.global.order(:key)
       render json: {
         success: true,
         variables: vars.map { |v| serialize_variable(v) }
@@ -44,7 +44,7 @@ module Api
     end
 
     def upsert_variable(attrs)
-      variable = PlatformVariable.find_or_initialize_by(
+      variable = ::PlatformVariable.find_or_initialize_by(
         scope: "global",
         strategy_id: nil,
         key: attrs[:key]

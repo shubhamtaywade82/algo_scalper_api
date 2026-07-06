@@ -25,8 +25,8 @@ module Api
       def session
         render json: {
           success: true,
-          market_open: TradingSession::Service.market_open?,
-          session: TradingSession::Service.current_session_info
+          market_open: ::TradingSession::Service.market_open?,
+          session: ::TradingSession::Service.current_session_info
         }
       end
 
@@ -44,9 +44,9 @@ module Api
       private
 
       def find_manager
-        return nil unless defined?(Strategies::Manager)
+        return nil unless defined?(::Strategies::Manager)
 
-        ObjectSpace.each_object(Strategies::Manager).first
+        ObjectSpace.each_object(::Strategies::Manager).first
       end
     end
   end

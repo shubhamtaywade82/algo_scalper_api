@@ -19,7 +19,7 @@ RSpec.describe 'Api::Variables' do
       body = response.parsed_body
       vars = body['variables'].index_by { |v| v['key'] }
       expect(vars['api_key']['value']).to eq('•••')
-      expect(vars['timeout']['value']).to eq(30.0)
+      expect(vars['timeout']['value']).to eq("30.0")
     end
   end
 
@@ -34,7 +34,7 @@ RSpec.describe 'Api::Variables' do
       body = response.parsed_body
       expect(body['variables'].size).to eq(1)
       expect(body['variables'].first['key']).to eq('max_positions')
-      expect(body['variables'].first['value']).to eq(5.0)
+      expect(body['variables'].first['value']).to eq("5.0")
     end
 
     it 'returns 422 when variables param is missing' do

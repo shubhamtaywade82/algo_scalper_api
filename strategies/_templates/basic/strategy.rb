@@ -1,1 +1,1 @@
-class PlaceholderStrategy < Strategies::Base; def call(c) = Hold.new; end
+class PlaceholderStrategy < Strategies::Base; def call(c) = nil; end

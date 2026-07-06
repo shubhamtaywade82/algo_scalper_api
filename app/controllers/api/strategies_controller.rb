@@ -7,13 +7,13 @@ module Api
     include Api::TokenAuthenticatable
 
     before_action :authenticate_dashboard_token!
-    before_action :find_strategy, only: %i[show deploy start stop restart versions signals logs variables update_variables]
+    before_action :find_strategy, only: %i[show start stop restart versions signals logs variables update_variables]
 
     STRATEGIES_ROOT = Rails.root.join("strategies")
 
     # GET /api/strategies
     def index
-      records = Strategies::Record.includes(:current_version).order(:slug)
+      records = ::Strategies::Record.includes(:current_version).order(:slug)
       manager = find_manager
 
       render json: {
@@ -26,7 +26,7 @@ module Api
     def show
       manager = find_manager
       runner = manager&.runner_status(@strategy.slug)
-      variables = PlatformVariable.for_strategy(@strategy.id).map { |v| serialize_variable(v) }
+      variables = ::PlatformVariable.for_strategy(@strategy.id).map { |v| serialize_variable(v) }
 
       render json: {
         success: true,
@@ -56,7 +56,8 @@ module Api
 
     # POST /api/strategies/:slug/deploy
     def deploy
-      result = Strategies::DeployPipeline.call(@strategy.slug)
+      slug = params[:slug]
+      result = ::Strategies::DeployPipeline.call(slug)
 
       if result[:ok]
         render json: { success: true, version: serialize_version(result[:version]), scan_report: result[:scan_report] }
@@ -101,7 +102,7 @@ module Api
     # GET /api/strategies/:slug/signals
     def signals
       scope = @strategy.signals.order(emitted_at: :desc)
-      scope = scope.where(action: params[:action]) if params[:action].present?
+      scope = scope.where(action: params[:filter_action]) if params[:filter_action].present?
       scope = scope.where(outcome: params[:outcome]) if params[:outcome].present?
 
       page = [params[:page].to_i, 1].max
@@ -121,13 +122,13 @@ module Api
       limit = [params[:limit].to_i, 1].max
       limit = [limit, 1000].min
 
-      entries = Strategies::LogStream.fetch(@strategy.slug, limit: limit)
+      entries = ::Strategies::LogStream.fetch(@strategy.slug, limit: limit)
       render json: { success: true, logs: entries }
     end
 
     # GET /api/strategies/:slug/variables
     def variables
-      vars = PlatformVariable.for_strategy(@strategy.id)
+      vars = ::PlatformVariable.for_strategy(@strategy.id)
       render json: { success: true, variables: vars.map { |v| serialize_variable(v) } }
     end
 
@@ -144,15 +145,15 @@ module Api
     private
 
     def find_strategy
-      @strategy = Strategies::Record.find_by!(slug: params[:slug])
+      @strategy = ::Strategies::Record.find_by!(slug: params[:slug])
     rescue ActiveRecord::RecordNotFound
       render json: { success: false, error: "Strategy not found: #{params[:slug]}" }, status: :not_found
     end
 
     def find_manager
-      return nil unless defined?(Strategies::Manager)
+      return nil unless defined?(::Strategies::Manager)
 
-      ObjectSpace.each_object(Strategies::Manager).first
+      ObjectSpace.each_object(::Strategies::Manager).first
     end
 
     def try_nudge_manager
@@ -177,7 +178,7 @@ module Api
         File.write(manifest_path, manifest.to_yaml)
       end
 
-      Strategies::Record.create!(
+      ::Strategies::Record.create!(
         slug: slug,
         name: name,
         status: "draft"
@@ -240,7 +241,7 @@ module Api
     end
 
     def upsert_variable(attrs, strategy_id)
-      variable = PlatformVariable.find_or_initialize_by(
+      variable = ::PlatformVariable.find_or_initialize_by(
         scope: "strategy",
         strategy_id: strategy_id,
         key: attrs[:key]

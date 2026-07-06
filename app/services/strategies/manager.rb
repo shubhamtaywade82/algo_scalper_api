@@ -91,7 +91,7 @@ module Strategies
         if desired == "running" && !actual
           start_runner(strategy_record)
         elsif desired != "running" && actual
-          @mutex.synchronize { stop_runner(strategy_record.slug, desired) }
+          @mutex.synchronize { stop_runner(strategy_record.slug, "manual") }
         end
 
         if desired == "running" && strategy_record.status != "running"
