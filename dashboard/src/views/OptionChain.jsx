@@ -14,24 +14,23 @@ export default function OptionChain() {
   // Spot Price from live dashboard indexes feed
   const spotPrice = () => {
     const key = selectedAsset().toLowerCase()
-    return indices()?.[key] || chain()?.spot || 24444.35
+    return indices()?.[key] || chain()?.spot || 0
   }
 
-  // Calculate change from previous close (fallback to 0.62% mock if data not yet in feed)
   const prevClose = () => {
     const data = chain()
     if (data && data.legs && data.legs.length > 0) {
       const atm = data.legs.find(l => l.strike === data.atm_strike)
       if (atm && atm.prev_close) return atm.prev_close
     }
-    return spotPrice() / 1.0062
+    return spotPrice()
   }
 
   const spotChange = () => spotPrice() - prevClose()
-  const spotChangePct = () => prevClose() > 0 ? (spotChange() / prevClose()) * 100 : 0.62
+  const spotChangePct = () => prevClose() > 0 ? (spotChange() / prevClose()) * 100 : 0
 
-  const atmStrike = () => chain()?.atm_strike || 22000
-  const currentExpiry = () => chain()?.expiry || '06 JUN 2024'
+  const atmStrike = () => chain()?.atm_strike || 0
+  const currentExpiry = () => chain()?.expiry || ''
 
   // Map legs from backend stream to table rows
   const derivedChainRows = createMemo(() => {
@@ -58,6 +57,7 @@ export default function OptionChain() {
         grouped[strike].c_chg = changePct
         grouped[strike].c_iv = leg.iv || 0
         grouped[strike].c_delta = leg.delta || 0
+        grouped[strike].c_gamma = leg.gamma || 0
         grouped[strike].c_theta = leg.theta || 0
         grouped[strike].c_vega = leg.vega || 0
       } else if (leg.type === 'PE') {
@@ -68,6 +68,7 @@ export default function OptionChain() {
         grouped[strike].p_chg = changePct
         grouped[strike].p_iv = leg.iv || 0
         grouped[strike].p_delta = leg.delta || 0
+        grouped[strike].p_gamma = leg.gamma || 0
         grouped[strike].p_theta = leg.theta || 0
         grouped[strike].p_vega = leg.vega || 0
       }
@@ -80,12 +81,16 @@ export default function OptionChain() {
   const summary = createMemo(() => {
     let callOi = 0
     let putOi = 0
-    let maxCallOi = 0
-    let maxCallOiStrike = 21900
+    let callChoi = 0
+    let putChoi = 0
+    let maxCallOi = -1
+    let maxCallOiStrike = atmStrike()
 
     derivedChainRows().forEach(r => {
       callOi += r.c_oi || 0
       putOi += r.p_oi || 0
+      callChoi += r.c_choi || 0
+      putChoi += r.p_choi || 0
       if ((r.c_oi || 0) > maxCallOi) {
         maxCallOi = r.c_oi
         maxCallOiStrike = r.strike
@@ -93,24 +98,34 @@ export default function OptionChain() {
     })
 
     const totalOi = callOi + putOi
-    const pcr = callOi > 0 ? (putOi / callOi) : 0.87
-    const putPct = totalOi > 0 ? Math.round((putOi / totalOi) * 100) : 46
+    const totalChoi = callChoi + putChoi
+    const pcr = callOi > 0 ? (putOi / callOi) : 0
+    const putPct = totalOi > 0 ? Math.round((putOi / totalOi) * 100) : 0
     const callPct = 100 - putPct
+
+    // Calculate dynamic OI change percentages
+    const callOiChangePct = (callOi - callChoi) > 0 ? (callChoi / (callOi - callChoi)) * 100 : 0
+    const putOiChangePct = (putOi - putChoi) > 0 ? (putChoi / (putOi - putChoi)) * 100 : 0
+    const totalOiChangePct = (totalOi - totalChoi) > 0 ? (totalChoi / (totalOi - totalChoi)) * 100 : 0
 
     // Find live ATM IV
     const atm = atmStrike()
     const atmRow = derivedChainRows().find(r => r.strike === atm)
-    const atmIv = atmRow ? (atmRow.c_iv || atmRow.p_iv || 15.48) : 15.48
+    const atmIv = atmRow ? (atmRow.c_iv || atmRow.p_iv || 0) : 0
 
     return {
       callOi,
       putOi,
       totalOi,
+      totalChoi,
       pcr,
       putPct,
       callPct,
       maxPain: maxCallOiStrike,
-      atmIv
+      atmIv,
+      callOiChangePct,
+      putOiChangePct,
+      totalOiChangePct
     }
   })
 
@@ -119,16 +134,16 @@ export default function OptionChain() {
     const atm = atmStrike()
     const match = derivedChainRows().find(r => r.strike === atm)
     return {
-      c_delta: match?.c_delta || 0.45,
-      c_gamma: 0.0028,
-      c_theta: match?.c_theta || -1.63,
-      c_vega: match?.c_vega || 4.62,
-      c_rho: 1.28,
-      p_delta: match?.p_delta || -0.55,
-      p_gamma: 0.0029,
-      p_theta: match?.p_theta || -1.72,
-      p_vega: match?.p_vega || 3.76,
-      p_rho: -1.35
+      c_delta: match?.c_delta || 0,
+      c_gamma: match?.c_gamma || 0,
+      c_theta: match?.c_theta || 0,
+      c_vega: match?.c_vega || 0,
+      c_rho: 0,
+      p_delta: match?.p_delta || 0,
+      p_gamma: match?.p_gamma || 0,
+      p_theta: match?.p_theta || 0,
+      p_vega: match?.p_vega || 0,
+      p_rho: 0
     }
   })
 
@@ -160,7 +175,7 @@ export default function OptionChain() {
           <div class="flex flex-col">
             <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">Expiry Date</span>
             <select class="glass-select text-[10px] px-2.5 py-1.5 rounded-lg">
-              <option>{currentExpiry()} (Weekly)</option>
+              <option>{currentExpiry() ? `${currentExpiry()} (Weekly)` : 'Loading...'}</option>
             </select>
           </div>
           <div class="flex flex-col">
@@ -205,6 +220,11 @@ export default function OptionChain() {
       </div>
 
       {/* Spot Price & OI Summary Metrics */}
+      <Show when={spotPrice() > 0 || derivedChainRows().length > 0} fallback={
+        <div class="flex items-center justify-center h-20 bg-white/[0.01] border border-dashed border-white/10 rounded-2xl">
+          <span class="text-xs text-gray-600 font-bold uppercase tracking-wider">Waiting for market data...</span>
+        </div>
+      }>
       <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-9 gap-4">
         <div class="glass p-3.5 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Spot Price</span>
@@ -221,7 +241,7 @@ export default function OptionChain() {
           <div class="text-sm font-black text-white text-data">
             <AnimatedNumber value={summary().atmIv} decimals={2} />%
           </div>
-          <span class="text-[8px] font-bold text-rose-500 mt-0.5 block">-0.32%</span>
+          <span class="text-[8px] font-bold text-gray-500 mt-0.5 block">Implied Volatility</span>
         </div>
         <div class="glass p-3.5 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">PCR (OI)</span>
@@ -242,21 +262,27 @@ export default function OptionChain() {
           <div class="text-sm font-black text-white text-data">
             <AnimatedNumber value={summary().totalOi} decimals={0} />
           </div>
-          <span class="text-[8px] text-emerald-400 mt-0.5 block">+4.32%</span>
+          <span class={`text-[8px] font-bold mt-0.5 block ${summary().totalOiChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {summary().totalOiChangePct >= 0 ? '+' : ''}{summary().totalOiChangePct.toFixed(2)}%
+          </span>
         </div>
         <div class="glass p-3.5 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Call OI</span>
           <div class="text-sm font-black text-white text-data">
             <AnimatedNumber value={summary().callOi} decimals={0} />
           </div>
-          <span class="text-[8px] text-emerald-400 mt-0.5 block">+4.12%</span>
+          <span class={`text-[8px] font-bold mt-0.5 block ${summary().callOiChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {summary().callOiChangePct >= 0 ? '+' : ''}{summary().callOiChangePct.toFixed(2)}%
+          </span>
         </div>
         <div class="glass p-3.5 rounded-xl">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block mb-1">Put OI</span>
           <div class="text-sm font-black text-white text-data">
             <AnimatedNumber value={summary().putOi} decimals={0} />
           </div>
-          <span class="text-[8px] text-emerald-400 mt-0.5 block">+4.60%</span>
+          <span class={`text-[8px] font-bold mt-0.5 block ${summary().putOiChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {summary().putOiChangePct >= 0 ? '+' : ''}{summary().putOiChangePct.toFixed(2)}%
+          </span>
         </div>
         <div class="glass p-3.5 rounded-xl flex flex-col justify-between">
           <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest block">Put/Call Ratio</span>
@@ -269,6 +295,7 @@ export default function OptionChain() {
           </div>
         </div>
       </div>
+      </Show>
 
       {/* Main Options Chain Workspace Layout */}
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -374,7 +401,7 @@ export default function OptionChain() {
         <div class="lg:col-span-3 space-y-6">
           <div class="glass p-5 rounded-2xl space-y-3.5">
             <div class="flex items-center justify-between border-b border-white/5 pb-2 text-[10px]">
-              <span class="font-black text-white">{selectedAsset()} {currentExpiry()} (Weekly)</span>
+              <span class="font-black text-white">{selectedAsset()}{currentExpiry() ? ` ${currentExpiry()} (Weekly)` : ' — Loading...'}</span>
             </div>
             <div class="text-[10px] space-y-2.5">
               <div class="flex justify-between border-b border-white/5 pb-2">
@@ -434,7 +461,7 @@ export default function OptionChain() {
         {/* Greeks Details Card (4 cols) */}
         <div class="lg:col-span-4 glass p-5 rounded-2xl flex flex-col justify-between">
           <div class="flex items-center justify-between border-b border-white/5 pb-2 text-[10px]">
-            <span class="font-black text-gray-400 uppercase tracking-widest font-bold">Greeks (ATM: {atmStrike().toLocaleString()})</span>
+            <span class="font-black text-gray-400 uppercase tracking-widest font-bold">Greeks {atmStrike() ? `(ATM: ${atmStrike().toLocaleString()})` : ''}</span>
             <div class="flex items-center gap-1.5 text-[8px] font-black uppercase">
               <span class="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Calls</span>
               <span class="text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">Puts</span>
