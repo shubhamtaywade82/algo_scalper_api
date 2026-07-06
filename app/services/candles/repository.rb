@@ -7,7 +7,7 @@ module Candles
   # docs/infra-strategy-setup/03_data_layer.md, D-03.2).
   class Repository
     BASE_TIMEFRAME = "1m"
-    TIMEFRAME_PATTERN = /\A(\d+)m\z/
+    TIMEFRAME_PATTERN = /\A([1-9]\d*)m\z/
 
     class << self
       # @param instrument_key [String]
@@ -66,8 +66,11 @@ module Candles
       end
 
       def bucket_start(ts, minutes)
-        epoch = ts.to_i
-        Time.zone.at(epoch - (epoch % (minutes * 60)))
+        local = ts.in_time_zone
+        midnight = local.beginning_of_day
+        minutes_since_midnight = ((local - midnight) / 60).to_i
+        bucket_index = minutes_since_midnight / minutes
+        midnight + (bucket_index * minutes).minutes
       end
     end
   end

@@ -69,6 +69,45 @@ RSpec.describe Candles::Repository do
         described_class.series(instrument_key: 'NIFTY', timeframe: 'bogus', from: base_ts, to: base_ts + 1.minute)
       end.to raise_error(ArgumentError, /Unsupported timeframe/)
     end
+
+    it 'raises ArgumentError for a zero-minute timeframe instead of dividing by zero' do
+      seed_minute(0, open: 100, high: 105, low: 95, close: 100)
+
+      expect do
+        described_class.series(instrument_key: 'NIFTY', timeframe: '0m', from: base_ts, to: base_ts + 1.minute)
+      end.to raise_error(ArgumentError, /Unsupported timeframe/)
+    end
+  end
+
+  describe '.series bucket alignment across an hour boundary' do
+    let(:hour_ts) { Time.zone.parse('2026-07-06 09:00:00') }
+
+    before do
+      # Seed 1m bars straddling the 09:00 IST hour boundary so that
+      # epoch-based bucketing (misaligned by 30 minutes vs IST) and
+      # local-midnight-based bucketing disagree on the 60m bucket start.
+      Candles::Record.create!(
+        instrument_key: 'NIFTY', exchange_segment: 'IDX_I', security_id: '13',
+        timeframe: '1m', ts: hour_ts - 1.minute,
+        open: 200, high: 205, low: 195, close: 200, volume: 100, source: 'live'
+      )
+      Candles::Record.create!(
+        instrument_key: 'NIFTY', exchange_segment: 'IDX_I', security_id: '13',
+        timeframe: '1m', ts: hour_ts,
+        open: 200, high: 210, low: 198, close: 208, volume: 100, source: 'live'
+      )
+    end
+
+    it 'aligns 60m buckets to local (IST) hour boundaries, not epoch-based ones' do
+      result = described_class.series(
+        instrument_key: 'NIFTY', timeframe: '60m', from: hour_ts - 5.minutes, to: hour_ts + 5.minutes
+      )
+
+      result.each do |bar|
+        local = bar[:ts].in_time_zone
+        expect(local.min).to eq(0), "expected bucket ts #{local} to fall on a local hour boundary"
+      end
+    end
   end
 
   describe '.series when no data exists' do
