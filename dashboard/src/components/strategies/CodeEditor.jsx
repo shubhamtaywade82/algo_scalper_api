@@ -1,116 +1,93 @@
-import { createSignal, createMemo, For, onMount } from 'solid-js'
+import { createSignal, createEffect, onMount, createMemo } from 'solid-js'
 
 export default function CodeEditor(props) {
   let textareaRef
   let gutterRef
+
   const [cursorLine, setCursorLine] = createSignal(1)
   const [cursorCol, setCursorCol] = createSignal(1)
 
   const lineCount = createMemo(() => {
-    const text = props.code()
-    if (!text) return 1
+    const text = props.code() || ''
     return text.split('\n').length
   })
 
-  const lines = createMemo(() => Array.from({ length: lineCount() }, (_, i) => i + 1))
-
-  function updateCursorPosition() {
-    if (!textareaRef) return
-    const val = textareaRef.value
-    const pos = textareaRef.selectionStart
-    const before = val.substring(0, pos)
-    const lineNum = before.split('\n').length
-    const lastNewline = before.lastIndexOf('\n')
-    const col = pos - lastNewline
-    setCursorLine(lineNum)
-    setCursorCol(col)
-  }
-
-  function handleScroll() {
-    if (gutterRef && textareaRef) {
+  // Synchronize scrolling of gutter and textarea
+  const handleScroll = () => {
+    if (textareaRef && gutterRef) {
       gutterRef.scrollTop = textareaRef.scrollTop
     }
   }
 
-  function handleInput(e) {
-    if (props.onChange) {
-      props.onChange(e.target.value)
-    }
-    updateCursorPosition()
+  // Update cursor position line and column
+  const handleCursorMove = (e) => {
+    const el = e.target
+    const textBeforeCursor = el.value.substring(0, el.selectionStart)
+    const lines = textBeforeCursor.split('\n')
+    setCursorLine(lines.length)
+    setCursorCol(lines[lines.length - 1].length + 1)
   }
 
-  onMount(() => {
-    if (textareaRef) {
-      textareaRef.addEventListener('click', updateCursorPosition)
-      textareaRef.addEventListener('keyup', updateCursorPosition)
+  // Handle Tab key press to insert spaces
+  const handleKeyDown = (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const el = e.target
+      const start = el.selectionStart
+      const end = el.selectionEnd
+      const text = el.value
+      const value = text.substring(0, start) + '  ' + text.substring(end)
+      props.onChange(value)
+      
+      // Reset cursor position
+      setTimeout(() => {
+        el.selectionStart = el.selectionEnd = start + 2
+      }, 0)
     }
-  })
+  }
 
   return (
-    <div class="flex flex-col h-full rounded-xl overflow-hidden border border-white/10">
-      {/* Editor area */}
-      <div class="flex flex-1 overflow-hidden" style="background: #0d1117">
-        {/* Line numbers gutter */}
+    <div class="flex flex-col flex-1 h-full bg-[#0d1117] rounded-xl border border-white/5 overflow-hidden">
+      {/* Editor Body */}
+      <div class="flex flex-1 relative min-h-0">
+        {/* Line Numbers Gutter */}
         <div
           ref={gutterRef}
-          class="select-none overflow-hidden flex-shrink-0"
-          style={{
-            'background': '#0d1117',
-            'border-right': '1px solid rgba(255,255,255,0.06)',
-            'padding': '12px 0',
-            'min-width': '52px',
-            'text-align': 'right',
-          }}
+          class="w-12 bg-[#090d12] text-gray-600 font-mono text-[11px] text-right pr-2 py-4 select-none overflow-hidden border-r border-white/5"
+          style="line-height: 18px;"
         >
-          <For each={lines()}>
-            {(num) => (
-              <div
-                class="font-mono text-[12px] leading-[20px] px-3"
-                style={{
-                  color: num === cursorLine() ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.2)',
-                }}
-              >
-                {num}
-              </div>
-            )}
-          </For>
+          {Array.from({ length: lineCount() }).map((_, i) => (
+            <div class={cursorLine() === i + 1 ? 'text-gray-400 font-bold bg-white/5' : ''}>{i + 1}</div>
+          ))}
         </div>
 
         {/* Textarea */}
         <textarea
           ref={textareaRef}
-          value={props.code()}
-          onInput={handleInput}
+          value={props.code() || ''}
+          onInput={(e) => props.onChange(e.target.value)}
           onScroll={handleScroll}
-          readOnly={props.readOnly || false}
+          onKeyUp={handleCursorMove}
+          onClick={handleCursorMove}
+          onKeyDown={handleKeyDown}
+          readOnly={props.readOnly}
+          class="flex-1 bg-[#0d1117] text-gray-200 font-mono text-[12px] p-4 resize-none outline-none border-none focus:ring-0 leading-[18px] overflow-auto h-full"
+          placeholder="# Write strategy logic here..."
           spellcheck={false}
-          class="flex-1 bg-transparent text-gray-300 font-mono text-[12px] leading-[20px] p-3 outline-none resize-none overflow-auto"
-          style={{
-            'tab-size': '2',
-            'caret-color': '#58a6ff',
-            'white-space': 'pre',
-            'word-wrap': 'normal',
-            'overflow-wrap': 'normal',
-          }}
         />
       </div>
 
-      {/* Status bar */}
-      <div
-        class="flex items-center justify-between px-4 py-1.5 text-[11px] font-mono border-t border-white/5 flex-shrink-0"
-        style="background: #161b22; color: rgba(255,255,255,0.4)"
-      >
+      {/* Editor Status Bar */}
+      <div class="flex items-center justify-between px-4 py-1.5 bg-[#090d12] border-t border-white/5 text-[10px] text-gray-500 font-mono select-none">
         <div class="flex items-center gap-4">
-          <span>Ln {cursorLine()}, Col {cursorCol()}</span>
+          <span>Line {cursorLine()}, Col {cursorCol()}</span>
           <span>Spaces: 2</span>
           <span>UTF-8</span>
+          <span class="text-primary-400">Ruby</span>
         </div>
-        <div class="flex items-center gap-4">
-          <span class="capitalize">{props.language || 'Ruby'}</span>
-          <span class="flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-            0 errors
-          </span>
+        <div class="flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span class="text-emerald-500 font-black">No errors</span>
         </div>
       </div>
     </div>

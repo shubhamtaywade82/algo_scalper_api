@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_06_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_06_120001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -390,6 +390,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120000) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "platform_variables", force: :cascade do |t|
+    t.boolean "boolean_value"
+    t.datetime "created_at", null: false
+    t.decimal "decimal_value", precision: 16, scale: 8
+    t.text "description"
+    t.jsonb "json_value"
+    t.string "key", null: false
+    t.text "string_value"
+    t.datetime "updated_at", null: false
+    t.string "value_type", default: "string", null: false
+    t.index ["key"], name: "index_platform_variables_on_key", unique: true
+  end
+
   create_table "position_meta_snapshots", force: :cascade do |t|
     t.integer "config_change_log_id"
     t.jsonb "config_snapshot", default: {}, null: false
@@ -653,6 +666,67 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120000) do
     t.index ["expires_at"], name: "index_solid_queue_semaphores_on_expires_at"
     t.index ["key", "value"], name: "index_solid_queue_semaphores_on_key_and_value"
     t.index ["key"], name: "index_solid_queue_semaphores_on_key", unique: true
+  end
+
+  create_table "strategies", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "current_version_id"
+    t.string "desired_status"
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.string "status", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["current_version_id"], name: "index_strategies_on_current_version_id"
+    t.index ["slug"], name: "index_strategies_on_slug", unique: true
+  end
+
+  create_table "strategy_runs", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "started_at"
+    t.jsonb "stats", default: {}
+    t.string "stop_reason"
+    t.datetime "stopped_at"
+    t.bigint "strategy_id", null: false
+    t.bigint "strategy_version_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["strategy_id"], name: "index_strategy_runs_on_strategy_id"
+    t.index ["strategy_version_id"], name: "index_strategy_runs_on_strategy_version_id"
+  end
+
+  create_table "strategy_signals", force: :cascade do |t|
+    t.string "action", null: false
+    t.float "confidence"
+    t.datetime "created_at", null: false
+    t.datetime "emitted_at", null: false
+    t.string "instrument_key", null: false
+    t.jsonb "metadata", default: {}
+    t.string "outcome"
+    t.bigint "position_tracker_id"
+    t.string "reason"
+    t.bigint "strategy_id", null: false
+    t.bigint "strategy_run_id", null: false
+    t.bigint "strategy_version_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_key", "emitted_at"], name: "index_strategy_signals_on_instrument_key_and_emitted_at"
+    t.index ["position_tracker_id"], name: "index_strategy_signals_on_position_tracker_id"
+    t.index ["strategy_id"], name: "index_strategy_signals_on_strategy_id"
+    t.index ["strategy_run_id", "emitted_at"], name: "index_strategy_signals_on_strategy_run_id_and_emitted_at"
+    t.index ["strategy_run_id"], name: "index_strategy_signals_on_strategy_run_id"
+    t.index ["strategy_version_id"], name: "index_strategy_signals_on_strategy_version_id"
+  end
+
+  create_table "strategy_versions", force: :cascade do |t|
+    t.string "checksum", null: false
+    t.datetime "created_at", null: false
+    t.datetime "deployed_at"
+    t.string "file_path", null: false
+    t.jsonb "manifest", default: {}, null: false
+    t.jsonb "scan_report", default: {}
+    t.bigint "strategy_id", null: false
+    t.datetime "updated_at", null: false
+    t.integer "version", null: false
+    t.index ["strategy_id", "version"], name: "index_strategy_versions_on_strategy_id_and_version", unique: true
+    t.index ["strategy_id"], name: "index_strategy_versions_on_strategy_id"
   end
 
   create_table "trade_analytics", force: :cascade do |t|
