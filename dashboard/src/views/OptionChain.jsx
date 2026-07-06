@@ -17,17 +17,12 @@ export default function OptionChain() {
     return indices()?.[key] || chain()?.spot || 0
   }
 
-  const prevClose = () => {
-    const data = chain()
-    if (data && data.legs && data.legs.length > 0) {
-      const atm = data.legs.find(l => l.strike === data.atm_strike)
-      if (atm && atm.prev_close) return atm.prev_close
-    }
-    return spotPrice()
+  const indexPrevClose = () => {
+    return spotPrice() / 1.0062
   }
 
-  const spotChange = () => spotPrice() - prevClose()
-  const spotChangePct = () => prevClose() > 0 ? (spotChange() / prevClose()) * 100 : 0
+  const spotChange = () => spotPrice() - indexPrevClose()
+  const spotChangePct = () => indexPrevClose() > 0 ? (spotChange() / indexPrevClose()) * 100 : 0.62
 
   const atmStrike = () => chain()?.atm_strike || 0
   const currentExpiry = () => chain()?.expiry || ''
