@@ -96,10 +96,19 @@ RSpec.describe Candles::Record do
     expect(described_class.new(attrs)).to be_valid
   end
 
-  it 'requires instrument_key, timeframe, ts, and OHLC' do
+  it 'requires instrument_key, ts, and OHLC' do
     record = described_class.new
     record.valid?
-    expect(record.errors.attribute_names).to include(:instrument_key, :timeframe, :ts, :open, :high, :low, :close)
+    expect(record.errors.attribute_names).to include(:instrument_key, :ts, :open, :high, :low, :close)
+  end
+
+  it 'requires timeframe to be present even though the column defaults to "1m"' do
+    # The migration's column default pre-fills `timeframe` on a bare `.new`, so the
+    # presence validator never fires there. Force it blank to prove the validation
+    # still catches an explicit nil/blank value.
+    record = described_class.new(attrs.merge(timeframe: nil))
+    record.valid?
+    expect(record.errors.attribute_names).to include(:timeframe)
   end
 
   it 'enforces uniqueness on instrument_key + timeframe + ts' do
@@ -186,7 +195,7 @@ end
 - [ ] **Step 6: Run test to verify it passes**
 
 Run: `bundle exec rspec spec/models/candles/record_spec.rb`
-Expected: PASS (4 examples, 0 failures)
+Expected: PASS (6 examples, 0 failures)
 
 - [ ] **Step 7: Commit**
 
