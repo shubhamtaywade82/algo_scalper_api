@@ -104,3 +104,5 @@ export const navigationConfig = [
 // - /api/reports → Reports & Performance pages
 // - /api/logs → Logs page
 // - /api/alerts → Alerts page (CRUD)
+// - /api/backtests → Backtests execution, reports, and configs
+// - /api/replay → Replay historical data ingestion and player control state

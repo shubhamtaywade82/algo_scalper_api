@@ -19,6 +19,8 @@ const Settings = lazy(() => import('./views/Settings'))
 const Ledger = lazy(() => import('./views/Ledger'))
 const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
 const OptionScalper = lazy(() => import('./views/OptionScalper'))
+const Backtester = lazy(() => import('./views/Backtester'))
+const Replay = lazy(() => import('./views/Replay'))
 
 // New TDD routes — backend DEPENDENCY stubs
 const MarketWatch = lazy(() => import('./views/MarketWatch'))
@@ -131,6 +133,8 @@ export default function App() {
           <Route path="/analysis" component={Analysis} />
           <Route path="/ledger" component={Ledger} />
           <Route path="/settings" component={Settings} />
+          <Route path="/backtester" component={Backtester} />
+          <Route path="/replay" component={Replay} />
           {/* New routes from TDD layout */}
           <Route path="/market-watch" component={MarketWatch} />
           {/* DEPENDENCY: backend — /api/holdings */}
