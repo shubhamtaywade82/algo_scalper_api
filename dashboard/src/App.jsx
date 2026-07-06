@@ -92,7 +92,7 @@ function AppShell(props) {
         />
         <div class="flex">
           <Sidebar collapsed={sidebarCollapsed()} />
-          <main class={`flex-1 transition-all duration-300 pt-14 pb-20 ${sidebarCollapsed() ? 'ml-16' : 'ml-56'}`}>
+          <main class={`flex-1 transition-all duration-300 pt-1 pb-20 ${sidebarCollapsed() ? 'ml-16' : 'ml-56'}`}>
             <div class="px-8 pt-3 pb-6 w-full">
               {props.children}
 
