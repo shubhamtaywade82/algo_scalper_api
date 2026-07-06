@@ -33,6 +33,7 @@ module Entries
         Guards::MomentumGateGuard,
         Guards::IvVolGateGuard,
         Guards::OptionVolumeVelocityGuard,
+        Guards::ChainConfirmationGuard,
         Guards::EarliestEntryGuard,
         Guards::TradingTimeRestrictionGuard,
         Guards::EdgeFailureGuard,
