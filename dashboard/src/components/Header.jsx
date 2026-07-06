@@ -1,6 +1,6 @@
 import { createMemo } from 'solid-js'
 import { Show } from 'solid-js'
-import { A } from '@solidjs/router'
+import { A, useLocation } from '@solidjs/router'
 import { useDashboardContext } from '../context/DashboardContext'
 import { useFlash } from '../stores/useFlash'
 import { confluenceLtfCompact, expiryBadgeMeta, subscribedRowByKey } from '../lib/expiryBadge'
@@ -115,6 +115,20 @@ function MarketStatusBanner(props) {
   )
 }
 
+function SidebarToggle(props) {
+  return (
+    <button
+      onClick={props.onToggle}
+      class="p-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/[0.05] transition-all duration-200 mr-2"
+      title={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path d="M9 18l6-6-6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  )
+}
+
 export default function Header(props) {
   const OptionsBuyingStatePills = (p) => {
     const ob = () => props.optionsBuying?.[p.indexKey] || {}
@@ -158,41 +172,52 @@ export default function Header(props) {
   const navLinkSettingsActive = 'bg-cyan-500/10 text-cyan-300 border-cyan-500/25 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
   const navLinkLedgerActive = 'bg-violet-500/10 text-violet-300 border-violet-500/25 shadow-[0_0_15px_rgba(139,92,246,0.15)]'
 
+  const location = useLocation()
+  const pageTitle = createMemo(() => {
+    const path = location.pathname
+    if (path === '/') return 'Dashboard'
+    const segment = path.split('/')[1] || ''
+    if (!segment) return 'Dashboard'
+    if (segment === 'option-scalper') return 'Option Scalper'
+    return segment.charAt(0).toUpperCase() + segment.slice(1)
+  })
+
   return (
     <div class="sticky top-0 z-50">
-      <header class="glass border-b border-white/5 px-6 py-4 flex items-center justify-between gap-4">
-        {/* Left Section: title & tickers */}
-        <div class="flex items-center gap-6 min-w-0 flex-1">
+      <header class="relative glass border-b border-white/5 px-6 py-2.5 flex items-center justify-between gap-4">
+        {/* Left Section: toggle + title & tickers */}
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <SidebarToggle onToggle={props.onToggleSidebar} collapsed={props.sidebarCollapsed} />
           <div class="flex flex-col shrink-0">
             <span class="text-[10px] font-black text-primary-400 tracking-[0.3em] uppercase">{props.mode} ENGINE</span>
             <span class="text-[8px] font-bold text-gray-500 tracking-widest mt-0.5 uppercase">Active Terminal</span>
           </div>
 
-          <div class="hidden xl:flex items-center gap-2.5 border-l border-white/10 pl-4 min-w-0">
+          <div class="hidden xl:flex items-center gap-2 border-l border-white/10 pl-3 min-w-0">
             {/* Nifty 50 Card */}
             <a
               href="/charts?symbol=NIFTY"
               target="_blank"
               rel="noopener noreferrer"
-              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-xl px-2.5 py-1 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Nifty 50</span>
-                <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${niftyFlash()}`}>
+                <span class={`text-[11px] font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${niftyFlash()}`}>
                   <AnimatedNumber value={props.indices?.nifty} decimals={2} nullDisplay="—" />
                 </span>
               </div>
-              <div class="flex flex-col items-end gap-1">
+              <div class="flex flex-col items-end gap-0.5">
                 {(() => {
                   const b = expiryBlock('NIFTY')
                   return (
                     <>
-                      <span class={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded border leading-none ${b.className}`}>
+                      <span class={`text-[6px] font-black uppercase tracking-tight px-1 py-0.5 rounded border leading-none ${b.className}`}>
                         {b.text}
                       </span>
                       <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}>
                         <span
-                          class="text-[6px] font-mono text-gray-500 leading-none tracking-tighter"
+                          class="text-[5px] font-mono text-gray-500 leading-none tracking-tighter"
                           title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
                         >
                           {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'NIFTY'))}
@@ -210,25 +235,25 @@ export default function Header(props) {
               href="/charts?symbol=BANKNIFTY"
               target="_blank"
               rel="noopener noreferrer"
-              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-xl px-2.5 py-1 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Bank Nifty</span>
-                <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${bankniftyFlash()}`}>
+                <span class={`text-[11px] font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${bankniftyFlash()}`}>
                   <AnimatedNumber value={props.indices?.banknifty} decimals={2} nullDisplay="—" />
                 </span>
               </div>
-              <div class="flex flex-col items-end gap-1">
+              <div class="flex flex-col items-end gap-0.5">
                 {(() => {
                   const b = expiryBlock('BANKNIFTY')
                   return (
                     <>
-                      <span class={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded border leading-none ${b.className}`}>
+                      <span class={`text-[6px] font-black uppercase tracking-tight px-1 py-0.5 rounded border leading-none ${b.className}`}>
                         {b.text}
                       </span>
                       <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}>
                         <span
-                          class="text-[6px] font-mono text-gray-500 leading-none tracking-tighter"
+                          class="text-[5px] font-mono text-gray-500 leading-none tracking-tighter"
                           title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
                         >
                           {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'BANKNIFTY'))}
@@ -246,25 +271,25 @@ export default function Header(props) {
               href="/charts?symbol=SENSEX"
               target="_blank"
               rel="noopener noreferrer"
-              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-xl px-2.5 py-1 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
                 <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Sensex</span>
-                <span class={`text-xs font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${sensexFlash()}`}>
+                <span class={`text-[11px] font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${sensexFlash()}`}>
                   <AnimatedNumber value={props.indices?.sensex} decimals={2} nullDisplay="—" />
                 </span>
               </div>
-              <div class="flex flex-col items-end gap-1">
+              <div class="flex flex-col items-end gap-0.5">
                 {(() => {
                   const b = expiryBlock('SENSEX')
                   return (
                     <>
-                      <span class={`text-[7px] font-black uppercase tracking-tight px-1.5 py-0.5 rounded border leading-none ${b.className}`}>
+                      <span class={`text-[6px] font-black uppercase tracking-tight px-1 py-0.5 rounded border leading-none ${b.className}`}>
                         {b.text}
                       </span>
                       <Show when={confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}>
                         <span
-                          class="text-[6px] font-mono text-gray-500 leading-none tracking-tighter"
+                          class="text-[5px] font-mono text-gray-500 leading-none tracking-tighter"
                           title="SMC Confluence LTF (Pine) — enable signals.enable_smc_confluence_digest"
                         >
                           {confluenceLtfCompact(subscribedRowByKey(props.subscribedIndices, 'SENSEX'))}
@@ -277,63 +302,14 @@ export default function Header(props) {
               </div>
             </a>
           </div>
+
         </div>
 
-        {/* Center Section: Navigation */}
-        <nav class="flex items-center gap-1 bg-white/[0.02] p-1 rounded-2xl border border-white/5 backdrop-blur-xl shrink-0">
-          <A href="/" end class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <rect width="20" height="16" x="2" y="4" rx="2" stroke-width="2.5"/>
-              <path d="m7 10 2 2-2 2m5-2h5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Terminal
-          </A>
-          <A href="/strategies" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Strategies
-          </A>
-          <A href="/alpha" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="m12 3-1.912 5.886H3.886L9.088 12.5l-1.912 5.886L12 14.772l4.824 3.614-1.912-5.886 5.202-3.614h-6.202L12 3z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Alpha
-          </A>
-          <A href="/signals" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Signals
-          </A>
-          <A href="/option-scalper" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2v20M4 6h16M4 18h16M8 10h8v4H8z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Option Scalper
-          </A>
-          <A href="/analysis" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkActive} inactiveClass="">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Analysis
-          </A>
-          <A href="/ledger" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkLedgerActive} inactiveClass="">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M8 7h8M8 11h8M8 15h4" stroke-width="2.5" stroke-linecap="round"/>
-            </svg>
-            Ledger
-          </A>
-          <A href="/settings" class={`${navLinkBase} ${navLinkInactive}`} activeClass={navLinkSettingsActive} inactiveClass="">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <circle cx="12" cy="12" r="3" stroke-width="2.5"/>
-            </svg>
-            Settings
-          </A>
-        </nav>
+        {/* Center Section: Centered Dynamic Page Title */}
+        <div class="absolute left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none">
+          <span class="text-xs font-black text-white uppercase tracking-[0.25em]">{pageTitle()}</span>
+          <span class="text-[7px] font-bold text-gray-500 tracking-widest uppercase mt-0.5">Real-time view</span>
+        </div>
 
         {/* Right Section: System badges */}
         <div class="flex items-center gap-2.5 text-[9px] font-black tracking-wider flex-1 justify-end shrink-0">

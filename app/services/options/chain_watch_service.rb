@@ -171,7 +171,8 @@ module Options
         if tick&.ltp&.positive?
           leg.merge(
             ltp: tick.ltp.to_f, oi: tick.oi.to_i, oi_change: tick.oi_change.to_i,
-            bid: tick.bid, ask: tick.ask, feed_stale: false
+            bid: tick.bid, ask: tick.ask, volume: tick.volume.to_i, prev_close: tick.prev_close.to_f,
+            feed_stale: false
           )
         else
           leg.merge(feed_stale: true)
