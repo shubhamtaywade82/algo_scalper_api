@@ -1,12 +1,21 @@
 # frozen_string_literal: true
 
 module Candles
+  # Read API over durably-persisted candles. The 1m timeframe reads straight
+  # from the table; every other timeframe is derived on read via OHLC rollup
+  # over the 1m rows — no higher-timeframe rows are ever stored (see
+  # docs/infra-strategy-setup/03_data_layer.md, D-03.2).
   class Repository
     BASE_TIMEFRAME = "1m"
-    TIMEFRAME_PATTERN = /\A(\d+)m\z/
+    TIMEFRAME_PATTERN = /\A([1-9]\d*)m\z/
 
     class << self
-      def series(instrument_key:, from:, to:, timeframe: BASE_TIMEFRAME)
+      # @param instrument_key [String]
+      # @param timeframe [String] e.g. "1m", "3m", "5m", "15m"
+      # @param from [Time]
+      # @param to [Time]
+      # @return [Array<Hash>] ordered by ts ascending
+      def series(instrument_key:, timeframe: BASE_TIMEFRAME, from:, to:)
         if timeframe.to_s == BASE_TIMEFRAME
           base_series(instrument_key: instrument_key, from: from, to: to)
         else
@@ -28,6 +37,10 @@ module Candles
           end
       end
 
+      # NOTE: `from` should be bucket-aligned for the requested timeframe.
+      # `.between(from, to)` is inclusive over raw 1m rows, so an unaligned
+      # `from` (e.g. "3m" starting at :16 instead of :15) yields a leading
+      # bucket built from a partial set of 1m bars.
       def derive(instrument_key:, timeframe:, from:, to:)
         minutes = minutes_for(timeframe)
         base = base_series(instrument_key: instrument_key, from: from, to: to)
@@ -57,8 +70,11 @@ module Candles
       end
 
       def bucket_start(ts, minutes)
-        epoch = ts.to_i
-        Time.zone.at(epoch - (epoch % (minutes * 60)))
+        local = ts.in_time_zone
+        midnight = local.beginning_of_day
+        minutes_since_midnight = ((local - midnight) / 60).to_i
+        bucket_index = minutes_since_midnight / minutes
+        midnight + (bucket_index * minutes).minutes
       end
     end
   end

@@ -117,7 +117,10 @@ module Live
         else
           # The previous forming candle (if any) is now finalized — hand it off
           # for durable persistence before starting the new one. A persistence
-          # hiccup must never block or abort the Redis write below.
+          # hiccup must never block or abort the Redis write below. Note the
+          # enqueue itself is a synchronous Solid Queue DB insert (not fully
+          # async) — acceptable since it fires once/minute/index and is
+          # rescue-guarded, but this is not a DB-free path.
           begin
             Candles::Persister.enqueue(instrument: instrument, interval: interval, candles: [last], source: "live") if last
             if last && interval == 1
