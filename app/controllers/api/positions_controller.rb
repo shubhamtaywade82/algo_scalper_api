@@ -38,8 +38,9 @@ module Api
       # Date filter (defaults to today)
       scope = scope.where(exited_at: filter_date.all_day)
 
-      # Index key filter (stored in meta JSONB)
-      scope = scope.where("meta->>'index_key' = ?", params[:index_key].upcase) if params[:index_key].present?
+      if params[:index_key].present?
+        scope = scope.by_index_key(params[:index_key].upcase)
+      end
 
       # Option type: CE or PE suffix on symbol
       if params[:option_type].present?

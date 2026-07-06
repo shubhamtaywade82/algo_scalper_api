@@ -27,8 +27,8 @@ RSpec.describe Trading::InstrumentExecutionProfile do
         expect(profile[:allow_execution_only]).to be(false)
         expect(profile[:max_lots_by_permission]).to eq(
           execution_only: 0,
-          scale_ready: 5,
-          full_deploy: 20
+          scale_ready: 2,
+          full_deploy: 10
         )
         expect(profile[:target_model]).to eq(:convexity)
         expect(profile[:scaling_style]).to eq(:late)

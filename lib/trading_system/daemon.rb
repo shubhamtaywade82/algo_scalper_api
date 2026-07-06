@@ -91,6 +91,14 @@ module TradingSystem
       @supervisor.start_all
       subscribe_active_positions!
       TradingSystem::Bootstrap.boot_market_gates!
+
+      # Warm up index candles asynchronously so indicator and structural exit rules have continuous series
+      Thread.new do
+        Thread.current.name = 'daemon-index-warmup'
+        warmup_index_candles!
+      rescue StandardError => e
+        Rails.logger.error("[TradingDaemon] warmup_index_candles! failed: #{e.class} - #{e.message}")
+      end
     end
 
     def subscribe_active_positions!
@@ -102,6 +110,18 @@ module TradingSystem
       @supervisor[:market_feed].subscribe_many(active_pairs) if active_pairs.any?
     rescue StandardError => e
       Rails.logger.error("[TradingDaemon] subscribe_active_positions failed: #{e.class} - #{e.message}")
+    end
+
+    def warmup_index_candles!
+      Rails.logger.info('[TradingDaemon] Warming up index candles for exit/trailing engines...')
+      IndexConfigLoader.load_indices.each do |cfg|
+        inst = IndexInstrumentCache.instance.get_or_fetch(cfg)
+        next unless inst
+
+        Live::HistoricalBackfillService.new.backfill(instrument: inst, interval: 1, reason: :warmup)
+        Live::HistoricalBackfillService.new.backfill(instrument: inst, interval: 5, reason: :warmup)
+      end
+      Rails.logger.info('[TradingDaemon] Index candles warmup complete')
     end
 
     def strict_boot_reconciliation?(market_closed:)
@@ -129,6 +149,8 @@ module TradingSystem
       return if @stopping
       @stopping = true
 
+      alert_shutdown_with_open_positions!
+
       if @market_open_thread&.alive?
         @market_open_thread.kill
         @market_open_thread = nil
@@ -143,6 +165,21 @@ module TradingSystem
       end
     rescue StandardError => e
       warn "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
+    end
+
+    # Positions are NOT force-flattened on shutdown — they remain open at the broker.
+    # This only alerts so an operator knows to watch them until the process restarts
+    # and Live::ReconciliationService picks the exit/risk monitoring back up.
+    def alert_shutdown_with_open_positions!
+      count = PositionTracker.active.count
+      return if count.zero?
+
+      message = "TradingDaemon shutting down with #{count} open position(s) — " \
+                'they remain live at the broker UNMONITORED until the process restarts and reconciliation resumes'
+      warn "[TradingDaemon] #{message}"
+      Notifications::TelegramNotifier.instance.notify_error(message, context: 'TradingSystem::Daemon#safe_stop!')
+    rescue StandardError => e
+      warn "[TradingDaemon] alert_shutdown_with_open_positions! failed: #{e.class} - #{e.message}"
     end
 
     def keep_process_alive!

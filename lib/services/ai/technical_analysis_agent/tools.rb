@@ -415,10 +415,15 @@ module Services
                    when 'adx'
                      adx_period = period || 14
                      series.adx(adx_period)
-                   when 'supertrend'
-                     st_period = period || 7
-                     multiplier = args['multiplier']&.to_f || 3.0
-                     series.supertrend_signal(period: st_period, multiplier: multiplier)
+                  when 'supertrend'
+                    st_period = period || 7
+                    multiplier = args['multiplier']&.to_f || 3.0
+                    supertrend_cfg = args['supertrend_cfg'] || {}
+                    series.supertrend_signal(
+                      period: st_period,
+                      multiplier: multiplier,
+                      supertrend_cfg: supertrend_cfg.deep_symbolize_keys
+                    )
                    when 'atr'
                      atr_period = period || 14
                      series.atr(atr_period)

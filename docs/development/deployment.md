@@ -67,7 +67,7 @@ This document covers deployment setup and operational procedures for the Algo Sc
 | `LIVE_TRADING` | — | Set `"true"` for live gateway path at boot; unset/false forces paper |
 | `SIGNAL_TIER` | `standard` (via YAML if unset) | `exploratory` / `standard` / `selective` — merges `config/signal_tier_presets.yml` |
 | `RAILS_ENV` | `development` | Rails environment |
-| `OLLAMA_MODEL` | `llama3.2:3b` | Ollama model for AI analysis |
+| `OLLAMA_MODEL` | `qwen3.5:4b` | Ollama model for AI analysis |
 | `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_TIMEOUT` | `120` | Ollama request timeout (seconds) |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token for notifications |

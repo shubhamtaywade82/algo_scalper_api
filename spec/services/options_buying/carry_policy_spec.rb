@@ -57,7 +57,9 @@ RSpec.describe OptionsBuying::CarryPolicy do
 
     before do
       allow(OptionsBuying::Mode).to receive(:config).and_return({})
-      allow(described_class).to receive(:carry_allowed?).with(index_key: 'NIFTY').and_return(carry_allowed)
+      allow(described_class).to receive(:carry_allowed?) do |args|
+        args[:index_key] == 'NIFTY' ? carry_allowed : false
+      end
     end
 
     context 'when carry allowed and ROI clears the threshold' do

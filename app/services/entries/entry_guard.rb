@@ -16,45 +16,58 @@ module Entries
       end
 
       def try_enter(index_cfg:, pick:, direction:, scale_multiplier: 1, entry_metadata: nil, permission: nil, signal: nil)
-        # 1. Pipeline Execution
-        context = {
-          index_cfg: index_cfg,
-          pick: pick,
-          direction: direction,
-          scale_multiplier: scale_multiplier,
-          entry_metadata: entry_metadata || {},
-          permission: permission,
-          is_paper: entry_metadata&.dig(:paper) || Rails.env.local?
-        }
+        # Serialize the guard decision + tracker creation per index so concurrent
+        # callers (scheduler, manual API, BOS engine) can't both pass exposure/
+        # max-concurrent checks before either commits.
+        Entries::AdvisoryLock.with_index_lock(index_cfg[:key]) do
+          # 1. Pipeline Execution
+          context = {
+            index_cfg: index_cfg,
+            pick: pick,
+            direction: direction,
+            scale_multiplier: scale_multiplier,
+            entry_metadata: entry_metadata || {},
+            permission: permission,
+            is_paper: entry_metadata&.dig(:paper) || Rails.env.local?
+          }
 
-        result = entry_guard_pipeline.run(context)
-        if result != EntryGuardPipeline::PASS
-          reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
-          Observability::StructuredLog.info(
-            event: 'entry_blocked',
-            payload: {
-              service: 'Entries::EntryGuard',
-              index_key: index_cfg[:key].to_s,
-              symbol: pick[:symbol].to_s,
-              reason: reason
-            }
-          )
-          signal&.record_entry_outcome('blocked', reason)
-          return false
+          result = entry_guard_pipeline.run(context)
+          if result != EntryGuardPipeline::PASS
+            reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
+            Observability::StructuredLog.info(
+              event: 'entry_blocked',
+              payload: {
+                service: 'Entries::EntryGuard',
+                index_key: index_cfg[:key].to_s,
+                symbol: pick[:symbol].to_s,
+                reason: reason
+              }
+            )
+            signal&.record_entry_outcome('blocked', reason)
+            next false
+          end
+
+          # 2. Order Execution
+          execution_result = OrderExecutionService.call(context)
+
+          if execution_result.is_a?(Hash) && execution_result[:error]
+            signal&.record_entry_outcome('blocked', execution_result[:error])
+            next false
+          end
+
+          # Success - Tracker created
+          signal&.record_entry_outcome('entered')
+          validate_entry_price!(execution_result, context)
+
+          # Record trade in DailyLimits
+          begin
+            Live::DailyLimits.new.record_trade(index_key: index_cfg[:key])
+          rescue StandardError => e
+            Rails.logger.error("[EntryGuard] Failed to record trade in DailyLimits: #{e.class} - #{e.message}")
+          end
+
+          true
         end
-
-        # 2. Order Execution
-        execution_result = OrderExecutionService.call(context)
-
-        if execution_result.is_a?(Hash) && execution_result[:error]
-          signal&.record_entry_outcome('blocked', execution_result[:error])
-          return false
-        end
-
-        # Success - Tracker created
-        signal&.record_entry_outcome('entered')
-        validate_entry_price!(execution_result, context)
-        true
       rescue StandardError => e
         signal&.record_entry_outcome('blocked', "exception: #{e.class}")
         bt = e.backtrace&.first(12)&.join("\n")
@@ -66,75 +79,80 @@ module Entries
 
       # Used by OrderExecutionService
       def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata:, bos_context:)
-        meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
-        apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
+        PositionTracker.transaction do
+          meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
+          apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        snapshot = meta_hash.delete('config_snapshot')
-        version = meta_hash.delete('config_version') || {}
-        entry_at = meta_hash.delete('entry_at')
+          snapshot = meta_hash.delete(:config_snapshot)
+          version = (meta_hash.delete(:config_version) || {}).with_indifferent_access
+          entry_at = meta_hash.delete(:entry_at)
 
-        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+          tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
 
-        tracker = PositionTracker.create!(
-          order_no: order_no,
-          instrument: instrument,
-          watchable: instrument,
-          security_id: pick[:security_id],
-          segment: pick[:segment] || index_cfg[:segment],
-          side: side,
-          quantity: quantity,
-          entry_price: ltp,
-          avg_price: ltp,
-          symbol: pick[:symbol],
-          status: :active,
-          paper: false,
-          **tracker_attrs,
-          meta: legacy_meta
-        )
+          tracker = PositionTracker.create!(
+            order_no: order_no,
+            instrument: instrument,
+            watchable: instrument,
+            security_id: pick[:security_id],
+            segment: pick[:segment] || index_cfg[:segment],
+            side: side,
+            quantity: quantity,
+            entry_price: ltp,
+            avg_price: ltp,
+            symbol: pick[:symbol],
+            status: :active,
+            paper: false,
+            **tracker_attrs,
+            meta: legacy_meta
+          )
 
-        tracker.create_position_meta_snapshot!(
-          config_version_hash: version['hash'].to_s,
-          config_change_log_id: version['change_log_id'],
-          config_snapshot: snapshot,
-          entry_at: entry_at
-        )
+          tracker.create_position_meta_snapshot!(
+            config_version_hash: version['hash'].to_s,
+            config_change_log_id: version['change_log_id'],
+            config_snapshot: snapshot,
+            entry_at: entry_at
+          )
 
-        tracker
+          tracker
+        end
       end
 
       def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata:, bos_context:)
-        meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
-        apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
+        PositionTracker.transaction do
+          meta_hash = build_base_meta(index_cfg: index_cfg, pick: pick, direction: bos_context&.dig(:direction))
+          apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price: ltp, quantity: quantity)
 
-        snapshot = meta_hash.delete('config_snapshot')
-        version = meta_hash.delete('config_version') || {}
-        entry_at = meta_hash.delete('entry_at')
+          snapshot = meta_hash.delete(:config_snapshot)
+          version = (meta_hash.delete(:config_version) || {}).with_indifferent_access
+          entry_at = meta_hash.delete(:entry_at)
 
-        tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
+          tracker_attrs, legacy_meta = split_meta_hash(meta_hash)
 
-        tracker = PositionTracker.create!(
-          order_no: order_no,
-          instrument: instrument,
-          watchable: instrument,
-          security_id: pick[:security_id],
-          segment: pick[:segment] || index_cfg[:segment],
-          side: side,
-          quantity: quantity,
-          entry_price: ltp,
-          avg_price: ltp,
-          symbol: pick[:symbol],
-          status: :active,
-          paper: true,
-          **tracker_attrs,
-          meta: legacy_meta
-        )
-        tracker.create_position_meta_snapshot!(
-          config_version_hash: version['hash'].to_s,
-          config_change_log_id: version['change_log_id'],
-          config_snapshot: snapshot
-        )
+          tracker = PositionTracker.create!(
+            order_no: order_no,
+            instrument: instrument,
+            watchable: instrument,
+            security_id: pick[:security_id],
+            segment: pick[:segment] || index_cfg[:segment],
+            side: side,
+            quantity: quantity,
+            entry_price: ltp,
+            avg_price: ltp,
+            symbol: pick[:symbol],
+            status: :active,
+            paper: true,
+            **tracker_attrs,
+            meta: legacy_meta
+          )
+          tracker.create_position_meta_snapshot!(
+            config_version_hash: version['hash'].to_s,
+            config_change_log_id: version['change_log_id'],
+            config_snapshot: snapshot,
+            entry_at: entry_at
+          )
 
-        tracker
+          tracker
+        end
       end
 
       def build_client_order_id(index_cfg:, pick:)

@@ -172,7 +172,7 @@
 - `OLLAMA_BASE_URL` - For Ollama (e.g., `http://192.168.1.14:11434`)
 
 ### Optional:
-- `OLLAMA_MODEL` - Explicitly set Ollama model (e.g., `llama3.2:3b`)
+- `OLLAMA_MODEL` - Explicitly set Ollama model (e.g., `qwen3.5:4b`)
 - `OLLAMA_TIMEOUT` - Timeout for Ollama requests (default: 300 seconds)
 - `AI_AGENT_MAX_ITERATIONS` - Max iterations before safety limit (default: 15, range: 3-100)
 - `AI_AGENT_MAX_CONSECUTIVE_TOOLS` - Max consecutive tool calls (default: 8, range: 3-15)

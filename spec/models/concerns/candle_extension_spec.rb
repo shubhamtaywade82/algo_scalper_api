@@ -165,6 +165,12 @@ RSpec.describe CandleExtension do
       allow(instrument).to receive(:candles).and_return(nil)
       expect(instrument.supertrend_signal(interval: '5')).to be_nil
     end
+
+    it 'forwards custom supertrend parameters' do
+      expect(candle_series).to receive(:supertrend_signal).with(period: 10, multiplier: 2.5).and_return(:short_entry)
+
+      expect(instrument.supertrend_signal(interval: '5', period: 10, multiplier: 2.5)).to eq(:short_entry)
+    end
   end
 
   describe '#liquidity_grab_up?' do

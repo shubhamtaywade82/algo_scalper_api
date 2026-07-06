@@ -78,14 +78,15 @@ class IndexInstrumentCache
     # Rails.logger.info("[IndexCache] Creating temporary instrument for #{index_cfg[:key]} (SID: #{index_cfg[:sid]}, Segment: #{index_cfg[:segment]})")
 
     exchange = determine_exchange(index_cfg)
-    Instrument.new(
+    attrs = {
       security_id: index_cfg[:sid],
       symbol_name: index_cfg[:key],
       exchange: exchange,
       segment: segment_key,
-      instrument_code: 'index',
-      enabled: true
-    )
+      instrument_code: 'index'
+    }
+    attrs[:enabled] = true if Instrument.column_names.include?('enabled')
+    Instrument.new(attrs)
   end
 
   def determine_exchange(index_cfg)

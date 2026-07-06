@@ -69,18 +69,6 @@ module Live
         stop!
         false
       end
-
-      # Subscribe to watchlist OUTSIDE the lock to avoid deadlock
-      # (subscribe_many calls ensure_running! which might try to acquire the lock)
-      subscribe_watchlist
-
-      Rails.logger.info("[MarketFeedHub] DhanHQ market feed started (watchlist=#{@watchlist.count} instruments)")
-      true
-    rescue StandardError => e
-      Rails.logger.error("Failed to start DhanHQ market feed: #{e.class} - #{e.message}")
-      release_budget!("market_feed_hub")
-      stop!
-      false
     end
 
     def stop!
@@ -471,10 +459,13 @@ module Live
       MarketData::MarketCache.update_ltp(symbol, ltp, is_index: is_index)
 
       # Keep CandleSeriesCache forming candle up-to-date for index instruments.
-      # Only index spots (IDX_I segment) feed the 5-min cache used by indicators.
+      # Feed both 1-min and 5-min caches used by exit/trailing engines and indicators.
       if is_index
         instrument = Instrument.find_by(security_id: tick[:security_id].to_s)
-        Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 5) if instrument
+        if instrument
+          Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 5)
+          Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 1)
+        end
       end
 
       return unless tick[:oi].present? || tick[:volume].present?

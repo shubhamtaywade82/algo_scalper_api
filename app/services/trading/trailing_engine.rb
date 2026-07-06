@@ -152,7 +152,7 @@ module Trading
     def expiry_day_factor
       return 1.0 unless expiry_day_tightening_enabled?
 
-      index_key = @tracker.meta&.[]('index_key') || @tracker.meta&.[](:index_key)
+      index_key = @tracker.index_key || @tracker.meta&.[]('index_key') || @tracker.meta&.[](:index_key)
       return 1.0 if index_key.blank?
       return expiry_tightening_ratio if Market::ExpiryChecker.expiry_today?(index_key)
 

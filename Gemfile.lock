@@ -2,6 +2,7 @@ PATH
   remote: /home/nemesis/project/trading-workspace/dhanhq-mcp
   specs:
     dhanhq-mcp (0.1.0)
+      DhanHQ
       rack (>= 2.0)
 
 GEM

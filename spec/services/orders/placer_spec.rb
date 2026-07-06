@@ -470,6 +470,68 @@ RSpec.describe Orders::Placer do
     end
   end
 
+  describe "order slicing integration" do
+    let(:client_order_id) { "TEST-SLICE" }
+
+    before do
+      # Mock Slicer config to set NIFTY limit = 1000
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        options_buying: {
+          execution: {
+            order_slicing: {
+              enabled: true,
+              delay_ms: 100,
+              freeze_limits: {
+                'NIFTY' => 1000,
+                'default' => 1000
+              }
+            }
+          }
+        }
+      })
+
+      # Mock resolve_index_key to return NIFTY for security_id
+      allow(described_class).to receive(:resolve_index_key).with(security_id).and_return('NIFTY')
+      # Mock sleep to avoid delaying test run
+      allow(described_class).to receive(:sleep)
+    end
+
+    it "places a single order when quantity is below freeze limit" do
+      described_class.buy_market!(seg: segment, sid: security_id, qty: 800, client_order_id: client_order_id)
+
+      expect(DhanHQ::Models::Order).to have_received(:create).once
+      expect(captured_attrs.last[:quantity]).to eq(800)
+      expect(captured_attrs.last[:correlation_id]).to eq(client_order_id)
+    end
+
+    it "slices order and places multiple orders when quantity exceeds freeze limit" do
+      described_class.buy_market!(seg: segment, sid: security_id, qty: 2500, client_order_id: client_order_id)
+
+      expect(DhanHQ::Models::Order).to have_received(:create).thrice
+      expect(captured_attrs.pluck(:quantity)).to eq([1000, 1000, 500])
+      expect(captured_attrs.pluck(:correlation_id)).to eq(["#{client_order_id}_1", "#{client_order_id}_2", "#{client_order_id}_3"])
+      expect(described_class).to have_received(:sleep).twice.with(0.1)
+    end
+
+    it "stops slicing and alerts when a middle slice fails, leaving a partial position" do
+      call_count = 0
+      allow(DhanHQ::Models::Order).to receive(:create) do |attributes|
+        call_count += 1
+        captured_attrs << attributes
+        call_count == 2 ? nil : order_double # slice 2 of 3 "fails" (nil result)
+      end
+      allow(Notifications::TelegramNotifier.instance).to receive(:notify_error)
+
+      described_class.buy_market!(seg: segment, sid: security_id, qty: 2500, client_order_id: client_order_id)
+
+      expect(DhanHQ::Models::Order).to have_received(:create).twice # stopped after slice 2, slice 3 never attempted
+      expect(Notifications::TelegramNotifier.instance).to have_received(:notify_error).with(
+        a_string_matching(/Slice 2\/3 failed.*filled 1000\/2500/),
+        context: 'Orders::Placer#place_order_with_slicing'
+      )
+    end
+  end
+
   describe ".order_placement_enabled?" do
     before do
       allow(ENV).to receive(:[]).and_call_original
@@ -481,6 +543,87 @@ RSpec.describe Orders::Placer do
 
       allow(ENV).to receive(:[]).with("PLACE_ORDER").and_return("false")
       expect(described_class.send(:order_placement_enabled?)).to be(false)
+    end
+  end
+
+  describe ".with_token_auto_heal" do
+    before do
+      allow(described_class).to receive(:with_order_rate_limit).and_call_original
+      allow(described_class).to receive(:rate_limiter).and_return(
+        Class.new { def consume!; yield; end }.new
+      )
+    end
+
+    it "refreshes the token and retries exactly once on token expiry" do
+      call_count = 0
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(true)
+      allow(Dhan::TokenManager).to receive(:refresh!)
+
+      result = described_class.send(:with_token_auto_heal, context: "orders.test") do
+        call_count += 1
+        raise "unauthorized" if call_count == 1
+
+        :ok
+      end
+
+      expect(result).to eq(:ok)
+      expect(call_count).to eq(2)
+      expect(Dhan::TokenManager).to have_received(:refresh!).once
+    end
+
+    it "does not loop forever when the token keeps expiring after retry" do
+      call_count = 0
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(true)
+      allow(Dhan::TokenManager).to receive(:refresh!)
+
+      result = described_class.send(:with_token_auto_heal, context: "orders.test") do
+        call_count += 1
+        raise "unauthorized"
+      end
+
+      expect(result).to be_nil
+      expect(call_count).to eq(2) # original attempt + exactly one retry, not infinite
+      expect(Dhan::TokenManager).to have_received(:refresh!).once
+    end
+
+    it "does not retry on non-token-expiry errors" do
+      call_count = 0
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(false)
+      allow(Dhan::TokenManager).to receive(:refresh!)
+
+      result = described_class.send(:with_token_auto_heal, context: "orders.test") do
+        call_count += 1
+        raise "some other broker error"
+      end
+
+      expect(result).to be_nil
+      expect(call_count).to eq(1)
+      expect(Dhan::TokenManager).not_to have_received(:refresh!)
+    end
+  end
+
+  describe "order placement wires through with_token_auto_heal" do
+    let(:client_order_id) { "AUTO_HEAL_TEST" }
+
+    before do
+      allow(described_class).to receive(:with_order_rate_limit).and_call_original
+    end
+
+    it "buy_market! retries once and succeeds after a token refresh" do
+      call_count = 0
+      allow(DhanhqErrorHandler).to receive(:token_expired?).and_return(true)
+      allow(Dhan::TokenManager).to receive(:refresh!)
+      allow(DhanHQ::Models::Order).to receive(:create) do
+        call_count += 1
+        raise "unauthorized" if call_count == 1
+
+        order_double
+      end
+
+      result = described_class.buy_market!(seg: segment, sid: security_id, qty: quantity, client_order_id: client_order_id)
+
+      expect(result).to eq(order_double)
+      expect(Dhan::TokenManager).to have_received(:refresh!).once
     end
   end
 end

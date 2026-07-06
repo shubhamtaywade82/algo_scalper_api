@@ -20,7 +20,8 @@ module Ai
         private
 
         def run_indicator_optimization(symbol, days, dry_run: false)
-          instrument = IndexInstrumentCache.instance.get_or_fetch(key: symbol)
+          index_cfg = IndiaIndexRegistry.for_key(symbol) || { key: symbol }
+          instrument = IndexInstrumentCache.instance.get_or_fetch(index_cfg)
           return { error: 'Instrument not found' } unless instrument
 
           # Run for the primary indicators

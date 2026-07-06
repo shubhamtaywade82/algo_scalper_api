@@ -312,7 +312,7 @@ Signals, guards, strike qualification, and risk rules use the **same logic** in 
 | `REDIS_URL` | Optional | Redis connection (default: redis://127.0.0.1:6379/0) |
 | `DATABASE_URL` | Optional | PostgreSQL connection |
 | `RAILS_ENV` | Optional | Rails environment |
-| `OLLAMA_MODEL` | Optional | Ollama model name (default: llama3.2:3b) |
+| `OLLAMA_MODEL` | Optional | Ollama model name (default: qwen3.5:4b) |
 | `OLLAMA_BASE_URL` / `OLLAMA_HOST_URL` | Optional | Ollama server URL (default: http://localhost:11434) |
 | `OLLAMA_TIMEOUT` | Optional | Ollama request timeout in seconds (default: 120) |
 | `TELEGRAM_BOT_TOKEN` | Optional | Telegram bot token |

@@ -79,6 +79,14 @@ options_buying:
       max_chase_seconds: 15
       tick_interval_seconds: 2
       fallback_to_market: true
+    order_slicing:
+      enabled: true
+      delay_ms: 500
+      freeze_limits:
+        NIFTY: 1800
+        BANKNIFTY: 900
+        SENSEX: 1000
+        default: 1800
   positional:
     enabled: false
     require_carry_allowed: true
@@ -148,8 +156,8 @@ expiry_week_power_trend:
 
 loss_streak_guard:
   enabled: true
-  consecutive_losses_threshold: 2
-  cooldown_minutes: 30
+  consecutive_losses_threshold: 3
+  cooldown_minutes: 20
 
 segment_expectancy_guard:
   enabled: true
@@ -232,7 +240,7 @@ indices:
       weak_trend_pct: 0.005
 
     trade_limits:
-      max_trades_per_day: 2
+      max_trades_per_day: 5
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -274,7 +282,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 1
+      max_trades_per_day: 10
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -316,7 +324,7 @@ indices:
       weak_trend_pct: 0.01
 
     trade_limits:
-      max_trades_per_day: 2
+      max_trades_per_day: 4
 
     # Per-index ADX thresholds (overrides global if specified)
     adx_thresholds:
@@ -339,7 +347,7 @@ indices:
         priority: 4
 
 trade_limits:
-  global_max_trades_per_day: 8
+  global_max_trades_per_day: 12
   global_max_concurrent_positions: 6 # Portfolio-level cap across all indices
 
 # ============================================
@@ -356,6 +364,11 @@ broker_fees:
 # ============================================
 risk:
   auto_update_ip: false # Set to true to automatically update whitelisted IP on Dhan after cooldown
+  max_exposure_rupees:
+    NIFTY: 500000
+    BANKNIFTY: 300000
+    SENSEX: 300000
+    default: 200000
   # LEGACY FALLBACKS — Effective SL/TP resolved by DTE via risk.dte_parameters.by_dte
   # These are used by risk_explorer, meta_builder as fallback when DTE resolution unavailable
   sl_pct: 0.08 # -8% base premium SL — aligned with adaptive_trail entry_guard hard_stop
@@ -369,6 +382,14 @@ risk:
 
   volume_velocity_gate:
     enabled: true
+
+  chain_confirmation_gate:
+    enabled: true
+    min_oi_change: 0
+    min_iv: 8.0
+    max_iv: 45.0
+    min_delta: 0.25
+    max_delta: 0.75
 
   momentum_gate:
     enabled: true
@@ -900,13 +921,13 @@ position_sizing:
   daily_limits:
     enable: true
     per_index:
-      NIFTY: 0.02 # 2% max loss for NIFTY (already DECIMAL)
-      BANKNIFTY: 0.04 # 4% max loss for BANKNIFTY (already DECIMAL)
-      SENSEX: 0.01 # 1% max loss for SENSEX (already DECIMAL)
-    global_limit_pct: 0.04 # 4% (already DECIMAL)
+      NIFTY: 0.03 # 3% max loss for NIFTY (increased from 2%)
+      BANKNIFTY: 0.05 # 5% max loss for BANKNIFTY (increased from 4%)
+      SENSEX: 0.03 # 3% max loss for SENSEX (increased from 2%)
+    global_limit_pct: 0.06 # 6% (increased from 5%)
 
   # Daily profit target: Stop trading when daily profit reaches this amount
-  max_daily_profit: 20000 # ₹20,000 daily profit target (trading stops when reached)
+  max_daily_profit: 30000 # ₹30,000 daily profit target (increased from ₹20,000)
   # Alternative config key: daily_profit_target (also supported)
 
   # Edge Failure Detector (Quality/Regime Detector - NOT a loss cap)
@@ -943,6 +964,16 @@ position_sizing:
     session_based_pause: false # Enable session-aware pause logic
     s3_max_consecutive_sls: 2 # In S3 (11:30-13:45), pause after N consecutive SLs
     s4_start_time: "13:45" # Resume entries when S4 (close/gamma) starts (IST)
+
+# ============================================
+# KELLY CRITERION POSITION SIZING
+# ============================================
+kelly_sizing:
+  enabled: false
+  safety_factor: 0.5 # Fractional Kelly (e.g. 0.5 = Half Kelly)
+  max_capital_allocation_pct: 0.20 # Cap at 20% of capital per trade
+  default_win_rate: 0.55
+  default_payout_ratio: 1.5
 
 # ============================================
 # PORTFOLIO-LEVEL PROFIT LOCK ENGINE

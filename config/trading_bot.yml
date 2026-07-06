@@ -1,0 +1,30 @@
+# Trading Bot Configuration
+# Used by: rake trading:bot
+
+symbols:
+  - NIFTY
+  - BANKNIFTY
+
+# Timeframes for SMC analysis (DhanHQ format: minutes)
+timeframes:
+  entry: "15"    # Entry timeframe
+  trend: "60"    # Trend/H1 timeframe
+
+# Risk management
+max_risk_per_trade_pct: 2.0
+max_open_trades: 3
+max_setups_per_symbol: 1
+
+# Execution
+slippage_pct: 0.05
+taker_fee: 0.0004
+maker_fee: 0.0002
+
+# Paper trading
+initial_balance: 100000.0
+
+# Polling
+poll_interval_sec: 30
+
+# Notifications
+telegram_notify: true

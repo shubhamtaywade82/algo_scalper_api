@@ -310,8 +310,12 @@ class CandleSeries
     end
   end
 
-  def supertrend_signal
-    result = Indicators::Supertrend.new(series: self).call
+  def supertrend_signal(period: 7, multiplier: 3.0, supertrend_cfg: {})
+    cfg = supertrend_cfg.is_a?(Hash) ? supertrend_cfg.dup : {}
+    cfg[:period] ||= period
+    cfg[:base_multiplier] ||= multiplier
+
+    result = Indicators::Supertrend.new(series: self, **cfg).call
     trend_line = result[:line] || []
     return nil if trend_line.empty?
 

@@ -18,8 +18,6 @@ AllCops:
     - "bin/**/*"
     - "config/**/*"
     - "lib/tasks/**/*"
-    - "run_spec_debug.rb"
-    - "trace.rb"
 
 # Overwrite or add rules to create your own house style
 #

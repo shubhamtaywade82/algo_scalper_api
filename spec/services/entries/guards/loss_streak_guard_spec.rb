@@ -10,7 +10,7 @@ RSpec.describe Entries::Guards::LossStreakGuard do
         paper_trading: { enabled: true },
         loss_streak_guard: {
           enabled: true,
-          consecutive_losses_threshold: 2,
+          consecutive_losses_threshold: 1,
           cooldown_minutes: 30
         }
       }
@@ -32,19 +32,6 @@ RSpec.describe Entries::Guards::LossStreakGuard do
     end
 
     context 'when there are not enough consecutive loss exits' do
-      before do
-        create(
-          :position_tracker,
-          :paper,
-          :exited,
-          segment: 'NSE_FNO',
-          last_pnl_rupees: BigDecimal('-900'),
-          exit_reason: 'STOP_LOSS (Sub-second Trigger)',
-          exited_at: Time.current,
-          meta: { index_key: 'NIFTY' }
-        )
-      end
-
       it 'passes entry' do
         result = described_class.call(context)
 
@@ -59,18 +46,8 @@ RSpec.describe Entries::Guards::LossStreakGuard do
           :paper,
           :exited,
           segment: 'NSE_FNO',
-          last_pnl_rupees: BigDecimal('-1200'),
+          last_pnl_rupees: BigDecimal('-900'),
           exit_reason: 'STOP_LOSS (Sub-second Trigger)',
-          exited_at: 1.minute.ago,
-          meta: { index_key: 'NIFTY' }
-        )
-        create(
-          :position_tracker,
-          :paper,
-          :exited,
-          segment: 'NSE_FNO',
-          last_pnl_rupees: BigDecimal('-800'),
-          exit_reason: 'PREMIUM_MOMENTUM_FAILURE (Sub-second Trigger)',
           exited_at: Time.current,
           meta: { index_key: 'NIFTY' }
         )
@@ -99,7 +76,7 @@ RSpec.describe Entries::Guards::LossStreakGuard do
           paper_trading: { enabled: false },
           loss_streak_guard: {
             enabled: true,
-            consecutive_losses_threshold: 2,
+            consecutive_losses_threshold: 1,
             cooldown_minutes: 30
           }
         }
@@ -113,15 +90,6 @@ RSpec.describe Entries::Guards::LossStreakGuard do
           last_pnl_rupees: BigDecimal('-1200'),
           exit_reason: 'STOP_LOSS (Sub-second Trigger)',
           exited_at: 1.minute.ago,
-          meta: { index_key: 'SENSEX' }
-        )
-        create(
-          :position_tracker,
-          :exited,
-          segment: 'NSE_FNO',
-          last_pnl_rupees: BigDecimal('-800'),
-          exit_reason: 'PREMIUM_MOMENTUM_FAILURE (Sub-second Trigger)',
-          exited_at: Time.current,
           meta: { index_key: 'SENSEX' }
         )
       end

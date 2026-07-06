@@ -21,7 +21,7 @@ module Entries
           symbol = index_cfg[:key].to_s.upcase
           if %w[NIFTY SENSEX BANKNIFTY].include?(symbol)
             trades_today = daily_limits.get_daily_trades(symbol)
-            return false if trades_today >= 3
+            return false if trades_today >= max_trades_per_symbol
           end
 
           return true if result[:allowed]
@@ -35,8 +35,24 @@ module Entries
           end
         end
 
+        # Sanity cap on trades/symbol/day, independent of per-index trade_frequency limits
+        # (which this guard deliberately does not block on — see comment above). Sourced
+        # from config instead of hardcoded so it lives in one tunable place.
+        def max_trades_per_symbol
+          config = AlgoConfig.fetch
+          limits = config[:daily_limits] || config.dig(:position_sizing, :daily_limits) || config.dig(:risk, :daily_limits) || {}
+          (limits[:max_trades_per_symbol] || 6).to_i
+        rescue StandardError
+          6
+        end
+
         def daily_limits_enabled?
-          AlgoConfig.fetch.dig(:risk, :daily_limits, :enabled) == true
+          config = AlgoConfig.fetch
+          # Check both top-level daily_limits and nested position_sizing/risk paths
+          limits = config[:daily_limits] || config.dig(:position_sizing, :daily_limits) || config.dig(:risk, :daily_limits)
+          return false unless limits
+
+          limits[:enable] == true || limits[:enabled] == true
         rescue StandardError
           false
         end

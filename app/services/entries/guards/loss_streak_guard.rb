@@ -69,7 +69,7 @@ module Entries
         def recent_positions(index_key)
           position_scope
             .where(status: :exited)
-            .where("meta->>'index_key' = ?", index_key)
+            .by_index_key(index_key)
             .where(exited_at: Time.zone.today.all_day)
             .order(exited_at: :desc)
             .limit(loss_threshold)
