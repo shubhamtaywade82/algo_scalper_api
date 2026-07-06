@@ -11,6 +11,7 @@ import './style.css'
 
 const Dashboard = lazy(() => import('./views/Dashboard'))
 const Strategies = lazy(() => import('./views/Strategies'))
+const StrategyCreator = lazy(() => import('./views/StrategyCreator'))
 const Signals = lazy(() => import('./views/Signals'))
 const Alpha = lazy(() => import('./views/Alpha'))
 const Analysis = lazy(() => import('./views/Analysis'))
@@ -127,6 +128,8 @@ export default function App() {
       <Route component={Protected}>
         <Route component={AppShell}>
           <Route path="/" component={Dashboard} />
+          <Route path="/strategies/creator" component={StrategyCreator} />
+          <Route path="/strategies/:id" component={StrategyCreator} />
           <Route path="/strategies" component={Strategies} />
           <Route path="/alpha" component={Alpha} />
           <Route path="/signals" component={Signals} />

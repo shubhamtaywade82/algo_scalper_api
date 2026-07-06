@@ -731,6 +731,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120000) do
     t.string "trade_direction", default: "both"
     t.datetime "updated_at", null: false
     t.string "version", default: "1.0.0"
+    t.index ["name", "version"], name: "index_trading_strategies_on_name_and_version", unique: true
     t.index ["name"], name: "index_trading_strategies_on_name"
     t.index ["status"], name: "index_trading_strategies_on_status"
   end

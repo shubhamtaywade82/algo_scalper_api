@@ -118,7 +118,7 @@ module TradingSystem
         return
       end
 
-      indices = IndexConfigLoader.load_indices.map { |i| i[:key] }
+      indices = IndexConfigLoader.load_indices.pluck(:key)
       if indices.empty?
         Rails.logger.warn("[Bootstrap] Skipping shadow runner (no indices configured)")
         return
