@@ -58,6 +58,7 @@ export const endpoints = {
     pnlByStrategy: '/reports/pnl_by_strategy',
     pnlByInstrument: '/reports/pnl_by_instrument'
   },
+  orders: '/orders',
   alerts: '/alerts',
   logs: '/logs',
   equityCurve: '/equity_curve'
