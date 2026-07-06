@@ -42,6 +42,7 @@ Rails.application.routes.draw do
     get "reports/export", to: "reports#export"
     get :depth, to: "depth#index"
     get :equity_curve, to: "equity_curve#index"
+    post :backtests, to: "backtests#create"
 
     get :logs,     to: "logs#index"
     get :alerts,   to: "alerts#index"

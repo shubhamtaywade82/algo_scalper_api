@@ -1,10 +1,49 @@
 import { createSignal, createMemo, For, Show } from 'solid-js'
+import { useBacktest } from '../stores/useBacktest'
 import AnimatedNumber from '../components/AnimatedNumber'
 
 export default function Backtester() {
   const [selectedStrategy, setSelectedStrategy] = createSignal('ORB Breakout')
   const [activeTab, setActiveTab] = createSignal('overview')
   const [selectedTradeIndex, setSelectedTradeIndex] = createSignal(0)
+  const [symbol, setSymbol] = createSignal('NIFTY')
+  const [daysBack, setDaysBack] = createSignal(30)
+
+  const { result, loading, error, runBacktest } = useBacktest()
+
+  const btResult = createMemo(() => result() || {})
+
+  const metrics = createMemo(() => {
+    const r = btResult().metrics
+    if (r) return r
+    return {
+      netProfit: 124560, netProfitPct: 12.46,
+      totalReturn: 12.46, winRate: 63.21,
+      totalTrades: 76, winningTrades: 48, losingTrades: 28,
+      profitFactor: 2.18, maxDrawdown: 18750, maxDrawdownPct: 1.87,
+      expectancy: 1639.47, avgWinPct: 8.5, avgLossPct: -3.2
+    }
+  })
+
+  const trades = createMemo(() => {
+    const t = btResult().trades
+    if (t && t.length > 0) return t
+    return [
+      { id: 1, datetime: '02 Apr 09:25', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 134.50, exit: 142.80, pnl: 830, pnlPct: 6.17, status: 'WIN' },
+      { id: 2, datetime: '02 Apr 10:03', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 142.10, exit: 137.60, pnl: -450, pnlPct: -3.17, status: 'LOSS' },
+      { id: 3, datetime: '02 Apr 10:48', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 103.20, exit: 111.90, pnl: 870, pnlPct: 8.43, status: 'WIN' },
+      { id: 4, datetime: '02 Apr 11:32', instrument: 'NIFTY 04 APR 22200 PE', type: 'SELL', entry: 95.75, exit: 91.20, pnl: 455, pnlPct: 4.75, status: 'WIN' },
+      { id: 5, datetime: '02 Apr 13:05', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 128.60, exit: 123.40, pnl: -520, pnlPct: -4.04, status: 'LOSS' },
+      { id: 6, datetime: '03 Apr 09:24', instrument: 'NIFTY 05 APR 22150 CE', type: 'BUY', entry: 115.35, exit: 128.10, pnl: 1275, pnlPct: 11.07, status: 'WIN' },
+      { id: 7, datetime: '03 Apr 10:12', instrument: 'NIFTY 05 APR 22150 CE', type: 'BUY', entry: 128.40, exit: 133.90, pnl: 550, pnlPct: 4.28, status: 'WIN' }
+    ]
+  })
+
+  const config = createMemo(() => btResult().config || {})
+
+  function handleRunBacktest() {
+    runBacktest({ symbol: symbol(), days_back: daysBack() })
+  }
 
   // Saved configs list
   const savedConfigs = [
@@ -12,34 +51,6 @@ export default function Backtester() {
     { id: '2', label: 'Supertrend Scalper - BANKNIFTY 5m' },
     { id: '3', label: 'EMA Cross - SENSEX 15m' }
   ]
-
-  // KPI Metrics
-  const metrics = {
-    netProfit: 124560,
-    netProfitPct: 12.46,
-    totalReturn: 12.46,
-    annualizedReturn: 28.73,
-    winRate: 63.21,
-    winTrades: 48,
-    totalTrades: 76,
-    profitFactor: 2.18,
-    maxDrawdown: 18750,
-    maxDrawdownPct: 1.87,
-    expectancy: 1639.47
-  }
-
-  // Trades List Mock
-  const trades = [
-    { id: 1, datetime: '02 Apr 09:25', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 134.50, exit: 142.80, pnl: 830, pnlPct: 6.17, status: 'WIN' },
-    { id: 2, datetime: '02 Apr 10:03', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 142.10, exit: 137.60, pnl: -450, pnlPct: -3.17, status: 'LOSS' },
-    { id: 3, datetime: '02 Apr 10:48', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 103.20, exit: 111.90, pnl: 870, pnlPct: 8.43, status: 'WIN' },
-    { id: 4, datetime: '02 Apr 11:32', instrument: 'NIFTY 04 APR 22200 PE', type: 'SELL', entry: 95.75, exit: 91.20, pnl: 455, pnlPct: 4.75, status: 'WIN' },
-    { id: 5, datetime: '02 Apr 13:05', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 128.60, exit: 123.40, pnl: -520, pnlPct: -4.04, status: 'LOSS' },
-    { id: 6, datetime: '03 Apr 09:24', instrument: 'NIFTY 05 APR 22150 CE', type: 'BUY', entry: 115.35, exit: 128.10, pnl: 1275, pnlPct: 11.07, status: 'WIN' },
-    { id: 7, datetime: '03 Apr 10:12', instrument: 'NIFTY 05 APR 22150 CE', type: 'BUY', entry: 128.40, exit: 133.90, pnl: 550, pnlPct: 4.28, status: 'WIN' }
-  ]
-
-  const selectedTrade = () => trades[selectedTradeIndex()] || trades[0]
 
   return (
     <div class="space-y-6">
@@ -52,19 +63,35 @@ export default function Backtester() {
               {(cfg) => <option value={cfg.id}>{cfg.label}</option>}
             </For>
           </select>
-          <button class="p-2 border border-white/5 rounded-xl text-gray-500 hover:text-white transition-colors">
-            ★
-          </button>
+          <select class="glass-select text-xs px-3 py-2 rounded-xl" value={symbol()} onChange={e => setSymbol(e.target.value)}>
+            <option value="NIFTY">NIFTY</option>
+            <option value="BANKNIFTY">BANKNIFTY</option>
+            <option value="SENSEX">SENSEX</option>
+          </select>
+          <select class="glass-select text-xs px-3 py-2 rounded-xl" value={daysBack()} onChange={e => setDaysBack(Number(e.target.value))}>
+            <option value={7}>7 days</option>
+            <option value={30}>30 days</option>
+            <option value={60}>60 days</option>
+            <option value={90}>90 days</option>
+          </select>
         </div>
         <div class="flex items-center gap-2.5">
+          <Show when={error()}>
+            <span class="text-[9px] text-rose-400">{error()}</span>
+          </Show>
           <button class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all">
             Save Report
           </button>
-          <button class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all">
-            Share
-          </button>
-          <button class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-[0_0_15px_rgba(59,130,246,0.25)] hover:shadow-[0_0_20px_rgba(59,130,246,0.45)] transition-all flex items-center gap-1.5">
-            <span>▶</span> Run Backtest
+          <button
+            onClick={handleRunBacktest}
+            disabled={loading()}
+            class={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+              loading()
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-primary-600 hover:bg-primary-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.25)] hover:shadow-[0_0_20px_rgba(59,130,246,0.45)]'
+            }`}
+          >
+            <span>{loading() ? '⟳' : '▶'}</span> {loading() ? 'Running...' : 'Run Backtest'}
           </button>
         </div>
       </div>
@@ -88,37 +115,34 @@ export default function Backtester() {
       <div class="grid grid-cols-1 md:grid-cols-4 xl:grid-cols-7 gap-4">
         <div class="glass p-4 rounded-xl">
           <span class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Net Profit</span>
-          <div class="text-lg font-black text-emerald-400 text-data">₹{metrics.netProfit.toLocaleString('en-IN')}</div>
-          <span class="text-[9px] font-bold text-emerald-500 mt-1 block">+{metrics.netProfitPct}%</span>
+          <div class="text-lg font-black text-emerald-400 text-data">₹{(metrics().netProfit || 0).toLocaleString('en-IN')}</div>
+          <span class="text-[9px] font-bold text-emerald-500 mt-1 block">{metrics().netProfitPct >= 0 ? '+' : ''}{metrics().netProfitPct}%</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Total Return</span>
-          <div class="text-lg font-black text-white text-data">{metrics.totalReturn}%</div>
-          <span class="text-[9px] font-bold text-gray-500 mt-1 block">Annualized: {metrics.annualizedReturn}%</span>
+          <div class="text-lg font-black text-white text-data">{metrics().totalReturn}%</div>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Win Rate</span>
-          <div class="text-lg font-black text-white text-data">{metrics.winRate}%</div>
-          <span class="text-[9px] font-bold text-gray-500 mt-1 block">({metrics.winTrades} / {metrics.totalTrades})</span>
+          <div class="text-lg font-black text-white text-data">{metrics().winRate}%</div>
+          <span class="text-[9px] font-bold text-gray-500 mt-1 block">({metrics().winningTrades} / {metrics().totalTrades})</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Profit Factor</span>
-          <div class="text-lg font-black text-white text-data">{metrics.profitFactor}</div>
-          <span class="text-[9px] font-bold text-gray-500 mt-1 block">Gross Profit/Loss</span>
+          <div class="text-lg font-black text-white text-data">{metrics().profitFactor}</div>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Max Drawdown</span>
-          <div class="text-lg font-black text-rose-500 text-data">₹{metrics.maxDrawdown.toLocaleString('en-IN')}</div>
-          <span class="text-[9px] font-bold text-rose-500 mt-1 block">{metrics.maxDrawdownPct}%</span>
+          <div class="text-lg font-black text-rose-500 text-data">₹{(metrics().maxDrawdown || 0).toLocaleString('en-IN')}</div>
+          <span class="text-[9px] font-bold text-rose-500 mt-1 block">{metrics().maxDrawdownPct}%</span>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Total Trades</span>
-          <div class="text-lg font-black text-white text-data">{metrics.totalTrades}</div>
-          <span class="text-[9px] font-bold text-gray-500 mt-1 block">Buy: 40 / Sell: 36</span>
+          <div class="text-lg font-black text-white text-data">{metrics().totalTrades}</div>
         </div>
         <div class="glass p-4 rounded-xl">
           <span class="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Expectancy</span>
-          <div class="text-lg font-black text-white text-data">₹{metrics.expectancy}</div>
+          <div class="text-lg font-black text-white text-data">₹{metrics().expectancy}</div>
           <span class="text-[9px] font-bold text-gray-500 mt-1 block">Per Trade</span>
         </div>
       </div>
@@ -168,7 +192,7 @@ export default function Backtester() {
             {/* Trades List (7 Cols) */}
             <div class="lg:col-span-7 glass p-5 rounded-2xl flex flex-col justify-between">
               <div class="flex items-center justify-between border-b border-white/5 pb-3">
-                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Trades ({metrics.totalTrades})</span>
+                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Trades ({metrics().totalTrades})</span>
                 <div class="flex items-center gap-2">
                   <select class="glass-select text-[8px] font-bold px-2.5 py-1.5 rounded-lg">
                     <option>All Trades</option>
