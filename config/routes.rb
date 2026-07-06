@@ -117,8 +117,13 @@ Rails.application.routes.draw do
     # Strategy Platform (Phases 2–5)
     resources :strategies, param: :slug, only: %i[index show create] do
       member do
-        post :deploy, :start, :stop, :restart
-        get  :versions, :signals, :logs
+        post :deploy
+        post :start
+        post :stop
+        post :restart
+        get  :versions
+        get  :signals
+        get  :logs
         get  :variables
         put  :variables, action: :update_variables
       end
