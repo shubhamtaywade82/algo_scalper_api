@@ -54,7 +54,9 @@ export const endpoints = {
     pnl: '/reports/pnl',
     trades: '/reports/trades',
     performance: '/reports/performance',
-    export: '/reports/export'
+    export: '/reports/export',
+    pnlByStrategy: '/reports/pnl_by_strategy',
+    pnlByInstrument: '/reports/pnl_by_instrument'
   },
   alerts: '/alerts',
   logs: '/logs',

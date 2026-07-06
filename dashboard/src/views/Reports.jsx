@@ -9,7 +9,7 @@ export default function Reports() {
   const [activeTab, setActiveTab] = createSignal('summary')
 
   const { data: curveData, fetchCurve } = useEquityCurve()
-  const { summary, daily, trades: reportTrades, loading, error, fetchAll } = useReports()
+  const { summary, daily, trades: reportTrades, byStrategy, byInstrument, loading, error, fetchAll } = useReports()
 
   onMount(() => {
     fetchCurve()
@@ -199,7 +199,7 @@ export default function Reports() {
                         <td class={`py-2.5 text-right font-black text-data ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           <AnimatedNumber value={t.pnl} currency decimals={0} showSign pnlColor />
                         </td>
-                        <td class="py-2.5 text-right text-gray-400 font-bold">—</td>
+                        <td class="py-2.5 text-right text-gray-400 font-bold">{t.entry_strategy || '—'}</td>
                       </tr>
                     )}
                   </For>
@@ -241,23 +241,77 @@ export default function Reports() {
 
       {/* Bottom strategic data tables */}
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {/* PnL by Strategy — not available from backend */}
+        {/* PnL by Strategy */}
         <div class="glass p-5 rounded-2xl">
           <div class="border-b border-white/5 pb-3">
             <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">P&L by Strategy</span>
           </div>
-          <div class="flex items-center justify-center h-24 text-[10px] text-gray-600 font-bold uppercase tracking-wider">
-            No data
+          <div class="mt-2 max-h-[180px] overflow-y-auto">
+            <Show when={byStrategy().length > 0} fallback={
+              <div class="flex items-center justify-center h-16 text-[10px] text-gray-600 font-bold uppercase tracking-wider">No data</div>
+            }>
+              <table class="w-full text-left border-collapse text-[9px]">
+                <thead>
+                  <tr class="text-gray-600 font-black uppercase tracking-wider border-b border-white/5">
+                    <th class="py-1.5">Strategy</th>
+                    <th class="py-1.5 text-right">Trades</th>
+                    <th class="py-1.5 text-right">WR</th>
+                    <th class="py-1.5 text-right">Net P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={byStrategy()}>
+                    {(s) => (
+                      <tr class="border-b border-white/5">
+                        <td class="py-1.5 font-bold text-white truncate max-w-[80px]">{s.strategy}</td>
+                        <td class="py-1.5 text-right text-gray-400">{s.total_trades}</td>
+                        <td class="py-1.5 text-right text-gray-400">{s.win_rate_percent}%</td>
+                        <td class={`py-1.5 text-right font-black text-data ${s.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          <AnimatedNumber value={s.net_pnl} currency decimals={0} showSign />
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
           </div>
         </div>
 
-        {/* PnL by Instrument — not available from backend */}
+        {/* PnL by Instrument */}
         <div class="glass p-5 rounded-2xl">
           <div class="border-b border-white/5 pb-3">
             <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">P&L by Instrument</span>
           </div>
-          <div class="flex items-center justify-center h-24 text-[10px] text-gray-600 font-bold uppercase tracking-wider">
-            No data
+          <div class="mt-2 max-h-[180px] overflow-y-auto">
+            <Show when={byInstrument().length > 0} fallback={
+              <div class="flex items-center justify-center h-16 text-[10px] text-gray-600 font-bold uppercase tracking-wider">No data</div>
+            }>
+              <table class="w-full text-left border-collapse text-[9px]">
+                <thead>
+                  <tr class="text-gray-600 font-black uppercase tracking-wider border-b border-white/5">
+                    <th class="py-1.5">Symbol</th>
+                    <th class="py-1.5 text-right">Trades</th>
+                    <th class="py-1.5 text-right">WR</th>
+                    <th class="py-1.5 text-right">Net P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={byInstrument()}>
+                    {(inst) => (
+                      <tr class="border-b border-white/5">
+                        <td class="py-1.5 font-bold text-white">{inst.symbol}</td>
+                        <td class="py-1.5 text-right text-gray-400">{inst.total_trades}</td>
+                        <td class="py-1.5 text-right text-gray-400">{inst.win_rate_percent}%</td>
+                        <td class={`py-1.5 text-right font-black text-data ${inst.net_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          <AnimatedNumber value={inst.net_pnl} currency decimals={0} showSign />
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
           </div>
         </div>
 
