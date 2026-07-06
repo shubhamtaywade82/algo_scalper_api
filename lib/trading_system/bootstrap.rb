@@ -85,8 +85,6 @@ module TradingSystem
       register_chain_watch(supervisor, :chain_watch_banknifty, 'BANKNIFTY')
       register_chain_watch(supervisor, :chain_watch_sensex, 'SENSEX')
 
-      register_shadow_runner(supervisor)
-
       supervisor
     end
 
@@ -103,37 +101,5 @@ module TradingSystem
       Rails.logger.warn("[Bootstrap] Skipping #{key} registration: #{e.class} - #{e.message}")
     end
     private :register_chain_watch
-
-    # Registers the Phase-2 shadow-mode harness for SupertrendV1.
-    #
-    # Runs the plugin alongside the frozen Signal::Scheduler, logging
-    # decision diffs. Tolerates missing strategy file, missing indices,
-    # and failed loads — never prevents the daemon from booting.
-    def register_shadow_runner(supervisor)
-      strategy_path = Rails.root.join("strategies/supertrend_v1/strategy.rb")
-      load strategy_path.to_s if File.exist?(strategy_path.to_s)
-
-      unless defined?(::SupertrendV1)
-        Rails.logger.warn("[Bootstrap] Skipping shadow runner (SupertrendV1 not found)")
-        return
-      end
-
-      indices = IndexConfigLoader.load_indices.pluck(:key)
-      if indices.empty?
-        Rails.logger.warn("[Bootstrap] Skipping shadow runner (no indices configured)")
-        return
-      end
-
-      strategy = SupertrendV1.new
-      runner = Strategies::ShadowRunner.new(
-        strategy: strategy,
-        instruments: indices
-      )
-      supervisor.register(:shadow_runner, runner)
-      Rails.logger.info("[Bootstrap] Registered shadow runner for #{indices.join(', ')}")
-    rescue StandardError => e
-      Rails.logger.warn("[Bootstrap] Skipping shadow runner: #{e.class} - #{e.message}")
-    end
-    private :register_shadow_runner
   end
 end

@@ -67,8 +67,8 @@
 # #     # If you need real-time order updates (< 1s latency), uncomment the line below:
 # #     # MarketStreamLifecycle.safely_start { Live::OrderUpdateHandler.instance.start! }
 
-# #     # 2️⃣ Start Signal Scheduler # Start trading scheduler (signals → entries)
-# #     MarketStreamLifecycle.safely_start { Signal::Scheduler.instance.start! }
+# #     # 2️⃣ Start Strategy Manager (signals → entries)
+# #     MarketStreamLifecycle.safely_start { Strategies::Manager.new.start }
 
 # #     # 3️⃣ Start Risk Manager Service
 # #     MarketStreamLifecycle.safely_start { Live::RiskManagerService.instance.start! }

@@ -4,7 +4,7 @@ module Strategies
   class Run < ApplicationRecord
     self.table_name = "strategy_runs"
 
-    STOP_REASONS = %w[manual crash kill_switch market_close error_limit].freeze
+    STOP_REASONS = %w[manual crash kill_switch market_close error_limit shutdown].freeze
 
     belongs_to :strategy_record, class_name: "Strategies::Record", foreign_key: :strategy_id,
                                  inverse_of: :runs
