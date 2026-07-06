@@ -29,6 +29,15 @@ const Alerts = lazy(() => import('./views/Alerts'))
 const Scheduler = lazy(() => import('./views/Scheduler'))
 const Logs = lazy(() => import('./views/Logs'))
 
+// Auth routes
+const Login = lazy(() => import('./views/Login'))
+const Register = lazy(() => import('./views/Register'))
+import AuthGuard from './components/auth/AuthGuard'
+
+function Protected(props) {
+  return <AuthGuard>{props.children}</AuthGuard>
+}
+
 function AppShell(props) {
   const {
     open, closed,
@@ -107,30 +116,38 @@ function AppShell(props) {
 export default function App() {
   return (
     <Router>
-      <Route component={AppShell}>
-        <Route path="/" component={Dashboard} />
-        <Route path="/strategies" component={Strategies} />
-        <Route path="/alpha" component={Alpha} />
-        <Route path="/signals" component={Signals} />
-        <Route path="/option-scalper" component={OptionScalper} />
-        <Route path="/analysis" component={Analysis} />
-        <Route path="/ledger" component={Ledger} />
-        <Route path="/settings" component={Settings} />
-        {/* New routes from TDD layout */}
-        <Route path="/market-watch" component={MarketWatch} />
-        {/* DEPENDENCY: backend — /api/holdings */}
-        <Route path="/holdings" component={Holdings} />
-        {/* DEPENDENCY: backend — /api/funds */}
-        <Route path="/funds" component={Funds} />
-        {/* DEPENDENCY: backend — /api/reports */}
-        <Route path="/reports" component={Reports} />
-        {/* DEPENDENCY: backend — /api/alerts */}
-        <Route path="/alerts" component={Alerts} />
-        {/* Backend: /api/scheduler/tasks exists */}
-        <Route path="/scheduler" component={Scheduler} />
-        {/* DEPENDENCY: backend — /api/logs */}
-        <Route path="/logs" component={Logs} />
+      {/* Auth pages — own layout, no header chrome */}
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+
+      {/* Protected app shell */}
+      <Route component={Protected}>
+        <Route component={AppShell}>
+          <Route path="/" component={Dashboard} />
+          <Route path="/strategies" component={Strategies} />
+          <Route path="/alpha" component={Alpha} />
+          <Route path="/signals" component={Signals} />
+          <Route path="/option-scalper" component={OptionScalper} />
+          <Route path="/analysis" component={Analysis} />
+          <Route path="/ledger" component={Ledger} />
+          <Route path="/settings" component={Settings} />
+          {/* New routes from TDD layout */}
+          <Route path="/market-watch" component={MarketWatch} />
+          {/* DEPENDENCY: backend — /api/holdings */}
+          <Route path="/holdings" component={Holdings} />
+          {/* DEPENDENCY: backend — /api/funds */}
+          <Route path="/funds" component={Funds} />
+          {/* DEPENDENCY: backend — /api/reports */}
+          <Route path="/reports" component={Reports} />
+          {/* DEPENDENCY: backend — /api/alerts */}
+          <Route path="/alerts" component={Alerts} />
+          {/* Backend: /api/scheduler/tasks exists */}
+          <Route path="/scheduler" component={Scheduler} />
+          {/* DEPENDENCY: backend — /api/logs */}
+          <Route path="/logs" component={Logs} />
+        </Route>
       </Route>
+
       {/* Fullscreen — own layout, no Header/footer chrome */}
       <Route path="/charts" component={Charts} />
       <Route path="/trail-engine" component={TrailEngine} />

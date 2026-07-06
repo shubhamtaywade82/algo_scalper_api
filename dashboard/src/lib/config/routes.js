@@ -60,8 +60,12 @@ export const navigationConfig = [
     section: NAV_SECTIONS.MAIN,
     items: [
       { id: 'dashboard', label: 'Dashboard', href: ROUTES.DASHBOARD, icon: 'dashboard', end: true },
+      { id: 'signals', label: 'Signals', href: ROUTES.SIGNALS, icon: 'signals' },
+      { id: 'alpha', label: 'Alpha', href: ROUTES.ALPHA, icon: 'alpha' },
+      { id: 'analysis', label: 'Analysis', href: ROUTES.ANALYSIS, icon: 'analysis' },
       { id: 'strategies', label: 'Strategies', href: ROUTES.STRATEGIES, icon: 'strategies' },
-      { id: 'backtester', label: 'Backtester', href: ROUTES.BACKTESTER, icon: 'strategies' }, // reuses strategies icon/similar
+      { id: 'option-scalper', label: 'Option Scalper', href: ROUTES.OPTION_SCALPER, icon: 'optionScalper' },
+      { id: 'backtester', label: 'Backtester', href: ROUTES.BACKTESTER, icon: 'strategies' },
       { id: 'replay', label: 'Replay', href: ROUTES.REPLAY, icon: 'alpha' },
       { id: 'reports', label: 'Reports', href: ROUTES.REPORTS, icon: 'reports' }
     ],
