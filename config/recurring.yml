@@ -31,6 +31,20 @@ development:
     priority: 2
     description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
 
+  candles_daily_backfill:
+    class: Candles::DailyBackfillJob
+    schedule: at 8:50am every day
+    queue_name: background
+    priority: 2
+    description: "Seeds/gap-fills persisted 1m index candles (NIFTY/BANKNIFTY/SENSEX) before market open"
+
+  candles_retention:
+    class: Candles::RetentionJob
+    schedule: at 2:00am every Sunday
+    queue_name: background
+    priority: 30
+    description: "Prunes 1m index candle history beyond the 2-year retention window"
+
   portfolio_reset:
     class: PortfolioResetJob
     schedule: at 9:15am every day
@@ -188,6 +202,20 @@ production:
     queue_name: background
     priority: 2
     description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
+
+  candles_daily_backfill:
+    class: Candles::DailyBackfillJob
+    schedule: at 8:50am every day
+    queue_name: background
+    priority: 2
+    description: "Seeds/gap-fills persisted 1m index candles (NIFTY/BANKNIFTY/SENSEX) before market open"
+
+  candles_retention:
+    class: Candles::RetentionJob
+    schedule: at 2:00am every Sunday
+    queue_name: background
+    priority: 30
+    description: "Prunes 1m index candle history beyond the 2-year retention window"
 
   portfolio_reset:
     class: PortfolioResetJob
