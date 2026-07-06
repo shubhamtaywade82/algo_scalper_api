@@ -115,6 +115,10 @@ module Live
           last["volume"] = last["volume"].to_i + tick[:volume].to_i
           last["oi"]     = tick[:oi].to_i if tick[:oi].to_i.positive?
         else
+          # The previous forming candle (if any) is now finalized — hand it off
+          # for durable persistence before starting the new one.
+          Candles::Persister.enqueue(instrument: instrument, interval: interval, candles: [last], source: "live") if last
+
           # Start a new forming candle
           new_candle = {
             "timestamp" => bucket_iso,
