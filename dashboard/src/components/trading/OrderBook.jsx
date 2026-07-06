@@ -37,7 +37,7 @@ export default function OrderBook(props) {
         </Show>
       </div>
       <div class="px-4 py-2 border-b border-white/5">
-        <span class="text-[8px] font-black text-gray-600 uppercase tracking-widest">{symbol()}</span>
+        <span class="text-[8px] font-black text-gray-600 uppercase tracking-widest">{depth().symbol || symbol()}</span>
       </div>
 
       <div class="grid grid-cols-2 divide-x divide-white/5">

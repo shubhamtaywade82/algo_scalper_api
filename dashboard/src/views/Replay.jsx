@@ -1,6 +1,7 @@
-import { createSignal, createMemo, For, Show } from 'solid-js'
+import { createSignal, createMemo, For, Show, onMount, onCleanup } from 'solid-js'
 import AnimatedNumber from '../components/AnimatedNumber'
 import { useReplay } from '../stores/useReplay'
+import { createChart, CandlestickSeries, ColorType } from 'lightweight-charts'
 
 export default function Replay() {
   const [isPlaying, setIsPlaying] = createSignal(false)
@@ -19,17 +20,7 @@ export default function Replay() {
   const replayTrades = createMemo(() => result()?.trades || [])
   const candles = createMemo(() => result()?.candles || [])
 
-  // Strategy State Indicators
-  const strategyState = [
-    { name: 'EMA 20', val: '21,982.45' },
-    { name: 'EMA 50', val: '21,945.10' },
-    { name: 'RSI (14)', val: '64.25' },
-    { name: 'ATR (14)', val: '32.45' },
-    { name: 'Opening Range High', val: '22,010.20' },
-    { name: 'Opening Range Low', val: '21,950.15' },
-    { name: 'Breakout', val: 'Yes', class: 'text-emerald-400 font-bold' },
-    { name: 'Position', val: 'Flat', class: 'text-gray-400 font-bold' }
-  ]
+  const latestTrade = createMemo(() => replayTrades().length > 0 ? replayTrades()[replayTrades().length - 1] : null)
 
   return (
     <div class="space-y-6">
@@ -39,21 +30,15 @@ export default function Replay() {
         <div class="flex flex-wrap items-center gap-3">
           <div class="flex flex-col">
             <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">Strategy</span>
-            <select class="glass-select text-[10px] px-2.5 py-1.5 rounded-lg">
-              <option>ORB Breakout v1.0.0</option>
-            </select>
+            <div class="text-[10px] bg-white/[0.02] border border-white/5 px-2.5 py-1.5 rounded-lg text-white font-bold">SMC Replay</div>
           </div>
           <div class="flex flex-col">
             <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">Instrument</span>
-            <select class="glass-select text-[10px] px-2.5 py-1.5 rounded-lg font-mono">
-              <option>NIFTY</option>
-            </select>
+            <div class="text-[10px] bg-white/[0.02] border border-white/5 px-2.5 py-1.5 rounded-lg text-white font-mono font-bold">{result()?.symbol || '—'}</div>
           </div>
           <div class="flex flex-col">
             <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">Timeframe</span>
-            <select class="glass-select text-[10px] px-2.5 py-1.5 rounded-lg">
-              <option>1 Minute</option>
-            </select>
+            <div class="text-[10px] bg-white/[0.02] border border-white/5 px-2.5 py-1.5 rounded-lg text-white font-bold">5 Minute</div>
           </div>
           <div class="flex flex-col">
             <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">Date</span>
@@ -147,47 +132,40 @@ export default function Replay() {
           <div class="glass p-5 rounded-2xl flex flex-col justify-between h-[360px]">
             <div class="flex items-center justify-between border-b border-white/5 pb-2 text-[10px]">
               <div>
-                <span class="font-black text-white">NIFTY - 1 - NSE</span>
-                <span class="text-gray-500 font-mono ml-2">O 22,032.40 H 22,033.15 L 22,025.80 C 22,029.05 -2.85 (-0.01%)</span>
+                <span class="font-black text-white">{result()?.symbol || 'NIFTY'} — Replay</span>
+                <span class="text-gray-500 font-mono ml-2">{candles().length} candles</span>
               </div>
-              <div class="text-emerald-400 font-bold uppercase tracking-wider">Volume SMA 9</div>
+              <div class="text-emerald-400 font-bold uppercase tracking-wider">OHLC (5m)</div>
             </div>
-            {/* Mock Candlestick Chart View */}
-            <div class="flex-1 py-4 relative flex items-center justify-center">
-              <svg viewBox="0 0 600 200" class="w-full h-full">
-                {/* Grid Lines */}
-                <line x1="0" y1="50" x2="600" y2="50" stroke="rgba(255,255,255,0.02)" />
-                <line x1="0" y1="100" x2="600" y2="100" stroke="rgba(255,255,255,0.02)" />
-                <line x1="0" y1="150" x2="600" y2="150" stroke="rgba(255,255,255,0.02)" />
-
-                {/* Candles */}
-                <g fill="rgb(16, 185, 129)" stroke="rgb(16, 185, 129)">
-                  <line x1="50" y1="130" x2="50" y2="70" stroke-width="1" />
-                  <rect x="46" y="80" width="8" height="40" />
-                </g>
-                <g fill="rgb(239, 68, 68)" stroke="rgb(239, 68, 68)">
-                  <line x1="100" y1="140" x2="100" y2="90" stroke-width="1" />
-                  <rect x="96" y="100" width="8" height="30" />
-                </g>
-                {/* Armed Buy Call Tag */}
-                <g transform="translate(140, 60)">
-                  <rect x="0" y="0" width="60" height="18" rx="4" fill="rgb(16, 185, 129)" />
-                  <text x="30" y="12" fill="white" font-size="8" font-weight="bold" text-anchor="middle">BUY CALL</text>
-                </g>
-                <g fill="rgb(16, 185, 129)" stroke="rgb(16, 185, 129)">
-                  <line x1="170" y1="110" x2="170" y2="50" stroke-width="1" />
-                  <rect x="166" y="60" width="8" height="40" />
-                </g>
-                {/* Exit Tag */}
-                <g transform="translate(290, 40)">
-                  <rect x="0" y="0" width="36" height="18" rx="4" fill="rgb(139, 92, 246)" />
-                  <text x="18" y="12" fill="white" font-size="8" font-weight="bold" text-anchor="middle">EXIT</text>
-                </g>
-                <g fill="rgb(239, 68, 68)" stroke="rgb(239, 68, 68)">
-                  <line x1="310" y1="150" x2="310" y2="70" stroke-width="1" />
-                  <rect x="306" y="80" width="8" height="50" />
-                </g>
-              </svg>
+            <div class="flex-1 py-4 relative">
+              <Show when={candles().length > 0} fallback={
+                <div class="flex items-center justify-center h-full text-[10px] text-gray-600 font-bold uppercase tracking-wider">
+                  No candle data
+                </div>
+              }>
+                <div ref={el => {
+                  if (!el) return
+                  const chart = createChart(el, {
+                    layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#6b7280' },
+                    grid: { vertLines: { color: 'rgba(255,255,255,0.02)' }, horzLines: { color: 'rgba(255,255,255,0.02)' } },
+                    width: el.clientWidth,
+                    height: el.clientHeight,
+                    rightPriceScale: { borderVisible: false },
+                    timeScale: { borderVisible: false, visible: false }
+                  })
+                  const cs = chart.addSeries(CandlestickSeries, {
+                    upColor: '#10b981', downColor: '#ef4444', wickUpColor: '#10b981', wickDownColor: '#ef4444',
+                    borderVisible: false
+                  })
+                  cs.setData(candles())
+                  chart.timeScale().fitContent()
+                  const ro = new ResizeObserver(() => {
+                    chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })
+                  })
+                  ro.observe(el)
+                  onCleanup(() => { ro.disconnect(); chart.remove() })
+                }} class="w-full h-full" />
+              </Show>
             </div>
             {/* Playback controller toolbar */}
             <div class="flex items-center justify-between border-t border-white/5 pt-3">
@@ -225,42 +203,45 @@ export default function Replay() {
           <div class="glass p-5 rounded-2xl space-y-3.5">
             <div class="flex items-center justify-between border-b border-white/5 pb-2">
               <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Trade Information</span>
-              <span class="text-[8px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">WIN</span>
+              <Show when={latestTrade()} fallback={<span class="text-[8px] text-gray-600 font-bold">No trades</span>}>
+                <span class={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                  latestTrade().status === 'WIN' ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                }`}>{latestTrade().status}</span>
+              </Show>
             </div>
-            <div class="text-[10px] space-y-2.5">
-              <div class="flex justify-between border-b border-white/5 pb-2">
-                <span class="text-gray-500 uppercase font-bold">Signal</span>
-                <span class="font-black text-emerald-400">BUY CALL</span>
+            <Show when={latestTrade()} fallback={
+              <div class="text-[10px] text-gray-600 font-bold uppercase tracking-wider py-4 text-center">No trade data</div>
+            }>
+              <div class="text-[10px] space-y-2.5">
+                <div class="flex justify-between border-b border-white/5 pb-2">
+                  <span class="text-gray-500 uppercase font-bold">Signal</span>
+                  <span class="font-black text-emerald-400">{latestTrade().type === 'BUY' ? 'BUY CALL' : 'SELL PUT'}</span>
+                </div>
+                <div class="flex justify-between border-b border-white/5 pb-2">
+                  <span class="text-gray-500 uppercase font-bold">Instrument</span>
+                  <span class="font-black text-white font-mono">{latestTrade().inst}</span>
+                </div>
+                <div class="flex justify-between border-b border-white/5 pb-2">
+                  <span class="text-gray-500 uppercase font-bold">P&L (Realized)</span>
+                  <span class={`font-black text-data ${latestTrade().pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {latestTrade().pnl >= 0 ? '+' : ''}₹{latestTrade().pnl.toLocaleString('en-IN')} ({latestTrade().pnlPct}%)
+                  </span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-gray-500 uppercase font-bold">Entry Price</span>
+                  <span class="font-black text-white text-data">₹{latestTrade().entry}</span>
+                </div>
               </div>
-              <div class="flex justify-between border-b border-white/5 pb-2">
-                <span class="text-gray-500 uppercase font-bold">Instrument</span>
-                <span class="font-black text-white font-mono">NIFTY 05 JUN 22100 CE</span>
-              </div>
-              <div class="flex justify-between border-b border-white/5 pb-2">
-                <span class="text-gray-500 uppercase font-bold">P&L (Realized)</span>
-                <span class="font-black text-emerald-400 text-data">+₹830.00 (+6.17%)</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500 uppercase font-bold">Holding Time</span>
-                <span class="font-black text-white text-data">22m 45s</span>
-              </div>
-            </div>
+            </Show>
           </div>
 
           {/* Strategy State */}
           <div class="glass p-5 rounded-2xl space-y-3.5">
             <div class="flex items-center justify-between border-b border-white/5 pb-2">
-              <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Strategy State (At 09:15:00)</span>
+              <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Strategy State</span>
             </div>
-            <div class="grid grid-cols-2 gap-4 text-[10px]">
-              <For each={strategyState}>
-                {(st) => (
-                  <div>
-                    <span class="text-gray-500 block text-[8px] uppercase font-bold">{st.name}</span>
-                    <span class={`font-black text-white text-data mt-1 block ${st.class || ''}`}>{st.val}</span>
-                  </div>
-                )}
-              </For>
+            <div class="flex items-center justify-center py-6 text-[10px] text-gray-600 font-bold uppercase tracking-wider">
+              Not available in replay mode
             </div>
           </div>
         </div>
@@ -308,7 +289,7 @@ export default function Replay() {
                 Positions
               </button>
             </div>
-            <span class="text-[8px] font-mono text-gray-500">Showing 1 to 5 of 76 trades</span>
+            <span class="text-[8px] font-mono text-gray-500">{replayTrades().length} trade{replayTrades().length === 1 ? '' : 's'}</span>
           </div>
           <div class="overflow-x-auto mt-2">
             <table class="w-full text-left border-collapse text-[10px]">

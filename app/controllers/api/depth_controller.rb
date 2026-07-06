@@ -16,6 +16,26 @@ module Api
     private
 
     def fetch_depth(symbol)
+      if %w[NIFTY BANKNIFTY SENSEX].include?(symbol.upcase)
+        begin
+          analyzer = Options::DerivativeChainAnalyzer.new(index_key: symbol.upcase)
+          spot = analyzer.spot_ltp
+          expiry = analyzer.find_nearest_expiry
+          if spot&.positive? && expiry
+            increment = spot >= 50_000 ? 100 : (spot >= 10_000 ? 50 : 25)
+            atm = (spot / increment).round * increment
+            contract = Derivative.options.find_by(underlying_symbol: symbol.upcase, expiry_date: expiry, strike_price: atm, option_type: 'CE')
+            if contract
+              depth = try_dhan_quote(contract)
+              return depth if depth
+              return try_redis_depth(contract) || empty_depth("#{symbol} ATM CE")
+            end
+          end
+        rescue => e
+          Rails.logger.warn("[DepthController] Failed to resolve ATM CE option for #{symbol}: #{e.message}")
+        end
+      end
+
       instrument = Instrument.find_by(symbol_name: symbol.upcase, segment: 'index')
       return empty_depth(symbol) unless instrument
 

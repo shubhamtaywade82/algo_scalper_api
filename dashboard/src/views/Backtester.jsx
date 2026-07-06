@@ -1,6 +1,7 @@
 import { createSignal, createMemo, For, Show } from 'solid-js'
 import { useBacktest } from '../stores/useBacktest'
 import AnimatedNumber from '../components/AnimatedNumber'
+import EquityCurve from '../components/charts/EquityCurve'
 
 export default function Backtester() {
   const [selectedStrategy, setSelectedStrategy] = createSignal('ORB Breakout')
@@ -13,44 +14,20 @@ export default function Backtester() {
 
   const btResult = createMemo(() => result() || {})
 
-  const metrics = createMemo(() => {
-    const r = btResult().metrics
-    if (r) return r
-    return {
-      netProfit: 124560, netProfitPct: 12.46,
-      totalReturn: 12.46, winRate: 63.21,
-      totalTrades: 76, winningTrades: 48, losingTrades: 28,
-      profitFactor: 2.18, maxDrawdown: 18750, maxDrawdownPct: 1.87,
-      expectancy: 1639.47, avgWinPct: 8.5, avgLossPct: -3.2
-    }
-  })
-
-  const trades = createMemo(() => {
-    const t = btResult().trades
-    if (t && t.length > 0) return t
-    return [
-      { id: 1, datetime: '02 Apr 09:25', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 134.50, exit: 142.80, pnl: 830, pnlPct: 6.17, status: 'WIN' },
-      { id: 2, datetime: '02 Apr 10:03', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 142.10, exit: 137.60, pnl: -450, pnlPct: -3.17, status: 'LOSS' },
-      { id: 3, datetime: '02 Apr 10:48', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 103.20, exit: 111.90, pnl: 870, pnlPct: 8.43, status: 'WIN' },
-      { id: 4, datetime: '02 Apr 11:32', instrument: 'NIFTY 04 APR 22200 PE', type: 'SELL', entry: 95.75, exit: 91.20, pnl: 455, pnlPct: 4.75, status: 'WIN' },
-      { id: 5, datetime: '02 Apr 13:05', instrument: 'NIFTY 04 APR 22100 CE', type: 'BUY', entry: 128.60, exit: 123.40, pnl: -520, pnlPct: -4.04, status: 'LOSS' },
-      { id: 6, datetime: '03 Apr 09:24', instrument: 'NIFTY 05 APR 22150 CE', type: 'BUY', entry: 115.35, exit: 128.10, pnl: 1275, pnlPct: 11.07, status: 'WIN' },
-      { id: 7, datetime: '03 Apr 10:12', instrument: 'NIFTY 05 APR 22150 CE', type: 'BUY', entry: 128.40, exit: 133.90, pnl: 550, pnlPct: 4.28, status: 'WIN' }
-    ]
-  })
-
+  const metrics = createMemo(() => btResult().metrics || {})
+  const trades = createMemo(() => btResult().trades || [])
+  const equityCurve = createMemo(() => btResult().equity_curve || [])
   const config = createMemo(() => btResult().config || {})
+
+  const selectedTrade = createMemo(() => {
+    const t = trades()
+    const idx = selectedTradeIndex()
+    return t[idx] || {}
+  })
 
   function handleRunBacktest() {
     runBacktest({ symbol: symbol(), days_back: daysBack() })
   }
-
-  // Saved configs list
-  const savedConfigs = [
-    { id: '1', label: 'ORB Breakout - NIFTY 1m (v1)' },
-    { id: '2', label: 'Supertrend Scalper - BANKNIFTY 5m' },
-    { id: '3', label: 'EMA Cross - SENSEX 15m' }
-  ]
 
   return (
     <div class="space-y-6">
@@ -59,9 +36,7 @@ export default function Backtester() {
       <div class="flex flex-wrap items-center justify-between gap-4 bg-white/[0.01] border border-white/5 rounded-2xl p-4">
         <div class="flex items-center gap-3">
           <select class="glass-select text-xs px-3 py-2 rounded-xl">
-            <For each={savedConfigs}>
-              {(cfg) => <option value={cfg.id}>{cfg.label}</option>}
-            </For>
+            <option>Supertrend Backtest</option>
           </select>
           <select class="glass-select text-xs px-3 py-2 rounded-xl" value={symbol()} onChange={e => setSymbol(e.target.value)}>
             <option value="NIFTY">NIFTY</option>
@@ -151,39 +126,21 @@ export default function Backtester() {
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left 9 columns: Chart & Table */}
         <div class="lg:col-span-9 space-y-6">
-          {/* Main Backtest Chart */}
           <div class="glass p-5 rounded-2xl h-[340px] flex flex-col justify-between">
             <div class="flex items-center justify-between border-b border-white/5 pb-3">
               <div>
                 <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Equity Curve</span>
-                <span class="text-[8px] font-bold text-gray-600 mt-0.5 block">Initial Capital: ₹10,00,000</span>
-              </div>
-              <div class="flex items-center gap-3 text-[9px] font-bold">
-                <span class="text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-emerald-500" /> Equity</span>
-                <span class="text-gray-500 flex items-center gap-1.5"><span class="w-2 h-2 rounded bg-gray-500" /> Buy & Hold (Nifty)</span>
+                <span class="text-[8px] font-bold text-gray-600 mt-0.5 block">Initial Capital: ₹250,000</span>
               </div>
             </div>
-            <div class="flex-1 py-4 relative">
-              <svg viewBox="0 0 500 150" class="w-full h-full">
-                <defs>
-                  <linearGradient id="backtestGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="rgb(16, 185, 129)" stop-opacity="0.15"/>
-                    <stop offset="100%" stop-color="rgb(16, 185, 129)" stop-opacity="0.0"/>
-                  </linearGradient>
-                </defs>
-                {/* Buy & Hold line */}
-                <path d="M 10 110 L 100 115 L 200 95 L 300 100 L 400 90 L 490 85" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1.5" stroke-dasharray="3,3" />
-                {/* Backtest Equity curve */}
-                <path d="M 10 110 Q 50 100 100 80 T 200 85 T 300 60 T 400 55 T 490 35" fill="none" stroke="rgb(16, 185, 129)" stroke-width="2.5" />
-                <path d="M 10 110 Q 50 100 100 80 T 200 85 T 300 60 T 400 55 T 490 35 L 490 145 L 10 145 Z" fill="url(#backtestGrad)" />
-              </svg>
-              <div class="flex justify-between text-[8px] text-gray-600 font-black uppercase px-2 mt-1">
-                <span>01 Apr</span>
-                <span>01 May</span>
-                <span>01 Jun</span>
-                <span>01 Jul</span>
-                <span>31 Aug</span>
-              </div>
+            <div class="flex-1 py-2">
+              <Show when={result()} fallback={
+                <div class="flex items-center justify-center h-full text-[10px] text-gray-600 font-bold uppercase tracking-wider">
+                  Run a backtest to see equity curve
+                </div>
+              }>
+                <EquityCurve data={equityCurve} height={260} />
+              </Show>
             </div>
           </div>
 
@@ -201,90 +158,86 @@ export default function Backtester() {
                 </div>
               </div>
               <div class="overflow-x-auto mt-2">
-                <table class="w-full text-left border-collapse text-[10px]">
-                  <thead>
-                    <tr class="text-gray-600 font-black uppercase tracking-wider border-b border-white/5">
-                      <th class="py-2.5">Date & Time</th>
-                      <th class="py-2.5">Instrument</th>
-                      <th class="py-2.5 text-center">Type</th>
-                      <th class="py-2.5 text-right font-black text-data">P&L</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <For each={trades()}>
-                      {(t, idx) => (
-                        <tr
-                          onClick={() => setSelectedTradeIndex(idx())}
-                          class={`border-b border-white/5 hover:bg-white/[0.01] cursor-pointer transition-colors ${
-                            selectedTradeIndex() === idx() ? 'bg-primary-500/5 border-l-2 border-l-primary-500' : ''
-                          }`}
-                        >
-                          <td class="py-2.5 text-gray-500 font-mono">{t.datetime}</td>
-                          <td class="py-2.5 font-bold text-white max-w-[120px] truncate">{t.instrument}</td>
-                          <td class="py-2.5 text-center">
-                            <span class={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
-                              t.type === 'BUY' ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
-                            }`}>{t.type}</span>
-                          </td>
-                          <td class={`py-2.5 text-right font-black text-data ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {t.pnl >= 0 ? '+' : ''}₹{t.pnl}
-                          </td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
+                <Show when={trades().length > 0} fallback={
+                  <div class="text-center py-8 text-[10px] text-gray-600 font-bold uppercase tracking-wider">No trades — run a backtest</div>
+                }>
+                  <table class="w-full text-left border-collapse text-[10px]">
+                    <thead>
+                      <tr class="text-gray-600 font-black uppercase tracking-wider border-b border-white/5">
+                        <th class="py-2.5">Date & Time</th>
+                        <th class="py-2.5">Instrument</th>
+                        <th class="py-2.5 text-center">Type</th>
+                        <th class="py-2.5 text-right font-black text-data">P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <For each={trades()}>
+                        {(t, idx) => (
+                          <tr
+                            onClick={() => setSelectedTradeIndex(idx())}
+                            class={`border-b border-white/5 hover:bg-white/[0.01] cursor-pointer transition-colors ${
+                              selectedTradeIndex() === idx() ? 'bg-primary-500/5 border-l-2 border-l-primary-500' : ''
+                            }`}
+                          >
+                            <td class="py-2.5 text-gray-500 font-mono">{t.datetime}</td>
+                            <td class="py-2.5 font-bold text-white max-w-[120px] truncate">{t.instrument}</td>
+                            <td class="py-2.5 text-center">
+                              <span class={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                                t.type === 'BUY' ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                              }`}>{t.type}</span>
+                            </td>
+                            <td class={`py-2.5 text-right font-black text-data ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {t.pnl >= 0 ? '+' : ''}₹{t.pnl}
+                            </td>
+                          </tr>
+                        )}
+                      </For>
+                    </tbody>
+                  </table>
+                </Show>
               </div>
             </div>
 
             {/* Trade Detail Inspector (5 Cols) */}
             <div class="lg:col-span-5 glass p-5 rounded-2xl flex flex-col justify-between">
-              <div class="flex items-center justify-between border-b border-white/5 pb-3">
-                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Trade Detail</span>
-                <span class="text-[8px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">WIN</span>
-              </div>
-              <div class="mt-3 text-[10px] space-y-2.5">
-                <h4 class="font-black text-white text-xs">{selectedTrade().instrument}</h4>
-                <div class="grid grid-cols-2 gap-3 border-y border-white/5 py-3">
-                  <div>
-                    <span class="text-gray-500 block text-[8px] uppercase font-bold">Entry Time</span>
-                    <span class="font-semibold text-white mt-1 block">{selectedTrade().datetime}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-500 block text-[8px] uppercase font-bold">Exit Time</span>
-                    <span class="font-semibold text-white mt-1 block">02 Apr 09:37</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-500 block text-[8px] uppercase font-bold">Entry Price</span>
-                    <span class="font-semibold text-white mt-1 block text-data">₹{selectedTrade().entry}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-500 block text-[8px] uppercase font-bold">Exit Price</span>
-                    <span class="font-semibold text-white mt-1 block text-data">₹{selectedTrade().exit}</span>
-                  </div>
+              <Show when={trades().length > 0} fallback={
+                <div class="flex items-center justify-center h-full text-[10px] text-gray-600 font-bold uppercase tracking-wider">Select a trade</div>
+              }>
+                <div class="flex items-center justify-between border-b border-white/5 pb-3">
+                  <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Trade Detail</span>
+                  <span class={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                    selectedTrade().status === 'WIN' ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                  }`}>{selectedTrade().status || '—'}</span>
                 </div>
+                <div class="mt-3 text-[10px] space-y-2.5">
+                  <h4 class="font-black text-white text-xs">{selectedTrade().instrument}</h4>
+                  <div class="grid grid-cols-2 gap-3 border-y border-white/5 py-3">
+                    <div>
+                      <span class="text-gray-500 block text-[8px] uppercase font-bold">Entry Time</span>
+                      <span class="font-semibold text-white mt-1 block">{selectedTrade().datetime}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500 block text-[8px] uppercase font-bold">Exit Time</span>
+                      <span class="font-semibold text-white mt-1 block">{selectedTrade().datetime}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500 block text-[8px] uppercase font-bold">Entry Price</span>
+                      <span class="font-semibold text-white mt-1 block text-data">₹{selectedTrade().entry}</span>
+                    </div>
+                    <div>
+                      <span class="text-gray-500 block text-[8px] uppercase font-bold">Exit Price</span>
+                      <span class="font-semibold text-white mt-1 block text-data">₹{selectedTrade().exit}</span>
+                    </div>
+                  </div>
 
-                <div class="flex justify-between items-center bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
-                  <span class="text-gray-400 font-bold uppercase text-[8px]">Realized P&L</span>
-                  <span class={`text-sm font-black text-data ${selectedTrade().pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {selectedTrade().pnl >= 0 ? '+' : ''}₹{selectedTrade().pnl} ({selectedTrade().pnlPct}%)
-                  </span>
-                </div>
-
-                {/* Price Chart Preview (Mock Candle Stick Chart) */}
-                <div class="h-[120px] bg-black/20 rounded-xl p-3 border border-white/5 flex flex-col justify-between">
-                  <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest">Price Chart (1m)</span>
-                  <div class="flex-1 flex items-end justify-between gap-1 py-2">
-                    {/* Simulated Candlesticks */}
-                    <div class="w-2 bg-rose-500 h-10 relative flex items-center justify-center"><div class="absolute w-0.5 h-14 bg-rose-500" /></div>
-                    <div class="w-2 bg-emerald-500 h-12 relative flex items-center justify-center"><div class="absolute w-0.5 h-16 bg-emerald-500" /></div>
-                    <div class="w-2 bg-emerald-500 h-16 relative flex items-center justify-center"><div class="absolute w-0.5 h-20 bg-emerald-500" /></div>
-                    <div class="w-2 bg-emerald-500 h-8 relative flex items-center justify-center"><div class="absolute w-0.5 h-12 bg-emerald-500" /></div>
-                    <div class="w-2 bg-rose-500 h-14 relative flex items-center justify-center"><div class="absolute w-0.5 h-18 bg-rose-500" /></div>
-                    <div class="w-2 bg-emerald-500 h-10 relative flex items-center justify-center"><div class="absolute w-0.5 h-14 bg-emerald-500" /></div>
+                  <div class="flex justify-between items-center bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
+                    <span class="text-gray-400 font-bold uppercase text-[8px]">Realized P&L</span>
+                    <span class={`text-sm font-black text-data ${selectedTrade().pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {selectedTrade().pnl >= 0 ? '+' : ''}₹{selectedTrade().pnl} ({selectedTrade().pnlPct}%)
+                    </span>
                   </div>
                 </div>
-              </div>
+              </Show>
             </div>
           </div>
         </div>
