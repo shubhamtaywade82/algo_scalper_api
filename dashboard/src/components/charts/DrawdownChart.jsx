@@ -1,6 +1,6 @@
-// DEPENDENCY: backend endpoint GET /api/equity_curve?date_from=&date_to=
+// Backend: GET /api/equity_curve?date_from=&date_to=
 // Expected response shape: [{time: unix_seconds, equity: number, drawdown_pct: number}]
-// TODO: Wire to useDashboard() when endpoint is available
+// TODO: Wire to useDashboard()
 
 import { onMount, onCleanup, createEffect } from 'solid-js'
 import { createChart, HistogramSeries, ColorType } from 'lightweight-charts'

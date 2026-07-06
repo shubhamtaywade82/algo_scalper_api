@@ -1,6 +1,6 @@
-// DEPENDENCY: backend endpoint GET /api/depth?symbol=:index_key
+// Backend: GET /api/depth?symbol=:index_key
 // Expected response shape: { symbol, bid: [{price, qty, orders}], ask: [{price, qty, orders}], totalBidQty, totalAskQty }
-// TODO: Wire to useDashboard() when endpoint is available
+// TODO: Wire to useDashboard()
 
 import { createMemo, For, Show } from 'solid-js'
 
@@ -84,7 +84,7 @@ export default function OrderBook(props) {
 
       <Show when={bids().length === 0 && asks().length === 0}>
         <div class="flex items-center justify-center py-8 text-gray-600 text-[10px] uppercase tracking-widest">
-          DEPENDENCY: No depth data — wire to /api/depth
+          No depth data available
         </div>
       </Show>
     </div>

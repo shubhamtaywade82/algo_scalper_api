@@ -40,6 +40,9 @@ Rails.application.routes.draw do
     get "reports/trades", to: "reports#trades"
     get "reports/performance", to: "reports#performance"
     get "reports/export", to: "reports#export"
+    get :depth, to: "depth#index"
+    get :equity_curve, to: "equity_curve#index"
+
     get :logs,     to: "logs#index"
     get :alerts,   to: "alerts#index"
     post :alerts,  to: "alerts#create"

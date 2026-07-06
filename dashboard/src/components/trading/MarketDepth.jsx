@@ -1,5 +1,5 @@
-// DEPENDENCY: backend endpoint GET /api/depth?symbol=:index_key
-// TODO: Wire to useDashboard() when endpoint is available
+// Backend: GET /api/depth?symbol=:index_key
+// TODO: Wire to useDashboard()
 
 import { createMemo, createEffect, createSignal, onCleanup } from 'solid-js'
 import { Show } from 'solid-js'

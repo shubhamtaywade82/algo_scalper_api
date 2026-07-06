@@ -98,6 +98,6 @@ export const navigationConfig = [
   },
 ]
 
-// Remaining backend DEPENDENCY:
+// Backend DEPENDENCY (not yet implemented):
 // - /api/backtests → Backtests execution, reports, and configs
 // - /api/replay → Replay historical data ingestion and player control state

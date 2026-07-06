@@ -1,0 +1,80 @@
+# frozen_string_literal: true
+
+module Api
+  class DepthController < ApplicationController
+    include Api::TokenAuthenticatable
+
+    before_action :authenticate_dashboard_token!
+
+    def index
+      symbol = params[:symbol] || 'NIFTY'
+      depth = fetch_depth(symbol)
+
+      render json: depth
+    end
+
+    private
+
+    def fetch_depth(symbol)
+      instrument = Instrument.find_by(symbol_name: symbol.upcase, segment: 'index')
+      return empty_depth(symbol) unless instrument
+
+      depth = try_dhan_quote(instrument)
+      return depth if depth
+
+      try_redis_depth(instrument) || empty_depth(symbol)
+    end
+
+    def try_dhan_quote(instrument)
+      exch_enum = { instrument.exchange_segment => [instrument.security_id.to_i] }
+      response = DhanHQ::Models::MarketFeed.quote(exch_enum)
+
+      return nil unless response.is_a?(Hash) && response['status'] == 'success'
+
+      quote_data = response.dig('data', instrument.exchange_segment, instrument.security_id.to_s)
+      return nil unless quote_data
+
+      raw_depth = quote_data['depth'] || quote_data[:depth]
+      return nil unless raw_depth
+
+      bids = (raw_depth['buy'] || raw_depth[:buy] || []).map { |l| map_depth_level(l) }
+      asks = (raw_depth['sell'] || raw_depth[:sell] || []).map { |l| map_depth_level(l) }
+
+      {
+        symbol: instrument.symbol_name,
+        bid: bids,
+        ask: asks,
+        totalBidQty: bids.sum { |b| b[:qty] },
+        totalAskQty: asks.sum { |a| a[:qty] }
+      }
+    rescue StandardError => e
+      Rails.logger.debug("[DepthController] DhanHQ quote failed: #{e.message}")
+      nil
+    end
+
+    def map_depth_level(level)
+      {
+        price: (level['price'] || level[:price]).to_f,
+        qty: (level['quantity'] || level[:quantity]).to_i,
+        orders: (level['orders'] || level[:orders]).to_i
+      }
+    end
+
+    def try_redis_depth(instrument)
+      cached = Validators::MarketDataCache.depth_snapshot(instrument.security_id)
+      return nil unless cached
+
+      {
+        symbol: instrument.symbol_name,
+        bid: [{ price: cached[:best_bid].to_f, qty: cached[:best_bid_qty].to_i, orders: 0 }],
+        ask: [{ price: cached[:best_ask].to_f, qty: cached[:best_ask_qty].to_i, orders: 0 }],
+        totalBidQty: cached[:best_bid_qty].to_i,
+        totalAskQty: cached[:best_ask_qty].to_i
+      }
+    end
+
+    def empty_depth(symbol)
+      { symbol: symbol, bid: [], ask: [], totalBidQty: 0, totalAskQty: 0 }
+    end
+  end
+end
