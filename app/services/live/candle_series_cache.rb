@@ -120,6 +120,14 @@ module Live
           # hiccup must never block or abort the Redis write below.
           begin
             Candles::Persister.enqueue(instrument: instrument, interval: interval, candles: [last], source: "live") if last
+            if last && interval == 1
+              Core::EventBus.instance.publish(:candle_closed,
+                                              instrument_key: instrument_key,
+                                              ts: last["timestamp"],
+                                              o: last["open"], h: last["high"],
+                                              l: last["low"], c: last["close"],
+                                              v: last["volume"])
+            end
           rescue StandardError => e
             Rails.logger.error("[CandleSeriesCache] append_tick persist enqueue error: #{e.class} - #{e.message}")
           end
