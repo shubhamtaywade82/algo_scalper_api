@@ -1,18 +1,6 @@
 import { Show, createMemo } from 'solid-js'
 import AnimatedNumber from './AnimatedNumber'
 
-function inr(val) {
-  if (val == null) return '₹0'
-  const prefix = Number(val) >= 0 ? '+' : '−'
-  return `${prefix}₹${Math.abs(Number(val)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-}
-
-function pnlClass(val) {
-  const n = Number(val)
-  if (!n) return 'text-gray-400'
-  return n >= 0 ? 'text-emerald-400' : 'text-rose-400'
-}
-
 export default function StatsBar(props) {
   const stats = () => props.stats || {}
   const balance = () => props.balance || {}
@@ -41,11 +29,11 @@ export default function StatsBar(props) {
           <span class="text-[14px]">📈</span>
         </div>
         <div class="z-10">
-          <div class={`text-xl font-black text-data ${pnlClass(netPnl())}`}>
-            {inr(netPnl())}
+          <div class="text-xl font-black text-data">
+            <AnimatedNumber value={netPnl()} currency decimals={0} showSign pnlColor />
           </div>
-          <span class={`text-[10px] font-bold mt-1 block ${pnlClass(netPnl())}`}>
-            {netPnl() >= 0 ? '+' : ''}{netPnlPct()}%
+          <span class="text-[10px] font-bold mt-1 block">
+            <AnimatedNumber value={netPnlPct()} suffix="%" showSign pnlColor />
           </span>
         </div>
         {/* Tiny Sparkline SVG */}
@@ -69,11 +57,11 @@ export default function StatsBar(props) {
           <span class="text-[14px]">💼</span>
         </div>
         <div class="z-10">
-          <div class={`text-xl font-black text-data ${pnlClass(openPnl())}`}>
-            {inr(openPnl())}
+          <div class="text-xl font-black text-data">
+            <AnimatedNumber value={openPnl()} currency decimals={0} showSign pnlColor />
           </div>
-          <span class={`text-[10px] font-bold mt-1 block ${pnlClass(openPnl())}`}>
-            {openPnl() >= 0 ? '+' : ''}{openPnlPct()}%
+          <span class="text-[10px] font-bold mt-1 block">
+            <AnimatedNumber value={openPnlPct()} suffix="%" showSign pnlColor />
           </span>
         </div>
         {/* Tiny Sparkline SVG */}
@@ -97,11 +85,11 @@ export default function StatsBar(props) {
           <span class="text-[14px]">🏆</span>
         </div>
         <div>
-          <div class={`text-xl font-black text-data ${pnlClass(realizedPnl())}`}>
-            {inr(realizedPnl())}
+          <div class="text-xl font-black text-data">
+            <AnimatedNumber value={realizedPnl()} currency decimals={0} showSign pnlColor />
           </div>
-          <span class={`text-[10px] font-bold mt-1 block ${pnlClass(realizedPnl())}`}>
-            {realizedPnl() >= 0 ? '+' : ''}{realizedPnlPct()}%
+          <span class="text-[10px] font-bold mt-1 block">
+            <AnimatedNumber value={realizedPnlPct()} suffix="%" showSign pnlColor />
           </span>
         </div>
       </div>
@@ -114,10 +102,10 @@ export default function StatsBar(props) {
         </div>
         <div>
           <div class="text-xl font-black text-white text-data">
-            {winRate()}%
+            <AnimatedNumber value={winRate()} suffix="%" />
           </div>
           <span class="text-[10px] font-bold text-gray-500 mt-1 block">
-            ({winners()} / {totalTrades()})
+            (<AnimatedNumber value={winners()} decimals={0} /> / <AnimatedNumber value={totalTrades()} decimals={0} />)
           </span>
         </div>
       </div>
@@ -130,7 +118,7 @@ export default function StatsBar(props) {
         </div>
         <div>
           <div class="text-xl font-black text-white text-data">
-            {totalTrades()}
+            <AnimatedNumber value={totalTrades()} decimals={0} />
           </div>
           <span class="text-[10px] font-bold text-gray-500 mt-1 block">
             (Today)
@@ -162,10 +150,10 @@ export default function StatsBar(props) {
         </div>
         <div>
           <div class="text-xl font-black text-white text-data">
-            ₹{cash().toLocaleString('en-IN')}
+            <AnimatedNumber value={cash()} currency decimals={0} />
           </div>
           <span class="text-[10px] font-bold text-gray-500 mt-1 block">
-            Margin: ₹{marginUsed().toLocaleString('en-IN')}
+            Margin: ₹<AnimatedNumber value={marginUsed()} decimals={0} />
           </span>
         </div>
       </div>

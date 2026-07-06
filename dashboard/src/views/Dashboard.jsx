@@ -195,7 +195,9 @@ export default function Dashboard() {
             <div class="w-28 space-y-2 border-l border-white/5 pl-4 shrink-0 flex flex-col justify-center">
               <div>
                 <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest">Net P&L</span>
-                <div class="text-xs font-black text-emerald-400 text-data mt-0.5">+₹{inrFormat(netPnl())}</div>
+                <div class="text-xs font-black text-data mt-0.5">
+                  <AnimatedNumber value={netPnl()} currency decimals={0} showSign pnlColor />
+                </div>
               </div>
               <div>
                 <span class="text-[8px] font-black text-gray-500 uppercase tracking-widest">Max Drawdown</span>
@@ -357,10 +359,14 @@ export default function Dashboard() {
                   {(p) => (
                     <tr class="border-b border-white/5 hover:bg-white/[0.01]">
                       <td class="py-2.5 font-bold text-white max-w-[120px] truncate" title={p.symbol}>{p.symbol}</td>
-                      <td class="py-2.5 text-right text-data text-gray-400">{p.qty}</td>
-                      <td class="py-2.5 text-right text-data text-white">{p.ltp.toFixed(2)}</td>
-                      <td class={`py-2.5 text-right font-black text-data ${p.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {p.pnl >= 0 ? '+' : ''}₹{inrFormat(p.pnl)}
+                      <td class="py-2.5 text-right text-data text-gray-400">
+                        <AnimatedNumber value={p.qty} decimals={0} />
+                      </td>
+                      <td class="py-2.5 text-right text-data text-white">
+                        <AnimatedNumber value={p.ltp} decimals={2} />
+                      </td>
+                      <td class="py-2.5 text-right font-black text-data">
+                        <AnimatedNumber value={p.pnl} currency decimals={0} showSign pnlColor />
                       </td>
                     </tr>
                   )}
@@ -368,8 +374,8 @@ export default function Dashboard() {
                 <tr class="font-black text-white">
                   <td class="py-3 uppercase tracking-wider text-gray-500">Total</td>
                   <td colspan="2"></td>
-                  <td class={`py-3 text-right text-data ${totalOpenPnl() >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {totalOpenPnl() >= 0 ? '+' : ''}₹{inrFormat(totalOpenPnl())}
+                  <td class="py-3 text-right text-data">
+                    <AnimatedNumber value={totalOpenPnl()} currency decimals={0} showSign pnlColor />
                   </td>
                 </tr>
               </tbody>
