@@ -42,6 +42,7 @@ Rails.application.routes.draw do
     get "reports/export", to: "reports#export"
     get "reports/pnl_by_strategy", to: "reports#pnl_by_strategy"
     get "reports/pnl_by_instrument", to: "reports#pnl_by_instrument"
+    get "orders", to: "orders#index"
     get :depth, to: "depth#index"
     get :equity_curve, to: "equity_curve#index"
     post :backtests, to: "backtests#create"

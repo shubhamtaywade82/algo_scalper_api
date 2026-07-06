@@ -1,8 +1,9 @@
-import { createSignal, createMemo, createEffect, For, Show } from 'solid-js'
+import { createSignal, createMemo, createEffect, For, Show, onMount } from 'solid-js'
 import { useDashboardContext } from '../context/DashboardContext'
 import StatsBar from '../components/StatsBar'
 import AnimatedNumber from '../components/AnimatedNumber'
 import { useAlerts } from '../stores/useAlerts'
+import { useOrders } from '../stores/useOrders'
 
 const RUNNING_PEAK_KEY = 'algo_dashboard_daily_pnl_hwm'
 
@@ -40,6 +41,9 @@ export default function Dashboard() {
 
   const [runningPeakPnl, setRunningPeakPnl] = createSignal(loadRunningPeak())
   const { alerts: liveAlerts } = useAlerts()
+  const { orders: recentOrders, fetchOrders } = useOrders()
+
+  onMount(() => { fetchOrders() })
 
   createEffect(() => {
     const currentOpen = open() || []
@@ -117,7 +121,7 @@ export default function Dashboard() {
     return openPositionsList().reduce((sum, p) => sum + Number(p.pnl || 0), 0)
   })
 
-  const recentOrders = []
+  // recentOrders now from useOrders() store
 
   return (
     <div class="space-y-6">
@@ -359,7 +363,40 @@ export default function Dashboard() {
             <button class="text-[8px] font-black uppercase text-gray-500 hover:text-white transition-colors">View All</button>
           </div>
           <div class="flex-1 overflow-x-auto mt-2">
-            <div class="text-center py-8 text-[10px] text-gray-600 font-bold uppercase tracking-wider">No recent orders</div>
+            <Show when={recentOrders().length > 0} fallback={
+              <div class="text-center py-8 text-[10px] text-gray-600 font-bold uppercase tracking-wider">No recent orders</div>
+            }>
+              <table class="w-full text-left border-collapse text-[10px]">
+                <thead>
+                  <tr class="text-gray-600 font-black uppercase tracking-wider border-b border-white/5">
+                    <th class="py-2">Symbol</th>
+                    <th class="py-2 text-center">Side</th>
+                    <th class="py-2 text-right">Qty</th>
+                    <th class="py-2 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={recentOrders()}>
+                    {(o) => (
+                      <tr class="border-b border-white/5">
+                        <td class="py-2 font-bold text-white truncate max-w-[100px]">{o.symbol}</td>
+                        <td class="py-2 text-center">
+                          <span class={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                            o.side === 'BUY' ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                          }`}>{o.side}</span>
+                        </td>
+                        <td class="py-2 text-right text-gray-400">{o.quantity}</td>
+                        <td class="py-2 text-right">
+                          <span class={`text-[8px] font-black uppercase ${
+                            o.status === 'exited' ? 'text-gray-500' : o.status === 'active' ? 'text-emerald-400' : 'text-amber-400'
+                          }`}>{o.status}</span>
+                        </td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </Show>
           </div>
         </div>
       </div>

@@ -11,16 +11,17 @@ export function useReports() {
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal(null)
 
-  async function fetchAll() {
+  async function fetchAll(params = {}) {
     setLoading(true)
     setError(null)
+    const q = { since: params.since || undefined, until: params.until || undefined }
     try {
       const [perfRes, pnlRes, tradesRes, stratRes, instrRes] = await Promise.all([
-        apiClient.get(endpoints.reports.performance),
-        apiClient.get(endpoints.reports.pnl),
-        apiClient.get(endpoints.reports.trades, { params: { per_page: 10 } }),
-        apiClient.get(endpoints.reports.pnlByStrategy),
-        apiClient.get(endpoints.reports.pnlByInstrument)
+        apiClient.get(endpoints.reports.performance, { params: q }),
+        apiClient.get(endpoints.reports.pnl, { params: q }),
+        apiClient.get(endpoints.reports.trades, { params: { ...q, per_page: 10 } }),
+        apiClient.get(endpoints.reports.pnlByStrategy, { params: q }),
+        apiClient.get(endpoints.reports.pnlByInstrument, { params: q })
       ])
       setSummary({
         ...(perfRes.data?.summary || {}),

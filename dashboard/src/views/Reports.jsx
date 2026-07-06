@@ -7,6 +7,8 @@ import AnimatedNumber from '../components/AnimatedNumber'
 
 export default function Reports() {
   const [activeTab, setActiveTab] = createSignal('summary')
+  const [sinceDate, setSinceDate] = createSignal('')
+  const [untilDate, setUntilDate] = createSignal('')
 
   const { data: curveData, fetchCurve } = useEquityCurve()
   const { summary, daily, trades: reportTrades, byStrategy, byInstrument, loading, error, fetchAll } = useReports()
@@ -52,16 +54,14 @@ export default function Reports() {
       <div class="flex flex-wrap items-center justify-between gap-4 bg-white/[0.01] border border-white/5 rounded-2xl p-4">
         <div class="flex flex-wrap items-center gap-3">
           <div class="flex flex-col">
-            <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">Date Range</span>
-            <div class="text-[10px] bg-white/[0.02] border border-white/5 px-2.5 py-1.5 rounded-lg text-white font-mono">
-              01 Apr 2024 - 03 Jun 2024
-            </div>
+            <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">From</span>
+            <input type="date" value={sinceDate()} onInput={(e) => setSinceDate(e.target.value)}
+              class="text-[10px] bg-white/[0.02] border border-white/5 px-2.5 py-1.5 rounded-lg text-white font-mono w-[140px]" />
           </div>
           <div class="flex flex-col">
-            <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">Compare With</span>
-            <select class="glass-select text-[10px] px-2.5 py-1.5 rounded-lg">
-              <option>01 Mar 2024 - 31 Mar 2024</option>
-            </select>
+            <span class="text-[7px] text-gray-500 font-black uppercase tracking-wider mb-1">To</span>
+            <input type="date" value={untilDate()} onInput={(e) => setUntilDate(e.target.value)}
+              class="text-[10px] bg-white/[0.02] border border-white/5 px-2.5 py-1.5 rounded-lg text-white font-mono w-[140px]" />
           </div>
         </div>
 
@@ -69,11 +69,19 @@ export default function Reports() {
           <button class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all">
             Schedule Report
           </button>
-          <button class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all">
+          <button
+            onClick={() => {
+              const params = new URLSearchParams()
+              if (sinceDate()) params.set('since', sinceDate())
+              if (untilDate()) params.set('until', untilDate())
+              window.open(`/api/reports/export?${params.toString()}`, '_blank')
+            }}
+            class="px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-300 hover:bg-white/[0.06] hover:text-white transition-all"
+          >
             Export
           </button>
           <button
-            onClick={() => fetchAll()}
+            onClick={() => fetchAll({ since: sinceDate(), until: untilDate() })}
             disabled={loading()}
             class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg transition-all disabled:opacity-40"
           >

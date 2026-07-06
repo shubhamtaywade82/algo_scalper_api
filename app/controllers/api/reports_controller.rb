@@ -16,16 +16,16 @@ module Api
     end
 
     def pnl
-      closed_trackers = PositionTracker.exited
-      total_trades = closed_trackers.count
-      winning_trades = closed_trackers.where("last_pnl_rupees > 0").count
-      losing_trades = closed_trackers.where("last_pnl_rupees <= 0").count
+      scope = date_filtered_scope(PositionTracker.exited)
+      total_trades = scope.count
+      winning_trades = scope.where("last_pnl_rupees > 0").count
+      losing_trades = scope.where("last_pnl_rupees <= 0").count
 
-      net_pnl = closed_trackers.sum(:last_pnl_rupees).to_f
+      net_pnl = scope.sum(:last_pnl_rupees).to_f
       win_rate = total_trades.positive? ? (winning_trades.to_f / total_trades * 100).round(2) : 0.0
 
-      gross_profit = closed_trackers.where("last_pnl_rupees > 0").sum(:last_pnl_rupees).to_f
-      gross_loss = closed_trackers.where("last_pnl_rupees <= 0").sum(:last_pnl_rupees).to_f
+      gross_profit = scope.where("last_pnl_rupees > 0").sum(:last_pnl_rupees).to_f
+      gross_loss = scope.where("last_pnl_rupees <= 0").sum(:last_pnl_rupees).to_f
 
       render json: {
         success: true,
@@ -43,11 +43,9 @@ module Api
     end
 
     def trades
-      scope = PositionTracker.exited.includes(:watchable, :instrument)
-                             .order(exited_at: :desc)
+      scope = date_filtered_scope(PositionTracker.exited.includes(:watchable, :instrument))
+              .order(exited_at: :desc)
 
-      scope = scope.where(exited_at: params[:since].presence&.to_time..) if params[:since].present?
-      scope = scope.where(exited_at: ..params[:until].presence&.to_time) if params[:until].present?
       scope = scope.where(side: params[:side].upcase) if params[:side].present?
 
       page = [params[:page].to_i, 1].max
@@ -71,19 +69,19 @@ module Api
     end
 
     def performance
-      closed_trackers = PositionTracker.exited
+      scope = date_filtered_scope(PositionTracker.exited)
 
-      total = closed_trackers.count
-      wins = closed_trackers.where("last_pnl_rupees > 0").count
-      losses = closed_trackers.where("last_pnl_rupees <= 0").count
+      total = scope.count
+      wins = scope.where("last_pnl_rupees > 0").count
+      losses = scope.where("last_pnl_rupees <= 0").count
       win_rate = total.positive? ? (wins.to_f / total * 100).round(2) : 0.0
 
-      net_pnl = closed_trackers.sum(:last_pnl_rupees).to_f
-      avg_win = wins.positive? ? (closed_trackers.where("last_pnl_rupees > 0").sum(:last_pnl_rupees).to_f / wins).round(2) : 0.0
-      avg_loss = losses.positive? ? (closed_trackers.where("last_pnl_rupees <= 0").sum(:last_pnl_rupees).to_f / losses).round(2) : 0.0
+      net_pnl = scope.sum(:last_pnl_rupees).to_f
+      avg_win = wins.positive? ? (scope.where("last_pnl_rupees > 0").sum(:last_pnl_rupees).to_f / wins).round(2) : 0.0
+      avg_loss = losses.positive? ? (scope.where("last_pnl_rupees <= 0").sum(:last_pnl_rupees).to_f / losses).round(2) : 0.0
 
-      max_win = closed_trackers.maximum(:last_pnl_rupees).to_f
-      max_loss = closed_trackers.minimum(:last_pnl_rupees).to_f
+      max_win = scope.maximum(:last_pnl_rupees).to_f
+      max_loss = scope.minimum(:last_pnl_rupees).to_f
 
       profit_factor = if avg_loss.negative?
                         (avg_win / avg_loss.abs).round(2)
@@ -91,12 +89,10 @@ module Api
                         0.0
                       end
 
-      # Daily breakdown (last 30 days)
-      daily = closed_trackers.where(exited_at: 30.days.ago..)
-                             .group(Arel.sql("DATE(exited_at)"))
-                             .pluck(Arel.sql("DATE(exited_at)"), Arel.sql("SUM(last_pnl_rupees)"))
-                             .map { |date, pnl| { date: date.to_s, pnl: pnl.to_f.round(2) } }
-                             .sort_by { |d| d[:date] }
+      daily = scope.group(Arel.sql("DATE(exited_at)"))
+                   .pluck(Arel.sql("DATE(exited_at)"), Arel.sql("SUM(last_pnl_rupees)"))
+                   .map { |date, pnl| { date: date.to_s, pnl: pnl.to_f.round(2) } }
+                   .sort_by { |d| d[:date] }
 
       render json: {
         success: true,
@@ -118,7 +114,7 @@ module Api
     end
 
     def pnl_by_strategy
-      scope = PositionTracker.exited
+      scope = date_filtered_scope(PositionTracker.exited)
 
       rows = scope.group(:entry_strategy)
                   .pluck(
@@ -148,7 +144,7 @@ module Api
     end
 
     def pnl_by_instrument
-      scope = PositionTracker.exited
+      scope = date_filtered_scope(PositionTracker.exited)
 
       rows = scope.group(:symbol)
                   .pluck(
@@ -176,6 +172,16 @@ module Api
 
       render json: { success: true, breakdown: breakdown.sort_by { |r| -r[:net_pnl] } }
     end
+
+    private
+
+    def date_filtered_scope(scope)
+      scope = scope.where(exited_at: params[:since].presence&.to_time..) if params[:since].present?
+      scope = scope.where(exited_at: ..params[:until].presence&.to_time) if params[:until].present?
+      scope
+    end
+
+    public
 
     def export
       scope = PositionTracker.exited.includes(:watchable, :instrument)
