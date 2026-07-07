@@ -22,11 +22,15 @@ module Strategies
 
     # Matches the interface EntryGuard.try_enter expects from TradingSignal,
     # so the same guard pipeline can score outcomes for either signal source.
+    # `reason` here is the guard's block reason, not the strategy's original
+    # signal reasoning — keep the latter intact in the `reason` column (the
+    # signals dashboard parses ADX etc. out of it) and file the guard's
+    # verdict under metadata instead.
     def record_entry_outcome(outcome, reason = nil, position_tracker: nil)
       mapped = outcome.to_s == "entered" ? "executed" : "blocked_by_guard"
       update!(
         outcome: mapped,
-        reason: reason.presence || self.reason,
+        metadata: metadata.merge("entry_result_reason" => reason),
         position_tracker: position_tracker || self.position_tracker
       )
     end

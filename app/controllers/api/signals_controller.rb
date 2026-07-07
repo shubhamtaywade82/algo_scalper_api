@@ -113,7 +113,7 @@ module Api
           strategy: sig.strategy_record&.slug,
           entry_outcome: ENTRY_OUTCOME_BY_OUTCOME[sig.outcome] || "skipped",
           reason: sig.reason,
-          entry_blocked_reason: sig.outcome == "blocked_by_guard" ? sig.reason : nil,
+          entry_blocked_reason: sig.outcome == "blocked_by_guard" ? sig.metadata["entry_result_reason"] : nil,
           entry_skip_stage: sig.outcome == "blocked_by_guard" ? nil : "strategy_platform",
           entry_skip_code: sig.outcome == "blocked_by_guard" ? nil : sig.reason
         }
