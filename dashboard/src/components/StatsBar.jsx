@@ -38,18 +38,7 @@ export default function StatsBar(props) {
             <AnimatedNumber value={netPnlPct()} suffix="%" showSign pnlColor />
           </span>
         </div>
-        {/* Tiny Sparkline SVG */}
-        <div class="absolute bottom-2 right-2 w-16 h-8 opacity-40 group-hover:opacity-75 transition-opacity duration-300">
-          <svg viewBox="0 0 100 50" class="w-full h-full">
-            <path
-              d="M0,45 Q20,35 40,38 T80,15 T100,5"
-              fill="none"
-              stroke="rgb(52, 211, 153)"
-              stroke-width="3.5"
-              stroke-linecap="round"
-            />
-          </svg>
-        </div>
+
       </div>
 
       {/* 2. Open P&L */}
@@ -66,18 +55,7 @@ export default function StatsBar(props) {
             <AnimatedNumber value={openPnlPct()} suffix="%" showSign pnlColor />
           </span>
         </div>
-        {/* Tiny Sparkline SVG */}
-        <div class="absolute bottom-2 right-2 w-16 h-8 opacity-40 group-hover:opacity-75 transition-opacity duration-300">
-          <svg viewBox="0 0 100 50" class="w-full h-full">
-            <path
-              d="M0,40 Q30,42 60,25 T100,12"
-              fill="none"
-              stroke="rgb(52, 211, 153)"
-              stroke-width="3.5"
-              stroke-linecap="round"
-            />
-          </svg>
-        </div>
+
       </div>
 
       {/* 3. Realized P&L */}

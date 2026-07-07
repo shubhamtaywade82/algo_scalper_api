@@ -21,7 +21,14 @@ export function useDashboard(onPositionChange) {
     losers: 0
   })
   const [balance, setBalance] = createSignal({ cash: 0, equity: 0, mtm: 0, exposure: 0 })
-  const [indices, setIndices] = createSignal({ nifty: null, banknifty: null, sensex: null })
+  const [indices, setIndices] = createSignal({
+    nifty: null,
+    banknifty: null,
+    sensex: null,
+    nifty_prev_close: null,
+    banknifty_prev_close: null,
+    sensex_prev_close: null
+  })
   const [subscribedIndices, setSubscribedIndices] = createSignal([])
   const [optionsBuying, setOptionsBuying] = createSignal({ nifty: {}, banknifty: {}, sensex: {} })
   const [system, setSystem] = createSignal({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
@@ -89,6 +96,9 @@ export function useDashboard(onPositionChange) {
       if (src.nifty) { current.nifty = src.nifty; changed = true }
       if (src.banknifty) { current.banknifty = src.banknifty; changed = true }
       if (src.sensex) { current.sensex = src.sensex; changed = true }
+      if (src.nifty_prev_close !== undefined && src.nifty_prev_close !== null) { current.nifty_prev_close = src.nifty_prev_close; changed = true }
+      if (src.banknifty_prev_close !== undefined && src.banknifty_prev_close !== null) { current.banknifty_prev_close = src.banknifty_prev_close; changed = true }
+      if (src.sensex_prev_close !== undefined && src.sensex_prev_close !== null) { current.sensex_prev_close = src.sensex_prev_close; changed = true }
     }
 
     if (changed) {

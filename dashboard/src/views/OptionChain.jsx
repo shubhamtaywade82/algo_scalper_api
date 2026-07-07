@@ -11,14 +11,10 @@ export default function OptionChain() {
   const { chain, isStale, connected } = useOptionChain(selectedAsset)
   const { indices } = useDashboardContext()
 
-  // Spot Price from live dashboard indexes feed
-  const spotPrice = () => {
-    const key = selectedAsset().toLowerCase()
-    return indices()?.[key] || chain()?.spot || 0
-  }
+  const spotPrice = () => indices()?.[selectedAsset().toLowerCase()] || 0
 
   const indexPrevClose = () => {
-    return spotPrice() / 1.0062
+    return indices()?.[selectedAsset().toLowerCase() + '_prev_close'] || (spotPrice() / 1.0062)
   }
 
   const spotChange = () => spotPrice() - indexPrevClose()

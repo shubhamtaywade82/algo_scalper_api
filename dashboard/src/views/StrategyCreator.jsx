@@ -11,17 +11,7 @@ import ExitRulesPanel from '../components/strategies/ExitRulesPanel'
 import RiskManagementPanel from '../components/strategies/RiskManagementPanel'
 import FiltersPanel from '../components/strategies/FiltersPanel'
 import SchedulePanel from '../components/strategies/SchedulePanel'
-
-const sampleLogs = [
-  { time: '09:24:12', message: '[ORB Breakout] Candle closed 09:23, O:24180.5 H:24195.2 L:24170.8 C:24190.3', level: 'info' },
-  { time: '09:24:12', message: '[ORB Breakout] Opening Range High: 24195.2 · Low: 24140.7', level: 'info' },
-  { time: '09:24:12', message: '[ORB Breakout] Breakout UP detected @ 24195.2', level: 'success' },
-  { time: '09:24:12', message: '[ORB Breakout] Signal: Buy Call', level: 'success' },
-  { time: '09:24:12', message: '[Risk Engine] Position size: 75 lots (Risk: 1.00%)', level: 'warn' },
-  { time: '09:24:13', message: '[Option Selector] Selected: NIFTY 06 JUN 24160 CE', level: 'info' },
-  { time: '09:24:13', message: '[Order Manager] Order placed Successfully', level: 'success' },
-  { time: '09:24:13', message: '[Execution] Order ID: 230518001238843', level: 'info' },
-]
+import { useLogs } from '../stores/useLogs'
 
 function scanReportToErrors(scanReport) {
   if (!scanReport) return []
@@ -64,6 +54,17 @@ export default function StrategyCreator() {
   const [newInstrument, setNewInstrument] = createSignal('')
   const [newTag, setNewTag] = createSignal('')
   const [isSaved, setIsSaved] = createSignal(true)
+
+  const { logs: liveLogs } = useLogs()
+  const strategyLogs = createMemo(() => {
+    return liveLogs()
+      .filter(log => !name() || (log.source && log.source.toUpperCase() === name().toUpperCase()) || log.message.toUpperCase().includes(name().toUpperCase()))
+      .map(log => ({
+        time: log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '',
+        message: log.message,
+        level: log.level
+      }))
+  })
 
   // Load strategy if ID is present
   onMount(async () => {
@@ -403,7 +404,7 @@ export default function StrategyCreator() {
                 </Show>
 
                 <Show when={activeTab() === 'Logs'}>
-                  <RecentLogs logs={sampleLogs} strategyName={name()} />
+                  <RecentLogs logs={strategyLogs()} strategyName={name()} />
                 </Show>
               </Show>
             </div>

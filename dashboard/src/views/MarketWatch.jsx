@@ -38,11 +38,46 @@ export default function MarketWatch() {
     fetchDepth()
   })
 
-  const quoteCards = createMemo(() => [
-    { label: 'Nifty 50', value: indices()?.nifty, isPositive: true, changePct: 0 },
-    { label: 'Bank Nifty', value: indices()?.banknifty, isPositive: true, changePct: 0 },
-    { label: 'Sensex', value: indices()?.sensex, isPositive: true, changePct: 0 },
-  ])
+  const quoteCards = createMemo(() => {
+    const idxs = indices() || {}
+    
+    const getNiftyChange = () => {
+      const val = idxs.nifty
+      const prev = idxs.nifty_prev_close
+      if (!val || !prev) return { isPositive: true, changePct: 0 }
+      const change = val - prev
+      const pct = (change / prev) * 100
+      return { isPositive: change >= 0, changePct: pct.toFixed(2) }
+    }
+
+    const getBankniftyChange = () => {
+      const val = idxs.banknifty
+      const prev = idxs.banknifty_prev_close
+      if (!val || !prev) return { isPositive: true, changePct: 0 }
+      const change = val - prev
+      const pct = (change / prev) * 100
+      return { isPositive: change >= 0, changePct: pct.toFixed(2) }
+    }
+
+    const getSensexChange = () => {
+      const val = idxs.sensex
+      const prev = idxs.sensex_prev_close
+      if (!val || !prev) return { isPositive: true, changePct: 0 }
+      const change = val - prev
+      const pct = (change / prev) * 100
+      return { isPositive: change >= 0, changePct: pct.toFixed(2) }
+    }
+
+    const nifty = getNiftyChange()
+    const banknifty = getBankniftyChange()
+    const sensex = getSensexChange()
+
+    return [
+      { label: 'Nifty 50', value: idxs.nifty, isPositive: nifty.isPositive, changePct: nifty.changePct },
+      { label: 'Bank Nifty', value: idxs.banknifty, isPositive: banknifty.isPositive, changePct: banknifty.changePct },
+      { label: 'Sensex', value: idxs.sensex, isPositive: sensex.isPositive, changePct: sensex.changePct },
+    ]
+  })
 
   return (
     <div class="space-y-6">

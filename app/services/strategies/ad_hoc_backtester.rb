@@ -33,7 +33,8 @@ module Strategies
           "instrument" => backtest[:instrument],
           "error" => backtest[:error],
           "ran_at" => Time.current.iso8601
-        }
+        },
+        scan_report: scan_report
       }
     end
 

@@ -55,7 +55,10 @@ module Api
       {
         nifty: load_indices.find { |i| i[:key] == 'NIFTY' }&.dig(:ltp),
         banknifty: load_indices.find { |i| i[:key] == 'BANKNIFTY' }&.dig(:ltp),
-        sensex: load_indices.find { |i| i[:key] == 'SENSEX' }&.dig(:ltp)
+        sensex: load_indices.find { |i| i[:key] == 'SENSEX' }&.dig(:ltp),
+        nifty_prev_close: Live::TickCache.fetch('IDX_I', '13')&.dig(:prev_close),
+        banknifty_prev_close: Live::TickCache.fetch('IDX_I', '25')&.dig(:prev_close),
+        sensex_prev_close: Live::TickCache.fetch('IDX_I', '51')&.dig(:prev_close)
       }
     end
 

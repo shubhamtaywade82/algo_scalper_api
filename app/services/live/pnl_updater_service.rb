@@ -494,7 +494,10 @@ module Live
         indices: {
           nifty: Live::TickCache.ltp('IDX_I', '13'),
           banknifty: Live::TickCache.ltp('IDX_I', '25'),
-          sensex: Live::TickCache.ltp('IDX_I', '51')
+          sensex: Live::TickCache.ltp('IDX_I', '51'),
+          nifty_prev_close: Live::TickCache.fetch('IDX_I', '13')&.dig(:prev_close),
+          banknifty_prev_close: Live::TickCache.fetch('IDX_I', '25')&.dig(:prev_close),
+          sensex_prev_close: Live::TickCache.fetch('IDX_I', '51')&.dig(:prev_close)
         },
         options_buying: {
           nifty: build_options_buying_state('NIFTY'),

@@ -47,7 +47,12 @@ module Api
     # POST /api/trading_strategies/:id/validate
     def validate
       result = @trading_strategy.run_checks!
-      render json: { checks: result[:checks], backtest_results: result[:backtest_results], strategy: @trading_strategy }
+      render json: {
+        checks: result[:checks],
+        backtest_results: result[:backtest_results],
+        scan_report: result[:scan_report],
+        strategy: @trading_strategy
+      }
     end
 
     # POST /api/trading_strategies/:id/deploy
@@ -79,7 +84,7 @@ module Api
                       name version status code description author
                       runtime timeframe trade_direction
                     ], {
-                      instruments: [], tags: [], parameters: [],
+                      instruments: [], tags: [], parameters: %i[name type default_value description],
                       entry_rules: {}, exit_rules: {}, risk_management: {}, filters: {}, schedule: {}
                     }])
     end

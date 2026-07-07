@@ -14,6 +14,22 @@ export default function OptimizationPanel(props) {
   const [lookback, setLookback] = createSignal(5)
   const [indicator, setIndicator] = createSignal('all')
 
+  const lookbackOptions = [
+    { value: 5, label: '5 Days' },
+    { value: 15, label: '15 Days' },
+    { value: 30, label: '30 Days' },
+    { value: 90, label: '90 Days' }
+  ]
+
+  const indicatorOptions = [
+    { value: 'all', label: 'All Systems' },
+    { value: 'adx', label: 'ADX Indicator' },
+    { value: 'rsi', label: 'RSI Indicator' },
+    { value: 'macd', label: 'MACD Indicator' },
+    { value: 'supertrend', label: 'Supertrend Indicator' },
+    { value: 'trailing', label: 'Trailing Stop Exit' }
+  ]
+
   const results = createMemo(() => props.data)
 
   const handleRun = () => {
@@ -38,10 +54,9 @@ export default function OptimizationPanel(props) {
             onChange={(e) => setLookback(Number(e.target.value))}
             class="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-gray-300 text-xs font-bold focus:outline-none focus:border-primary-500/50"
           >
-            <option value={5}>5 Days</option>
-            <option value={15}>15 Days</option>
-            <option value={30}>30 Days</option>
-            <option value={90}>90 Days</option>
+            <For each={lookbackOptions}>
+              {(opt) => <option value={opt.value}>{opt.label}</option>}
+            </For>
           </select>
         </div>
 
@@ -52,12 +67,9 @@ export default function OptimizationPanel(props) {
             onChange={(e) => setIndicator(e.target.value)}
             class="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-gray-300 text-xs font-bold focus:outline-none focus:border-primary-500/50"
           >
-            <option value="all">All Systems</option>
-            <option value="adx">ADX Indicator</option>
-            <option value="rsi">RSI Indicator</option>
-            <option value="macd">MACD Indicator</option>
-            <option value="supertrend">Supertrend Indicator</option>
-            <option value="trailing">Trailing Stop Exit</option>
+            <For each={indicatorOptions}>
+              {(opt) => <option value={opt.value}>{opt.label}</option>}
+            </For>
           </select>
         </div>
 
@@ -153,26 +165,34 @@ export default function OptimizationPanel(props) {
               <div class="flex items-center justify-between mb-4 pb-2 border-b border-white/5">
                 <span class="text-[10px] font-black text-cyan-400 tracking-widest uppercase">Trailing Exit Stop Calibration</span>
                 <span class="text-[9px] font-bold text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded tracking-widest">
-                  {results().trailing.total_simulated || 92} TRADES SIMULATED
+                  {results().trailing.total_simulated != null ? `${results().trailing.total_simulated} TRADES SIMULATED` : '—'}
                 </span>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div class="p-3 rounded-lg bg-black/40 border border-white/5">
                   <span class="block text-[8px] font-bold text-gray-500 uppercase tracking-wider mb-1">Early Trigger</span>
-                  <span class="text-sm font-black text-white">{fmtVal((results().trailing.best_params?.early_trigger || 0.03) * 100, 1)}%</span>
+                  <span class="text-sm font-black text-white">
+                    {results().trailing.best_params?.early_trigger != null ? `${(results().trailing.best_params.early_trigger * 100).toFixed(1)}%` : '—'}
+                  </span>
                 </div>
                 <div class="p-3 rounded-lg bg-black/40 border border-white/5">
                   <span class="block text-[8px] font-bold text-gray-500 uppercase tracking-wider mb-1">Breakeven Trigger</span>
-                  <span class="text-sm font-black text-white">{fmtVal((results().trailing.best_params?.breakeven_trigger || 0.08) * 100, 1)}%</span>
+                  <span class="text-sm font-black text-white">
+                    {results().trailing.best_params?.breakeven_trigger != null ? `${(results().trailing.best_params.breakeven_trigger * 100).toFixed(1)}%` : '—'}
+                  </span>
                 </div>
                 <div class="p-3 rounded-lg bg-black/40 border border-white/5">
                   <span class="block text-[8px] font-bold text-gray-500 uppercase tracking-wider mb-1">Activation Trigger</span>
-                  <span class="text-sm font-black text-white">{fmtVal((results().trailing.best_params?.activation_trigger || 0.15) * 100, 1)}%</span>
+                  <span class="text-sm font-black text-white">
+                    {results().trailing.best_params?.activation_trigger != null ? `${(results().trailing.best_params.activation_trigger * 100).toFixed(1)}%` : '—'}
+                  </span>
                 </div>
                 <div class="p-3 rounded-lg bg-black/40 border border-white/5">
                   <span class="block text-[8px] font-bold text-gray-500 uppercase tracking-wider mb-1">Trailing Distance</span>
-                  <span class="text-sm font-black text-white">{fmtVal((results().trailing.best_params?.trailing_distance || 0.20) * 100, 1)}%</span>
+                  <span class="text-sm font-black text-white">
+                    {results().trailing.best_params?.trailing_distance != null ? `${(results().trailing.best_params.trailing_distance * 100).toFixed(1)}%` : '—'}
+                  </span>
                 </div>
               </div>
             </div>
