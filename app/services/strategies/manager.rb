@@ -70,6 +70,22 @@ module Strategies
       end
     end
 
+    def on_candle_closed(event)
+      instrument_key = event[:instrument_key]
+      @mutex.synchronize do
+        @runners.each_value do |state|
+          next unless state[:thread]&.alive?
+          next unless strategy_covers_instrument?(state, instrument_key)
+
+          state[:pending_events] << event
+        end
+      end
+    end
+
+    def subscribe_to_events
+      @bus.subscribe(:candle_closed, self, method_name: :on_candle_closed)
+    end
+
     private
 
     def control_loop
@@ -128,22 +144,6 @@ module Strategies
       })
     rescue StandardError => e
       Rails.logger.warn("[Strategies::Manager] broadcast_heartbeat failed for #{slug}: #{e.message}")
-    end
-
-    def subscribe_to_events
-      @bus.subscribe(:candle_closed, self, method_name: :on_candle_closed)
-    end
-
-    def on_candle_closed(event)
-      instrument_key = event[:instrument_key]
-      @mutex.synchronize do
-        @runners.each_value do |state|
-          next unless state[:thread]&.alive?
-          next unless strategy_covers_instrument?(state, instrument_key)
-
-          state[:pending_events] << event
-        end
-      end
     end
 
     def start_runner(strategy_record)

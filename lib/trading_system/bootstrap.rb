@@ -80,6 +80,8 @@ module TradingSystem
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
       supervisor.register(:smc_scanner, Smc::Scanner.new)
       supervisor.register(:strategy_manager, Strategies::Manager.new)
+      supervisor.register(:pnl_updater, Live::PnlUpdaterService.instance)
+      supervisor.register(:candle_poller, Live::CandlePollerService.new)
 
       register_chain_watch(supervisor, :chain_watch_nifty, 'NIFTY')
       register_chain_watch(supervisor, :chain_watch_banknifty, 'BANKNIFTY')

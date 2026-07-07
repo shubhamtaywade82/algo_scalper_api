@@ -76,8 +76,6 @@ module Strategies
   end
 
   class << self
-    private
-
     def redis
       @redis ||= ConnectionPool.new(size: 2, timeout: 3) do
         Redis.new(url: ENV.fetch("REDIS_URL", "redis://127.0.0.1:6379/0"))

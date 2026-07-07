@@ -94,6 +94,14 @@ module Live
       end
     end
 
+    def start
+      start!
+    end
+
+    def stop
+      stop!
+    end
+
     def running?
       @running
     end
@@ -460,6 +468,7 @@ module Live
       return if @last_heartbeat_at && (Time.current.to_f - @last_heartbeat_at) < 1.0
 
       @last_heartbeat_at = Time.current.to_f
+      Live::SystemStatusCache.instance.report_heartbeat(:pnl_updater)
       ActionCable.server.broadcast("dashboard", build_dashboard_stats)
     rescue StandardError => e
       @logger.debug("[PnlUpdater] heartbeat broadcast failed: #{e.message}")

@@ -20,10 +20,7 @@ module Api
         options_buying: build_options_buying_payload,
         recent_signals: recent_signals_payload,
         circuit_breaker: Risk::CircuitBreaker.instance.status,
-        system: Live::SystemStatusCache.instance.all_statuses.merge(
-          ws_order_update: Live::OrderUpdateHub.instance.running?,
-          pnl_updater_running: Live::PnlUpdaterService.instance.running?
-        ),
+        system: Live::SystemStatusCache.instance.all_statuses,
         config: {
           risk: AlgoConfig.fetch[:risk].slice(:sl_pct, :tp_pct, :hard_rupee_sl, :profit_floor, :trailing),
           signals: (AlgoConfig.fetch[:signals] || {}).slice(
