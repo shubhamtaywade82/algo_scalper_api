@@ -1,7 +1,17 @@
 # SMC Structure Event Log — Design
 
 **Date:** 2026-07-07
-**Status:** Approved (sub-project 1 of 4 in the Analysis Layer initiative — see context below)
+**Status:** Implemented (sub-project 1 of 4 in the Analysis Layer initiative — see context below)
+
+**Correction (post-implementation):** The "Deletions" section below was wrong.
+`Smc::Analyzer` is called as bare `Analyzer.new(series)` from inside
+`Smc::Context#initialize` (implicit namespace resolution inside `module Smc`) — a call
+form the original `grep -rn "Smc::Analyzer\.new"` audit missed. `Smc::Context` is itself
+heavily live (`Smc::BiasEngine`, `Trading::PermissionResolver`, `Smc::Navigator`, AI
+trading bot/agent, backtest replay all call it), making `Smc::Analyzer` and
+`Smc::StructureStore` live production code, not dead. Caught during implementation via a
+full-suite run before the deletion was committed; the deletion was reverted and skipped.
+Neither file was touched.
 
 ## Context
 
