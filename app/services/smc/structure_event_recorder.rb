@@ -25,7 +25,7 @@ module Smc
       return [] if series.nil? || series.candles.size < MIN_CANDLES
 
       record_swings(series) + record_bos(series) + record_choch(series) +
-        record_fvgs(series) + record_order_blocks(series)
+        record_fvgs(series) + record_order_blocks(series) + record_liquidity_sweep(series)
     end
 
     private
@@ -117,6 +117,35 @@ module Smc
           payload: { 'bias' => block[:bias].to_s, 'high' => block[:high].to_f, 'low' => block[:low].to_f, 'index' => block[:index] }
         )
       end
+    end
+
+    def record_liquidity_sweep(series)
+      liquidity = Smc::Detectors::Liquidity.new(series)
+      direction = liquidity.sweep_direction
+      return [] unless direction
+
+      structure = Smc::Detectors::Structure.new(series)
+      level_event_type = direction == :buy_side ? 'swing_high' : 'swing_low'
+      level_price = (direction == :buy_side ? structure.last_swing_high : structure.last_swing_low)&.dig(:price)&.to_f
+      return [] unless level_price
+
+      last_timestamp = series.candles.last.timestamp.iso8601
+      known = SmcEvent.where(correlation_id: correlation_id, event_type: 'liquidity_sweep')
+                      .order(sequence: :desc).limit(50)
+                      .pluck(Arel.sql("payload->>'direction'"), Arel.sql("(payload->>'level_price')::float"), Arel.sql("payload->>'timestamp'"))
+      identity = [direction.to_s, level_price, last_timestamp]
+      return [] if known.include?(identity)
+
+      parent_id = SmcEvent.where(correlation_id: correlation_id, event_type: level_event_type)
+                          .order(sequence: :desc).limit(50)
+                          .find { |e| e.payload['price'].to_f == level_price } # rubocop:disable Lint/FloatComparison -- same jsonb round-trip value, exact match intended
+                          &.id
+
+      [publish_event!(
+        event_type: 'liquidity_sweep',
+        payload: { 'direction' => direction.to_s, 'level_price' => level_price, 'timestamp' => last_timestamp },
+        parent_event_id: parent_id
+      )]
     end
 
     def already_emitted_values(event_type:, field:)

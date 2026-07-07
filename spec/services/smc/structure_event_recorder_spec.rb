@@ -168,5 +168,60 @@ RSpec.describe Smc::StructureEventRecorder do
       expect(ob_events.first.payload['high']).to eq(106.0)
       expect(ob_events.first.payload['low']).to eq(100.0)
     end
+
+    it 'persists a liquidity_sweep event linked to the swept swing level' do
+      series = build(:candle_series, :five_minute)
+      candles = [
+        build(:candle, high: 100, low: 90, close: 95),
+        build(:candle, high: 101, low: 89, close: 96),
+        build(:candle, high: 110, low: 95, close: 97), # swing high @ 110
+        build(:candle, high: 108, low: 96, close: 98),
+        build(:candle, high: 109, low: 97, close: 99),
+        build(:candle, high: 115, low: 98, close: 100) # wicks above 110, closes back below -> sweep
+      ]
+      candles.each { |c| series.add_candle(c) }
+      allow(instrument).to receive(:candles).with(interval: '5').and_return(series)
+      allow(series).to receive(:swing_high?) { |i| i == 2 }
+      allow(series).to receive(:swing_low?).and_return(false)
+
+      events = described_class.record!(instrument: instrument, interval: '5')
+      swing_high_event = events.find { |e| e.event_type == 'swing_high' && e.payload['price'] == 110.0 } # rubocop:disable Lint/FloatComparison
+      sweep_event = events.find { |e| e.event_type == 'liquidity_sweep' }
+
+      expect(swing_high_event).not_to be_nil
+      expect(sweep_event).not_to be_nil
+      expect(sweep_event.payload['direction']).to eq('buy_side')
+      expect(sweep_event.payload['parent_event_id']).to eq(swing_high_event.id)
+    end
+  end
+
+  describe 'replay determinism' do
+    it 'produces a stable, sequence-ordered event history replayable via EventStore::ReplayEngine' do
+      replay_instrument = create(:instrument, symbol_name: 'BANKNIFTY')
+      series = build(:candle_series, :five_minute)
+      candles = [
+        build(:candle, high: 100, low: 90, close: 95),
+        build(:candle, high: 98, low: 85, close: 88),
+        build(:candle, high: 97, low: 86, close: 90),
+        build(:candle, high: 99, low: 87, close: 91),
+        build(:candle, high: 110, low: 88, close: 105)
+      ]
+      candles.each { |c| series.add_candle(c) }
+      allow(replay_instrument).to receive(:candles).with(interval: '5').and_return(series)
+      allow(series).to receive(:swing_high?) { |i| i == 0 }
+      allow(series).to receive(:swing_low?) { |i| i == 1 }
+
+      described_class.record!(instrument: replay_instrument, interval: '5')
+
+      replay = EventStore::ReplayEngine.new(
+        stream: Smc::StructureEventRecorder::STREAM,
+        from: 1.minute.ago,
+        to: 1.minute.from_now
+      )
+      sequences = replay.to_a.select { |e| e.correlation_id == 'SMC-STRUCT-BANKNIFTY-5' }.map(&:sequence)
+
+      expect(sequences).to eq(sequences.sort)
+      expect(sequences.uniq).to eq(sequences)
+    end
   end
 end
