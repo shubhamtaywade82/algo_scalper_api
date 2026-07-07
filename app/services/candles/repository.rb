@@ -35,15 +35,37 @@ module Candles
       private
 
       def base_series(instrument_key:, from:, to:)
-        Record
-          .for_instrument(instrument_key)
-          .for_timeframe(BASE_TIMEFRAME)
-          .between(from, to)
-          .order(:ts)
-          .pluck(:ts, :open, :high, :low, :close, :volume, :oi)
-          .map do |ts, o, h, l, c, v, oi|
-            { ts: ts, open: o.to_f, high: h.to_f, low: l.to_f, close: c.to_f, volume: v.to_i, oi: oi.to_i }
+        rows = Record
+               .for_instrument(instrument_key)
+               .for_timeframe(BASE_TIMEFRAME)
+               .between(from, to)
+               .order(:ts)
+               .pluck(:ts, :open, :high, :low, :close, :volume, :oi)
+               .map do |ts, o, h, l, c, v, oi|
+          { ts: ts, open: o.to_f, high: h.to_f, low: l.to_f, close: c.to_f, volume: v.to_i, oi: oi.to_i }
+        end
+
+        # Fall back to Redis candle cache when Solid Queue worker hasn't
+        # persisted today's candles yet (the WS-tick → Redis → DB pipeline
+        # requires a separate jobs process).
+        if rows.empty? && (instrument = find_instrument(instrument_key))
+          cached = Live::CandleSeriesCache.fetch(instrument: instrument, interval: 1, backfill: false)
+          if cached&.candles
+            rows = cached.candles.reject { |c| c.timestamp.nil? || c.timestamp < from || c.timestamp > to }
+                                 .map do |c|
+              { ts: c.timestamp, open: c.open.to_f, high: c.high.to_f,
+                low: c.low.to_f, close: c.close.to_f, volume: c.volume.to_i, oi: c.oi.to_i }
+            end
           end
+        end
+
+        rows
+      end
+
+      def find_instrument(instrument_key)
+        Instrument.find_by(symbol_name: instrument_key)
+      rescue StandardError
+        nil
       end
 
       # NOTE: `from` should be bucket-aligned for the requested timeframe.
