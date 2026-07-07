@@ -1,4 +1,4 @@
-import { createSignal, onMount, createMemo, Show, createEffect } from 'solid-js'
+import { createSignal, onMount, createMemo, Show, createEffect, For } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
 import { useStrategies } from '../stores/useStrategies'
 import CodeEditor from '../components/strategies/CodeEditor'
@@ -6,6 +6,11 @@ import ParametersTable from '../components/strategies/ParametersTable'
 import StrategyFlowChart from '../components/strategies/StrategyFlowChart'
 import BacktestPreview from '../components/strategies/BacktestPreview'
 import RecentLogs from '../components/strategies/RecentLogs'
+import EntryRulesPanel from '../components/strategies/EntryRulesPanel'
+import ExitRulesPanel from '../components/strategies/ExitRulesPanel'
+import RiskManagementPanel from '../components/strategies/RiskManagementPanel'
+import FiltersPanel from '../components/strategies/FiltersPanel'
+import SchedulePanel from '../components/strategies/SchedulePanel'
 
 const sampleLogs = [
   { time: '09:24:12', message: '[ORB Breakout] Candle closed 09:23, O:24180.5 H:24195.2 L:24170.8 C:24190.3', level: 'info' },
@@ -43,6 +48,12 @@ export default function StrategyCreator() {
   const [parameters, setParameters] = createSignal([])
   const [instruments, setInstruments] = createSignal(['NIFTY'])
   const [tags, setTags] = createSignal(['Intraday'])
+  const [entryRules, setEntryRules] = createSignal({})
+  const [exitRules, setExitRules] = createSignal({})
+  const [riskManagement, setRiskManagement] = createSignal({})
+  const [filters, setFilters] = createSignal({})
+  const [schedule, setSchedule] = createSignal({})
+  const [activeSection, setActiveSection] = createSignal('Strategy Builder')
   const [checks, setChecks] = createSignal({ syntax: 'not_run', logic: 'not_run', risk: 'not_run', backtest: 'not_run' })
   const [backtestResults, setBacktestResults] = createSignal({})
   const [codeErrors, setCodeErrors] = createSignal(null)
@@ -71,6 +82,11 @@ export default function StrategyCreator() {
         setParameters(data.parameters || [])
         setInstruments(data.instruments || [])
         setTags(data.tags || [])
+        setEntryRules(data.entry_rules || {})
+        setExitRules(data.exit_rules || {})
+        setRiskManagement(data.risk_management || {})
+        setFilters(data.filters || {})
+        setSchedule(data.schedule || {})
         setChecks(data.checks || { syntax: 'not_run', logic: 'not_run', risk: 'not_run', backtest: 'not_run' })
         setBacktestResults(data.backtest_results || {})
         setIsSaved(true)
@@ -107,6 +123,11 @@ export default function StrategyCreator() {
       parameters: parameters(),
       instruments: instruments(),
       tags: tags(),
+      entry_rules: entryRules(),
+      exit_rules: exitRules(),
+      risk_management: riskManagement(),
+      filters: filters(),
+      schedule: schedule(),
       checks: checks(),
       backtest_results: backtestResults()
     }
@@ -261,13 +282,18 @@ export default function StrategyCreator() {
             />
 
             <div class="space-y-1 text-[10px] font-black uppercase tracking-wider text-gray-500">
-              <button class="w-full text-left px-2 py-1.5 rounded-lg text-primary-400 bg-primary-500/5 font-bold">Strategy Builder</button>
-              <button class="w-full text-left px-2 py-1.5 rounded-lg hover:text-white hover:bg-white/5">Entry Rules</button>
-              <button class="w-full text-left px-2 py-1.5 rounded-lg hover:text-white hover:bg-white/5">Exit Rules</button>
-              <button class="w-full text-left px-2 py-1.5 rounded-lg hover:text-white hover:bg-white/5">Risk Management</button>
-              <button class="w-full text-left px-2 py-1.5 rounded-lg hover:text-white hover:bg-white/5">Filters</button>
-              <button class="w-full text-left px-2 py-1.5 rounded-lg hover:text-white hover:bg-white/5">Parameters</button>
-              <button class="w-full text-left px-2 py-1.5 rounded-lg hover:text-white hover:bg-white/5">Schedule</button>
+              <For each={['Strategy Builder', 'Entry Rules', 'Exit Rules', 'Risk Management', 'Filters', 'Parameters', 'Schedule']}>
+                {(section) => (
+                  <button
+                    onClick={() => setActiveSection(section)}
+                    class={`w-full text-left px-2 py-1.5 rounded-lg ${
+                      activeSection() === section ? 'text-primary-400 bg-primary-500/5 font-bold' : 'hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {section}
+                  </button>
+                )}
+              </For>
             </div>
           </div>
 
@@ -344,20 +370,41 @@ export default function StrategyCreator() {
 
             {/* Tab content view */}
             <div class="flex-1 mt-4 flex flex-col min-h-0">
-              <Show when={activeTab() === 'Builder'}>
-                <StrategyFlowChart strategyName={name()} />
+              <Show when={activeSection() === 'Entry Rules'}>
+                <EntryRulesPanel value={entryRules} onChange={setEntryRules} />
+              </Show>
+              <Show when={activeSection() === 'Exit Rules'}>
+                <ExitRulesPanel value={exitRules} onChange={setExitRules} />
+              </Show>
+              <Show when={activeSection() === 'Risk Management'}>
+                <RiskManagementPanel value={riskManagement} onChange={setRiskManagement} />
+              </Show>
+              <Show when={activeSection() === 'Filters'}>
+                <FiltersPanel value={filters} onChange={setFilters} />
+              </Show>
+              <Show when={activeSection() === 'Schedule'}>
+                <SchedulePanel value={schedule} onChange={setSchedule} />
+              </Show>
+              <Show when={activeSection() === 'Parameters'}>
+                <ParametersTable parameters={parameters} onChange={setParameters} />
               </Show>
 
-              <Show when={activeTab() === 'Code'}>
-                <CodeEditor code={code} onChange={setCode} language="ruby" errors={codeErrors} />
-              </Show>
+              <Show when={activeSection() === 'Strategy Builder'}>
+                <Show when={activeTab() === 'Builder'}>
+                  <StrategyFlowChart strategyName={name()} />
+                </Show>
 
-              <Show when={activeTab() === 'Backtest'}>
-                <BacktestPreview results={backtestResults} />
-              </Show>
+                <Show when={activeTab() === 'Code'}>
+                  <CodeEditor code={code} onChange={setCode} language="ruby" errors={codeErrors} />
+                </Show>
 
-              <Show when={activeTab() === 'Logs'}>
-                <RecentLogs logs={sampleLogs} strategyName={name()} />
+                <Show when={activeTab() === 'Backtest'}>
+                  <BacktestPreview results={backtestResults} />
+                </Show>
+
+                <Show when={activeTab() === 'Logs'}>
+                  <RecentLogs logs={sampleLogs} strategyName={name()} />
+                </Show>
               </Show>
             </div>
           </div>
