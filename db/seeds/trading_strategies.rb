@@ -24,36 +24,29 @@ TradingStrategy.find_or_create_by!(name: "ORB Breakout", version: "1.0.0") do |s
   s.checks = { syntax: "passed", logic: "passed", risk: "passed", backtest: "not_run" }
   s.code = <<~RUBY
     class OrbBreakoutStrategy < BaseStrategy
-      def initialize(config = {})
-        super
-        @opening_range = (config[:opening_range_minutes] || 15).to_i
-        @risk_per_trade = (config[:risk_per_trade_pct] || 1.0).to_f
-      end
+      def call(context)
+        series = context.candles.call("1m")
+        return Signals::Hold.new(reason: "no_candle_data") unless series&.candles&.any?
 
-      def on_market_open(context)
-        @range_high = nil
-        @range_low = nil
-        @range_start_time = context.market_open_time
-      end
+        opening_range_minutes = (params[:opening_range_minutes] || 15).to_i
+        candles = series.candles
+        session_start = candles.first.timestamp
+        range_end = session_start + opening_range_minutes.minutes
 
-      def on_candle_closed(context)
-        return if context.position.open?
-        return unless context.time > @range_start_time + @opening_range.minutes
+        range_candles = candles.select { |c| c.timestamp < range_end }
+        return Signals::Hold.new(reason: "opening_range_forming") if candles.last.timestamp < range_end
 
-        update_opening_range(context)
-        return if @range_high.nil? || @range_low.nil?
+        range_high = range_candles.map(&:high).max
+        range_low = range_candles.map(&:low).min
+        latest = candles.last
 
-        breakout = check_breakout(context)
-        return unless breakout
-
-        signal = breakout[:direction] == :up ? BuyCallSignal.new : BuyPutSignal.new
-        signal.reason = "ORB Breakout \#{breakout[:direction].upcase}"
-        signal.metadata = {
-          range_high: @range_high,
-          range_low: @range_low,
-          breakout_price: breakout[:price]
-        }
-        signal
+        if latest.close > range_high
+          Signals::BuyCall.new(confidence: 0.7, reason: "orb_breakout_up")
+        elsif latest.close < range_low
+          Signals::BuyPut.new(confidence: 0.7, reason: "orb_breakout_down")
+        else
+          Signals::Hold.new(reason: "inside_opening_range")
+        end
       end
     end
   RUBY
@@ -79,25 +72,32 @@ TradingStrategy.find_or_create_by!(name: "Supertrend ADX", version: "1.0.0") do 
   s.checks = { syntax: "passed", logic: "passed", risk: "passed", backtest: "passed" }
   s.code = <<~RUBY
     class SupertrendAdxStrategy < BaseStrategy
-      def initialize(config = {})
-        super
-        @st_period = (config[:supertrend_period] || 10).to_i
-        @st_multiplier = (config[:supertrend_multiplier] || 3.0).to_f
-        @adx_threshold = (config[:adx_threshold] || 25).to_i
-      end
+      def call(context)
+        series = context.candles.call("5m")
+        return Signals::Hold.new(reason: "no_candle_data") unless series&.candles&.any?
 
-      def on_candle_closed(context)
-        return if context.position.open?
+        st_period = (params[:supertrend_period] || 10).to_i
+        st_multiplier = (params[:supertrend_multiplier] || 3.0).to_f
+        adx_threshold = (params[:adx_threshold] || 25).to_i
+        adx_period = (params[:adx_period] || 14).to_i
 
-        st = context.indicator(:supertrend, period: @st_period, multiplier: @st_multiplier)
-        adx = context.indicator(:adx, period: @adx_period)
+        result = Indicators::Supertrend.new(series: series, period: st_period, base_multiplier: st_multiplier).call
+        last_idx = result[:line]&.rindex { |v| !v.nil? }
+        return Signals::Hold.new(reason: "supertrend_unavailable") unless last_idx
 
-        return unless adx.value >= @adx_threshold
+        adx = series.adx(adx_period)
+        return Signals::Hold.new(reason: "adx_unavailable") if adx.nil?
+        return Signals::Hold.new(reason: "adx_below_threshold(\#{adx.round(1)})") if adx < adx_threshold
 
-        if st.direction == :bullish && context.close > st.value
-          BuyCallSignal.new(reason: 'Supertrend bullish + ADX confirmed')
-        elsif st.direction == :bearish && context.close < st.value
-          BuyPutSignal.new(reason: 'Supertrend bearish + ADX confirmed')
+        close = series.candles[last_idx].close
+        line_value = result[:line][last_idx]
+
+        if result[:trend] == :bullish && close > line_value
+          Signals::BuyCall.new(confidence: 0.7, reason: "supertrend_bullish_adx_confirmed")
+        elsif result[:trend] == :bearish && close < line_value
+          Signals::BuyPut.new(confidence: 0.7, reason: "supertrend_bearish_adx_confirmed")
+        else
+          Signals::Hold.new(reason: "trend_not_confirmed")
         end
       end
     end
@@ -124,25 +124,30 @@ TradingStrategy.find_or_create_by!(name: "VWAP Reversal", version: "1.0.0") do |
   s.checks = { syntax: "passed", logic: "not_run", risk: "not_run", backtest: "not_run" }
   s.code = <<~RUBY
     class VwapReversalStrategy < BaseStrategy
-      def initialize(config = {})
-        super
-        @rsi_period = (config[:rsi_period] || 14).to_i
-        @oversold = (config[:rsi_oversold] || 30).to_i
-        @overbought = (config[:rsi_overbought] || 70).to_i
-      end
+      def call(context)
+        series = context.candles.call("3m")
+        return Signals::Hold.new(reason: "no_candle_data") unless series&.candles&.any?
 
-      def on_candle_closed(context)
-        return if context.position.open?
+        rsi_period = (params[:rsi_period] || 14).to_i
+        oversold = (params[:rsi_oversold] || 30).to_i
+        overbought = (params[:rsi_overbought] || 70).to_i
+        band_pct = (params[:vwap_band_pct] || 0.5).to_f
 
-        vwap = context.indicator(:vwap)
-        rsi = context.indicator(:rsi, period: @rsi_period)
+        vwap = series.current_vwap
+        return Signals::Hold.new(reason: "vwap_unavailable") if vwap.nil? || vwap.zero?
 
-        distance_pct = ((context.close - vwap.value) / vwap.value) * 100
+        rsi = series.rsi(rsi_period)
+        return Signals::Hold.new(reason: "rsi_unavailable") if rsi.nil?
 
-        if distance_pct < -@vwap_band_pct && rsi.value < @oversold
-          BuyCallSignal.new(reason: 'VWAP pullback + RSI oversold')
-        elsif distance_pct > @vwap_band_pct && rsi.value > @overbought
-          BuyPutSignal.new(reason: 'VWAP rejection + RSI overbought')
+        close = series.candles.last.close
+        distance_pct = ((close - vwap) / vwap) * 100
+
+        if distance_pct < -band_pct && rsi < oversold
+          Signals::BuyCall.new(confidence: 0.6, reason: "vwap_pullback_rsi_oversold")
+        elsif distance_pct > band_pct && rsi > overbought
+          Signals::BuyPut.new(confidence: 0.6, reason: "vwap_rejection_rsi_overbought")
+        else
+          Signals::Hold.new(reason: "no_reversal_setup")
         end
       end
     end

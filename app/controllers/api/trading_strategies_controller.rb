@@ -46,8 +46,8 @@ module Api
 
     # POST /api/trading_strategies/:id/validate
     def validate
-      @trading_strategy.run_checks!
-      render json: { checks: @trading_strategy.checks }
+      result = @trading_strategy.run_checks!
+      render json: { checks: result[:checks], backtest_results: result[:backtest_results] }
     end
 
     private
