@@ -107,6 +107,7 @@ Rails.application.routes.draw do
     resources :trading_strategies, only: %i[index show create update destroy] do
       member do
         post :validate
+        post :deploy
       end
     end
 

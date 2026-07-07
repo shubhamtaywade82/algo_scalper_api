@@ -5,7 +5,7 @@ module Api
     include Api::TokenAuthenticatable
 
     before_action :authenticate_dashboard_token!
-    before_action :set_trading_strategy, only: %i[show update destroy validate]
+    before_action :set_trading_strategy, only: %i[show update destroy validate deploy]
 
     # GET /api/trading_strategies
     def index
@@ -47,7 +47,25 @@ module Api
     # POST /api/trading_strategies/:id/validate
     def validate
       result = @trading_strategy.run_checks!
-      render json: { checks: result[:checks], backtest_results: result[:backtest_results] }
+      render json: { checks: result[:checks], backtest_results: result[:backtest_results], strategy: @trading_strategy }
+    end
+
+    # POST /api/trading_strategies/:id/deploy
+    def deploy
+      result = ::Strategies::AdHocDeployer.call(@trading_strategy)
+
+      if result[:ok]
+        render json: {
+          success: true,
+          slug: @trading_strategy.slug,
+          strategy_record_id: @trading_strategy.strategy_record_id,
+          scan_report: result[:scan_report],
+          strategy: @trading_strategy
+        }
+      else
+        render json: { success: false, errors: result[:errors], scan_report: result[:scan_report] },
+               status: :unprocessable_content
+      end
     end
 
     private
@@ -57,10 +75,13 @@ module Api
     end
 
     def trading_strategy_params
-      params.expect(trading_strategy: %i[
+      params.expect(trading_strategy: [%i[
                       name version status code description author
-                      runtime timeframe trade_direction parameters instruments tags
-                    ])
+                      runtime timeframe trade_direction
+                    ], {
+                      instruments: [], tags: [], parameters: [],
+                      entry_rules: {}, exit_rules: {}, risk_management: {}, filters: {}, schedule: {}
+                    }])
     end
   end
 end
