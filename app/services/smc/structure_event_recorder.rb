@@ -24,7 +24,7 @@ module Smc
       series = @instrument.candles(interval: @interval)
       return [] if series.nil? || series.candles.size < MIN_CANDLES
 
-      record_swings(series) + record_bos(series)
+      record_swings(series) + record_bos(series) + record_choch(series)
     end
 
     private
@@ -64,6 +64,24 @@ module Smc
 
         publish_event!(event_type: 'bos', payload: { 'price' => price, 'type' => bos[:type].to_s, 'index' => bos[:index] })
       end
+    end
+
+    def record_choch(series)
+      choch = Smc::Detectors::Structure.new(series).choch?
+      return [] unless choch
+
+      price = choch[:price].to_f
+      known = already_emitted_values(event_type: 'choch', field: 'price')
+      return [] if known.include?(price)
+
+      parent_id = SmcEvent.where(correlation_id: correlation_id, event_type: 'bos')
+                          .order(sequence: :desc).limit(1).pick(:id)
+
+      [publish_event!(
+        event_type: 'choch',
+        payload: { 'price' => price, 'type' => choch[:type].to_s, 'index' => choch[:index] },
+        parent_event_id: parent_id
+      )]
     end
 
     def already_emitted_values(event_type:, field:)

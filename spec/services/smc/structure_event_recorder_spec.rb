@@ -99,5 +99,36 @@ RSpec.describe Smc::StructureEventRecorder do
       expect(bos_events).not_to be_empty
       expect(bos_events.first.payload['type']).to eq('bullish')
     end
+
+    it 'links a choch event to the most recent bos event as its parent' do
+      # Smc::Detectors::Structure#choch? is structurally unreachable via real candle
+      # data (its bullish->bearish branch requires close < last_swing_low, but #trend
+      # calls #bos? first, which already intercepts that exact condition and returns
+      # :bearish directly -- current_trend can never be :bullish when that check holds).
+      # Pre-existing bug in the detector, out of scope here. Stub it at the boundary to
+      # test StructureEventRecorder's own choch-wiring/parent-linking logic instead.
+      series = build(:candle_series, :five_minute)
+      candles = [
+        build(:candle, high: 100, low: 90, close: 95),
+        build(:candle, high: 98, low: 85, close: 88),
+        build(:candle, high: 97, low: 86, close: 90),
+        build(:candle, high: 99, low: 87, close: 91),
+        build(:candle, high: 110, low: 88, close: 105) # closes above swing high -> BOS
+      ]
+      candles.each { |c| series.add_candle(c) }
+      allow(instrument).to receive(:candles).with(interval: '5').and_return(series)
+      allow(series).to receive(:swing_high?) { |i| i == 0 }
+      allow(series).to receive(:swing_low?) { |i| i == 1 }
+      allow_any_instance_of(Smc::Detectors::Structure).to receive(:choch?) # rubocop:disable RSpec/AnyInstance
+        .and_return({ type: :bearish, price: 82.0, index: 4, semantic: :choch })
+
+      events = described_class.record!(instrument: instrument, interval: '5')
+      bos_event = events.find { |e| e.event_type == 'bos' }
+      choch_event = events.find { |e| e.event_type == 'choch' }
+
+      expect(bos_event).not_to be_nil
+      expect(choch_event).not_to be_nil
+      expect(choch_event.payload['parent_event_id']).to eq(bos_event.id)
+    end
   end
 end
