@@ -8,6 +8,8 @@ class TradingStrategy < ApplicationRecord
 
   STATUSES = [STATUS_DRAFT, STATUS_ACTIVE, STATUS_ARCHIVED].freeze
 
+  belongs_to :strategy_record, class_name: "Strategies::Record", optional: true
+
   # --- Validations ---
   validates :name, presence: true, uniqueness: { scope: :version }
   validates :status, inclusion: { in: STATUSES }
@@ -17,15 +19,20 @@ class TradingStrategy < ApplicationRecord
   scope :draft,    -> { where(status: STATUS_DRAFT) }
   scope :archived, -> { where(status: STATUS_ARCHIVED) }
 
-  # Stub: mark all checks as passed.
-  # Future versions will perform actual syntax, logic, risk, and backtest validation.
+  def slugify
+    name.to_s.parameterize.presence || "strategy-#{id || 'new'}"
+  end
+
+  def deployed?
+    strategy_record_id.present?
+  end
+
+  # Runs real syntax/security/backtest checks and persists results.
   def run_checks!
-    self.checks = {
-      syntax: "passed",
-      logic: "passed",
-      risk: "passed",
-      backtest: "passed"
-    }
+    result = Strategies::AdHocBacktester.new(self).run
+    self.checks = result[:checks]
+    self.backtest_results = result[:backtest_results]
     save!
+    result
   end
 end
