@@ -74,5 +74,30 @@ RSpec.describe Smc::StructureEventRecorder do
       expect(first_swing_highs).not_to be_empty
       expect(second_swing_highs).to be_empty
     end
+
+    it 'persists a bos event when a break of structure occurs' do
+      series = build(:candle_series, :five_minute)
+      # lookback=3 default: detect_bos_history only considers indices >= lookback,
+      # and only counts a swing toward a given index i if swing[:index]+lookback<=i.
+      # With swings pinned at index 0 (high) and index 1 (low), both become eligible
+      # by index 4 (5 candles total, satisfying MIN_CANDLES).
+      candles = [
+        build(:candle, high: 100, low: 90, close: 95),  # swing high (mocked)
+        build(:candle, high: 98, low: 85, close: 88),   # swing low (mocked)
+        build(:candle, high: 97, low: 86, close: 90),
+        build(:candle, high: 99, low: 87, close: 91),
+        build(:candle, high: 110, low: 88, close: 105)  # closes above swing high -> BOS
+      ]
+      candles.each { |c| series.add_candle(c) }
+      allow(instrument).to receive(:candles).with(interval: '5').and_return(series)
+      allow(series).to receive(:swing_high?) { |i| i == 0 }
+      allow(series).to receive(:swing_low?) { |i| i == 1 }
+
+      events = described_class.record!(instrument: instrument, interval: '5')
+      bos_events = events.select { |e| e.event_type == 'bos' }
+
+      expect(bos_events).not_to be_empty
+      expect(bos_events.first.payload['type']).to eq('bullish')
+    end
   end
 end

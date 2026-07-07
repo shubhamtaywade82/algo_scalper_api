@@ -24,7 +24,7 @@ module Smc
       series = @instrument.candles(interval: @interval)
       return [] if series.nil? || series.candles.size < MIN_CANDLES
 
-      record_swings(series)
+      record_swings(series) + record_bos(series)
     end
 
     private
@@ -52,6 +52,18 @@ module Smc
         end
       end
       events
+    end
+
+    def record_bos(series)
+      history = Smc::Detectors::Structure.new(series).bos_history
+      known = already_emitted_values(event_type: 'bos', field: 'price')
+
+      history.filter_map do |bos|
+        price = bos[:price].to_f
+        next if known.include?(price)
+
+        publish_event!(event_type: 'bos', payload: { 'price' => price, 'type' => bos[:type].to_s, 'index' => bos[:index] })
+      end
     end
 
     def already_emitted_values(event_type:, field:)
