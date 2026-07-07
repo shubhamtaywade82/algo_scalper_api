@@ -15,11 +15,12 @@ RSpec.describe Smc::Scanner do
       allow(scanner).to receive(:publish_scan_event)
       allow(AlgoConfig).to receive(:fetch).and_return({ signals: { smc_event_store_publish: true } })
 
-      expect(Smc::StructureEventRecorder).to receive(:record!)
-        .with(instrument: instrument, interval: Smc::Scanner::STRUCTURE_EVENT_INTERVAL)
-        .and_return([])
+      allow(Smc::StructureEventRecorder).to receive(:record!).and_return([])
 
       scanner.send(:process_index, index_cfg)
+
+      expect(Smc::StructureEventRecorder).to have_received(:record!)
+        .with(instrument: instrument, interval: Smc::Scanner::STRUCTURE_EVENT_INTERVAL)
     end
   end
 end
