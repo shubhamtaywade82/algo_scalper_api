@@ -1,4 +1,4 @@
-import { createSignal, onMount, createMemo, Show, createEffect, For } from 'solid-js'
+import { createSignal, onMount, createMemo, Show, createEffect, For, onCleanup } from 'solid-js'
 import { useParams, useNavigate } from '@solidjs/router'
 import { useStrategies } from '../stores/useStrategies'
 import CodeEditor from '../components/strategies/CodeEditor'
@@ -11,7 +11,8 @@ import ExitRulesPanel from '../components/strategies/ExitRulesPanel'
 import RiskManagementPanel from '../components/strategies/RiskManagementPanel'
 import FiltersPanel from '../components/strategies/FiltersPanel'
 import SchedulePanel from '../components/strategies/SchedulePanel'
-import { useLogs } from '../stores/useLogs'
+import cable from '../cable'
+import { apiClient } from '../lib/api'
 
 function scanReportToErrors(scanReport) {
   if (!scanReport) return []
@@ -55,15 +56,50 @@ export default function StrategyCreator() {
   const [newTag, setNewTag] = createSignal('')
   const [isSaved, setIsSaved] = createSignal(true)
 
-  const { logs: liveLogs } = useLogs()
-  const strategyLogs = createMemo(() => {
-    return liveLogs()
-      .filter(log => !name() || (log.source && log.source.toUpperCase() === name().toUpperCase()) || log.message.toUpperCase().includes(name().toUpperCase()))
-      .map(log => ({
-        time: log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '',
-        message: log.message,
-        level: log.level
-      }))
+  const [slug, setSlug] = createSignal('')
+  const [strategyLogs, setStrategyLogs] = createSignal([])
+
+  createEffect(() => {
+    const currentSlug = slug()
+    if (!currentSlug) {
+      setStrategyLogs([])
+      return
+    }
+
+    apiClient.get(`/strategies/${currentSlug}/logs`)
+      .then(res => {
+        const mapped = (res.data || []).map(([ts, level, line]) => ({
+          time: ts ? new Date(ts).toLocaleTimeString() : '',
+          message: line,
+          level: (level || 'info').toLowerCase()
+        }))
+        setStrategyLogs(mapped.reverse())
+      })
+      .catch(err => console.error('Failed to fetch strategy logs:', err))
+
+    const subscription = cable.subscriptions.create(
+      { channel: 'StrategyLogsChannel', slug: currentSlug },
+      {
+        connected() {
+          console.log(`🔌 [WS:StrategyLogs] Connected to ${currentSlug}`)
+        },
+        received(data) {
+          const newLog = {
+            time: data.ts ? new Date(data.ts).toLocaleTimeString() : '',
+            message: data.line,
+            level: (data.level || 'info').toLowerCase()
+          }
+          setStrategyLogs(prev => [...prev, newLog])
+        },
+        disconnected() {
+          console.log(`🔌 [WS:StrategyLogs] Disconnected from ${currentSlug}`)
+        }
+      }
+    )
+
+    onCleanup(() => {
+      subscription.unsubscribe()
+    })
   })
 
   // Load strategy if ID is present
@@ -72,6 +108,7 @@ export default function StrategyCreator() {
       const data = await fetchOne(params.id)
       if (data) {
         setName(data.name || '')
+        setSlug(data.slug || '')
         setVersion(data.version || '1.0.0')
         setStatus(data.status || 'draft')
         setCode(data.code || '')
@@ -134,10 +171,12 @@ export default function StrategyCreator() {
     }
 
     if (params.id) {
-      await update(params.id, payload)
+      const res = await update(params.id, payload)
+      if (res?.slug) setSlug(res.slug)
     } else {
       const res = await create(payload)
       if (res && res.id) {
+        if (res.slug) setSlug(res.slug)
         navigate(`/strategies/${res.id}`, { replace: true })
       }
     }
@@ -181,6 +220,7 @@ export default function StrategyCreator() {
     setDeploying(false)
     if (res?.success) {
       setStatus('active')
+      if (res.slug) setSlug(res.slug)
     } else {
       setDeployError((res?.errors || ['Deploy failed']).join(', '))
     }

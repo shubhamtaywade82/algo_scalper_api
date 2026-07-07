@@ -70,18 +70,23 @@ export default function BacktestPreview(props) {
     return '—'
   }
 
-  const equityCurvePaths = createMemo(() => {
+  const sanitizeCurve = createMemo(() => {
     const curve = results().equity_curve || []
+    return curve.filter(d => d && d.equity != null && !isNaN(Number(d.equity)))
+  })
+
+  const equityCurvePaths = createMemo(() => {
+    const curve = sanitizeCurve()
     if (curve.length < 2) return { line: '', fill: '' }
 
-    const equities = curve.map(d => d.equity)
+    const equities = curve.map(d => Number(d.equity))
     const maxEq = Math.max(...equities)
     const minEq = Math.min(...equities)
     const range = maxEq - minEq || 1
 
     const points = curve.map((d, i) => {
       const x = (i / (curve.length - 1)) * 300
-      const y = 80 - ((d.equity - minEq) / range) * 60
+      const y = 80 - ((Number(d.equity) - minEq) / range) * 60
       return { x, y }
     })
 
@@ -92,9 +97,9 @@ export default function BacktestPreview(props) {
   })
 
   const baselineY = createMemo(() => {
-    const curve = results().equity_curve || []
+    const curve = sanitizeCurve()
     if (curve.length === 0) return 80
-    const equities = curve.map(d => d.equity)
+    const equities = curve.map(d => Number(d.equity))
     const maxEq = Math.max(...equities)
     const minEq = Math.min(...equities)
     const range = maxEq - minEq || 1
@@ -103,10 +108,12 @@ export default function BacktestPreview(props) {
   })
 
   const xAxisLabels = createMemo(() => {
-    const curve = results().equity_curve || []
+    const curve = sanitizeCurve()
     if (curve.length < 2) return ['Start', 'Mid', 'End']
     const formatTime = (t) => {
-      const d = new Date(t * 1000)
+      if (t == null) return '—'
+      const d = new Date(Number(t) * 1000)
+      if (isNaN(d.getTime())) return '—'
       return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     }
     const start = formatTime(curve[0].time)
