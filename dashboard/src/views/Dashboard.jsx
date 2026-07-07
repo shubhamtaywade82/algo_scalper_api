@@ -127,7 +127,16 @@ export default function Dashboard() {
     <div class="space-y-6">
 
       {/* 2. Top StatsBar KPI Cards Row */}
-      <StatsBar balance={balance()} stats={liveStats()} marketStatus={marketStatus()} mode={mode()} />
+      <StatsBar
+        balance={balance()}
+        stats={liveStats()}
+        marketStatus={marketStatus()}
+        mode={mode()}
+        strategies={{
+          running: activeStrategies().filter((s) => s.status === 'Running').length,
+          total: activeStrategies().length
+        }}
+      />
 
       {/* 3. Middle Charts & Market Overview Row */}
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

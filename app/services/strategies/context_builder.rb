@@ -41,7 +41,7 @@ module Strategies
 
       StrategyContext.new(
         instrument_key: instrument_key,
-        candles: CandleSeriesContext.new(@candle_repo, instrument, instrument_key),
+        candles: CandleSeriesContext.new(@candle_repo, instrument, instrument_key, @clock),
         indicators: calculator,
         session: SessionFacade.new(@session_service),
         position: build_position(instrument),
@@ -74,15 +74,16 @@ module Strategies
 
   # Wraps candles access so strategies can do context.candles("5m").
   class CandleSeriesContext
-    def initialize(repo, instrument, instrument_key)
+    def initialize(repo, instrument, instrument_key, clock = -> { Time.current })
       @repo = repo
       @instrument = instrument
       @instrument_key = instrument_key
+      @clock = clock
     end
 
     def call(timeframe = "1m")
-      from = Time.current - (60 * 60 * 6)
-      to = Time.current
+      from = @clock.call - (60 * 60 * 6)
+      to = @clock.call
 
       @repo.series(
         instrument_key: @instrument_key,

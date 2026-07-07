@@ -14,13 +14,22 @@ module Candles
       # @param timeframe [String] e.g. "1m", "3m", "5m", "15m"
       # @param from [Time]
       # @param to [Time]
-      # @return [Array<Hash>] ordered by ts ascending
-      def series(instrument_key:, timeframe: BASE_TIMEFRAME, from:, to:)
-        if timeframe.to_s == BASE_TIMEFRAME
-          base_series(instrument_key: instrument_key, from: from, to: to)
-        else
-          derive(instrument_key: instrument_key, timeframe: timeframe, from: from, to: to)
+      # @param include_forming [Boolean] merge the forming bar from Live::CandleSeriesCache
+      # @param instrument [Instrument, nil] required to resolve the forming bar
+      # @return [CandleSeries] ordered by ts ascending
+      def series(instrument_key:, from:, to:, timeframe: BASE_TIMEFRAME, include_forming: false, instrument: nil)
+        rows = base_series(instrument_key: instrument_key, from: from, to: to)
+
+        if include_forming && instrument
+          forming = forming_row(instrument)
+          if forming && forming[:ts] >= from && forming[:ts] <= to &&
+             (rows.empty? || forming[:ts] > rows.last[:ts])
+            rows << forming
+          end
         end
+
+        rows = rollup(rows, timeframe) unless timeframe.to_s == BASE_TIMEFRAME
+        to_candle_series(instrument_key, timeframe, rows)
       end
 
       private
@@ -41,9 +50,38 @@ module Candles
       # `.between(from, to)` is inclusive over raw 1m rows, so an unaligned
       # `from` (e.g. "3m" starting at :16 instead of :15) yields a leading
       # bucket built from a partial set of 1m bars.
-      def derive(instrument_key:, timeframe:, from:, to:)
+      # The most recent (still-forming) bar lives only in the Redis candle
+      # cache, never in the durable table.
+      def forming_row(instrument)
+        cached = Live::CandleSeriesCache.fetch(instrument: instrument, interval: 1, backfill: false)
+        last = cached&.candles&.last
+        return nil unless last
+
+        {
+          ts: last.timestamp,
+          open: last.open, high: last.high, low: last.low, close: last.close,
+          volume: last.volume, oi: 0
+        }
+      rescue StandardError => e
+        Rails.logger.warn("[Candles::Repository] forming_row failed for #{instrument.security_id}: #{e.message}")
+        nil
+      end
+
+      def to_candle_series(instrument_key, timeframe, rows)
+        series = CandleSeries.new(symbol: instrument_key, interval: minutes_for(timeframe).to_s)
+        rows.each do |r|
+          series.add_candle(
+            Candle.new(
+              timestamp: r[:ts], open: r[:open], high: r[:high],
+              low: r[:low], close: r[:close], volume: r[:volume]
+            )
+          )
+        end
+        series
+      end
+
+      def rollup(base, timeframe)
         minutes = minutes_for(timeframe)
-        base = base_series(instrument_key: instrument_key, from: from, to: to)
         return [] if base.empty?
 
         base

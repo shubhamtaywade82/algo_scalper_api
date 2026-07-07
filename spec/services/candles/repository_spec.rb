@@ -22,13 +22,14 @@ RSpec.describe Candles::Repository do
     it 'returns ordered 1m bars within the range' do
       result = described_class.series(instrument_key: 'NIFTY', timeframe: '1m', from: base_ts, to: base_ts + 5.minutes)
 
-      expect(result.size).to eq(2)
-      expect(result.map { |c| c[:close] }).to eq([25_005.0, 25_015.0])
+      expect(result).to be_a(CandleSeries)
+      expect(result.candles.size).to eq(2)
+      expect(result.candles.map(&:close)).to eq([25_005.0, 25_015.0])
     end
 
     it 'excludes bars outside the range' do
       result = described_class.series(instrument_key: 'NIFTY', timeframe: '1m', from: base_ts + 2.minutes, to: base_ts + 5.minutes)
-      expect(result).to be_empty
+      expect(result.candles).to be_empty
     end
   end
 
@@ -45,21 +46,21 @@ RSpec.describe Candles::Repository do
     it 'derives 3m bars via OHLC rollup' do
       result = described_class.series(instrument_key: 'NIFTY', timeframe: '3m', from: base_ts, to: base_ts + 5.minutes)
 
-      expect(result.size).to eq(2)
+      expect(result.candles.size).to eq(2)
 
-      first = result.first
-      expect(first[:ts]).to eq(base_ts)
-      expect(first[:open]).to eq(100.0)
-      expect(first[:high]).to eq(120.0)
-      expect(first[:low]).to eq(95.0)
-      expect(first[:close]).to eq(112.0)
-      expect(first[:volume]).to eq(300)
+      first = result.candles.first
+      expect(first.timestamp).to eq(base_ts)
+      expect(first.open).to eq(100.0)
+      expect(first.high).to eq(120.0)
+      expect(first.low).to eq(95.0)
+      expect(first.close).to eq(112.0)
+      expect(first.volume).to eq(300)
 
-      second = result.second
-      expect(second[:open]).to eq(112.0)
-      expect(second[:high]).to eq(135.0)
-      expect(second[:low]).to eq(110.0)
-      expect(second[:close]).to eq(130.0)
+      second = result.candles.second
+      expect(second.open).to eq(112.0)
+      expect(second.high).to eq(135.0)
+      expect(second.low).to eq(110.0)
+      expect(second.close).to eq(130.0)
     end
   end
 
@@ -103,17 +104,17 @@ RSpec.describe Candles::Repository do
         instrument_key: 'NIFTY', timeframe: '60m', from: hour_ts - 5.minutes, to: hour_ts + 5.minutes
       )
 
-      result.each do |bar|
-        local = bar[:ts].in_time_zone
+      result.candles.each do |bar|
+        local = bar.timestamp.in_time_zone
         expect(local.min).to eq(0), "expected bucket ts #{local} to fall on a local hour boundary"
       end
     end
   end
 
   describe '.series when no data exists' do
-    it 'returns an empty array' do
+    it 'returns an empty series' do
       result = described_class.series(instrument_key: 'BANKNIFTY', timeframe: '5m', from: base_ts, to: base_ts + 1.hour)
-      expect(result).to eq([])
+      expect(result.candles).to eq([])
     end
   end
 end

@@ -151,7 +151,9 @@ module Strategies
       return unless version
 
       strategy_class = Loader.load_version(version)
-      strategy_instance = strategy_class.new
+      strategy_instance = strategy_class.new(
+        params: strategy_class.params_schema.transform_values { |v| v[:default] }
+      )
 
       log_stream = LogStream.new(strategy_record.slug)
       @context_builder.logger = log_stream
@@ -169,7 +171,7 @@ module Strategies
         strategy: strategy_instance,
         run: run_record,
         log_stream: log_stream,
-        errors: [],
+        errors: 0,
         error_timestamps: [],
         backoff_until: nil,
         last_heartbeat: Time.current.to_i,
