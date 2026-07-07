@@ -9,18 +9,111 @@ export default function Replay() {
   const [activeTab, setActiveTab] = createSignal('trades')
   const { result, loading, error, loadReplay } = useReplay()
 
-  const metrics = createMemo(() => result()?.metrics || {
-    netPnl: 0, netPnlPct: 0, totalTrades: 0, winRate: 0,
-    winningTrades: 0, losingTrades: 0, profitFactor: 0,
-    maxDrawdown: 0, maxDrawdownPct: 0, avgTrade: 0,
-    expectancy: 0, signalCount: 0, signalWinRate: 0
-  })
+  const [currentIndex, setCurrentIndex] = createSignal(0)
 
+  const candles = createMemo(() => result()?.candles || [])
   const events = createMemo(() => result()?.events || [])
   const replayTrades = createMemo(() => result()?.trades || [])
-  const candles = createMemo(() => result()?.candles || [])
 
-  const latestTrade = createMemo(() => replayTrades().length > 0 ? replayTrades()[replayTrades().length - 1] : null)
+  // Initialize/reset currentIndex when candles array changes
+  createEffect(() => {
+    const list = candles()
+    if (list.length > 0) {
+      setCurrentIndex(Math.min(50, list.length))
+    } else {
+      setCurrentIndex(0)
+    }
+  })
+
+  // Playback timer effect
+  createEffect(() => {
+    if (!isPlaying()) return
+
+    const speedStr = playbackSpeed()
+    let delay = 1000
+    if (speedStr === '0.5x') delay = 2000
+    else if (speedStr === '1x') delay = 1000
+    else if (speedStr === '2x') delay = 500
+    else if (speedStr === '5x') delay = 200
+
+    const interval = setInterval(() => {
+      if (currentIndex() < candles().length) {
+        setCurrentIndex(prev => prev + 1)
+      } else {
+        setIsPlaying(false)
+      }
+    }, delay)
+
+    onCleanup(() => clearInterval(interval))
+  })
+
+  const currentTimestamp = createMemo(() => candles()[currentIndex() - 1]?.time)
+  const visibleCandles = createMemo(() => candles().slice(0, currentIndex()))
+  const visibleTrades = createMemo(() => {
+    const ts = currentTimestamp()
+    if (!ts) return []
+    return replayTrades().filter(t => t.entry_timestamp && t.entry_timestamp <= ts)
+  })
+  const visibleEvents = createMemo(() => {
+    const ts = currentTimestamp()
+    if (!ts) return []
+    return events().filter(e => e.timestamp && e.timestamp <= ts)
+  })
+
+  const currentTimestampFormatted = createMemo(() => {
+    const ts = currentTimestamp()
+    if (!ts) return '--:--:--'
+    return new Date(ts * 1000).toLocaleTimeString('en-IN', { hour12: false })
+  })
+
+  const metrics = createMemo(() => {
+    const trades = visibleTrades()
+    const total = trades.length
+    if (total === 0) {
+      return {
+        netPnl: 0, netPnlPct: 0, totalTrades: 0, winRate: 0,
+        winningTrades: 0, losingTrades: 0, profitFactor: 0,
+        maxDrawdown: 0, maxDrawdownPct: 0, avgTrade: 0,
+        expectancy: 0, signalCount: 0, signalWinRate: 0
+      }
+    }
+
+    const wins = trades.filter(t => t.status === 'WIN')
+    const losses = trades.filter(t => t.status === 'LOSS')
+    
+    const netPnl = trades.reduce((acc, t) => acc + (t.pnl || 0), 0)
+    const netPnlPct = trades.reduce((acc, t) => acc + (t.pnlPct || 0), 0)
+    
+    const winningTrades = wins.length
+    const losingTrades = losses.length
+    const winRate = Math.round((winningTrades / total) * 100)
+
+    const grossWin = wins.reduce((acc, t) => acc + (t.pnl || 0), 0)
+    const grossLoss = Math.abs(losses.reduce((acc, t) => acc + (t.pnl || 0), 0))
+    const profitFactor = grossLoss === 0 ? (grossWin === 0 ? 0 : 5) : Number((grossWin / grossLoss).toFixed(2))
+
+    const avgTrade = Number((netPnl / total).toFixed(2))
+    
+    const sigCount = visibleEvents().filter(e => e.type === 'signal').length
+
+    return {
+      netPnl,
+      netPnlPct: Number(netPnlPct.toFixed(2)),
+      totalTrades: total,
+      winRate,
+      winningTrades,
+      losingTrades,
+      profitFactor,
+      maxDrawdown: 0,
+      maxDrawdownPct: 0,
+      avgTrade,
+      expectancy: avgTrade,
+      signalCount: sigCount,
+      signalWinRate: 0
+    }
+  })
+
+  const latestTrade = createMemo(() => visibleTrades().length > 0 ? visibleTrades()[visibleTrades().length - 1] : null)
 
   return (
     <div class="space-y-6">
@@ -133,12 +226,12 @@ export default function Replay() {
             <div class="flex items-center justify-between border-b border-white/5 pb-2 text-[10px]">
               <div>
                 <span class="font-black text-white">{result()?.symbol || 'NIFTY'} — Replay</span>
-                <span class="text-gray-500 font-mono ml-2">{candles().length} candles</span>
+                <span class="text-gray-500 font-mono ml-2">{visibleCandles().length} / {candles().length} candles</span>
               </div>
               <div class="text-emerald-400 font-bold uppercase tracking-wider">OHLC (5m)</div>
             </div>
             <div class="flex-1 py-4 relative">
-              <Show when={candles().length > 0} fallback={
+              <Show when={visibleCandles().length > 0} fallback={
                 <div class="flex items-center justify-center h-full text-[10px] text-gray-600 font-bold uppercase tracking-wider">
                   No candle data
                 </div>
@@ -157,8 +250,12 @@ export default function Replay() {
                     upColor: '#10b981', downColor: '#ef4444', wickUpColor: '#10b981', wickDownColor: '#ef4444',
                     borderVisible: false
                   })
-                  cs.setData(candles())
-                  chart.timeScale().fitContent()
+                  
+                  createEffect(() => {
+                    cs.setData(visibleCandles())
+                    chart.timeScale().fitContent()
+                  })
+
                   const ro = new ResizeObserver(() => {
                     chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })
                   })
@@ -170,14 +267,30 @@ export default function Replay() {
             {/* Playback controller toolbar */}
             <div class="flex items-center justify-between border-t border-white/5 pt-3">
               <div class="flex items-center gap-3">
-                <button class="p-2 bg-white/5 rounded-lg text-gray-300 hover:text-white transition-all text-xs font-bold">⏮</button>
+                <button
+                  onClick={() => {
+                    setIsPlaying(false)
+                    setCurrentIndex(Math.min(50, candles().length))
+                  }}
+                  class="p-2 bg-white/5 rounded-lg text-gray-300 hover:text-white transition-all text-xs font-bold"
+                >
+                  ⏮
+                </button>
                 <button
                   onClick={() => setIsPlaying(!isPlaying())}
                   class="w-8 h-8 rounded-full bg-primary-600 hover:bg-primary-500 text-white flex items-center justify-center transition-all text-xs"
                 >
                   {isPlaying() ? '⏸' : '▶'}
                 </button>
-                <button class="p-2 bg-white/5 rounded-lg text-gray-300 hover:text-white transition-all text-xs font-bold">⏭</button>
+                <button
+                  onClick={() => {
+                    setIsPlaying(false)
+                    setCurrentIndex(prev => Math.min(prev + 1, candles().length))
+                  }}
+                  class="p-2 bg-white/5 rounded-lg text-gray-300 hover:text-white transition-all text-xs font-bold"
+                >
+                  ⏭
+                </button>
                 <select
                   value={playbackSpeed()}
                   onChange={(e) => setPlaybackSpeed(e.target.value)}
@@ -190,8 +303,18 @@ export default function Replay() {
                 </select>
               </div>
               <div class="flex-1 mx-6 flex items-center gap-2">
-                <input type="range" class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-primary-500" value="40" />
-                <span class="text-[8px] font-mono text-gray-500">09:15:00</span>
+                <input
+                  type="range"
+                  class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                  min="1"
+                  max={candles().length || 1}
+                  value={currentIndex()}
+                  onInput={(e) => {
+                    setIsPlaying(false)
+                    setCurrentIndex(Number(e.target.value))
+                  }}
+                />
+                <span class="text-[8px] font-mono text-gray-500">{currentTimestampFormatted()}</span>
               </div>
             </div>
           </div>
@@ -256,7 +379,7 @@ export default function Replay() {
             <button class="text-[8px] font-black uppercase text-gray-500 hover:text-white transition-colors">Jump to Event</button>
           </div>
           <div class="flex-1 overflow-y-auto max-h-[160px] mt-2 divide-y divide-white/5">
-            <For each={events()}>
+            <For each={visibleEvents()}>
               {(e) => (
                 <div class="py-2.5 flex items-start gap-3 text-[10px]">
                   <span class="text-gray-500 font-mono mt-0.5">{e.time}</span>
@@ -289,7 +412,7 @@ export default function Replay() {
                 Positions
               </button>
             </div>
-            <span class="text-[8px] font-mono text-gray-500">{replayTrades().length} trade{replayTrades().length === 1 ? '' : 's'}</span>
+            <span class="text-[8px] font-mono text-gray-500">{visibleTrades().length} trade{visibleTrades().length === 1 ? '' : 's'}</span>
           </div>
           <div class="overflow-x-auto mt-2">
             <table class="w-full text-left border-collapse text-[10px]">
@@ -303,7 +426,7 @@ export default function Replay() {
                 </tr>
               </thead>
               <tbody>
-                <For each={replayTrades()}>
+                <For each={visibleTrades()}>
                   {(t) => (
                     <tr class="border-b border-white/5 hover:bg-white/[0.01]">
                       <td class="py-2.5 text-gray-500 font-mono">{t.time}</td>
