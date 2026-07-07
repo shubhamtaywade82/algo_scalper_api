@@ -28,7 +28,7 @@ function scanReportToErrors(scanReport) {
 export default function StrategyCreator() {
   const params = useParams()
   const navigate = useNavigate()
-  const { currentStrategy, fetchOne, create, update, validateStrategy, loading } = useStrategies()
+  const { currentStrategy, fetchOne, create, update, validateStrategy, deployStrategy, loading } = useStrategies()
 
   // State signals
   const [name, setName] = createSignal('New Strategy')
@@ -46,6 +46,8 @@ export default function StrategyCreator() {
   const [checks, setChecks] = createSignal({ syntax: 'not_run', logic: 'not_run', risk: 'not_run', backtest: 'not_run' })
   const [backtestResults, setBacktestResults] = createSignal({})
   const [codeErrors, setCodeErrors] = createSignal(null)
+  const [deployError, setDeployError] = createSignal(null)
+  const [deploying, setDeploying] = createSignal(false)
 
   const [activeTab, setActiveTab] = createSignal('Code')
   const [newInstrument, setNewInstrument] = createSignal('')
@@ -142,6 +144,26 @@ export default function StrategyCreator() {
     }
   }
 
+  const deployStrategyAction = async () => {
+    if (!params.id) {
+      setDeployError('Save the strategy as a draft before deploying.')
+      return
+    }
+    if (!isSaved()) {
+      setDeployError('You have unsaved changes — save them first.')
+      return
+    }
+    setDeploying(true)
+    setDeployError(null)
+    const res = await deployStrategy(params.id)
+    setDeploying(false)
+    if (res?.success) {
+      setStatus('active')
+    } else {
+      setDeployError((res?.errors || ['Deploy failed']).join(', '))
+    }
+  }
+
   const addInstrument = () => {
     if (newInstrument() && !instruments().includes(newInstrument().toUpperCase())) {
       setInstruments([...instruments(), newInstrument().toUpperCase()])
@@ -208,11 +230,21 @@ export default function StrategyCreator() {
           >
             Test Strategy
           </button>
-          <button class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg transition-all">
-            Deploy
+          <button
+            onClick={deployStrategyAction}
+            disabled={!params.id || deploying()}
+            class="px-5 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-lg transition-all disabled:opacity-40"
+          >
+            {deploying() ? 'Deploying…' : 'Deploy'}
           </button>
         </div>
       </div>
+
+      <Show when={deployError()}>
+        <div class="bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold px-4 py-2.5 rounded-xl">
+          {deployError()}
+        </div>
+      </Show>
 
       {/* Main 3-column workspace */}
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
