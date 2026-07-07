@@ -317,7 +317,7 @@ export default function StrategyCreator() {
               </Show>
 
               <Show when={activeTab() === 'Code'}>
-                <CodeEditor code={code} onChange={setCode} language="ruby" />
+                <CodeEditor code={code} onChange={setCode} language="ruby" errors={codeErrors} />
               </Show>
 
               <Show when={activeTab() === 'Backtest'}>

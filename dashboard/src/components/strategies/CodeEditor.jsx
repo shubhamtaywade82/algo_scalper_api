@@ -77,7 +77,7 @@ export default function CodeEditor(props) {
     view?.dispatch({ effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(isReadOnly)) })
   })
 
-  const errorCount = () => (props.errors ? props.errors().length : null)
+  const errorCount = () => (props.errors && props.errors() ? props.errors().length : null)
 
   return (
     <div class="flex flex-col flex-1 h-full bg-[#0d1117] rounded-xl border border-white/5 overflow-hidden">
