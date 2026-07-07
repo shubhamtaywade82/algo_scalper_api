@@ -149,5 +149,24 @@ RSpec.describe Smc::StructureEventRecorder do
       expect(fvg_events.first.payload['from']).to eq(102.0)
       expect(fvg_events.first.payload['to']).to eq(103.0)
     end
+
+    it 'persists an order_block_formed event for an active order block' do
+      series = build(:candle_series, :five_minute)
+      series.add_candle(build(:candle, open: 105, high: 106, low: 100, close: 101)) # bearish
+      series.add_candle(build(:candle, open: 101, high: 112, low: 100.5, close: 111)) # bullish displacement, closes above a.high
+      series.add_candle(build(:candle, open: 111, high: 113, low: 109, close: 112))
+      series.add_candle(build(:candle, open: 112, high: 114, low: 110, close: 113))
+      series.add_candle(build(:candle, open: 113, high: 115, low: 111, close: 114)) # MIN_CANDLES, stays above block low=100
+      allow(instrument).to receive(:candles).with(interval: '5').and_return(series)
+      allow(series).to receive(:atr).with(20).and_return(1.0)
+
+      events = described_class.record!(instrument: instrument, interval: '5')
+      ob_events = events.select { |e| e.event_type == 'order_block_formed' }
+
+      expect(ob_events.size).to eq(1)
+      expect(ob_events.first.payload['bias']).to eq('bullish')
+      expect(ob_events.first.payload['high']).to eq(106.0)
+      expect(ob_events.first.payload['low']).to eq(100.0)
+    end
   end
 end

@@ -24,7 +24,8 @@ module Smc
       series = @instrument.candles(interval: @interval)
       return [] if series.nil? || series.candles.size < MIN_CANDLES
 
-      record_swings(series) + record_bos(series) + record_choch(series) + record_fvgs(series)
+      record_swings(series) + record_bos(series) + record_choch(series) +
+        record_fvgs(series) + record_order_blocks(series)
     end
 
     private
@@ -97,6 +98,23 @@ module Smc
         publish_event!(
           event_type: 'fvg_created',
           payload: { 'type' => gap[:type].to_s, 'from' => gap[:from].to_f, 'to' => gap[:to].to_f, 'index' => gap[:index] }
+        )
+      end
+    end
+
+    def record_order_blocks(series)
+      blocks = Smc::Detectors::OrderBlocks.new(series).active_blocks
+      known = SmcEvent.where(correlation_id: correlation_id, event_type: 'order_block_formed')
+                      .order(sequence: :desc).limit(50)
+                      .pluck(Arel.sql("payload->>'bias'"), Arel.sql("(payload->>'high')::float"), Arel.sql("(payload->>'low')::float"))
+
+      blocks.filter_map do |block|
+        identity = [block[:bias].to_s, block[:high].to_f, block[:low].to_f]
+        next if known.include?(identity)
+
+        publish_event!(
+          event_type: 'order_block_formed',
+          payload: { 'bias' => block[:bias].to_s, 'high' => block[:high].to_f, 'low' => block[:low].to_f, 'index' => block[:index] }
         )
       end
     end
