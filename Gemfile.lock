@@ -8,7 +8,7 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    DhanHQ (2.8.0)
+    DhanHQ (3.0.0)
       activesupport
       base64
       bindata
@@ -294,6 +294,8 @@ GEM
       net-pop
       net-smtp
     marcel (1.1.0)
+    mcp (0.22.0)
+      json_schemer (>= 2.4)
     mini_mime (1.1.5)
     minitest (6.0.3)
       drb (~> 2.0)
@@ -591,6 +593,11 @@ GEM
     websocket-extensions (0.1.5)
     whenever (1.1.2)
       chronic (>= 0.6.3)
+    woods (1.5.0)
+      mcp (>= 0.9.2, < 1.0)
+      msgpack (>= 1.5)
+      prism (~> 1.4)
+      railties (>= 6.0)
     zeitwerk (2.7.5)
 
 PLATFORMS
@@ -605,7 +612,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
-  DhanHQ (= 2.8.0)
+  DhanHQ (= 3.0.0)
   activerecord-import
   annotate
   bootsnap
@@ -655,9 +662,10 @@ DEPENDENCIES
   vcr
   webmock
   whenever
+  woods
 
 CHECKSUMS
-  DhanHQ (2.8.0) sha256=ceea98e7948f8a0889090437cc2c7592db3af7aa24c356b647aa69d02d188c7e
+  DhanHQ (3.0.0) sha256=48204e24350989626d7cc3a95c13b767d8484e03299ffa71b02b306d3bd1f605
   action_text-trix (2.1.18) sha256=3fdb83f8bff4145d098be283cdd47ac41caf5110bfa6df4695ed7127d7fb3642
   actioncable (8.1.3) sha256=e5bc7f75e44e6a22de29c4f43176927c3a9ce4824464b74ed18d8226e75a80f0
   actionmailbox (8.1.3) sha256=df7da474eaa0e70df4ed5a6fef66eb3b3b0f2dbf7f14518deee8d77f1b4aae59
@@ -757,6 +765,7 @@ CHECKSUMS
   loofah (2.25.1) sha256=d436c73dbd0c1147b16c4a41db097942d217303e1f7728704b37e4df9f6d2e04
   mail (2.9.0) sha256=6fa6673ecd71c60c2d996260f9ee3dd387d4673b8169b502134659ece6d34941
   marcel (1.1.0) sha256=fdcfcfa33cc52e93c4308d40e4090a5d4ea279e160a7f6af988260fa970e0bee
+  mcp (0.22.0) sha256=e2ef603207c7e2c691bef4d8d8ab35d9740bedf315949fdb6d9a25318d1a7025
   mini_mime (1.1.5) sha256=8681b7e2e4215f2a159f9400b5816d85e9d8c6c6b491e96a12797e798f8bccef
   minitest (6.0.3) sha256=88ac8a1de36c00692420e7cb3cc11a0773bbcb126aee1c249f320160a7d11411
   msgpack (1.8.0) sha256=e64ce0212000d016809f5048b48eb3a65ffb169db22238fb4b72472fecb2d732
@@ -876,6 +885,7 @@ CHECKSUMS
   websocket-driver (0.8.0) sha256=ed0dba4b943c22f17f9a734817e808bc84cdce6a7e22045f5315aa57676d4962
   websocket-extensions (0.1.5) sha256=1c6ba63092cda343eb53fc657110c71c754c56484aad42578495227d717a8241
   whenever (1.1.2) sha256=af139a25cf6b5c7d2122686724c0b9a4a7495135a1f79a404e29f4cce48abd83
+  woods (1.5.0) sha256=03ebec76f6a69b318315f551586f442b7fcd78a45006b214178078df0322aa2e
   zeitwerk (2.7.5) sha256=d8da92128c09ea6ec62c949011b00ed4a20242b255293dd66bf41545398f73dd
 
 BUNDLED WITH

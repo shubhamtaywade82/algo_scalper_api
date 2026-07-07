@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_06_120002) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_07_053537) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -828,6 +828,43 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120002) do
     t.index ["watchable_type", "watchable_id"], name: "index_watchlist_items_on_watchable_type_and_watchable_id"
   end
 
+  create_table "woods_edges", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "relationship", null: false
+    t.bigint "source_id", null: false
+    t.bigint "target_id", null: false
+    t.string "via"
+    t.index ["source_id", "target_id", "relationship"], name: "idx_woods_edges_unique", unique: true
+    t.index ["source_id"], name: "index_woods_edges_on_source_id"
+    t.index ["target_id"], name: "index_woods_edges_on_target_id"
+  end
+
+  create_table "woods_embeddings", force: :cascade do |t|
+    t.string "chunk_type"
+    t.string "content_hash", null: false
+    t.datetime "created_at", null: false
+    t.integer "dimensions", null: false
+    t.text "embedding", null: false
+    t.bigint "unit_id", null: false
+    t.index ["content_hash"], name: "index_woods_embeddings_on_content_hash"
+    t.index ["unit_id"], name: "index_woods_embeddings_on_unit_id"
+  end
+
+  create_table "woods_units", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "file_path", null: false
+    t.string "identifier", null: false
+    t.json "metadata"
+    t.string "namespace"
+    t.text "source_code"
+    t.string "source_hash"
+    t.string "unit_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["file_path"], name: "index_woods_units_on_file_path"
+    t.index ["identifier"], name: "index_woods_units_on_identifier", unique: true
+    t.index ["unit_type"], name: "index_woods_units_on_unit_type"
+  end
+
   add_foreign_key "best_indicator_params", "instruments"
   add_foreign_key "derivatives", "instruments"
   add_foreign_key "ledger_postings", "ledger_accounts"
@@ -847,4 +884,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_120002) do
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "trade_analytics", "position_trackers"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"
+  add_foreign_key "woods_edges", "woods_units", column: "source_id"
+  add_foreign_key "woods_edges", "woods_units", column: "target_id"
+  add_foreign_key "woods_embeddings", "woods_units", column: "unit_id"
 end

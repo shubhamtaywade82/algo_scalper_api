@@ -47,7 +47,7 @@ gem 'kamal', require: false
 gem 'thruster', require: false
 
 # DhanHQ Ruby client (v2 API wrapper and WebSocket feed)
-gem 'DhanHQ', '2.8.0'
+gem 'DhanHQ', '3.0.0', require: 'dhan_hq'
 
 # MCP adapter for DhanHQ tool specs and validated routing
 gem 'dhanhq-mcp', path: '/home/nemesis/project/trading-workspace/dhanhq-mcp'
@@ -109,6 +109,9 @@ group :development, :test do
 
   # N+1 query detection
   gem 'bullet'
+
+  # Rails codebase indexing for AI coding assistant context
+  gem 'woods'
 end
 
 gem "json_schemer", "~> 2.4"
