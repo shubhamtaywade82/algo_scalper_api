@@ -24,7 +24,7 @@ module Smc
       series = @instrument.candles(interval: @interval)
       return [] if series.nil? || series.candles.size < MIN_CANDLES
 
-      record_swings(series) + record_bos(series) + record_choch(series)
+      record_swings(series) + record_bos(series) + record_choch(series) + record_fvgs(series)
     end
 
     private
@@ -82,6 +82,23 @@ module Smc
         payload: { 'price' => price, 'type' => choch[:type].to_s, 'index' => choch[:index] },
         parent_event_id: parent_id
       )]
+    end
+
+    def record_fvgs(series)
+      gaps = Smc::Detectors::Fvg.new(series).active_gaps
+      known = SmcEvent.where(correlation_id: correlation_id, event_type: 'fvg_created')
+                      .order(sequence: :desc).limit(50)
+                      .pluck(Arel.sql("payload->>'type'"), Arel.sql("(payload->>'from')::float"), Arel.sql("(payload->>'to')::float"))
+
+      gaps.filter_map do |gap|
+        identity = [gap[:type].to_s, gap[:from].to_f, gap[:to].to_f]
+        next if known.include?(identity)
+
+        publish_event!(
+          event_type: 'fvg_created',
+          payload: { 'type' => gap[:type].to_s, 'from' => gap[:from].to_f, 'to' => gap[:to].to_f, 'index' => gap[:index] }
+        )
+      end
     end
 
     def already_emitted_values(event_type:, field:)

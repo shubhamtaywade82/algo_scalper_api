@@ -130,5 +130,24 @@ RSpec.describe Smc::StructureEventRecorder do
       expect(choch_event).not_to be_nil
       expect(choch_event.payload['parent_event_id']).to eq(bos_event.id)
     end
+
+    it 'persists an fvg_created event for an active fair value gap' do
+      series = build(:candle_series, :five_minute)
+      series.add_candle(build(:candle, open: 100, high: 102, low: 99, close: 101))
+      series.add_candle(build(:candle, open: 101, high: 105, low: 100.5, close: 104))
+      series.add_candle(build(:candle, open: 104, high: 106, low: 103, close: 105))
+      series.add_candle(build(:candle, open: 105, high: 107, low: 104, close: 106)) # stays above gap[:to]=103, no mitigation
+      series.add_candle(build(:candle, open: 106, high: 108, low: 105, close: 107))
+      allow(instrument).to receive(:candles).with(interval: '5').and_return(series)
+      allow(series).to receive(:atr).with(20).and_return(1.0)
+
+      events = described_class.record!(instrument: instrument, interval: '5')
+      fvg_events = events.select { |e| e.event_type == 'fvg_created' }
+
+      expect(fvg_events.size).to eq(1)
+      expect(fvg_events.first.payload['type']).to eq('bullish')
+      expect(fvg_events.first.payload['from']).to eq(102.0)
+      expect(fvg_events.first.payload['to']).to eq(103.0)
+    end
   end
 end
