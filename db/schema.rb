@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_07_053537) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_07_084810) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -799,11 +799,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_053537) do
     t.text "code", default: ""
     t.datetime "created_at", null: false
     t.text "description"
+    t.jsonb "entry_rules", default: {}
+    t.jsonb "exit_rules", default: {}
+    t.jsonb "filters", default: {}
     t.jsonb "instruments", default: []
     t.string "name", null: false
     t.jsonb "parameters", default: []
+    t.jsonb "risk_management", default: {}
     t.string "runtime", default: "Ruby"
+    t.jsonb "schedule", default: {}
+    t.string "slug"
     t.string "status", default: "draft"
+    t.bigint "strategy_record_id"
     t.jsonb "tags", default: []
     t.string "timeframe", default: "1m"
     t.string "trade_direction", default: "both"
@@ -811,7 +818,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_053537) do
     t.string "version", default: "1.0.0"
     t.index ["name", "version"], name: "index_trading_strategies_on_name_and_version", unique: true
     t.index ["name"], name: "index_trading_strategies_on_name"
+    t.index ["slug"], name: "index_trading_strategies_on_slug", unique: true
     t.index ["status"], name: "index_trading_strategies_on_status"
+    t.index ["strategy_record_id"], name: "index_trading_strategies_on_strategy_record_id"
   end
 
   create_table "watchlist_items", force: :cascade do |t|
