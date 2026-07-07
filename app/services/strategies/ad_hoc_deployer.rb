@@ -6,7 +6,7 @@ module Strategies
   # to disk under strategies/<slug>/ and runs the existing DeployPipeline.
   class AdHocDeployer
     STRATEGIES_ROOT = Rails.root.join("strategies")
-    CLASS_NAME_PATTERN = /^\s*class\s+([A-Z]\w*)\s*<\s*(\S+)/.freeze
+    CLASS_NAME_PATTERN = /^\s*class\s+([A-Z]\w*)\s*<\s*(\S+)/
 
     def self.call(trading_strategy)
       new(trading_strategy).call
