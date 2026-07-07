@@ -19,13 +19,15 @@ module Strategies
 
     def call
       class_name, superclass_name = extract_class_info
-      return error_result("No strategy class found in code (expected `class Foo < Strategies::Base` or `< BaseStrategy`)") unless class_name
+      unless class_name
+        return error_result(["No strategy class found in code (expected `class Foo < Strategies::Base` or `< BaseStrategy`)"])
+      end
 
       slug = @trading_strategy.slugify
       write_files(slug, class_name, superclass_name)
 
       result = DeployPipeline.call(slug)
-      return error_result(*result[:errors]) unless result[:ok]
+      return error_result(result[:errors], result[:scan_report]) unless result[:ok]
 
       link_and_activate(slug, result[:version])
       { ok: true, errors: [], scan_report: result[:scan_report],
@@ -85,8 +87,8 @@ module Strategies
       )
     end
 
-    def error_result(*errors)
-      { ok: false, errors: errors, scan_report: nil, strategy_record: nil, version: nil }
+    def error_result(errors, scan_report = nil)
+      { ok: false, errors: errors, scan_report: scan_report, strategy_record: nil, version: nil }
     end
   end
 end
