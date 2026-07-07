@@ -15,6 +15,8 @@ module Strategies
     ERROR_LIMIT         = 5
     ERROR_WINDOW        = 10 * 60
     BACKOFF_CAP         = 60
+    ENTRY_ACTIONS = %w[buy_call buy_put].freeze
+    DIRECTION_BY_ACTION = { "buy_call" => :bullish, "buy_put" => :bearish }.freeze
 
     attr_reader :runners
 
@@ -261,7 +263,7 @@ module Strategies
     def persist_signal(state, slug, instrument_key, signal)
       action = signal.class.name.demodulize.underscore
 
-      Strategies::Signal.create!(
+      record = Strategies::Signal.create!(
         strategy_id: Strategies::Record.find_by(slug: slug)&.id,
         strategy_version_id: state[:version_id],
         strategy_run_id: state[:run]&.id,
@@ -269,13 +271,54 @@ module Strategies
         action: action,
         confidence: signal.respond_to?(:confidence) ? signal.confidence : nil,
         reason: signal.respond_to?(:reason) ? signal.reason : nil,
-        outcome: "shadow",
+        outcome: action == "hold" ? "ignored_hold" : "shadow",
         emitted_at: Time.current
       )
+
+      attempt_entry(record, instrument_key, action) if ENTRY_ACTIONS.include?(action)
 
       @bus.publish(:strategy_signal,
                    slug: slug, instrument_key: instrument_key,
                    action: action, confidence: signal.try(:confidence))
+    end
+
+    def attempt_entry(record, instrument_key, action)
+      return unless auto_entry_enabled?
+      return if record.confidence && record.confidence < min_entry_confidence
+
+      index_cfg = IndexConfigLoader.load_indices.find { |c| c[:key].to_s.upcase == instrument_key.to_s.upcase }
+      return record.update!(outcome: "blocked_by_guard", reason: "no_index_cfg") unless index_cfg
+
+      direction = DIRECTION_BY_ACTION.fetch(action)
+      picks = Options::ChainAnalyzer.pick_strikes(index_cfg: index_cfg, direction: direction)
+      return record.update!(outcome: "blocked_by_guard", reason: "no_strikes") if picks.blank?
+
+      entry_metadata = {
+        entry_contract: Entries::EntryGuard::SUPERTREND_CONTRACT,
+        permission: :scale_ready,
+        strategy_signal_id: record.id,
+        paper: true
+      }
+
+      picks.each do |pick|
+        entered = Entries::EntryGuard.try_enter(
+          index_cfg: index_cfg, pick: pick, direction: direction,
+          scale_multiplier: 1, entry_metadata: entry_metadata,
+          permission: :scale_ready, signal: record
+        )
+        break if entered
+      end
+    rescue StandardError => e
+      record.update!(outcome: "blocked_by_guard", reason: "exception: #{e.class}")
+      Rails.logger.error("[Strategies::Manager] entry attempt failed for #{instrument_key}: #{e.class} - #{e.message}")
+    end
+
+    def auto_entry_enabled?
+      AlgoConfig.fetch.dig(:strategy_platform, :auto_entry_enabled) != false
+    end
+
+    def min_entry_confidence
+      AlgoConfig.fetch.dig(:strategy_platform, :min_confidence) || 0.6
     end
 
     def handle_crash(state, slug, exception)

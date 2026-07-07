@@ -54,7 +54,7 @@ module Candles
             rows = cached.candles.reject { |c| c.timestamp.nil? || c.timestamp < from || c.timestamp > to }
                                  .map do |c|
               { ts: c.timestamp, open: c.open.to_f, high: c.high.to_f,
-                low: c.low.to_f, close: c.close.to_f, volume: c.volume.to_i, oi: c.oi.to_i }
+                low: c.low.to_f, close: c.close.to_f, volume: c.volume.to_i, oi: 0 }
             end
           end
         end

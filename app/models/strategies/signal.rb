@@ -19,5 +19,16 @@ module Strategies
     validates :action, presence: true, inclusion: { in: ACTIONS }
     validates :outcome, inclusion: { in: OUTCOMES }, allow_nil: true
     validates :emitted_at, presence: true
+
+    # Matches the interface EntryGuard.try_enter expects from TradingSignal,
+    # so the same guard pipeline can score outcomes for either signal source.
+    def record_entry_outcome(outcome, reason = nil, position_tracker: nil)
+      mapped = outcome.to_s == "entered" ? "executed" : "blocked_by_guard"
+      update!(
+        outcome: mapped,
+        reason: reason.presence || self.reason,
+        position_tracker: position_tracker || self.position_tracker
+      )
+    end
   end
 end

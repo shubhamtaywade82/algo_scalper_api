@@ -18,6 +18,13 @@ const sampleLogs = [
   { time: '09:24:13', message: '[Execution] Order ID: 230518001238843', level: 'info' },
 ]
 
+function scanReportToErrors(scanReport) {
+  if (!scanReport) return []
+  const blocked = (scanReport.blocked || []).map(f => ({ line: f.line || 1, message: f.message, severity: 'error' }))
+  const warnings = (scanReport.warnings || []).map(f => ({ line: f.line || 1, message: f.message, severity: 'warning' }))
+  return [...blocked, ...warnings]
+}
+
 export default function StrategyCreator() {
   const params = useParams()
   const navigate = useNavigate()
@@ -38,6 +45,7 @@ export default function StrategyCreator() {
   const [tags, setTags] = createSignal(['Intraday'])
   const [checks, setChecks] = createSignal({ syntax: 'not_run', logic: 'not_run', risk: 'not_run', backtest: 'not_run' })
   const [backtestResults, setBacktestResults] = createSignal({})
+  const [codeErrors, setCodeErrors] = createSignal(null)
 
   const [activeTab, setActiveTab] = createSignal('Code')
   const [newInstrument, setNewInstrument] = createSignal('')
@@ -117,6 +125,20 @@ export default function StrategyCreator() {
     const res = await validateStrategy(params.id)
     if (res && res.checks) {
       setChecks(res.checks)
+      if (res.backtest_results) setBacktestResults(res.backtest_results)
+      
+      if (res.scan_report) {
+        setCodeErrors(scanReportToErrors(res.scan_report))
+      } else {
+        const errs = []
+        if (res.checks.syntax === 'failed') {
+          errs.push({ line: 1, message: 'Ruby syntax validation failed', severity: 'error' })
+        }
+        if (res.checks.risk === 'failed') {
+          errs.push({ line: 1, message: 'Security scanner blocked unsafe calls', severity: 'error' })
+        }
+        setCodeErrors(errs)
+      }
     }
   }
 

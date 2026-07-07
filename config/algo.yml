@@ -45,6 +45,13 @@ midday_guard:
   block_after_time: "15:00"
   trending_adx_bypass: 28    # skip guard entirely when ADX >= this (trending market)
 
+# Strategies::Manager plugin platform — wires plugin signals (e.g. supertrend_v1)
+# into the real Entries::EntryGuard pipeline. Set auto_entry_enabled: false to
+# go back to shadow-only (signals persisted, no orders placed).
+strategy_platform:
+  auto_entry_enabled: true
+  min_confidence: 0.6
+
 # Options buying framework — default intraday_scalper (see docs/options_buying_intraday_spec.md)
 options_buying:
   mode: intraday_scalper          # intraday_scalper | positional
