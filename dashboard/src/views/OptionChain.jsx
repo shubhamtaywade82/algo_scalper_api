@@ -11,7 +11,7 @@ export default function OptionChain() {
   const { chain, isStale, connected } = useOptionChain(selectedAsset)
   const { indices } = useDashboardContext()
 
-  const spotPrice = () => indices()?.[selectedAsset().toLowerCase()] || 0
+  const spotPrice = () => indices()?.[selectedAsset().toLowerCase()] || chain()?.spot || 0
 
   const indexPrevClose = () => {
     return indices()?.[selectedAsset().toLowerCase() + '_prev_close'] || (spotPrice() / 1.0062)
@@ -356,12 +356,12 @@ export default function OptionChain() {
                   <th class="py-2.5">OI</th>
                   <th>Chg OI</th>
                   <th>Vol</th>
-                  <th class="text-emerald-400">LTP</th>
-                  <th>Chg %</th>
-                  <th>IV</th>
-                  <th>Delta</th>
-                  <th>Theta</th>
                   <th>Vega</th>
+                  <th>Theta</th>
+                  <th>Delta</th>
+                  <th>IV</th>
+                  <th>Chg %</th>
+                  <th class="text-emerald-400">LTP</th>
                   <th class="text-white bg-white/5">Price</th>
                   <th class="text-rose-400">LTP</th>
                   <th>Chg %</th>
@@ -388,18 +388,18 @@ export default function OptionChain() {
                       <td class={`text-data text-gray-500 ${callsTdClass(r.strike)}`}>
                         <AnimatedNumber value={r.c_vol} decimals={0} />
                       </td>
-                      <td class={`text-data font-black text-white ${callsTdClass(r.strike)}`}>
-                        ₹<AnimatedNumber value={r.c_ltp} decimals={2} />
+                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_vega.toFixed(2)}</td>
+                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_theta.toFixed(2)}</td>
+                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_delta.toFixed(2)}</td>
+                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>
+                        <AnimatedNumber value={r.c_iv} decimals={2} />%
                       </td>
                       <td class={`text-data ${r.c_chg >= 0 ? 'text-emerald-400' : 'text-rose-500'} ${callsTdClass(r.strike)}`}>
                         {r.c_chg >= 0 ? '+' : ''}<AnimatedNumber value={r.c_chg} decimals={2} />%
                       </td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>
-                        <AnimatedNumber value={r.c_iv} decimals={2} />%
+                      <td class={`text-data font-black text-white ${callsTdClass(r.strike)}`}>
+                        ₹<AnimatedNumber value={r.c_ltp} decimals={2} />
                       </td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_delta.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_theta.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_vega.toFixed(2)}</td>
 
                       {/* STRIKE */}
                       <td class={`py-2 text-data font-black text-white bg-white/5 border-x border-white/5`}>
