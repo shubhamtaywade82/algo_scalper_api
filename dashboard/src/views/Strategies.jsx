@@ -29,6 +29,14 @@ export default function Strategies() {
     }
   }
 
+  function expiryVariant(className) {
+    if (className.includes('text-emerald')) return 'success'
+    if (className.includes('text-red') || className.includes('text-rose')) return 'danger'
+    if (className.includes('text-amber') || className.includes('text-yellow')) return 'warning'
+    if (className.includes('text-blue') || className.includes('text-cyan')) return 'info'
+    return 'outline'
+  }
+
   return (
     <div class="space-y-6">
       {/* Header Bar */}

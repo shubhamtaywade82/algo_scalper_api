@@ -80,10 +80,10 @@ export default function Replay() {
 
     const wins = trades.filter(t => t.status === 'WIN')
     const losses = trades.filter(t => t.status === 'LOSS')
-    
+
     const netPnl = trades.reduce((acc, t) => acc + (t.pnl || 0), 0)
     const netPnlPct = trades.reduce((acc, t) => acc + (t.pnlPct || 0), 0)
-    
+
     const winningTrades = wins.length
     const losingTrades = losses.length
     const winRate = Math.round((winningTrades / total) * 100)
@@ -93,7 +93,7 @@ export default function Replay() {
     const profitFactor = grossLoss === 0 ? (grossWin === 0 ? 0 : 5) : Number((grossWin / grossLoss).toFixed(2))
 
     const avgTrade = Number((netPnl / total).toFixed(2))
-    
+
     const sigCount = visibleEvents().filter(e => e.type === 'signal').length
 
     return {
@@ -250,7 +250,7 @@ export default function Replay() {
                     upColor: '#10b981', downColor: '#ef4444', wickUpColor: '#10b981', wickDownColor: '#ef4444',
                     borderVisible: false
                   })
-                  
+
                   createEffect(() => {
                     cs.setData(visibleCandles())
                     chart.timeScale().fitContent()

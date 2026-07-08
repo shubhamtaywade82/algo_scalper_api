@@ -40,7 +40,7 @@ export default function MarketWatch() {
 
   const quoteCards = createMemo(() => {
     const idxs = indices() || {}
-    
+
     const getNiftyChange = () => {
       const val = idxs.nifty
       const prev = idxs.nifty_prev_close

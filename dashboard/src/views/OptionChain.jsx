@@ -145,7 +145,7 @@ export default function OptionChain() {
     const min = Math.min(...values)
     const max = Math.max(...values)
     const range = max - min
-    
+
     return data.map((d, i) => {
       const x = (i / (data.length - 1)) * 200
       const y = range > 0 ? 50 - ((d.pcr - min) / range) * 40 : 30
@@ -160,7 +160,7 @@ export default function OptionChain() {
     const min = Math.min(...values)
     const max = Math.max(...values)
     const range = max - min
-    
+
     return data.map((d, i) => {
       const x = (i / (data.length - 1)) * 200
       const y = range > 0 ? 50 - ((d.maxPain - min) / range) * 40 : 30
