@@ -1,0 +1,21 @@
+---
+slug: vwap-reversal
+name: VWAP Reversal
+class_name: VwapReversalStrategy
+timeframes:
+- 3m
+instruments:
+- NIFTY
+params:
+  rsi_period:
+    type: Integer
+    default: '14'
+  rsi_oversold:
+    type: Integer
+    default: '30'
+  rsi_overbought:
+    type: Integer
+    default: '70'
+  vwap_band_pct:
+    type: Float
+    default: '0.5'
