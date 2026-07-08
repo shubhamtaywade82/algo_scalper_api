@@ -27,6 +27,7 @@ Rails.application.routes.draw do
     get :dashboard, to: "dashboard#show"
     get "public_ip/audit", to: "public_ip#audit"
     get :positions, to: "positions#index"
+    get "positions/:id", to: "positions#show"
     post "positions/:id/close", to: "positions#close"
     get :signals, to: "signals#index"
     get :dhan_access_token, to: "dhan_access_token#show"

@@ -37,4 +37,24 @@ RSpec.describe Api::PositionsController do
       expect(Positions::ManualCloseService).to have_received(:call).with(tracker_id: '42')
     end
   end
+
+  describe 'GET /api/positions/:id' do
+    it 'returns the serialized detail for an existing tracker' do
+      tracker = create(:position_tracker, segment: 'NSE_FNO')
+      allow(Positions::Serializer).to receive(:detail).and_call_original
+
+      get "/api/positions/#{tracker.id}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['id']).to eq(tracker.id)
+      expect(Positions::Serializer).to have_received(:detail).with(tracker)
+    end
+
+    it 'returns 404 for an unknown id' do
+      get '/api/positions/999999'
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body['error']).to eq('not_found')
+    end
+  end
 end
