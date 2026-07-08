@@ -9,6 +9,7 @@ export const endpoints = {
   candles: (symbol) => `/candles/${symbol}`,
 
   positions: '/positions',
+  positionDetail: (id) => `/positions/${id}`,
   closePosition: (id) => `/positions/${id}/close`,
 
   signals: '/signals',
