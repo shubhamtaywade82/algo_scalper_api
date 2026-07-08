@@ -45,6 +45,13 @@ midday_guard:
   block_after_time: "15:00"
   trending_adx_bypass: 28    # skip guard entirely when ADX >= this (trending market)
 
+# Strategies::Manager plugin platform — wires plugin signals (e.g. supertrend_v1)
+# into the real Entries::EntryGuard pipeline. Set auto_entry_enabled: false to
+# go back to shadow-only (signals persisted, no orders placed).
+strategy_platform:
+  auto_entry_enabled: true
+  min_confidence: 0.6
+
 # Options buying framework — default intraday_scalper (see docs/options_buying_intraday_spec.md)
 options_buying:
   mode: intraday_scalper          # intraday_scalper | positional
@@ -229,7 +236,7 @@ indices:
 
     premium_band:
       min: 30
-      max: 120
+      max: 160 # raised from 120 — was blocking most real ATM premiums in current price regime
 
     otm_rules:
       max_otm: 2 # ATM → +1 OTM → +2 OTM
@@ -271,7 +278,7 @@ indices:
 
     premium_band:
       min: 60
-      max: 180
+      max: 650 # raised from 180 — BANKNIFTY ATM premiums were running 400-600, blocking nearly every signal
 
     otm_rules:
       max_otm: 2
@@ -313,7 +320,7 @@ indices:
 
     premium_band:
       min: 40
-      max: 150
+      max: 320 # raised from 150 — SENSEX ATM premiums were running 180-300, blocking nearly every signal
 
     otm_rules:
       max_otm: 2
@@ -666,7 +673,11 @@ risk:
   #
   # Each regime gets different SL/TP/trailing rules based on Greek behavior
   time_regimes:
-    enabled: false # disabled so entries aren't blocked by session regimes
+    # Enabled based on 61-trading-day regime research (real DhanHQ index price data,
+    # 5m bars, NIFTY/BANKNIFTY/SENSEX): chop_decay confirmed worst session everywhere,
+    # close_gamma outperformed trend_continuation in every matched ADX bucket, and ADX
+    # showed a clear ceiling (not just floor) within trend_continuation specifically.
+    enabled: true
 
     # S1: OPEN EXPANSION (09:15 – 09:45)
     # Delta explodes, Gamma spikes, IV expands, Theta irrelevant
@@ -694,6 +705,16 @@ risk:
       allow_runners: true # Allow runner with trend intact (exponential drawdown logic fits here)
       allow_entries: true
       min_adx: 15.0 # Trend continuation only, pullbacks preferred, 1m + 5m alignment
+      max_adx: 35.0 # Ceiling, not just floor — very high ADX was the single worst bucket here
+                    # in regime research (late/exhaustion moves). NIFTY/SENSEX statistically
+                    # indistinguishable from each other at current sample size — kept shared.
+      # BANKNIFTY measured meaningfully different optimal cutoffs in a follow-up finer-grained
+      # pass (fav:adverse ratio bottomed at ADX 15-20 and collapsed again at ADX>=40, better
+      # in between) — given its own thresholds rather than forced to share NIFTY/SENSEX's.
+      per_index_min_adx:
+        BANKNIFTY: 20.0
+      per_index_max_adx:
+        BANKNIFTY: 40.0
       max_tp_rupees: null # No limit (runners allowed)
 
     # S3: CHOP / THETA ZONE (11:30 – 13:45) ❌ DANGER
@@ -718,10 +739,20 @@ risk:
       end: "15:15"
       sl_multiplier: 0.75 # Close gamma — tighter SL, book or cut
       tp_multiplier: 0.75 # FIXED TP (₹1.5k-₹2k)
-      allow_trailing: false # No runners after 14:45
-      allow_runners: false # Book profits aggressively
+      allow_trailing: true # Regime research: close_gamma outperformed trend_continuation's
+                           # favorable-continuation rate in every matched ADX bucket (up to
+                           # 13:1 favorable:adverse for BANKNIFTY at ADX 35+) — don't cut
+                           # winners short here on an outdated "risky window" assumption
+      allow_runners: true # See allow_trailing note above — data says let winners run here too
       allow_entries: true # ONLY continuation moves, no fresh breakouts after 14:45, ATM only
       min_adx: 18.0
+      # Follow-up finer-grained pass found ADX>=40 clearly worst for BANKNIFTY here too, so
+      # giving it a ceiling (this pass used a different Supertrend/ADX reconstruction than the
+      # one that produced the "13:1 at ADX 35+" note above — the two aren't fully reconciled,
+      # so this is a conservative ceiling above where both passes agree things degrade, not a
+      # tight one).
+      per_index_max_adx:
+        BANKNIFTY: 40.0
       max_tp_rupees: 2000 # Fixed ₹1.5k-₹2k
 
   # Global Time-Based Overrides (CRITICAL - override everything)
@@ -925,6 +956,16 @@ position_sizing:
       BANKNIFTY: 0.05 # 5% max loss for BANKNIFTY (increased from 4%)
       SENSEX: 0.03 # 3% max loss for SENSEX (increased from 2%)
     global_limit_pct: 0.06 # 6% (increased from 5%)
+    # Sanity cap on trade *count* per index per day, independent of the loss-pct caps above.
+    # 1m strategies (e.g. supertrend_v1) can legitimately re-signal many times a session —
+    # this was hardcoded to 6 and was blocking real, profitable trend entries after only a
+    # handful of trades. Raise per-index as warranted; `default` covers any index not listed.
+    max_trades_per_symbol:
+      default: 15
+      per_index:
+        NIFTY: 25
+        BANKNIFTY: 20
+        SENSEX: 20
 
   # Daily profit target: Stop trading when daily profit reaches this amount
   max_daily_profit: 30000 # ₹30,000 daily profit target (increased from ₹20,000)

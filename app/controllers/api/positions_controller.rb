@@ -18,6 +18,13 @@ module Api
       }
     end
 
+    def show
+      tracker = PositionTracker.includes(:watchable, :instrument, :meta_snapshot).find_by(id: params[:id])
+      return render json: { error: "not_found" }, status: :not_found unless tracker
+
+      render json: Positions::Serializer.detail(tracker)
+    end
+
     def close
       outcome = Positions::ManualCloseService.call(tracker_id: params[:id])
       render json: outcome[:json], status: outcome[:status]

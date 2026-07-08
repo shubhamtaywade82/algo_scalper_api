@@ -1,0 +1,1 @@
+class PlaceholderStrategy < Strategies::Base; def call(c) = nil; end

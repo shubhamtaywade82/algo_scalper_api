@@ -1,0 +1,6 @@
+name: "<%= class_name.underscore.humanize %>"
+slug: "<%= slug %>"
+class_name: "<%= class_name %>"
+timeframes: ["1m"]
+instruments: ["NIFTY"]
+params: {}

@@ -27,7 +27,11 @@ module Core
       volatility_spike: :volatility_spike,
       trend_flip: :trend_flip,
       bracket_placed: :bracket_placed,
-      bracket_modified: :bracket_modified
+      bracket_modified: :bracket_modified,
+      candle_closed: :candle_closed,
+      strategy_signal: :strategy_signal,
+      strategy_error: :strategy_error,
+      strategy_status_change: :strategy_status_change
     }.freeze
 
     def initialize

@@ -34,16 +34,22 @@ module Entries
           result = entry_guard_pipeline.run(context)
           if result != EntryGuardPipeline::PASS
             reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
+            guard_results = result.is_a?(Hash) ? result[:evaluated] : nil
             Observability::StructuredLog.info(
               event: 'entry_blocked',
               payload: {
                 service: 'Entries::EntryGuard',
                 index_key: index_cfg[:key].to_s,
                 symbol: pick[:symbol].to_s,
-                reason: reason
+                reason: reason,
+                guard_results: guard_results
               }
             )
-            signal&.record_entry_outcome('blocked', reason)
+            if guard_results.present?
+              signal&.record_entry_outcome('blocked', reason, extra_metadata: { 'guard_results' => guard_results })
+            else
+              signal&.record_entry_outcome('blocked', reason)
+            end
             next false
           end
 

@@ -58,7 +58,6 @@ module TradingSystem
       supervisor.register(:tick_smc_ai, Smc::TickAi::AnalysisService.new)
       supervisor.register(:options_buying_breakout, OptionsBuying::BreakoutWatcher.new)
       supervisor.register(:options_buying_stream_consumer, OptionsBuying::StreamConsumer.new)
-      supervisor.register(:signal_scheduler, Signal::Scheduler.new)
       supervisor.register(:risk_manager, Live::RiskManagerService.new(exit_engine: exit_engine))
       supervisor.register(:position_heartbeat, TradingSystem::PositionHeartbeat.new)
       supervisor.register(:order_router, router)
@@ -80,6 +79,9 @@ module TradingSystem
       supervisor.register(:reconciliation, Live::ReconciliationService.instance)
       supervisor.register(:stats_notifier, Live::StatsNotifierService.instance)
       supervisor.register(:smc_scanner, Smc::Scanner.new)
+      supervisor.register(:strategy_manager, Strategies::Manager.new)
+      supervisor.register(:pnl_updater, Live::PnlUpdaterService.instance)
+      supervisor.register(:candle_poller, Live::CandlePollerService.new)
 
       register_chain_watch(supervisor, :chain_watch_nifty, 'NIFTY')
       register_chain_watch(supervisor, :chain_watch_banknifty, 'BANKNIFTY')

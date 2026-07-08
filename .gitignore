@@ -66,3 +66,6 @@ dump.rdb
 
 .superpowers/
 .devagent
+
+# Woods codebase index (generated artifacts)
+/tmp/woods/

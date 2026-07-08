@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_07_084810) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -75,6 +75,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
     t.index ["proposed_patch"], name: "index_calibration_runs_on_proposed_patch", using: :gin
     t.index ["raw_stats"], name: "index_calibration_runs_on_raw_stats", using: :gin
     t.index ["symbol", "created_at"], name: "index_calibration_runs_on_symbol_and_created_at"
+  end
+
+  create_table "candles", force: :cascade do |t|
+    t.decimal "close", precision: 12, scale: 4, null: false
+    t.datetime "created_at", null: false
+    t.string "exchange_segment", null: false
+    t.decimal "high", precision: 12, scale: 4, null: false
+    t.string "instrument_key", null: false
+    t.decimal "low", precision: 12, scale: 4, null: false
+    t.bigint "oi"
+    t.decimal "open", precision: 12, scale: 4, null: false
+    t.string "security_id", null: false
+    t.string "source", default: "live", null: false
+    t.string "timeframe", default: "1m", null: false
+    t.datetime "ts", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "volume", default: 0
+    t.index ["instrument_key", "timeframe", "ts"], name: "index_candles_on_key_timeframe_ts", unique: true
+    t.index ["security_id", "timeframe", "ts"], name: "index_candles_on_security_timeframe_ts"
   end
 
   create_table "derivatives", force: :cascade do |t|
@@ -371,6 +390,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "platform_variables", force: :cascade do |t|
+    t.boolean "boolean_value", default: false, null: false
+    t.datetime "created_at", null: false
+    t.decimal "decimal_value", precision: 16, scale: 8
+    t.text "description"
+    t.jsonb "json_value"
+    t.string "key", null: false
+    t.string "scope", default: "global", null: false
+    t.boolean "secret", default: false, null: false
+    t.bigint "strategy_id"
+    t.text "string_value"
+    t.datetime "updated_at", null: false
+    t.string "value_type", default: "string", null: false
+    t.index ["key"], name: "index_platform_variables_on_key", unique: true
+    t.index ["scope", "strategy_id", "key"], name: "idx_platform_variables_on_scope_strategy_key", unique: true
+  end
+
   create_table "position_meta_snapshots", force: :cascade do |t|
     t.integer "config_change_log_id"
     t.jsonb "config_snapshot", default: {}, null: false
@@ -636,6 +672,67 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
     t.index ["key"], name: "index_solid_queue_semaphores_on_key", unique: true
   end
 
+  create_table "strategies", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "current_version_id"
+    t.string "desired_status"
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.string "status", default: "draft", null: false
+    t.datetime "updated_at", null: false
+    t.index ["current_version_id"], name: "index_strategies_on_current_version_id"
+    t.index ["slug"], name: "index_strategies_on_slug", unique: true
+  end
+
+  create_table "strategy_runs", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "started_at"
+    t.jsonb "stats", default: {}
+    t.string "stop_reason"
+    t.datetime "stopped_at"
+    t.bigint "strategy_id", null: false
+    t.bigint "strategy_version_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["strategy_id"], name: "index_strategy_runs_on_strategy_id"
+    t.index ["strategy_version_id"], name: "index_strategy_runs_on_strategy_version_id"
+  end
+
+  create_table "strategy_signals", force: :cascade do |t|
+    t.string "action", null: false
+    t.float "confidence"
+    t.datetime "created_at", null: false
+    t.datetime "emitted_at", null: false
+    t.string "instrument_key", null: false
+    t.jsonb "metadata", default: {}
+    t.string "outcome"
+    t.bigint "position_tracker_id"
+    t.string "reason"
+    t.bigint "strategy_id", null: false
+    t.bigint "strategy_run_id", null: false
+    t.bigint "strategy_version_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["instrument_key", "emitted_at"], name: "index_strategy_signals_on_instrument_key_and_emitted_at"
+    t.index ["position_tracker_id"], name: "index_strategy_signals_on_position_tracker_id"
+    t.index ["strategy_id"], name: "index_strategy_signals_on_strategy_id"
+    t.index ["strategy_run_id", "emitted_at"], name: "index_strategy_signals_on_strategy_run_id_and_emitted_at"
+    t.index ["strategy_run_id"], name: "index_strategy_signals_on_strategy_run_id"
+    t.index ["strategy_version_id"], name: "index_strategy_signals_on_strategy_version_id"
+  end
+
+  create_table "strategy_versions", force: :cascade do |t|
+    t.string "checksum", null: false
+    t.datetime "created_at", null: false
+    t.datetime "deployed_at"
+    t.string "file_path", null: false
+    t.jsonb "manifest", default: {}, null: false
+    t.jsonb "scan_report", default: {}
+    t.bigint "strategy_id", null: false
+    t.datetime "updated_at", null: false
+    t.integer "version", null: false
+    t.index ["strategy_id", "version"], name: "index_strategy_versions_on_strategy_id_and_version", unique: true
+    t.index ["strategy_id"], name: "index_strategy_versions_on_strategy_id"
+  end
+
   create_table "trade_analytics", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.integer "duration_seconds"
@@ -695,6 +792,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
     t.index ["metadata"], name: "index_trading_signals_on_metadata", using: :gin
   end
 
+  create_table "trading_strategies", force: :cascade do |t|
+    t.string "author", default: "System"
+    t.jsonb "backtest_results", default: {}
+    t.jsonb "checks", default: {"risk"=>"not_run", "logic"=>"not_run", "syntax"=>"not_run", "backtest"=>"not_run"}
+    t.text "code", default: ""
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.jsonb "entry_rules", default: {}
+    t.jsonb "exit_rules", default: {}
+    t.jsonb "filters", default: {}
+    t.jsonb "instruments", default: []
+    t.string "name", null: false
+    t.jsonb "parameters", default: []
+    t.jsonb "risk_management", default: {}
+    t.string "runtime", default: "Ruby"
+    t.jsonb "schedule", default: {}
+    t.string "slug"
+    t.string "status", default: "draft"
+    t.bigint "strategy_record_id"
+    t.jsonb "tags", default: []
+    t.string "timeframe", default: "1m"
+    t.string "trade_direction", default: "both"
+    t.datetime "updated_at", null: false
+    t.string "version", default: "1.0.0"
+    t.index ["name", "version"], name: "index_trading_strategies_on_name_and_version", unique: true
+    t.index ["name"], name: "index_trading_strategies_on_name"
+    t.index ["slug"], name: "index_trading_strategies_on_slug", unique: true
+    t.index ["status"], name: "index_trading_strategies_on_status"
+    t.index ["strategy_record_id"], name: "index_trading_strategies_on_strategy_record_id"
+  end
+
   create_table "watchlist_items", force: :cascade do |t|
     t.boolean "active", default: true, null: false
     t.datetime "created_at", null: false
@@ -707,6 +835,43 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
     t.string "watchable_type"
     t.index ["segment", "security_id"], name: "index_watchlist_items_on_segment_and_security_id", unique: true
     t.index ["watchable_type", "watchable_id"], name: "index_watchlist_items_on_watchable_type_and_watchable_id"
+  end
+
+  create_table "woods_edges", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "relationship", null: false
+    t.bigint "source_id", null: false
+    t.bigint "target_id", null: false
+    t.string "via"
+    t.index ["source_id", "target_id", "relationship"], name: "idx_woods_edges_unique", unique: true
+    t.index ["source_id"], name: "index_woods_edges_on_source_id"
+    t.index ["target_id"], name: "index_woods_edges_on_target_id"
+  end
+
+  create_table "woods_embeddings", force: :cascade do |t|
+    t.string "chunk_type"
+    t.string "content_hash", null: false
+    t.datetime "created_at", null: false
+    t.integer "dimensions", null: false
+    t.text "embedding", null: false
+    t.bigint "unit_id", null: false
+    t.index ["content_hash"], name: "index_woods_embeddings_on_content_hash"
+    t.index ["unit_id"], name: "index_woods_embeddings_on_unit_id"
+  end
+
+  create_table "woods_units", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "file_path", null: false
+    t.string "identifier", null: false
+    t.json "metadata"
+    t.string "namespace"
+    t.text "source_code"
+    t.string "source_hash"
+    t.string "unit_type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["file_path"], name: "index_woods_units_on_file_path"
+    t.index ["identifier"], name: "index_woods_units_on_identifier", unique: true
+    t.index ["unit_type"], name: "index_woods_units_on_unit_type"
   end
 
   add_foreign_key "best_indicator_params", "instruments"
@@ -728,4 +893,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_25_153309) do
   add_foreign_key "solid_queue_scheduled_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "trade_analytics", "position_trackers"
   add_foreign_key "trade_telemetry", "position_trackers", column: "tracker_id"
+  add_foreign_key "woods_edges", "woods_units", column: "source_id"
+  add_foreign_key "woods_edges", "woods_units", column: "target_id"
+  add_foreign_key "woods_embeddings", "woods_units", column: "unit_id"
 end

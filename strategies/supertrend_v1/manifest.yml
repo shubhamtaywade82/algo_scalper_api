@@ -1,0 +1,15 @@
+name: "Supertrend V1"
+slug: "supertrend_v1"
+class_name: "SupertrendV1"
+timeframes: ["1m"]
+instruments: ["NIFTY", "BANKNIFTY", "SENSEX"]
+params:
+  supertrend_period:
+    type: integer
+    default: 10
+  supertrend_multiplier:
+    type: float
+    default: 2.0
+  adx_min:
+    type: float
+    default: 20.0

@@ -190,7 +190,7 @@ export default function Header(props) {
           <SidebarToggle onToggle={props.onToggleSidebar} collapsed={props.sidebarCollapsed} />
           <div class="flex flex-col shrink-0">
             <span class="text-[10px] font-black text-primary-400 tracking-[0.3em] uppercase">{props.mode} ENGINE</span>
-            <span class="text-[8px] font-bold text-gray-500 tracking-widest mt-0.5 uppercase">Active Terminal</span>
+            <span class="text-[10px] font-bold text-gray-500 tracking-widest mt-0.5 uppercase">Active Terminal</span>
           </div>
 
           <div class="hidden xl:flex items-center gap-2 border-l border-white/10 pl-3 min-w-0">
@@ -199,11 +199,11 @@ export default function Header(props) {
               href="/charts?symbol=NIFTY"
               target="_blank"
               rel="noopener noreferrer"
-              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-xl px-2.5 py-1 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+              class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
-                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Nifty 50</span>
-                <span class={`text-[11px] font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${niftyFlash()}`}>
+                <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Nifty 50</span>
+                <span class={`text-[16px] font-black text-white text-data transition-all duration-300 rounded px-0.5 ${niftyFlash()}`}>
                   <AnimatedNumber value={props.indices?.nifty} decimals={2} nullDisplay="—" />
                 </span>
               </div>
@@ -235,11 +235,11 @@ export default function Header(props) {
               href="/charts?symbol=BANKNIFTY"
               target="_blank"
               rel="noopener noreferrer"
-              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-xl px-2.5 py-1 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+              class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
-                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Bank Nifty</span>
-                <span class={`text-[11px] font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${bankniftyFlash()}`}>
+                <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Bank Nifty</span>
+                <span class={`text-[16px] font-black text-white text-data transition-all duration-300 rounded px-0.5 ${bankniftyFlash()}`}>
                   <AnimatedNumber value={props.indices?.banknifty} decimals={2} nullDisplay="—" />
                 </span>
               </div>
@@ -271,11 +271,11 @@ export default function Header(props) {
               href="/charts?symbol=SENSEX"
               target="_blank"
               rel="noopener noreferrer"
-              class="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-xl px-2.5 py-1 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
+              class="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 hover:bg-white/[0.04] hover:border-primary-500/20 hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all duration-300 group cursor-pointer"
             >
               <div class="flex flex-col">
-                <span class="text-[8px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Sensex</span>
-                <span class={`text-[11px] font-black text-white text-data transition-all duration-300 rounded px-0.5 mt-0.5 ${sensexFlash()}`}>
+                <span class="text-[10px] font-black text-gray-500 tracking-wider uppercase group-hover:text-primary-400 transition-colors">Sensex</span>
+                <span class={`text-[16px] font-black text-white text-data transition-all duration-300 rounded px-0.5 ${sensexFlash()}`}>
                   <AnimatedNumber value={props.indices?.sensex} decimals={2} nullDisplay="—" />
                 </span>
               </div>

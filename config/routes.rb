@@ -27,6 +27,7 @@ Rails.application.routes.draw do
     get :dashboard, to: "dashboard#show"
     get "public_ip/audit", to: "public_ip#audit"
     get :positions, to: "positions#index"
+    get "positions/:id", to: "positions#show"
     post "positions/:id/close", to: "positions#close"
     get :signals, to: "signals#index"
     get :dhan_access_token, to: "dhan_access_token#show"
@@ -61,6 +62,8 @@ Rails.application.routes.draw do
     # OHLC candle series for dashboard charting (read-only)
     get 'candles/:index_key', to: 'candles#index', as: :candles
 
+    get 'option_chain/:index_key', to: 'option_chains#show'
+
     get 'market/vix', to: 'market#vix'
 
     # Live AI analysis dashboard
@@ -83,13 +86,13 @@ Rails.application.routes.draw do
       post :apply, on: :member
     end
 
-    # Alpha Engine
+    # Alpha Engine — view into Strategies::Manager platform data (no separate signal
+    # generation of its own; SignalEngine that used to back scan/execute was an
+    # intentional no-op stub post-migration, so those actions were removed).
     namespace :alpha do
-      get  :status
-      post :scan
-      post :execute
-      get  :history
-      get  :performance
+      get :status
+      get :history
+      get :performance
     end
 
     # Ledger (paper double-entry)
@@ -103,9 +106,41 @@ Rails.application.routes.draw do
       delete :trip, action: :reset, on: :member
     end
 
+    # Trading Strategies (Strategy Creator)
+    resources :trading_strategies, only: %i[index show create update destroy] do
+      member do
+        post :validate
+        post :deploy
+      end
+    end
+
     resource :drawdown_guard, only: [], controller: 'drawdown_guard' do
       delete :reset, on: :member
     end
+
+    # Strategy Platform (Phases 2–5)
+    resources :strategies, param: :slug, only: %i[index show create] do
+      member do
+        post :deploy
+        post :start
+        post :stop
+        post :restart
+        get  :versions
+        get  :signals
+        get  :logs
+        get  :variables
+        put  :variables, action: :update_variables
+      end
+    end
+
+    # Global platform variables
+    get  'variables', to: 'variables#index'
+    put  'variables', to: 'variables#update'
+
+    # Strategy subsystem health
+    get  'strategies/health/pool',     to: 'strategies/health#pool'
+    get  'strategies/health/session',  to: 'strategies/health#session'
+    get  'strategies/health/backtest', to: 'strategies/health#backtest'
   end
 
   # Redis UI (development only)

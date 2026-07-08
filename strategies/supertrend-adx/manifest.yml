@@ -1,0 +1,23 @@
+---
+slug: supertrend-adx
+name: Supertrend ADX
+class_name: SupertrendAdxStrategy
+timeframes:
+- 5m
+instruments:
+- NIFTY
+- BANKNIFTY
+- SENSEX
+params:
+  supertrend_period:
+    type: Integer
+    default: '10'
+  supertrend_multiplier:
+    type: Float
+    default: '3.0'
+  adx_threshold:
+    type: Integer
+    default: '25'
+  adx_period:
+    type: Integer
+    default: '14'

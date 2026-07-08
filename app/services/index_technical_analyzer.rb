@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'dhan_hq'
+require 'dhan_hq/ta'
+require 'dhan_hq/analysis'
 
 # Service for performing technical analysis on indices using DhanHQ TA modules
 # Single configurable analyzer that adapts behavior based on index-specific configuration

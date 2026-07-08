@@ -10,9 +10,7 @@ RSpec.configure do |config|
     if Live::OrderUpdateHandler.instance.respond_to?(:running?) && Live::OrderUpdateHandler.instance.running?
       Live::OrderUpdateHandler.instance.stop!
     end
-    if Signal::Scheduler.instance.respond_to?(:running?) && Signal::Scheduler.instance.running?
-      Signal::Scheduler.instance.stop!
-    end
+
     Live::RiskManagerService.instance.stop! if Live::RiskManagerService.instance.running?
     if defined?(Live::AtmOptionsService)
       atm_service = Live::AtmOptionsService.instance
@@ -34,19 +32,17 @@ RSpec.configure do |config|
       Live::OrderUpdateHub,
       Live::OrderUpdateHandler,
       Live::ReconciliationService,
-      Live::PaperPnlRefresher,
-      Signal::Scheduler
+      Live::PaperPnlRefresher
     ].each do |service_class|
-      if defined?(service_class) && service_class.respond_to?(:instance)
-        begin
-          service = service_class.instance
-          if service.respond_to?(:running?) && service.running?
-            service.stop! if service.respond_to?(:stop!)
-            service.stop if service.respond_to?(:stop)
-          end
-        rescue StandardError
-          # Ignore
+      next unless defined?(service_class) && service_class.respond_to?(:instance)
+      begin
+        service = service_class.instance
+        if service.respond_to?(:running?) && service.running?
+          service.stop! if service.respond_to?(:stop!)
+          service.stop if service.respond_to?(:stop)
         end
+      rescue StandardError
+        # Ignore
       end
     end
   end
@@ -59,9 +55,7 @@ RSpec.configure do |config|
     if Live::OrderUpdateHandler.instance.respond_to?(:running?) && Live::OrderUpdateHandler.instance.running?
       Live::OrderUpdateHandler.instance.stop!
     end
-    if Signal::Scheduler.instance.respond_to?(:running?) && Signal::Scheduler.instance.running?
-      Signal::Scheduler.instance.stop!
-    end
+
     Live::RiskManagerService.instance.stop! if Live::RiskManagerService.instance.running?
     if defined?(Live::AtmOptionsService)
       atm_service = Live::AtmOptionsService.instance

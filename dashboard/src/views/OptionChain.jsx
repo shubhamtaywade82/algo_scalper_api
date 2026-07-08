@@ -1,4 +1,4 @@
-import { createSignal, createMemo, For, Show } from 'solid-js'
+import { createSignal, createMemo, For, Show, createEffect } from 'solid-js'
 import { useOptionChain } from '../stores/useOptionChain'
 import { useDashboardContext } from '../context/DashboardContext'
 import AnimatedNumber from '../components/AnimatedNumber'
@@ -11,14 +11,10 @@ export default function OptionChain() {
   const { chain, isStale, connected } = useOptionChain(selectedAsset)
   const { indices } = useDashboardContext()
 
-  // Spot Price from live dashboard indexes feed
-  const spotPrice = () => {
-    const key = selectedAsset().toLowerCase()
-    return indices()?.[key] || chain()?.spot || 0
-  }
+  const spotPrice = () => indices()?.[selectedAsset().toLowerCase()] || chain()?.spot || 0
 
   const indexPrevClose = () => {
-    return spotPrice() / 1.0062
+    return indices()?.[selectedAsset().toLowerCase() + '_prev_close'] || (spotPrice() / 1.0062)
   }
 
   const spotChange = () => spotPrice() - indexPrevClose()
@@ -122,6 +118,54 @@ export default function OptionChain() {
       putOiChangePct,
       totalOiChangePct
     }
+  })
+
+  const [history, setHistory] = createSignal([])
+
+  createEffect(() => {
+    selectedAsset()
+    setHistory([])
+  })
+
+  createEffect(() => {
+    const pcr = summary().pcr
+    const maxPain = summary().maxPain
+    if (pcr > 0 || maxPain > 0) {
+      setHistory(prev => {
+        const next = [...prev, { pcr, maxPain, time: Date.now() }]
+        return next.slice(-50)
+      })
+    }
+  })
+
+  const pcrPath = createMemo(() => {
+    const data = history()
+    if (data.length < 2) return 'M 0,30 L 200,30'
+    const values = data.map(d => d.pcr)
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    const range = max - min
+
+    return data.map((d, i) => {
+      const x = (i / (data.length - 1)) * 200
+      const y = range > 0 ? 50 - ((d.pcr - min) / range) * 40 : 30
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)},${y.toFixed(1)}`
+    }).join(' ')
+  })
+
+  const maxPainPath = createMemo(() => {
+    const data = history()
+    if (data.length < 2) return 'M 0,30 L 200,30'
+    const values = data.map(d => d.maxPain)
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    const range = max - min
+
+    return data.map((d, i) => {
+      const x = (i / (data.length - 1)) * 200
+      const y = range > 0 ? 50 - ((d.maxPain - min) / range) * 40 : 30
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)},${y.toFixed(1)}`
+    }).join(' ')
   })
 
   // Greeks Summary for ATM strike (read from live ticks)
@@ -312,12 +356,12 @@ export default function OptionChain() {
                   <th class="py-2.5">OI</th>
                   <th>Chg OI</th>
                   <th>Vol</th>
-                  <th class="text-emerald-400">LTP</th>
-                  <th>Chg %</th>
-                  <th>IV</th>
-                  <th>Delta</th>
-                  <th>Theta</th>
                   <th>Vega</th>
+                  <th>Theta</th>
+                  <th>Delta</th>
+                  <th>IV</th>
+                  <th>Chg %</th>
+                  <th class="text-emerald-400">LTP</th>
                   <th class="text-white bg-white/5">Price</th>
                   <th class="text-rose-400">LTP</th>
                   <th>Chg %</th>
@@ -344,18 +388,18 @@ export default function OptionChain() {
                       <td class={`text-data text-gray-500 ${callsTdClass(r.strike)}`}>
                         <AnimatedNumber value={r.c_vol} decimals={0} />
                       </td>
-                      <td class={`text-data font-black text-white ${callsTdClass(r.strike)}`}>
-                        ₹<AnimatedNumber value={r.c_ltp} decimals={2} />
+                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_vega.toFixed(2)}</td>
+                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_theta.toFixed(2)}</td>
+                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_delta.toFixed(2)}</td>
+                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>
+                        <AnimatedNumber value={r.c_iv} decimals={2} />%
                       </td>
                       <td class={`text-data ${r.c_chg >= 0 ? 'text-emerald-400' : 'text-rose-500'} ${callsTdClass(r.strike)}`}>
                         {r.c_chg >= 0 ? '+' : ''}<AnimatedNumber value={r.c_chg} decimals={2} />%
                       </td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>
-                        <AnimatedNumber value={r.c_iv} decimals={2} />%
+                      <td class={`text-data font-black text-white ${callsTdClass(r.strike)}`}>
+                        ₹<AnimatedNumber value={r.c_ltp} decimals={2} />
                       </td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_delta.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_theta.toFixed(2)}</td>
-                      <td class={`text-data text-gray-400 ${callsTdClass(r.strike)}`}>{r.c_vega.toFixed(2)}</td>
 
                       {/* STRIKE */}
                       <td class={`py-2 text-data font-black text-white bg-white/5 border-x border-white/5`}>
@@ -491,7 +535,7 @@ export default function OptionChain() {
           </div>
           <div class="flex-1 py-3">
             <svg viewBox="0 0 200 60" class="w-full h-full">
-              <path d="M0,45 L40,50 L80,38 L120,40 L160,25 L200,30" fill="none" stroke="rgb(16, 185, 129)" stroke-width="2" />
+              <path d={pcrPath()} fill="none" stroke="rgb(16, 185, 129)" stroke-width="2" />
             </svg>
           </div>
         </div>
@@ -506,7 +550,7 @@ export default function OptionChain() {
           </div>
           <div class="flex-1 py-3">
             <svg viewBox="0 0 200 60" class="w-full h-full">
-              <path d="M0,35 L40,40 L80,28 L120,38 L160,18 L200,20" fill="none" stroke="rgb(245, 158, 11)" stroke-width="2" />
+              <path d={maxPainPath()} fill="none" stroke="rgb(245, 158, 11)" stroke-width="2" />
             </svg>
           </div>
         </div>

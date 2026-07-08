@@ -115,6 +115,26 @@ module Live
           last["volume"] = last["volume"].to_i + tick[:volume].to_i
           last["oi"]     = tick[:oi].to_i if tick[:oi].to_i.positive?
         else
+          # The previous forming candle (if any) is now finalized — hand it off
+          # for durable persistence before starting the new one. A persistence
+          # hiccup must never block or abort the Redis write below. Note the
+          # enqueue itself is a synchronous Solid Queue DB insert (not fully
+          # async) — acceptable since it fires once/minute/index and is
+          # rescue-guarded, but this is not a DB-free path.
+          begin
+            Candles::Persister.enqueue(instrument: instrument, interval: interval, candles: [last], source: "live") if last
+            if last && interval == 1
+              Core::EventBus.instance.publish(:candle_closed,
+                                              instrument_key: instrument_key(instrument),
+                                              ts: last["timestamp"],
+                                              o: last["open"], h: last["high"],
+                                              l: last["low"], c: last["close"],
+                                              v: last["volume"])
+            end
+          rescue StandardError => e
+            Rails.logger.error("[CandleSeriesCache] append_tick persist enqueue error: #{e.class} - #{e.message}")
+          end
+
           # Start a new forming candle
           new_candle = {
             "timestamp" => bucket_iso,
@@ -178,6 +198,80 @@ module Live
         redis.del(key)
       rescue StandardError => e
         Rails.logger.error("[CandleSeriesCache] store_candles error: #{e.class} - #{e.message}")
+      end
+
+      LAST_PUBLISHED_PREFIX = "live:candle_poll:last_published"
+
+      # Poll DhanHQ REST API for latest OHLC and publish candle_closed events
+      # when new candles complete. Designed for use as a fallback when the
+      # WebSocket tick stream is unavailable.
+      #
+      # Uses a separate Redis key to track the last published candle timestamp,
+      # independent of the candle cache, so each completed candle is published
+      # exactly once regardless of poll timing.
+      #
+      # @param instrument [Instrument]
+      # @param interval [Integer] candle interval in minutes
+      # @return [Hash] { published: Integer, error: String|nil }
+      def poll_candle_closure(instrument:, interval: 1)
+        security_id = instrument.security_id.to_s
+        redis_key(security_id, interval)
+        pub_key = "#{LAST_PUBLISHED_PREFIX}:#{security_id}:#{interval}"
+
+        last_published_ts = redis.get(pub_key)
+        last_published_ts = last_published_ts ? Time.zone.parse(last_published_ts) : nil
+
+        to_date = Time.current.strftime("%Y-%m-%d %H:%M:%S")
+        from_date = (Time.current - (interval * 5).minutes).strftime("%Y-%m-%d %H:%M:%S")
+
+        ohlc_data = instrument.intraday_ohlc(interval: interval.to_s, from_date: from_date, to_date: to_date)
+        return { published: 0, error: "no data" } if ohlc_data.blank?
+
+        candles = normalize_ohlc(ohlc_data)
+        return { published: 0, error: "no candles" } if candles.empty?
+
+        published = 0
+        max_ts = nil
+
+        candles.each do |candle|
+          candle_ts = parse_ts(candle[:timestamp])
+          next unless candle_ts
+
+          next if last_published_ts && candle_ts <= last_published_ts
+          next if (Time.current - candle_ts) < interval.minutes
+
+          Core::EventBus.instance.publish(:candle_closed,
+                                          instrument_key: instrument_key(instrument),
+                                          ts: candle[:timestamp],
+                                          o: candle[:open], h: candle[:high],
+                                          l: candle[:low], c: candle[:close],
+                                          v: candle[:volume])
+          published += 1
+          max_ts = candle_ts if max_ts.nil? || candle_ts > max_ts
+        rescue StandardError => e
+          Rails.logger.error("[CandleSeriesCache] poll_candle_closure publish error: #{e.class} - #{e.message}")
+        end
+
+        redis.set(pub_key, max_ts.utc.iso8601(3), ex: 86400) if published.positive? && max_ts
+
+        store_candles(security_id: security_id, interval: interval, candles: candles)
+
+        { published: published, error: nil }
+      rescue StandardError => e
+        Rails.logger.error("[CandleSeriesCache] poll_candle_closure error: #{e.class} - #{e.message}")
+        { published: 0, error: e.message }
+      end
+
+      def instrument_key(instrument)
+        instrument.respond_to?(:symbol_name) ? instrument.symbol_name : instrument.symbol
+      end
+
+      def normalize_ohlc(raw)
+        scratch = CandleSeries.new(symbol: "_poller_", interval: "1")
+        scratch.normalise_candles(raw)
+      rescue StandardError => e
+        Rails.logger.error("[CandleSeriesCache] normalize_ohlc error: #{e.class} - #{e.message}")
+        []
       end
 
       private
