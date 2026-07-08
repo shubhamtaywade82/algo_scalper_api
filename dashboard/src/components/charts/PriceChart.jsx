@@ -1,5 +1,6 @@
 import { onMount, onCleanup, createEffect, createSignal, For } from 'solid-js'
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, ColorType } from 'lightweight-charts'
+import { istTickMarkFormatter, istTimeFormatter } from '../../lib/chartTime'
 
 // Overlay indicators are just LineSeries fed derived {time, value} arrays.
 // Add a new type by: (1) writing a compute fn here, (2) registering it in
@@ -377,7 +378,12 @@ export default function PriceChart(props) {
       autoSize: !!props.fullHeight,
       // rightOffset keeps a few empty bars between the latest candle and the
       // price axis instead of pinning it flush against the edge.
-      timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5 },
+      // tickMarkFormatter forces IST rendering — candle `time` values are
+      // correct UTC seconds, but lightweight-charts' default formatter uses
+      // the browser's local timezone, which garbles the axis into the
+      // trading session's UTC-shifted hours (see lib/chartTime.js).
+      timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5, tickMarkFormatter: istTickMarkFormatter },
+      localization: { timeFormatter: istTimeFormatter },
       crosshair: { mode: 0 },
       // Built-in kinetic scroll/zoom easing — the chart's own "smooth animation" layer
       kineticScroll: { touch: true, mouse: true }

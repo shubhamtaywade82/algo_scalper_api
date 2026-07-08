@@ -4,6 +4,7 @@
 
 import { onMount, onCleanup, createEffect } from 'solid-js'
 import { createChart, HistogramSeries, ColorType } from 'lightweight-charts'
+import { istTickMarkFormatter, istTimeFormatter } from '../../lib/chartTime'
 
 export default function DrawdownChart(props) {
   let containerEl
@@ -22,7 +23,9 @@ export default function DrawdownChart(props) {
       },
       width: containerEl.clientWidth,
       height: props.height || 120,
-      timeScale: { timeVisible: true, secondsVisible: false },
+      // tickMarkFormatter forces IST rendering — see lib/chartTime.js.
+      timeScale: { timeVisible: true, secondsVisible: false, tickMarkFormatter: istTickMarkFormatter },
+      localization: { timeFormatter: istTimeFormatter },
       rightPriceScale: {
         scaleMargins: { top: 0.1, bottom: 0.1 }
       }

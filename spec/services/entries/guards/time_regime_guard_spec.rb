@@ -55,5 +55,56 @@ RSpec.describe Entries::Guards::TimeRegimeGuard do
         expect(result).to eq(Entries::EntryGuardPipeline::PASS)
       end
     end
+
+    context 'ADX regime bounds' do
+      let(:context) do
+        {
+          index_cfg: index_cfg,
+          pick: { symbol: 'NIFTY26APR23000CE', adx_value: adx },
+          direction: :bullish
+        }
+      end
+
+      before do
+        allow(Live::TimeRegimeService.instance).to receive_messages(
+          allow_new_trades?: true, allow_entries?: true, current_regime: :trend_continuation,
+          regime_config: { min_adx: 15.0, max_adx: 35.0 }
+        )
+      end
+
+      context 'when adx is above the regime max_adx ceiling' do
+        let(:adx) { 40.0 }
+
+        it 'blocks entry' do
+          expect(described_class.call(context)).to eq({ blocked: 'time regime rules for NIFTY' })
+        end
+      end
+
+      context 'when adx is below the regime min_adx floor' do
+        let(:adx) { 10.0 }
+
+        it 'blocks entry' do
+          expect(described_class.call(context)).to eq({ blocked: 'time regime rules for NIFTY' })
+        end
+      end
+
+      context 'when adx is within the regime bounds' do
+        let(:adx) { 25.0 }
+
+        it 'passes' do
+          expect(described_class.call(context)).to eq(Entries::EntryGuardPipeline::PASS)
+        end
+      end
+
+      context 'when the signal carries no adx value' do
+        let(:context) do
+          { index_cfg: index_cfg, pick: { symbol: 'NIFTY26APR23000CE' }, direction: :bullish }
+        end
+
+        it 'passes (no data to enforce against)' do
+          expect(described_class.call(context)).to eq(Entries::EntryGuardPipeline::PASS)
+        end
+      end
+    end
   end
 end
