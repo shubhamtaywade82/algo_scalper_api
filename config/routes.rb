@@ -86,13 +86,13 @@ Rails.application.routes.draw do
       post :apply, on: :member
     end
 
-    # Alpha Engine
+    # Alpha Engine — view into Strategies::Manager platform data (no separate signal
+    # generation of its own; SignalEngine that used to back scan/execute was an
+    # intentional no-op stub post-migration, so those actions were removed).
     namespace :alpha do
-      get  :status
-      post :scan
-      post :execute
-      get  :history
-      get  :performance
+      get :status
+      get :history
+      get :performance
     end
 
     # Ledger (paper double-entry)
