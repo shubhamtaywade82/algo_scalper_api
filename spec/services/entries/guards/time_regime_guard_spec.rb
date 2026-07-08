@@ -106,5 +106,49 @@ RSpec.describe Entries::Guards::TimeRegimeGuard do
         end
       end
     end
+
+    context 'per-index ADX overrides' do
+      let(:index_cfg) { { key: 'BANKNIFTY' } }
+      let(:context) do
+        {
+          index_cfg: index_cfg,
+          pick: { symbol: 'BANKNIFTY26APR50000CE' },
+          direction: :bullish
+        }
+      end
+
+      before do
+        allow(Live::TimeRegimeService.instance).to receive_messages(
+          allow_new_trades?: true, allow_entries?: true, current_regime: :trend_continuation,
+          regime_config: {
+            min_adx: 15.0, max_adx: 35.0,
+            per_index_min_adx: { 'BANKNIFTY' => 20.0 },
+            per_index_max_adx: { 'BANKNIFTY' => 40.0 }
+          }
+        )
+      end
+
+      it 'uses the per-index floor instead of the global one' do
+        # 17 is below BANKNIFTY's 20.0 override but above the global 15.0 floor
+        result = described_class.call(context.merge(pick: { adx_value: 17.0 }))
+        expect(result).to eq({ blocked: 'time regime rules for BANKNIFTY' })
+      end
+
+      it 'uses the per-index ceiling instead of the global one' do
+        # 37 is above the global 35.0 ceiling but below BANKNIFTY's 40.0 override
+        result = described_class.call(context.merge(pick: { adx_value: 37.0 }))
+        expect(result).to eq(Entries::EntryGuardPipeline::PASS)
+      end
+
+      it 'still blocks above the per-index ceiling' do
+        result = described_class.call(context.merge(pick: { adx_value: 45.0 }))
+        expect(result).to eq({ blocked: 'time regime rules for BANKNIFTY' })
+      end
+
+      it 'falls back to the global bounds for an index with no override' do
+        nifty_context = { index_cfg: { key: 'NIFTY' }, pick: { adx_value: 17.0 }, direction: :bullish }
+        expect(described_class.call(nifty_context)).to eq(Entries::EntryGuardPipeline::PASS)
+      end
+    end
   end
 end

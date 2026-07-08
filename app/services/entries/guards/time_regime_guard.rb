@@ -36,24 +36,34 @@ module Entries
           true
         end
 
-        # Historical regime research (61 trading days, 5m bars, NIFTY/BANKNIFTY/SENSEX) found
+        # Historical regime research (60+ trading days, 5m bars, NIFTY/BANKNIFTY/SENSEX) found
         # ADX has no clean "higher is better" line: within trend_continuation specifically,
-        # ADX >= 35 was consistently the WORST bucket (likely late/exhaustion moves), while
-        # min_adx already guards the floor. `max_adx` (optional per regime) enforces that
-        # ceiling; only applied when both the regime config sets it and the signal actually
-        # carries an ADX value — absent either, this is a no-op (matches MiddayQualityGuard's
-        # pattern of not blocking on data it doesn't have).
+        # very high ADX was consistently the WORST bucket (likely late/exhaustion moves), while
+        # min_adx already guards the floor. `min_adx`/`max_adx` enforce global floor/ceiling;
+        # `per_index_min_adx`/`per_index_max_adx` (optional, keyed by index symbol) override
+        # them per index — BANKNIFTY's optimal cutoffs measured meaningfully different from
+        # NIFTY/SENSEX (min 20 vs 15, max 40 vs 35), which were statistically indistinguishable
+        # from each other and kept shared. All of this is only applied when the regime config
+        # sets it AND the signal actually carries an ADX value — absent either, this is a no-op
+        # (matches MiddayQualityGuard's pattern of not blocking on data it doesn't have).
         def adx_within_regime_bounds?(regime_cfg, context)
           adx = adx_value(context)
           return true if adx.nil?
 
-          min = regime_cfg[:min_adx]
+          index_key = context.dig(:index_cfg, :key).to_s.upcase
+
+          min = per_index_bound(regime_cfg, :per_index_min_adx, index_key) || regime_cfg[:min_adx]
           return false if min && adx < min.to_f
 
-          max = regime_cfg[:max_adx]
+          max = per_index_bound(regime_cfg, :per_index_max_adx, index_key) || regime_cfg[:max_adx]
           return false if max && adx > max.to_f
 
           true
+        end
+
+        def per_index_bound(regime_cfg, key, index_key)
+          overrides = regime_cfg[key] || {}
+          overrides[index_key] || overrides[index_key.to_sym]
         end
 
         def adx_value(context)

@@ -705,8 +705,16 @@ risk:
       allow_runners: true # Allow runner with trend intact (exponential drawdown logic fits here)
       allow_entries: true
       min_adx: 15.0 # Trend continuation only, pullbacks preferred, 1m + 5m alignment
-      max_adx: 35.0 # Ceiling, not just floor — ADX>=35 was the single worst bucket here in
-                    # regime research (late/exhaustion moves), across all 3 indices
+      max_adx: 35.0 # Ceiling, not just floor — very high ADX was the single worst bucket here
+                    # in regime research (late/exhaustion moves). NIFTY/SENSEX statistically
+                    # indistinguishable from each other at current sample size — kept shared.
+      # BANKNIFTY measured meaningfully different optimal cutoffs in a follow-up finer-grained
+      # pass (fav:adverse ratio bottomed at ADX 15-20 and collapsed again at ADX>=40, better
+      # in between) — given its own thresholds rather than forced to share NIFTY/SENSEX's.
+      per_index_min_adx:
+        BANKNIFTY: 20.0
+      per_index_max_adx:
+        BANKNIFTY: 40.0
       max_tp_rupees: null # No limit (runners allowed)
 
     # S3: CHOP / THETA ZONE (11:30 – 13:45) ❌ DANGER
@@ -738,6 +746,13 @@ risk:
       allow_runners: true # See allow_trailing note above — data says let winners run here too
       allow_entries: true # ONLY continuation moves, no fresh breakouts after 14:45, ATM only
       min_adx: 18.0
+      # Follow-up finer-grained pass found ADX>=40 clearly worst for BANKNIFTY here too, so
+      # giving it a ceiling (this pass used a different Supertrend/ADX reconstruction than the
+      # one that produced the "13:1 at ADX 35+" note above — the two aren't fully reconciled,
+      # so this is a conservative ceiling above where both passes agree things degrade, not a
+      # tight one).
+      per_index_max_adx:
+        BANKNIFTY: 40.0
       max_tp_rupees: 2000 # Fixed ₹1.5k-₹2k
 
   # Global Time-Based Overrides (CRITICAL - override everything)
