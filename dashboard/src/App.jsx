@@ -26,6 +26,7 @@ const Replay = lazy(() => import('./views/Replay'))
 
 // New TDD routes — all backends implemented
 const MarketWatch = lazy(() => import('./views/MarketWatch'))
+const Positions = lazy(() => import('./views/Positions'))
 const Holdings = lazy(() => import('./views/Holdings'))
 const Funds = lazy(() => import('./views/Funds'))
 const Reports = lazy(() => import('./views/Reports'))
@@ -142,6 +143,7 @@ export default function App() {
           <Route path="/replay" component={Replay} />
           {/* New routes from TDD layout */}
           <Route path="/market-watch" component={MarketWatch} />
+          <Route path="/positions" component={Positions} />
           <Route path="/holdings" component={Holdings} />
           <Route path="/funds" component={Funds} />
           <Route path="/reports" component={Reports} />
