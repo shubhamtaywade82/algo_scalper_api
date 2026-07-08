@@ -90,6 +90,10 @@ module Strategies
 
     private
 
+    def refresh_strategy_registry
+      Strategies::Discovery.sync!
+    end
+
     def control_loop
       while @running
         reconcile
@@ -102,6 +106,7 @@ module Strategies
     end
 
     def reconcile
+      refresh_strategy_registry
       Strategies::Record.where(status: %w[running deployed]).find_each do |strategy_record|
         desired = strategy_record.desired_status || strategy_record.status
         actual = @mutex.synchronize { @runners.key?(strategy_record.slug) }

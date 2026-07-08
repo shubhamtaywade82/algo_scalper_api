@@ -26,11 +26,13 @@ module Strategies
     # signal reasoning — keep the latter intact in the `reason` column (the
     # signals dashboard parses ADX etc. out of it) and file the guard's
     # verdict under metadata instead.
-    def record_entry_outcome(outcome, reason = nil, position_tracker: nil)
+    def record_entry_outcome(outcome, reason = nil, position_tracker: nil, extra_metadata: nil)
       mapped = outcome.to_s == "entered" ? "executed" : "blocked_by_guard"
+      new_metadata = metadata.merge("entry_result_reason" => reason)
+      new_metadata.merge!(extra_metadata) if extra_metadata.is_a?(Hash) && extra_metadata.any?
       update!(
         outcome: mapped,
-        metadata: metadata.merge("entry_result_reason" => reason),
+        metadata: new_metadata,
         position_tracker: position_tracker || self.position_tracker
       )
     end

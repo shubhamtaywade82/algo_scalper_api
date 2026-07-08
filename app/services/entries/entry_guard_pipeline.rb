@@ -11,13 +11,21 @@ module Entries
 
     # @param context [Hash] Mutable context (index_cfg, pick, direction, etc.)
     # @return [Symbol] :pass if all handlers passed
-    # @return [Hash] { blocked: String } if a handler blocked
+    # @return [Hash] { blocked: String, evaluated: Array<Hash> } if a handler blocked.
+    #   `evaluated` lists every guard run before the block, in order, so callers can
+    #   report the full decision trail rather than only the guard that finally blocked.
     def run(context)
+      evaluated = []
       @handlers.each do |handler|
         result = handler.call(context)
-        next if result == PASS
+        if result == PASS
+          evaluated << { guard: handler.name, result: :pass }
+          next
+        end
 
-        return result
+        reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
+        evaluated << { guard: handler.name, result: :blocked, reason: reason }
+        return { blocked: reason, evaluated: evaluated }
       end
       PASS
     end
