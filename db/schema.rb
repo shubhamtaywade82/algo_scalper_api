@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_12_120003) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_12_150000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -579,6 +579,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_12_120003) do
     t.datetime "updated_at", null: false
     t.index ["research_signal_id", "expiry_flag", "option_type", "strike_distance", "entry_model"], name: "index_research_candidates_on_signal_and_contract", unique: true
     t.index ["research_signal_id"], name: "index_research_option_candidates_on_research_signal_id"
+  end
+
+  create_table "research_premium_lifecycles", force: :cascade do |t|
+    t.decimal "actual_strike", precision: 12, scale: 4
+    t.datetime "created_at", null: false
+    t.datetime "decay_start_ts"
+    t.decimal "end_premium", precision: 12, scale: 4
+    t.decimal "end_return_pct", precision: 10, scale: 4
+    t.datetime "end_ts"
+    t.decimal "entry_premium", precision: 12, scale: 4
+    t.datetime "entry_ts", null: false
+    t.string "expiry_flag", null: false
+    t.string "interval", default: "5", null: false
+    t.decimal "max_drawdown_after_peak_pct", precision: 10, scale: 4
+    t.jsonb "metadata", default: {}, null: false
+    t.integer "minutes_to_peak"
+    t.string "option_type", null: false
+    t.integer "peak_duration_minutes"
+    t.decimal "peak_premium", precision: 12, scale: 4
+    t.decimal "peak_return_pct", precision: 10, scale: 4
+    t.datetime "peak_ts"
+    t.string "status", default: "pending", null: false
+    t.string "strike_label", null: false
+    t.jsonb "threshold_minutes", default: {}, null: false
+    t.jsonb "underlying_context", default: {}, null: false
+    t.string "underlying_symbol", null: false
+    t.datetime "updated_at", null: false
+    t.index ["underlying_symbol", "expiry_flag", "option_type", "strike_label", "interval", "entry_ts"], name: "index_research_lifecycles_on_contract_and_entry", unique: true
   end
 
   create_table "research_raw_fetches", force: :cascade do |t|

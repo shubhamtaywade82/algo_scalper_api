@@ -92,6 +92,7 @@ app/services/
     token_manager.rb               # 3-tier token: authority server → TOTP → static ENV
   adapters/
     option_chain/dhan_adapter.rb   # live option chain fetch (always wired, even in paper mode)
+  research/                        # offline research pipeline (see below) — never called from the live trading path
 
 app/jobs/
   instruments_import_job.rb        # daily DhanHQ CSV sync
@@ -161,6 +162,18 @@ Exit enforcement (5s loop):
     → Premium R-stop, trailing (tiered/direct/gamma), profit floor
     → Structure invalidation, premium momentum, R:R booking, time stop
 ```
+
+## Research Pipeline (`Research::` — offline, decoupled from live trading)
+
+A layered pipeline over Dhan's `ExpiredOptionsData` ("rollingoption") and the persisted `candles` table, for studying option premium behavior — never wired into the live entry/exit path.
+
+- `research_raw_fetches` — raw API response archive (audit/replay)
+- `research_option_bars` — normalized minute/5-min option OHLCV, keyed by contract identity (symbol/expiry_flag/option_type/strike_label/interval/ts)
+- `research_signals` — signal-time snapshot (spot/direction/timestamp), buildable manually or from a `TradingSignal`
+- `research_option_candidates` — ATM+/-N candidate strikes per signal, scored (entry/exit/MFE/MAE/return) by `Research::TradeScorer`
+- `research_premium_lifecycles` — full premium path (entry → peak → decay → end) per strike across a session, with a best-effort underlying context snapshot (ATR/ADX/RSI/MACD/VWAP) at entry and peak via `Research::UnderlyingContextSnapshot`
+
+Entry points: `Research::Pipeline.run` (single signal → ranked candidates) and `Research::LifecycleRunner.run` (full ATM+/-N board → ranked lifecycles). Rake tasks: `research:run_signal`, `research:run_board_lifecycle` (see `lib/tasks/research.rake`).
 
 ## Paper vs Live Mode
 
