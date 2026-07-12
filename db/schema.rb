@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_07_084810) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_12_120003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -529,6 +529,87 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_084810) do
     t.datetime "updated_at", null: false
   end
 
+  create_table "research_option_bars", force: :cascade do |t|
+    t.decimal "actual_strike", precision: 12, scale: 4
+    t.decimal "close", precision: 12, scale: 4
+    t.datetime "created_at", null: false
+    t.string "exchange_segment", null: false
+    t.string "expiry_flag", null: false
+    t.decimal "high", precision: 12, scale: 4
+    t.string "instrument", default: "OPTIDX", null: false
+    t.string "interval", default: "5", null: false
+    t.decimal "iv", precision: 10, scale: 4
+    t.decimal "low", precision: 12, scale: 4
+    t.bigint "oi"
+    t.decimal "open", precision: 12, scale: 4
+    t.string "option_type", null: false
+    t.bigint "research_raw_fetch_id"
+    t.string "source", default: "rolling_option", null: false
+    t.decimal "spot", precision: 12, scale: 4
+    t.string "strike_label", null: false
+    t.datetime "ts", null: false
+    t.string "underlying_symbol", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "volume", default: 0
+    t.index ["research_raw_fetch_id"], name: "index_research_option_bars_on_research_raw_fetch_id"
+    t.index ["underlying_symbol", "expiry_flag", "option_type", "strike_label", "interval", "ts"], name: "index_research_option_bars_on_contract_and_ts", unique: true
+  end
+
+  create_table "research_option_candidates", force: :cascade do |t|
+    t.decimal "actual_strike", precision: 12, scale: 4
+    t.datetime "created_at", null: false
+    t.string "entry_model", default: "next_candle_open", null: false
+    t.decimal "entry_price", precision: 12, scale: 4
+    t.datetime "entry_timestamp"
+    t.date "expiry_date"
+    t.string "expiry_flag", null: false
+    t.decimal "exit_price", precision: 12, scale: 4
+    t.datetime "exit_timestamp"
+    t.integer "holding_minutes"
+    t.decimal "mae_pct", precision: 10, scale: 4
+    t.decimal "mfe_pct", precision: 10, scale: 4
+    t.jsonb "metadata", default: {}, null: false
+    t.string "option_type", null: false
+    t.bigint "research_signal_id", null: false
+    t.decimal "return_pct", precision: 10, scale: 4
+    t.string "status", default: "pending", null: false
+    t.integer "strike_distance", default: 0, null: false
+    t.string "strike_label", null: false
+    t.string "underlying_symbol", null: false
+    t.datetime "updated_at", null: false
+    t.index ["research_signal_id", "expiry_flag", "option_type", "strike_distance", "entry_model"], name: "index_research_candidates_on_signal_and_contract", unique: true
+    t.index ["research_signal_id"], name: "index_research_option_candidates_on_research_signal_id"
+  end
+
+  create_table "research_raw_fetches", force: :cascade do |t|
+    t.string "api_version"
+    t.datetime "created_at", null: false
+    t.string "endpoint", null: false
+    t.datetime "fetched_at", null: false
+    t.jsonb "request", default: {}, null: false
+    t.jsonb "response", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.index ["endpoint", "fetched_at"], name: "index_research_raw_fetches_on_endpoint_and_fetched_at"
+  end
+
+  create_table "research_signals", force: :cascade do |t|
+    t.decimal "confidence", precision: 6, scale: 3
+    t.datetime "created_at", null: false
+    t.string "direction", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.jsonb "reason", default: {}, null: false
+    t.datetime "signal_timestamp", null: false
+    t.string "source", default: "manual", null: false
+    t.bigint "source_id"
+    t.string "source_type"
+    t.decimal "spot_price", precision: 12, scale: 4, null: false
+    t.string "strategy_name"
+    t.string "underlying_symbol", null: false
+    t.datetime "updated_at", null: false
+    t.index ["source_type", "source_id"], name: "index_research_signals_on_source_type_and_source_id"
+    t.index ["underlying_symbol", "signal_timestamp"], name: "index_research_signals_on_symbol_and_ts"
+  end
+
   create_table "settings", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
@@ -885,6 +966,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_084810) do
   add_foreign_key "paper_trades", "paper_positions"
   add_foreign_key "position_meta_snapshots", "position_trackers"
   add_foreign_key "position_trackers", "instruments"
+  add_foreign_key "research_option_bars", "research_raw_fetches"
+  add_foreign_key "research_option_candidates", "research_signals"
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
