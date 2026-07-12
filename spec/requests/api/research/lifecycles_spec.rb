@@ -68,4 +68,36 @@ RSpec.describe Api::Research::LifecyclesController do
       expect(response).to have_http_status(:unprocessable_entity)
     end
   end
+
+  describe "GET /api/research/lifecycles/expectancy" do
+    it "returns context buckets ranked by avg return" do
+      Research::PremiumLifecycle.create!(
+        underlying_symbol: "NIFTY", expiry_flag: "WEEK", option_type: "CE", strike_label: "ATM", interval: "5",
+        entry_ts: Time.current, status: "computed", peak_return_pct: 140.0,
+        underlying_context: { "entry" => { "regime" => { "trend" => "strong_bullish",
+                                                           "opening_range_breakout" => "breakout_up" } } }
+      )
+      Research::PremiumLifecycle.create!(
+        underlying_symbol: "NIFTY", expiry_flag: "WEEK", option_type: "PE", strike_label: "ATM", interval: "5",
+        entry_ts: Time.current, status: "computed", peak_return_pct: 10.0,
+        underlying_context: { "entry" => { "regime" => { "trend" => "neutral",
+                                                           "opening_range_breakout" => "inside_range" } } }
+      )
+
+      get "/api/research/lifecycles/expectancy", params: { dimensions: "trend,opening_range_breakout" }
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body["buckets"].size).to eq(2)
+      expect(body["buckets"].first["context"]).to eq("trend" => "strong_bullish",
+                                                       "opening_range_breakout" => "breakout_up")
+      expect(body["total_lifecycles"]).to eq(2)
+    end
+
+    it "returns 422 for an unknown dimension" do
+      get "/api/research/lifecycles/expectancy", params: { dimensions: "not_a_real_dimension" }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+  end
 end

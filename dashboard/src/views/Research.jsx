@@ -1,11 +1,13 @@
-import { createSignal } from 'solid-js'
+import { createSignal, Switch, Match } from 'solid-js'
 import { Tabs } from '../components/ui/Tabs'
 import SignalPipelinePanel from '../components/research/SignalPipelinePanel'
 import LifecycleBoardPanel from '../components/research/LifecycleBoardPanel'
+import ExpectancyReportPanel from '../components/research/ExpectancyReportPanel'
 
 const TABS = [
   { value: 'signals', label: 'Signal Pipeline' },
-  { value: 'lifecycle', label: 'Premium Lifecycle Board' }
+  { value: 'lifecycle', label: 'Premium Lifecycle Board' },
+  { value: 'expectancy', label: 'Context → Expectancy' }
 ]
 
 export default function Research() {
@@ -29,7 +31,11 @@ export default function Research() {
         onChange={setTab}
         tabBarClass="px-2"
       >
-        {tab() === 'signals' ? <SignalPipelinePanel /> : <LifecycleBoardPanel />}
+        <Switch>
+          <Match when={tab() === 'signals'}><SignalPipelinePanel /></Match>
+          <Match when={tab() === 'lifecycle'}><LifecycleBoardPanel /></Match>
+          <Match when={tab() === 'expectancy'}><ExpectancyReportPanel /></Match>
+        </Switch>
       </Tabs>
     </div>
   )

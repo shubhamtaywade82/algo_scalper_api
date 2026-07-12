@@ -148,6 +148,7 @@ Rails.application.routes.draw do
       resources :lifecycles, only: %i[index show] do
         collection do
           post :run
+          get :expectancy
         end
       end
     end
