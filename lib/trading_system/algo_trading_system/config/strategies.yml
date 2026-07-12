@@ -1,0 +1,19 @@
+ema_crossover:
+  fast_period: 9
+  slow_period: 21
+
+rsi_macd:
+  rsi_period: 14
+  rsi_threshold_low: 30
+  rsi_threshold_high: 70
+
+bollinger_breakout:
+  period: 20
+  std_dev: 2
+
+iv_spike_momentum:
+  iv_threshold: 1.4
+  volume_threshold: 1.5
+
+vwap_breakout:
+  volume_ratio: 1.0
