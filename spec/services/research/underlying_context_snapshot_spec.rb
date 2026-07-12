@@ -28,6 +28,10 @@ RSpec.describe Research::UnderlyingContextSnapshot do
       expect(context).to have_key('rsi')
       expect(context).to have_key('macd')
       expect(context['vwap']).to be_a(Numeric)
+      expect(context['regime']).to be_a(Hash)
+      expect(context['regime']).to have_key('market_structure')
+      expect(context['regime']).to have_key('trend')
+      expect(context['regime']).to have_key('volatility_regime')
     end
   end
 end

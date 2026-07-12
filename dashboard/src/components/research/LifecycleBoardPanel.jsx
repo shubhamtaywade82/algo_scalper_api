@@ -44,6 +44,24 @@ const CONTEXT_FIELDS = [
   { key: 'vwap_distance', label: 'VWAP Dist.' }
 ]
 
+const REGIME_FIELDS = [
+  { key: 'market_structure', label: 'Structure' },
+  { key: 'trend', label: 'Trend' },
+  { key: 'volatility_regime', label: 'Volatility' },
+  { key: 'momentum', label: 'Momentum' },
+  { key: 'volume_regime', label: 'Volume' },
+  { key: 'vwap_relation', label: 'VWAP' },
+  { key: 'liquidity_sweep', label: 'Liquidity' },
+  { key: 'opening_range_breakout', label: 'ORB' },
+  { key: 'gap', label: 'Gap' },
+  { key: 'time_context', label: 'Session' }
+]
+
+function regimeLabel(value) {
+  if (!value || value === 'unknown') return '—'
+  return String(value).replace(/_/g, ' ')
+}
+
 export default function LifecycleBoardPanel() {
   const [symbol, setSymbol] = createSignal('NIFTY')
   const [date, setDate] = createSignal('')
@@ -231,6 +249,20 @@ export default function LifecycleBoardPanel() {
                         )}
                       </For>
                     </div>
+
+                    <Show when={detail().underlying_context[phase].regime}>
+                      <div class="mt-3 pt-3 border-t border-white/5 flex flex-wrap gap-1.5">
+                        <For each={REGIME_FIELDS}>
+                          {(f) => (
+                            <Show when={detail().underlying_context[phase].regime[f.key] && detail().underlying_context[phase].regime[f.key] !== 'unknown'}>
+                              <Badge variant="outline" class="text-[9px] uppercase tracking-wide" title={f.label}>
+                                {f.label}: {regimeLabel(detail().underlying_context[phase].regime[f.key])}
+                              </Badge>
+                            </Show>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
                   </Show>
                 </div>
               )}

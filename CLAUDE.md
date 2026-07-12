@@ -171,9 +171,11 @@ A layered pipeline over Dhan's `ExpiredOptionsData` ("rollingoption") and the pe
 - `research_option_bars` — normalized minute/5-min option OHLCV, keyed by contract identity (symbol/expiry_flag/option_type/strike_label/interval/ts)
 - `research_signals` — signal-time snapshot (spot/direction/timestamp), buildable manually or from a `TradingSignal`
 - `research_option_candidates` — ATM+/-N candidate strikes per signal, scored (entry/exit/MFE/MAE/return) by `Research::TradeScorer`
-- `research_premium_lifecycles` — full premium path (entry → peak → decay → end) per strike across a session, with a best-effort underlying context snapshot (ATR/ADX/RSI/MACD/VWAP) at entry and peak via `Research::UnderlyingContextSnapshot`
+- `research_premium_lifecycles` — full premium path (entry → peak → decay → end) per strike across a session, with a best-effort underlying context snapshot (ATR/ADX/RSI/MACD/VWAP, plus `Research::ContextClassifier`'s regime labels) at entry and peak via `Research::UnderlyingContextSnapshot`
 
-Entry points: `Research::Pipeline.run` (single signal → ranked candidates) and `Research::LifecycleRunner.run` (full ATM+/-N board → ranked lifecycles). Rake tasks: `research:run_signal`, `research:run_board_lifecycle` (see `lib/tasks/research.rake`).
+`Research::ContextClassifier` buckets the underlying into regime labels (market structure, trend strength, volatility regime, momentum, volume regime, time-of-day, VWAP relation, liquidity sweep, opening-range breakout, gap) so signals/lifecycles can eventually be grouped into a context → expectancy report — the goal being "what market context produces high-expectancy premium expansion", not single-indicator thresholds. Reuses the existing `Smc::Detectors::Structure`/`Liquidity` (pure, side-effect-free) for structure/BOS/CHoCH/sweep detection rather than re-deriving swing points. Thresholds are a documented first cut (see the class), not calibrated against historical data yet.
+
+Entry points: `Research::Pipeline.run` (single signal → ranked candidates) and `Research::LifecycleRunner.run` (full ATM+/-N board → ranked lifecycles). Rake tasks: `research:run_signal`, `research:run_board_lifecycle` (see `lib/tasks/research.rake`). Dashboard: `/research` (Signal Pipeline + Premium Lifecycle Board panels), backed by `/api/research/*`.
 
 ## Paper vs Live Mode
 
