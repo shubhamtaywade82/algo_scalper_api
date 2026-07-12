@@ -1,0 +1,52 @@
+# ruby_mastery.yml
+# Static analysis configuration for the algo trading system.
+# Run: ruby_mastery analyze src/
+# Docs: https://github.com/shubhamtaywade82/ruby_mastery
+
+# ── Code Quality Thresholds ────────────────────────────────────────────────────
+method_length: 15          # trading logic can be verbose; 15 is the hard limit
+class_length: 250          # allow slightly larger classes for API clients
+nesting_depth: 2           # enforce guard clauses; no deep nesting
+
+# ── Ruby Idioms ────────────────────────────────────────────────────────────────
+# Enforce idiomatic Ruby: enumerables over loops, guard clauses, etc.
+enforce_idioms: true
+
+# ── Ruby Object Model ─────────────────────────────────────────────────────────
+enforce_object_model: true
+# Disallow procedural "God" classes; each class must have one clear responsibility
+single_responsibility: true
+
+# ── Architecture Rules ────────────────────────────────────────────────────────
+enforce_architecture: true
+
+# These paths map to the module boundaries defined in ARCHITECTURE.md.
+# ruby_mastery will flag cross-boundary dependencies that bypass the EventBus.
+architecture:
+  layers:
+    - name: utils
+      path: src/utils
+    - name: api
+      path: src/api
+      allowed_dependencies: [utils]
+    - name: market_data
+      path: src/market_data
+      allowed_dependencies: [utils, api]
+    - name: indicators
+      path: src/indicators
+      allowed_dependencies: [utils]
+    - name: strategies
+      path: src/strategies
+      allowed_dependencies: [utils, indicators]
+    - name: execution
+      path: src/execution
+      allowed_dependencies: [utils, api, strategies]
+    - name: backtest
+      path: src/backtest
+      allowed_dependencies: [utils, market_data, indicators, strategies, execution]
+
+# ── Exclusions ────────────────────────────────────────────────────────────────
+exclude:
+  - spec/
+  - examples/
+  - bin/

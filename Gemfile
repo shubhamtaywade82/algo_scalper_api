@@ -50,7 +50,7 @@ gem 'thruster', require: false
 gem 'DhanHQ', '2.8.0', require: 'dhan_hq'
 
 # MCP adapter for DhanHQ tool specs and validated routing
-gem 'dhanhq-mcp', path: '/home/nemesis/project/trading-workspace/dhanhq-mcp'
+gem 'dhanhq-mcp', path: '/home/nemesis/project/trading-workspace/sdk/dhanhq-mcp'
 
 # TOTP generation for Dhan TOTP auth strategy
 gem 'rotp', '~> 6.3'

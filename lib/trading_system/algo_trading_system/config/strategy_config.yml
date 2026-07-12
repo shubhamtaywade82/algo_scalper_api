@@ -1,0 +1,11 @@
+# Strategy configuration for AutoExp optimization
+entry:
+  range_expansion_threshold: 1.5
+  atr_rising_lookback: 3
+strike_selection:
+  delta_target: 0.5
+exit:
+  mfe_ratio_nifty: 0.4
+  initial_stop: 0.15
+risk:
+  max_trades_per_day: 3

@@ -1,0 +1,17 @@
+📊 Indian NSE/BSE Options Backtesting System
+
+Quick Navigation:
+1. README.md - Main overview & system architecture
+2. QUICK_REFERENCE.md - Command reference & strategy guide
+3. IMPLEMENTATION_GUIDE.md - Detailed setup & examples
+4. ARCHITECTURE.md - Data flows & state machine
+
+Source Code:
+- src/api/dhan_api_client.rb - Data ingestion
+- src/backtest/options_engine.rb - Simulation & P&L
+- src/strategies/trading_strategies.rb - Signal generation
+- src/backtest/orchestrator.rb - Multi-strike coordinator
+- src/utils/greeks_calculator.js - Real-time Greeks
+
+Run a test now:
+$ ruby examples/backtest_example.rb

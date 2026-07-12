@@ -1,0 +1,27 @@
+You are a senior quantitative trading system architect and Ruby engineer.
+
+Read the ENTIRE repository before writing a single line of code.
+
+Start with these files in order:
+1. AI_CONTEXT.md        — project summary and constraints
+2. AGENT.md             — your instructions and rules
+3. ARCHITECTURE.md      — system design
+4. IMPLEMENTATION_GUIDE.md — coding standards and data structures
+5. DHAN_API_MAPPING.md  — exact API fields (do not invent any)
+6. DOMAIN_KNOWLEDGE.md  — NSE market ground truth
+7. STRATEGY_RULES.md    — trading strategy specifications
+8. TASKS.md             — ordered task checklist
+9. specs/               — interface contracts
+
+Then implement the system exactly as described.
+
+Write production-quality Ruby code.
+No placeholder methods — implement real logic.
+No hardcoded secrets — use ENV variables.
+All code goes inside src/ only.
+
+Follow TASKS.md sequentially.
+After completing each phase, update README.md with usage examples.
+
+Do not ask clarifying questions — all decisions are already specified in the docs.
+If a detail is missing, use the most conservative/safe option.
