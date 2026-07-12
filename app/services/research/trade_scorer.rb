@@ -28,12 +28,16 @@ module Research
           entry_price: entry_price,
           exit_timestamp: exit_bar.ts,
           exit_price: exit_bar.close,
-          mfe_pct: pct(max_high, entry_price),
-          mae_pct: pct(entry_price, min_low),
-          return_pct: pct(exit_bar.close, entry_price),
+          mfe_pct: Research::PercentChange.of(max_high, entry_price),
+          mae_pct: Research::PercentChange.of(min_low, entry_price)&.abs,
+          return_pct: Research::PercentChange.of(exit_bar.close, entry_price),
           holding_minutes: ((exit_bar.ts - entry_bar.ts) / 60).round,
           status: "scored"
         )
+        candidate
+      rescue StandardError => e
+        Rails.logger.error("[Research::TradeScorer] candidate ##{candidate.id} failed: #{e.class}: #{e.message}")
+        candidate.update!(status: "failed")
         candidate
       end
 
@@ -44,13 +48,14 @@ module Research
         candidate
       end
 
+      # Returns nil (not 0) when no bar satisfies the entry model's condition —
+      # callers must treat that as "no entry point found", not "enter at bar 0".
       def entry_index_for(candidate, bars)
         signal_ts = candidate.research_signal.signal_timestamp
 
         case candidate.entry_model
         when "same_candle_open", "signal_candle_close"
-          idx = bars.rindex { |bar| bar.ts <= signal_ts }
-          idx || 0
+          bars.rindex { |bar| bar.ts <= signal_ts }
         else # "next_candle_open"
           bars.index { |bar| bar.ts > signal_ts }
         end
@@ -58,12 +63,6 @@ module Research
 
       def entry_price_for(candidate, bar)
         candidate.entry_model == "signal_candle_close" ? bar.close : bar.open
-      end
-
-      def pct(numerator_price, denominator_price)
-        return nil if denominator_price.to_f.zero?
-
-        ((numerator_price.to_f - denominator_price.to_f) / denominator_price.to_f * 100).round(4)
       end
     end
   end

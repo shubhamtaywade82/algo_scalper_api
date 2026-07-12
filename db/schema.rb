@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_12_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_13_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -566,6 +566,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_12_150000) do
     t.decimal "exit_price", precision: 12, scale: 4
     t.datetime "exit_timestamp"
     t.integer "holding_minutes"
+    t.string "interval", default: "5", null: false
     t.decimal "mae_pct", precision: 10, scale: 4
     t.decimal "mfe_pct", precision: 10, scale: 4
     t.jsonb "metadata", default: {}, null: false

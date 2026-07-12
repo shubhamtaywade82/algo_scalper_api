@@ -36,6 +36,11 @@ const ICONS = {
       <path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   ),
+  research: () => (
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path d="M9 2v6.5L4 20a1 1 0 0 0 1 1.5h14a1 1 0 0 0 1-1.5L15 8.5V2M9 2h6M8 15h8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  ),
   marketWatch: () => (
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path d="M2 12h1m18 0h1M12 2v1m0 18v1M4.22 4.22l.7.7m14.15-.7l-.7.7M4.22 19.78l.7-.7m14.15.7l-.7-.7" stroke-width="2" stroke-linecap="round"/>

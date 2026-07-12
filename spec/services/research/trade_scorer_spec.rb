@@ -65,5 +65,26 @@ RSpec.describe Research::TradeScorer do
 
       expect(candidate.entry_price.to_f).to eq(104.0)
     end
+
+    it 'marks no_data (not entry-at-bar-0) when signal_candle_close has no bar at/before the signal timestamp' do
+      candidate.update!(entry_model: 'signal_candle_close')
+      bar!(ts: Time.zone.parse('2026-07-10 11:00:00'), open: 100, high: 106, low: 99, close: 104) # after signal only
+
+      described_class.score!(candidate)
+      candidate.reload
+
+      expect(candidate.status).to eq('no_data')
+      expect(candidate.entry_price).to be_nil
+    end
+
+    it 'marks the candidate failed (not silently no_data) when scoring raises' do
+      bar!(ts: Time.zone.parse('2026-07-10 10:15:00'), open: 110, high: 120, low: 108, close: 118)
+      allow(candidate).to receive(:bars).and_raise(ActiveRecord::StatementInvalid, 'boom')
+
+      described_class.score!(candidate)
+      candidate.reload
+
+      expect(candidate.status).to eq('failed')
+    end
   end
 end

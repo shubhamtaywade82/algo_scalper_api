@@ -13,6 +13,7 @@ const Dashboard = lazy(() => import('./views/Dashboard'))
 const Strategies = lazy(() => import('./views/Strategies'))
 const StrategyCreator = lazy(() => import('./views/StrategyCreator'))
 const Signals = lazy(() => import('./views/Signals'))
+const Research = lazy(() => import('./views/Research'))
 const Alpha = lazy(() => import('./views/Alpha'))
 const Analysis = lazy(() => import('./views/Analysis'))
 const Charts = lazy(() => import('./views/Charts'))
@@ -134,6 +135,7 @@ export default function App() {
           <Route path="/strategies" component={Strategies} />
           <Route path="/alpha" component={Alpha} />
           <Route path="/signals" component={Signals} />
+          <Route path="/research" component={Research} />
           <Route path="/option-scalper" component={OptionScalper} />
           <Route path="/option-chain" component={OptionChain} />
           <Route path="/analysis" component={Analysis} />

@@ -141,6 +141,16 @@ Rails.application.routes.draw do
     get  'strategies/health/pool',     to: 'strategies/health#pool'
     get  'strategies/health/session',  to: 'strategies/health#session'
     get  'strategies/health/backtest', to: 'strategies/health#backtest'
+
+    # Research pipeline (offline — signal/candidate backtests + premium lifecycle board)
+    namespace :research do
+      resources :signals, only: %i[index show create]
+      resources :lifecycles, only: %i[index show] do
+        collection do
+          post :run
+        end
+      end
+    end
   end
 
   # Redis UI (development only)

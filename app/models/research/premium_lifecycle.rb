@@ -9,7 +9,7 @@ module Research
   class PremiumLifecycle < ApplicationRecord
     self.table_name = "research_premium_lifecycles"
 
-    STATUSES = %w[pending computed no_data].freeze
+    STATUSES = %w[pending computed no_data failed].freeze
 
     validates :underlying_symbol, :expiry_flag, :option_type, :strike_label, :entry_ts, presence: true
     validates :status, inclusion: { in: STATUSES }

@@ -33,13 +33,13 @@ module Research
           entry_premium: entry_premium,
           peak_ts: peak_bar[:ts],
           peak_premium: peak_premium,
-          peak_return_pct: pct(peak_premium, entry_premium),
+          peak_return_pct: Research::PercentChange.of(peak_premium, entry_premium),
           minutes_to_peak: minutes_between(entry_bar[:ts], peak_bar[:ts]),
           peak_duration_minutes: peak_duration_minutes(window, peak_index, peak_premium),
           decay_start_ts: decay_start_ts(window, peak_index, peak_premium, decay_ratio),
           end_ts: window.last[:ts],
           end_premium: window.last[:close].to_f,
-          end_return_pct: pct(window.last[:close].to_f, entry_premium),
+          end_return_pct: Research::PercentChange.of(window.last[:close].to_f, entry_premium),
           max_drawdown_after_peak_pct: max_drawdown_after_peak(window, peak_index, peak_premium),
           threshold_minutes: threshold_minutes(window, entry_bar, entry_premium, thresholds)
         }
@@ -74,20 +74,26 @@ module Research
       end
 
       # First bar after the peak beyond which the close never again recovers
-      # above decay_ratio * peak_premium.
+      # above decay_ratio * peak_premium. Single backward pass over the tail
+      # (O(n)) instead of rescanning the remaining suffix for every candidate
+      # index (which was O(n^2)): track the last index (from the end) whose
+      # close still met the threshold — decay starts right after it.
       def decay_start_ts(window, peak_index, peak_premium, decay_ratio)
         threshold = peak_premium * decay_ratio
-        ((peak_index + 1)...window.size).each do |i|
-          return window[i][:ts] if window[i..].all? { |bar| bar[:close].to_f < threshold }
+        last_recovery_index = peak_index
+        (peak_index...window.size).each do |i|
+          last_recovery_index = i if window[i][:close].to_f >= threshold
         end
-        nil
+        return nil if last_recovery_index == window.size - 1
+
+        window[last_recovery_index + 1][:ts]
       end
 
       def max_drawdown_after_peak(window, peak_index, peak_premium)
         return 0.0 if peak_premium.zero?
 
         min_low = window[peak_index..].map { |bar| bar[:low].to_f }.min
-        pct(min_low, peak_premium).abs
+        Research::PercentChange.of(min_low, peak_premium).abs
       end
 
       def threshold_minutes(window, entry_bar, entry_premium, thresholds)
@@ -100,12 +106,6 @@ module Research
 
       def minutes_between(from_ts, to_ts)
         ((to_ts - from_ts) / 60).round
-      end
-
-      def pct(numerator_price, denominator_price)
-        return nil if denominator_price.to_f.zero?
-
-        ((numerator_price.to_f - denominator_price.to_f) / denominator_price.to_f * 100).round(4)
       end
     end
   end

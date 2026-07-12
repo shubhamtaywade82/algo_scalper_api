@@ -24,22 +24,11 @@ module Research
     end
 
     def call
-      response = DhanHQ::Models::ExpiredOptionsData.fetch(
-        exchange_segment: segment,
-        interval: @interval,
-        security_id: security_id,
-        instrument: "OPTIDX",
-        expiry_flag: @expiry_flag,
-        expiry_code: @expiry_code,
-        strike: @dhan_strike_param,
-        drv_option_type: drv_option_type,
-        required_data: REQUIRED_DATA,
-        from_date: @from_date,
-        to_date: @to_date
-      )
+      response = fetch_response
+      return [] if response.nil?
 
       raw_fetch = store_raw_fetch(response)
-      side_data = response&.data&.[](@option_type == "CE" ? "ce" : "pe")
+      side_data = response.data&.[](@option_type == "CE" ? "ce" : "pe")
 
       rows = Research::OptionBarNormalizer.normalize(
         side_data,
@@ -54,12 +43,35 @@ module Research
 
       rows.each { |row| row[:research_raw_fetch_id] = raw_fetch&.id }
       upsert(rows)
-    rescue StandardError => e
-      log_error("fetch failed for #{@symbol} #{@option_type} #{@strike_label}: #{e.message}")
-      []
     end
 
     private
+
+    # Only the external network call is treated as an expected failure mode
+    # (rate limits, timeouts, transient DhanHQ errors) and swallowed into a
+    # logged "no data" result. A bug in our own normalize/upsert code below
+    # is deliberately NOT rescued here — it propagates to the caller
+    # (Research::Pipeline / Research::LifecycleRunner), which marks that one
+    # candidate/lifecycle "failed" instead of letting every code bug quietly
+    # masquerade as "this contract had no data".
+    def fetch_response
+      DhanHQ::Models::ExpiredOptionsData.fetch(
+        exchange_segment: segment,
+        interval: @interval,
+        security_id: security_id,
+        instrument: "OPTIDX",
+        expiry_flag: @expiry_flag,
+        expiry_code: @expiry_code,
+        strike: @dhan_strike_param,
+        drv_option_type: drv_option_type,
+        required_data: REQUIRED_DATA,
+        from_date: @from_date,
+        to_date: @to_date
+      )
+    rescue StandardError => e
+      log_error("fetch failed for #{@symbol} #{@option_type} #{@strike_label}: #{e.message}")
+      nil
+    end
 
     def segment
       @symbol == "SENSEX" ? "BSE_FNO" : "NSE_FNO"

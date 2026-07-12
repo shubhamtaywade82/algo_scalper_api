@@ -47,5 +47,40 @@ RSpec.describe Research::LifecycleRunner do
 
       expect(Research::PremiumLifecycle.count).to eq(2)
     end
+
+    it 'is idempotent even when the anchor entry_ts does not land exactly on a bar boundary' do
+      anchor = Time.zone.parse('2026-07-10 09:14:30') # bars start at 09:15:00 — one second earlier
+
+      2.times do
+        described_class.run(
+          symbol: 'NIFTY', spot: 24_982, expiry_flag: 'WEEK', entry_ts: anchor,
+          from_date: '2026-07-10', to_date: '2026-07-11', max_distance: 0
+        )
+      end
+
+      expect(Research::PremiumLifecycle.count).to eq(2)
+      expect(Research::PremiumLifecycle.pluck(:entry_ts)).to all(eq(anchor))
+    end
+
+    it 'isolates a per-contract analysis failure instead of losing every other result in the board' do
+      call_count = 0
+      allow(Research::PremiumLifecycleAnalyzer).to receive(:analyze).and_wrap_original do |original, *args, **kwargs|
+        call_count += 1
+        raise 'boom' if call_count == 1
+
+        original.call(*args, **kwargs)
+      end
+
+      ranked = described_class.run(
+        symbol: 'NIFTY', spot: 24_982, expiry_flag: 'WEEK', entry_ts: Time.zone.parse('2026-07-10 09:15:00'),
+        from_date: '2026-07-10', to_date: '2026-07-11', max_distance: 0
+      )
+
+      # The failed contract is still persisted (status: "failed") rather than
+      # silently dropped — only an exception past that point (e.g. a save
+      # failure) would remove it from the results entirely.
+      expect(ranked.size).to eq(2)
+      expect(Research::PremiumLifecycle.pluck(:status)).to contain_exactly('computed', 'failed')
+    end
   end
 end

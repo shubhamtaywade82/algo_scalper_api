@@ -5,7 +5,7 @@ module Research
   # the requested expiries, using the signal's own direction to pick CE vs PE.
   class CandidateBuilder
     class << self
-      def build(signal:, expiry_flags: ["WEEK"], max_distance: 2, entry_model: "next_candle_open")
+      def build(signal:, expiry_flags: ["WEEK"], max_distance: 2, entry_model: "next_candle_open", interval: "5")
         option_type = option_type_for(signal.direction)
         return [] unless option_type
 
@@ -13,7 +13,7 @@ module Research
           Research::StrikeResolver
             .candidates(symbol: signal.underlying_symbol, spot: signal.spot_price, option_type: option_type,
                         max_distance: max_distance)
-            .map { |candidate| find_or_create(signal, expiry_flag, option_type, entry_model, candidate) }
+            .map { |candidate| find_or_create(signal, expiry_flag, option_type, entry_model, interval, candidate) }
         end
       end
 
@@ -26,7 +26,7 @@ module Research
         end
       end
 
-      def find_or_create(signal, expiry_flag, option_type, entry_model, candidate)
+      def find_or_create(signal, expiry_flag, option_type, entry_model, interval, candidate)
         Research::OptionCandidate.find_or_create_by!(
           research_signal: signal,
           expiry_flag: expiry_flag,
@@ -37,6 +37,7 @@ module Research
           record.underlying_symbol = signal.underlying_symbol
           record.strike_label = candidate[:strike_label]
           record.actual_strike = candidate[:actual_strike]
+          record.interval = interval.to_s
           record.metadata = { "dhan_strike_param" => candidate[:dhan_strike_param] }
         end
       end

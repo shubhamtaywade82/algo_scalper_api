@@ -39,6 +39,7 @@ export const ROUTES = {
   // Existing routes (keep for backward compat)
   ALPHA: '/alpha',
   SIGNALS: '/signals',
+  RESEARCH: '/research',
   OPTION_SCALPER: '/option-scalper',
   ANALYSIS: '/analysis',
   LEDGER: '/ledger',
@@ -63,6 +64,7 @@ export const navigationConfig = [
       { id: 'signals', label: 'Signals', href: ROUTES.SIGNALS, icon: 'signals' },
       { id: 'alpha', label: 'Alpha', href: ROUTES.ALPHA, icon: 'alpha' },
       { id: 'analysis', label: 'Analysis', href: ROUTES.ANALYSIS, icon: 'analysis' },
+      { id: 'research', label: 'Research', href: ROUTES.RESEARCH, icon: 'research' },
       { id: 'strategies', label: 'Strategies', href: ROUTES.STRATEGIES, icon: 'strategies' },
       { id: 'option-scalper', label: 'Option Scalper', href: ROUTES.OPTION_SCALPER, icon: 'optionScalper' },
       { id: 'backtester', label: 'Backtester', href: ROUTES.BACKTESTER, icon: 'strategies' },
