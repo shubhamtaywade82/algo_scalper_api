@@ -9,7 +9,7 @@ module Research
 
     DIRECTIONS = %w[bullish bearish no_trade].freeze
 
-    has_many :option_candidates, class_name: "Research::OptionCandidate", dependent: :destroy
+    has_many :option_candidates, class_name: "Research::OptionCandidate", foreign_key: :research_signal_id, dependent: :destroy
 
     validates :underlying_symbol, :signal_timestamp, :spot_price, presence: true
     validates :direction, inclusion: { in: DIRECTIONS }
