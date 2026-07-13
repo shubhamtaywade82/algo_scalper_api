@@ -1,6 +1,63 @@
 # lib/tasks/backtest.rake
 # frozen_string_literal: true
 
+# Wrapper class to adapt active strategies (BaseStrategy format) to BacktestService
+class ActiveStrategyBacktestWrapper
+  def initialize(series:, strategy_class:, strategy_params: {})
+    @series = series
+    @strategy_class = strategy_class
+    @strategy_params = strategy_params
+  end
+
+  def generate_signal(index)
+    return nil if index < 15 # Warmup period
+
+    truncated_series = CandleSeries.new(symbol: @series.symbol, interval: @series.interval)
+    @series.candles.first(index + 1).each { |c| truncated_series.add_candle(c) }
+
+    context = Strategies::StrategyContext.new(
+      instrument_key: @series.symbol,
+      candles: ->(_tf) { truncated_series },
+      indicators: nil,
+      session: mock_session,
+      position: mock_position,
+      params: @strategy_params,
+      clock: -> { truncated_series.candles.last.timestamp },
+      config: {},
+      logger: nil
+    )
+
+    strategy = @strategy_class.new(params: @strategy_params)
+    signal = strategy.call(context)
+
+    case signal
+    when Signals::BuyCall
+      { type: :ce, price: truncated_series.candles.last.close }
+    when Signals::BuyPut
+      { type: :pe, price: truncated_series.candles.last.close }
+    end
+  rescue StandardError
+    nil
+  end
+
+  private
+
+  def mock_session
+    @mock_session ||= Object.new.tap do |o|
+      def o.entry_allowed? = true
+      def o.market_open? = true
+      def o.seconds_until_close = 18_000
+      def o.should_force_exit? = false
+    end
+  end
+
+  def mock_position
+    @mock_position ||= Object.new.tap do |o|
+      def o.open? = false
+    end
+  end
+end
+
 namespace :backtest do
   # Ensure services are disabled during backtests
   task env: :environment do
@@ -63,65 +120,6 @@ namespace :backtest do
     load Rails.root.join('strategies/supertrend-adx/strategy.rb').to_s
     load Rails.root.join('strategies/vwap-reversal/strategy.rb').to_s
 
-    # Define wrapper if not already defined
-    unless defined?(ActiveStrategyBacktestWrapper)
-      class ActiveStrategyBacktestWrapper
-        def initialize(series:, strategy_class:, strategy_params: {})
-          @series = series
-          @strategy_class = strategy_class
-          @strategy_params = strategy_params
-        end
-
-        def generate_signal(index)
-          return nil if index < 15 # Warmup period
-
-          truncated_series = CandleSeries.new(symbol: @series.symbol, interval: @series.interval)
-          @series.candles.first(index + 1).each { |c| truncated_series.add_candle(c) }
-
-          context = Strategies::StrategyContext.new(
-            instrument_key: @series.symbol,
-            candles: ->(_tf) { truncated_series },
-            indicators: nil,
-            session: mock_session,
-            position: mock_position,
-            params: @strategy_params,
-            clock: -> { truncated_series.candles.last.timestamp },
-            config: {},
-            logger: nil
-          )
-
-          strategy = @strategy_class.new(params: @strategy_params)
-          signal = strategy.call(context)
-
-          case signal
-          when Signals::BuyCall
-            { type: :ce, price: truncated_series.candles.last.close }
-          when Signals::BuyPut
-            { type: :pe, price: truncated_series.candles.last.close }
-          end
-        rescue StandardError
-          nil
-        end
-
-        private
-
-        def mock_session
-          @mock_session ||= Object.new.tap do |o|
-            def o.entry_allowed? = true
-            def o.market_open? = true
-            def o.seconds_until_close = 18_000
-            def o.should_force_exit? = false
-          end
-        end
-
-        def mock_position
-          @mock_position ||= Object.new.tap do |o|
-            def o.open? = false
-          end
-        end
-      end
-    end
-
     strategies = {
       'SupertrendV1' => {
         class: SupertrendV1,
@@ -176,65 +174,6 @@ namespace :backtest do
     load Rails.root.join('strategies/supertrend_v1/strategy.rb').to_s
     load Rails.root.join('strategies/supertrend-adx/strategy.rb').to_s
     load Rails.root.join('strategies/vwap-reversal/strategy.rb').to_s
-
-    # Define wrapper if not already defined
-    unless defined?(ActiveStrategyBacktestWrapper)
-      class ActiveStrategyBacktestWrapper
-        def initialize(series:, strategy_class:, strategy_params: {})
-          @series = series
-          @strategy_class = strategy_class
-          @strategy_params = strategy_params
-        end
-
-        def generate_signal(index)
-          return nil if index < 15
-
-          truncated_series = CandleSeries.new(symbol: @series.symbol, interval: @series.interval)
-          @series.candles.first(index + 1).each { |c| truncated_series.add_candle(c) }
-
-          context = Strategies::StrategyContext.new(
-            instrument_key: @series.symbol,
-            candles: ->(_tf) { truncated_series },
-            indicators: nil,
-            session: mock_session,
-            position: mock_position,
-            params: @strategy_params,
-            clock: -> { truncated_series.candles.last.timestamp },
-            config: {},
-            logger: nil
-          )
-
-          strategy = @strategy_class.new(params: @strategy_params)
-          signal = strategy.call(context)
-
-          case signal
-          when Signals::BuyCall
-            { type: :ce, price: truncated_series.candles.last.close }
-          when Signals::BuyPut
-            { type: :pe, price: truncated_series.candles.last.close }
-          end
-        rescue StandardError
-          nil
-        end
-
-        private
-
-        def mock_session
-          @mock_session ||= Object.new.tap do |o|
-            def o.entry_allowed? = true
-            def o.market_open? = true
-            def o.seconds_until_close = 18_000
-            def o.should_force_exit? = false
-          end
-        end
-
-        def mock_position
-          @mock_position ||= Object.new.tap do |o|
-            def o.open? = false
-          end
-        end
-      end
-    end
 
     strategies = {
       'SupertrendV1' => {
