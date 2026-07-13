@@ -561,15 +561,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_090000) do
     t.string "entry_model", default: "next_candle_open", null: false
     t.decimal "entry_price", precision: 12, scale: 4
     t.datetime "entry_timestamp"
-    t.date "expiry_date"
-    t.string "expiry_flag", null: false
     t.decimal "exit_price", precision: 12, scale: 4
     t.datetime "exit_timestamp"
+    t.date "expiry_date"
+    t.string "expiry_flag", null: false
     t.integer "holding_minutes"
     t.string "interval", default: "5", null: false
     t.decimal "mae_pct", precision: 10, scale: 4
-    t.decimal "mfe_pct", precision: 10, scale: 4
     t.jsonb "metadata", default: {}, null: false
+    t.decimal "mfe_pct", precision: 10, scale: 4
     t.string "option_type", null: false
     t.bigint "research_signal_id", null: false
     t.decimal "return_pct", precision: 10, scale: 4

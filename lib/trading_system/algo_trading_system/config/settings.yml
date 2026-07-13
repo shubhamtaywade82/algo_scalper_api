@@ -1,0 +1,10 @@
+capital: 5000000
+risk_per_trade_pct: 2.0
+max_daily_loss_pct: 3.0
+max_positions: 3
+broker: "dhan"
+symbols:
+  - "NIFTY"
+  - "BANKNIFTY"
+  - "FINNIFTY"
+timeframe: "5m"

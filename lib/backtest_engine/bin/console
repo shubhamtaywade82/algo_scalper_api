@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+
+require "bundler/setup"
+
+begin
+  require "dotenv"
+  Dotenv.load
+rescue LoadError
+  warn "dotenv not available; skipping .env loading"
+end
+
+require_relative "../lib/backtest_engine"
+require "irb"
+
+begin
+  BacktestEngine::DhanConfiguration.configure_with_env_or_token_endpoint
+  puts "Configured DhanHQ (ENV or token endpoint)."
+rescue KeyError, LoadError => e
+  warn "DhanHQ configuration skipped: #{e.message}"
+end
+
+puts "Loaded BacktestEngine (v#{BacktestEngine::VERSION})"
+puts "ENV loaded from .env (if present)."
+puts "You can now work with BacktestEngine and DhanHQ in IRB."
+
+IRB.start(__FILE__)
+

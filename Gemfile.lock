@@ -1,5 +1,5 @@
 PATH
-  remote: /home/nemesis/project/trading-workspace/dhanhq-mcp
+  remote: /home/nemesis/project/trading-workspace/sdk/dhanhq-mcp
   specs:
     dhanhq-mcp (0.1.0)
       DhanHQ

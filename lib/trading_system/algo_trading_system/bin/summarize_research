@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'dotenv/load'
+require_relative '../src/utils/research_summary_parser'
+
+# Find latest research file if no argument provided
+research_dir = 'research_results'
+csv_files = Dir.glob("#{research_dir}/*.csv").sort_by { |f| File.mtime(f) }.reverse
+
+target_file = ARGV[0] || csv_files.first
+
+if target_file.nil?
+  puts "No research CSV files found in #{research_dir}/"
+  exit 1
+end
+
+Utils::ResearchSummaryParser.summarize(target_file)

@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative '../src/api/token_fetcher'
+require 'dotenv/load'
+
+begin
+  puts "Fetching Dhan token from remote server..."
+  data = Api::TokenFetcher.fetch_and_update_env
+  puts "Successfully updated .env with new token."
+  puts "Expires at: #{data[:expires_at]}"
+rescue StandardError => e
+  puts "Error: #{e.message}"
+  puts "Ensure AUTH_SERVER_BEARER_TOKEN is set in your .env file."
+  exit 1
+end
