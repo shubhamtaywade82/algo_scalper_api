@@ -252,7 +252,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div class="py-2.5 text-[9px] uppercase tracking-wider text-gray-500 font-black">
-              Market: <span class={`${marketStatus() === 'open' ? 'text-emerald-400' : 'text-rose-400'}`}>{marketStatus() ?? 'Unknown'}</span>
+              Market: <span class={`${marketStatus()?.market_open ? 'text-emerald-400' : 'text-rose-400'}`}>{marketStatus()?.market_open ? 'Open' : 'Closed'}</span>
             </div>
           </div>
         </div>
