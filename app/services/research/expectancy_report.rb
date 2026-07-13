@@ -48,11 +48,8 @@ module Research
       end
 
       def row_for(lifecycle, dimensions, phase)
-        regime = lifecycle.underlying_context&.dig(phase, "regime")
-        return nil if regime.blank?
-
+        regime = lifecycle.underlying_context&.dig(phase, "regime") || {}
         context = dimensions.index_with { |dim| regime[dim] || "unknown" }
-        return nil if context.values.all? { |v| v == "unknown" }
 
         {
           context: context,

@@ -25,16 +25,12 @@ RSpec.describe Research::StrikeResolver do
   end
 
   describe '.dhan_strike_param' do
-    it 'maps CE distances: below spot is ITM, above spot is OTM' do
+    it 'returns ATM-relative format (DhanHQ API expects ATM/ATM+N/ATM-N)' do
       expect(described_class.dhan_strike_param(option_type: 'CE', distance: 0)).to eq('ATM')
-      expect(described_class.dhan_strike_param(option_type: 'CE', distance: -1)).to eq('ITM1')
-      expect(described_class.dhan_strike_param(option_type: 'CE', distance: 2)).to eq('OTM2')
-    end
-
-    it 'maps PE distances: above spot is ITM, below spot is OTM' do
-      expect(described_class.dhan_strike_param(option_type: 'PE', distance: 0)).to eq('ATM')
-      expect(described_class.dhan_strike_param(option_type: 'PE', distance: 1)).to eq('ITM1')
-      expect(described_class.dhan_strike_param(option_type: 'PE', distance: -2)).to eq('OTM2')
+      expect(described_class.dhan_strike_param(option_type: 'CE', distance: -1)).to eq('ATM-1')
+      expect(described_class.dhan_strike_param(option_type: 'CE', distance: 2)).to eq('ATM+2')
+      expect(described_class.dhan_strike_param(option_type: 'PE', distance: 1)).to eq('ATM+1')
+      expect(described_class.dhan_strike_param(option_type: 'PE', distance: -2)).to eq('ATM-2')
     end
   end
 end

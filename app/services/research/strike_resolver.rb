@@ -48,15 +48,14 @@ module Research
         distance.positive? ? "ATM+#{distance}" : "ATM#{distance}"
       end
 
-      # Translates our direction-agnostic distance into Dhan's moneyness-based
-      # strike param ("ATM" / "ITM{n}" / "OTM{n}"). A call is in-the-money
-      # below spot and out-of-the-money above it; a put is the mirror image.
+      # DhanHQ's expired-options API expects the strike param in ATM-relative
+      # format ("ATM", "ATM+1", "ATM-1", …) regardless of option type — the
+      # API resolves moneyness internally.  This is distinct from
+      # Research::StrikeResolver#label_for only in that label_for returns
+      # "ATM-2" (Ruby string-interpolates -2) while Dhan requires "ATM-2" as
+      # well — they happen to be the same format.
       def dhan_strike_param(option_type:, distance:)
-        return "ATM" if distance.zero?
-
-        below_spot = distance.negative?
-        moneyness = option_type.to_s.upcase == "CE" ? (below_spot ? "ITM" : "OTM") : (below_spot ? "OTM" : "ITM")
-        "#{moneyness}#{distance.abs}"
+        label_for(distance)
       end
     end
   end

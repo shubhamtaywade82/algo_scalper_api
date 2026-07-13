@@ -49,13 +49,16 @@ RSpec.describe Research::ExpectancyReport do
       expect(buckets.map { |b| b[:context]['trend'] }).to eq(%w[strong_bullish strong_bearish])
     end
 
-    it 'excludes lifecycles with no regime data for the requested phase' do
+    it 'buckets lifecycles with no regime data as "unknown"' do
       Research::PremiumLifecycle.create!(
         underlying_symbol: 'NIFTY', expiry_flag: 'WEEK', option_type: 'CE', strike_label: 'ATM', interval: '5',
         entry_ts: Time.current, status: 'computed', peak_return_pct: 50.0, underlying_context: {}
       )
 
-      expect(described_class.call(scope: Research::PremiumLifecycle.all, dimensions: %w[trend])).to eq([])
+      buckets = described_class.call(scope: Research::PremiumLifecycle.all, dimensions: %w[trend])
+      expect(buckets.size).to eq(1)
+      expect(buckets.first[:context]['trend']).to eq('unknown')
+      expect(buckets.first[:sample_size]).to eq(1)
     end
 
     it 'raises for unknown dimensions' do

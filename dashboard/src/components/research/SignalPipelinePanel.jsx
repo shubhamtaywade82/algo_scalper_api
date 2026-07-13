@@ -66,11 +66,13 @@ export default function SignalPipelinePanel() {
   const [history, setHistory] = createSignal([])
   const [historyLoading, setHistoryLoading] = createSignal(false)
 
+  let spotPriceTimer
+
   async function fetchSpotPrice() {
     const ts = timestamp()
     if (!ts) return
     try {
-      const res = await fetch(`/api/candles/${symbol()}?interval=1&days=5`)
+      const res = await fetch(`/api/candles/${symbol()}?interval=5&days=2`)
       const data = await res.json()
       const targetMs = new Date(ts).getTime()
       const closest = (data.candles || []).reduce((best, c) => {
@@ -81,6 +83,11 @@ export default function SignalPipelinePanel() {
     } catch {
       // spot price is a convenience; leave empty on failure
     }
+  }
+
+  function debouncedFetchSpotPrice() {
+    clearTimeout(spotPriceTimer)
+    spotPriceTimer = setTimeout(fetchSpotPrice, 400)
   }
 
   async function fetchHistory() {
@@ -152,7 +159,7 @@ export default function SignalPipelinePanel() {
             <Select label="Symbol" value={symbol()} onChange={(e) => { setSymbol(e.target.value); fetchSpotPrice() }} options={SYMBOLS} />
           </div>
           <div class="w-56">
-            <Input label="Signal Timestamp" type="datetime-local" value={timestamp()} onInput={(e) => { setTimestamp(e.target.value); fetchSpotPrice() }} />
+            <Input label="Signal Timestamp" type="datetime-local" value={timestamp()} onInput={(e) => { setTimestamp(e.target.value); debouncedFetchSpotPrice() }} />
           </div>
           <div class="w-32">
             <Input label="Spot Price" type="number" step="0.01" value={spotPrice()} onInput={(e) => setSpotPrice(e.target.value)} />
