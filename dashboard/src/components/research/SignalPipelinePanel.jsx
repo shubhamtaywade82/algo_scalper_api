@@ -43,9 +43,15 @@ function fmtTime(v) {
   return new Date(v).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
+function nowLocal() {
+  const d = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export default function SignalPipelinePanel() {
-  const [symbol, setSymbol] = createSignal('NIFTY')
-  const [timestamp, setTimestamp] = createSignal('')
+  const [symbol, setSymbol] = createSignal('SENSEX')
+  const [timestamp, setTimestamp] = createSignal(nowLocal())
   const [spotPrice, setSpotPrice] = createSignal('')
   const [direction, setDirection] = createSignal('bullish')
   const [expiryFlag, setExpiryFlag] = createSignal('WEEK')
@@ -60,6 +66,23 @@ export default function SignalPipelinePanel() {
   const [history, setHistory] = createSignal([])
   const [historyLoading, setHistoryLoading] = createSignal(false)
 
+  async function fetchSpotPrice() {
+    const ts = timestamp()
+    if (!ts) return
+    try {
+      const res = await fetch(`/api/candles/${symbol()}?interval=1&days=5`)
+      const data = await res.json()
+      const targetMs = new Date(ts).getTime()
+      const closest = (data.candles || []).reduce((best, c) => {
+        const diff = Math.abs(c.time * 1000 - targetMs)
+        return diff < best.diff ? { candle: c, diff } : best
+      }, { candle: null, diff: Infinity }).candle
+      if (closest) setSpotPrice(String(closest.close))
+    } catch {
+      // spot price is a convenience; leave empty on failure
+    }
+  }
+
   async function fetchHistory() {
     setHistoryLoading(true)
     try {
@@ -73,7 +96,10 @@ export default function SignalPipelinePanel() {
     }
   }
 
-  onMount(fetchHistory)
+  onMount(() => {
+    fetchHistory()
+    fetchSpotPrice()
+  })
 
   async function runPipeline(e) {
     e.preventDefault()
@@ -123,10 +149,10 @@ export default function SignalPipelinePanel() {
       <form onSubmit={runPipeline} class="glass rounded-2xl border border-white/5 px-6 py-5">
         <div class="flex flex-wrap items-end gap-4">
           <div class="w-36">
-            <Select label="Symbol" value={symbol()} onChange={(e) => setSymbol(e.target.value)} options={SYMBOLS} />
+            <Select label="Symbol" value={symbol()} onChange={(e) => { setSymbol(e.target.value); fetchSpotPrice() }} options={SYMBOLS} />
           </div>
           <div class="w-56">
-            <Input label="Signal Timestamp" type="datetime-local" value={timestamp()} onInput={(e) => setTimestamp(e.target.value)} />
+            <Input label="Signal Timestamp" type="datetime-local" value={timestamp()} onInput={(e) => { setTimestamp(e.target.value); fetchSpotPrice() }} />
           </div>
           <div class="w-32">
             <Input label="Spot Price" type="number" step="0.01" value={spotPrice()} onInput={(e) => setSpotPrice(e.target.value)} />
