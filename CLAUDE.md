@@ -132,6 +132,7 @@ Registered in `lib/trading_system/bootstrap.rb`, started by `supervisor.start_al
 | `SmcScannerJob` | Every 15 min (market hours) | SMC + AVRZ pattern detection |
 | `AiTechnicalAnalysisJob` (NIFTY) | Every 15 min (market hours) | AI-powered analysis |
 | `AiTechnicalAnalysisJob` (SENSEX) | Every 15 min (market hours) | AI-powered analysis |
+| `Research::DailyLifecycleJob` (NIFTY/BANKNIFTY/SENSEX) | Daily 9:00 AM | Auto-runs the prior session's premium-lifecycle board so `research_premium_lifecycles` accumulates without manual dashboard clicks — resolves spot from persisted candles, skips silently on non-trading days or missing candle data |
 
 Run `rails solid_queue:load_recurring` to populate the schedule after config changes.
 
