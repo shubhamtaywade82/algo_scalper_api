@@ -57,9 +57,10 @@ module Indicators
       return default_result if highs.nil? || lows.nil? || closes.nil?
       return default_result if highs.empty? || lows.empty? || closes.empty?
 
-      minimum_required = [training_period, period + 1].max
+      minimum_required = period + 1
       return default_result if closes.size < minimum_required
 
+      @adaptive_multipliers = Array.new(closes.size, @base_multiplier)
       @atr_values = calculate_adaptive_atr(highs, lows, closes)
       optimize_multipliers_with_clustering(closes, atr_values)
       supertrend_line = calculate_adaptive_supertrend(highs, lows, closes, atr_values, adaptive_multipliers)
