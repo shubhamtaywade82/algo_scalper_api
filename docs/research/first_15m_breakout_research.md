@@ -121,7 +121,7 @@ To prevent overfitting, the system uses two mathematical layers:
 
 ### Verdict rule (from the design spec, applied mechanically)
 
-A strategy wins only if its OOS retention ratio beats the best pre-existing exit (best of the original 8: `fixed_30` at 0.15) **and** its bootstrap 95% CI lower bound on return is above 0%. Otherwise: no validated edge.
+A strategy wins only if its retention ratio beats the best pre-existing exit (best of the original 8: `fixed_30` at 0.15) **and** its bootstrap 95% CI lower bound on return is above 0%. Otherwise: no validated edge.
 
 ### 13-strategy exit-performance matrix (ATM strike)
 
