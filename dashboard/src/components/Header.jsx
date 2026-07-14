@@ -148,7 +148,27 @@ export default function Header(props) {
     )
   }
 
-  const { publicIpv4, publicIpv6, registeredIps } = useDashboardContext()
+  const { publicIpv4, publicIpv6, registeredIps, stats } = useDashboardContext()
+
+  const openPnl = () => stats()?.unrealized_pnl_rupees ?? 0
+  const openPnlPct = () => stats()?.unrealized_pnl_pct ?? 0
+  const realizedPnl = () => stats()?.realized_pnl_rupees ?? 0
+  const realizedPnlPct = () => stats()?.realized_pnl_pct ?? 0
+
+  const openPnlColorClass = createMemo(() => {
+    const val = Number(openPnl() || 0)
+    if (val > 0) return 'border-emerald-500/10 hover:border-emerald-500/20 hover:shadow-[0_0_12px_rgba(16,185,129,0.08)] bg-emerald-500/[0.02]'
+    if (val < 0) return 'border-rose-500/10 hover:border-rose-500/20 hover:shadow-[0_0_12px_rgba(239,68,68,0.08)] bg-rose-500/[0.02]'
+    return 'border-white/5 hover:border-white/10'
+  })
+
+  const realizedPnlColorClass = createMemo(() => {
+    const val = Number(realizedPnl() || 0)
+    if (val > 0) return 'border-emerald-500/10 hover:border-emerald-500/20 hover:shadow-[0_0_12px_rgba(16,185,129,0.08)] bg-emerald-500/[0.02]'
+    if (val < 0) return 'border-rose-500/10 hover:border-rose-500/20 hover:shadow-[0_0_12px_rgba(239,68,68,0.08)] bg-rose-500/[0.02]'
+    return 'border-white/5 hover:border-white/10'
+  })
+
 
   const isIpVerified = createMemo(() => {
     const ips = registeredIps()
@@ -313,6 +333,31 @@ export default function Header(props) {
 
         {/* Right Section: System badges */}
         <div class="flex items-center gap-2.5 text-[9px] font-black tracking-wider flex-1 justify-end shrink-0">
+          {/* P&L Header Widgets */}
+          <div class="hidden lg:flex items-center gap-2 mr-2">
+            {/* Open P&L Badge */}
+            <div class={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${openPnlColorClass()}`}>
+              <span class="text-[8px] font-black text-gray-500 uppercase tracking-wider">Open P&L</span>
+              <span class="text-[10px] font-black">
+                <AnimatedNumber value={openPnl()} currency decimals={0} showSign pnlColor />
+              </span>
+              <span class="text-[8px] font-bold">
+                (<AnimatedNumber value={openPnlPct()} suffix="%" showSign pnlColor />)
+              </span>
+            </div>
+
+            {/* Realized P&L Badge */}
+            <div class={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${realizedPnlColorClass()}`}>
+              <span class="text-[8px] font-black text-gray-500 uppercase tracking-wider">Realized P&L</span>
+              <span class="text-[10px] font-black">
+                <AnimatedNumber value={realizedPnl()} currency decimals={0} showSign pnlColor />
+              </span>
+              <span class="text-[8px] font-bold">
+                (<AnimatedNumber value={realizedPnlPct()} suffix="%" showSign pnlColor />)
+              </span>
+            </div>
+          </div>
+
           <div
             class={`flex items-center gap-2 px-3 py-1.5 rounded-full border bg-white/[0.01] transition-all duration-300 ${isIpVerified() ? 'border-emerald-500/10 hover:border-emerald-500/25 text-gray-500 hover:text-gray-300' : 'border-rose-500/10 hover:border-rose-500/25 text-rose-400'}`}
             title={isIpVerified() ? `Verified: ${publicIpv4()}` : `Not Registered: ${publicIpv4()}`}
