@@ -21,7 +21,7 @@ RSpec.describe OptionsBuying::StreamConsumer do
     let(:tick) { { ltp: 120.0, oi: 4500, vol: 9000, ts: 1_700_000_000 } }
 
     before do
-      allow(OptionsBuying::StateStore).to receive(:parse_stream_message).with(fields).and_return(tick)
+      allow(OptionsBuying::StateStore).to receive(:parse_stream_entry).with(fields).and_return(tick)
       allow(OptionsBuying::StateStore).to receive(:xack)
       allow(IndexConfigLoader).to receive(:load_indices).and_return([{ key: 'NIFTY', sid: '13' }])
       allow(OptionsBuying::StateStore).to receive(:radar_strikes).with('NIFTY').and_return([{ security_id: 'opt1' }])
@@ -55,7 +55,7 @@ RSpec.describe OptionsBuying::StreamConsumer do
         monitored_strikes: ['opt1'],
         xreadgroup: { 'key1' => [['1-0', { 'ltp' => '1' }], ['2-0', { 'ltp' => '2' }]] }
       )
-      allow(OptionsBuying::StateStore).to receive(:stream_key_for).with('opt1').and_return('key1')
+      allow(OptionsBuying::StateStore).to receive(:stream_key).with('opt1').and_return('key1')
       allow(consumer).to receive(:process_message!)
 
       expect(consumer.send(:read_batch)).to eq(2)

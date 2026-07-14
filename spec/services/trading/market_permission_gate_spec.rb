@@ -17,8 +17,15 @@ RSpec.describe Trading::MarketPermissionGate do
     )
   end
 
+  let(:chain_result) do
+    Struct.new(
+      :direction_confidence, :direction_hint, :oi_confirmation,
+      :premium_expansion, :pcr, :near_expiry_penalty, keyword_init: true
+    )
+  end
+
   let(:chain) do
-    Options::ChainSignalExtractor::Result.new(
+    chain_result.new(
       direction_confidence: 55,
       direction_hint: :bullish,
       oi_confirmation: true,

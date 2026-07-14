@@ -205,14 +205,6 @@ module OptionsBuying
         []
       end
 
-      def parse_stream_message(fields)
-        parse_stream_entry(fields)
-      end
-
-      def stream_key_for(security_id)
-        stream_key(security_id)
-      end
-
       def cache_snapshot(security_id)
         raw = redis.hgetall(cache_key(security_id))
         return nil if raw.blank?
@@ -310,8 +302,6 @@ module OptionsBuying
       rescue JSON::ParserError
         nil
       end
-
-      private
     end
   end
 end
