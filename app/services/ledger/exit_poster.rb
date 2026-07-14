@@ -56,11 +56,7 @@ module Ledger
       end
 
       def paper_posting?(tracker)
-        return true if tracker.paper?
-
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-      rescue StandardError
-        false
+        EntryPoster.paper_posting?(tracker)
       end
     end
   end

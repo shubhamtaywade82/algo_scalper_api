@@ -14,8 +14,7 @@ module Trading
       # @return [Hash] frozen policy hash (and nested arrays/hashes are frozen)
       def for(permission:)
         key = normalize_permission(permission)
-        policy = POLICIES.fetch(key, POLICIES[:blocked])
-        deep_dup(policy) # return a fresh, immutable object each call
+        POLICIES.fetch(key, POLICIES[:blocked])
       end
 
       # Deep freeze helper - must be public to be called during constant definition
@@ -42,17 +41,6 @@ module Trading
         end
 
         permission.is_a?(Symbol) ? permission : :blocked
-      end
-
-      def deep_dup(obj)
-        case obj
-        when Hash
-          obj.transform_values { |v| deep_dup(v) }.freeze
-        when Array
-          obj.map { |v| deep_dup(v) }.freeze
-        else
-          obj # primitives are already frozen in our constants
-        end
       end
     end
 

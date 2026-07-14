@@ -33,13 +33,13 @@ module Trading
         # - full_deploy -> scale_ready
         # - scale_ready -> execution_only
         # - execution_only -> execution_only
-        p = downgrade_for_low_atr(p) if atr_current < atr_session_median
+        p = downgrade(p) if atr_current < atr_session_median
 
         # Rule 2 (second):
         # If atr_slope <= 0:
         # - scale_ready -> execution_only
         # - full_deploy -> scale_ready
-        p = downgrade_for_non_positive_slope(p) if atr_slope <= 0
+        p = downgrade(p) if atr_slope <= 0
 
         # Rule 3 (implicit safety): never upgrade.
         p
@@ -47,16 +47,7 @@ module Trading
 
       private
 
-      def downgrade_for_low_atr(permission)
-        case permission
-        when :full_deploy then :scale_ready
-        when :scale_ready then :execution_only
-        when :execution_only then :execution_only
-        else :blocked
-        end
-      end
-
-      def downgrade_for_non_positive_slope(permission)
+      def downgrade(permission)
         case permission
         when :full_deploy then :scale_ready
         when :scale_ready then :execution_only
@@ -85,6 +76,4 @@ module Trading
       end
     end
   end
-
-  AtrPermissionModifier = ATRPermissionModifier unless const_defined?(:AtrPermissionModifier)
 end

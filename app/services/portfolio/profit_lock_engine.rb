@@ -149,10 +149,6 @@ module Portfolio
 
         net <= peak * early_giveback[:keep_ratio]
       end
-
-      def reset_early_giveback_cache!
-        @early_giveback = nil
-      end
     end
   end
 end

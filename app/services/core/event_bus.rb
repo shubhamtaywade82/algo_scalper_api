@@ -18,14 +18,7 @@ module Core
       entry_filled: :entry_filled,
       sl_hit: :sl_hit,
       tp_hit: :tp_hit,
-      structure_break: :structure_break,
       exit_triggered: :exit_triggered,
-      risk_alert: :risk_alert,
-      breakeven_lock: :breakeven_lock,
-      trailing_triggered: :trailing_triggered,
-      danger_zone: :danger_zone,
-      volatility_spike: :volatility_spike,
-      trend_flip: :trend_flip,
       bracket_placed: :bracket_placed,
       bracket_modified: :bracket_modified,
       candle_closed: :candle_closed,
@@ -37,11 +30,6 @@ module Core
     def initialize
       @subscribers = Concurrent::Map.new { |h, k| h[k] = Concurrent::Array.new }
       @lock = Mutex.new
-      @stats = {
-        events_published: 0,
-        events_delivered: 0,
-        errors: 0
-      }
     end
 
     # Subscribe to an event type
@@ -85,15 +73,12 @@ module Core
       subscribers = @subscribers[event_type]
       return 0 if subscribers.empty?
 
-      @stats[:events_published] += 1
       notified = 0
 
       subscribers.each do |subscription|
         subscription[:handler].call(event)
         notified += 1
-        @stats[:events_delivered] += 1
       rescue StandardError => e
-        @stats[:errors] += 1
         Rails.logger.error(
           "[Core::EventBus] Error delivering #{event_type} to subscriber: #{e.class} - #{e.message}"
         )
@@ -143,20 +128,9 @@ module Core
       removed
     end
 
-    # Get statistics
-    # @return [Hash] Statistics hash
-    def stats
-      @stats.dup
-    end
-
     # Clear all subscriptions (for testing/cleanup)
     def clear
       @subscribers.clear
-      @stats = {
-        events_published: 0,
-        events_delivered: 0,
-        errors: 0
-      }
       Rails.logger.debug('[Core::EventBus] Cleared all subscriptions')
     end
 

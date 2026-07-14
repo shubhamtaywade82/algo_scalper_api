@@ -5,7 +5,7 @@ require 'rails_helper'
 # Explicitly require the class file to ensure it's loaded
 require_relative '../../../app/services/trading/atr_permission_modifier'
 
-RSpec.describe Trading::AtrPermissionModifier do
+RSpec.describe Trading::ATRPermissionModifier do
   describe '.apply' do
     context 'when atr_current below median' do
       it 'downgrades full_deploy to scale_ready' do

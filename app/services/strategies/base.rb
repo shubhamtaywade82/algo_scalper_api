@@ -16,11 +16,6 @@ module Strategies
       raise NotImplementedError, "#{self.class} must implement #call(context)"
     end
 
-    def on_start(context) = nil
-    def on_stop(context) = nil
-    def on_position_opened(context) = nil
-    def on_position_closed(context) = nil
-
     private
 
     attr_reader :params
