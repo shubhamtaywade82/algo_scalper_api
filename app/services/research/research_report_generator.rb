@@ -74,8 +74,6 @@ module Research
       aggregate
     end
 
-    private
-
     def self.average(arr)
       return 0.0 if arr.empty?
       arr.sum.to_f / arr.size
@@ -91,7 +89,7 @@ module Research
     def self.std_dev(arr)
       return 0.0 if arr.size <= 1
       avg = average(arr)
-      variance = arr.map { |x| (x - avg)**2 }.sum / (arr.size - 1)
+      variance = arr.sum { |x| (x - avg)**2 } / (arr.size - 1)
       Math.sqrt(variance)
     end
 
@@ -104,10 +102,10 @@ module Research
         times = trades.map { |t| t[:strikes][strike_label][:exits][name][:holding_time_minutes] }
         retentions = trades.map { |t| t[:strikes][strike_label][:exits][name][:opportunity_retention_ratio] || 0.0 }
         lost_profit = trades.map { |t| t[:strikes][strike_label][:exits][name][:lost_profit_points] || 0.0 }
-        
+
         wins = returns.select { |r| r > 0.0 }
         losses = returns.select { |r| r < 0.0 }
-        win_rate = returns.size > 0 ? (wins.size.to_f / returns.size) * 100.0 : 0.0
+        win_rate = returns.size.positive? ? (wins.size.to_f / returns.size) * 100.0 : 0.0
 
         # Expectancy
         expectancy = average(returns)
@@ -116,17 +114,21 @@ module Research
         sd = std_dev(returns)
 
         # Sharpe (simplified trade-level Sharpe)
-        sharpe = sd > 0 ? (expectancy / sd) : 0.0
+        sharpe = sd.positive? ? (expectancy / sd) : 0.0
 
         # Sortino
-        downside_variance = losses.map { |r| r**2 }.sum / [returns.size, 1].max
+        downside_variance = losses.sum { |r| r**2 } / [returns.size, 1].max
         downside_sd = Math.sqrt(downside_variance)
-        sortino = downside_sd > 0 ? (expectancy / downside_sd) : 0.0
+        sortino = downside_sd.positive? ? (expectancy / downside_sd) : 0.0
 
         # Profit Factor
         gross_wins = wins.sum
         gross_losses = losses.sum.abs
-        profit_factor = gross_losses > 0 ? (gross_wins / gross_losses) : (gross_wins > 0 ? 99.9 : 1.0)
+        profit_factor = if gross_losses.positive?
+gross_wins / gross_losses
+                        else
+(gross_wins.positive? ? 99.9 : 1.0)
+                        end
 
         edge_score = Research::EdgeScorer.score(returns, 30.0)
 
@@ -150,7 +152,7 @@ module Research
 
     def self.compare_strikes(trades)
       strikes = ["ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2"]
-      
+
       strikes.index_with do |strike|
         mfe_vals = trades.map { |t| t[:strikes][strike][:mfe_pct] }
         mae_vals = trades.map { |t| t[:strikes][strike][:mae_pct] }
@@ -174,12 +176,12 @@ module Research
 
     def self.compute_probabilities(trades)
       avg_opening_vol = average(trades.map { |t| t[:first_candle_volume] || 0.0 })
-      
+
       # 1. P(CE > 50% MFE | gap up, strong volume, bullish breakout)
       bull_filters = trades.select do |t|
         t[:gap_pct] > 0.15 &&
-        (t[:first_candle_volume] || 0) >= avg_opening_vol &&
-        t[:breakout_type] == :bullish
+          (t[:first_candle_volume] || 0) >= avg_opening_vol &&
+          t[:breakout_type] == :bullish
       end
       num_ce_gt_50 = bull_filters.count { |t| t[:strikes]["ATM"][:mfe_pct] >= 50.0 }
       p_ce_expansion = bull_filters.any? ? (num_ce_gt_50.to_f / bull_filters.size) * 100.0 : 0.0
@@ -187,8 +189,8 @@ module Research
       # 2. P(PE > 50% MFE | gap down, below VWAP, bearish breakdown)
       bear_filters = trades.select do |t|
         t[:gap_pct] < -0.15 &&
-        t[:vwap_dist] < 0 &&
-        t[:breakout_type] == :bearish
+          t[:vwap_dist].negative? &&
+          t[:breakout_type] == :bearish
       end
       num_pe_gt_50 = bear_filters.count { |t| t[:strikes]["ATM"][:mfe_pct] >= 50.0 }
       p_pe_expansion = bear_filters.any? ? (num_pe_gt_50.to_f / bear_filters.size) * 100.0 : 0.0
@@ -262,7 +264,7 @@ module Research
           "ATM Exit Hybrid Return %", "ATM Exit Hybrid Capture Eff", "ATM Exit Hybrid Retention Ratio", "ATM Exit Hybrid Lost Profit",
           "Volatility Regime", "Trend Regime", "Auction Archetype", "Failure Reason"
         ]
-        
+
         trades.each do |t|
           atm = t[:strikes]["ATM"]
           hybrid = atm[:exits][:hybrid_divergence]
@@ -324,7 +326,7 @@ module Research
           "Momentum Return %", "Momentum Capture Eff",
           "Volatility Regime", "Trend Regime", "Auction Archetype"
         ]
-        
+
         trades.each do |t|
           ["ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2"].each do |strike_label|
             str = t[:strikes][strike_label]
@@ -366,63 +368,63 @@ module Research
     end
 
     def self.print_console_summary(agg)
-      puts "\n" + "=" * 120
-      puts "📊 INSTITUTIONAL OPENING AUCTION RESEARCH OPERATING SYSTEM (V7)"
-      puts "=" * 120
-      puts "Total Simulated Trade Events: #{agg[:total_trade_opportunities]}"
-      puts "  Bullish Breakouts: #{agg[:breakout_type_split][:bullish]} | Bearish Breakdowns: #{agg[:breakout_type_split][:bearish]}"
+      Rails.logger.debug "\n#{'=' * 120}"
+      Rails.logger.debug "📊 INSTITUTIONAL OPENING AUCTION RESEARCH OPERATING SYSTEM (V7)"
+      Rails.logger.debug "=" * 120
+      Rails.logger.debug "Total Simulated Trade Events: #{agg[:total_trade_opportunities]}"
+      Rails.logger.debug "  Bullish Breakouts: #{agg[:breakout_type_split][:bullish]} | Bearish Breakdowns: #{agg[:breakout_type_split][:bearish]}"
 
-      puts "\n🏫 AUCTION ARCHETYPE DISTRIBUTION MATRIX:"
+      Rails.logger.debug "\n🏫 AUCTION ARCHETYPE DISTRIBUTION MATRIX:"
       agg[:archetype_distribution].each do |arch, count|
         bar = ("█" * count).ljust(15)
-        printf("  - %-25s : %2d events (%5.1f%%) | %s\n", 
+        printf("  - %-25s : %2d events (%5.1f%%) | %s\n",
                arch.to_s.titleize, count, (count.to_f / agg[:total_trade_opportunities]) * 100.0, bar)
       end
 
       if agg[:nonlinear_importance].any?
-        puts "\n🧠 SHANNON INFORMATION GAIN MATRIX (Non-linear Mutual Info to MFE >= 30%):"
+        Rails.logger.debug "\n🧠 SHANNON INFORMATION GAIN MATRIX (Non-linear Mutual Info to MFE >= 30%):"
         agg[:nonlinear_importance][:information_gains].each do |feat, gain|
           bar = ("█" * (gain * 20).round).ljust(20)
           printf("  %-25s : %6.4f bits | %s\n", feat.to_s.titleize, gain, bar)
         end
 
-        puts "\n🎲 BINNED CONDITIONAL PROBABILITY MATRIX: P(ATM Option Expansion >= 30% | Bin)"
+        Rails.logger.debug "\n🎲 BINNED CONDITIONAL PROBABILITY MATRIX: P(ATM Option Expansion >= 30% | Bin)"
         agg[:nonlinear_importance][:conditional_probability_tables].each do |feat_name, bin_table|
-          puts "  #{feat_name.to_s.titleize}:"
+          Rails.logger.debug "  #{feat_name.to_s.titleize}:"
           bin_table.each do |bin_name, stats|
-            printf("    * %-20s : Win Rate %5.1f%% (sample size: %d)\n", 
+            printf("    * %-20s : Win Rate %5.1f%% (sample size: %d)\n",
                    bin_name.to_s.titleize, stats[:probability_pct], stats[:sample])
           end
         end
       end
 
-      puts "\n🧠 LINEAR FEATURE CORRELATION MATRIX (MFE Strength):"
+      Rails.logger.debug "\n🧠 LINEAR FEATURE CORRELATION MATRIX (MFE Strength):"
       agg[:feature_importance].each do |feature, r|
         bar = ("█" * (r.abs * 20).round).ljust(20)
         printf("  %-25s : %6.4f | %s\n", feature.to_s.titleize, r, bar)
       end
 
-      puts "\n⚠️ NEGATIVE RESEARCH: failed breakout reason distribution:"
+      Rails.logger.debug "\n⚠️ NEGATIVE RESEARCH: failed breakout reason distribution:"
       agg[:negative_research].each do |reason, count|
-        printf("  - %-25s : %d trades (%5.1f%%)\n", 
+        printf("  - %-25s : %d trades (%5.1f%%)\n",
                reason.to_s.titleize, count, (count.to_f / [agg[:negative_research].values.sum, 1].max) * 100.0)
       end
 
-      puts "\n🧪 HYPOTHESIS VALIDATION MATRIX:"
-      printf("  %-50s | %6s | %7s | %10s | %10s\n", 
+      Rails.logger.debug "\n🧪 HYPOTHESIS VALIDATION MATRIX:"
+      printf("  %-50s | %6s | %7s | %10s | %10s\n",
              "Hypothesis Rule", "Sample", "Success", "Expectancy", "Verdict")
-      puts "  " + "-" * 92
-      
+      Rails.logger.debug "  #{'-' * 92}"
+
       agg[:hypotheses].each do |h|
         printf("  %-50s | %6d | %6.1f%% | %8.2fR | %10s\n",
                h[:description].truncate(50), h[:sample_size], h[:success_rate], h[:expectancy_r], h[:verdict].to_s.upcase)
       end
 
-      puts "\n🛡️ EXIT STRATEGY MATRIX & WALK-FORWARD STATISTICAL VALIDATION (ATM STRIKE):"
-      printf("  %-18s | %8s | %8s | %6s | %8s | %8s | %10s | %10s | %10s\n", 
+      Rails.logger.debug "\n🛡️ EXIT STRATEGY MATRIX & WALK-FORWARD STATISTICAL VALIDATION (ATM STRIKE):"
+      printf("  %-18s | %8s | %8s | %6s | %8s | %8s | %10s | %10s | %10s\n",
              "Strategy", "Win Rate", "Avg Ret", "Sharpe", "Retent R", "Lost Pts", "95% Ret CI", "IS / OOS Ret", "Edge Score")
-      puts "  " + "-" * 115
-      
+      Rails.logger.debug "  #{'-' * 115}"
+
       sorted_exits = agg[:exit_performance_atm].sort_by { |_, stats| -stats[:avg_return_pct] }
       sorted_exits.each do |name, stats|
         val = agg[:statistical_validation][name]
@@ -430,10 +432,10 @@ module Research
         splits = val ? val[:split_validation] : { is_avg_return_pct: 0.0, oos_avg_return_pct: 0.0 }
 
         printf("  %-18s | %7.2f%% | %7.2f%% | %6.3f | %8.2f | %8.1f | [%5.1f, %4.1f] | %5.1f%% / %4.1f%% | %10d\n",
-               name.to_s.titleize, 
-               stats[:win_rate_pct], 
-               stats[:avg_return_pct], 
-               stats[:sharpe_ratio], 
+               name.to_s.titleize,
+               stats[:win_rate_pct],
+               stats[:avg_return_pct],
+               stats[:sharpe_ratio],
                stats[:avg_opportunity_retention],
                stats[:avg_lost_profit_points],
                ci[0], ci[1],
@@ -441,28 +443,28 @@ module Research
                stats[:edge_score] || 0)
       end
 
-      puts "\n🎯 STRIKE COMPARISON (ATM-2 to ATM+2) UNDER HYBRID EXIT:"
-      printf("  %-12s | %8s | %8s | %7s | %10s | %9s | %8s\n", 
+      Rails.logger.debug "\n🎯 STRIKE COMPARISON (ATM-2 to ATM+2) UNDER HYBRID EXIT:"
+      printf("  %-12s | %8s | %8s | %7s | %10s | %9s | %8s\n",
              "Strike", "Avg MFE", "Avg MAE", "Decay", "Elasticity", "Avg Return", "Win Rate")
-      puts "  " + "-" * 76
-      
+      Rails.logger.debug "  #{'-' * 76}"
+
       ["ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2"].each do |strike|
         stats = agg[:strike_comparison][strike]
         printf("  %-12s | %7.2f%% | %7.2f%% | %6.2f%% | %10.3f | %8.2f%% | %7.2f%%\n",
-               strike, 
-               stats[:avg_mfe_pct], 
-               stats[:avg_mae_pct], 
-               stats[:avg_decay_from_peak_pct], 
-               stats[:avg_elasticity], 
+               strike,
+               stats[:avg_mfe_pct],
+               stats[:avg_mae_pct],
+               stats[:avg_decay_from_peak_pct],
+               stats[:avg_elasticity],
                stats[:hybrid_exit_avg_return_pct],
                stats[:hybrid_exit_win_rate_pct])
       end
 
-      puts "\n🎲 CONDITIONAL PROBABILITIES & PATTERN MINING:"
-      puts "  P(ATM CE MFE > 50% | Bull filters)       : #{agg[:conditional_probabilities][:p_atm_ce_mfe_above_50_given_bull_filters]}%"
-      puts "  P(ATM PE MFE > 50% | Bear filters)       : #{agg[:conditional_probabilities][:p_atm_pe_mfe_above_50_given_bear_filters]}%"
-      puts "  P(Premium decay > 25% after peak | MFE>=50%): #{agg[:conditional_probabilities][:p_decay_above_25_given_strong_mfe]}%"
-      puts "=" * 110 + "\n"
+      Rails.logger.debug "\n🎲 CONDITIONAL PROBABILITIES & PATTERN MINING:"
+      Rails.logger.debug "  P(ATM CE MFE > 50% | Bull filters)       : #{agg[:conditional_probabilities][:p_atm_ce_mfe_above_50_given_bull_filters]}%"
+      Rails.logger.debug "  P(ATM PE MFE > 50% | Bear filters)       : #{agg[:conditional_probabilities][:p_atm_pe_mfe_above_50_given_bear_filters]}%"
+      Rails.logger.debug "  P(Premium decay > 25% after peak | MFE>=50%): #{agg[:conditional_probabilities][:p_decay_above_25_given_strong_mfe]}%"
+      Rails.logger.debug "#{'=' * 110}\n"
     end
   end
 end

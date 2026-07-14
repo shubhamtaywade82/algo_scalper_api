@@ -34,6 +34,15 @@ RSpec.describe Research::ExitCaptureAnalyzer do
         :gamma_state, :velocity_ratchet
       )
     end
+
+    it "maps every registered strategy to a defined simulator method" do
+      pending_methods = %i[simulate_gamma_state simulate_velocity_ratchet] # Tasks 2-3
+      described_class::STRATEGY_METHODS.each_value do |m|
+        next if pending_methods.include?(m)
+
+        expect(described_class).to respond_to(m), "missing #{m}"
+      end
+    end
   end
 
   describe ".simulate_mfe_retrace_35" do

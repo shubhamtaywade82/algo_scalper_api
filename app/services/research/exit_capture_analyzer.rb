@@ -2,12 +2,22 @@
 
 module Research
   class ExitCaptureAnalyzer
-    STRATEGY_NAMES = %i[
-      fixed_30 fixed_50 trail_20 und_ema9 prem_ema5
-      momentum_decay hybrid_divergence hold_to_close
-      mfe_retrace_25 mfe_retrace_35 mfe_retrace_50
-      gamma_state velocity_ratchet
-    ].freeze
+    STRATEGY_METHODS = {
+      fixed_30: :simulate_fixed_target_30,
+      fixed_50: :simulate_fixed_target_50,
+      trail_20: :simulate_trailing_stop_20,
+      und_ema9: :simulate_underlying_ema9,
+      prem_ema5: :simulate_premium_ema5,
+      momentum_decay: :simulate_momentum_decay,
+      hybrid_divergence: :simulate_hybrid_divergence,
+      hold_to_close: :simulate_hold_to_close,
+      mfe_retrace_25: :simulate_mfe_retrace_25,
+      mfe_retrace_35: :simulate_mfe_retrace_35,
+      mfe_retrace_50: :simulate_mfe_retrace_50,
+      gamma_state: :simulate_gamma_state,
+      velocity_ratchet: :simulate_velocity_ratchet
+    }.freeze
+    STRATEGY_NAMES = STRATEGY_METHODS.keys.freeze
 
     # Simulates various exit candidates and measures their capture efficiency on a specific strike.
     # @param underlying_candles [Array<Hash>] Daily NIFTY candles
@@ -27,7 +37,7 @@ module Research
       entry_price = expansion_context[:entry_price]
       peak_price = expansion_context[:peak_price]
 
-      rules = STRATEGY_NAMES.index_with { |name| method(:"simulate_#{name}") }
+      rules = STRATEGY_METHODS.transform_values { |m| method(m) }
 
       results = {}
       rules.each do |name, sim_method|
@@ -49,8 +59,8 @@ module Research
         return_pct = entry_price.positive? ? ((exit_price - entry_price) / entry_price) * 100.0 : 0.0
 
         peak_time = expansion_context[:peak_time]
-        leakage_time = (peak_time && exit_time > peak_time) ? ((exit_time - peak_time) / 60).round : 0
-        leakage_speed = leakage_time > 0 ? (lost_profit_pts / leakage_time) : 0.0
+        leakage_time = peak_time && exit_time > peak_time ? ((exit_time - peak_time) / 60).round : 0
+        leakage_speed = leakage_time.positive? ? (lost_profit_pts / leakage_time) : 0.0
 
         results[name] = {
           exit_price: exit_price.round(2),
