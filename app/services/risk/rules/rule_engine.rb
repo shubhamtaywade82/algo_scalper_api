@@ -11,23 +11,6 @@ module Risk
         @rules = rules.sort_by(&:priority)
       end
 
-      # Add a rule to the engine
-      # @param rule [BaseRule] Rule to add
-      # @return [RuleEngine] Self for chaining
-      def add_rule(rule)
-        @rules << rule
-        @rules.sort_by!(&:priority)
-        self
-      end
-
-      # Remove a rule from the engine
-      # @param rule_class [Class] Rule class to remove
-      # @return [RuleEngine] Self for chaining
-      def remove_rule(rule_class)
-        @rules.reject! { |r| r.is_a?(rule_class) }
-        self
-      end
-
       # Evaluate all rules against the given context
       # Rules are evaluated in priority order (lower priority number = higher priority)
       # First rule that triggers an exit wins, and evaluation stops
@@ -41,7 +24,7 @@ module Risk
 
           begin
             result = rule.evaluate(context)
-            
+
             # If we should continue (no_action or skip), move to next rule
             next if result.skip? || result.continue?
 
