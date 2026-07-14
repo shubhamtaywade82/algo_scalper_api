@@ -55,7 +55,11 @@ module Ledger
         nil
       end
 
-      delegate :paper_posting?, to: :EntryPoster
+      # rubocop:disable Rails/Delegate -- `delegate` targets an instance method, not this class method
+      def paper_posting?(tracker)
+        EntryPoster.paper_posting?(tracker)
+      end
+      # rubocop:enable Rails/Delegate
     end
   end
 end
