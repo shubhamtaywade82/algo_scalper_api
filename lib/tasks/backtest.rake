@@ -27,11 +27,15 @@ class ActiveStrategyBacktestWrapper
       logger: nil
     )
 
-    @strategy_class.new(params: @strategy_params).call(context)
+    strategy = @strategy_class.new(params: @strategy_params)
+    signal = strategy.call(context)
 
-    # No production strategy ever produced a Signals::BuyCall/BuyPut, so this
-    # always fell through to nil regardless of signal - preserved as-is.
-    nil
+    case signal
+    when Signals::BuyCall
+      { type: :ce, price: truncated_series.candles.last.close }
+    when Signals::BuyPut
+      { type: :pe, price: truncated_series.candles.last.close }
+    end
   rescue StandardError
     nil
   end
