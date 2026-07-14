@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "created_at": "2026-03-08T21:32:33+05:30",
+    "underlying": "nifty",
+    "strategy": "vwap_breakout",
+    "period": "2024-01-01 to 2024-01-01",
+    "capital": 1000000
+  },
+  "statistics": {
+    "strikes_analyzed": 3,
+    "total_trades": 34,
+    "total_pnl": "₹47034.01",
+    "pnl_percentage": "4.7%",
+    "trades_by_strike": {
+      "ATM_CALL": {
+        "trades": 13,
+        "win_rate": "38.46%",
+        "pnl": "₹16938.21",
+        "pnl_pct": "1.69%"
+      },
+      "ATM+1_CALL": {
+        "trades": 11,
+        "win_rate": "45.45%",
+        "pnl": "₹17656.03",
+        "pnl_pct": "1.77%"
+      },
+      "ATM-1_CALL": {
+        "trades": 10,
+        "win_rate": "30.0%",
+        "pnl": "₹12439.77",
+        "pnl_pct": "1.24%"
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+[
+  {
+    "symbol": "ATM_CALL",
+    "entry_price": 55.4,
+    "exit_price": 54.568999999999996,
+    "quantity": 451,
+    "entry_time": 1725442920,
+    "exit_time": 1725443340,
+    "pnl": -399.58,
+    "pnl_pct": -1.6,
+    "max_loss": 374.78,
+    "status": "LOSS",
+    "strike": "ATM_CALL"
+  },
+  {
+    "symbol": "ATM-1_CALL",
+    "entry_price": 80.75,
+    "exit_price": 79.53875,
+    "quantity": 309,
+    "entry_time": 1725442920,
+    "exit_time": 1725443460,
+    "pnl": -399.04,
+    "pnl_pct": -1.6,
+    "max_loss": 374.28,
+    "status": "LOSS",
+    "strike": "ATM-1_CALL"
+  },
+  {
+    "symbol": "ATM-1_CALL",
+    "entry_price": 81.4,
+    "exit_price": 80.179,
+    "quantity": 307,
+    "entry_time": 1725443520,
+    "exit_time": 1725443640,
+    "pnl": -399.65,
+    "pnl_pct": -1.6,
+    "max_loss": 374.85,
+    "status": "LOSS",
+    "strike": "ATM-1_CALL"
+  }
+]

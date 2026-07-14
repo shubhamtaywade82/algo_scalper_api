@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "created_at": "2026-03-08T22:32:51+05:30",
+    "underlying": "nifty",
+    "strategy": "supertrend",
+    "period": "2026-03-01 to 2026-03-07",
+    "capital": 1000000
+  },
+  "statistics": {
+    "strikes_analyzed": 3,
+    "total_trades": 249,
+    "total_pnl": "₹-17255.24",
+    "pnl_percentage": "-1.73%",
+    "trades_by_strike": {
+      "ATM_CALL": {
+        "trades": 84,
+        "win_rate": "5.95%",
+        "pnl": "₹-10318.51",
+        "pnl_pct": "-1.03%"
+      },
+      "ATM+1_CALL": {
+        "trades": 82,
+        "win_rate": "7.32%",
+        "pnl": "₹-635.67",
+        "pnl_pct": "-0.06%"
+      },
+      "ATM-1_CALL": {
+        "trades": 83,
+        "win_rate": "6.02%",
+        "pnl": "₹-6301.06",
+        "pnl_pct": "-0.63%"
+      }
+    }
+  }
+}

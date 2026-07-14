@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "created_at": "2026-03-08T22:57:33+05:30",
+    "underlying": "nifty",
+    "strategy": "bollinger_breakout",
+    "period": "2022-11-08 to 2022-12-07",
+    "capital": 1000000.0
+  },
+  "statistics": {
+    "strikes_analyzed": 3,
+    "total_trades": 287,
+    "total_pnl": "₹52000.12",
+    "pnl_percentage": "5.2%",
+    "trades_by_strike": {
+      "ATM_CALL": {
+        "trades": 96,
+        "win_rate": "10.42%",
+        "pnl": "₹15332.22",
+        "pnl_pct": "1.53%"
+      },
+      "ATM+1_CALL": {
+        "trades": 100,
+        "win_rate": "13.0%",
+        "pnl": "₹30136.78",
+        "pnl_pct": "3.01%"
+      },
+      "ATM-1_CALL": {
+        "trades": 91,
+        "win_rate": "8.79%",
+        "pnl": "₹6531.12",
+        "pnl_pct": "0.65%"
+      }
+    }
+  }
+}

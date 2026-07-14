@@ -1,0 +1,2 @@
+Strike,Entry Time,Exit Time,Entry Price,Exit Price,Quantity,PnL,Return %,Status
+ATM_CALL,2024-09-04 15:12:00,2024-09-04 15:19:00,55.4,54.57,451,-399.58,-1.6,LOSS
