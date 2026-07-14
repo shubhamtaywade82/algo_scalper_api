@@ -313,5 +313,45 @@ module Research
       c_last = active_candles.last
       [c_last[:close], c_last[:timestamp], "market_close"]
     end
+
+    # 13. Velocity ratchet — peak-capture exit designed from V4/V5 findings:
+    # premium peaked on every trade then gave back 28-99%; this floors the giveback.
+    # Arms at MFE >= 10% of entry. Floor = max(entry*1.02, peak - gap);
+    # gap = 35% of MFE while 1-min velocity > 0, tightens to 15% once velocity <= 0.
+    # Floor only ever rises. Hard exit: velocity < 0 for 3 consecutive minutes AND close < EMA5.
+    def self.simulate_velocity_ratchet(entry_price, entry_idx, active_candles, *, **)
+      arm_threshold = entry_price * 1.10
+      peak = entry_price
+      floor = nil
+      neg_velocity_run = 0
+      # rubocop:disable Rails/Pluck -- array of hashes, not AR relation; pluck won't work
+      closes = active_candles.first(entry_idx).map { |c| c[:close] }
+      # rubocop:enable Rails/Pluck
+
+      active_candles[entry_idx..].each do |c|
+        closes << c[:close]
+        peak = [peak, c[:high]].max
+
+        velocity = closes.size >= 2 ? closes[-1] - closes[-2] : 0.0
+        neg_velocity_run = velocity.negative? ? neg_velocity_run + 1 : 0
+
+        if peak >= arm_threshold
+          mfe = peak - entry_price
+          gap_ratio = velocity.positive? ? 0.35 : 0.15
+          candidate = [entry_price * 1.02, peak - (mfe * gap_ratio)].max
+          floor = floor.nil? ? candidate : [floor, candidate].max
+        end
+
+        next unless floor
+        return [floor, c[:timestamp], "ratchet_floor"] if c[:low] <= floor
+
+        if neg_velocity_run >= 3 && closes.size >= 5
+          ema5 = closes.last(5).sum / 5.0
+          return [c[:close], c[:timestamp], "velocity_hard_exit"] if c[:close] < ema5
+        end
+      end
+      c_last = active_candles.last
+      [c_last[:close], c_last[:timestamp], "market_close"]
+    end
   end
 end

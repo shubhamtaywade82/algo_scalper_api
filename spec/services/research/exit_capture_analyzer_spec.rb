@@ -36,10 +36,7 @@ RSpec.describe Research::ExitCaptureAnalyzer do
     end
 
     it "maps every registered strategy to a defined simulator method" do
-      pending_methods = %i[simulate_velocity_ratchet] # Task 3
       described_class::STRATEGY_METHODS.each_value do |m|
-        next if pending_methods.include?(m)
-
         expect(described_class).to respond_to(m), "missing #{m}"
       end
     end
@@ -83,6 +80,30 @@ RSpec.describe Research::ExitCaptureAnalyzer do
       # so exhaustion trail peak*0.90 governs; peak high 130.5 -> stop 117.45
       expect(reason).to eq("gamma_state_stop")
       expect(exit_price).to be_within(1.0).of(117.45)
+    end
+  end
+
+  describe ".simulate_velocity_ratchet" do
+    it "hard-exits within ~5 minutes of the peak on the round-trip series" do
+      candles = round_trip_candles
+      _price, exit_time, reason = described_class.simulate_velocity_ratchet(100.0, 1, candles)
+      peak_time = candles[10][:timestamp] # idx 10 = the 130 peak
+      expect(reason).to(satisfy { |r| %w[ratchet_floor velocity_hard_exit].include?(r) })
+      expect(exit_time - peak_time).to be <= 5.minutes
+    end
+
+    it "never realizes a loss once armed (floor >= entry*1.02)" do
+      candles = round_trip_candles
+      exit_price, _t, _r = described_class.simulate_velocity_ratchet(100.0, 1, candles)
+      expect(exit_price).to be >= 102.0
+    end
+
+    it "rides the slow grind without premature exit" do
+      candles = slow_grind_candles
+      exit_price, _t, _reason = described_class.simulate_velocity_ratchet(100.0, 1, candles)
+      # Grind peaks at 460.5; even the flat tail only triggers the tightened floor,
+      # which by then ratcheted far above entry. Must capture most of the move.
+      expect(exit_price).to be >= 400.0
     end
   end
 end
