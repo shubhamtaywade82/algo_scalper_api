@@ -367,14 +367,15 @@ gross_wins / gross_losses
       end
     end
 
+    # rubocop:disable Rails/Output
     def self.print_console_summary(agg)
-      Rails.logger.debug "\n#{'=' * 120}"
-      Rails.logger.debug "📊 INSTITUTIONAL OPENING AUCTION RESEARCH OPERATING SYSTEM (V7)"
-      Rails.logger.debug "=" * 120
-      Rails.logger.debug "Total Simulated Trade Events: #{agg[:total_trade_opportunities]}"
-      Rails.logger.debug "  Bullish Breakouts: #{agg[:breakout_type_split][:bullish]} | Bearish Breakdowns: #{agg[:breakout_type_split][:bearish]}"
+      puts "\n#{'=' * 120}"
+      puts "📊 INSTITUTIONAL OPENING AUCTION RESEARCH OPERATING SYSTEM (V7)"
+      puts "=" * 120
+      puts "Total Simulated Trade Events: #{agg[:total_trade_opportunities]}"
+      puts "  Bullish Breakouts: #{agg[:breakout_type_split][:bullish]} | Bearish Breakdowns: #{agg[:breakout_type_split][:bearish]}"
 
-      Rails.logger.debug "\n🏫 AUCTION ARCHETYPE DISTRIBUTION MATRIX:"
+      puts "\n🏫 AUCTION ARCHETYPE DISTRIBUTION MATRIX:"
       agg[:archetype_distribution].each do |arch, count|
         bar = ("█" * count).ljust(15)
         printf("  - %-25s : %2d events (%5.1f%%) | %s\n",
@@ -382,15 +383,15 @@ gross_wins / gross_losses
       end
 
       if agg[:nonlinear_importance].any?
-        Rails.logger.debug "\n🧠 SHANNON INFORMATION GAIN MATRIX (Non-linear Mutual Info to MFE >= 30%):"
+        puts "\n🧠 SHANNON INFORMATION GAIN MATRIX (Non-linear Mutual Info to MFE >= 30%):"
         agg[:nonlinear_importance][:information_gains].each do |feat, gain|
           bar = ("█" * (gain * 20).round).ljust(20)
           printf("  %-25s : %6.4f bits | %s\n", feat.to_s.titleize, gain, bar)
         end
 
-        Rails.logger.debug "\n🎲 BINNED CONDITIONAL PROBABILITY MATRIX: P(ATM Option Expansion >= 30% | Bin)"
+        puts "\n🎲 BINNED CONDITIONAL PROBABILITY MATRIX: P(ATM Option Expansion >= 30% | Bin)"
         agg[:nonlinear_importance][:conditional_probability_tables].each do |feat_name, bin_table|
-          Rails.logger.debug "  #{feat_name.to_s.titleize}:"
+          puts "  #{feat_name.to_s.titleize}:"
           bin_table.each do |bin_name, stats|
             printf("    * %-20s : Win Rate %5.1f%% (sample size: %d)\n",
                    bin_name.to_s.titleize, stats[:probability_pct], stats[:sample])
@@ -398,32 +399,32 @@ gross_wins / gross_losses
         end
       end
 
-      Rails.logger.debug "\n🧠 LINEAR FEATURE CORRELATION MATRIX (MFE Strength):"
+      puts "\n🧠 LINEAR FEATURE CORRELATION MATRIX (MFE Strength):"
       agg[:feature_importance].each do |feature, r|
         bar = ("█" * (r.abs * 20).round).ljust(20)
         printf("  %-25s : %6.4f | %s\n", feature.to_s.titleize, r, bar)
       end
 
-      Rails.logger.debug "\n⚠️ NEGATIVE RESEARCH: failed breakout reason distribution:"
+      puts "\n⚠️ NEGATIVE RESEARCH: failed breakout reason distribution:"
       agg[:negative_research].each do |reason, count|
         printf("  - %-25s : %d trades (%5.1f%%)\n",
                reason.to_s.titleize, count, (count.to_f / [agg[:negative_research].values.sum, 1].max) * 100.0)
       end
 
-      Rails.logger.debug "\n🧪 HYPOTHESIS VALIDATION MATRIX:"
+      puts "\n🧪 HYPOTHESIS VALIDATION MATRIX:"
       printf("  %-50s | %6s | %7s | %10s | %10s\n",
              "Hypothesis Rule", "Sample", "Success", "Expectancy", "Verdict")
-      Rails.logger.debug "  #{'-' * 92}"
+      puts "  #{'-' * 92}"
 
       agg[:hypotheses].each do |h|
         printf("  %-50s | %6d | %6.1f%% | %8.2fR | %10s\n",
                h[:description].truncate(50), h[:sample_size], h[:success_rate], h[:expectancy_r], h[:verdict].to_s.upcase)
       end
 
-      Rails.logger.debug "\n🛡️ EXIT STRATEGY MATRIX & WALK-FORWARD STATISTICAL VALIDATION (ATM STRIKE):"
+      puts "\n🛡️ EXIT STRATEGY MATRIX & WALK-FORWARD STATISTICAL VALIDATION (ATM STRIKE):"
       printf("  %-18s | %8s | %8s | %6s | %8s | %8s | %10s | %10s | %10s\n",
              "Strategy", "Win Rate", "Avg Ret", "Sharpe", "Retent R", "Lost Pts", "95% Ret CI", "IS / OOS Ret", "Edge Score")
-      Rails.logger.debug "  #{'-' * 115}"
+      puts "  #{'-' * 115}"
 
       sorted_exits = agg[:exit_performance_atm].sort_by { |_, stats| -stats[:avg_return_pct] }
       sorted_exits.each do |name, stats|
@@ -443,10 +444,10 @@ gross_wins / gross_losses
                stats[:edge_score] || 0)
       end
 
-      Rails.logger.debug "\n🎯 STRIKE COMPARISON (ATM-2 to ATM+2) UNDER HYBRID EXIT:"
+      puts "\n🎯 STRIKE COMPARISON (ATM-2 to ATM+2) UNDER HYBRID EXIT:"
       printf("  %-12s | %8s | %8s | %7s | %10s | %9s | %8s\n",
              "Strike", "Avg MFE", "Avg MAE", "Decay", "Elasticity", "Avg Return", "Win Rate")
-      Rails.logger.debug "  #{'-' * 76}"
+      puts "  #{'-' * 76}"
 
       ["ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2"].each do |strike|
         stats = agg[:strike_comparison][strike]
@@ -460,11 +461,12 @@ gross_wins / gross_losses
                stats[:hybrid_exit_win_rate_pct])
       end
 
-      Rails.logger.debug "\n🎲 CONDITIONAL PROBABILITIES & PATTERN MINING:"
-      Rails.logger.debug "  P(ATM CE MFE > 50% | Bull filters)       : #{agg[:conditional_probabilities][:p_atm_ce_mfe_above_50_given_bull_filters]}%"
-      Rails.logger.debug "  P(ATM PE MFE > 50% | Bear filters)       : #{agg[:conditional_probabilities][:p_atm_pe_mfe_above_50_given_bear_filters]}%"
-      Rails.logger.debug "  P(Premium decay > 25% after peak | MFE>=50%): #{agg[:conditional_probabilities][:p_decay_above_25_given_strong_mfe]}%"
-      Rails.logger.debug "#{'=' * 110}\n"
+      puts "\n🎲 CONDITIONAL PROBABILITIES & PATTERN MINING:"
+      puts "  P(ATM CE MFE > 50% | Bull filters)       : #{agg[:conditional_probabilities][:p_atm_ce_mfe_above_50_given_bull_filters]}%"
+      puts "  P(ATM PE MFE > 50% | Bear filters)       : #{agg[:conditional_probabilities][:p_atm_pe_mfe_above_50_given_bear_filters]}%"
+      puts "  P(Premium decay > 25% after peak | MFE>=50%): #{agg[:conditional_probabilities][:p_decay_above_25_given_strong_mfe]}%"
+      puts "#{'=' * 110}\n"
     end
+    # rubocop:enable Rails/Output
   end
 end
