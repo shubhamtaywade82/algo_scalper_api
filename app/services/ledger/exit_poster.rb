@@ -55,9 +55,7 @@ module Ledger
         nil
       end
 
-      def paper_posting?(tracker)
-        EntryPoster.paper_posting?(tracker)
-      end
+      delegate :paper_posting?, to: :EntryPoster
     end
   end
 end
