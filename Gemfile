@@ -103,7 +103,7 @@ group :development, :test do
   gem 'webmock', require: false
 
   # Annotate models, routes, etc.
-  gem 'annotate'
+  gem 'annotaterb'
 
   gem "debride"
 
