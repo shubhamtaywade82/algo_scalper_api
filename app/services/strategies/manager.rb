@@ -68,7 +68,7 @@ module Strategies
 
     def all_statuses
       @mutex.synchronize do
-        @runners.transform_keys { |slug| runner_status(slug) }.keys.index_with { |s| runner_status(s) }
+        @runners.keys.index_with { |slug| runner_status(slug) }
       end
     end
 

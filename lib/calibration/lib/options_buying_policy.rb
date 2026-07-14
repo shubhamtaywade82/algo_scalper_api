@@ -40,8 +40,9 @@ class OptionsBuyingPolicy
   end
 
   def moneyness_for(side:, adx:, atr_pct:)
-    return @config.dig(:preferred_moneyness, side) if adx.to_f >= @config[:strong_trend_adx].to_f && atr_pct.to_f >= 0.03
-    return @config.dig(:preferred_moneyness, side) if adx.to_f >= @config[:moderate_trend_adx].to_f
+    strong_trend = adx.to_f >= @config[:strong_trend_adx].to_f && atr_pct.to_f >= 0.03
+    moderate_trend = adx.to_f >= @config[:moderate_trend_adx].to_f
+    return @config.dig(:preferred_moneyness, side) if strong_trend || moderate_trend
 
     :atm
   end

@@ -65,9 +65,7 @@ module Telegram
 
       # ---------- Headings ----------
       def format_headings(text)
-        text
-          .gsub(/^###\s*(.+)$/) { "<b>#{strip_md(::Regexp.last_match(1))}</b>" }
-          .gsub(/^####\s*(.+)$/) { "<b>#{strip_md(::Regexp.last_match(1))}</b>" }
+        text.gsub(/^\#{3,4}\s*(.+)$/) { "<b>#{strip_md(::Regexp.last_match(1))}</b>" }
       end
 
       # ---------- Blockquotes ----------
