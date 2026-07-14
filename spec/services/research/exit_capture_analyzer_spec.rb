@@ -36,7 +36,7 @@ RSpec.describe Research::ExitCaptureAnalyzer do
     end
 
     it "maps every registered strategy to a defined simulator method" do
-      pending_methods = %i[simulate_gamma_state simulate_velocity_ratchet] # Tasks 2-3
+      pending_methods = %i[simulate_velocity_ratchet] # Task 3
       described_class::STRATEGY_METHODS.each_value do |m|
         next if pending_methods.include?(m)
 
@@ -60,6 +60,29 @@ RSpec.describe Research::ExitCaptureAnalyzer do
       # stop never hit while grinding up; flat tail never retraces 35% of a 360.5-pt MFE
       expect(reason).to eq("market_close")
       expect(exit_price).to be_within(0.01).of(460.0)
+    end
+  end
+
+  describe ".simulate_gamma_state" do
+    it "exits via survival stop when the premium collapses before reaching +10%" do
+      # entry 100, drifts down immediately -> survival stop at entry*0.88 = 88
+      base = Time.zone.parse("2026-07-10 09:30:00")
+      closes = (0..30).map { |i| 100.0 - (1.0 * i) }
+      candles = closes.each_with_index.map do |c, i|
+        { timestamp: base + i.minutes, open: c, high: c + 0.5, low: c - 0.5, close: c, volume: 1000 }
+      end
+      exit_price, _t, reason = described_class.simulate_gamma_state(100.0, 1, candles)
+      expect(exit_price).to be_within(0.01).of(88.0)
+      expect(reason).to eq("gamma_state_stop")
+    end
+
+    it "exits via exhaustion trail (peak*0.90) when velocity stalls after a rally" do
+      candles = round_trip_candles
+      exit_price, _t, reason = described_class.simulate_gamma_state(100.0, 1, candles)
+      # Rally: velocity 3/close ≈ 2.4-3% < 5% threshold once above +10% profit,
+      # so exhaustion trail peak*0.90 governs; peak high 130.5 -> stop 117.45
+      expect(reason).to eq("gamma_state_stop")
+      expect(exit_price).to be_within(1.0).of(117.45)
     end
   end
 end

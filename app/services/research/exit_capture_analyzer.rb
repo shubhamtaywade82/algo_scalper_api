@@ -267,5 +267,51 @@ module Research
     def self.simulate_mfe_retrace_50(entry_price, entry_idx, active_candles, *, **)
       simulate_mfe_retrace(entry_price, entry_idx, active_candles, ratio: 0.50)
     end
+
+    # 12. Gamma-state exit — mirror of live Orders::GammaTrailingEngine (NIFTY config).
+    # 4 states from profit/velocity/acceleration; exit when candle low touches the state's stop.
+    GAMMA_STATE_CFG = {
+      gamma_trigger: 0.25, velocity_threshold: 0.05,
+      gamma_trail: 0.65, normal_trail: 0.80, exhaust_trail: 0.90,
+      survival_sl: 0.88, survival_profit: 0.10
+    }.freeze
+
+    def self.simulate_gamma_state(entry_price, entry_idx, active_candles, *, **)
+      cfg = GAMMA_STATE_CFG
+      peak = entry_price
+      # rubocop:disable Rails/Pluck -- array of hashes, not AR relation; pluck won't work
+      closes = active_candles.first(entry_idx).map { |c| c[:close] }
+      # rubocop:enable Rails/Pluck
+
+      active_candles[entry_idx..].each do |c|
+        closes << c[:close]
+        peak = [peak, c[:high]].max
+
+        profit = (c[:close] - entry_price) / entry_price
+        velocity = closes.size >= 2 ? (closes[-1] - closes[-2]) / closes[-2] : 0.0
+        acceleration =
+          if closes.size >= 3
+            v1 = (closes[-2] - closes[-3]) / closes[-3]
+            (velocity - v1)
+          else
+            0.0
+          end
+
+        stop =
+          if profit < cfg[:survival_profit]
+            entry_price * cfg[:survival_sl]
+          elsif profit > cfg[:gamma_trigger] && acceleration.positive?
+            peak * cfg[:gamma_trail]
+          elsif velocity < cfg[:velocity_threshold]
+            peak * cfg[:exhaust_trail]
+          else
+            peak * cfg[:normal_trail]
+          end
+
+        return [stop, c[:timestamp], "gamma_state_stop"] if c[:low] <= stop
+      end
+      c_last = active_candles.last
+      [c_last[:close], c_last[:timestamp], "market_close"]
+    end
   end
 end
