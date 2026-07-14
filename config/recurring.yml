@@ -181,6 +181,30 @@ development:
     priority: 15
     description: "Daily self-learning optimization loop (Observe-Think-Act) for NIFTY, BANKNIFTY, and SENSEX"
 
+  research_daily_lifecycle_nifty:
+    class: Research::DailyLifecycleJob
+    args: ["NIFTY"]
+    schedule: at 9:00am every day
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for NIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_banknifty:
+    class: Research::DailyLifecycleJob
+    args: ["BANKNIFTY"]
+    schedule: at 9:00am every day
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for BANKNIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_sensex:
+    class: Research::DailyLifecycleJob
+    args: ["SENSEX"]
+    schedule: at 9:00am every day
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for SENSEX so research_premium_lifecycles accumulates without manual clicks"
+
 production:
   pre_market_iv_baseline:
     class: PreMarketIvBaselineJob
@@ -363,3 +387,27 @@ production:
     queue_name: background
     priority: 3
     description: "Weekly ATM±1 options calibration — proposes config patches for NIFTY and SENSEX"
+
+  research_daily_lifecycle_nifty:
+    class: Research::DailyLifecycleJob
+    args: ["NIFTY"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for NIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_banknifty:
+    class: Research::DailyLifecycleJob
+    args: ["BANKNIFTY"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for BANKNIFTY so research_premium_lifecycles accumulates without manual clicks"
+
+  research_daily_lifecycle_sensex:
+    class: Research::DailyLifecycleJob
+    args: ["SENSEX"]
+    schedule: at 9:00am every weekday
+    queue_name: background
+    priority: 20
+    description: "Auto-runs the prior session's premium-lifecycle board for SENSEX so research_premium_lifecycles accumulates without manual clicks"

@@ -21,7 +21,9 @@ require_relative "indicators/dmi"
 #
 # Each output hash also contains all intermediate indicator values
 # so you can inspect why a signal fired.
-class SuperTrendSignalGenerator
+module Calibration
+  module Lib
+    class SuperTrendSignalGenerator
   # ── Pine Script defaults ────────────────────────────────────────
   DEFAULT_CONFIG = {
     # SuperTrend2
@@ -317,4 +319,6 @@ class SuperTrendSignalGenerator
       current_position
     end
   end
+end
+end
 end

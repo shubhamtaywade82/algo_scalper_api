@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+if defined?(Rswag)
 Rswag::Ui.configure do |c|
   # List the Swagger endpoints that you want to be documented through the
   # swagger-ui. The first parameter is the path (absolute or relative to the UI
@@ -14,4 +15,5 @@ Rswag::Ui.configure do |c|
   # Add Basic Auth in case your API is private
   # c.basic_auth_enabled = true
   # c.basic_auth_credentials 'username', 'password'
+end
 end

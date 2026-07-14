@@ -12,6 +12,6 @@ class SupertrendBacktestStrategy
     direction = SupertrendTrend.direction(series: @series, supertrend_result: st)
     return nil if direction == :none
 
-    { direction: direction == :long ? :buy : :sell, price: @series.candles.last.close }
+    { type: direction == :long ? :ce : :pe, price: @series.candles.last.close }
   end
 end
