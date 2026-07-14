@@ -304,8 +304,6 @@ module InstrumentHelpers
   def intraday_ohlc(interval: '5', oi: false, from_date: nil, to_date: nil, days: 2) # rubocop:disable Naming/MethodParameterName
     to_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:today_or_last_trading_day)
                   Market::Calendar.today_or_last_trading_day.to_s
-                elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:today_or_last_trading_day)
-                  MarketCalendar.today_or_last_trading_day.to_s
                 else
                   (Time.zone.today - 1).to_s
                 end
@@ -313,8 +311,6 @@ module InstrumentHelpers
     # Use trading days, not calendar days, to avoid weekends/holidays
     from_date ||= if defined?(Market::Calendar) && Market::Calendar.respond_to?(:trading_days_ago)
                     Market::Calendar.trading_days_ago(days).to_s
-                  elsif defined?(MarketCalendar) && MarketCalendar.respond_to?(:trading_days_ago)
-                    MarketCalendar.trading_days_ago(days).to_s
                   else
                     (Date.parse(to_date) - days).to_s # Fallback to calendar days
                   end
