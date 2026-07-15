@@ -1,0 +1,1222 @@
+{
+  "generated_at": "2026-07-14 11:29:06 +0530",
+  "summary": {
+    "total_trading_days": 10,
+    "breakouts": {
+      "bullish": 7,
+      "bearish": 3,
+      "none": 0
+    },
+    "day_classifications": {
+      "expansion_morning": 1,
+      "failed_breakout": 8,
+      "trend_morning": 1
+    },
+    "option_moves": {
+      "avg_ce_expansion_15m": 15.86,
+      "avg_pe_expansion_15m": 13.48,
+      "avg_breakout_max_gain": 83.4,
+      "max_gain_observed": 381.4,
+      "avg_time_to_peak_minutes": 159.3,
+      "avg_retracement_pct": 33.51
+    },
+    "exit_performance": {
+      "fixed_30": {
+        "avg_capture_efficiency": -0.689,
+        "avg_return_pct": -0.78,
+        "win_rate_pct": 50.0,
+        "avg_holding_time_mins": 233.7
+      },
+      "fixed_50": {
+        "avg_capture_efficiency": -0.7217,
+        "avg_return_pct": 2.42,
+        "win_rate_pct": 50.0,
+        "avg_holding_time_mins": 327.8
+      },
+      "trail_20": {
+        "avg_capture_efficiency": -0.1492,
+        "avg_return_pct": 2.75,
+        "win_rate_pct": 50.0,
+        "avg_holding_time_mins": 108.0
+      },
+      "und_ema9": {
+        "avg_capture_efficiency": 0.1775,
+        "avg_return_pct": 4.62,
+        "win_rate_pct": 80.0,
+        "avg_holding_time_mins": 8.3
+      },
+      "prem_ema5": {
+        "avg_capture_efficiency": 0.1028,
+        "avg_return_pct": 3.98,
+        "win_rate_pct": 80.0,
+        "avg_holding_time_mins": 4.9
+      },
+      "momentum_decay": {
+        "avg_capture_efficiency": 0.2046,
+        "avg_return_pct": 4.75,
+        "win_rate_pct": 90.0,
+        "avg_holding_time_mins": 6.0
+      },
+      "hybrid_divergence": {
+        "avg_capture_efficiency": 0.2957,
+        "avg_return_pct": 9.56,
+        "win_rate_pct": 100.0,
+        "avg_holding_time_mins": 13.7
+      },
+      "hold_to_close": {
+        "avg_capture_efficiency": -0.5778,
+        "avg_return_pct": 47.16,
+        "win_rate_pct": 50.0,
+        "avg_holding_time_mins": 357.2
+      }
+    },
+    "conditional_probabilities": {
+      "p_ce_expansion_above_50_given_bull_filters": 0.0,
+      "p_pe_expansion_above_50_given_bear_filters": 0.0,
+      "p_retracement_above_25_given_strong_expansion": 33.33,
+      "p_trail_stop_retains_above_80_mfe": 0.0
+    }
+  },
+  "daily_details": [
+    {
+      "date": "2026-06-30",
+      "atm_strike": 24050,
+      "day_type": "expansion_morning",
+      "breakout": {
+        "or_high": 24035.55,
+        "or_low": 23890.8,
+        "or_width": 144.75,
+        "gap_pct": null,
+        "breakout_type": "bearish",
+        "breakout_time": "2026-06-30 09:30:00 +0530",
+        "breakout_price": 23889.15,
+        "max_continuation": 59.95000000000073,
+        "max_adverse": 109.39999999999782,
+        "sustained": false,
+        "failed": true,
+        "atr": 15.139285714286286,
+        "adx": null,
+        "rsi": 8.5402,
+        "vwap": 23938.72,
+        "vwap_dist": 93.32999999999811,
+        "first_candle_body_ratio": 0.8730964467005076,
+        "first_candle_volume": 4891016
+      },
+      "options": {
+        "ce_expansion_15m": 1.2413108242303872,
+        "pe_expansion_15m": 64.39920556107248,
+        "ce_elasticity_15m": 2.2072692410985097,
+        "pe_elasticity_15m": 114.51312822819067,
+        "active_option_type": "PE",
+        "entry_price": 197.24,
+        "peak_price": 226.51,
+        "peak_time": "2026-06-30 09:47:00 +0530",
+        "max_gain_pct": 14.839789089434182,
+        "time_to_peak_minutes": 17,
+        "drawdown_from_peak_pct": 44.32916869012406,
+        "velocity_pct_per_min": 0.8729287699667166,
+        "trade_elasticity": 120.61972378689262
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 154.96,
+          "exit_time": "2026-06-30 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 359,
+          "capture_efficiency": -1.4445,
+          "giveback_pct": 31.59,
+          "return_pct": -21.44
+        },
+        "fixed_50": {
+          "exit_price": 154.96,
+          "exit_time": "2026-06-30 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 359,
+          "capture_efficiency": -1.4445,
+          "giveback_pct": 31.59,
+          "return_pct": -21.44
+        },
+        "trail_20": {
+          "exit_price": 181.21,
+          "exit_time": "2026-06-30 10:05:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 35,
+          "capture_efficiency": -0.5477,
+          "giveback_pct": 20.0,
+          "return_pct": -8.13
+        },
+        "und_ema9": {
+          "exit_price": 203.43,
+          "exit_time": "2026-06-30 09:37:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 7,
+          "capture_efficiency": 0.2115,
+          "giveback_pct": 10.19,
+          "return_pct": 3.14
+        },
+        "prem_ema5": {
+          "exit_price": 207.13,
+          "exit_time": "2026-06-30 09:35:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 5,
+          "capture_efficiency": 0.3379,
+          "giveback_pct": 8.56,
+          "return_pct": 5.01
+        },
+        "momentum_decay": {
+          "exit_price": 207.13,
+          "exit_time": "2026-06-30 09:35:00 +0530",
+          "exit_reason": "low_of_previous_2_broken",
+          "holding_time_minutes": 5,
+          "capture_efficiency": 0.3379,
+          "giveback_pct": 8.56,
+          "return_pct": 5.01
+        },
+        "hybrid_divergence": {
+          "exit_price": 213.65,
+          "exit_time": "2026-06-30 09:44:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 14,
+          "capture_efficiency": 0.5606,
+          "giveback_pct": 5.68,
+          "return_pct": 8.32
+        },
+        "hold_to_close": {
+          "exit_price": 154.96,
+          "exit_time": "2026-06-30 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 359,
+          "capture_efficiency": -1.4445,
+          "giveback_pct": 31.59,
+          "return_pct": -21.44
+        }
+      }
+    },
+    {
+      "date": "2026-07-01",
+      "atm_strike": 23900,
+      "day_type": "failed_breakout",
+      "breakout": {
+        "or_high": 23934.9,
+        "or_low": 23895.1,
+        "or_width": 39.80000000000291,
+        "gap_pct": -0.084038005247143,
+        "breakout_type": "bullish",
+        "breakout_time": "2026-07-01 09:38:00 +0530",
+        "breakout_price": 23941.7,
+        "max_continuation": 108.20000000000073,
+        "max_adverse": 17.850000000002183,
+        "sustained": false,
+        "failed": true,
+        "atr": 12.20714285714296,
+        "adx": null,
+        "rsi": 67.8151,
+        "vwap": 23917.7,
+        "vwap_dist": -20.049999999999272,
+        "first_candle_body_ratio": 0.18791946308724833,
+        "first_candle_volume": 4050293
+      },
+      "options": {
+        "ce_expansion_15m": 12.681340670335176,
+        "pe_expansion_15m": 1.2506253126563283,
+        "ce_elasticity_15m": 119.7842849290293,
+        "pe_elasticity_15m": 11.813045850989075,
+        "active_option_type": "CE",
+        "entry_price": 136.2,
+        "peak_price": 191.73,
+        "peak_time": "2026-07-01 12:09:00 +0530",
+        "max_gain_pct": 40.77092511013216,
+        "time_to_peak_minutes": 151,
+        "drawdown_from_peak_pct": 28.268919835184892,
+        "velocity_pct_per_min": 0.2700061265571666,
+        "trade_elasticity": 83.25582929891246
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 177.06,
+          "exit_time": "2026-07-01 10:22:00 +0530",
+          "exit_reason": "target_hit",
+          "holding_time_minutes": 44,
+          "capture_efficiency": 0.7358,
+          "giveback_pct": 7.65,
+          "return_pct": 30.0
+        },
+        "fixed_50": {
+          "exit_price": 139.03,
+          "exit_time": "2026-07-01 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 351,
+          "capture_efficiency": 0.051,
+          "giveback_pct": 27.49,
+          "return_pct": 2.08
+        },
+        "trail_20": {
+          "exit_price": 145.59,
+          "exit_time": "2026-07-01 10:43:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 65,
+          "capture_efficiency": 0.1691,
+          "giveback_pct": 24.06,
+          "return_pct": 6.9
+        },
+        "und_ema9": {
+          "exit_price": 133.84,
+          "exit_time": "2026-07-01 09:42:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 4,
+          "capture_efficiency": -0.0425,
+          "giveback_pct": 30.19,
+          "return_pct": -1.73
+        },
+        "prem_ema5": {
+          "exit_price": 138.86,
+          "exit_time": "2026-07-01 09:41:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 3,
+          "capture_efficiency": 0.0479,
+          "giveback_pct": 27.58,
+          "return_pct": 1.95
+        },
+        "momentum_decay": {
+          "exit_price": 133.84,
+          "exit_time": "2026-07-01 09:42:00 +0530",
+          "exit_reason": "low_of_previous_2_broken",
+          "holding_time_minutes": 4,
+          "capture_efficiency": -0.0425,
+          "giveback_pct": 30.19,
+          "return_pct": -1.73
+        },
+        "hybrid_divergence": {
+          "exit_price": 152.13,
+          "exit_time": "2026-07-01 10:07:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 29,
+          "capture_efficiency": 0.2869,
+          "giveback_pct": 20.65,
+          "return_pct": 11.7
+        },
+        "hold_to_close": {
+          "exit_price": 139.03,
+          "exit_time": "2026-07-01 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 351,
+          "capture_efficiency": 0.051,
+          "giveback_pct": 27.49,
+          "return_pct": 2.08
+        }
+      }
+    },
+    {
+      "date": "2026-07-02",
+      "atm_strike": 24050,
+      "day_type": "failed_breakout",
+      "breakout": {
+        "or_high": 24127.6,
+        "or_low": 24058.8,
+        "or_width": 68.79999999999927,
+        "gap_pct": 0.309530410060051,
+        "breakout_type": "bullish",
+        "breakout_time": "2026-07-02 09:33:00 +0530",
+        "breakout_price": 24128.3,
+        "max_continuation": 66.25,
+        "max_adverse": 60.79999999999927,
+        "sustained": false,
+        "failed": true,
+        "atr": 13.660714285714025,
+        "adx": null,
+        "rsi": 74.1708,
+        "vwap": 24098.94,
+        "vwap_dist": -36.73999999999796,
+        "first_candle_body_ratio": 0.5248120300752098,
+        "first_candle_volume": 7398222
+      },
+      "options": {
+        "ce_expansion_15m": 28.016990089114696,
+        "pe_expansion_15m": 1.2492712584325811,
+        "ce_elasticity_15m": 136.3297106010689,
+        "pe_elasticity_15m": 6.078910995885948,
+        "active_option_type": "CE",
+        "entry_price": 152.64,
+        "peak_price": 170.69,
+        "peak_time": "2026-07-02 09:43:00 +0530",
+        "max_gain_pct": 11.825209643605879,
+        "time_to_peak_minutes": 10,
+        "drawdown_from_peak_pct": 35.06356552815045,
+        "velocity_pct_per_min": 1.1825209643605878,
+        "trade_elasticity": 93.23134403132772
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 149.08,
+          "exit_time": "2026-07-02 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 356,
+          "capture_efficiency": -0.1972,
+          "giveback_pct": 12.66,
+          "return_pct": -2.33
+        },
+        "fixed_50": {
+          "exit_price": 149.08,
+          "exit_time": "2026-07-02 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 356,
+          "capture_efficiency": -0.1972,
+          "giveback_pct": 12.66,
+          "return_pct": -2.33
+        },
+        "trail_20": {
+          "exit_price": 136.55,
+          "exit_time": "2026-07-02 10:06:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 33,
+          "capture_efficiency": -0.8913,
+          "giveback_pct": 20.0,
+          "return_pct": -10.54
+        },
+        "und_ema9": {
+          "exit_price": 165.37,
+          "exit_time": "2026-07-02 09:47:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 14,
+          "capture_efficiency": 0.7053,
+          "giveback_pct": 3.12,
+          "return_pct": 8.34
+        },
+        "prem_ema5": {
+          "exit_price": 151.64,
+          "exit_time": "2026-07-02 09:35:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 2,
+          "capture_efficiency": -0.0554,
+          "giveback_pct": 11.16,
+          "return_pct": -0.66
+        },
+        "momentum_decay": {
+          "exit_price": 165.04,
+          "exit_time": "2026-07-02 09:44:00 +0530",
+          "exit_reason": "low_of_previous_2_broken",
+          "holding_time_minutes": 11,
+          "capture_efficiency": 0.687,
+          "giveback_pct": 3.31,
+          "return_pct": 8.12
+        },
+        "hybrid_divergence": {
+          "exit_price": 162.56,
+          "exit_time": "2026-07-02 09:40:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 7,
+          "capture_efficiency": 0.5496,
+          "giveback_pct": 4.76,
+          "return_pct": 6.5
+        },
+        "hold_to_close": {
+          "exit_price": 149.08,
+          "exit_time": "2026-07-02 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 356,
+          "capture_efficiency": -0.1972,
+          "giveback_pct": 12.66,
+          "return_pct": -2.33
+        }
+      }
+    },
+    {
+      "date": "2026-07-03",
+      "atm_strike": 24400,
+      "day_type": "failed_breakout",
+      "breakout": {
+        "or_high": 24378.15,
+        "or_low": 24295.15,
+        "or_width": 83.0,
+        "gap_pct": 0.8625326889337644,
+        "breakout_type": "bearish",
+        "breakout_time": "2026-07-03 13:33:00 +0530",
+        "breakout_price": 24290.55,
+        "max_continuation": 38.20000000000073,
+        "max_adverse": 8.350000000002183,
+        "sustained": false,
+        "failed": true,
+        "atr": 8.703571428571324,
+        "adx": 11.422810779592742,
+        "rsi": 23.7687,
+        "vwap": 24340.42,
+        "vwap_dist": 35.2300000000032,
+        "first_candle_body_ratio": 0.8657270029673727,
+        "first_candle_volume": 6837316
+      },
+      "options": {
+        "ce_expansion_15m": 1.23334977799704,
+        "pe_expansion_15m": 32.798881762867936,
+        "ce_elasticity_15m": 10.775520615065226,
+        "pe_elasticity_15m": 286.55701155663445,
+        "active_option_type": "PE",
+        "entry_price": 142.49,
+        "peak_price": 162.55,
+        "peak_time": "2026-07-03 14:52:00 +0530",
+        "max_gain_pct": 14.078180924977193,
+        "time_to_peak_minutes": 79,
+        "drawdown_from_peak_pct": 12.549984620116888,
+        "velocity_pct_per_min": 0.17820482183515435,
+        "trade_elasticity": 130.80352839494577
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 148.72,
+          "exit_time": "2026-07-03 15:30:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 117,
+          "capture_efficiency": 0.3106,
+          "giveback_pct": 8.51,
+          "return_pct": 4.37
+        },
+        "fixed_50": {
+          "exit_price": 148.72,
+          "exit_time": "2026-07-03 15:30:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 117,
+          "capture_efficiency": 0.3106,
+          "giveback_pct": 8.51,
+          "return_pct": 4.37
+        },
+        "trail_20": {
+          "exit_price": 148.72,
+          "exit_time": "2026-07-03 15:30:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 117,
+          "capture_efficiency": 0.3106,
+          "giveback_pct": 8.51,
+          "return_pct": 4.37
+        },
+        "und_ema9": {
+          "exit_price": 145.99,
+          "exit_time": "2026-07-03 13:39:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 6,
+          "capture_efficiency": 0.1745,
+          "giveback_pct": 10.19,
+          "return_pct": 2.46
+        },
+        "prem_ema5": {
+          "exit_price": 146.06,
+          "exit_time": "2026-07-03 13:37:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 4,
+          "capture_efficiency": 0.178,
+          "giveback_pct": 10.14,
+          "return_pct": 2.51
+        },
+        "momentum_decay": {
+          "exit_price": 148.21,
+          "exit_time": "2026-07-03 13:38:00 +0530",
+          "exit_reason": "no_new_high_3_min",
+          "holding_time_minutes": 5,
+          "capture_efficiency": 0.2851,
+          "giveback_pct": 8.82,
+          "return_pct": 4.01
+        },
+        "hybrid_divergence": {
+          "exit_price": 146.23,
+          "exit_time": "2026-07-03 13:44:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 11,
+          "capture_efficiency": 0.1864,
+          "giveback_pct": 10.04,
+          "return_pct": 2.62
+        },
+        "hold_to_close": {
+          "exit_price": 148.72,
+          "exit_time": "2026-07-03 15:30:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 117,
+          "capture_efficiency": 0.3106,
+          "giveback_pct": 8.51,
+          "return_pct": 4.37
+        }
+      }
+    },
+    {
+      "date": "2026-07-06",
+      "atm_strike": 24300,
+      "day_type": "failed_breakout",
+      "breakout": {
+        "or_high": 24360.15,
+        "or_low": 24287.1,
+        "or_width": 73.05000000000291,
+        "gap_pct": 0.14688190118328642,
+        "breakout_type": "bullish",
+        "breakout_time": "2026-07-06 09:30:00 +0530",
+        "breakout_price": 24360.45,
+        "max_continuation": 649.5499999999993,
+        "max_adverse": 9.049999999999272,
+        "sustained": false,
+        "failed": true,
+        "atr": 11.73928571428561,
+        "adx": null,
+        "rsi": 64.441,
+        "vwap": 24345.06,
+        "vwap_dist": -38.210000000002765,
+        "first_candle_body_ratio": 0.5777988614800817,
+        "first_candle_volume": 4217068
+      },
+      "options": {
+        "ce_expansion_15m": 22.05515866422995,
+        "pe_expansion_15m": 1.2460541618209005,
+        "ce_elasticity_15m": 117.43514422291798,
+        "pe_elasticity_15m": 6.634753910899318,
+        "active_option_type": "CE",
+        "entry_price": 143.08,
+        "peak_price": 688.78,
+        "peak_time": "2026-07-06 20:23:37 +0530",
+        "max_gain_pct": 381.3950237629297,
+        "time_to_peak_minutes": 654,
+        "drawdown_from_peak_pct": 0.0,
+        "velocity_pct_per_min": 0.5831728192093727,
+        "trade_elasticity": 141.40473811299708
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 186.0,
+          "exit_time": "2026-07-06 12:15:00 +0530",
+          "exit_reason": "target_hit",
+          "holding_time_minutes": 165,
+          "capture_efficiency": 0.0787,
+          "giveback_pct": 73.0,
+          "return_pct": 30.0
+        },
+        "fixed_50": {
+          "exit_price": 214.62,
+          "exit_time": "2026-07-06 20:23:37 +0530",
+          "exit_reason": "target_hit",
+          "holding_time_minutes": 654,
+          "capture_efficiency": 0.1311,
+          "giveback_pct": 68.84,
+          "return_pct": 50.0
+        },
+        "trail_20": {
+          "exit_price": 151.11,
+          "exit_time": "2026-07-06 14:07:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 277,
+          "capture_efficiency": 0.0147,
+          "giveback_pct": 78.06,
+          "return_pct": 5.61
+        },
+        "und_ema9": {
+          "exit_price": 149.09,
+          "exit_time": "2026-07-06 09:37:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 7,
+          "capture_efficiency": 0.011,
+          "giveback_pct": 78.35,
+          "return_pct": 4.2
+        },
+        "prem_ema5": {
+          "exit_price": 149.09,
+          "exit_time": "2026-07-06 09:37:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 7,
+          "capture_efficiency": 0.011,
+          "giveback_pct": 78.35,
+          "return_pct": 4.2
+        },
+        "momentum_decay": {
+          "exit_price": 146.68,
+          "exit_time": "2026-07-06 09:33:00 +0530",
+          "exit_reason": "no_new_high_3_min",
+          "holding_time_minutes": 3,
+          "capture_efficiency": 0.0066,
+          "giveback_pct": 78.7,
+          "return_pct": 2.52
+        },
+        "hybrid_divergence": {
+          "exit_price": 160.68,
+          "exit_time": "2026-07-06 09:52:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 22,
+          "capture_efficiency": 0.0323,
+          "giveback_pct": 76.67,
+          "return_pct": 12.3
+        },
+        "hold_to_close": {
+          "exit_price": 687.28,
+          "exit_time": "2026-07-06 20:23:37 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 654,
+          "capture_efficiency": 0.9973,
+          "giveback_pct": 0.22,
+          "return_pct": 380.35
+        }
+      }
+    },
+    {
+      "date": "2026-07-07",
+      "atm_strike": 24450,
+      "day_type": "failed_breakout",
+      "breakout": {
+        "or_high": 24488.45,
+        "or_low": 24427.0,
+        "or_width": 61.45000000000073,
+        "gap_pct": -2.161767646470703,
+        "breakout_type": "bullish",
+        "breakout_time": "2026-07-07 10:09:00 +0530",
+        "breakout_price": 24489.15,
+        "max_continuation": 41.75,
+        "max_adverse": 140.20000000000073,
+        "sustained": false,
+        "failed": true,
+        "atr": 15.428571428571948,
+        "adx": 10.700483646971021,
+        "rsi": 62.7542,
+        "vwap": 24459.32,
+        "vwap_dist": 5.130000000001019,
+        "first_candle_body_ratio": 0.0008650519031016096,
+        "first_candle_volume": 6819815
+      },
+      "options": {
+        "ce_expansion_15m": 5.578719146097396,
+        "pe_expansion_15m": 12.48332221480986,
+        "ce_elasticity_15m": 158.69801815547422,
+        "pe_elasticity_15m": 355.1135025093344,
+        "active_option_type": "CE",
+        "entry_price": 126.5,
+        "peak_price": 143.26,
+        "peak_time": "2026-07-07 11:26:00 +0530",
+        "max_gain_pct": 13.249011857707501,
+        "time_to_peak_minutes": 77,
+        "drawdown_from_peak_pct": 74.40318302387267,
+        "velocity_pct_per_min": 0.17206508906113638,
+        "trade_elasticity": 80.00116033004822
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 39.08,
+          "exit_time": "2026-07-07 15:30:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 321,
+          "capture_efficiency": -5.216,
+          "giveback_pct": 72.72,
+          "return_pct": -69.11
+        },
+        "fixed_50": {
+          "exit_price": 39.08,
+          "exit_time": "2026-07-07 15:30:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 321,
+          "capture_efficiency": -5.216,
+          "giveback_pct": 72.72,
+          "return_pct": -69.11
+        },
+        "trail_20": {
+          "exit_price": 114.61,
+          "exit_time": "2026-07-07 12:31:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 142,
+          "capture_efficiency": -0.7095,
+          "giveback_pct": 20.0,
+          "return_pct": -9.4
+        },
+        "und_ema9": {
+          "exit_price": 125.05,
+          "exit_time": "2026-07-07 10:14:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 5,
+          "capture_efficiency": -0.0865,
+          "giveback_pct": 12.71,
+          "return_pct": -1.15
+        },
+        "prem_ema5": {
+          "exit_price": 125.05,
+          "exit_time": "2026-07-07 10:14:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 5,
+          "capture_efficiency": -0.0865,
+          "giveback_pct": 12.71,
+          "return_pct": -1.15
+        },
+        "momentum_decay": {
+          "exit_price": 129.16,
+          "exit_time": "2026-07-07 10:12:00 +0530",
+          "exit_reason": "no_new_high_3_min",
+          "holding_time_minutes": 3,
+          "capture_efficiency": 0.1587,
+          "giveback_pct": 9.84,
+          "return_pct": 2.1
+        },
+        "hybrid_divergence": {
+          "exit_price": 129.37,
+          "exit_time": "2026-07-07 10:13:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 4,
+          "capture_efficiency": 0.1712,
+          "giveback_pct": 9.7,
+          "return_pct": 2.27
+        },
+        "hold_to_close": {
+          "exit_price": 39.08,
+          "exit_time": "2026-07-07 15:30:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 321,
+          "capture_efficiency": -5.216,
+          "giveback_pct": 72.72,
+          "return_pct": -69.11
+        }
+      }
+    },
+    {
+      "date": "2026-07-08",
+      "atm_strike": 24250,
+      "day_type": "failed_breakout",
+      "breakout": {
+        "or_high": 24295.25,
+        "or_low": 24229.9,
+        "or_width": 65.34999999999854,
+        "gap_pct": -0.38659423414101945,
+        "breakout_type": "bearish",
+        "breakout_time": "2026-07-08 09:30:00 +0530",
+        "breakout_price": 24224.55,
+        "max_continuation": 419.34999999999854,
+        "max_adverse": 75.45000000000073,
+        "sustained": false,
+        "failed": true,
+        "atr": 13.653571428570753,
+        "adx": null,
+        "rsi": 20.7768,
+        "vwap": 24261.51,
+        "vwap_dist": -1.9599999999991269,
+        "first_candle_body_ratio": 0.2614807872540039,
+        "first_candle_volume": 6647658
+      },
+      "options": {
+        "ce_expansion_15m": 12.747875354107647,
+        "pe_expansion_15m": 10.189968338610235,
+        "ce_elasticity_15m": 151.96939535467533,
+        "pe_elasticity_15m": 121.47618988154773,
+        "active_option_type": "PE",
+        "entry_price": 128.68,
+        "peak_price": 413.32,
+        "peak_time": "2026-07-08 14:52:00 +0530",
+        "max_gain_pct": 221.1998756605533,
+        "time_to_peak_minutes": 322,
+        "drawdown_from_peak_pct": 23.80238072195877,
+        "velocity_pct_per_min": 0.6869561355917804,
+        "trade_elasticity": 127.99705194704167
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 167.28,
+          "exit_time": "2026-07-08 13:47:00 +0530",
+          "exit_reason": "target_hit",
+          "holding_time_minutes": 257,
+          "capture_efficiency": 0.1356,
+          "giveback_pct": 59.53,
+          "return_pct": 30.0
+        },
+        "fixed_50": {
+          "exit_price": 193.02,
+          "exit_time": "2026-07-08 13:52:00 +0530",
+          "exit_reason": "target_hit",
+          "holding_time_minutes": 262,
+          "capture_efficiency": 0.226,
+          "giveback_pct": 53.3,
+          "return_pct": 50.0
+        },
+        "trail_20": {
+          "exit_price": 114.98,
+          "exit_time": "2026-07-08 09:52:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 22,
+          "capture_efficiency": -0.0481,
+          "giveback_pct": 72.18,
+          "return_pct": -10.64
+        },
+        "und_ema9": {
+          "exit_price": 137.86,
+          "exit_time": "2026-07-08 09:40:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 10,
+          "capture_efficiency": 0.0323,
+          "giveback_pct": 66.65,
+          "return_pct": 7.13
+        },
+        "prem_ema5": {
+          "exit_price": 138.34,
+          "exit_time": "2026-07-08 09:38:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 8,
+          "capture_efficiency": 0.0339,
+          "giveback_pct": 66.53,
+          "return_pct": 7.51
+        },
+        "momentum_decay": {
+          "exit_price": 137.86,
+          "exit_time": "2026-07-08 09:40:00 +0530",
+          "exit_reason": "no_new_high_3_min",
+          "holding_time_minutes": 10,
+          "capture_efficiency": 0.0323,
+          "giveback_pct": 66.65,
+          "return_pct": 7.13
+        },
+        "hybrid_divergence": {
+          "exit_price": 136.54,
+          "exit_time": "2026-07-08 09:35:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 5,
+          "capture_efficiency": 0.0276,
+          "giveback_pct": 66.97,
+          "return_pct": 6.11
+        },
+        "hold_to_close": {
+          "exit_price": 334.51,
+          "exit_time": "2026-07-08 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 359,
+          "capture_efficiency": 0.7231,
+          "giveback_pct": 19.07,
+          "return_pct": 159.95
+        }
+      }
+    },
+    {
+      "date": "2026-07-09",
+      "atm_strike": 23950,
+      "day_type": "failed_breakout",
+      "breakout": {
+        "or_high": 24038.5,
+        "or_low": 23927.7,
+        "or_width": 110.79999999999927,
+        "gap_pct": 0.13914637361533666,
+        "breakout_type": "bullish",
+        "breakout_time": "2026-07-09 09:39:00 +0530",
+        "breakout_price": 24050.7,
+        "max_continuation": 84.0,
+        "max_adverse": 125.0,
+        "sustained": false,
+        "failed": true,
+        "atr": 16.62500000000026,
+        "adx": null,
+        "rsi": 68.8834,
+        "vwap": 24002.05,
+        "vwap_dist": -73.09999999999854,
+        "first_candle_body_ratio": 0.7119244391971394,
+        "first_candle_volume": 5137352
+      },
+      "options": {
+        "ce_expansion_15m": 48.525380078092546,
+        "pe_expansion_15m": 1.2461576804851706,
+        "ce_elasticity_15m": 121.97073462391425,
+        "pe_elasticity_15m": 3.1322736164333396,
+        "active_option_type": "CE",
+        "entry_price": 172.74,
+        "peak_price": 220.49,
+        "peak_time": "2026-07-09 10:43:00 +0530",
+        "max_gain_pct": 27.642700011578093,
+        "time_to_peak_minutes": 64,
+        "drawdown_from_peak_pct": 58.28835774865073,
+        "velocity_pct_per_min": 0.4319171876809077,
+        "trade_elasticity": 80.226259802927
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 117.4,
+          "exit_time": "2026-07-09 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 350,
+          "capture_efficiency": -1.159,
+          "giveback_pct": 46.75,
+          "return_pct": -32.04
+        },
+        "fixed_50": {
+          "exit_price": 117.4,
+          "exit_time": "2026-07-09 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 350,
+          "capture_efficiency": -1.159,
+          "giveback_pct": 46.75,
+          "return_pct": -32.04
+        },
+        "trail_20": {
+          "exit_price": 176.39,
+          "exit_time": "2026-07-09 10:46:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 67,
+          "capture_efficiency": 0.0765,
+          "giveback_pct": 20.0,
+          "return_pct": 2.11
+        },
+        "und_ema9": {
+          "exit_price": 183.37,
+          "exit_time": "2026-07-09 09:48:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 9,
+          "capture_efficiency": 0.2226,
+          "giveback_pct": 16.84,
+          "return_pct": 6.15
+        },
+        "prem_ema5": {
+          "exit_price": 176.27,
+          "exit_time": "2026-07-09 09:41:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 2,
+          "capture_efficiency": 0.0739,
+          "giveback_pct": 20.06,
+          "return_pct": 2.04
+        },
+        "momentum_decay": {
+          "exit_price": 181.61,
+          "exit_time": "2026-07-09 09:43:00 +0530",
+          "exit_reason": "no_new_high_3_min",
+          "holding_time_minutes": 4,
+          "capture_efficiency": 0.1858,
+          "giveback_pct": 17.63,
+          "return_pct": 5.13
+        },
+        "hybrid_divergence": {
+          "exit_price": 183.37,
+          "exit_time": "2026-07-09 09:48:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 9,
+          "capture_efficiency": 0.2226,
+          "giveback_pct": 16.84,
+          "return_pct": 6.15
+        },
+        "hold_to_close": {
+          "exit_price": 117.4,
+          "exit_time": "2026-07-09 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 350,
+          "capture_efficiency": -1.159,
+          "giveback_pct": 46.75,
+          "return_pct": -32.04
+        }
+      }
+    },
+    {
+      "date": "2026-07-10",
+      "atm_strike": 24100,
+      "day_type": "failed_breakout",
+      "breakout": {
+        "or_high": 24187.9,
+        "or_low": 24120.35,
+        "or_width": 67.55000000000291,
+        "gap_pct": 0.5954490678386586,
+        "breakout_type": "bullish",
+        "breakout_time": "2026-07-10 09:37:00 +0530",
+        "breakout_price": 24193.6,
+        "max_continuation": 34.85000000000218,
+        "max_adverse": 41.54999999999927,
+        "sustained": false,
+        "failed": true,
+        "atr": 12.971428571428987,
+        "adx": null,
+        "rsi": 67.1165,
+        "vwap": 24167.11,
+        "vwap_dist": -42.409999999999854,
+        "first_candle_body_ratio": 0.519091847265169,
+        "first_candle_volume": 5109252
+      },
+      "options": {
+        "ce_expansion_15m": 24.068529607451776,
+        "pe_expansion_15m": 1.2475049900199602,
+        "ce_elasticity_15m": 132.8709510802934,
+        "pe_elasticity_15m": 6.886884126483761,
+        "active_option_type": "CE",
+        "entry_price": 149.7,
+        "peak_price": 173.63,
+        "peak_time": "2026-07-10 10:01:00 +0530",
+        "max_gain_pct": 15.98530394121577,
+        "time_to_peak_minutes": 24,
+        "drawdown_from_peak_pct": 31.860853539134936,
+        "velocity_pct_per_min": 0.6660543308839905,
+        "trade_elasticity": 94.05523366278717
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 138.78,
+          "exit_time": "2026-07-10 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 352,
+          "capture_efficiency": -0.4563,
+          "giveback_pct": 20.07,
+          "return_pct": -7.29
+        },
+        "fixed_50": {
+          "exit_price": 138.78,
+          "exit_time": "2026-07-10 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 352,
+          "capture_efficiency": -0.4563,
+          "giveback_pct": 20.07,
+          "return_pct": -7.29
+        },
+        "trail_20": {
+          "exit_price": 138.9,
+          "exit_time": "2026-07-10 11:10:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 93,
+          "capture_efficiency": -0.4511,
+          "giveback_pct": 20.0,
+          "return_pct": -7.21
+        },
+        "und_ema9": {
+          "exit_price": 160.02,
+          "exit_time": "2026-07-10 09:50:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 13,
+          "capture_efficiency": 0.4313,
+          "giveback_pct": 7.84,
+          "return_pct": 6.89
+        },
+        "prem_ema5": {
+          "exit_price": 158.06,
+          "exit_time": "2026-07-10 09:43:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 6,
+          "capture_efficiency": 0.3494,
+          "giveback_pct": 8.97,
+          "return_pct": 5.58
+        },
+        "momentum_decay": {
+          "exit_price": 156.4,
+          "exit_time": "2026-07-10 09:44:00 +0530",
+          "exit_reason": "low_of_previous_2_broken",
+          "holding_time_minutes": 7,
+          "capture_efficiency": 0.28,
+          "giveback_pct": 9.92,
+          "return_pct": 4.48
+        },
+        "hybrid_divergence": {
+          "exit_price": 163.97,
+          "exit_time": "2026-07-10 09:49:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 12,
+          "capture_efficiency": 0.5963,
+          "giveback_pct": 5.56,
+          "return_pct": 9.53
+        },
+        "hold_to_close": {
+          "exit_price": 138.78,
+          "exit_time": "2026-07-10 15:29:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 352,
+          "capture_efficiency": -0.4563,
+          "giveback_pct": 20.07,
+          "return_pct": -7.29
+        }
+      }
+    },
+    {
+      "date": "2026-07-13",
+      "atm_strike": 24050,
+      "day_type": "trend_morning",
+      "breakout": {
+        "or_high": 24044.45,
+        "or_low": 24000.2,
+        "or_width": 44.25,
+        "gap_pct": -0.7114343714699328,
+        "breakout_type": "bullish",
+        "breakout_time": "2026-07-13 09:37:00 +0530",
+        "breakout_price": 24057.6,
+        "max_continuation": 202.20000000000073,
+        "max_adverse": 15.25,
+        "sustained": true,
+        "failed": false,
+        "atr": 14.97857142857122,
+        "adx": null,
+        "rsi": 67.4341,
+        "vwap": 24028.15,
+        "vwap_dist": 11.25,
+        "first_candle_body_ratio": 0.4553571428571901,
+        "first_candle_volume": 3886212
+      },
+      "options": {
+        "ce_expansion_15m": 2.4650233177881478,
+        "pe_expansion_15m": 8.67754830113258,
+        "ce_elasticity_15m": 49.58801802981824,
+        "pe_elasticity_15m": 174.56322563199484,
+        "active_option_type": "CE",
+        "entry_price": 120.06,
+        "peak_price": 231.71,
+        "peak_time": "2026-07-13 12:52:00 +0530",
+        "max_gain_pct": 92.9951690821256,
+        "time_to_peak_minutes": 195,
+        "drawdown_from_peak_pct": 26.563376634586337,
+        "velocity_pct_per_min": 0.4768983029852595,
+        "trade_elasticity": 103.34757097608725
+      },
+      "exits": {
+        "fixed_30": {
+          "exit_price": 156.08,
+          "exit_time": "2026-07-13 09:53:00 +0530",
+          "exit_reason": "target_hit",
+          "holding_time_minutes": 16,
+          "capture_efficiency": 0.3226,
+          "giveback_pct": 32.64,
+          "return_pct": 30.0
+        },
+        "fixed_50": {
+          "exit_price": 180.09,
+          "exit_time": "2026-07-13 12:13:00 +0530",
+          "exit_reason": "target_hit",
+          "holding_time_minutes": 156,
+          "capture_efficiency": 0.5377,
+          "giveback_pct": 22.28,
+          "return_pct": 50.0
+        },
+        "trail_20": {
+          "exit_price": 185.37,
+          "exit_time": "2026-07-13 13:26:00 +0530",
+          "exit_reason": "trailing_stop",
+          "holding_time_minutes": 229,
+          "capture_efficiency": 0.5849,
+          "giveback_pct": 20.0,
+          "return_pct": 54.4
+        },
+        "und_ema9": {
+          "exit_price": 132.96,
+          "exit_time": "2026-07-13 09:45:00 +0530",
+          "exit_reason": "underlying_lost_ema9",
+          "holding_time_minutes": 8,
+          "capture_efficiency": 0.1155,
+          "giveback_pct": 42.62,
+          "return_pct": 10.74
+        },
+        "prem_ema5": {
+          "exit_price": 135.47,
+          "exit_time": "2026-07-13 09:44:00 +0530",
+          "exit_reason": "premium_lost_ema5",
+          "holding_time_minutes": 7,
+          "capture_efficiency": 0.138,
+          "giveback_pct": 41.53,
+          "return_pct": 12.84
+        },
+        "momentum_decay": {
+          "exit_price": 132.96,
+          "exit_time": "2026-07-13 09:45:00 +0530",
+          "exit_reason": "low_of_previous_2_broken",
+          "holding_time_minutes": 8,
+          "capture_efficiency": 0.1155,
+          "giveback_pct": 42.62,
+          "return_pct": 10.74
+        },
+        "hybrid_divergence": {
+          "exit_price": 156.22,
+          "exit_time": "2026-07-13 10:01:00 +0530",
+          "exit_reason": "bearish_divergence",
+          "holding_time_minutes": 24,
+          "capture_efficiency": 0.3239,
+          "giveback_pct": 32.58,
+          "return_pct": 30.12
+        },
+        "hold_to_close": {
+          "exit_price": 188.53,
+          "exit_time": "2026-07-13 15:30:00 +0530",
+          "exit_reason": "market_close",
+          "holding_time_minutes": 353,
+          "capture_efficiency": 0.6133,
+          "giveback_pct": 18.64,
+          "return_pct": 57.03
+        }
+      }
+    }
+  ]
+}

@@ -10,7 +10,7 @@ module Research
     # @param interval [String] '1' for 1-minute
     # @param strict [Boolean] when true, refuse synthetic/simulated fallbacks
     # @return [Array<Hash>] Daily market data payloads
-    def self.run(symbol: "NIFTY", lookback_days: 90, interval: "1", strict: true)
+    def self.run(symbol: "NIFTY", lookback_days: 365, interval: "1", strict: true, db_only: false)
       symbol = symbol.to_s.upcase
       days_data = []
 
@@ -68,8 +68,8 @@ module Research
         atm_strike = Research::StrikeResolver.atm(symbol: symbol, spot: spot_open)
 
         # Load or generate CE & PE Option Candles
-        ce_candles = load_or_simulate_options(symbol, "CE", atm_strike, date, nifty_candles, strict: strict)
-        pe_candles = load_or_simulate_options(symbol, "PE", atm_strike, date, nifty_candles, strict: strict)
+        ce_candles = load_or_simulate_options(symbol, "CE", atm_strike, date, nifty_candles, strict: strict, db_only: db_only)
+        pe_candles = load_or_simulate_options(symbol, "PE", atm_strike, date, nifty_candles, strict: strict, db_only: db_only)
 
         next if ce_candles.empty? || pe_candles.empty?
 
@@ -121,7 +121,7 @@ module Research
       end
     end
 
-    def self.load_or_simulate_options(symbol, option_type, strike, date, nifty_candles, strike_label: "ATM", strict: true)
+    def self.load_or_simulate_options(symbol, option_type, strike, date, nifty_candles, strike_label: "ATM", strict: true, db_only: false)
       # Try fetching from DB first
       expiry_flag = "WEEK"
       interval = "1"
@@ -151,6 +151,8 @@ module Research
           }
         end
       end
+
+      return [] if db_only
 
       # Attempt to fetch using OptionCandleFetcher if token is valid
       begin

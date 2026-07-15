@@ -120,6 +120,7 @@ RSpec.describe Positions::ExitFlow do
         expect(tracker.exit_reason).to eq(Positions::ExitFlow::FALLBACK_EXIT_REASON)
       end
     end
+
     context 'when redis cache has stale peak pnl' do
       it 'persists final pnl from exit_price instead of cache' do
         tracker = create(
@@ -159,6 +160,38 @@ RSpec.describe Positions::ExitFlow do
         expect(tracker.last_pnl_rupees).to eq(expected[:pnl])
         expect(tracker.last_pnl_pct.to_f).to be_within(0.0001).of(expected[:pnl_pct].to_f)
         expect(tracker.last_pnl_rupees).not_to eq(BigDecimal('1998'))
+      end
+    end
+
+    context 'when exit is manual' do
+      it 'overrides exit_path in decision and meta to manual' do
+        tracker = create(
+          :position_tracker,
+          :option_position,
+          **base_tracker_attrs,
+          meta: { 'exit_path' => 'zombie_watchdog' }
+        )
+        cache = instance_double(
+          Live::RedisPnlCache,
+          fetch_pnl: {},
+          sync_pnl_to_database: true,
+          clear_tracker: nil
+        )
+
+        allow(Live::RedisPnlCache).to receive(:instance).and_return(cache)
+        allow(Positions::DailyPnlRecorder).to receive(:call)
+        allow(Positions::FeedSubscription).to receive(:unsubscribe)
+
+        described_class.call(
+          tracker: tracker,
+          exit_price: BigDecimal('100'),
+          exit_reason: 'MANUAL_DASHBOARD_CLOSE'
+        )
+
+        tracker.reload
+        expect(tracker.exit_reason).to eq('MANUAL_DASHBOARD_CLOSE')
+        expect(tracker.decision['exit_path']).to eq('manual')
+        expect(tracker.meta['exit_path']).to eq('manual')
       end
     end
   end

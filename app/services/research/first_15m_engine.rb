@@ -8,11 +8,11 @@ module Research
     # @param target_points [Numeric] Target points for ORB continuation
     # @param output_dir [String] Directory path to save reports
     # @return [Hash] Compiled aggregate report
-    def self.run(symbol: "NIFTY", lookback_days: 90, target_points: 50.0, output_dir: "data/research")
+    def self.run(symbol: "NIFTY", lookback_days: 365, target_points: 50.0, output_dir: "data/research", db_only: false)
       Rails.logger.info("[Research::First15mEngine] Initializing research V5 for #{symbol} (lookback: #{lookback_days} days)")
 
       # 1. Fetch NIFTY underlying daily data
-      days_data = Research::MarketDataFetcher.run(symbol: symbol, lookback_days: lookback_days, strict: true)
+      days_data = Research::MarketDataFetcher.run(symbol: symbol, lookback_days: lookback_days, strict: true, db_only: db_only)
       if days_data.empty?
         Rails.logger.error("[Research::First15mEngine] No daily market data found. Exiting.")
         return {}
@@ -90,7 +90,8 @@ module Research
                 day[:date],
                 day[:underlying_candles],
                 strike_label: label,
-                strict: true
+                strict: true,
+                db_only: db_only
               )
 
               next if option_candles.empty?

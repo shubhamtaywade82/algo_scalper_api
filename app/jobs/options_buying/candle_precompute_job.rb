@@ -42,7 +42,7 @@ module OptionsBuying
     end
 
     def cache_candles(index_key, sid, segment, timeframe)
-      instrument = Instrument.find_by(security_id: sid.to_i)
+      instrument = Instrument.find_by_sid_and_segment(security_id: sid.to_s, segment_code: segment)
       return unless instrument
 
       raw_candles = if timeframe == 'D'

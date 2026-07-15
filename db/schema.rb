@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_13_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_14_071237) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -527,6 +527,192 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_13_090000) do
     t.string "ip_version"
     t.datetime "last_seen_at"
     t.datetime "updated_at", null: false
+  end
+
+  create_table "research_data_quality_audits", force: :cascade do |t|
+    t.date "audit_date", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "details", default: {}
+    t.integer "duplicate_candles", default: 0
+    t.integer "missing_candles", default: 0
+    t.boolean "option_chain_complete", default: false
+    t.string "status", default: "pass", null: false
+    t.boolean "strike_alignment_ok", default: false
+    t.string "symbol", null: false
+    t.integer "timestamp_drift_count", default: 0
+    t.integer "total_candles"
+    t.datetime "updated_at", null: false
+    t.integer "volume_anomalies", default: 0
+    t.index ["symbol", "audit_date"], name: "index_research_data_quality_audits_on_symbol_and_audit_date", unique: true
+  end
+
+  create_table "research_dataset_snapshots", force: :cascade do |t|
+    t.integer "candle_count", null: false
+    t.datetime "created_at", null: false
+    t.string "dataset_id", null: false
+    t.date "end_date", null: false
+    t.string "fingerprint", null: false
+    t.integer "option_bar_count", default: 0
+    t.integer "session_count", null: false
+    t.date "start_date", null: false
+    t.string "status", default: "active"
+    t.string "symbol", null: false
+    t.datetime "updated_at", null: false
+    t.index ["dataset_id"], name: "index_research_dataset_snapshots_on_dataset_id", unique: true
+  end
+
+  create_table "research_edge_registry", force: :cascade do |t|
+    t.string "capacity", default: "unknown"
+    t.float "confidence"
+    t.string "confidence_interval"
+    t.datetime "created_at", null: false
+    t.text "description", null: false
+    t.date "discovered_on"
+    t.float "drift_pct", default: 0.0
+    t.string "edge_id", null: false
+    t.integer "evidence_score", null: false
+    t.float "expected_drawdown"
+    t.float "expected_return"
+    t.string "experiment_id", null: false
+    t.string "expiry_sensitivity"
+    t.date "last_validated_on"
+    t.string "market"
+    t.jsonb "performance", default: {}
+    t.string "regime"
+    t.date "retired_on"
+    t.text "retirement_reason"
+    t.integer "sample_size"
+    t.string "status", default: "accepted", null: false
+    t.datetime "updated_at", null: false
+    t.float "win_probability"
+    t.index ["edge_id"], name: "index_research_edge_registry_on_edge_id", unique: true
+  end
+
+  create_table "research_event_exits", primary_key: ["event_uuid", "strike_label", "exit_strategy"], force: :cascade do |t|
+    t.float "capture_efficiency"
+    t.string "event_uuid", limit: 100, null: false
+    t.float "exit_price"
+    t.string "exit_reason", limit: 100
+    t.string "exit_strategy", limit: 50, null: false
+    t.datetime "exit_time", precision: nil
+    t.integer "holding_time_minutes"
+    t.float "leakage_speed"
+    t.integer "leakage_time"
+    t.float "lost_profit_points"
+    t.float "opportunity_retention_ratio"
+    t.float "return_pct"
+    t.string "strike_label", limit: 50, null: false
+  end
+
+  create_table "research_event_strikes", primary_key: ["event_uuid", "strike_label"], force: :cascade do |t|
+    t.float "drawdown_from_peak_pct"
+    t.float "entry_price"
+    t.string "event_uuid", limit: 100, null: false
+    t.float "expansion_quality_score"
+    t.float "gamma_efficiency"
+    t.float "mae_pct"
+    t.float "mfe_10m"
+    t.float "mfe_15m"
+    t.float "mfe_30m"
+    t.float "mfe_5m"
+    t.float "mfe_60m"
+    t.float "mfe_pct"
+    t.float "peak_price"
+    t.string "strike_label", limit: 50, null: false
+    t.integer "time_to_peak_minutes"
+  end
+
+  create_table "research_events", primary_key: "event_uuid", id: { type: :string, limit: 100 }, force: :cascade do |t|
+    t.float "adx"
+    t.string "archetype", limit: 50
+    t.float "atr"
+    t.string "breakout_type", limit: 50
+    t.date "date"
+    t.integer "entry_index"
+    t.datetime "entry_time", precision: nil
+    t.string "event_id", limit: 100
+    t.string "event_type", limit: 50
+    t.string "exit_version", limit: 20
+    t.integer "expected_opportunity_score"
+    t.boolean "failed"
+    t.string "failure_reason", limit: 50
+    t.string "feature_version", limit: 20
+    t.float "gap_pct"
+    t.float "india_vix"
+    t.string "indicator_version", limit: 20
+    t.float "max_adverse"
+    t.float "max_continuation"
+    t.boolean "monthly_expiry"
+    t.float "or_high"
+    t.float "or_low"
+    t.float "or_width"
+    t.string "predicted_archetype", limit: 50
+    t.string "research_version", limit: 20
+    t.float "rsi"
+    t.float "sector_breadth"
+    t.string "strategy_version", limit: 20
+    t.boolean "sustained"
+    t.string "trend_regime", limit: 50
+    t.float "underlying_entry_price"
+    t.float "us_overnight_change"
+    t.string "volatility_regime", limit: 50
+    t.float "vwap_dist"
+    t.boolean "weekly_expiry"
+  end
+
+  create_table "research_experiment_registry", force: :cascade do |t|
+    t.integer "cpu_time_ms"
+    t.datetime "created_at", null: false
+    t.string "dataset_fingerprint"
+    t.string "dataset_id"
+    t.string "dataset_range"
+    t.integer "dataset_size"
+    t.jsonb "distributions", default: {}
+    t.jsonb "evidence_details", default: {}
+    t.integer "evidence_score", default: 0
+    t.string "exit_version", default: "V7.0"
+    t.string "experiment_id", null: false
+    t.string "feature_version", default: "V7.0"
+    t.integer "features_used", default: 0
+    t.string "hypothesis_description"
+    t.string "notebook_path"
+    t.jsonb "parent_experiments", default: []
+    t.string "question_id"
+    t.text "question_text", null: false
+    t.text "rejection_reason"
+    t.string "research_version", default: "V7.0"
+    t.integer "rows_processed", default: 0
+    t.datetime "updated_at", null: false
+    t.string "verdict", default: "pending", null: false
+    t.index ["experiment_id"], name: "index_research_experiment_registry_on_experiment_id", unique: true
+  end
+
+  create_table "research_feature_importances", primary_key: "feature_name", id: { type: :string, limit: 100 }, force: :cascade do |t|
+    t.float "information_gain"
+    t.float "pearson_correlation"
+  end
+
+  create_table "research_feature_registry", force: :cascade do |t|
+    t.string "category", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "dependencies", default: []
+    t.date "deprecated_on"
+    t.text "description"
+    t.string "feature_id", null: false
+    t.string "formula"
+    t.date "introduced_on"
+    t.string "name", null: false
+    t.string "status", default: "active", null: false
+    t.datetime "updated_at", null: false
+    t.string "version", default: "1.0", null: false
+    t.index ["feature_id"], name: "index_research_feature_registry_on_feature_id", unique: true
+  end
+
+  create_table "research_hypotheses", primary_key: "description", id: { type: :string, limit: 255 }, force: :cascade do |t|
+    t.float "expectancy_r"
+    t.integer "sample_size"
+    t.float "success_rate"
+    t.string "verdict", limit: 50
   end
 
   create_table "research_option_bars", force: :cascade do |t|

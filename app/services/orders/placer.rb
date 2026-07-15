@@ -519,7 +519,9 @@ module Orders
       end
 
       def resolve_index_key(sid)
-        instrument = Instrument.find_by(security_id: sid.to_s)
+        instrument = Instrument.find_by(security_id: sid.to_s, segment: 'index') ||
+                     Instrument.find_by(security_id: sid.to_s, segment: 'derivatives') ||
+                     Instrument.find_by(security_id: sid.to_s)
         instrument&.underlying_symbol || 'default'
       rescue StandardError
         'default'

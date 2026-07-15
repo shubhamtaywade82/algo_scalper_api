@@ -33,6 +33,9 @@ module Research
       # 3. Conditional Probabilities
       probabilities = compute_probabilities(trades)
 
+      # 3.5. Predicted Premium Regime Probabilities
+      premium_regimes = compute_premium_regime_probabilities(trades)
+
       # 4. Run Hypothesis Validation Engine
       hypotheses = Research::HypothesisEngine.run(trades)
 
@@ -46,13 +49,15 @@ module Research
         exit_performance_atm: exit_stats,
         strike_comparison: strike_stats,
         conditional_probabilities: probabilities,
+        premium_regime_probabilities: premium_regimes,
         hypotheses: hypotheses.map do |h|
           {
             description: h.description,
             sample_size: h.sample_size,
             success_rate: h.success_rate.round(2),
             expectancy_r: h.expectancy.round(2),
-            verdict: h.verdict
+            verdict: h.verdict,
+            reason: h.reason
           }
         end,
         feature_importance: correlations,
@@ -97,11 +102,11 @@ module Research
       exit_names = Research::ExitCaptureAnalyzer::STRATEGY_NAMES
 
       exit_names.index_with do |name|
-        returns = trades.map { |t| t[:strikes][strike_label][:exits][name][:return_pct] }
-        efficiencies = trades.map { |t| t[:strikes][strike_label][:exits][name][:capture_efficiency] }
-        times = trades.map { |t| t[:strikes][strike_label][:exits][name][:holding_time_minutes] }
-        retentions = trades.map { |t| t[:strikes][strike_label][:exits][name][:opportunity_retention_ratio] || 0.0 }
-        lost_profit = trades.map { |t| t[:strikes][strike_label][:exits][name][:lost_profit_points] || 0.0 }
+        returns = trades.map { |t| t.dig(:strikes, strike_label, :exits, name, :return_pct).to_f }
+        efficiencies = trades.map { |t| t.dig(:strikes, strike_label, :exits, name, :capture_efficiency).to_f }
+        times = trades.map { |t| t.dig(:strikes, strike_label, :exits, name, :holding_time_minutes).to_i }
+        retentions = trades.map { |t| t.dig(:strikes, strike_label, :exits, name, :opportunity_retention_ratio).to_f }
+        lost_profit = trades.map { |t| t.dig(:strikes, strike_label, :exits, name, :lost_profit_points).to_f }
 
         wins = returns.select { |r| r > 0.0 }
         losses = returns.select { |r| r < 0.0 }
@@ -154,23 +159,35 @@ gross_wins / gross_losses
       strikes = ["ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2"]
 
       strikes.index_with do |strike|
-        mfe_vals = trades.map { |t| t[:strikes][strike][:mfe_pct] }
-        mae_vals = trades.map { |t| t[:strikes][strike][:mae_pct] }
-        decay_vals = trades.map { |t| t[:strikes][strike][:drawdown_from_peak_pct] }
-        elasticity_vals = trades.map { |t| t[:strikes][strike][:trade_elasticity] }
+        strike_trades = trades.select { |t| t[:strikes] && t[:strikes][strike] }
+        if strike_trades.empty?
+          {
+            avg_mfe_pct: 0.0,
+            avg_mae_pct: 0.0,
+            avg_decay_from_peak_pct: 0.0,
+            avg_elasticity: 0.0,
+            hybrid_exit_avg_return_pct: 0.0,
+            hybrid_exit_win_rate_pct: 0.0
+          }
+        else
+          mfe_vals = strike_trades.map { |t| t[:strikes][strike][:mfe_pct] }
+          mae_vals = strike_trades.map { |t| t[:strikes][strike][:mae_pct] }
+          decay_vals = strike_trades.map { |t| t[:strikes][strike][:drawdown_from_peak_pct] }
+          elasticity_vals = strike_trades.map { |t| t[:strikes][strike][:trade_elasticity] }
 
-        # ROI under hybrid divergence exit (our best strategy)
-        hybrid_returns = trades.map { |t| t[:strikes][strike][:exits][:hybrid_divergence][:return_pct] }
-        wins = hybrid_returns.count { |r| r > 0.0 }
+          # ROI under hybrid divergence exit (our best strategy)
+          hybrid_returns = strike_trades.map { |t| t[:strikes][strike][:exits][:hybrid_divergence][:return_pct] }
+          wins = hybrid_returns.count { |r| r > 0.0 }
 
-        {
-          avg_mfe_pct: average(mfe_vals).round(2),
-          avg_mae_pct: average(mae_vals).round(2),
-          avg_decay_from_peak_pct: average(decay_vals).round(2),
-          avg_elasticity: average(elasticity_vals).round(3),
-          hybrid_exit_avg_return_pct: average(hybrid_returns).round(2),
-          hybrid_exit_win_rate_pct: ((wins.to_f / trades.size) * 100.0).round(2)
-        }
+          {
+            avg_mfe_pct: average(mfe_vals).round(2),
+            avg_mae_pct: average(mae_vals).round(2),
+            avg_decay_from_peak_pct: average(decay_vals).round(2),
+            avg_elasticity: average(elasticity_vals).round(3),
+            hybrid_exit_avg_return_pct: average(hybrid_returns).round(2),
+            hybrid_exit_win_rate_pct: ((wins.to_f / strike_trades.size) * 100.0).round(2)
+          }
+        end
       end
     end
 
@@ -205,6 +222,62 @@ gross_wins / gross_losses
         p_atm_pe_mfe_above_50_given_bear_filters: p_pe_expansion.round(2),
         p_decay_above_25_given_strong_mfe: p_decay.round(2)
       }
+    end
+
+    def self.compute_premium_regime_probabilities(trades, strike_label: "ATM")
+      feature_bins = {
+        gap_regime: ->(t) {
+          pct = t[:gap_pct] || 0.0
+          if pct < -0.4 then :large_gap_down
+          elsif pct < -0.15 then :mod_gap_down
+          elsif pct <= 0.15 then :flat_open
+          elsif pct <= 0.4 then :mod_gap_up
+          else :large_gap_up
+          end
+        },
+        or_width_regime: ->(t) {
+          width = t[:or_width] || 0.0
+          if width < 25.0 then :narrow_range
+          elsif width < 50.0 then :mod_range
+          else :wide_range
+          end
+        },
+        volatility_regime: ->(t) {
+          t[:regime]&.[](:volatility) || :normal
+        },
+        trend_regime: ->(t) {
+          t[:regime]&.[](:trend) || :mean_reverting
+        },
+        adx_strength: ->(t) {
+          adx = t[:adx] || 0.0
+          if adx < 20.0 then :low_trend
+          elsif adx <= 30.0 then :mod_trend
+          else :strong_trend
+          end
+        }
+      }
+
+      result = {}
+      feature_bins.each do |regime_name, bin_extractor|
+        result[regime_name] = {}
+        grouped_trades = trades.group_by { |t| bin_extractor.call(t) }
+        grouped_trades.each do |bin_name, subset|
+          total_subset = subset.size
+          next if total_subset.zero?
+
+          shape_counts = subset.map { |t| t.dig(:strikes, strike_label, :premium_pattern) || :neutral }
+                               .group_by { |s| s }
+                               .transform_values(&:size)
+
+          distribution = shape_counts.transform_values { |count| ((count.to_f / total_subset) * 100.0).round(1) }
+
+          result[regime_name][bin_name] = {
+            sample: total_subset,
+            distribution: distribution
+          }
+        end
+      end
+      result
     end
 
     def self.write_json(aggregate, trades, output_dir)
@@ -330,6 +403,8 @@ gross_wins / gross_losses
         trades.each do |t|
           ["ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2"].each do |strike_label|
             str = t[:strikes][strike_label]
+            next if str.nil?
+
             hybrid = str[:exits][:hybrid_divergence]
             trail = str[:exits][:trail_20]
             mom = str[:exits][:momentum_decay]
@@ -412,13 +487,13 @@ gross_wins / gross_losses
       end
 
       puts "\n🧪 HYPOTHESIS VALIDATION MATRIX:"
-      printf("  %-50s | %6s | %7s | %10s | %10s\n",
-             "Hypothesis Rule", "Sample", "Success", "Expectancy", "Verdict")
-      puts "  #{'-' * 92}"
+      printf("  %-50s | %6s | %7s | %10s | %20s | %s\n",
+             "Hypothesis Rule", "Sample", "Success", "Expectancy", "Verdict", "Reason")
+      puts "  #{'-' * 140}"
 
       agg[:hypotheses].each do |h|
-        printf("  %-50s | %6d | %6.1f%% | %8.2fR | %10s\n",
-               h[:description].truncate(50), h[:sample_size], h[:success_rate], h[:expectancy_r], h[:verdict].to_s.upcase)
+        printf("  %-50s | %6d | %6.1f%% | %8.2fR | %20s | %s\n",
+               h[:description].truncate(50), h[:sample_size], h[:success_rate], h[:expectancy_r], h[:verdict].to_s.tr('_', ' ').upcase, h[:reason] || "N/A")
       end
 
       puts "\n🛡️ EXIT STRATEGY MATRIX & WALK-FORWARD STATISTICAL VALIDATION (ATM STRIKE):"
@@ -459,6 +534,15 @@ gross_wins / gross_losses
                stats[:avg_elasticity],
                stats[:hybrid_exit_avg_return_pct],
                stats[:hybrid_exit_win_rate_pct])
+      end
+
+      puts "\n🔮 PREDICTED PREMIUM REGIME PROBABILITY MATRIX: P(Premium Shape | Opening Context)"
+      agg[:premium_regime_probabilities].each do |regime_name, bin_table|
+        puts "  #{regime_name.to_s.titleize}:"
+        bin_table.each do |bin_name, data|
+          dist_str = data[:distribution].map { |shape, pct| "#{shape.to_s.titleize}: #{pct}%" }.join(", ")
+          printf("    * %-20s (sample: %d) -> %s\n", bin_name.to_s.titleize, data[:sample], dist_str)
+        end
       end
 
       puts "\n🎲 CONDITIONAL PROBABILITIES & PATTERN MINING:"
