@@ -88,17 +88,17 @@ module Risk
       end
 
       def override_exit(context)
-        return supertrend_exit(context) if supertrend_flipped?(context)
-        return counter_candle_exit(context) if counter_candles?(context)
+        series = underlying_series(context, '1')
+        return supertrend_exit(context) if supertrend_flipped?(context, series)
+        return counter_candle_exit(context) if counter_candles?(context, series)
 
         nil
       end
 
-      def supertrend_flipped?(context)
+      def supertrend_flipped?(context, series)
         return false unless adaptive_config.fetch(:supertrend_flip_exit, true)
 
         direction = context.tracker.direction.to_s
-        series = underlying_series(context, '1')
         return false unless direction.present? && series&.candles&.any?
 
         st_cfg = AlgoConfig.fetch.dig(:signals, :supertrend) || {}
@@ -110,12 +110,12 @@ module Risk
         false
       end
 
-      def counter_candles?(context)
+      def counter_candles?(context, series)
         needed = adaptive_config.fetch(:counter_candles, 3).to_i
         return false unless needed.positive?
 
         direction = context.tracker.direction.to_s
-        candles = underlying_series(context, '1')&.candles&.last(needed)
+        candles = series&.candles&.last(needed)
         return false unless direction.present? && candles&.size == needed
 
         long_trade?(direction) ? candles.all?(&:bearish?) : candles.all?(&:bullish?)
