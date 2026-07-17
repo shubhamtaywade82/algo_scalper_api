@@ -205,6 +205,38 @@ development:
     priority: 20
     description: "Auto-runs the prior session's premium-lifecycle board for SENSEX so research_premium_lifecycles accumulates without manual clicks"
 
+  ai_trading_signal_nifty_open:
+    class: Agents::TradingSignalJob
+    args: ["NIFTY", "5"]
+    schedule: at 9:20am every day
+    queue_name: background
+    priority: 3
+    description: "AI agent pipeline open signal for NIFTY at market open (9:20 AM)"
+
+  ai_trading_signal_nifty_refresh:
+    class: Agents::TradingSignalJob
+    args: ["NIFTY", "5"]
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 8
+    description: "AI agent pipeline intraday refresh for NIFTY every 30 minutes"
+
+  ai_trading_signal_banknifty_open:
+    class: Agents::TradingSignalJob
+    args: ["BANKNIFTY", "5"]
+    schedule: at 9:22am every day
+    queue_name: background
+    priority: 3
+    description: "AI agent pipeline open signal for BANKNIFTY at market open (9:22 AM)"
+
+  ai_trading_signal_banknifty_refresh:
+    class: Agents::TradingSignalJob
+    args: ["BANKNIFTY", "5"]
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 8
+    description: "AI agent pipeline intraday refresh for BANKNIFTY every 30 minutes"
+
 production:
   pre_market_iv_baseline:
     class: PreMarketIvBaselineJob
@@ -411,3 +443,35 @@ production:
     queue_name: background
     priority: 20
     description: "Auto-runs the prior session's premium-lifecycle board for SENSEX so research_premium_lifecycles accumulates without manual clicks"
+
+  ai_trading_signal_nifty_open:
+    class: Agents::TradingSignalJob
+    args: ["NIFTY", "5"]
+    schedule: at 9:20am every weekday
+    queue_name: background
+    priority: 3
+    description: "AI agent pipeline open signal for NIFTY at market open (9:20 AM)"
+
+  ai_trading_signal_nifty_refresh:
+    class: Agents::TradingSignalJob
+    args: ["NIFTY", "5"]
+    schedule: every 30 minutes during market hours
+    queue_name: background
+    priority: 8
+    description: "AI agent pipeline intraday refresh for NIFTY every 30 minutes"
+
+  ai_trading_signal_banknifty_open:
+    class: Agents::TradingSignalJob
+    args: ["BANKNIFTY", "5"]
+    schedule: at 9:22am every weekday
+    queue_name: background
+    priority: 3
+    description: "AI agent pipeline open signal for BANKNIFTY at market open (9:22 AM)"
+
+  ai_trading_signal_banknifty_refresh:
+    class: Agents::TradingSignalJob
+    args: ["BANKNIFTY", "5"]
+    schedule: every 30 minutes during market hours
+    queue_name: background
+    priority: 8
+    description: "AI agent pipeline intraday refresh for BANKNIFTY every 30 minutes"

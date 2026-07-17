@@ -117,3 +117,6 @@ end
 gem "json_schemer", "~> 2.4"
 
 gem "rswag", "~> 2.17", groups: %i[development test]
+
+# AI Multi-Agent orchestration framework
+gem 'ruby_llm-agents'

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_14_071237) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_16_185138) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -825,6 +825,84 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_14_071237) do
     t.index ["underlying_symbol", "signal_timestamp"], name: "index_research_signals_on_symbol_and_ts"
   end
 
+  create_table "ruby_llm_agents_execution_details", force: :cascade do |t|
+    t.text "assistant_prompt"
+    t.json "attempts", default: [], null: false
+    t.integer "cache_creation_tokens", default: 0
+    t.datetime "cached_at"
+    t.json "classification_result"
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.bigint "execution_id", null: false
+    t.json "fallback_chain"
+    t.json "messages_summary", default: {}, null: false
+    t.json "parameters", default: {}, null: false
+    t.json "response", default: {}
+    t.string "routed_to"
+    t.text "system_prompt"
+    t.json "tool_calls", default: [], null: false
+    t.datetime "updated_at", null: false
+    t.text "user_prompt"
+    t.index ["execution_id"], name: "index_ruby_llm_agents_execution_details_on_execution_id", unique: true
+  end
+
+  create_table "ruby_llm_agents_executions", force: :cascade do |t|
+    t.string "agent_type", null: false
+    t.integer "attempts_count", default: 1, null: false
+    t.boolean "cache_hit", default: false
+    t.integer "cached_tokens", default: 0
+    t.string "chosen_model_id"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.integer "duration_ms"
+    t.string "error_class"
+    t.string "execution_type", default: "chat", null: false
+    t.string "finish_reason"
+    t.decimal "input_cost", precision: 12, scale: 6
+    t.integer "input_tokens", default: 0
+    t.integer "messages_count", default: 0, null: false
+    t.json "metadata", default: {}, null: false
+    t.string "model_id", null: false
+    t.string "model_provider"
+    t.decimal "output_cost", precision: 12, scale: 6
+    t.integer "output_tokens", default: 0
+    t.bigint "parent_execution_id"
+    t.string "request_id"
+    t.bigint "root_execution_id"
+    t.datetime "started_at", null: false
+    t.string "status", default: "running", null: false
+    t.boolean "streaming", default: false
+    t.decimal "temperature", precision: 3, scale: 2
+    t.string "tenant_id"
+    t.integer "tool_calls_count", default: 0, null: false
+    t.decimal "total_cost", precision: 12, scale: 6
+    t.integer "total_tokens", default: 0
+    t.string "trace_id"
+    t.datetime "updated_at", null: false
+    t.index ["agent_type", "created_at"], name: "index_ruby_llm_agents_executions_on_agent_type_and_created_at"
+    t.index ["agent_type", "status"], name: "index_ruby_llm_agents_executions_on_agent_type_and_status"
+    t.index ["cache_hit", "created_at"], name: "index_ruby_llm_agents_executions_on_cache_hit_and_created_at"
+    t.index ["created_at"], name: "index_ruby_llm_agents_executions_on_created_at"
+    t.index ["model_id", "status"], name: "index_ruby_llm_agents_executions_on_model_id_and_status"
+    t.index ["parent_execution_id"], name: "index_ruby_llm_agents_executions_on_parent_execution_id"
+    t.index ["request_id"], name: "index_ruby_llm_agents_executions_on_request_id"
+    t.index ["root_execution_id"], name: "index_ruby_llm_agents_executions_on_root_execution_id"
+    t.index ["status", "created_at"], name: "index_ruby_llm_agents_executions_on_status_and_created_at"
+    t.index ["status"], name: "index_ruby_llm_agents_executions_on_status"
+    t.index ["tenant_id", "created_at"], name: "index_ruby_llm_agents_executions_on_tenant_id_and_created_at"
+    t.index ["tenant_id", "status"], name: "index_ruby_llm_agents_executions_on_tenant_id_and_status"
+    t.index ["trace_id"], name: "index_ruby_llm_agents_executions_on_trace_id"
+  end
+
+  create_table "ruby_llm_agents_overrides", force: :cascade do |t|
+    t.string "agent_type", null: false
+    t.datetime "created_at", null: false
+    t.json "settings", default: {}, null: false
+    t.datetime "updated_at", null: false
+    t.string "updated_by"
+    t.index ["agent_type"], name: "index_ruby_llm_agents_overrides_on_agent_type", unique: true
+  end
+
   create_table "settings", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "key", null: false
@@ -1183,6 +1261,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_14_071237) do
   add_foreign_key "position_trackers", "instruments"
   add_foreign_key "research_option_bars", "research_raw_fetches"
   add_foreign_key "research_option_candidates", "research_signals"
+  add_foreign_key "ruby_llm_agents_execution_details", "ruby_llm_agents_executions", column: "execution_id", on_delete: :cascade
+  add_foreign_key "ruby_llm_agents_executions", "ruby_llm_agents_executions", column: "parent_execution_id", on_delete: :nullify
+  add_foreign_key "ruby_llm_agents_executions", "ruby_llm_agents_executions", column: "root_execution_id", on_delete: :nullify
   add_foreign_key "solid_queue_blocked_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_claimed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
   add_foreign_key "solid_queue_failed_executions", "solid_queue_jobs", column: "job_id", on_delete: :cascade
