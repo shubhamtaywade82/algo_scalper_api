@@ -22,10 +22,16 @@ module Smc
       end
 
       def active_blocks
-        find_blocks.reject { |b| mitigated?(b) }
+        @active_blocks ||= find_blocks.reject { |b| mitigated?(b) }
       end
 
       def find_blocks
+        return @find_blocks if defined?(@find_blocks)
+
+        @find_blocks = compute_blocks
+      end
+
+      def compute_blocks
         blocks = []
         # Need at least 4 candles: (0...(4-3)) => one index for a=0, b=1
         return [] if candles.size < 4
@@ -68,7 +74,7 @@ module Smc
       def displacement?(candle, candle_index = nil)
         return false unless candle
 
-        atr = @series.atr(20)
+        atr = cached_atr
         body_size = (candle.close - candle.open).abs
         return false if atr && body_size <= (atr * DISPLACEMENT_THRESHOLD)
         return true unless atr
@@ -106,6 +112,12 @@ module Smc
 
       def candles
         @series&.candles || []
+      end
+
+      def cached_atr
+        return @cached_atr if defined?(@cached_atr)
+
+        @cached_atr = @series.atr(20)
       end
     end
   end

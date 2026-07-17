@@ -228,12 +228,13 @@ module Indicators
 
       lookback_start = [current_index - training_period, period].max
       features = []
+      atr_window = atr[lookback_start...current_index].compact
+      avg_atr_for_window = atr_window.any? ? atr_window.sum / atr_window.size.to_f : nil
 
       (lookback_start...current_index).each do |i|
         next if atr[i].nil?
 
-        atr_window = atr[lookback_start...current_index].compact
-        avg_atr = atr_window.any? ? atr_window.sum / atr_window.size.to_f : atr[i]
+        avg_atr = avg_atr_for_window || atr[i]
         normalized_atr = avg_atr&.zero? ? 1.0 : atr[i] / (avg_atr + 1e-8)
 
         volatility = if i >= 10

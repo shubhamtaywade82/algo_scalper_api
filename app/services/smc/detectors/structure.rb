@@ -108,10 +108,11 @@ module Smc
         max_i = arr.size - 1
 
         if max_i >= min_i
+          reversed_swings = swings.reverse
           (min_i..max_i).each do |i|
             close = arr[i].close
-            last_high = swings.reverse.find { |s| s[:type] == :high && s[:index] + @lookback <= i }
-            last_low = swings.reverse.find { |s| s[:type] == :low && s[:index] + @lookback <= i }
+            last_high = reversed_swings.find { |s| s[:type] == :high && s[:index] + @lookback <= i }
+            last_low = reversed_swings.find { |s| s[:type] == :low && s[:index] + @lookback <= i }
             next unless last_high && last_low
 
             if close > last_high[:price]

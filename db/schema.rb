@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_16_185138) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_17_073159) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -199,6 +199,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_185138) do
     t.string "underlying_symbol"
     t.datetime "updated_at", null: false
     t.index ["instrument_code"], name: "index_instruments_on_instrument_code"
+    t.index ["security_id", "segment"], name: "index_instruments_on_security_id_and_segment"
     t.index ["security_id", "symbol_name", "exchange", "segment"], name: "index_instruments_unique", unique: true
     t.index ["symbol_name"], name: "index_instruments_on_symbol_name"
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
@@ -502,6 +503,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_185138) do
     t.index ["carry_mode"], name: "index_position_trackers_on_carry_mode"
     t.index ["client_order_id"], name: "index_position_trackers_on_client_order_id"
     t.index ["created_at"], name: "index_position_trackers_on_created_at"
+    t.index ["entry_strategy"], name: "index_position_trackers_on_entry_strategy"
     t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
     t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
     t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
@@ -1085,6 +1087,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_185138) do
     t.bigint "strategy_run_id", null: false
     t.bigint "strategy_version_id", null: false
     t.datetime "updated_at", null: false
+    t.index ["emitted_at"], name: "index_strategy_signals_on_emitted_at"
     t.index ["instrument_key", "emitted_at"], name: "index_strategy_signals_on_instrument_key_and_emitted_at"
     t.index ["position_tracker_id"], name: "index_strategy_signals_on_position_tracker_id"
     t.index ["strategy_id"], name: "index_strategy_signals_on_strategy_id"
