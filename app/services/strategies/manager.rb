@@ -26,6 +26,7 @@ module Strategies
       @running = false
       @mutex = Mutex.new
       @bus = Core::EventBus.instance
+      @bus_subscription_id = nil
       @log_streams = {} # slug => LogStream
     end
 
@@ -40,7 +41,7 @@ module Strategies
 
     def stop
       @running = false
-      @bus.unsubscribe_all(self) if defined?(@bus)
+      @bus.unsubscribe(@bus_subscription_id) if @bus_subscription_id
       @control_thread&.kill
       @mutex.synchronize { @runners.each_key { |slug| stop_runner(slug, "shutdown") } }
       Rails.logger.info("[Strategies::Manager] stopped")
@@ -85,7 +86,7 @@ module Strategies
     end
 
     def subscribe_to_events
-      @bus.subscribe(:candle_closed, self, method_name: :on_candle_closed)
+      @bus_subscription_id = @bus.subscribe(:candle_closed) { |event| on_candle_closed(event) }
     end
 
     private

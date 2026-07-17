@@ -15,7 +15,6 @@ module Core
     # Event types
     EVENTS = {
       ltp: :ltp,
-      entry_filled: :entry_filled,
       sl_hit: :sl_hit,
       tp_hit: :tp_hit,
       exit_triggered: :exit_triggered,
@@ -34,29 +33,15 @@ module Core
 
     # Subscribe to an event type
     # @param event_type [Symbol] Event type (e.g., :ltp, :sl_hit)
-    # @param subscriber [Object, Proc] Subscriber object or proc
-    # @param method_name [Symbol, nil] Method name to call on subscriber (if object)
     # @return [String] Subscription ID for unsubscribing
-    def subscribe(event_type, subscriber = nil, method_name: nil, &block)
+    def subscribe(event_type, &block)
       raise ArgumentError, "Unknown event type: #{event_type}" unless EVENTS.value?(event_type)
-
-      handler = if block
-                  block
-                elsif subscriber.is_a?(Proc)
-                  subscriber
-                elsif subscriber && method_name
-                  ->(event) { subscriber.public_send(method_name, event) }
-                elsif subscriber.respond_to?(:call)
-                  ->(event) { subscriber.call(event) }
-                else
-                  raise ArgumentError, 'Must provide block, proc, or subscriber with method_name'
-                end
+      raise ArgumentError, 'Must provide a block' unless block
 
       subscription_id = SecureRandom.uuid
       @subscribers[event_type] << {
         id: subscription_id,
-        handler: handler,
-        subscriber: subscriber
+        handler: block
       }
 
       Rails.logger.debug { "[Core::EventBus] Subscribed to #{event_type} (#{subscription_id[0..7]})" }
@@ -106,26 +91,6 @@ module Core
 
       Rails.logger.debug { "[Core::EventBus] Unsubscribed (#{subscription_id[0..7]})" } if found
       found
-    end
-
-    # Unsubscribe all handlers for a specific subscriber object
-    # @param subscriber [Object] Subscriber object to remove
-    # @return [Integer] Number of subscriptions removed
-    def unsubscribe_all(subscriber)
-      removed = 0
-      @subscribers.each_value do |subs|
-        subs.delete_if do |sub|
-          if sub[:subscriber] == subscriber
-            removed += 1
-            true
-          else
-            false
-          end
-        end
-      end
-
-      Rails.logger.debug { "[Core::EventBus] Unsubscribed all for #{subscriber.class.name} (#{removed} subscriptions)" } if removed.positive?
-      removed
     end
 
     # Clear all subscriptions (for testing/cleanup)
