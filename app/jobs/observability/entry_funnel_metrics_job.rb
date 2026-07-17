@@ -43,7 +43,7 @@ module Observability
       message = <<~MSG.strip
         📊 Entry Funnel — #{report[:date]}
         Breakout arms: #{summary[:breakout_arms]}
-        Signals: #{summary[:signals_created]} | Entered: #{summary[:entered]}
+        Signals: #{summary[:signals_created]} (legacy: #{summary[:legacy_signals]} | platform: #{summary[:strategy_platform_signals]}) | Entered: #{summary[:entered]}
         Blocked: #{summary[:guard_blocked]} | Skipped: #{summary[:signal_skipped]}
         Positions opened: #{summary[:positions_opened]}
         Enter rate: #{summary[:enter_rate_pct]}%

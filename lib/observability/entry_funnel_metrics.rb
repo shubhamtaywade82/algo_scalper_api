@@ -22,6 +22,8 @@ module Observability
       [/exception:/i, 'Exception']
     ].freeze
 
+    SHADOW_OUTCOMES = %w[shadow ignored_hold].freeze
+
     def initialize(date: Time.zone.today, index_key: nil, include_live_state: false)
       @date = date.to_date
       @index_key = index_key&.to_s&.downcase.presence
@@ -117,28 +119,67 @@ module Observability
       index_key.present? ? " — #{index_key.upcase}" : ' — ALL INDICES'
     end
 
+    # Two independent signal sources feed entries today: the legacy
+    # TradingSignal pipeline (Signal::Engine) and Strategies::Signal (the
+    # Strategies::Manager plugin platform, which is what's actually registered
+    # in the trading daemon now — see lib/trading_system/bootstrap.rb). A
+    # summary built from TradingSignal alone reads "0 signals" on a day where
+    # every entry came through the strategy platform, while position_scope
+    # (real PositionTracker rows) shows the entries did happen. Combine both.
     def summary_counts
-      signals = signal_scope.to_a
-      outcomes = signals.group_by { |s| s.metadata&.dig('entry_outcome') }
-      entered = outcomes['entered']&.size.to_i
-      blocked = outcomes['blocked']&.size.to_i
-      skipped = outcomes['skipped']&.size.to_i
-      no_outcome = signals.size - entered - blocked - skipped
+      legacy = legacy_signal_summary
+      platform = strategy_platform_summary
+      entered = legacy[:entered] + platform[:entered]
+      blocked = legacy[:blocked] + platform[:blocked]
+      signals_created = legacy[:total] + platform[:total]
       attempted = entered + blocked
       arms = breakout_event_scope.count
 
       {
         breakout_arms: arms,
-        signals_created: signals.size,
+        signals_created: signals_created,
         try_enter_attempts: attempted,
         entered: entered,
         guard_blocked: blocked,
-        signal_skipped: skipped,
-        no_outcome_recorded: no_outcome,
+        signal_skipped: legacy[:skipped],
+        no_outcome_recorded: legacy[:no_outcome] + platform[:shadow],
         positions_opened: position_scope.count,
         enter_rate_pct: percentage(entered, attempted),
-        signal_to_enter_pct: percentage(entered, signals.size)
+        signal_to_enter_pct: percentage(entered, signals_created),
+        legacy_signals: legacy[:total],
+        strategy_platform_signals: platform[:total]
       }
+    end
+
+    def legacy_signal_summary
+      signals = signal_scope.to_a
+      outcomes = signals.group_by { |s| s.metadata&.dig('entry_outcome') }
+      entered = outcomes['entered']&.size.to_i
+      blocked = outcomes['blocked']&.size.to_i
+      skipped = outcomes['skipped']&.size.to_i
+      { total: signals.size, entered: entered, blocked: blocked, skipped: skipped,
+        no_outcome: signals.size - entered - blocked - skipped }
+    end
+
+    # Strategies::Signal#record_entry_outcome (app/models/strategies/signal.rb)
+    # maps its outcome to "executed" / "blocked_by_guard"; "shadow" is the
+    # pre-attempt default and "ignored_hold" is a Hold action that never
+    # reached try_enter. Reason text lives under metadata['entry_result_reason'],
+    # a different key/taxonomy than TradingSignal's, so guard-bucket breakdowns
+    # stay legacy-only for now (see report_notes) — only the top-level counts
+    # that feed the Telegram funnel summary are unified here.
+    def strategy_platform_summary
+      signals = strategy_platform_scope.to_a
+      entered = signals.count { |s| s.outcome == 'executed' }
+      blocked = signals.count { |s| s.outcome == 'blocked_by_guard' }
+      shadow = signals.count { |s| SHADOW_OUTCOMES.include?(s.outcome) }
+      { total: signals.size, entered: entered, blocked: blocked, shadow: shadow }
+    end
+
+    def strategy_platform_scope
+      scope = Strategies::Signal.where(emitted_at: day_range)
+      scope = scope.where(instrument_key: @index_key.upcase) if @index_key.present?
+      scope
     end
 
     def breakout_event_counts
@@ -244,6 +285,8 @@ module Observability
     def report_notes
       notes = []
       notes << 'Pre-signal cycle blocks (entry_quality, trading_context, etc.) are log-only — not in TradingSignal rows.'
+      notes << 'Summary counts combine TradingSignal (legacy) and Strategies::Signal (strategy platform); ' \
+               'guard/reason breakdowns below remain TradingSignal-only.'
       notes << 'Set LIVE=1 to include current Redis breakout_ready flags.'
       notes << 'Dominant guard block suggests where to relax config first.' if guard_block_counts[:by_guard].any?
       notes

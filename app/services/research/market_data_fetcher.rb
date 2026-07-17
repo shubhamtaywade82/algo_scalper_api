@@ -44,8 +44,11 @@ module Research
         end
       end
 
-      # Combine unique dates
-      all_dates = (dates + json_days.keys).uniq.sort.last(lookback_days)
+      # Combine unique dates — reject any weekend dates that slipped into the
+      # candles table (e.g. from a backfill gap-fill or timezone edge case);
+      # DhanHQ::Models::ExpiredOptionsData rejects weekend from_date/to_date
+      # outright, so a single bad date here fails every fetch for that day.
+      all_dates = (dates + json_days.keys).uniq.reject { |d| d.saturday? || d.sunday? }.sort.last(lookback_days)
 
       if all_dates.empty?
         if strict

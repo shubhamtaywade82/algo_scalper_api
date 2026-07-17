@@ -92,7 +92,7 @@ module Options
         end
 
         legs.first(2).map do |leg|
-          leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id)
+          leg.slice(:segment, :security_id, :symbol, :strike, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id)
         end
       end
 

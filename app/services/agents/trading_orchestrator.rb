@@ -317,11 +317,31 @@ module Agents
       HTML
     end
 
+    # Agent stages usually return free-text markdown, not a Hash — for the
+    # fields we headline in Telegram (bias/action/verdict), fall back to the
+    # same text extraction already used to drive control flow instead of
+    # silently showing a placeholder that contradicts the body text below it.
     def dig(obj, key, default = nil)
-      return default unless obj.is_a?(Hash)
-      return obj[key] || obj[key.to_s] || default if key
+      if obj.is_a?(Hash)
+        val = obj[key] || obj[key.to_s]
+        return val if val
+      end
+      extract_from_text(obj, key) || default
+    end
 
-      default
+    def extract_from_text(obj, key)
+      return nil if obj.is_a?(Hash)
+
+      case key
+      when :bias
+        obj.to_s[/\b(BULLISH|BEARISH|NEUTRAL)\b/i]&.upcase
+      when :trend_strength
+        obj.to_s[/\bADX\D{0,5}(\d+(?:\.\d+)?)/i, 1]&.then { |v| "ADX #{v}" }
+      when :action
+        extract_action(obj)
+      when :verdict
+        extract_verdict(obj)
+      end
     end
 
     def log(msg)
