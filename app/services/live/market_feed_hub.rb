@@ -3,7 +3,6 @@
 require "singleton"
 require "concurrent/array"
 require "concurrent/set"
-require "concurrent/map"
 
 module Live
   class MarketFeedHub
@@ -23,7 +22,6 @@ module Live
       @watchlist_keys = Concurrent::Set.new
       @watchdog_thread = nil
       @restarting = false
-      @index_instrument_cache = Concurrent::Map.new
     end
 
     def start!
@@ -463,7 +461,9 @@ module Live
       # Keep CandleSeriesCache forming candle up-to-date for index instruments.
       # Feed both 1-min and 5-min caches used by exit/trailing engines and indicators.
       if is_index
-        instrument = find_index_instrument(tick[:security_id].to_s)
+        instrument = IndexInstrumentCache.instance.get_or_fetch(
+          key: symbol.to_s.upcase, sid: tick[:security_id].to_s, segment: "IDX_I"
+        )
         if instrument
           Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 5)
           Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 1)
@@ -478,15 +478,6 @@ module Live
         ltp: ltp,
         timestamp: Time.current
       })
-    end
-
-    def find_index_instrument(security_id)
-      cached = @index_instrument_cache[security_id]
-      return cached if cached
-
-      instrument = Instrument.find_by_sid_and_segment(security_id: security_id, segment_code: "IDX_I")
-      @index_instrument_cache[security_id] = instrument if instrument
-      instrument
     end
 
     def notify_subscribers!(tick)

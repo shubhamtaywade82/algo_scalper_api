@@ -221,13 +221,13 @@ module Live
 
     def cast_numeric(value)
       Float(value)
-    rescue ArgumentError, TypeError
+    rescue StandardError
       value
     end
 
     def numeric_to_f(value)
       Float(value)
-    rescue ArgumentError, TypeError
+    rescue StandardError
       0.0
     end
 
