@@ -15,7 +15,8 @@ module Research
       mfe_retrace_35: :simulate_mfe_retrace_35,
       mfe_retrace_50: :simulate_mfe_retrace_50,
       gamma_state: :simulate_gamma_state,
-      velocity_ratchet: :simulate_velocity_ratchet
+      velocity_ratchet: :simulate_velocity_ratchet,
+      oi_unwind: :simulate_oi_unwind
     }.freeze
     STRATEGY_NAMES = STRATEGY_METHODS.keys.freeze
 
@@ -350,6 +351,26 @@ module Research
           return [c[:close], c[:timestamp], "velocity_hard_exit"] if c[:close] < ema5
         end
       end
+      c_last = active_candles.last
+      [c_last[:close], c_last[:timestamp], "market_close"]
+    end
+
+    # 14. OI unwinding — rising premium on falling OI is short-covering, not fresh
+    # buying; that rally tends to be fake. Exit once OI has dropped >20% from entry
+    # while price is still favorable (else there's nothing to protect).
+    def self.simulate_oi_unwind(entry_price, entry_idx, active_candles, *, **)
+      entry_oi = active_candles[entry_idx][:oi].to_f
+      return simulate_hold_to_close(entry_price, entry_idx, active_candles) if entry_oi <= 0
+
+      active_candles[entry_idx..].each do |c|
+        current_oi = c[:oi].to_f
+        next unless current_oi.positive?
+
+        if current_oi < entry_oi * 0.80 && c[:close] > entry_price
+          return [c[:close], c[:timestamp], "oi_unwind"]
+        end
+      end
+
       c_last = active_candles.last
       [c_last[:close], c_last[:timestamp], "market_close"]
     end

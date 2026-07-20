@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_17_073159) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_20_055142) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -750,6 +750,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_073159) do
     t.decimal "entry_price", precision: 12, scale: 4
     t.datetime "entry_timestamp"
     t.decimal "exit_price", precision: 12, scale: 4
+    t.jsonb "exit_simulations", default: {}, null: false
     t.datetime "exit_timestamp"
     t.date "expiry_date"
     t.string "expiry_flag", null: false

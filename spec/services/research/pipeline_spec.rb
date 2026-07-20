@@ -18,7 +18,7 @@ RSpec.describe Research::Pipeline do
         Research::OptionBar.create!(
           underlying_symbol: symbol, exchange_segment: 'NSE_FNO', expiry_flag: expiry_flag,
           option_type: option_type, strike_label: strike_label, interval: '5',
-          ts: Time.zone.parse('2026-07-10 10:15:00'), open: 110, high: 120, low: 108, close: 118
+          ts: Time.zone.parse('2026-07-10 10:15:00'), open: 110, high: 120, low: 108, close: 118, volume: 100_000
         )
       end
     end
