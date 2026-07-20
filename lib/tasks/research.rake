@@ -93,4 +93,41 @@ namespace :research do
              lifecycle.decay_start_ts&.strftime("%H:%M") || "-", lifecycle.end_return_pct || "-")
     end
   end
+
+  desc "Generate regime-driven signals over a date range and rank exit strategies per regime bucket"
+  task :run_regime_scan, %i[symbol from_date to_date expiry_flag] => :environment do |_t, args|
+    symbol = args[:symbol].presence || raise(ArgumentError, "symbol is required")
+    from_date = args[:from_date].presence || raise(ArgumentError, "from_date is required")
+    to_date = args[:to_date].presence || raise(ArgumentError, "to_date is required")
+    expiry_flag = args[:expiry_flag].presence || "WEEK"
+
+    puts "\n#{'=' * 100}"
+    puts "Regime scan — #{symbol} #{from_date} to #{to_date}"
+    puts '=' * 100
+
+    signals = Research::RegimeSignalGenerator.run(symbol: symbol, from_date: from_date, to_date: to_date)
+    puts "#{signals.size} regime-driven signals generated."
+
+    signals.each do |signal|
+      Research::Pipeline.run(signal: signal, expiry_flags: [expiry_flag], max_distance: 0)
+    end
+
+    buckets = Research::RegimeExitReport.call(scope: Research::OptionCandidate.where(status: "scored"))
+
+    if buckets.empty?
+      puts "No scored candidates produced (check symbol/date range/candle data availability)."
+      next
+    end
+
+    buckets.each do |bucket|
+      puts "\n#{'-' * 100}"
+      puts "Regime: #{bucket[:context].map { |k, v| "#{k}=#{v}" }.join(', ')} (n=#{bucket[:sample_size]})"
+      puts '-' * 100
+      printf("%-20s %10s %8s %8s %10s\n", "Strategy", "AvgRet%", "Win%", "PF", "Sharpe")
+      bucket[:strategies].each do |name, stats|
+        printf("%-20s %10s %8s %8s %10s\n",
+               name, stats[:avg_return_pct], stats[:win_rate_pct], stats[:profit_factor], stats[:sharpe_ratio])
+      end
+    end
+  end
 end
