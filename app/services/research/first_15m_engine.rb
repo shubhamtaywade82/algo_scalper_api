@@ -163,6 +163,15 @@ module Research
 
       return {} if trades.empty?
 
+      finalize(trades, output_dir: output_dir)
+    end
+
+    # Aggregate/report tail, split out so callers that need to combine trades from
+    # multiple symbols (e.g. NIFTY + SENSEX) into one statistically-powered hypothesis
+    # test can build `trades` per symbol via .run, concatenate, then finalize once.
+    def self.finalize(trades, output_dir: "data/research")
+      return {} if trades.empty?
+
       # 3. V5 Non-linear & Linear Feature Importance, Resampling and Walk-Forward validations
       correlations = Research::FeatureImportance.analyze(trades, strike_label: "ATM")
       nonlinear_importance = Research::NonlinearFeatureImportance.analyze(trades, strike_label: "ATM")

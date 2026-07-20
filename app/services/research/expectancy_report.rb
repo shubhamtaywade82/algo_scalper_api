@@ -72,7 +72,12 @@ module Research
           sample_size: group.size,
           avg_return_pct: average(returns),
           avg_end_return_pct: average(end_returns),
+          # win_rate_pct is peak-based (return_pct = peak_return_pct, the max favorable
+          # excursion) and is virtually always >= 0 over a multi-hour window — it reads
+          # ~100% for almost any bucket and isn't a meaningful "would this have made
+          # money" signal. end_win_rate_pct is the realized-return-based counterpart.
           win_rate_pct: returns.empty? ? nil : ((wins.to_f / returns.size) * 100).round(2),
+          end_win_rate_pct: end_returns.empty? ? nil : ((end_returns.count(&:positive?).to_f / end_returns.size) * 100).round(2),
           avg_time_to_peak_minutes: average(times),
           avg_drawdown_pct: average(drawdowns)
         }

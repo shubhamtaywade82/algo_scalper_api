@@ -68,7 +68,7 @@ development:
 
   market_vix_gate_refresh:
     class: Market::VixGateJob
-    schedule: every 15 minutes during market hours
+    schedule: every 15 minutes
     queue_name: background
     priority: 6
     description: "Refresh India VIX gate during session (RBI/macro spikes)"
@@ -82,7 +82,7 @@ development:
 
   options_buying_chain_radar_refresh:
     class: OptionsBuying::ChainRadarJob
-    schedule: every 30 minutes during market hours
+    schedule: every 30 minutes
     queue_name: background
     priority: 8
     description: "Refresh option chain radar during session"
@@ -169,7 +169,7 @@ development:
 
   alpha_scanner:
     class: AlphaScanJob
-    schedule: every 5 minutes during market hours
+    schedule: every 5 minutes
     queue_name: background
     priority: 10
     description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
@@ -216,7 +216,7 @@ development:
   ai_trading_signal_nifty_refresh:
     class: Agents::TradingSignalJob
     args: ["NIFTY", "5"]
-    schedule: every 30 minutes during market hours
+    schedule: every 30 minutes
     queue_name: background
     priority: 8
     description: "AI agent pipeline intraday refresh for NIFTY every 30 minutes"
@@ -232,7 +232,7 @@ development:
   ai_trading_signal_banknifty_refresh:
     class: Agents::TradingSignalJob
     args: ["BANKNIFTY", "5"]
-    schedule: every 30 minutes during market hours
+    schedule: every 30 minutes
     queue_name: background
     priority: 8
     description: "AI agent pipeline intraday refresh for BANKNIFTY every 30 minutes"
@@ -296,7 +296,7 @@ production:
 
   market_vix_gate_refresh:
     class: Market::VixGateJob
-    schedule: every 15 minutes during market hours
+    schedule: every 15 minutes
     queue_name: background
     priority: 6
     description: "Refresh India VIX gate during session (RBI/macro spikes)"
@@ -310,7 +310,7 @@ production:
 
   options_buying_chain_radar_refresh:
     class: OptionsBuying::ChainRadarJob
-    schedule: every 30 minutes during market hours
+    schedule: every 30 minutes
     queue_name: background
     priority: 8
     description: "Refresh option chain radar during session"
@@ -401,7 +401,7 @@ production:
 
   alpha_scanner:
     class: AlphaScanJob
-    schedule: every 5 minutes during market hours
+    schedule: every 5 minutes
     queue_name: background
     priority: 10
     description: "Autonomous Alpha Strategy scanner — runs all enabled modules across NIFTY, BANKNIFTY, and SENSEX"
@@ -455,7 +455,7 @@ production:
   ai_trading_signal_nifty_refresh:
     class: Agents::TradingSignalJob
     args: ["NIFTY", "5"]
-    schedule: every 30 minutes during market hours
+    schedule: every 30 minutes
     queue_name: background
     priority: 8
     description: "AI agent pipeline intraday refresh for NIFTY every 30 minutes"
@@ -471,7 +471,7 @@ production:
   ai_trading_signal_banknifty_refresh:
     class: Agents::TradingSignalJob
     args: ["BANKNIFTY", "5"]
-    schedule: every 30 minutes during market hours
+    schedule: every 30 minutes
     queue_name: background
     priority: 8
     description: "AI agent pipeline intraday refresh for BANKNIFTY every 30 minutes"

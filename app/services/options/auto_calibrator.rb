@@ -129,7 +129,8 @@ module Options
           high: data['high'][index].to_f,
           low: data['low'][index].to_f,
           close: data['close'][index].to_f,
-          spot: data['spot'][index].to_f
+          spot: data['spot'][index].to_f,
+          strike: data['strike']&.[](index)&.to_f
         }
       end
     rescue StandardError => e
@@ -140,6 +141,8 @@ module Options
     end
 
     def build_row(ce_candles, pe_candles)
+      ce_candles = same_strike_candles(ce_candles)
+      pe_candles = same_strike_candles(pe_candles)
       ce_stats = ce_candles.any? ? cycle_stats(ce_candles) : nil
       pe_stats = pe_candles.any? ? cycle_stats(pe_candles) : nil
       return nil unless ce_stats || pe_stats
@@ -168,6 +171,19 @@ module Options
         'pe_midday_oc' => pe_sess.dig('Midday', :oc_pct).to_f,
         'pe_afternoon_oc' => pe_sess.dig('Afternoon', :oc_pct).to_f
       }
+    end
+
+    # DhanHQ's expired-options "ATM"/"ATM+N" series re-resolves the strike per bar as spot
+    # drifts within the fetch window — a rolling composite, not one contract's continuous
+    # price. Pin to the strike quoted at the first bar (window open) so cycle_stats/session
+    # breakdowns/correlation all describe the same held contract, not a spliced series.
+    def same_strike_candles(candles)
+      return candles if candles.blank?
+
+      entry_strike = candles.first[:strike]
+      return candles if entry_strike.nil?
+
+      candles.select { |c| c[:strike].to_i == entry_strike.to_i }
     end
 
     def cycle_stats(candles)

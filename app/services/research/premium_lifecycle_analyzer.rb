@@ -19,7 +19,7 @@ module Research
         entry_index = sorted.index { |bar| bar[:ts] >= entry_ts }
         return { status: "no_data" } if entry_index.nil?
 
-        window = sorted[entry_index..]
+        window = same_strike_window(sorted[entry_index..])
         entry_bar = window.first
         entry_premium = entry_bar[:close].to_f
         return { status: "no_data" } if entry_premium <= 0
@@ -46,6 +46,19 @@ module Research
       end
 
       private
+
+      # DhanHQ's expired-options "ATM"/"ATM+N" series re-resolves the strike per bar as spot
+      # drifts (confirmed empirically: the same session's series can flip between adjacent
+      # strikes multiple times an hour) — it's a rolling composite, not one contract's
+      # continuous price. A real position holds one strike from entry onward, so peak/decay
+      # must only look at bars still quoting the entry bar's actual_strike. No-ops when
+      # actual_strike isn't present on the bars (older callers / synthetic fixtures).
+      def same_strike_window(window)
+        entry_strike = window.first[:actual_strike]
+        return window if entry_strike.nil?
+
+        window.select { |bar| bar[:actual_strike].to_i == entry_strike.to_i }
+      end
 
       # Peak is measured off intracandle highs (a premium can touch a level
       # without closing there); ties resolve to the earliest occurrence.

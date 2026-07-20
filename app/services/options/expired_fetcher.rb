@@ -3,10 +3,11 @@
 # app/services/options/expired_fetcher.rb
 module Options
   class ExpiredFetcher < ApplicationService
-    def initialize(symbol:, expiry_flag: 'WEEK', date: Time.zone.today)
+    def initialize(symbol:, expiry_flag: 'WEEK', date: Time.zone.today, interval: '5')
       @symbol = symbol
       @expiry_flag = normalize_expiry_flag(symbol, expiry_flag)
       @date = date
+      @interval = interval.to_s
     end
 
     # Fetches CE and PE OHLC arrays
@@ -35,7 +36,7 @@ module Options
     # end
 
     def call
-      cache_key = "expired_option_data:#{@symbol}:#{@date}:#{@expiry_flag}"
+      cache_key = "expired_option_data:#{@symbol}:#{@date}:#{@expiry_flag}:#{@interval}"
 
       cached_data = Rails.cache.read(cache_key)
       return cached_data if cached_data.present?
@@ -48,7 +49,7 @@ module Options
       result = { ce: 'CALL', pe: 'PUT' }.to_h do |side_key, opt_type|
         data = DhanHQ::Models::ExpiredOptionsData.fetch(
           exchange_segment: segment_for(@symbol),
-          interval: '5',
+          interval: @interval,
           security_id: security_id_for(@symbol),
           instrument: 'OPTIDX',
           expiry_flag: @expiry_flag,

@@ -193,9 +193,11 @@ RSpec.describe Research::First15mEngine do
     end
   end
 
-  describe Research::ResearchReportGenerator do
-    it "correctly aggregates V5 metrics and outputs CSV/JSON reports" do
-      mock_trade = {
+  # Shared by the ResearchReportGenerator spec below and the .finalize spec, which both
+  # need one full, realistic trade opportunity hash (finalize actually runs the real
+  # FeatureImportance/StatisticalValidator/HypothesisEngine pipeline on it, not stubs).
+  def sample_trade_opportunity
+    {
         date: base_time.to_date,
         breakout_type: :bullish,
         entry_time: base_time + 16.minutes,
@@ -241,7 +243,12 @@ RSpec.describe Research::First15mEngine do
           "ATM+1" => { mfe_pct: 50.0, mae_pct: -5.0, drawdown_from_peak_pct: 10.0, trade_elasticity: 1.2, gamma_efficiency: 1.0, expansion_quality_score: 70, entry_price: 60.0, peak_price: 90.0, time_to_peak_minutes: 20, peak_time: base_time + 30.minutes, exhaustion: { peak_exhaustion_score: 40.0, exhaustion_time: nil, divergence_detected: false }, thresholds: { time_to_50: nil, time_above_50: nil }, horizons: { mfe_5m: 10.0, mfe_10m: 15.0, mfe_15m: 20.0, mfe_30m: 25.0, mfe_60m: 30.0 }, exits: { hybrid_divergence: { return_pct: 40.0, capture_efficiency: 0.80, opportunity_retention_ratio: 0.80, lost_profit_points: 10.0, leakage_time: 5, leakage_speed: 2.0 }, trail_20: { return_pct: 30.0, capture_efficiency: 0.60, opportunity_retention_ratio: 0.60, lost_profit_points: 20.0, leakage_time: 5, leakage_speed: 4.0 }, momentum_decay: { return_pct: 35.0, capture_efficiency: 0.70, opportunity_retention_ratio: 0.70, lost_profit_points: 15.0, leakage_time: 5, leakage_speed: 3.0 } } },
           "ATM+2" => { mfe_pct: 40.0, mae_pct: -5.0, drawdown_from_peak_pct: 10.0, trade_elasticity: 1.0, gamma_efficiency: 0.8, expansion_quality_score: 65, entry_price: 30.0, peak_price: 42.0, time_to_peak_minutes: 20, peak_time: base_time + 30.minutes, exhaustion: { peak_exhaustion_score: 40.0, exhaustion_time: nil, divergence_detected: false }, thresholds: { time_to_50: nil, time_above_50: nil }, horizons: { mfe_5m: 10.0, mfe_10m: 15.0, mfe_15m: 20.0, mfe_30m: 25.0, mfe_60m: 30.0 }, exits: { hybrid_divergence: { return_pct: 30.0, capture_efficiency: 0.75, opportunity_retention_ratio: 0.75, lost_profit_points: 10.0, leakage_time: 5, leakage_speed: 2.0 }, trail_20: { return_pct: 20.0, capture_efficiency: 0.50, opportunity_retention_ratio: 0.50, lost_profit_points: 20.0, leakage_time: 5, leakage_speed: 4.0 }, momentum_decay: { return_pct: 25.0, capture_efficiency: 0.62, opportunity_retention_ratio: 0.62, lost_profit_points: 15.0, leakage_time: 5, leakage_speed: 3.0 } } }
         }
-      }
+    }
+  end
+
+  describe Research::ResearchReportGenerator do
+    it "correctly aggregates V5 metrics and outputs CSV/JSON reports" do
+      mock_trade = sample_trade_opportunity
 
       correlations = { gap_pct: 0.8 }
       val_reports = {
@@ -263,6 +270,19 @@ RSpec.describe Research::First15mEngine do
 
       expect(report[:total_trade_opportunities]).to eq(1)
       expect(report[:feature_importance][:gap_pct]).to eq(0.8)
+    end
+  end
+
+  describe ".finalize" do
+    it "runs the real aggregate/hypothesis/persistence pipeline on already-built trades" do
+      result = described_class.finalize([sample_trade_opportunity], output_dir: "tmp/test_research_finalize")
+
+      expect(result[:total_trade_opportunities]).to eq(1)
+      expect(result[:hypotheses]).to be_an(Array)
+    end
+
+    it "returns {} for an empty trades array" do
+      expect(described_class.finalize([], output_dir: "tmp/test_research_finalize")).to eq({})
     end
   end
 

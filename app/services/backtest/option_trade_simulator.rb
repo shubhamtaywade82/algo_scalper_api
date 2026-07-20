@@ -11,10 +11,20 @@ module Backtest
     # @return [Hash, nil] position hash or nil if no option data
     def enter_position(signal, candle, index)
       signal_type = signal[:type]
-      option_data = fetch_option_series(signal_type, candle.timestamp)
-      return if option_data.blank?
+      raw_option_data = fetch_option_series(signal_type, candle.timestamp)
+      return if raw_option_data.blank?
 
-      entry_premium = fetch_premium_price(option_data, candle.timestamp)
+      # DhanHQ's expired-options "ATM" series re-resolves the strike per bar as spot drifts —
+      # it's a rolling composite of whichever strike was nearest at each instant, not one
+      # contract's continuous price (flips between adjacent strikes multiple times an hour on
+      # real data). Pin to the strike at entry and only track that strike going forward, or
+      # SL/target/trailing checks below are reading a spliced series, not the held position.
+      entry_bar = raw_option_data.min_by { |b| (b[:timestamp] - candle.timestamp).abs }
+      return if entry_bar.nil?
+
+      entry_strike = entry_bar[:strike]
+      option_data = entry_strike.nil? ? raw_option_data : raw_option_data.select { |b| b[:strike].to_i == entry_strike.to_i }
+      entry_premium = entry_bar[:close].to_f
 
       {
         signal_type: signal_type,

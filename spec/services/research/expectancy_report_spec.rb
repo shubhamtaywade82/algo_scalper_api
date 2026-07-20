@@ -3,12 +3,13 @@
 require 'rails_helper'
 
 RSpec.describe Research::ExpectancyReport do
-  def make_lifecycle(trend:, orb:, return_pct:, drawdown_pct:, minutes_to_peak:, phase_regime: {})
+  def make_lifecycle(trend:, orb:, return_pct:, drawdown_pct:, minutes_to_peak:, phase_regime: {}, end_return_pct: nil)
     regime = { 'trend' => trend, 'opening_range_breakout' => orb }.merge(phase_regime)
     Research::PremiumLifecycle.create!(
       underlying_symbol: 'NIFTY', expiry_flag: 'WEEK', option_type: 'CE', strike_label: 'ATM', interval: '5',
       entry_ts: Time.current + rand(10_000).seconds, status: 'computed',
-      peak_return_pct: return_pct, max_drawdown_after_peak_pct: drawdown_pct, minutes_to_peak: minutes_to_peak,
+      peak_return_pct: return_pct, end_return_pct: end_return_pct, max_drawdown_after_peak_pct: drawdown_pct,
+      minutes_to_peak: minutes_to_peak,
       underlying_context: { 'entry' => { 'regime' => regime }, 'peak' => { 'regime' => {} } }
     )
   end
@@ -16,11 +17,11 @@ RSpec.describe Research::ExpectancyReport do
   describe '.call' do
     it 'groups lifecycles by the requested dimensions and computes avg return / win rate / avg drawdown' do
       make_lifecycle(trend: 'strong_bullish', orb: 'breakout_up', return_pct: 140.0, drawdown_pct: 20.0,
-                      minutes_to_peak: 60)
+                     minutes_to_peak: 60)
       make_lifecycle(trend: 'strong_bullish', orb: 'breakout_up', return_pct: 100.0, drawdown_pct: 30.0,
-                      minutes_to_peak: 80)
+                     minutes_to_peak: 80)
       make_lifecycle(trend: 'neutral', orb: 'inside_range', return_pct: -10.0, drawdown_pct: 40.0,
-                      minutes_to_peak: 30)
+                     minutes_to_peak: 30)
 
       buckets = described_class.call(scope: Research::PremiumLifecycle.all, dimensions: %w[trend opening_range_breakout])
 
@@ -38,11 +39,28 @@ RSpec.describe Research::ExpectancyReport do
       expect(worst[:win_rate_pct]).to eq(0.0)
     end
 
+    it 'computes end_win_rate_pct off realized end-of-window return, not peak_return_pct' do
+      # peak_return_pct (max favorable excursion) is virtually always positive over a
+      # multi-hour window, so win_rate_pct is a near-useless "did it ever tick up" signal.
+      # Both lifecycles here have a large positive peak_return_pct (so win_rate_pct reads
+      # 100%) but one never recovers by end_ts (end_return_pct negative) — end_win_rate_pct
+      # must reflect that, not just echo win_rate_pct.
+      make_lifecycle(trend: 'strong_bullish', orb: 'breakout_up', return_pct: 140.0, drawdown_pct: 20.0,
+                     minutes_to_peak: 60, end_return_pct: 30.0)
+      make_lifecycle(trend: 'strong_bullish', orb: 'breakout_up', return_pct: 100.0, drawdown_pct: 30.0,
+                     minutes_to_peak: 80, end_return_pct: -15.0)
+
+      bucket = described_class.call(scope: Research::PremiumLifecycle.all, dimensions: %w[trend]).first
+
+      expect(bucket[:win_rate_pct]).to eq(100.0)
+      expect(bucket[:end_win_rate_pct]).to eq(50.0)
+    end
+
     it 'ranks buckets by avg_return_pct descending' do
       make_lifecycle(trend: 'strong_bearish', orb: 'breakout_down', return_pct: 5.0, drawdown_pct: 10.0,
-                      minutes_to_peak: 20)
+                     minutes_to_peak: 20)
       make_lifecycle(trend: 'strong_bullish', orb: 'breakout_up', return_pct: 200.0, drawdown_pct: 15.0,
-                      minutes_to_peak: 40)
+                     minutes_to_peak: 40)
 
       buckets = described_class.call(scope: Research::PremiumLifecycle.all, dimensions: %w[trend opening_range_breakout])
 

@@ -124,6 +124,21 @@ module Research
       end
     end
 
+    # DhanHQ's expired-options "ATM" series re-resolves the strike per bar as spot drifts —
+    # a rolling composite of whichever strike was nearest at each instant, not one contract's
+    # continuous price (confirmed empirically: flips between adjacent strikes multiple times
+    # an hour). Research::OptionBar persists actual_strike per row precisely so callers can
+    # pin to one contract; this drops bars whose actual_strike differs from the day's first
+    # bar instead of silently splicing across strikes.
+    def self.same_strike_bars(bars)
+      return bars if bars.blank?
+
+      entry_strike = bars.first.actual_strike
+      return bars if entry_strike.nil?
+
+      bars.select { |b| b.actual_strike.to_i == entry_strike.to_i }
+    end
+
     def self.load_or_simulate_options(symbol, option_type, strike, date, nifty_candles, strike_label: "ATM", strict: true, db_only: false)
       # Try fetching from DB first
       expiry_flag = "WEEK"
@@ -143,7 +158,7 @@ module Research
           min = (ist.hour * 60) + ist.min
           min.between?(555, 930)
         end
-        return daily_bars.map do |b|
+        return same_strike_bars(daily_bars).map do |b|
           {
             timestamp: b.ts,
             open: b.open.to_f,
@@ -177,7 +192,7 @@ module Research
             min = (ist.hour * 60) + ist.min
             min.between?(555, 930)
           end
-          return daily_bars.map do |b|
+          return same_strike_bars(daily_bars).map do |b|
             {
               timestamp: b.ts,
               open: b.open.to_f,

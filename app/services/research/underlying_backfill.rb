@@ -7,7 +7,7 @@ module Research
     CHUNK_DAYS = 75
 
     def self.call(symbol: "NIFTY", lookback_days: 365)
-      instrument = Instrument.find_by(exchange: "nse", segment: "index", symbol_name: symbol)
+      instrument = Instrument.segment_index.find_by(symbol_name: symbol)
       return existing_day_count(symbol) unless instrument
 
       existing = Candles::Record.where(instrument_key: symbol, timeframe: "1m")

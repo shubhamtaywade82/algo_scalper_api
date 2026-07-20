@@ -53,8 +53,8 @@ class HistoricalOptionsAnalyzer
       from_str = w[:from].strftime('%Y-%m-%d')
       to_str   = w[:to].strftime('%Y-%m-%d')
 
-      ce_raw = fetch_options(security_id, segment, from_str, to_str, 'CALL')
-      pe_raw = fetch_options(security_id, segment, from_str, to_str, 'PUT')
+      ce_raw = same_strike_candles(fetch_options(security_id, segment, from_str, to_str, 'CALL'))
+      pe_raw = same_strike_candles(fetch_options(security_id, segment, from_str, to_str, 'PUT'))
 
       ce_stat = cycle_stats(ce_raw)
       pe_stat = cycle_stats(pe_raw)
@@ -156,6 +156,20 @@ class HistoricalOptionsAnalyzer
   rescue StandardError => e
     Rails.logger.warn("[HistoricalOptionsAnalyzer] #{@symbol} #{opt_type}: #{e.message}")
     []
+  end
+
+  # DhanHQ's expired-options "ATM" series re-resolves the strike per bar as spot drifts within
+  # the fetch window (a full week here) — a rolling composite of whichever strike was nearest
+  # at each instant, not one contract's continuous price. Pin to the strike quoted at the
+  # window's first bar so cycle/day/session/correlation stats all describe the same held
+  # contract; bars where a different strike momentarily resolved are dropped, not followed.
+  def same_strike_candles(candles)
+    return candles if candles.blank?
+
+    entry_strike = candles.first[:strike]
+    return candles if entry_strike.nil?
+
+    candles.select { |c| c[:strike].to_i == entry_strike.to_i }
   end
 
   def cycle_stats(candles)
