@@ -41,11 +41,12 @@ module Backtest
 
     attr_reader :symbol, :days_back, :trade_log, :daily_log, :instrument, :params, :raw_entries, :trading_type
 
-    def initialize(symbol:, days_back: 90, params: {}, trading_type: :options)
+    def initialize(symbol:, days_back: 90, params: {}, trading_type: :options, entry_interval: '5')
       @symbol = symbol.to_s.upcase
       @trading_type = trading_type.to_sym
       raise "trading_type must be one of #{TRADING_TYPES}" unless TRADING_TYPES.include?(@trading_type)
 
+      @entry_interval = entry_interval.to_s
       @days_back = days_back
       @instrument = Instrument.segment_index.find_by(symbol_name: @symbol)
       raise "Instrument #{@symbol} not found" unless @instrument
@@ -61,18 +62,18 @@ module Backtest
       @daily_log = []
     end
 
-    def self.call(symbol:, days_back: 90, params: {}, trading_type: :options)
-      service = new(symbol: symbol, days_back: days_back, params: params, trading_type: trading_type)
+    def self.call(symbol:, days_back: 90, params: {}, trading_type: :options, entry_interval: '5')
+      service = new(symbol: symbol, days_back: days_back, params: params, trading_type: trading_type, entry_interval: entry_interval)
       service.execute
       service
     end
 
     # Process-local memoization so a sweep can grab the same collected entries for a symbol
     # across many parameter combos without re-hitting the live API for each one.
-    def self.for_sweep(symbol:, days_back: 90, trading_type: :options)
+    def self.for_sweep(symbol:, days_back: 90, trading_type: :options, entry_interval: '5')
       @sweep_cache ||= {}
-      key = [symbol.to_s.upcase, days_back, trading_type]
-      @sweep_cache[key] ||= new(symbol: symbol, days_back: days_back, trading_type: trading_type).tap(&:collect_entries)
+      key = [symbol.to_s.upcase, days_back, trading_type, entry_interval]
+      @sweep_cache[key] ||= new(symbol: symbol, days_back: days_back, trading_type: trading_type, entry_interval: entry_interval).tap(&:collect_entries)
     end
 
     def self.clear_sweep_cache!
@@ -103,14 +104,8 @@ module Backtest
       min5_data = fetch_data('5')
       min1_data = fetch_data('1')
 
-      unless min5_data
-        log_error('No 5m data')
-        @entries_collected = true
-        return self
-      end
-
-      unless min1_data
-        log_error('No 1m data')
+      unless min5_data && min1_data
+        log_error('Missing candle data')
         @entries_collected = true
         return self
       end
@@ -119,16 +114,21 @@ module Backtest
       series_1m = build_series(min1_data, '1')
       @series_1m = series_1m
 
-      $stdout.puts "5m candles: #{series_5m.candles.size}, 1m candles: #{@series_1m.candles.size}"
+      days_5m = group_by_date(series_5m)
+      entry_series = @entry_interval == '1' ? series_1m : series_5m
+      days_entry = group_by_date(entry_series)
 
-      days = group_by_date(series_5m)
-      $stdout.puts "Trading days found: #{days.size}"
+      $stdout.puts "#{@entry_interval}m candles: #{entry_series.candles.size}, 5m(CPR): #{series_5m.candles.size}, 1m: #{series_1m.candles.size}"
+      $stdout.puts "Trading days found: #{days_entry.size}"
 
-      days.each_with_index do |(date, candles_5m), idx|
+      days_entry.each_with_index do |(date, candles_entry), idx|
         next if idx.zero?
 
-        prev_date = days.keys[idx - 1]
-        collect_day_entries(date, candles_5m, prev_date, days[prev_date], series_1m)
+        prev_date = days_entry.keys[idx - 1]
+        prev_5m = days_5m[prev_date]
+        next unless prev_5m
+
+        collect_day_entries(date, candles_entry, prev_date, prev_5m, series_1m)
       end
 
       @entries_collected = true
