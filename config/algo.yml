@@ -75,12 +75,7 @@ options_buying:
     refresh_minutes: 30
     subscribe_sync_seconds: 30      # daemon polls radar set this often to subscribe strikes to the WS feed
   execution:
-    spread_enabled: true          # BidAskSpreadGuard — per-index overrides in indices[].execution
     max_bid_ask_spread_pct: 0.015
-    tcm_enabled: false            # TransactionCostGuard (pre-trade net-edge gate) only runs when true
-    min_net_edge_pct: 0.0         # block when expected edge − round-trip cost < this (DECIMAL)
-    expected_edge_pct: 0.30       # fallback expected premium edge when signal injects none (DECIMAL)
-    slippage_pct_per_side: 0.001  # modelled slippage per fill; charged on entry + exit
     limit_chasing:
       enabled: true
       max_chase_seconds: 15
@@ -198,13 +193,10 @@ sizing:
   # allocation_cap_pct: 0.30
 
 feature_flags:
-  enable_direction_before_chain: true
-  enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
   enable_auto_subscribe_unsubscribe: true
   enable_demand_driven_services: true
   enable_underlying_aware_exits: true
   enable_peak_drawdown_activation: true
-  auto_paper_on_insufficient_balance: false
 
 # DhanHQ broker settings
 dhanhq:
