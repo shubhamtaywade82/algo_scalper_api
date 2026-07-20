@@ -37,10 +37,15 @@ module Backtest
     MAX_FETCH_SPAN_DAYS = 89
     RAW_CANDLE_FIELDS = %w[open high low close volume timestamp].freeze
 
-    attr_reader :symbol, :days_back, :trade_log, :daily_log, :instrument, :params, :raw_entries
+    TRADING_TYPES = %i[options futures].freeze
 
-    def initialize(symbol:, days_back: 90, params: {})
+    attr_reader :symbol, :days_back, :trade_log, :daily_log, :instrument, :params, :raw_entries, :trading_type
+
+    def initialize(symbol:, days_back: 90, params: {}, trading_type: :options)
       @symbol = symbol.to_s.upcase
+      @trading_type = trading_type.to_sym
+      raise "trading_type must be one of #{TRADING_TYPES}" unless TRADING_TYPES.include?(@trading_type)
+
       @days_back = days_back
       @instrument = Instrument.segment_index.find_by(symbol_name: @symbol)
       raise "Instrument #{@symbol} not found" unless @instrument
@@ -56,18 +61,18 @@ module Backtest
       @daily_log = []
     end
 
-    def self.call(symbol:, days_back: 90, params: {})
-      service = new(symbol: symbol, days_back: days_back, params: params)
+    def self.call(symbol:, days_back: 90, params: {}, trading_type: :options)
+      service = new(symbol: symbol, days_back: days_back, params: params, trading_type: trading_type)
       service.execute
       service
     end
 
     # Process-local memoization so a sweep can grab the same collected entries for a symbol
     # across many parameter combos without re-hitting the live API for each one.
-    def self.for_sweep(symbol:, days_back: 90)
+    def self.for_sweep(symbol:, days_back: 90, trading_type: :options)
       @sweep_cache ||= {}
-      key = [symbol.to_s.upcase, days_back]
-      @sweep_cache[key] ||= new(symbol: symbol, days_back: days_back).tap(&:collect_entries)
+      key = [symbol.to_s.upcase, days_back, trading_type]
+      @sweep_cache[key] ||= new(symbol: symbol, days_back: days_back, trading_type: trading_type).tap(&:collect_entries)
     end
 
     def self.clear_sweep_cache!
@@ -112,8 +117,9 @@ module Backtest
 
       series_5m = build_series(min5_data, '5')
       series_1m = build_series(min1_data, '1')
+      @series_1m = series_1m
 
-      $stdout.puts "5m candles: #{series_5m.candles.size}, 1m candles: #{series_1m.candles.size}"
+      $stdout.puts "5m candles: #{series_5m.candles.size}, 1m candles: #{@series_1m.candles.size}"
 
       days = group_by_date(series_5m)
       $stdout.puts "Trading days found: #{days.size}"
@@ -310,7 +316,7 @@ module Backtest
         signal = evaluate_signal(prefix, cpr, vp, candle)
         next unless signal
 
-        entry = build_entry(signal, candle, day_close_time)
+        entry = build_entry(signal, candle, day_close_time, series_1m)
         next unless entry
 
         @raw_entries << entry
@@ -320,10 +326,35 @@ module Backtest
       $stdout.puts "  Entries: #{entries_today}"
     end
 
-    def build_entry(signal, candle, day_close_time)
-      # 1-minute option premium bars, not 5-minute — exit simulation needs finer granularity
-      # than the 5m index candles that drive signal generation, or SL/target/giveback triggers
-      # would be missed between bar closes.
+    def build_entry(signal, candle, day_close_time, series_1m = nil)
+      if @trading_type == :futures
+        build_futures_entry(signal, candle, day_close_time, series_1m)
+      else
+        build_options_entry(signal, candle, day_close_time)
+      end
+    end
+
+    def build_futures_entry(signal, candle, day_close_time, series_1m)
+      day_1m = series_1m.candles.select { |c| c.timestamp.to_date == candle.timestamp.to_date }
+      entry_bar = nearest_index_bar(day_1m, candle.timestamp)
+      return nil if entry_bar.nil?
+
+      exit_bars = day_1m
+                  .select { |b| b.timestamp > entry_bar.timestamp && b.timestamp <= day_close_time }
+                  .map { |b| { timestamp: b.timestamp, close: b.close } }
+
+      {
+        signal_type: signal[:type],
+        entry_time: candle.timestamp,
+        entry_price: entry_bar.close,
+        entry_index_price: candle.close,
+        exit_bars: exit_bars,
+        day_close_time: day_close_time,
+        reason: signal[:reason]
+      }
+    end
+
+    def build_options_entry(signal, candle, day_close_time)
       option_data = fetch_option_data(signal[:type], candle.timestamp)
       return nil if option_data.blank?
 
@@ -373,26 +404,31 @@ module Backtest
 
       tag = "CPR:#{cpr[:width_type]} C:#{chop[:regime]}(#{chop[:value]}) VI:#{vi[:state]}(#{vi[:vi_plus]}/#{vi[:vi_minus]}) MFI:#{mfi&.dig(:state)}(#{mfi&.dig(:value)})"
 
+      long_type  = @trading_type == :futures ? :long : :ce
+      short_type = @trading_type == :futures ? :short : :pe
+      long_label  = long_type.to_s.upcase
+      short_label = short_type.to_s.upcase
+
       # Tier 1: fresh crossover (strongest signal)
       if crossover == :bullish_crossover
         return nil if near_hvn?(price, vp[:hvns], :bullish)
-        return { type: :ce, price: price, reason: "CE X ↑ #{tag}" }
+        return { type: long_type, price: price, reason: "#{long_label} X ↑ #{tag}" }
       end
 
       if crossover == :bearish_crossover
         return nil if near_hvn?(price, vp[:hvns], :bearish)
-        return { type: :pe, price: price, reason: "PE X ↓ #{tag}" }
+        return { type: short_type, price: price, reason: "#{short_label} X ↓ #{tag}" }
       end
 
       # Tier 2: sustained VI direction while trending (no crossover needed)
       if vi[:state] == :bullish
         return nil if near_hvn?(price, vp[:hvns], :bullish)
-        return { type: :ce, price: price, reason: "CE VI #{tag}" }
+        return { type: long_type, price: price, reason: "#{long_label} VI #{tag}" }
       end
 
       if vi[:state] == :bearish
         return nil if near_hvn?(price, vp[:hvns], :bearish)
-        return { type: :pe, price: price, reason: "PE VI #{tag}" }
+        return { type: short_type, price: price, reason: "#{short_label} VI #{tag}" }
       end
 
       nil
@@ -425,10 +461,9 @@ module Backtest
         giveback_active: false
       }
 
-      bars = same_strike_bars(entry)
+      bars = exit_bars_for(entry)
              .select { |b| b[:timestamp] > entry[:entry_time] && b[:timestamp] <= entry[:day_close_time] }
              .sort_by { |b| b[:timestamp] }
-
       bars.each do |bar|
         premium = bar[:close]
         if premium > position[:hwm]
@@ -465,7 +500,7 @@ module Backtest
     end
 
     def force_exit(entry, position)
-      last_bar = same_strike_bars(entry).select { |b| b[:timestamp] <= entry[:day_close_time] }.max_by { |b| b[:timestamp] }
+      last_bar = exit_bars_for(entry).select { |b| b[:timestamp] <= entry[:day_close_time] }.max_by { |b| b[:timestamp] }
       final_premium = last_bar ? last_bar[:close] : position[:entry_price] * 0.5
       position[:hwm] = final_premium if final_premium > position[:hwm]
       build_exit(entry, position, final_premium, entry[:day_close_time], 'end_of_day')
@@ -532,6 +567,16 @@ module Backtest
     # resolved are skipped, not followed), but tracks the actual contract instead of a splice.
     def same_strike_bars(entry)
       entry[:option_data].select { |b| b[:strike].to_i == entry[:entry_strike].to_i }
+    end
+
+    def exit_bars_for(entry)
+      return entry[:exit_bars] if entry[:exit_bars]
+
+      same_strike_bars(entry)
+    end
+
+    def nearest_index_bar(bars, timestamp)
+      bars.min_by { |b| (b.timestamp - timestamp).abs }
     end
 
     # ── Helpers ────────────────────────────────────────────────────────────
