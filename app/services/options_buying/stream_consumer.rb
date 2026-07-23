@@ -67,7 +67,7 @@ module OptionsBuying
         messages = StateStore.xreadgroup(security_id, consumer_name: CONSUMER_NAME, count: 5)
         next if messages.blank?
 
-        stream_messages = messages[StateStore.stream_key_for(security_id)] || messages.values.first
+        stream_messages = messages[StateStore.stream_key(security_id)] || messages.values.first
         stream_messages&.each do |message_id, fields|
           process_message!(security_id, message_id, fields)
           count += 1
@@ -79,7 +79,7 @@ module OptionsBuying
     def process_message!(security_id, message_id, fields)
       return if StateStore.kill_switch_active?
 
-      tick = StateStore.parse_stream_message(fields)
+      tick = StateStore.parse_stream_entry(fields)
       index_key = index_key_for_security(security_id)
       return unless index_key
 

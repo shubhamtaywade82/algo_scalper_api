@@ -12,7 +12,7 @@ module Risk
         return skip_result unless context.active?
 
         tracker = context.tracker
-        elapsed_seconds = Time.current - tracker.created_at
+        elapsed_seconds = context.current_time - tracker.created_at
 
         # Resolve DTE-scaled time limit
         dte = days_to_expiry(tracker)

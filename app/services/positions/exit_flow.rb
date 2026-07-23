@@ -25,8 +25,14 @@ module Positions
         pnl_snapshot = resolve_final_pnl(exit_price: exit_px, cache_data: cache_data)
 
         metadata = Live::PositionRuntimeCache.instance.flush_to_meta!({}, tracker.id) || {}
-        resolved_reason = metadata["exit_reason"].presence || metadata["exit_triggered_at"].presence || FALLBACK_EXIT_REASON
+        resolved_reason = resolve_exit_reason_string(metadata)
         exit_triggered_at = metadata["exit_triggered_at"].presence || Time.current
+
+        if resolved_reason.to_s.include?('MANUAL')
+          metadata['exit_path'] = 'manual'
+        end
+        tracker.meta = metadata
+
         decision = Positions::ExitAnalyticsBuilder.build(tracker: tracker, exit_price: exit_px).stringify_keys
         decision["exit_reason"] = resolved_reason
         decision["exit_triggered_at"] = exit_triggered_at

@@ -55,13 +55,11 @@ module Ledger
         nil
       end
 
+      # rubocop:disable Rails/Delegate -- `delegate` targets an instance method, not this class method
       def paper_posting?(tracker)
-        return true if tracker.paper?
-
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-      rescue StandardError
-        false
+        EntryPoster.paper_posting?(tracker)
       end
+      # rubocop:enable Rails/Delegate
     end
   end
 end

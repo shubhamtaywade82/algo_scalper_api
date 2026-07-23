@@ -35,7 +35,7 @@ module Api
         render json: {
           success: true,
           backtests: {
-            available: defined?(Backtest::Engine),
+            available: false,
             jobs: BacktestRun.count
           }
         }

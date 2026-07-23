@@ -15,7 +15,7 @@ module Risk
         return skip_result unless context.active?
 
         tracker = context.tracker
-        elapsed = (Time.current - tracker.created_at).to_f / 60.0
+        elapsed = (context.current_time - tracker.created_at).to_f / 60.0
 
         threshold_minutes = (config[:threshold_minutes] || 45).to_f
         return no_action_result if elapsed <= threshold_minutes

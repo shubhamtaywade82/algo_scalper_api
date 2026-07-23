@@ -138,7 +138,7 @@ module Live
                           []
       end
       active_trackers.each do |tracker|
-        inst = tracker.instrument || Instrument.find_by(security_id: tracker.security_id)
+        inst = tracker.instrument || Instrument.find_by_sid_and_segment(security_id: tracker.security_id, segment_code: tracker.segment)
         instruments << inst if inst
       end
 

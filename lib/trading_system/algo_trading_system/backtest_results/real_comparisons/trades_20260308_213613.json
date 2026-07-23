@@ -1,0 +1,93 @@
+[
+  {
+    "symbol": "ATM_CALL",
+    "entry_price": 330.05,
+    "exit_price": 325.09925,
+    "quantity": 75,
+    "entry_time": 1772614200,
+    "exit_time": 1772614800,
+    "pnl": -395.87,
+    "pnl_pct": -1.6,
+    "max_loss": 371.31,
+    "status": "LOSS",
+    "strike": "ATM_CALL"
+  },
+  {
+    "symbol": "ATM+1_CALL",
+    "entry_price": 300.55,
+    "exit_price": 296.04175,
+    "quantity": 83,
+    "entry_time": 1772614200,
+    "exit_time": 1772614800,
+    "pnl": -398.94,
+    "pnl_pct": -1.6,
+    "max_loss": 374.18,
+    "status": "LOSS",
+    "strike": "ATM+1_CALL"
+  },
+  {
+    "symbol": "ATM+1_CALL",
+    "entry_price": 205.5,
+    "exit_price": 202.4175,
+    "quantity": 121,
+    "entry_time": 1772785500,
+    "exit_time": 1772786100,
+    "pnl": -397.66,
+    "pnl_pct": -1.6,
+    "max_loss": 372.98,
+    "status": "LOSS",
+    "strike": "ATM+1_CALL"
+  },
+  {
+    "symbol": "ATM+1_CALL",
+    "entry_price": 182.85,
+    "exit_price": 180.10725,
+    "quantity": 136,
+    "entry_time": 1772787300,
+    "exit_time": 1772787900,
+    "pnl": -397.7,
+    "pnl_pct": -1.6,
+    "max_loss": 373.01,
+    "status": "LOSS",
+    "strike": "ATM+1_CALL"
+  },
+  {
+    "symbol": "ATM+1_CALL",
+    "entry_price": 214.0,
+    "exit_price": 210.79,
+    "quantity": 116,
+    "entry_time": 1772789100,
+    "exit_time": 1772789700,
+    "pnl": -397.0,
+    "pnl_pct": -1.6,
+    "max_loss": 372.36,
+    "status": "LOSS",
+    "strike": "ATM+1_CALL"
+  },
+  {
+    "symbol": "ATM-1_CALL",
+    "entry_price": 239.25,
+    "exit_price": 235.66125,
+    "quantity": 104,
+    "entry_time": 1772786100,
+    "exit_time": 1772787900,
+    "pnl": -397.93,
+    "pnl_pct": -1.6,
+    "max_loss": 373.23,
+    "status": "LOSS",
+    "strike": "ATM-1_CALL"
+  },
+  {
+    "symbol": "ATM-1_CALL",
+    "entry_price": 270.8,
+    "exit_price": 266.738,
+    "quantity": 92,
+    "entry_time": 1772789100,
+    "exit_time": 1772789700,
+    "pnl": -398.43,
+    "pnl_pct": -1.6,
+    "max_loss": 373.7,
+    "status": "LOSS",
+    "strike": "ATM-1_CALL"
+  }
+]

@@ -53,7 +53,10 @@ module Research
 
         begin
           result = Research::PremiumLifecycleAnalyzer.analyze(
-            bars.map { |bar| { ts: bar.ts, open: bar.open.to_f, high: bar.high.to_f, low: bar.low.to_f, close: bar.close.to_f } },
+            bars.map do |bar|
+              { ts: bar.ts, open: bar.open.to_f, high: bar.high.to_f, low: bar.low.to_f, close: bar.close.to_f,
+                actual_strike: bar.actual_strike }
+            end,
             entry_ts: entry_ts, thresholds: thresholds
           )
 

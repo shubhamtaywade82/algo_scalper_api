@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 Rails.application.routes.draw do
+  # Agent dashboard exposes prompts/responses/costs — keep off production unless explicitly enabled.
+  if !Rails.env.production? || ENV['ENABLE_AGENTS_DASHBOARD'] == 'true'
+    mount RubyLLM::Agents::Engine => "/agents"
+  end
   # OpenAPI UI + served spec (disable in production unless ENABLE_SWAGGER_UI=true)
   if !Rails.env.production? || ENV['ENABLE_SWAGGER_UI'] == 'true'
     mount Rswag::Ui::Engine => '/api-docs'

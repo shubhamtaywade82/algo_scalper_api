@@ -25,10 +25,11 @@ RSpec.describe Research::TradeScorer do
     )
   end
 
-  def bar!(ts:, open:, high:, low:, close:)
+  def bar!(ts:, open:, high:, low:, close:, volume: 100_000, actual_strike: nil, oi: nil)
     Research::OptionBar.create!(
       underlying_symbol: 'NIFTY', exchange_segment: 'NSE_FNO', expiry_flag: 'WEEK', option_type: 'CE',
-      strike_label: 'ATM', interval: '5', ts: ts, open: open, high: high, low: low, close: close
+      strike_label: 'ATM', interval: '5', ts: ts, open: open, high: high, low: low, close: close,
+      volume: volume, actual_strike: actual_strike, oi: oi
     )
   end
 
@@ -85,6 +86,38 @@ RSpec.describe Research::TradeScorer do
       candidate.reload
 
       expect(candidate.status).to eq('failed')
+    end
+
+    it 'marks illiquid when entry-bar volume is below the floor' do
+      bar!(ts: Time.zone.parse('2026-07-10 10:15:00'), open: 110, high: 120, low: 108, close: 118, volume: 10)
+
+      described_class.score!(candidate)
+      candidate.reload
+
+      expect(candidate.status).to eq('illiquid')
+      expect(candidate.entry_price).to be_nil
+    end
+
+    it 'marks illiquid when entry price is below the premium floor' do
+      bar!(ts: Time.zone.parse('2026-07-10 10:15:00'), open: 2, high: 3, low: 1, close: 2)
+
+      described_class.score!(candidate)
+      candidate.reload
+
+      expect(candidate.status).to eq('illiquid')
+    end
+
+    it 'drops bars whose actual_strike drifted away from the entry bar (ATM re-resolution)' do
+      bar!(ts: Time.zone.parse('2026-07-10 10:15:00'), open: 110, high: 120, low: 108, close: 118, actual_strike: 25_000) # entry
+      bar!(ts: Time.zone.parse('2026-07-10 10:20:00'), open: 118, high: 300, low: 115, close: 121, actual_strike: 25_050) # drifted strike
+      bar!(ts: Time.zone.parse('2026-07-10 10:25:00'), open: 121, high: 125, low: 119, close: 123, actual_strike: 25_000) # back on strike
+
+      described_class.score!(candidate)
+      candidate.reload
+
+      expect(candidate.status).to eq('scored')
+      expect(candidate.exit_price.to_f).to eq(123.0) # last same-strike bar, not the drifted one
+      expect(candidate.mfe_pct.to_f).to be_within(0.01).of(((125.0 - 110.0) / 110.0) * 100) # 300 high excluded
     end
   end
 end

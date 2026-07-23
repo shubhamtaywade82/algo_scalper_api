@@ -74,7 +74,7 @@ module Options
       score = (oi_change_pct * 0.5) + (vol_ratio * 0.3) + (price_change_pct * 0.2)
 
       # Record current state for next cycle
-      record_strike_state(strike, type, option)
+      record_strike_state(strike, type, option, history: history)
 
       score
     end
@@ -87,7 +87,7 @@ module Options
       Rails.cache.read(cache_key(strike, type))
     end
 
-    def record_strike_state(strike, type, option)
+    def record_strike_state(strike, type, option, history: nil)
       current_state = {
         oi: option['oi'],
         ltp: option['last_price'],
@@ -96,7 +96,7 @@ module Options
       }
 
       # Update rolling averages (simple 5-period for responsiveness)
-      history = get_strike_history(strike, type) || {}
+      history ||= get_strike_history(strike, type) || {}
 
       prev_volumes = history[:volume_history] || []
       prev_volumes << option['volume'].to_f

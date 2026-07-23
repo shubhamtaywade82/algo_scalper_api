@@ -101,10 +101,6 @@ module Positions
       selected
     end
 
-    def config
-      live_view.to_h
-    end
-
     def reset_config!
       nil
     end

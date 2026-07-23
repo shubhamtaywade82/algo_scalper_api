@@ -161,33 +161,6 @@ RSpec.describe Risk::Rules::RuleEngine do
     end
   end
 
-  describe '#add_rule' do
-    it 'adds rule and re-sorts by priority' do
-      engine = described_class.new(rules: [])
-      rule1 = Risk::Rules::TakeProfitRule.new(config: {})
-      rule2 = Risk::Rules::StopLossRule.new(config: {})
-
-      engine.add_rule(rule1)
-      engine.add_rule(rule2)
-
-      expect(engine.rules.map(&:class)).to eq(
-        [Risk::Rules::StopLossRule, Risk::Rules::TakeProfitRule]
-      )
-    end
-  end
-
-  describe '#remove_rule' do
-    it 'removes rule by class' do
-      sl_rule = Risk::Rules::StopLossRule.new(config: {})
-      tp_rule = Risk::Rules::TakeProfitRule.new(config: {})
-
-      engine = described_class.new(rules: [sl_rule, tp_rule])
-      engine.remove_rule(Risk::Rules::StopLossRule)
-
-      expect(engine.rules.map(&:class)).to eq([Risk::Rules::TakeProfitRule])
-    end
-  end
-
   describe '#find_rule' do
     it 'finds rule by class' do
       sl_rule = Risk::Rules::StopLossRule.new(config: {})

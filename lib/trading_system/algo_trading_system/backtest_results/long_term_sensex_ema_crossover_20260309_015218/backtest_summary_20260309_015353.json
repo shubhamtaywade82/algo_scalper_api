@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "created_at": "2026-03-09T01:53:53+05:30",
+    "underlying": "sensex",
+    "strategy": "ema_crossover",
+    "period": "2025-07-08 to 2025-08-07",
+    "capital": 1000000.0
+  },
+  "statistics": {
+    "strikes_analyzed": 3,
+    "total_trades": 1684,
+    "total_pnl": "₹751052.77",
+    "pnl_percentage": "75.11%",
+    "trades_by_strike": {
+      "ATM_CALL": {
+        "trades": 565,
+        "win_rate": "15.4%",
+        "pnl": "₹243897.59",
+        "pnl_pct": "24.39%"
+      },
+      "ATM+1_CALL": {
+        "trades": 579,
+        "win_rate": "16.75%",
+        "pnl": "₹308383.94",
+        "pnl_pct": "30.84%"
+      },
+      "ATM-1_CALL": {
+        "trades": 540,
+        "win_rate": "14.63%",
+        "pnl": "₹198771.24",
+        "pnl_pct": "19.88%"
+      }
+    }
+  }
+}

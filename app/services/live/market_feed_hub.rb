@@ -461,7 +461,9 @@ module Live
       # Keep CandleSeriesCache forming candle up-to-date for index instruments.
       # Feed both 1-min and 5-min caches used by exit/trailing engines and indicators.
       if is_index
-        instrument = Instrument.find_by(security_id: tick[:security_id].to_s)
+        instrument = IndexInstrumentCache.instance.get_or_fetch(
+          key: symbol.to_s.upcase, sid: tick[:security_id].to_s, segment: "IDX_I"
+        )
         if instrument
           Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 5)
           Live::CandleSeriesCache.append_tick(instrument: instrument, tick: tick, interval: 1)

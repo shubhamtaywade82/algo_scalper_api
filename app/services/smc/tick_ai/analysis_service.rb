@@ -50,9 +50,9 @@ module Smc
         return unless Gate.acquire(sid, ttl_seconds: ttl)
 
         entry = index_entry_for_sid(sid)
-        instrument = Instrument.find_by(security_id: sid)
+        instrument = Instrument.find_by_sid_and_segment(security_id: sid, segment_code: entry[:segment])
         unless instrument&.exchange_segment.to_s == entry[:segment].to_s
-          Rails.logger.debug { "[Smc::TickAi::AnalysisService] No index Instrument for #{sid}" }
+          Rails.logger.debug { "[Smc::TickAi::AnalysisService] No index Instrument for #{sid} in segment #{entry[:segment]}" }
           return
         end
 

@@ -1,0 +1,80 @@
+[
+  {
+    "symbol": "ATM_CALL",
+    "entry_price": 195.04,
+    "exit_price": 234.04799999999997,
+    "quantity": 128,
+    "entry_time": 1704089700,
+    "exit_time": 1704091680,
+    "pnl": 4965.56,
+    "pnl_pct": 19.89,
+    "max_loss": 374.48,
+    "status": "WIN",
+    "strike": "ATM_CALL"
+  },
+  {
+    "symbol": "ATM_CALL",
+    "entry_price": 281.97,
+    "exit_price": 277.74045,
+    "quantity": 89,
+    "entry_time": 1704095760,
+    "exit_time": 1704100920,
+    "pnl": -401.34,
+    "pnl_pct": -1.6,
+    "max_loss": 376.43,
+    "status": "LOSS",
+    "strike": "ATM_CALL"
+  },
+  {
+    "symbol": "ATM+1_CALL",
+    "entry_price": 372.04,
+    "exit_price": 366.4594,
+    "quantity": 67,
+    "entry_time": 1704097800,
+    "exit_time": 1704099660,
+    "pnl": -398.64,
+    "pnl_pct": -1.6,
+    "max_loss": 373.9,
+    "status": "LOSS",
+    "strike": "ATM+1_CALL"
+  },
+  {
+    "symbol": "ATM-1_CALL",
+    "entry_price": 221.94,
+    "exit_price": 266.328,
+    "quantity": 112,
+    "entry_time": 1704089400,
+    "exit_time": 1704090840,
+    "pnl": 4944.11,
+    "pnl_pct": 19.89,
+    "max_loss": 372.86,
+    "status": "WIN",
+    "strike": "ATM-1_CALL"
+  },
+  {
+    "symbol": "ATM-1_CALL",
+    "entry_price": 275.66,
+    "exit_price": 330.79200000000003,
+    "quantity": 91,
+    "entry_time": 1704091140,
+    "exit_time": 1704092700,
+    "pnl": 4989.42,
+    "pnl_pct": 19.89,
+    "max_loss": 376.28,
+    "status": "WIN",
+    "strike": "ATM-1_CALL"
+  },
+  {
+    "symbol": "ATM-1_CALL",
+    "entry_price": 351.17,
+    "exit_price": 345.90245,
+    "quantity": 71,
+    "entry_time": 1704093960,
+    "exit_time": 1704102540,
+    "pnl": -398.74,
+    "pnl_pct": -1.6,
+    "max_loss": 374.0,
+    "status": "LOSS",
+    "strike": "ATM-1_CALL"
+  }
+]

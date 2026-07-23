@@ -34,15 +34,6 @@ module Indicators
       min_candles: EMA_SLOW
     }.freeze
 
-    def self.demo_config
-      {
-        adx_gate: 0.0,
-        rsi_up_min: 0.0,
-        rsi_down_max: 100.0,
-        min_candles: 1
-      }
-    end
-
     Result = Struct.new(
       :bias, :adx, :momentum, :proceed?,
       :sma50, :ema200, :rsi14, :atr14, :macd, :trend,

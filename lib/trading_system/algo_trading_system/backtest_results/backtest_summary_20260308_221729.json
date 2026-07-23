@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "created_at": "2026-03-08T22:17:29+05:30",
+    "underlying": "sensex",
+    "strategy": "rsi_macd",
+    "period": "2026-02-06 to 2026-03-08",
+    "capital": 1000000
+  },
+  "statistics": {
+    "strikes_analyzed": 0,
+    "total_trades": 0,
+    "total_pnl": "₹0.0",
+    "pnl_percentage": "0.0%",
+    "trades_by_strike": {}
+  }
+}

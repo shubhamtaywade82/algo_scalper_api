@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "created_at": "2026-03-08T21:20:13+05:30",
+    "underlying": "nifty",
+    "strategy": "rsi_macd",
+    "period": "2024-09-04 to 2024-09-04",
+    "capital": 1000000
+  },
+  "statistics": {
+    "strikes_analyzed": 1,
+    "total_trades": 1,
+    "total_pnl": "₹-399.58",
+    "pnl_percentage": "-0.04%",
+    "trades_by_strike": {
+      "ATM_CALL": {
+        "trades": 1,
+        "win_rate": "0.0%",
+        "pnl": "₹-399.58",
+        "pnl_pct": "-0.04%"
+      }
+    }
+  }
+}

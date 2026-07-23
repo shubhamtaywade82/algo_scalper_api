@@ -69,7 +69,12 @@ module OptionsBuying
     # security_id this session. Errors are rescued so a backfill failure never
     # interrupts the live tick path.
     def warmup_new_instrument(security_id)
-      instrument = Instrument.find_by(security_id: security_id)
+      segment = @tick[:segment] || @tick[:exchange_segment]
+      instrument = if segment
+                     Instrument.find_by_sid_and_segment(security_id: security_id, segment_code: segment)
+                   else
+                     Instrument.find_by(security_id: security_id)
+                   end
       return unless instrument
 
       from_date = 30.minutes.ago.strftime("%Y-%m-%d %H:%M:%S")

@@ -96,12 +96,8 @@ module Capital
         nil
       end
 
-      def normalize_multiplier(scale_multiplier)
-        [scale_multiplier.to_i, 1].max
-      end
-
       def effective_multiplier(scale_multiplier)
-        base_multiplier = normalize_multiplier(scale_multiplier)
+        base_multiplier = [scale_multiplier.to_i, 1].max
         midday_multiplier = post_1100_multiplier
         adjusted = base_multiplier
         adjusted = (adjusted * midday_multiplier).floor if midday_multiplier < 1.0 && post_1100?
@@ -346,25 +342,10 @@ module Capital
       def build_policy_with_overrides(band)
         {
           upto: band[:upto],
-          alloc_pct: allocation_percentage_with_override(band),
-          risk_per_trade_pct: risk_per_trade_with_override(band),
-          daily_max_loss_pct: daily_max_loss_with_override(band)
+          alloc_pct: band[:alloc_pct],
+          risk_per_trade_pct: band[:risk_per_trade_pct],
+          daily_max_loss_pct: band[:daily_max_loss_pct]
         }
-      end
-
-      def allocation_percentage_with_override(band)
-        # Prefer algo.yml config, ENV as fallback for testing
-        band[:alloc_pct] || ENV['ALLOC_PCT']&.to_f
-      end
-
-      def risk_per_trade_with_override(band)
-        # Prefer algo.yml config, ENV as fallback for testing
-        band[:risk_per_trade_pct] || ENV['RISK_PER_TRADE_PCT']&.to_f
-      end
-
-      def daily_max_loss_with_override(band)
-        # Prefer algo.yml config, ENV as fallback for testing
-        band[:daily_max_loss_pct] || ENV['DAILY_MAX_LOSS_PCT']&.to_f
       end
 
       def convert_to_bigdecimal(value)

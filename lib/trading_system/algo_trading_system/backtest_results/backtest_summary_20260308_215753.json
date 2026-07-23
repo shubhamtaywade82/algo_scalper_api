@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "created_at": "2026-03-08T21:57:53+05:30",
+    "underlying": "nifty",
+    "strategy": "rsi_macd",
+    "period": "2026-02-06 to 2026-03-08",
+    "capital": 1000000
+  },
+  "statistics": {
+    "strikes_analyzed": 3,
+    "total_trades": 267,
+    "total_pnl": "₹87420.5",
+    "pnl_percentage": "8.74%",
+    "trades_by_strike": {
+      "ATM_CALL": {
+        "trades": 88,
+        "win_rate": "15.91%",
+        "pnl": "₹36865.59",
+        "pnl_pct": "3.69%"
+      },
+      "ATM+1_CALL": {
+        "trades": 91,
+        "win_rate": "15.38%",
+        "pnl": "₹35610.92",
+        "pnl_pct": "3.56%"
+      },
+      "ATM-1_CALL": {
+        "trades": 88,
+        "win_rate": "11.36%",
+        "pnl": "₹14943.99",
+        "pnl_pct": "1.49%"
+      }
+    }
+  }
+}
