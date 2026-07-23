@@ -16,7 +16,7 @@ module TradingSystem
       @services[name.to_sym] = instance
     end
 
-    delegate :[], to: :@services
+    delegate :[], :key?, :fetch, :dig, to: :@services
 
     def services
       @services.dup

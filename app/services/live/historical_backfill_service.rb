@@ -267,6 +267,8 @@ module Live
         buckets << bucket
       end
 
+      Live::CandleSeriesCache.store_candles(security_id: security_id, interval: interval, candles: candles)
+
       { count: candles.size, min_bucket: buckets.min, max_bucket: buckets.max }
     end
 
