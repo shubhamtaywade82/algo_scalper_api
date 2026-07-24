@@ -120,4 +120,44 @@ RSpec.describe Positions::TrailingConfig do
       expect(described_class.adaptive_drawdown_for_peak(0.05, [])).to be_nil
     end
   end
+
+  describe '.calculate_hybrid_atr_trailing_sl' do
+    let(:config) do
+      {
+        risk: {
+          trailing_mode: 'hybrid_atr',
+          hybrid_atr: {
+            enabled: true,
+            base_multiplier: 2.0,
+            activation_profit_pct: 0.15,
+            min_sl_offset_pct: -0.15
+          }
+        }
+      }
+    end
+
+    it 'returns dynamic SL when trailing_mode is hybrid_atr' do
+      view = described_class.from(config)
+      sl = view.calculate_hybrid_atr_trailing_sl(
+        current_price: 120.0,
+        entry_price: 100.0,
+        peak_price: 125.0,
+        current_profit_pct: 0.20,
+        atr_value: 5.0
+      )
+      expect(sl).to eq(116.5)
+    end
+
+    it 'returns nil when hybrid_atr is disabled' do
+      disabled_config = { risk: { trailing_mode: 'tiered' } }
+      view = described_class.from(disabled_config)
+      expect(view.calculate_hybrid_atr_trailing_sl(
+        current_price: 120.0,
+        entry_price: 100.0,
+        peak_price: 125.0,
+        current_profit_pct: 0.20,
+        atr_value: 5.0
+      )).to be_nil
+    end
+  end
 end

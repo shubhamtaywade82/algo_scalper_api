@@ -25,6 +25,30 @@ module Live
 
           # Trailing stop activation threshold
           t_config = Positions::TrailingConfig.from_tracker(tracker)
+
+          if t_config.hybrid_atr_enabled?
+            ltp = position_data.current_ltp.to_f
+            entry = position_data.entry_price.to_f
+            peak = position_data.respond_to?(:peak_price) && position_data.peak_price.to_f.positive? ? position_data.peak_price.to_f : [ltp, entry].max
+            atr_val = position_data.respond_to?(:atr) ? position_data.atr.to_f : 0.0
+
+            hybrid_sl = if ltp.positive? && entry.positive? && atr_val.positive?
+                          t_config.calculate_hybrid_atr_trailing_sl(
+                            current_price: ltp,
+                            entry_price: entry,
+                            peak_price: peak,
+                            current_profit_pct: pnl_pct,
+                            atr_value: atr_val
+                          )
+                        end
+
+            if hybrid_sl && ltp <= hybrid_sl
+              reason = "hybrid_atr_trailing_exit (ltp: #{ltp}, sl: #{hybrid_sl})"
+              dispatch_exit(exit_engine, tracker, reason)
+              next
+            end
+          end
+
           activation_pct = t_config.direct_trailing_activation_profit_pct.to_f
           next if pnl_pct < activation_pct
 
