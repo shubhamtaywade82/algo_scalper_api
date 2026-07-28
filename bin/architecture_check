@@ -1,0 +1,29 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'json'
+require 'shellwords'
+
+SCRIPT_DIR = File.expand_path('../.agents/skills/scripts', __dir__)
+target_file = ARGV[0] || File.expand_path('app/services/capital/allocator.rb', __dir__)
+
+unless File.exist?(target_file)
+  puts "Usage: bin/architecture_check <file_path>"
+  exit 1
+end
+
+puts "========================================================================"
+puts "                RAILS ARCHITECTURE DIAGNOSIS REPORT                     "
+puts "========================================================================"
+puts "Target: #{target_file}"
+puts ""
+
+cmd = "ruby #{File.join(SCRIPT_DIR, 'rails_context_compiler.rb')} #{Shellwords.escape(target_file)}"
+output = `#{cmd}`
+
+begin
+  parsed = JSON.parse(output)
+  puts JSON.pretty_generate(parsed)
+rescue JSON::ParserError
+  puts output
+end
