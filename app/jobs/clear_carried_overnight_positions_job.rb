@@ -13,8 +13,9 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
   def perform
     exit_engine = nil
     today_start = Time.zone.today.beginning_of_day
-    stale = PositionTracker.active.where(created_at: ...today_start).reject { |t| held_carry?(t) }
-    if stale.empty?
+    trackers = PositionTracker.active.where(created_at: ...today_start).to_a
+
+    if trackers.empty?
       Rails.logger.info('[ClearCarriedOvernightPositionsJob] No carried-overnight positions to clear')
       return
     end
@@ -53,10 +54,8 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
           return
         end
 
-        Rails.logger.info("[ClearCarriedOvernightPositionsJob] #{tracker.order_no} stuck; clearing intent and retrying")
-        # Intentional: bypass validations/callbacks for a narrow BTST clear retry path.
-        tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
-      end
+      Rails.logger.info("[ClearCarriedOvernightPositionsJob] #{tracker.order_no} stuck; clearing intent and retrying")
+      tracker.update_columns(exit_requested_at: nil, exit_sent_at: nil, exit_coid: nil, updated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
       tracker.reload
       result = exit_engine.execute_exit(tracker, REASON)
     end

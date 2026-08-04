@@ -32,6 +32,18 @@ module Live
     MARKET_OPEN = '09:15' # IST
     MARKET_CLOSE = '15:15' # IST
 
+    # Returns a human-readable label for the current closed-market session.
+    def self.closed_session_label
+      regime = instance.current_regime
+      case regime
+      when POST_MARKET then 'POST_MARKET'
+      when PRE_MARKET  then 'PRE_MARKET'
+      else regime.to_s.upcase
+      end
+    rescue StandardError
+      'CLOSED'
+    end
+
     def current_regime(time: nil)
       # Use IST timezone explicitly
       time ||= current_ist_time

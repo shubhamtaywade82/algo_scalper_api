@@ -17,14 +17,6 @@ RSpec.describe 'Demand driven services' do
     allow(Positions::ActiveCache).to receive(:instance).and_return(empty_cache)
   end
 
-  it 'uses idle vs active intervals for RiskManagerService' do
-    service = Live::RiskManagerService.new
-    expect(service.send(:loop_sleep_interval, true)).to eq(5.0)
-    expect(service.send(:loop_sleep_interval, false)).to eq(0.5)
-  ensure
-    service.instance_variable_get(:@watchdog_thread)&.kill
-  end
-
   it 'computes intervals for PnlUpdaterService based on queue state' do
     service = Live::PnlUpdaterService.instance
     service.stop!

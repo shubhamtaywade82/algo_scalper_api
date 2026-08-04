@@ -83,10 +83,16 @@ module Orders
     end
 
     def update_highest(price)
-      return unless price > @highest
-
-      @highest = price
-      Live::PositionRuntimeCache.instance.update_highest_price!(@position, @highest)
+      if price > @highest
+        @highest = price
+        # highest_price is a store_accessor on meta
+        if @position.respond_to?(:update_columns)
+          meta = (@position.meta || {}).merge('highest_price' => @highest)
+          @position.update_columns(meta: meta) # rubocop:disable Rails/SkipsModelValidations
+        elsif @position.respond_to?(:meta=)
+          @position.meta = (@position.meta || {}).merge('highest_price' => @highest)
+        end
+      end
     end
   end
 end

@@ -18,16 +18,40 @@ RSpec.describe Positions::TrailingConfig do
   end
 
   describe '.peak_drawdown_active?' do
-    it 'is false when profit has not reached activation threshold' do
-      expect(described_class.peak_drawdown_active?(profit_pct: 20.0, current_sl_offset_pct: 15.0)).to be false
+    # Default activation_profit_pct is 0.25, activation_sl_offset_pct is 0.10
+
+    it 'is true when profit meets activation threshold (OR logic)' do
+      expect(described_class.peak_drawdown_active?(profit_pct: 0.30, current_sl_offset_pct: 0.0)).to be true
     end
 
-    it 'is false when SL offset is below minimum requirement' do
-      expect(described_class.peak_drawdown_active?(profit_pct: 30.0, current_sl_offset_pct: 5.0)).to be false
+    it 'is true when SL offset meets threshold (OR logic)' do
+      expect(described_class.peak_drawdown_active?(profit_pct: 0.10, current_sl_offset_pct: 0.15)).to be true
     end
 
-    it 'is true only when both thresholds are met' do
-      expect(described_class.peak_drawdown_active?(profit_pct: 30.0, current_sl_offset_pct: 12.0)).to be true
+    it 'is true when both thresholds are met' do
+      expect(described_class.peak_drawdown_active?(profit_pct: 0.30, current_sl_offset_pct: 0.12)).to be true
+    end
+
+    it 'is false when neither threshold is met' do
+      expect(described_class.peak_drawdown_active?(profit_pct: 0.10, current_sl_offset_pct: 0.05)).to be false
+    end
+
+    it 'emergency override: always true when peak >= 2x activation threshold' do
+      # 2x of 0.25 = 0.50. Peak of 0.60 should always activate regardless of SL offset
+      expect(described_class.peak_drawdown_active?(profit_pct: 0.60, current_sl_offset_pct: -0.15)).to be true
+    end
+
+    it 'emergency override does not trigger below 2x threshold' do
+      # 0.20 < 0.50 (2x of 0.25), and profit 0.20 < 0.25 threshold, SL offset -0.15 < 0.10 threshold
+      expect(described_class.peak_drawdown_active?(profit_pct: 0.20, current_sl_offset_pct: -0.15)).to be false
+    end
+
+    it 'handles zero peak profit' do
+      expect(described_class.peak_drawdown_active?(profit_pct: 0.0, current_sl_offset_pct: 0.0)).to be false
+    end
+
+    it 'handles negative current (neither threshold met)' do
+      expect(described_class.peak_drawdown_active?(profit_pct: -0.05, current_sl_offset_pct: -0.10)).to be false
     end
   end
 

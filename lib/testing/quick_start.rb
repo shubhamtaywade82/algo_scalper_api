@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
-# Quick Start Script for Service Testing
-# Run this in Rails console: load 'lib/testing/quick_start.rb'
+# Quick Start Script for Service Testing (dev/test only)
+# Usage (Rails console):
+#   Testing::QuickStart.load!
+if Rails.env.local?
+  module Testing
+    module QuickStart
+      module_function
 
 Rails.logger.debug { "\n#{'=' * 80}" }
 Rails.logger.debug '  SERVICE TESTING QUICK START'

@@ -22,10 +22,10 @@ module Positions
     # index_key: "NIFTY", "BANKNIFTY", "SENSEX" etc
     # Returns nil if profit_pct < activation threshold
     def allowed_upward_drawdown_pct(profit_pct, index_key: nil)
-      profit_start = cfg[:profit_min].to_f.nonzero? || 3.0
-      profit_end   = cfg[:profit_max].to_f.nonzero? || 30.0
-      dd_start     = cfg[:dd_start_pct].to_f.nonzero? || 15.0
-      dd_end       = cfg[:dd_end_pct].to_f.nonzero? || 1.0
+      profit_start = cfg[:profit_min].to_f.nonzero? || 0.03  # 3% as DECIMAL
+      profit_end   = cfg[:profit_max].to_f.nonzero? || 0.30  # 30% as DECIMAL
+      dd_start     = cfg[:dd_start_pct].to_f.nonzero? || 0.15 # 15% as DECIMAL
+      dd_end       = cfg[:dd_end_pct].to_f.nonzero? || 0.01 # 1% as DECIMAL
       k            = cfg[:exponential_k].to_f.nonzero? || 3.0
 
       return nil if profit_pct.to_f < profit_start

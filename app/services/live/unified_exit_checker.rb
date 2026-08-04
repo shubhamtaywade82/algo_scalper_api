@@ -6,8 +6,6 @@ module Live
   class UnifiedExitChecker
     class << self
       include Live::UnderlyingLtpResolver
-      include Live::StructureInvalidationEvaluator
-      include Live::UnderlyingContextEvaluator
 
       # Check all exit conditions and return first match
       # Returns: { exit: true/false, reason: "...", path: "..." } or nil
@@ -62,6 +60,19 @@ module Live
           }
         end
 
+        # 2.5 Emergency: profitable position flipped to loss
+        if emergency_peak_loss_exit_triggered?(tracker)
+          entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+          peak_pct = tracker.high_water_mark_pnl.to_f / entry_value
+          current_pct = tracker.current_pnl_pct.to_f
+          return {
+            exit: true,
+            reason: "EMERGENCY_PEAK_LOSS (peak: #{(peak_pct * 100).round(2)}%, current: #{(current_pct * 100).round(2)}%)",
+            path: 'emergency_peak_loss',
+            pnl_pct: (pnl_pct * 100.0).round(2)
+          }
+        end
+
         # 3. Profit Target (take profit)
         if profit_target_hit?(tracker, snapshot)
           return {
@@ -112,15 +123,18 @@ module Live
           }
         end
 
-        # 6. Structure Invalidation (options-aware dual condition)
-        si_result = check_structure_invalidation(tracker, snapshot)
-        return si_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if si_result
+        # 6. Structure Invalidation (underlying broke past entry structure level)
+        if (invalidation_price = tracker.meta&.dig('structure_invalidation_price'))
+          underlying_ltp = resolve_underlying_ltp(tracker.meta&.dig('index_key'))
+          if underlying_ltp && structure_invalidated?(tracker, underlying_ltp, invalidation_price)
+            return {
+              exit: true,
+              reason: "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{invalidation_price})"
+            }
+          end
+        end
 
-        # 6.5 SMC Navigator Exit (LTF CHoCH / liquidity sweep against position)
-        smc_nav_result = check_smc_navigator_exit(tracker, snapshot)
-        return smc_nav_result.merge(pnl_pct: (pnl_pct * 100.0).round(2)) if smc_nav_result
-
-        # 7. Time-Based Exit (if configured)
+        # 5. Time-Based Exit (if configured)
         if time_based_exit?(tracker)
           return {
             exit: true,
@@ -153,8 +167,8 @@ module Live
         config = exit_config
         return false unless config[:early_exit][:enabled]
 
-        pnl_pct = snapshot[:pnl_pct].to_f * 100.0
-        threshold = config[:early_exit][:profit_threshold].to_f
+        pnl_pct = snapshot[:pnl_pct].to_f
+        threshold = config[:early_exit][:profit_threshold].to_f # Already DECIMAL (e.g. 0.07)
         return false if pnl_pct >= threshold
 
         # Check ETF conditions
@@ -287,8 +301,9 @@ module Live
 
         # Adaptive trailing (if enabled)
         if config[:trailing][:type] == 'adaptive'
-          peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i)) * 100.0
-          activation = config[:trailing][:activation_profit].to_f
+          # peak_profit_pct is DECIMAL (e.g. 0.20 for 20%)
+          peak_profit_pct = (hwm / (tracker.entry_price.to_f * tracker.quantity.to_i))
+          activation = config[:trailing][:activation_profit].to_f # Already DECIMAL
 
           return false if peak_profit_pct < activation
 
@@ -303,7 +318,7 @@ module Live
         end
 
         # Fixed trailing
-        drop_threshold = config[:trailing][:drop_threshold].to_f
+        drop_threshold = config[:trailing][:drop_threshold].to_f # Already DECIMAL
         drop_pct = (hwm - pnl) / hwm
         drop_pct >= drop_threshold
       end
@@ -451,172 +466,124 @@ module Live
         (hwm / entry_value) >= activation
       end
 
-      def adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers, tightening_multiplier: 1.0)
-        allowed_dd = Positions::TrailingConfig.adaptive_drawdown_for_peak(peak_profit_pct, adaptive_tiers)
-        return false unless allowed_dd && peak_profit_pct.positive?
-        hwm = snapshot[:hwm_pnl].to_f
-        pnl_value = snapshot[:pnl].to_f
-        effective_allowed_dd = allowed_dd * (tightening_multiplier || 1.0).to_f
-        drop_from_peak_pct = (hwm - pnl_value) / hwm * peak_profit_pct
-        drop_from_peak_pct >= effective_allowed_dd
-      end
-
-      def check_smc_navigator_exit(tracker, snapshot)
-        return unless smc_navigator_exit_enabled? && smc_navigator_min_hold_elapsed?(tracker)
-
-        instrument = tracker.instrument
-        return unless instrument
-
-        ltp = snapshot[:ltp].to_f
-        return unless ltp.positive?
-
-        result = Smc::Navigator.evaluate_exit(tracker: tracker, ltp: ltp, instrument: instrument)
-        return unless result.suggest_exit?
-        return unless result.confidence >= smc_navigator_min_exit_confidence
-
-        {
-          exit: true,
-          reason: "SMC_NAVIGATOR_EXIT (#{result.reason})",
-          path: 'smc_navigator'
-        }
-      rescue StandardError => e
-        Rails.logger.error("[UnifiedExitChecker] SMC navigator exit check failed: #{e.class} - #{e.message}")
-        nil
-      end
-
-      def smc_navigator_exit_enabled?
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
-        cfg[:enabled] == true
-      rescue StandardError
-        false
-      end
-
-      def smc_navigator_min_hold_elapsed?(tracker)
-        return false unless tracker.created_at
-
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
-        min_seconds = (cfg[:min_hold_seconds] || 120).to_i
-        (Time.current - tracker.created_at) >= min_seconds
-      rescue StandardError
-        false
-      end
-
-      def smc_navigator_min_exit_confidence
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
-        (cfg[:min_confidence] || 0.65).to_f
-      rescue StandardError
-        0.65
-      end
-
-      def check_smc_navigator_exit(tracker, snapshot)
-        return unless smc_navigator_exit_enabled? && smc_navigator_min_hold_elapsed?(tracker)
-
-        instrument = tracker.instrument
-        return unless instrument
-
-        ltp = snapshot[:ltp].to_f
-        return unless ltp.positive?
-
-        result = Smc::Navigator.evaluate_exit(tracker: tracker, ltp: ltp, instrument: instrument)
-        return unless result.suggest_exit?
-        return unless result.confidence >= smc_navigator_min_exit_confidence
-
-        {
-          exit: true,
-          reason: "SMC_NAVIGATOR_EXIT (#{result.reason})",
-          path: 'smc_navigator'
-        }
-      rescue StandardError => e
-        Rails.logger.error("[UnifiedExitChecker] SMC navigator exit check failed: #{e.class} - #{e.message}")
-        nil
-      end
-
-      def smc_navigator_exit_enabled?
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
-        cfg[:enabled] == true
-      rescue StandardError
-        false
-      end
-
-      def smc_navigator_min_hold_elapsed?(tracker)
-        return false unless tracker.created_at
-
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
-        min_seconds = (cfg[:min_hold_seconds] || 120).to_i
-        (Time.current - tracker.created_at) >= min_seconds
-      rescue StandardError
-        false
-      end
-
-      def smc_navigator_min_exit_confidence
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
-        (cfg[:min_confidence] || 0.65).to_f
-      rescue StandardError
-        0.65
-      end
-
-      def structure_invalidation_enabled?
-        cfg = AlgoConfig.fetch.dig(:risk, :exits, :structure_invalidation) || {}
-        cfg.fetch(:enabled, true)
-      rescue StandardError
-        true
-      end
-
-      def check_structure_invalidation(tracker, snapshot)
-        cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :structure_invalidation) || {}
-        return unless cfg.fetch(:enabled, true) && tracker.meta&.dig('structure_invalidation_price') && (Time.current - tracker.created_at) >= (cfg[:min_hold_seconds] || 90)
-        underlying_ltp = resolve_underlying_ltp(tracker.meta['index_key'])
-        return unless underlying_ltp
-        if cfg[:underlying_move_pct] && cfg[:premium_drop_pct]
-          return { exit: true, reason: "STRUCTURE_INVALIDATION (underlying move + premium drop)", path: 'structure_invalidation' } if dual_condition_met?(tracker, underlying_ltp, snapshot[:ltp].to_f, cfg)
-        elsif structure_invalidated?(tracker, underlying_ltp, tracker.meta['structure_invalidation_price'])
-          return { exit: true, reason: "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{tracker.meta['structure_invalidation_price']})", path: 'structure_invalidation' }
+        # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
+        sl_value = risk_cfg[:sl_pct]
+        if sl_value
+          sl_value_pct = sl_value.to_f # Use DECIMAL directly (0.12)
+        else
+          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12 # Default 12% as DECIMAL
         end
+
+        # Read TP from config (can be in either location, stored as DECIMAL)
+        tp_value = exit_cfg[:take_profit]
+        unless tp_value
+          if risk_cfg[:tp_pct]
+            tp_value = risk_cfg[:tp_pct].to_f # Use DECIMAL directly (0.50)
+          else
+            tp_value = 0.50 # Default 50% as DECIMAL
+          end
+        end
+
+        instrument = tracker.instrument
+        return unless instrument
+
+        ltp = snapshot[:ltp].to_f
+        return unless ltp.positive?
+
+        result = Smc::Navigator.evaluate_exit(tracker: tracker, ltp: ltp, instrument: instrument)
+        return unless result.suggest_exit?
+        return unless result.confidence >= smc_navigator_min_exit_confidence
+
+        {
+          exit: true,
+          reason: "SMC_NAVIGATOR_EXIT (#{result.reason})",
+          path: 'smc_navigator'
+        }
+      rescue StandardError => e
+        Rails.logger.error("[UnifiedExitChecker] SMC navigator exit check failed: #{e.class} - #{e.message}")
         nil
+      end
+
+      def smc_navigator_exit_enabled?
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
+        cfg[:enabled] == true
+      rescue StandardError
+        false
+      end
+
+      def default_exit_config
+        {
+          stop_loss: { type: 'static', value: 0.12 }, # 12% stop loss (DECIMAL)
+          take_profit: 0.50, # 50% take profit (DECIMAL)
+          trailing: { enabled: true, type: 'adaptive', activation_profit: 0.035, drop_threshold: 0.025 },
+          early_exit: { enabled: true, profit_threshold: 0.07 },
+          premium_momentum_failure: { enabled: true },
+          time_based: { enabled: false, exit_time: '15:20' }
+        }
+      end
+
+      def premium_momentum_failure_hit?(tracker, snapshot)
+        config = exit_config
+        return false unless config[:premium_momentum_failure][:enabled]
+
+        ltp = snapshot[:ltp].to_f
+        return unless ltp.positive?
+
+        result = Smc::Navigator.evaluate_exit(tracker: tracker, ltp: ltp, instrument: instrument)
+        return unless result.suggest_exit?
+        return unless result.confidence >= smc_navigator_min_exit_confidence
+
+        {
+          exit: true,
+          reason: "SMC_NAVIGATOR_EXIT (#{result.reason})",
+          path: 'smc_navigator'
+        }
+      rescue StandardError => e
+        Rails.logger.error("[UnifiedExitChecker] SMC navigator exit check failed: #{e.class} - #{e.message}")
+        nil
+      end
+
+      def smc_navigator_exit_enabled?
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
+        cfg[:enabled] == true
+      rescue StandardError
+        false
+      end
+
+      def smc_navigator_min_hold_elapsed?(tracker)
+        return false unless tracker.created_at
+
+        cfg = AlgoConfig.fetch.dig(:risk, :exits, :smc_navigator_exit) || {}
+        min_seconds = (cfg[:min_hold_seconds] || 120).to_i
+        (Time.current - tracker.created_at) >= min_seconds
+      rescue StandardError
+        false
+      end
+
+      def emergency_peak_loss_exit_triggered?(tracker)
+        drawdown_cfg = AlgoConfig.fetch.dig(:position_sizing, :drawdown) || {}
+        return false if drawdown_cfg[:emergency_peak_loss_exit] == false
+
+        min_peak_pct = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false if entry_value <= 0
+
+        peak_pct = tracker.high_water_mark_pnl.to_f / entry_value
+        current_pct = tracker.current_pnl_pct.to_f
+
+        peak_pct >= min_peak_pct && current_pct < -0.02
       end
 
       def structure_invalidated?(tracker, underlying_ltp, invalidation_price)
         direction = tracker.meta&.dig('direction').to_s
-        level = invalidation_price.to_f
-        pct = (Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :structure_invalidation, :buffer_pct) || 0.002).to_f
-        buffer = (level * pct).abs
-        direction == 'long_pe' ? underlying_ltp > level + buffer : (direction == 'long_ce' ? underlying_ltp < level - buffer : false)
-      end
-
-      def peak_profit_pct_for(snapshot, tracker)
-        return snapshot[:hwm_pnl_pct].to_f if snapshot[:hwm_pnl_pct]
-
-        hwm = snapshot[:hwm_pnl].to_f
-        return false unless hwm.positive?
-
-        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
-        return false unless entry_value.positive?
-
-        peak_profit_pct = hwm / entry_value
-        peak_profit_pct >= activation
-      end
-
-      def adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers, tightening_multiplier: 1.0)
-        allowed_dd = Positions::TrailingConfig.adaptive_drawdown_for_peak(peak_profit_pct, adaptive_tiers)
-        return false unless allowed_dd && peak_profit_pct.positive?
-
-      def resolve_stall_minutes(tracker)
-        pmf_cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :premium_momentum_failure) || {}
-        default_stall = 3
-
-        multiplier = tightening_multiplier || 1.0
-        effective_allowed_dd = allowed_dd * multiplier.to_f
-
-        # Convert fractional drop from HWM into profit-percent scale for comparison with allowed_dd
-        drop_from_peak_pct = (hwm - pnl_value) / hwm * peak_profit_pct
-        return false unless drop_from_peak_pct >= effective_allowed_dd
-
-        Rails.logger.info(
-          "[UnifiedExitChecker] ADAPTIVE_TRAILING hit for #{tracker.order_no}: " \
-          "drop=#{(drop_from_peak_pct * 100).round(2)}% >= allowed=#{(effective_allowed_dd * 100).round(2)}% " \
-          "(multiplier=#{multiplier.to_f})"
-        )
-        true
+        case direction
+        when 'long_pe'
+          underlying_ltp > invalidation_price.to_f
+        when 'long_ce'
+          underlying_ltp < invalidation_price.to_f
+        else
+          false
+        end
       end
     end
   end

@@ -45,12 +45,14 @@ module Services
           (text.length / 4.0).ceil
         end
 
+        STOP_WORDS = %w[the is are was were what how when where].freeze
+
         # Extract meaningful keywords from query
         def extract_keywords(query)
           query.downcase
                .gsub(/[^\w\s]/, ' ')
                .split(/\s+/)
-               .reject { |w| w.length < 3 || %w[the is are was were what how when where].include?(w) }
+               .reject { |w| w.length < 3 || STOP_WORDS.include?(w) }
                .uniq
                .first(10)
         end

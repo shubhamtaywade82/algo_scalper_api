@@ -84,7 +84,7 @@ module Live
       unless drawdown_cfg[:emergency_peak_loss_exit] == false
         emergency_min_peak = (drawdown_cfg[:emergency_min_peak_pct] || 0.10).to_f
         if peak >= emergency_min_peak && current < -0.02
-          tracker ||= PositionTracker.find_by(id: position_data.tracker_id)
+          tracker = PositionTracker.find_by(id: position_data.tracker_id)
           if tracker&.active?
             reason = "emergency_peak_loss_exit (peak: #{(peak * 100).round(2)}%, current: #{(current * 100).round(2)}%)"
             Live::ExitEngine.execute_exit(tracker: tracker, reason: reason, source: :trailing_engine)
@@ -217,17 +217,7 @@ module Live
 
       meta['highest_price'] = new_highest
       meta['lowest_price'] = new_lowest
-
-      if pending_meta
-        pending_meta['highest_price'] = new_highest
-        pending_meta['lowest_price'] = new_lowest
-      elsif tracker.exit_requested_at.blank? && tracker.exit_sent_at.blank? && !tracker.exited?
-        Live::PositionRuntimeCache.instance.merge(
-          tracker_id,
-          highest_price: new_highest,
-          lowest_price: new_lowest
-        )
-      end
+      tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
     end
 
     # Apply direct trailing SL (follows price directly, only moves upward)
@@ -363,7 +353,7 @@ module Live
 
     # Apply tailored trailing SL (Gamma-Aware + MFE approach for indices)
     # rubocop:disable Metrics/AbcSize
-    def apply_tailored_sl(position_data, tracker: nil)
+    def apply_tailored_sl(position_data)
       return { updated: false, new_sl_price: nil, reason: 'invalid_position' } unless position_data.valid?
 
       current_price = position_data.current_ltp.to_f

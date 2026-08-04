@@ -29,13 +29,6 @@ class CandleSeries
     @candles.sort_by!(&:timestamp)
   end
 
-  # Ensures candles are sorted by timestamp (chronological order)
-  # CRITICAL: All indicators (Supertrend, ADX, ATR, RSI, MACD) assume chronological order
-  # Call this method if candles are added via add_candle and order might be incorrect
-  def ensure_sorted!
-    @candles.sort_by!(&:timestamp)
-  end
-
   def load_from_raw(response)
     normalise_candles(response).each do |row|
       @candles << Candle.new(
@@ -188,32 +181,6 @@ class CandleSeries
     nil
   end
 
-  def adx(period = 14)
-    # ADX needs at least period + 1 candles, but TechnicalAnalysis gem typically needs 2*period for accuracy
-    # We'll check for period + 1 here (minimum), but callers should ensure 2*period for best results
-    return nil if candles.size < period + 1
-
-    result = TechnicalAnalysis::Adx.calculate(hlc, period: period)
-    return nil if result.empty?
-
-    result.last.adx
-  rescue ArgumentError, TypeError => e
-    # Suppress "Not enough data" warnings - they're expected when called too early
-    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
-      Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
-    end
-    nil
-  rescue StandardError => e
-    # Don't catch NoMethodError as it indicates programming errors
-    raise if e.is_a?(NoMethodError)
-
-    # Suppress "Not enough data" warnings - they're expected when called too early
-    unless e.message.to_s.include?('Not enough data') || e.message.to_s.include?('insufficient')
-      Rails.logger.warn("[CandleSeries] ADX calculation failed: #{e.message}")
-    end
-    nil
-  end
-
   def swing_high?(index, lookback = 3)
     return false if index < lookback || index + lookback >= candles.size
 
@@ -320,9 +287,9 @@ class CandleSeries
     return nil if result.nil? || !result.is_a?(Array) || result.size < 3
 
     result # Returns [macd, signal, histogram] array
-  rescue NoMethodError => e
-    raise e
   rescue StandardError => e
+    raise e if e.is_a?(NoMethodError)
+
     Rails.logger.warn("[CandleSeries] MACD calculation failed: #{e.message}")
     nil
   end
@@ -414,9 +381,9 @@ class CandleSeries
     # OBV.calculate is a class method that takes an array of hashes
     # The gem expects the data in a specific format
     TechnicalAnalysis::Obv.calculate(dcv)
-  rescue NoMethodError => e
-    raise e
   rescue StandardError => e
+    raise e if e.is_a?(NoMethodError)
+
     # OBV.calculate might have different signature - try alternative approach
     Rails.logger.warn("[CandleSeries] OBV calculation failed: #{e.message}")
     nil

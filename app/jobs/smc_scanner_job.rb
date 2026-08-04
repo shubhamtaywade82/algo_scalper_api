@@ -22,6 +22,14 @@ class SmcScannerJob < ApplicationJob
 
     Rails.logger.info('[SmcScannerJob] Starting SMC scan...')
 
+    if TradingSession::Service.market_closed?
+      target_date = Market::Calendar.next_trading_day.strftime('%Y-%m-%d')
+      session = closed_market_session_label
+      Rails.logger.debug do
+        "[SmcScannerJob] Running while market closed (reason=overnight_research, session=#{session}, target_date=#{target_date})"
+      end
+    end
+
     indices = IndexConfigLoader.load_indices
     indices_with_instruments = build_indices_with_instruments(indices)
     Rails.logger.info("[SmcScannerJob] Scanning #{indices_with_instruments.size} indices...")
@@ -243,5 +251,9 @@ class SmcScannerJob < ApplicationJob
     ENV['TELEGRAM_BOT_TOKEN'].present? && ENV['TELEGRAM_CHAT_ID'].present?
   rescue StandardError
     false
+  end
+
+  def closed_market_session_label
+    Live::TimeRegimeService.closed_session_label
   end
 end

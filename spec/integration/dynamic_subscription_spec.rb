@@ -30,6 +30,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
            hget: nil,
            hgetall: {},
            hdel: true,
+           incrbyfloat: true,
            ttl: 3600,
            expire: true,
            scan_each: [].each)
@@ -407,7 +408,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Mock PositionTracker.active to return the tracker with eager loading
         active_relation = PositionTracker.where(id: tracker.id)
         allow(PositionTracker).to receive(:active).and_return(active_relation)
-        allow(active_relation).to receive(:eager_load).with(:instrument).and_return([tracker])
+        allow(active_relation).to receive(:includes).with(:instrument).and_return([tracker])
 
         expect(tracker).to receive(:mark_exited!)
 

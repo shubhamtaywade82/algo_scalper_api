@@ -76,7 +76,9 @@ RSpec.describe Live::TrailingEngine do
       end
 
       it 'does not exit if activation thresholds are not met' do
-        position = build_position(peak_profit_pct: 40.0, pnl_pct: 22.0, sl_offset_pct: 8.0)
+        # peak 0.20, current 0.12, sl_offset 0.08
+        # OR logic: profit 0.20 >= 0.25 (False) OR sl_offset 0.08 >= 0.10 (False) → blocked
+        position = build_position(peak_profit_pct: 0.20, pnl_pct: 0.12, sl_offset_pct: 0.08)
 
         result = engine.process_tick(position, exit_engine: exit_engine)
 
@@ -85,7 +87,11 @@ RSpec.describe Live::TrailingEngine do
       end
 
       it 'exits once when activation thresholds are satisfied' do
-        position = build_position(peak_profit_pct: 60.0, pnl_pct: 30.0, sl_offset_pct: 12.0)
+        # peak 0.60, current 0.30
+        # sl_price 112.0 means sl_offset is 0.12 (12%)
+        # activation thresholds: peak >= 0.25 OR sl_offset >= 0.10 (True)
+        # drawdown 0.30 >= threshold 0.008 (True)
+        position = build_position(peak_profit_pct: 0.60, pnl_pct: 0.30, sl_price: 112.0, sl_offset_pct: 0.12)
         allow(tracker).to receive(:active?).and_return(true, false)
 
         result_first = engine.process_tick(position, exit_engine: exit_engine)
@@ -177,6 +183,53 @@ RSpec.describe Live::TrailingEngine do
         tracker.id,
         hash_including(highest_price: 120.0, lowest_price: kind_of(Numeric))
       )
+    end
+  end
+
+  describe '#check_peak_drawdown emergency exit' do
+    it 'triggers emergency exit when peak >= 10% and current < -2%' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
+      position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.05)
+      allow(Live::ExitEngine).to receive(:execute_exit)
+
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(result).to be true
+      expect(Live::ExitEngine).to have_received(:execute_exit).with(
+        hash_including(reason: /emergency_peak_loss_exit/)
+      )
+    end
+
+    it 'does not trigger emergency when peak < 10%' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
+      allow(Live::ExitEngine).to receive(:execute_exit)
+      position = build_position(peak_profit_pct: 0.05, pnl_pct: -0.05)
+
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(Live::ExitEngine).not_to have_received(:execute_exit)
+    end
+
+    it 'does not trigger emergency when current loss is shallow (> -2%)' do
+      allow(AlgoConfig).to receive(:fetch).and_return({
+        position_sizing: {
+          drawdown: { emergency_peak_loss_exit: true, emergency_min_peak_pct: 0.10 }
+        },
+        feature_flags: { enable_peak_drawdown_activation: false }
+      })
+      allow(Live::ExitEngine).to receive(:execute_exit)
+      position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.01)
+
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(Live::ExitEngine).not_to have_received(:execute_exit)
     end
   end
 

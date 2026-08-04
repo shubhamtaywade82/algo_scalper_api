@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# rubocop:disable Style/GlobalVars
 module Optimization
   # Optimizes a SINGLE indicator's parameters
   # Tests parameter combinations for one indicator and measures price movement after signals
@@ -24,6 +25,8 @@ module Optimization
         multiplier: [1.5, 2.0, 2.5, 3.0]
       }
     }.freeze
+    UPSERT_UNIQUE_BY_WITH_INDICATOR = %i[instrument_id interval indicator].freeze
+    UPSERT_UNIQUE_BY_WITHOUT_INDICATOR = %i[instrument_id interval].freeze
 
     def initialize(instrument:, interval:, indicator:, lookback_days: 45, dry_run: false)
       @instrument = instrument
@@ -178,7 +181,7 @@ module Optimization
 
       # Check if indicator column exists (for backward compatibility)
       if BestIndicatorParam.column_names.include?('indicator')
-        BestIndicatorParam.upsert(
+        BestIndicatorParam.upsert( # rubocop:disable Rails/SkipsModelValidations
           {
             instrument_id: @instrument.id,
             interval: @interval,
@@ -188,11 +191,11 @@ module Optimization
             score: best[:score],
             updated_at: Time.current
           },
-          unique_by: %i[instrument_id interval indicator]
+          unique_by: UPSERT_UNIQUE_BY_WITH_INDICATOR
         )
       else
         # Fallback for old schema
-        BestIndicatorParam.upsert(
+        BestIndicatorParam.upsert( # rubocop:disable Rails/SkipsModelValidations
           {
             instrument_id: @instrument.id,
             interval: @interval,
@@ -201,7 +204,7 @@ module Optimization
             score: best[:score],
             updated_at: Time.current
           },
-          unique_by: %i[instrument_id interval]
+          unique_by: UPSERT_UNIQUE_BY_WITHOUT_INDICATOR
         )
       end
     rescue StandardError => e
@@ -209,3 +212,5 @@ module Optimization
     end
   end
 end
+
+# rubocop:enable Style/GlobalVars

@@ -33,7 +33,7 @@ RSpec.describe Entries::EntryFilterEngine do
 
         context 'when ATR is rising' do
           before do
-            atr_series = [double('Atr', atr: 10), double('Atr', atr: 11)]
+            atr_series = [instance_double(Atr, atr: 10), instance_double(Atr, atr: 11)]
             allow(TechnicalAnalysis::Atr).to receive(:calculate).and_return(atr_series)
           end
 
@@ -44,7 +44,7 @@ RSpec.describe Entries::EntryFilterEngine do
 
         context 'when ATR is falling' do
           before do
-            atr_series = [double('Atr', atr: 11), double('Atr', atr: 10)]
+            atr_series = [instance_double(Atr, atr: 11), instance_double(Atr, atr: 10)]
             allow(TechnicalAnalysis::Atr).to receive(:calculate).and_return(atr_series)
           end
 

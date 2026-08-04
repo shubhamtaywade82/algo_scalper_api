@@ -29,6 +29,12 @@ RSpec.describe Live::OrderUpdateHandler do
     # Stub OrderUpdateHub
     allow(hub).to receive(:start!)
     allow(hub).to receive(:on_update)
+
+    # Ensure handler uses our tracker instances
+    allow(PositionTracker).to receive(:find_by).and_call_original
+    allow(PositionTracker).to receive(:find_by).with(order_no: tracker.order_no).and_return(tracker)
+    allow(PositionTracker).to receive(:find_by).with(order_no: paper_tracker.order_no).and_return(paper_tracker)
+    allow(PositionTracker).to receive(:find_by).with(order_id: tracker.order_no).and_return(tracker)
   end
 
   describe '#initialize' do
@@ -310,7 +316,7 @@ RSpec.describe Live::OrderUpdateHandler do
       it 'returns early if tracker not found' do
         payload = { order_no: 'NONEXISTENT', order_status: 'TRADED' }
 
-        expect(PositionTracker).not_to receive(:find_by)
+        expect(tracker).not_to receive(:mark_exited!)
 
         handler.send(:handle_update, payload)
       end

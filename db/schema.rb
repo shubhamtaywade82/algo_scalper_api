@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_22_143000) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_13_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -29,21 +29,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_143000) do
   end
 
   create_table "best_indicator_params", force: :cascade do |t|
-    t.bigint "instrument_id", null: false
-    t.string "interval", null: false
-    t.jsonb "params", default: {}, null: false
-    t.jsonb "metrics", default: {}, null: false
-    t.decimal "score", precision: 12, scale: 6, default: "0.0", null: false
     t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
     t.string "indicator", null: false
-    t.index ["instrument_id", "interval", "indicator"], name: "idx_unique_best_params_per_instrument_interval_indicator", unique: true
-    t.index ["instrument_id"], name: "index_best_indicator_params_on_instrument_id"
-    t.index ["metrics"], name: "index_best_indicator_params_on_metrics", using: :gin
-    t.index ["params"], name: "index_best_indicator_params_on_params", using: :gin
-  end
-
-  create_table "derivatives", force: :cascade do |t|
     t.bigint "instrument_id", null: false
     t.string "interval", null: false
     t.jsonb "metrics", default: {}, null: false
@@ -54,24 +41,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_143000) do
     t.index ["instrument_id"], name: "index_best_indicator_params_on_instrument_id"
     t.index ["metrics"], name: "index_best_indicator_params_on_metrics", using: :gin
     t.index ["params"], name: "index_best_indicator_params_on_params", using: :gin
-  end
-
-  create_table "calibration_runs", force: :cascade do |t|
-    t.datetime "applied_at"
-    t.string "applied_by"
-    t.datetime "created_at", null: false
-    t.boolean "is_regime_shift", default: false, null: false
-    t.jsonb "proposed_patch", default: {}, null: false
-    t.jsonb "raw_stats", default: {}, null: false
-    t.string "regime_reason"
-    t.string "strike_mode", default: "atm_plus_minus", null: false
-    t.string "symbol", null: false
-    t.datetime "updated_at", null: false
-    t.integer "weeks_analyzed", default: 52, null: false
-    t.index ["applied_at"], name: "index_calibration_runs_on_applied_at_not_null", where: "(applied_at IS NOT NULL)"
-    t.index ["proposed_patch"], name: "index_calibration_runs_on_proposed_patch", using: :gin
-    t.index ["raw_stats"], name: "index_calibration_runs_on_raw_stats", using: :gin
-    t.index ["symbol", "created_at"], name: "index_calibration_runs_on_symbol_and_created_at"
   end
 
   create_table "derivatives", force: :cascade do |t|
@@ -183,82 +152,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_143000) do
     t.index ["underlying_symbol", "expiry_date"], name: "index_instruments_on_underlying_symbol_and_expiry_date", where: "(underlying_symbol IS NOT NULL)"
   end
 
-  create_table "iv_snapshots", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.decimal "implied_volatility", precision: 8, scale: 4
-    t.string "index_key", null: false
-    t.string "option_type", limit: 2
-    t.date "snapshot_date", null: false
-    t.decimal "strike_price", precision: 15, scale: 5
-    t.decimal "underlying_ltp", precision: 15, scale: 5
-    t.datetime "updated_at", null: false
-    t.index ["index_key", "snapshot_date", "strike_price", "option_type"], name: "index_iv_snapshots_unique", unique: true
-    t.index ["index_key", "snapshot_date"], name: "index_iv_snapshots_on_index_key_and_snapshot_date"
-  end
-
-  create_table "ledger_accounts", force: :cascade do |t|
-    t.string "account_type", null: false
-    t.decimal "balance_cache", precision: 18, scale: 2, default: "0.0", null: false
-    t.string "code", null: false
-    t.datetime "created_at", null: false
-    t.string "currency", default: "INR", null: false
-    t.string "name", null: false
-    t.datetime "updated_at", null: false
-    t.index ["code"], name: "index_ledger_accounts_on_code_unique", unique: true
-  end
-
-  create_table "ledger_journal_entries", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "event_type", null: false
-    t.string "idempotency_key", null: false
-    t.jsonb "meta", default: {}, null: false
-    t.string "mode", default: "paper", null: false
-    t.string "order_no"
-    t.bigint "position_tracker_id"
-    t.date "trading_date", null: false
-    t.datetime "updated_at", null: false
-    t.index ["event_type"], name: "index_ledger_journal_entries_on_event_type"
-    t.index ["idempotency_key"], name: "index_ledger_journal_entries_on_idempotency_key_unique", unique: true
-    t.index ["position_tracker_id"], name: "index_ledger_journal_entries_on_position_tracker_id"
-    t.index ["trading_date"], name: "index_ledger_journal_entries_on_trading_date"
-  end
-
-  create_table "ledger_postings", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.decimal "credit", precision: 18, scale: 2, default: "0.0", null: false
-    t.decimal "debit", precision: 18, scale: 2, default: "0.0", null: false
-    t.bigint "ledger_account_id", null: false
-    t.bigint "ledger_journal_entry_id", null: false
-    t.datetime "updated_at", null: false
-    t.index ["ledger_account_id"], name: "index_ledger_postings_on_ledger_account_id"
-    t.index ["ledger_journal_entry_id", "ledger_account_id"], name: "index_ledger_postings_on_journal_and_account"
-    t.index ["ledger_journal_entry_id"], name: "index_ledger_postings_on_ledger_journal_entry_id"
-  end
-
-  create_table "market_holidays", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "exchange", limit: 8, null: false
-    t.string "name", default: "", null: false
-    t.date "observed_on", null: false
-    t.datetime "updated_at", null: false
-    t.index ["exchange", "observed_on"], name: "index_market_holidays_on_exchange_and_observed_on_unique", unique: true
-    t.index ["observed_on"], name: "index_market_holidays_on_observed_on"
-  end
-
-  create_table "options_buying_signal_events", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "event_type", null: false
-    t.string "index_key", null: false
-    t.jsonb "metadata", default: {}, null: false
-    t.datetime "occurred_at", null: false
-    t.string "security_id"
-    t.datetime "updated_at", null: false
-    t.index ["event_type"], name: "index_options_buying_signal_events_on_event_type"
-    t.index ["index_key"], name: "index_options_buying_signal_events_on_index_key"
-    t.index ["metadata"], name: "index_options_buying_signal_events_on_metadata", using: :gin
-    t.index ["occurred_at"], name: "index_options_buying_signal_events_on_occurred_at"
-  end
-
   create_table "paper_daily_wallets", force: :cascade do |t|
     t.decimal "closing_cash", precision: 18, scale: 2, default: "0.0", null: false
     t.datetime "created_at", null: false
@@ -367,99 +260,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_143000) do
     t.string "mode", default: "paper", null: false
     t.decimal "total_pnl", precision: 15, scale: 2, default: "0.0", null: false
     t.datetime "updated_at", null: false
-  end
-
-  create_table "platform_variables", force: :cascade do |t|
-    t.boolean "boolean_value", default: false, null: false
-    t.datetime "created_at", null: false
-    t.decimal "decimal_value", precision: 16, scale: 8
-    t.text "description"
-    t.jsonb "json_value"
-    t.string "key", null: false
-    t.string "scope", default: "global", null: false
-    t.boolean "secret", default: false, null: false
-    t.bigint "strategy_id"
-    t.text "string_value"
-    t.datetime "updated_at", null: false
-    t.string "value_type", default: "string", null: false
-    t.index ["key"], name: "index_platform_variables_on_key", unique: true
-    t.index ["scope", "strategy_id", "key"], name: "idx_platform_variables_on_scope_strategy_key", unique: true
-  end
-
-  create_table "position_meta_snapshots", force: :cascade do |t|
-    t.integer "config_change_log_id"
-    t.jsonb "config_snapshot", default: {}, null: false
-    t.string "config_version_hash", null: false
-    t.datetime "created_at", null: false
-    t.datetime "entry_at"
-    t.bigint "position_tracker_id", null: false
-    t.string "snapshot_kind", default: "entry_config"
-    t.datetime "updated_at", null: false
     t.index ["position_tracker_id"], name: "index_position_meta_snapshots_on_position_tracker_id", unique: true
   end
 
   create_table "position_trackers", force: :cascade do |t|
-    t.string "alpha_source"
-    t.decimal "atm_strike", precision: 12, scale: 4
     t.decimal "avg_price", precision: 12, scale: 4
-    t.boolean "be_set", default: false, null: false
-    t.integer "bos_age_at_entry"
-    t.boolean "breakeven_locked", default: false, null: false
-    t.datetime "carry_marked_at"
-    t.string "carry_mode"
-    t.decimal "carry_roi_pct", precision: 8, scale: 4
-    t.string "client_order_id"
-    t.string "continuation_body_position"
     t.datetime "created_at", null: false
-    t.jsonb "decision", default: {}
-    t.string "direction"
-    t.integer "dte_at_entry"
-    t.jsonb "entry_context", default: {}
-    t.decimal "entry_distance_r", precision: 12, scale: 4
-    t.string "entry_path"
     t.decimal "entry_price", precision: 12, scale: 4
-    t.decimal "entry_risk_rupees", precision: 12, scale: 4
-    t.string "entry_strategy"
-    t.string "entry_tf"
-    t.decimal "entry_underlying_price", precision: 12, scale: 4
-    t.jsonb "execution", default: {}
     t.string "exit_coid"
     t.string "exit_order_id"
-    t.string "exit_path"
     t.decimal "exit_price", precision: 12, scale: 4
-    t.string "exit_reason"
     t.datetime "exit_requested_at"
     t.datetime "exit_sent_at"
-    t.datetime "exit_triggered_at"
     t.datetime "exited_at"
     t.datetime "expansion_at"
-    t.decimal "expected_value", precision: 12, scale: 4
-    t.date "expiry_date"
     t.decimal "high_water_mark_pnl", precision: 12, scale: 4, default: "0.0"
-    t.decimal "highest_price", precision: 12, scale: 4
-    t.string "htf_tf"
-    t.decimal "hwm_pnl_pct", precision: 12, scale: 6
-    t.string "index_key"
     t.bigint "instrument_id", null: false
-    t.decimal "iv_at_entry", precision: 8, scale: 4
-    t.decimal "iv_percentile", precision: 8, scale: 4
     t.decimal "last_pnl_pct", precision: 8, scale: 4
     t.decimal "last_pnl_rupees", precision: 12, scale: 4
-    t.decimal "lowest_price", precision: 12, scale: 4
     t.jsonb "meta", default: {}
     t.string "order_no", null: false
     t.boolean "paper", default: false, null: false
-    t.datetime "peak_premium_at"
-    t.decimal "premium_stop_price", precision: 12, scale: 4
-    t.decimal "profit_floor_rupees", precision: 12, scale: 4
-    t.datetime "profit_floor_set_at"
-    t.string "profit_zone_state"
-    t.datetime "profit_zone_transitioned_at"
-    t.integer "pullback_candles"
     t.integer "quantity"
-    t.decimal "retrace_pct", precision: 8, scale: 4
-    t.decimal "secured_sl_price", precision: 12, scale: 4
-    t.decimal "secured_sl_rupees", precision: 12, scale: 4
     t.string "security_id", null: false
     t.string "segment"
     t.string "side"
@@ -467,17 +289,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_143000) do
     t.datetime "signal_timestamp"
     t.decimal "spread_guard_pct", precision: 8, scale: 4
     t.string "status", default: "pending", null: false
-    t.string "strategy_profile"
     t.string "symbol"
-    t.string "time_from_bos_to_entry"
     t.string "trade_state"
-    t.decimal "trailing_stop_price", precision: 12, scale: 4
     t.datetime "updated_at", null: false
     t.datetime "validated_at"
-    t.decimal "vix_at_entry", precision: 8, scale: 4
     t.bigint "watchable_id", null: false
     t.string "watchable_type", null: false
-    t.index ["created_at"], name: "index_position_trackers_on_created_at"
     t.index ["exit_coid"], name: "index_position_trackers_on_exit_coid", unique: true
     t.index ["exit_order_id"], name: "index_position_trackers_on_exit_order_id"
     t.index ["exit_requested_at"], name: "index_position_trackers_on_exit_requested_at"
@@ -511,20 +328,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_143000) do
     t.datetime "updated_at", null: false
     t.text "value"
     t.index ["key"], name: "index_settings_on_key", unique: true
-  end
-
-  create_table "smc_events", force: :cascade do |t|
-    t.string "correlation_id", null: false
-    t.datetime "created_at", null: false
-    t.string "event_type", null: false
-    t.jsonb "payload", default: {}, null: false
-    t.integer "sequence", null: false
-    t.string "stream", null: false
-    t.datetime "updated_at", null: false
-    t.index ["correlation_id", "sequence"], name: "index_smc_events_on_correlation_id_and_sequence", unique: true
-    t.index ["correlation_id"], name: "index_smc_events_on_correlation_id"
-    t.index ["payload"], name: "index_smc_events_on_payload", using: :gin
-    t.index ["stream", "created_at"], name: "index_smc_events_on_stream_and_created_at"
   end
 
   create_table "solid_queue_blocked_executions", force: :cascade do |t|

@@ -31,7 +31,7 @@ module Orders
         @side        = side.to_s
         @segment     = segment
         @security_id = security_id
-        @qty         = SafeNumeric.to_non_negative_integer(qty)
+        @qty         = qty.to_i
         @meta        = meta || {}
       end
 

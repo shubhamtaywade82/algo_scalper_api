@@ -17,6 +17,7 @@ class HistoricalOptionsAnalyzer
   DOW = %w[Sun Mon Tue Wed Thu Fri Sat].freeze
 
   CACHE_TTL = 1.hour
+  REQUIRED_OHLCV_FIELDS = %w[open high low close volume oi spot strike].freeze
 
   def initialize(symbol, weeks: 8, interval: '5')
     @symbol   = symbol.upcase
@@ -106,10 +107,11 @@ class HistoricalOptionsAnalyzer
   def expiry_windows(weeks)
     today = Time.zone.today
     current_expiry = last_thursday(today)
-    weeks.times.map do |i|
+    windows = Array.new(weeks) do |i|
       expiry = current_expiry - (i * 7).days
       { expiry: expiry, from: expiry - 6.days, to: expiry }
-    end.reverse
+    end
+    windows.reverse
   end
 
   def pct(v, b)
@@ -119,16 +121,16 @@ class HistoricalOptionsAnalyzer
   def fetch_options(security_id, segment, from_str, to_str, opt_type)
     raw = DhanHQ::Models::ExpiredOptionsData.fetch(
       exchange_segment: segment,
-      interval:         @interval,
-      security_id:      security_id,
-      instrument:       'OPTIDX',
-      expiry_flag:      'WEEK',
-      expiry_code:      1,
-      strike:           'ATM',
-      drv_option_type:  opt_type,
-      required_data:    %w[open high low close volume oi spot strike],
-      from_date:        from_str,
-      to_date:          to_str
+      interval: @interval,
+      security_id: security_id,
+      instrument: 'OPTIDX',
+      expiry_flag: 'WEEK',
+      expiry_code: 1,
+      strike: 'ATM',
+      drv_option_type: opt_type,
+      required_data: REQUIRED_OHLCV_FIELDS,
+      from_date: from_str,
+      to_date: to_str
     )
     side = opt_type == 'CALL' ? 'ce' : 'pe'
     d = raw&.data&.[](side)

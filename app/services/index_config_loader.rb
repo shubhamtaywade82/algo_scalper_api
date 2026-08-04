@@ -14,11 +14,15 @@ class IndexConfigLoader
     instance.load_indices
   end
 
+  WATCHLIST_CHECK_TTL = 60.seconds
+
   def initialize
     @cached_indices = nil
     @cached_at = nil
     @watchlist_available = nil
     @watchlist_checked_at = nil
+    @watchlist_table_exists = nil
+    @watchlist_table_checked_at = nil
   end
 
   def load_indices
@@ -49,17 +53,18 @@ class IndexConfigLoader
     @cached_at = nil
     @watchlist_available = nil
     @watchlist_checked_at = nil
+    @watchlist_table_exists = nil
+    @watchlist_table_checked_at = nil
   end
 
   private
 
-  # Load indices from WatchlistItems (database)
+  # Load indices from WatchlistItems (database) — single query, no separate exists?
   # Merges with algo.yml config to get full configuration
   def load_from_watchlist_items
-    return [] unless watchlist_items_available?
+    return [] unless watchlist_table_exists?
 
-    # Load active index watchlist items
-    watchlist_items = WatchlistItem.active.where(kind: :index_value).includes(:watchable)
+    watchlist_items = WatchlistItem.active.where(kind: :index_value).includes(:watchable).to_a
     return [] if watchlist_items.empty?
 
     # Get algo.yml config for merging
@@ -149,29 +154,33 @@ class IndexConfigLoader
     []
   end
 
-  # Check if WatchlistItems table exists and has data
-  # Cached to avoid repeated database queries
-  def watchlist_items_available?
-    return @watchlist_available if @watchlist_checked_at &&
-                                   (Time.current - @watchlist_checked_at) < 60.seconds
+  # Memoized: does watchlist_items table exist? (schema only, no query)
+  def watchlist_table_exists?
+    return @watchlist_table_exists if @watchlist_table_checked_at &&
+                                      (Time.current - @watchlist_table_checked_at) < WATCHLIST_CHECK_TTL
 
-    @watchlist_available = check_watchlist_available
-    @watchlist_checked_at = Time.current
-    @watchlist_available
-  end
-
-  def check_watchlist_available
-    return false unless defined?(ActiveRecord)
-    return false unless ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items')
-
-    WatchlistItem.exists?
+    @watchlist_table_exists = defined?(ActiveRecord) &&
+                              ActiveRecord::Base.connection.schema_cache.data_source_exists?('watchlist_items')
+    @watchlist_table_checked_at = Time.current
+    @watchlist_table_exists
   rescue StandardError
+    @watchlist_table_exists = false
+    @watchlist_table_checked_at = Time.current
     false
   end
 
-  # Clear cache (call when WatchlistItems change)
-  def clear_cache!
-    @watchlist_available = nil
-    @watchlist_checked_at = nil
+  # Boolean for callers that need "watchlist available?" without loading indices.
+  # Uses table check + single limit(1).exists? when needed, cached 60s.
+  def watchlist_items_available?
+    return @watchlist_available if @watchlist_checked_at &&
+                                   (Time.current - @watchlist_checked_at) < WATCHLIST_CHECK_TTL
+
+    @watchlist_available = watchlist_table_exists? && WatchlistItem.limit(1).exists?
+    @watchlist_checked_at = Time.current
+    @watchlist_available
+  rescue StandardError
+    @watchlist_available = false
+    @watchlist_checked_at = Time.current
+    false
   end
 end

@@ -45,7 +45,8 @@ module Services
                 { role: 'user', content: prompt }
               ],
               model: model,
-              temperature: 0.1 # Low temperature for consistency
+              temperature: 0.1, # Low temperature for consistency
+              log_context: :ai_intent
             )
 
             # Parse JSON response

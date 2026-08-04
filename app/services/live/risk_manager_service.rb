@@ -43,6 +43,8 @@ module Live
       @thread = nil
       @market_closed_checked = false # Track if we've already checked after market closed
       @watchdog_thread = nil # Initialize as nil, start watchdog only when service starts
+      @redis_pnl_cache = {}
+      @cycle_tracker_map = nil
     end
 
     # Start monitoring loop (non-blocking)
@@ -87,27 +89,9 @@ module Live
       @running
     end
 
-    # Lightweight risk evaluation helper (unchanged semantics)
-    def evaluate_signal_risk(signal_data)
-      confidence = signal_data[:confidence] || 0.0
-      entry_price = signal_data[:entry_price]
-      stop_loss = signal_data[:stop_loss]
+    delegate :sleep, to: :Kernel
 
-      risk_level =
-        case confidence
-        when 0.8..1.0 then :low
-        when 0.6...0.8 then :medium
-        else :high
-        end
-
-      max_position_size =
-        case risk_level
-        when :low then 100
-        when :medium then 50
-        else 25
-        end
-
-      recommended_stop_loss = stop_loss || (entry_price * 0.98)
+    private
 
       # Concurrency lock: don't process if this tracker is already being analyzed
       # in the main monitor_loop or another event thread.

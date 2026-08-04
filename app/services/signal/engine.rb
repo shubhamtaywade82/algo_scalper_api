@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# rubocop:disable Metrics/BlockNesting
 
 # rubocop:disable Metrics/BlockNesting
 

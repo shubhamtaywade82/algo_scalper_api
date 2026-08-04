@@ -60,14 +60,7 @@ module Orders
       private
 
       def exit_successful?(response)
-        return false unless response.is_a?(Hash)
-        return true if response[:paper] == true
-
-        success_value = response[:success]
-        success_value == true ||
-          success_value == 1 ||
-          (success_value.is_a?(Numeric) && success_value.zero?) ||
-          success_value.to_s.casecmp('true').zero?
+        response.is_a?(Hash) && (response[:success] || response[:paper])
       end
     end
   end

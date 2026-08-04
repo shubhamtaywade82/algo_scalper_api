@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# rubocop:disable Metrics/BlockNesting
 
 module Live
   class RiskManagerService
@@ -57,16 +58,207 @@ module Live
             reason = "INSTITUTIONAL_TRAILING_STOP (SL: #{trailing_sl.round(2)}, LTP: #{ltp.to_f})"
             exit_path = 'trailing_stop_institutional'
 
-            Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
-            track_exit_path(tracker, exit_path, reason)
-            dispatch_exit(exit_engine, tracker, reason)
+        current_r = (net_pnl / risk_value).to_f
+
+        if tracker.trade_state.blank?
+          tracker.update_column(:trade_state, 'init') # rubocop:disable Rails/SkipsModelValidations
+        end
+
+        case tracker.trade_state
+        when 'init'
+          if current_r >= 1.0
+            tracker.update_columns(trade_state: 'validated', validated_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
           end
+        when 'validated'
+          if current_r >= 2.0
+            tracker.update_columns(trade_state: 'expansion', expansion_at: Time.current) # rubocop:disable Rails/SkipsModelValidations
+          end
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] advance_trade_state_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      private
+
+      def update_peak_trend_score(tracker, snapshot)
+        instrument = tracker.instrument || tracker.watchable&.instrument
+        return unless instrument
+
+        # Calculate current trend score
+        series = begin
+          instrument.candle_series(interval: '5')
+        rescue StandardError
+          nil
+        end
+        return unless series&.candles&.any?
+
+        adx_value = begin
+          instrument.adx(14, interval: '5')
+        rescue StandardError
+          nil
+        end
+        val = adx_value.is_a?(Hash) ? adx_value[:value] : adx_value
+        return unless val
+
+        trend_score = val.to_f + momentum_score(series.candles)
+
+        peak = tracker.meta&.dig('peak_trend_score') || 0
+        if trend_score > peak
+          meta = tracker.meta || {}
+          meta['peak_trend_score'] = trend_score
+          tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+        end
+      rescue StandardError
+        nil
+      end
+
+      def enforce_global_time_overrides(exit_engine:)
+        # Global override 1: IV collapse detection
+        enforce_iv_collapse_exit(exit_engine: exit_engine)
+
+        # Global override 2: Price stall detection (especially after ₹2k)
+        enforce_stall_detection_exit(exit_engine: exit_engine)
+      end
+
+      def enforce_iv_collapse_exit(exit_engine:)
+        return unless iv_collapse_detection_enabled?
+
+        PositionTracker.active.find_each do |tracker|
+          snapshot = pnl_snapshot(tracker)
+          next unless snapshot
+
+          # Check for sudden IV collapse
+          # This would require IV data from option chain - for now, skip if not available
+          # TODO: Implement IV collapse detection when IV data is available
         rescue StandardError => e
           Rails.logger.error("[RiskManager] enforce_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
         end
       rescue StandardError => e
-        Rails.logger.error("[RiskManager] enforce_trailing_stops method error: #{e.class} - #{e.message}")
-        Rails.logger.error("[RiskManager] Backtrace: #{e.backtrace.first(5).join(', ')}")
+        Rails.logger.error("[RiskManager] enforce_stall_detection_exit_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def enforce_time_based_exit(exit_engine:)
+        PositionTracker.active.find_each do |tracker|
+          enforce_time_based_exit_for(tracker, exit_engine: exit_engine)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_time_based_exit error: #{e.class} - #{e.message}")
+      end
+
+      # EOD force-close: at or after market close, close all active positions.
+      # Ensures intraday positions never carry overnight regardless of time-stop bypass or other rules.
+      def enforce_eod_force_close(exit_engine:)
+        risk = risk_config
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        return unless market_close_time
+
+        now = Time.current
+        return unless now >= market_close_time
+
+        PositionTracker.active.find_each do |tracker|
+          next if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
+
+          reason = "MARKET_CLOSE (EOD #{market_close_time.strftime('%H:%M')} IST)"
+          exit_path = 'eod_force_close'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_eod_force_close error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
+      def enforce_time_based_exit_for(tracker, exit_engine:)
+        risk = risk_config
+        exit_time = parse_time_hhmm(risk[:time_exit_hhmm] || '15:20')
+        return unless exit_time
+
+        now = Time.current
+        return unless now >= exit_time
+
+        market_close_time = parse_time_hhmm(risk[:market_close_hhmm] || '15:30')
+        return if market_close_time && now >= market_close_time
+
+        tracker.hydrate_pnl_from_cache!
+        if tracker.last_pnl_rupees.present? && tracker.last_pnl_rupees.positive?
+          min_profit = begin
+            BigDecimal((risk[:min_profit_rupees] || 0).to_s)
+          rescue StandardError
+            BigDecimal(0)
+          end
+          if min_profit.positive? && tracker.last_pnl_rupees < min_profit
+            Rails.logger.info("[RiskManager] Time-based exit skipped for #{tracker.order_no} - PnL < min_profit")
+            return
+          end
+        end
+
+        reason = "time-based exit (#{exit_time.strftime('%H:%M')})"
+        exit_path = 'time_based'
+        Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+        track_exit_path(tracker, exit_path, reason)
+        dispatch_exit(exit_engine, tracker, reason)
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_time_based_exit_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      def enforce_premium_r_stop(exit_engine:)
+        PositionTracker.active.find_each do |tracker|
+          enforce_premium_r_stop_for(tracker, exit_engine: exit_engine)
+        end
+      end
+
+      def enforce_premium_r_stop_for(tracker, exit_engine:)
+        snapshot = pnl_snapshot(tracker)
+        return unless snapshot
+
+        ltp = snapshot[:ltp]
+        return unless ltp
+
+        premium_stop = tracker.meta&.dig('premium_stop_price')
+        return unless premium_stop
+
+        if ltp.to_f <= premium_stop.to_f
+          reason = "PREMIUM_R_STOP (ltp: #{ltp}, stop: #{premium_stop})"
+          exit_path = 'premium_r_stop'
+          Rails.logger.info("[RiskManager] #{reason} for #{tracker.order_no} | Path: #{exit_path}")
+          track_exit_path(tracker, exit_path, reason)
+          dispatch_exit(exit_engine, tracker, reason)
+        end
+      rescue StandardError => e
+        Rails.logger.error("[RiskManager] enforce_premium_r_stop_for error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+      end
+
+      # LAYER 1: DYNAMIC TRAILING SL
+      # Purpose: Move SL up-only to capture trend moves (direct trailing)
+      def enforce_dynamic_trailing_stops(exit_engine:)
+        engine = @trailing_engine ||= Live::TrailingEngine.new
+        cache = active_cache
+        return unless cache
+
+        PositionTracker.active.find_each do |tracker|
+          # TrailingEngine expects PositionData from ActiveCache
+          position_data = cache.get_by_tracker_id(tracker.id)
+          next unless position_data
+
+          # process_tick handles peak updates and SL adjustments
+          result = engine.process_tick(position_data, exit_engine: exit_engine)
+
+          if result[:exit_triggered]
+            Rails.logger.info("[RiskManager] TrailingEngine triggered exit for #{tracker.order_no}: #{result[:reason]}")
+          end
+        rescue StandardError => e
+          Rails.logger.error("[RiskManager] enforce_dynamic_trailing_stops error for tracker=#{tracker.id}: #{e.class} - #{e.message}")
+        end
+      end
+
+      # LAYER 2: STRUCTURE INVALIDATION
+      # Purpose: Exit when trade thesis is broken by market structure failure
+      def enforce_structure_invalidation(exit_engine:)
+        return unless structure_invalidation_enabled?
+
+        PositionTracker.active.find_each do |tracker|
+          enforce_structure_invalidation_for(tracker, exit_engine: exit_engine)
+        end
       end
 
         # Legacy rule-engine path
@@ -404,8 +596,6 @@ module Live
         end
       end
 
-      private
-
       # Ratchet the profit floor upward as HWM PnL grows.
       # Monotonic — floor only moves up, never down.
       # Called every monitor cycle once the floor is armed.
@@ -419,7 +609,7 @@ module Live
         current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
         return if dynamic_floor <= current_floor
 
-        tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i)
+        tracker.update_column(:profit_floor_rupees, dynamic_floor.to_i) # rubocop:disable Rails/SkipsModelValidations
         Rails.logger.info(
           "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \
           "₹#{current_floor} → ₹#{dynamic_floor} (HWM: ₹#{hwm_pnl.round(2)}, trail: #{trail_pct}%)"
@@ -723,13 +913,7 @@ module Live
         current_floor = BigDecimal(tracker.profit_floor_rupees.to_s)
         return if dynamic_floor <= current_floor
 
-        if @pending_meta
-          @pending_meta['profit_floor_rupees'] = dynamic_floor.to_i
-        else
-          meta = (tracker.meta || {}).stringify_keys
-          meta['profit_floor_rupees'] = dynamic_floor.to_i
-          tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
-        end
+        tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
 
         Rails.logger.info(
           "[RiskManager] Trailing floor raised for #{tracker.order_no}: " \

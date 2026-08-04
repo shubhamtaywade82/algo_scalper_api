@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# rubocop:disable Metrics/BlockNesting
 
 # rubocop:disable Metrics/BlockNesting
 
@@ -447,6 +448,7 @@ module Options
       iv_rank = 0.5 # Default - could be calculated from historical IV
       atm_range_percent = self.class.atm_range_pct(iv_rank)
 
+      # rubocop:disable Style/MultilineBlockChain
       filtered.map do |item|
         strike = item[:strike]
         option_data = item[:option_data]
@@ -464,6 +466,7 @@ module Options
         score = self.class.calculate_strike_score(leg, option_type.to_sym, atm_strike, atm_range_percent)
         leg.merge(score: score)
       end.sort_by { |leg| [-leg[:score], leg[:distance_from_atm]] }
+      # rubocop:enable Style/MultilineBlockChain
     end
 
     def calculate_spread_ratio(option_data)
@@ -859,7 +862,9 @@ module Options
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike, :prev_close)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
-        if signals_cfg.fetch(:enable_expected_move_strike_gate, true)
+        if exit_testing_mode
+          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
+        else
           validator = Options::StrikeQualification::ExpectedMoveValidator.new
           validation = validator.call(
             index_key: key,
@@ -958,13 +963,13 @@ module Options
 
         # For buying options, focus on ATM and nearby strikes only (ATM, 1OTM, 2OTM max)
         # This prevents selecting expensive ITM options or far OTM options
-        computed_target_strikes = if [:ce, 'ce'].include?(side)
-                           # CE: ATM, ATM+1, ATM+2 (OTM calls, max 2OTM)
-                           [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval)]
-                         else
-                           # PE: ATM, ATM-1, ATM-2 (OTM puts, max 2OTM)
-                           [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval)]
-                         end
+        computed_target_strikes = if side.to_s == 'ce'
+                                    # CE: ATM, ATM+1, ATM+2 (OTM calls, max 2OTM)
+                                    [atm_strike, atm_strike + strike_interval, atm_strike + (2 * strike_interval)]
+                                  else
+                                    # PE: ATM, ATM-1, ATM-2 (OTM puts, max 2OTM)
+                                    [atm_strike, atm_strike - strike_interval, atm_strike - (2 * strike_interval)]
+                                  end
         available_strikes = option_chain_data.keys.map(&:to_f)
         target_strikes = (target_strikes.presence || computed_target_strikes).map(&:to_f)
         target_strikes = target_strikes.select { |s| available_strikes.include?(s) }
@@ -1016,7 +1021,7 @@ module Options
           # Debug: strike label calculation (currently unused)
           _strike_label = if strike == atm_strike
                             'ATM'
-                          elsif [:ce, 'ce'].include?(side)
+                          elsif side.to_s == 'ce'
                             strike_diff = (strike - atm_strike) / strike_interval
                             case strike_diff
                             when 1
@@ -1160,12 +1165,47 @@ module Options
             option_type: option_type
           )
 
-          if derivative.nil?
-            # Log available strikes for debugging
-            available_strikes = instrument.derivatives.where(
-              expiry_date: expiry_date_obj,
-              option_type: option_type
-            ).pluck(:strike_price).map(&:to_f).sort
+          security_id = nil
+          api_security_id = option_data['security_id']
+          if use_option_chain_security_id && valid_security_id?(api_security_id)
+            security_id = api_security_id.to_s
+          elsif derivative
+            security_id = derivative.security_id.to_s
+          end
+
+          unless valid_security_id?(security_id)
+            if derivative.nil? && use_option_chain_security_id
+              Rails.logger.debug do
+                "[Options::ChainAnalyzer] Missing usable security_id from option chain for #{index_cfg[:key]} " \
+                  "strike=#{strike} #{side}; skipping strike"
+              end
+            else
+              Rails.logger.debug do
+                "[Options::ChainAnalyzer] Invalid security_id for #{index_cfg[:key]} #{strike} #{side}: " \
+                  "#{security_id.inspect} (derivative_id=#{derivative&.id})"
+              end
+            end
+            rejected_count += 1
+            next
+          end
+
+          # In legacy mode, Derivative remains mandatory and must match strike metadata.
+          if !use_option_chain_security_id && derivative.nil?
+            available_strikes = if derivatives_collection.respond_to?(:where)
+                                  derivatives_collection.where(
+                                    expiry_date: expiry_date_obj,
+                                    option_type: option_type
+                                  ).pluck(:strike_price).map(&:to_f).sort
+                                else
+                                  # rubocop:disable Style/MultilineBlockChain
+                                  Array(derivatives_collection).filter_map do |d|
+                                    next unless derivative_like?(d)
+                                    next unless d.expiry_date == expiry_date_obj && d.option_type.to_s.upcase == option_type
+
+                                    d.strike_price.to_f
+                                  end.sort
+                                  # rubocop:enable Style/MultilineBlockChain
+                                end
 
             Rails.logger.debug do
               "[Options::ChainAnalyzer] Derivative not found for #{index_cfg[:key]} " \
@@ -1290,6 +1330,24 @@ module Options
         scored_legs.sort_by { |leg| [-leg[:score], leg[:distance_from_atm]] }
       end
 
+      def filter_and_rank(legs, atm:, side:, window:)
+        return [] unless legs
+
+        min_iv = AlgoConfig.fetch.dig(:option_chain, :min_iv).to_f
+        max_iv = AlgoConfig.fetch.dig(:option_chain, :max_iv).to_f
+        min_oi = AlgoConfig.fetch.dig(:option_chain, :min_oi).to_i
+        max_spread_pct = AlgoConfig.fetch.dig(:option_chain, :max_spread_pct).to_f
+
+        # rubocop:disable Style/MultilineBlockChain
+        legs.select do |leg|
+          leg[:type] == side &&
+            (leg[:strike].to_f - atm.to_f).abs <= window &&
+            leg[:iv].to_f.between?(min_iv, max_iv) &&
+            leg[:oi].to_i >= min_oi &&
+            leg.fetch(:spread_pct, 0.0).to_f <= max_spread_pct
+        end.sort_by { |leg| [-leg[:oi].to_i, leg.fetch(:spread_pct, 0.0).to_f] }
+        # rubocop:enable Style/MultilineBlockChain
+      end
 
       # Dynamic minimum delta thresholds depending on time of day
       # More realistic delta requirements for OTM options
@@ -1330,7 +1388,7 @@ module Options
                          else 'High'
                          end
 
-        _strike_guidance = if [:ce, 'ce'].include?(side)
+        _strike_guidance = if side.to_s == 'ce'
                              'CE strikes: ATM, ATM+1, ATM+2, ATM+3 (OTM calls only)'
                            else
                              'PE strikes: ATM, ATM-1, ATM-2, ATM-3 (OTM puts only)'

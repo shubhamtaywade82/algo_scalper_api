@@ -262,7 +262,7 @@ module Orders
     # @param sl_price [Float] Stop loss price
     # @param tp_price [Float] Take profit price
     # @param risk_pct [Float, nil] Dynamic risk percentage
-    # rubocop:disable Metrics/ParameterLists
+    # rubocop:disable Metrics/ParameterLists, Metrics/AbcSize, Metrics/MethodLength
     def emit_entry_filled_event(tracker, pick, index_cfg, direction, sl_price, tp_price,
                                 risk_pct = nil)
       event_data = {
@@ -286,7 +286,7 @@ module Orders
     rescue StandardError => e
       Rails.logger.error("[Orders::EntryManager] Failed to emit entry_filled event: #{e.class} - #{e.message}")
     end
-    # rubocop:enable Metrics/ParameterLists
+    # rubocop:enable Metrics/ParameterLists, Metrics/AbcSize, Metrics/MethodLength
 
     # Build success result hash
     # @param tracker [PositionTracker] PositionTracker instance

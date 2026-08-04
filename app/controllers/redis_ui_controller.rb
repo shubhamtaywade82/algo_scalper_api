@@ -73,7 +73,7 @@ class RedisUiController < ActionController::Base
         size: get_key_size(@key)
       }
     rescue StandardError => e
-      render json: { error: e.message }, status: :unprocessable_entity
+      render json: { error: e.message }, status: :unprocessable_content
     end
   end
 
@@ -87,7 +87,7 @@ class RedisUiController < ActionController::Base
       @redis.del(@key)
       render json: { success: true, message: "Key '#{@key}' deleted" }
     rescue StandardError => e
-      render json: { error: e.message }, status: :unprocessable_entity
+      render json: { error: e.message }, status: :unprocessable_content
     end
   end
 
@@ -95,7 +95,7 @@ class RedisUiController < ActionController::Base
     info_data = @redis.info
     render json: { info: info_data }
   rescue StandardError => e
-    render json: { error: e.message }, status: :unprocessable_entity
+    render json: { error: e.message }, status: :unprocessable_content
   end
 
   private

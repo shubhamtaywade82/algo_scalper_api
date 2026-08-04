@@ -32,6 +32,16 @@ module Options
         step = strike_step_for(index)
         atm_strike = round_to_step(spot.to_f, step)
 
+        # Get available strikes from the filtered chain (only strikes that exist)
+        # Handle different key formats in option chain
+        # rubocop:disable Style/MultilineBlockChain
+        available_strikes = option_chain.keys.filter_map do |k|
+          k.to_f
+        rescue StandardError
+          nil
+        end.to_set
+        # rubocop:enable Style/MultilineBlockChain
+
         desired = desired_strike(
           index: index,
           side: side_sym,
@@ -78,7 +88,17 @@ module Options
         ((value / step.to_f).round * step).to_i
       end
 
-      def desired_strike(index:, side:, permission:, trend:, atm_strike:, step:)
+      def desired_strike(index:, side:, permission:, trend:, atm_strike:, step:, momentum_score: nil)
+        # Institutional momentum-based selection
+        if momentum_score.present?
+          institutional_type = Options::StrikeSelector.strike_type_for_momentum(momentum_score)
+          if institutional_type == :itm
+            # Select ITM (strike lower than ATM for CE, higher than ATM for PE)
+            itm_strike = side == :CE ? atm_strike - step : atm_strike + step
+            return { strike: itm_strike, strike_type: :ITM }
+          end
+        end
+
         return { strike: atm_strike, strike_type: :ATM } if permission == :execution_only
         return { strike: atm_strike, strike_type: :ATM } if index == 'SENSEX' && permission != :full_deploy
         return { strike: atm_strike, strike_type: :ATM } if %i[chop neutral range].include?(trend)
@@ -130,9 +150,54 @@ module Options
       end
 
       def option_data_for(option_chain:, strike:, side:)
-        strike_key = strike.to_i.to_s
-        strike_data = option_chain[strike_key] || option_chain[strike_key.to_f.to_s] || option_chain[strike_key.to_i]
-        return nil unless strike_data.is_a?(Hash)
+        # Try multiple key formats to find strike data
+        strike_int = strike.to_i
+        strike_float = strike.to_f
+
+        # Try: string integer, string float, integer, float, formatted float (e.g., "25750.000000")
+        possible_keys = [
+          strike_int.to_s,
+          strike_float.to_s,
+          format('%<v>.6f', v: strike_float),  # Format like "25750.000000"
+          format('%<v>.2f', v: strike_float),  # Format like "25750.00"
+          strike_int,
+          strike_float,
+          strike_int.to_s.to_sym, # Symbol keys sometimes
+          strike_float.to_s.to_sym
+        ]
+
+        strike_data = nil
+        found_key = nil
+
+        possible_keys.each do |key|
+          next unless option_chain.key?(key)
+
+          strike_data = option_chain[key]
+          found_key = key
+          break
+        end
+
+        # If exact match not found, try fuzzy matching (find closest key)
+        unless strike_data.is_a?(Hash)
+          # Try to find key that matches when converted to float
+          option_chain.each_key do |key|
+            key_float = key.to_f
+            next unless (key_float - strike_float).abs < 0.01 # Within 0.01 tolerance
+
+            strike_data = option_chain[key]
+            found_key = key
+            break
+          end
+        end
+
+        unless strike_data.is_a?(Hash)
+          Rails.logger.debug do
+            "[StrikeSelector] Strike #{strike} not found in chain. " \
+              "Tried keys: #{possible_keys.first(6).inspect}. " \
+              "Available keys (sample): #{option_chain.keys.first(5).inspect}"
+          end
+          return nil
+        end
 
         side_key = side == :CE ? 'ce' : 'pe'
         strike_data[side_key]

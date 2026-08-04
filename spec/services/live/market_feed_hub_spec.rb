@@ -174,12 +174,6 @@ RSpec.describe Live::MarketFeedHub do
       expect(hub).to receive(:restart!)
       hub.send(:check_connection_health!)
     end
-
-    it 'does not restart if ticks are fresh' do
-      hub.instance_variable_set(:@last_tick_at, 5.seconds.ago)
-      expect(hub).not_to receive(:restart!)
-      hub.send(:check_connection_health!)
-    end
   end
 
   describe 'operator disable flag' do

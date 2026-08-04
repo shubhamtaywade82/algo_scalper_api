@@ -5,20 +5,46 @@ require 'concurrent/map'
 require_relative '../concerns/broker_fee_calculator'
 
 module Positions
-  # Position data structure - defined outside ActiveCache to avoid re-definition issues
-  class PositionData
-    attr_accessor :tracker_id, :security_id, :segment, :entry_price, :quantity,
-                  :sl_price, :tp_price, :high_water_mark, :current_ltp, :pnl,
-                  :pnl_pct, :peak_profit_pct, :min_profit_pct, :trend,
-                  :time_in_position, :breakeven_locked, :trailing_stop_price,
-                  :sl_offset_pct, :position_direction, :index_key,
-                  :underlying_segment, :underlying_security_id, :underlying_symbol,
-                  :underlying_trend_score, :underlying_ltp, :price_history,
-                  :last_updated_at
+  # Ultra-fast in-memory position cache for NEMESIS V3
+  # Mirrors Redis PnL + RedisTickCache for sub-millisecond lookups
+  # Subscribes directly to MarketFeedHub callbacks for real-time updates
+  # rubocop:disable Metrics/ClassLength
+  class ActiveCache
+    include Singleton
 
-    def initialize(attrs = {})
-      attrs.each do |k, v|
-        public_send("#{k}=", v) if respond_to?("#{k}=")
+    # Position data structure
+    PositionData = Struct.new(
+      :tracker_id,
+      :security_id,
+      :segment,
+      :entry_price,
+      :quantity,
+      :sl_price,
+      :tp_price,
+      :high_water_mark,
+      :current_ltp,
+      :pnl,
+      :pnl_pct,
+      :peak_profit_pct,
+      :min_profit_pct,
+      :trend,
+      :time_in_position,
+      :breakeven_locked,
+      :trailing_stop_price,
+      :sl_offset_pct,
+      :position_direction,
+      :index_key,
+      :underlying_segment,
+      :underlying_security_id,
+      :underlying_symbol,
+      :underlying_trend_score,
+      :underlying_ltp,
+      :price_history,
+      :last_updated_at,
+      keyword_init: true # rubocop:disable Style/RedundantStructKeywordInit
+    ) do
+      def composite_key
+        "#{segment}:#{security_id}"
       end
     end
 
@@ -155,7 +181,6 @@ module Positions
         nil
       end
       @last_bulk_load_count = nil
-      @last_profit_lock_check = Time.current
     end
 
     # Start the cache (subscribe to MarketFeedHub callbacks)
@@ -329,6 +354,7 @@ module Positions
     # @param tracker_id [Integer] PositionTracker ID
     # @param updates [Hash] Hash of updates (sl_price, tp_price, breakeven_locked, etc.)
     # @return [Boolean] True if updated
+    # rubocop:disable Metrics/AbcSize
     def update_position(tracker_id, **updates)
       position = get_by_tracker_id(tracker_id)
       return false unless position
@@ -354,16 +380,17 @@ module Positions
       Rails.logger.error("[Positions::ActiveCache] Failed to update position #{tracker_id}: #{e.class} - #{e.message}")
       false
     end
+    # rubocop:enable Metrics/AbcSize
 
     # Bulk load positions from database
     # @return [Integer] Number of positions loaded
+    # rubocop:disable Metrics/AbcSize
     def bulk_load!
       count = 0
       # Use cached active positions to avoid redundant query
       Positions::ActivePositionsCache.instance.active_trackers.each do |tracker|
         next unless tracker.entry_price&.positive?
 
-        # Try to get SL/TP from meta or calculate defaults
         sl_price = calculate_default_sl(tracker)
         tp_price = calculate_default_tp(tracker)
 
@@ -371,12 +398,18 @@ module Positions
         count += 1
       end
 
-      Rails.logger.info("[Positions::ActiveCache] Bulk loaded #{count} positions")
+      if @last_bulk_load_count.nil? || count != @last_bulk_load_count
+        Rails.logger.info("[Positions::ActiveCache] Bulk loaded #{count} positions")
+        @last_bulk_load_count = count
+      else
+        Rails.logger.debug { "[Positions::ActiveCache] Bulk loaded #{count} positions" }
+      end
       count
     rescue StandardError => e
       Rails.logger.error("[Positions::ActiveCache] Bulk load failed: #{e.class} - #{e.message}")
       0
     end
+    # rubocop:enable Metrics/AbcSize
 
     # Clear all positions
     # @return [Boolean]
@@ -385,6 +418,7 @@ module Positions
       @cache.clear
       @tracker_index.clear
       @stats[:positions_tracked] = 0
+      @last_bulk_load_count = nil
       Rails.logger.info('[Positions::ActiveCache] Cleared all positions')
       true
     end
@@ -404,6 +438,7 @@ module Positions
 
     # Handle tick from MarketFeedHub (replaces EventBus LTP event handling)
     # @param tick [Hash] Raw tick data from MarketFeedHub
+    # rubocop:disable Metrics/AbcSize
     def handle_tick(tick)
       return unless tick.is_a?(Hash)
       return unless tick[:ltp].to_f.positive?
@@ -427,6 +462,7 @@ module Positions
       Rails.logger.error("[Positions::ActiveCache] Error handling tick: #{e.class} - #{e.message}")
       Rails.logger.debug { e.backtrace.first(5).join("\n") }
     end
+    # rubocop:enable Metrics/AbcSize
 
     # Check for SL/TP hits and emit events
     # @param position [PositionData] Position data
@@ -498,6 +534,7 @@ module Positions
     # NEW (Step 12): Reload peak profit percentages from Redis for all active positions
     # Called on startup to restore peak values after restart
     # @return [Integer] Number of peaks reloaded
+    # rubocop:disable Metrics/AbcSize
     def reload_peaks
       return 0 unless @redis
 
@@ -534,6 +571,7 @@ module Positions
       Rails.logger.error("[ActiveCache] Failed to reload peaks: #{e.class} - #{e.message}")
       0
     end
+    # rubocop:enable Metrics/AbcSize
 
     def auto_subscribe_enabled?
       feature_flags[:enable_auto_subscribe_unsubscribe] == true
@@ -559,6 +597,7 @@ module Positions
       Live::MarketFeedHub.instance
     end
 
+    # rubocop:disable Metrics/AbcSize
     def attach_underlying_metadata(position_data, tracker)
       meta = Positions::MetadataResolver.underlying_meta(tracker, index_key: position_data.index_key)
       return unless meta
@@ -576,6 +615,7 @@ module Positions
     rescue StandardError => e
       Rails.logger.error("[Positions::ActiveCache] Failed to attach underlying metadata for tracker #{tracker.id}: #{e.class} - #{e.message}")
     end
+    # rubocop:enable Metrics/AbcSize
   end
   # rubocop:enable Metrics/ClassLength
 end

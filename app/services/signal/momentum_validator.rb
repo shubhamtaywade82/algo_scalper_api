@@ -4,7 +4,7 @@ module Signal
   # Validates momentum before entry
   # Requires at least 1 momentum confirmation
   class MomentumValidator
-    Result = Struct.new(:valid, :score, :factors, :reasons, keyword_init: true)
+    Result = Struct.new(:valid, :score, :factors, :reasons)
 
     # Validate momentum with multiple checks
     # @param instrument [Instrument] Instrument object

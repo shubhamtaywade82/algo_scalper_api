@@ -27,7 +27,7 @@ module Live
       # Always run enforcement - ExitEngine is only used for executing exits, not for triggering them.
       def monitor_loop(last_paper_pnl_update)
         # Clear per-cycle caches at the start
-        @redis_pnl_cache.clear
+        @redis_pnl_cache = {}
         @cycle_tracker_map = nil
 
         # Skip processing if market is closed and no active positions
@@ -322,6 +322,22 @@ module Live
       rescue StandardError => e
         Rails.logger.error("[RiskManager] exits_blocked_by_time? error: #{e.message}")
         false
+      end
+
+      # True when outside continuous trading window (before 9:20 or after 15:30 IST).
+      def outside_trading_window?
+        TradingSession::Service.market_closed?
+      end
+
+      # True only in 15:30–16:00 IST so EOD force-close runs once after close, not at 1 AM or weekend.
+      def in_eod_force_close_window?
+        return false unless TradingSession::Service.after_market_close_time?
+
+        ist = TradingSession::Service.current_ist_time
+        now_min = (ist.hour * 60) + ist.min
+        close_min = (TradingSession::Service::MARKET_CLOSE_HOUR * 60) + TradingSession::Service::MARKET_CLOSE_MINUTE
+        end_min = (16 * 60) + 0
+        now_min >= close_min && now_min < end_min
       end
     end
   end

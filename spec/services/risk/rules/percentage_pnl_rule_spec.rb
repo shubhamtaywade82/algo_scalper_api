@@ -7,7 +7,7 @@ RSpec.describe Risk::Rules::PercentagePnlRule do
     {
       percentage_pnl_exit: {
         enabled: true,
-        target_pct: 15.0
+        target_pct: 0.15 # DECIMAL format (15%)
       }
     }
   end

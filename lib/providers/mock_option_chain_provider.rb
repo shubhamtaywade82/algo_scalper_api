@@ -34,7 +34,7 @@ module Providers
 
     def generate_strikes(atm_strike)
       strikes = (-3..3).map do |offset|
-        (atm_strike + (offset * @strike_interval))
+        atm_strike + (offset * @strike_interval)
       end
       strikes.select(&:positive?).sort
     end

@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Orders::MfeExitEngine do
-  let(:tracker) { instance_double(PositionTracker, symbol: symbol, entry_price: 100.0, highest_price: 100.0, lowest_price: 100.0, meta: {}, update!: true) }
+  let(:tracker) { instance_double(PositionTracker, symbol: symbol, entry_price: 100.0, highest_price: 100.0, meta: {}) }
   let(:symbol) { 'NIFTY24MAR22000CE' }
   let(:ltp) { 100.0 }
   let(:engine) { described_class.new(position: tracker, ltp: ltp) }

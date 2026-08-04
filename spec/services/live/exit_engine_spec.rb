@@ -332,7 +332,7 @@ RSpec.describe Live::ExitEngine do
 
     context 'with LTP fallback' do
       it 'handles nil LTP gracefully' do
-        allow(Live::TickCache).to receive(:ltp).and_return(nil)
+        allow(Live::TickQuery).to receive(:ltp_for).and_return(nil)
 
         result = engine.execute_exit(tracker, 'test reason')
 
@@ -342,7 +342,7 @@ RSpec.describe Live::ExitEngine do
       end
 
       it 'handles LTP fetch errors gracefully' do
-        allow(TickCache.instance).to receive(:ltp).and_raise(StandardError.new('Cache error'))
+        allow(Live::TickQuery).to receive(:ltp_for).and_raise(StandardError.new('Cache error'))
         allow(router).to receive(:exit_market).and_return({ success: true, exit_price: 101.5 })
 
         result = engine.execute_exit(tracker, 'test reason')
@@ -367,7 +367,7 @@ RSpec.describe Live::ExitEngine do
       end
 
       it 'falls back to LTP when gateway does not provide exit_price' do
-        allow(Live::TickCache).to receive(:ltp).and_return(102.5)
+        allow(Live::TickQuery).to receive(:ltp_for).and_return(102.5)
         allow(router).to receive(:exit_market).and_return({ success: true })
 
         result = engine.execute_exit(tracker, 'test reason')
@@ -379,7 +379,7 @@ RSpec.describe Live::ExitEngine do
       end
 
       it 'uses gateway exit_price even when LTP is nil' do
-        allow(Live::TickCache).to receive(:ltp).and_return(nil)
+        allow(Live::TickQuery).to receive(:ltp_for).and_return(nil)
         allow(router).to receive(:exit_market).and_return({ success: true, exit_price: 100.0 })
 
         result = engine.execute_exit(tracker, 'test reason')

@@ -406,10 +406,12 @@ module Signal
 
       # Log the ordering for debugging
       if sorted.size > 1
+        # rubocop:disable Style/MultilineBlockChain
         order_str = sorted.map do |item|
           expiry_info = item[:expiry_date] ? "#{item[:expiry_date].strftime('%Y-%m-%d')} (#{item[:days_to_expiry]}d)" : 'N/A'
           "#{item[:index_cfg][:key]}: #{expiry_info}"
         end.join(' → ')
+        # rubocop:enable Style/MultilineBlockChain
         Rails.logger.debug { "[SignalScheduler] Processing order (by expiry proximity): #{order_str}" }
       end
 

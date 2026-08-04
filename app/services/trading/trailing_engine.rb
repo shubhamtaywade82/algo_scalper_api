@@ -62,7 +62,7 @@ module Trading
     def update_hwm
       if @ltp > @highest
         @highest = @ltp
-        @tracker.update_columns(meta: @tracker.meta.merge('highest_price' => @highest))
+        @tracker.update_columns(meta: @tracker.meta.merge('highest_price' => @highest)) # rubocop:disable Rails/SkipsModelValidations
       end
     end
 

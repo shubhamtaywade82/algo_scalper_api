@@ -67,29 +67,16 @@ module Live
 
       ltp = safe_ltp(tracker)
 
-      cmd_result = nil
-      begin
-        cmd_result = Orders::Commands::ExitOrderCommand.new(
-          gateway: @router,
-          tracker: tracker,
-          client_order_id: tracker.exit_coid,
-          reason: reason
-        ).call
-      rescue StandardError => e
-        Rails.logger.error("[ExitEngine] Router exception for #{tracker.order_no}: #{e.class} - #{e.message}")
-        return { success: false, reason: 'router_failed', error: e }
-      end
+      cmd_result = Orders::Commands::ExitOrderCommand.new(
+        gateway: @router,
+        tracker: tracker,
+        client_order_id: tracker.exit_coid,
+        reason: reason
+      ).call
 
       unless cmd_result.success?
-        error_detail = cmd_result.error
-        if error_detail.nil? && cmd_result.payload.is_a?(Hash)
-          # Keep payload shape (includes :raw) for consistent caller/logging handling.
-          error_detail = cmd_result.payload
-        end
-        error_detail = cmd_result.payload if error_detail.nil?
-
         Rails.logger.error("[ExitEngine] Router failed for #{tracker.order_no}: #{cmd_result.reason} (coid: #{tracker.exit_coid})")
-        return { success: false, reason: 'router_failed', error: error_detail }
+        return { success: false, reason: 'router_failed', error: cmd_result.error || cmd_result.payload }
       end
 
       # Extract raw broker response from command payload for downstream helpers
@@ -149,8 +136,18 @@ module Live
       tracker.exit_reason
     end
 
-    def ensure_exit_reason_on_meta!(tracker, reason)
-      return if reason.blank?
+    # Persists broker acknowledgement metadata after successful exit order placement.
+    # @param tracker [PositionTracker]
+    # @param result [Hash, Object]
+    # @return [void]
+    def persist_broker_ack!(tracker, result)
+      order_id = result.is_a?(Hash) ? (result[:order_id] || result['order_id']) : nil
+      tracker.update_columns( # rubocop:disable Rails/SkipsModelValidations
+        exit_sent_at: Time.current,
+        exit_order_id: order_id,
+        updated_at: Time.current
+      )
+    end
 
       tracker.reload
       return if tracker.exit_reason.to_s.strip.present?

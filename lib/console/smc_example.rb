@@ -5,16 +5,27 @@
 #
 #   Console::SmcExample.fetch_nifty_and_sensex_candles
 #
-# NOTE: Must always define Console::SmcExample so Zeitwerk eager load works
-# (bin/jobs, production boot). Behavior is gated inside the method.
-module Console
-  module SmcExample
-    module_function
+if Rails.env.local?
+  module Console
+    module SmcExample
+      module_function
 
-    def fetch_nifty_and_sensex_candles
-      unless console_demo_allowed?
-        Rails.logger.debug { '[Console::SmcExample] Skipped (use in development/test console only)' }
-        return
+      def fetch_nifty_and_sensex_candles
+        require_relative 'smc_helpers'
+
+        Rails.logger.debug { "\n#{'=' * 80}" }
+        Rails.logger.debug '  Fetching Candles for NIFTY and SENSEX'
+        Rails.logger.debug '=' * 80
+
+        fetch_for(symbol_name: 'NIFTY', security_id: '13')
+        fetch_for(symbol_name: 'SENSEX', security_id: '51')
+
+        Rails.logger.debug { "\n#{'=' * 80}" }
+        Rails.logger.debug '  Available Variables:'
+        Rails.logger.debug '=' * 80
+        Rails.logger.debug '  NIFTY:  $nifty_1h, $nifty_15m, $nifty_5m'
+        Rails.logger.debug '  SENSEX: $sensex_1h, $sensex_15m, $sensex_5m'
+        Rails.logger.debug "\n"
       end
 
       require_relative 'smc_helpers'

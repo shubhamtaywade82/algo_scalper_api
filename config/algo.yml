@@ -57,8 +57,8 @@ feature_flags:
   enable_trend_scorer: false # Toggle TrendScorer on/off (if false, uses legacy Supertrend+ADX path)
   enable_auto_subscribe_unsubscribe: true
   enable_demand_driven_services: true
-  enable_underlying_aware_exits: false
-  enable_peak_drawdown_activation: false
+  enable_underlying_aware_exits: true
+  enable_peak_drawdown_activation: true
   auto_paper_on_insufficient_balance: false
 
 # Calibration: historical option behaviour (weekly) and optional AI trade-based patches.
@@ -571,9 +571,12 @@ position_sizing:
     dd_end_pct: 1.0 # floor allowed DD at this % when profit >= profit_max
     exponential_k: 3.0 # curve steepness
     index_floors:
-      NIFTY: 1.0
-      BANKNIFTY: 1.2
-      SENSEX: 1.5
+      NIFTY: 0.01 # 1% floor
+      BANKNIFTY: 0.012 # 1.2% floor
+      SENSEX: 0.015 # 1.5% floor
+    # Emergency peak-loss exit: exit immediately if position had significant profit and flips to loss
+    emergency_peak_loss_exit: true    # Enable emergency exit
+    emergency_min_peak_pct: 0.10     # 10% minimum peak before emergency logic applies
 
   # Reverse (below entry) dynamic loss tightening
   reverse_loss:

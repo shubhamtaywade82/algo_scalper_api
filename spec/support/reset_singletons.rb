@@ -23,11 +23,6 @@ RSpec.configure do |config|
           instance.instance_variable_set(:@index, Concurrent::Map.new) if instance.instance_variable_get(:@index).nil?
         elsif singleton_class == Live::TickCache
           instance.clear if instance.respond_to?(:clear)
-        elsif singleton_class == Live::RedisPnlCache
-          instance.instance_variable_get(:@sync_timestamps)&.clear
-        elsif singleton_class == Live::RedisTickCache
-          # Preserve @redis; no per-example state to clear beyond generic ivars (skipped below)
-          nil
         elsif singleton_class == Positions::ActiveCache
           instance.clear if instance.respond_to?(:clear)
         elsif singleton_class == Live::MarketFeedHub
@@ -53,10 +48,7 @@ RSpec.configure do |config|
               instance.instance_variable_set(ivar, false)
             else
               # Only set to nil if not a fundamental state container
-              # Keep live Redis clients — clearing @redis breaks integration specs that
-              # round-trip data through RedisPnlCache / RedisTickCache.
-              next if ivar == :@redis && [Live::RedisPnlCache, Live::RedisTickCache].include?(singleton_class)
-
+              # We explicitly include @redis here to prevent mock leakage
               instance.instance_variable_set(ivar, nil) unless %i[@index @cache @queue].include?(ivar) && ivar != :@redis
             end
           end

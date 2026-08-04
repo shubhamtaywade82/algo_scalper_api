@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# rubocop:disable Metrics/BlockNesting
 
 require_relative '../concerns/broker_fee_calculator'
 
@@ -28,49 +29,25 @@ module Entries
           return false
         end
 
-        Observability::StructuredLog.info(
-          event: 'entry_attempted',
-          payload: {
-            service: 'Entries::EntryGuard',
-            index_key: index_cfg[:key].to_s,
-            direction: direction.to_s,
-            symbol: pick[:symbol].to_s
-          }
-        )
-
         # Portfolio-level policy gate (fast fail before building context)
         entry_policy = Policies::EntryPolicy.new(index_cfg: index_cfg, direction: direction)
         unless entry_policy.permitted?
-          Observability::StructuredLog.info(
-            event: 'entry_blocked',
-            payload: {
-              service: 'Entries::EntryGuard',
-              index_key: index_cfg[:key].to_s,
-              symbol: pick[:symbol].to_s,
-              stage: 'entry_policy',
-              reasons: entry_policy.reasons
-            }
-          )
-          signal&.record_entry_outcome('blocked', entry_policy.reasons.join('; '))
+          Rails.logger.info("[EntryGuard] EntryPolicy blocked — #{entry_policy.reasons.join(', ')}")
           return false
         end
 
-        # BANKNIFTY: Only allow entries in the last week before monthly expiry
-        # (BANKNIFTY weekly options carry excessive theta decay outside the final week)
-        if index_cfg[:key].to_s == 'BANKNIFTY' && !banknifty_last_week?
-          Rails.logger.info('[EntryGuard] BANKNIFTY entry blocked — not last week before monthly expiry')
-          return false
-        end
-
-        # Edge failure detector (rolling PnL window, consecutive SLs, session-based)
-        edge_check = Live::EdgeFailureDetector.instance.entries_paused?(index_key: index_cfg[:key])
-        if edge_check[:paused]
-          resume_at = edge_check[:resume_at]
-          resume_str = resume_at ? resume_at.strftime('%H:%M IST') : 'manual override'
-          Rails.logger.info(
-            "[EntryGuard] Entry blocked by edge failure detector for #{index_cfg[:key]}: #{edge_check[:reason]} (resume at: #{resume_str})"
-          )
-          signal&.record_entry_outcome('blocked', reason.to_s)
+        context = {
+          index_cfg: index_cfg,
+          pick: pick,
+          direction: direction,
+          scale_multiplier: scale_multiplier,
+          entry_metadata: entry_metadata,
+          permission: permission
+        }
+        result = entry_guard_pipeline.run(context)
+        if result != EntryGuardPipeline::PASS
+          reason = result.is_a?(Hash) ? result[:blocked] : result.to_s
+          Rails.logger.info("[EntryGuard] Entry blocked — #{reason}")
           return false
         end
 
@@ -211,9 +188,21 @@ module Entries
           return false
         end
 
-        # Live trading: Place real order
-        response = Orders.config.place_market(
-          side: 'buy',
+        # Risk-level policy gate (portfolio exposure + drawdown check before broker call)
+        risk_policy = Policies::RiskPolicy.new(
+          index_key: index_cfg[:key].to_s,
+          proposed_qty: quantity,
+          entry_price: ltp.to_f,
+          lot_size: lot_size
+        )
+        unless risk_policy.permitted?
+          Rails.logger.info("[EntryGuard] RiskPolicy blocked for #{index_cfg[:key]} — #{risk_policy.reasons.join(', ')}")
+          return false
+        end
+
+        place_cmd = Orders::Commands::PlaceOrderCommand.new(
+          gateway: Orders.config.gateway,
+          side: :buy,
           segment: pick[:segment] || index_cfg[:segment],
           security_id: pick[:security_id],
           qty: quantity,
@@ -225,16 +214,6 @@ module Entries
 
         unless place_cmd.success?
           Rails.logger.error("[EntryGuard] place_market failed for #{index_cfg[:key]}: #{pick[:symbol]} (#{place_cmd.reason})")
-          Observability::StructuredLog.error(
-            event: 'entry_order_failed',
-            payload: {
-              service: 'Entries::EntryGuard',
-              index_key: index_cfg[:key].to_s,
-              symbol: pick[:symbol].to_s,
-              reason: place_cmd.reason.to_s
-            }
-          )
-          signal&.record_entry_outcome('blocked', "order_placement_failed: #{place_cmd.reason}")
           return false
         end
 
@@ -986,11 +965,21 @@ module Entries
       def apply_bos_metadata!(meta_hash, bos_context, entry_metadata, entry_price:, quantity:)
         return unless bos_context
 
-        origin_price = bos_context[:origin_swing][:price].to_f
-        entry_underlying_price = bos_context[:entry_underlying_price]
-        reference_price = entry_underlying_price || entry_price
-        entry_risk_rupees = (reference_price.to_f - origin_price).abs * quantity.to_i
-        premium_r = entry_risk_rupees / quantity.to_f
+        contract = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_contract].to_s : ''
+        if contract == SUPERTREND_CONTRACT
+          # Supertrend direct entries do not have BOS structure risk; derive premium risk from configured SL %.
+          sl_decimal = supertrend_sl_decimal
+          premium_r = entry_price.to_f * sl_decimal
+          entry_risk_rupees = premium_r * quantity.to_i
+          origin_price = entry_price.to_f
+          entry_underlying_price = entry_metadata.is_a?(Hash) ? entry_metadata[:entry_underlying_price] : nil
+        else
+          origin_price = bos_context[:origin_swing][:price].to_f
+          entry_underlying_price = bos_context[:entry_underlying_price]
+          sl_decimal = supertrend_sl_decimal
+          premium_r = entry_price.to_f * sl_decimal
+          entry_risk_rupees = premium_r * quantity.to_i
+        end
         premium_stop = entry_price.to_f - premium_r
         premium_target = entry_price.to_f + premium_r
 
@@ -1000,7 +989,7 @@ module Entries
         meta_hash[:premium_stop_price] = premium_stop
         meta_hash[:initial_sl_pct] = (premium_r / entry_price.to_f * 100.0).round(2)
         meta_hash[:premium_target_price] = premium_target
-        meta_hash[:entry_underlying_price] = entry_underlying_price if entry_underlying_price
+        meta_hash[:entry_underlying_price] = entry_underlying_price || resolve_underlying_ltp(meta_hash[:index_key])
         meta_hash[:bos_confirmed_at] = bos_context[:confirmed_at]&.iso8601
         meta_hash[:bos_origin_index] = bos_context[:origin_swing][:index]
         meta_hash[:bos_timeframe] = bos_context[:timeframe]

@@ -40,6 +40,66 @@ module Trading
         permission_mode = config[:permission_mode] || 'strict'
         permission_mode == 'lenient' ? :execution_only : :blocked
       end
+
+      private
+
+      def resolve_avrz_state(symbol:, ltf_series:)
+        candles = ltf_series&.candles || []
+        # Reduced minimum candle requirement from 10 to 5 for more lenient detection
+        return :compressed if candles.size < 5 # Default to compressed instead of dead
+
+        compressed = Entries::RangeUtils.compressed?(candles.last(6), threshold_pct: compression_threshold_pct(symbol))
+        return :compressed if compressed
+
+        rejection = Avrz::Detector.new(ltf_series).rejection?
+        rejection ? :expanding_early : :compressed # Default to compressed instead of dead for better trade opportunities
+      rescue StandardError
+        :compressed # More lenient: default to compressed instead of dead
+      end
+
+      # Index-specific compression thresholds (deterministic).
+      # NOTE: These are conservative; if unsure => :compressed/:dead -> blocks scaling.
+      def compression_threshold_pct(symbol)
+        case symbol
+        when 'SENSEX' then 0.04
+        when 'NIFTY' then 0.06
+        else 0.06
+        end
+      end
+
+      def build_smc_result(htf:, mtf:, ltf:)
+        htf_trend = htf.trend
+        mtf_struct = mtf.structure.to_h
+        # ltf might be mtf fallback, so use internal_structure safely
+        ltf_struct = ltf.respond_to?(:internal_structure) ? ltf.internal_structure.to_h : mtf_struct
+
+        structure_state = case htf_trend.to_sym
+                          when :range then :range
+                          when :bullish, :bearish then :trend
+                          else :neutral
+                          end
+
+        # Use ltf for FVG/liquidity if available, otherwise fallback to mtf
+        fvg_data = ltf.respond_to?(:fvg) ? ltf.fvg.to_h : {}
+        liquidity_data = ltf.respond_to?(:liquidity) ? ltf.liquidity.to_h : {}
+        # Active = unmitigated FVGs; all_gaps = all FVGs in lookback (displacement proxy)
+        fvg_active = Array(fvg_data[:active])
+        fvg_any = fvg_active.any? || Array(fvg_data[:all_gaps]).any?
+        liquidity_h = liquidity_data
+
+        {
+          structure_state: structure_state,
+          trend: htf_trend,
+          bos_recent: mtf_struct[:last_bos].present?,
+          displacement: fvg_any,
+          liquidity_event_resolved: liquidity_h[:buy_side_taken] == true || liquidity_h[:sell_side_taken] == true,
+          active_liquidity_trap: liquidity_h[:equal_highs] == true || liquidity_h[:equal_lows] == true,
+          trap_resolved: false,
+          follow_through: ltf_struct[:last_bos].present?
+        }
+      rescue StandardError
+        {}
+      end
     end
   end
 end

@@ -24,9 +24,7 @@ module Policies
     end
 
     def permitted?
-      allowed = violations.empty?
-      log_blocked_reasons unless allowed
-      allowed
+      violations.empty?
     end
 
     def reasons
@@ -40,10 +38,10 @@ module Policies
     end
 
     def compute_violations
-      checks = %i[
-        circuit_breaker_tripped?
-        outside_trading_hours?
-        daily_loss_limit_reached?
+      checks = [
+        :circuit_breaker_tripped?,
+        :outside_trading_hours?,
+        :daily_loss_limit_reached?
       ]
       checks.each_with_object([]) do |check, acc|
         acc << check.to_s.delete_suffix('?') if send(check)
@@ -70,26 +68,9 @@ module Policies
       result = Live::DailyLimits.new.can_trade?(index_key: index_key)
       return false if result[:allowed]
 
-      blocked_for_risk_reason?(result[:reason])
+      !%w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].include?(result[:reason])
     rescue StandardError
       false
-    end
-
-    def blocked_for_risk_reason?(reason)
-      %w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].exclude?(reason)
-    end
-
-    def log_blocked_reasons
-      index_key = @index_cfg&.dig(:key).to_s
-      Observability::StructuredLog.warn(
-        event: 'entry_policy_blocked',
-        payload: {
-          service: 'Policies::EntryPolicy',
-          index_key: index_key,
-          direction: @direction.to_s,
-          reasons: reasons
-        }
-      )
     end
   end
 end

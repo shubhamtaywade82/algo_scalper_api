@@ -42,27 +42,42 @@ module Risk
         return skip_result unless context.active?
 
         tracker = context.tracker
-        instrument = tracker.instrument || tracker.watchable&.instrument
-        return skip_result unless instrument
+        return skip_result unless tracker.created_at
 
-        # Get position direction
-        position_direction = determine_position_direction(tracker, instrument)
-        return skip_result unless position_direction.in?(%i[bullish bearish])
+        # Use the fresh LTP from context if available
+        current_ltp = context.position.respond_to?(:current_ltp) ? context.position.current_ltp.to_f : nil
+        current_ltp ||= tracker.entry_price.to_f # Fallback (should not happen in live)
 
-        # Get index key for threshold lookup
-        index_key = tracker.meta&.dig('index_key') || instrument&.symbol_name&.split('_')&.first&.upcase || 'NIFTY'
-        thresholds = MOMENTUM_THRESHOLDS[index_key] || DEFAULT_THRESHOLDS
+        # Initialize or update peak premium in meta
+        meta = tracker.meta || {}
+        peak = meta['peak_premium'].to_f
+        last_peak_at = meta['peak_premium_at'] ? Time.zone.parse(meta['peak_premium_at']) : tracker.created_at
 
-        # Check 1m momentum failure
-        if momentum_failed?(instrument, position_direction, '1', thresholds['1'])
-          reason = "PREMIUM_MOMENTUM_FAILURE (1m: no progress in #{thresholds['1']} candles)"
-          return exit_result(reason: reason, metadata: { timeframe: '1m', candles: thresholds['1'] })
+        # Update peak if current LTP is higher
+        if current_ltp > peak
+          meta['peak_premium'] = current_ltp
+          meta['peak_premium_at'] = Time.current.iso8601
+          tracker.update_column(:meta, meta) # rubocop:disable Rails/SkipsModelValidations
+          return no_action_result
         end
 
-        # Check 5m momentum failure
-        if momentum_failed?(instrument, position_direction, '5', thresholds['5'])
-          reason = "PREMIUM_MOMENTUM_FAILURE (5m: no progress in #{thresholds['5']} candles)"
-          return exit_result(reason: reason, metadata: { timeframe: '5m', candles: thresholds['5'] })
+        # Check if stalled - ONLY for losing trades (Theta protection)
+        # Winners are handled by trailing stop/peak drawdown logic
+        return no_action_result if context.pnl_pct.to_f.positive?
+
+        stall_minutes = DEFAULT_STALL_MINUTES
+        elapsed_since_peak = (Time.current - last_peak_at) / 60.0
+
+        if elapsed_since_peak >= stall_minutes
+          reason = "PREMIUM_MOMENTUM_FAILURE (No new peak in #{elapsed_since_peak.round(1)} mins, Peak: #{peak.round(2)})"
+          return exit_result(
+            reason: reason,
+            metadata: {
+              peak: peak,
+              current: current_ltp,
+              elapsed_since_peak: elapsed_since_peak
+            }
+          )
         end
 
         no_action_result

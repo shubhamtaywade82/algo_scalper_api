@@ -178,7 +178,12 @@ module Smc
 
         days_to_expiry = calculate_days_to_expiry(instrument)
 
-        if days_to_expiry > max_expiry_days
+        if days_to_expiry == 999
+          Rails.logger.warn(
+            "[Smc::Scanner] Keeping #{idx_cfg[:key]} with unknown expiry " \
+            "(days_to_expiry=999) to avoid blocking signal processing"
+          )
+        elsif days_to_expiry > max_expiry_days
           Rails.logger.debug do
             "[Smc::Scanner] Skipping #{idx_cfg[:key]} - expiry in #{days_to_expiry} days " \
               "(> #{max_expiry_days} days limit)"

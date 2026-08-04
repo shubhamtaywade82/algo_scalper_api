@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require 'json'
-require 'open3'
+require 'English'
+require "json"
 
 module AutoExp
   class BacktestExecutor
@@ -15,8 +15,8 @@ module AutoExp
         chdir: Rails.root.to_s
       )
 
-      unless status.success?
-        Rails.logger.error("[AutoExp] Backtest script failed with status #{status.exitstatus}")
+      unless $CHILD_STATUS.success? # rubocop:disable Style/GlobalVars
+        Rails.logger.error("[AutoExp] Backtest script failed with status #{$CHILD_STATUS.exitstatus}") # rubocop:disable Style/GlobalVars
         raise "Backtest failed"
       end
 

@@ -76,7 +76,7 @@ module Smc
       @prefetched_data[:trend_analysis] = compute_trend_analysis
 
       # 3. Option chain (only for indices, may make API call)
-      if is_index?
+      if index?
         Rails.logger.debug('[Smc::AiAnalyzer] Pre-fetching option chain for index')
         @prefetched_data[:option_chain] = fetch_option_chain_data
       else
@@ -163,22 +163,10 @@ module Smc
       PROMPT
     end
 
-    def initial_analysis_prompt
-      symbol_name = @instrument.symbol_name || 'UNKNOWN'
-      decision = @initial_data[:decision]
-      trend_analysis = compute_trend_analysis
-
-      <<~PROMPT
-        Analyze the following SMC/AVRZ market structure data for #{symbol_name}:
-
-        Trading Decision from SMC Engine: #{decision}
-
-        **CRITICAL: PRICE TREND ANALYSIS (USE THIS FOR DIRECTION DECISION)**
-        #{trend_analysis}
-
-        Market Structure Analysis (Multi-Timeframe):
-
-        #{JSON.pretty_generate(@initial_data[:timeframes])}
+    def index?
+      segment = @instrument.exchange_segment
+      segment.to_s.upcase == 'IDX_I'
+    end
 
     def current_ltp
       ltp = @instrument.ltp || @instrument.latest_ltp
@@ -186,7 +174,7 @@ module Smc
     end
 
     def fetch_option_chain_data
-      return nil unless is_index?
+      return nil unless index?
 
         0. **Trend Confirmation** (MANDATORY - DO THIS FIRST):
            - Look at the Price Trend Analysis above
@@ -817,9 +805,11 @@ module Smc
         '- No significant gaps detected'
       else
         recent_gaps = gaps.last(3)
+        # rubocop:disable Style/MultilineBlockChain
         recent_gaps.map do |g|
           "- #{g[:type]}: #{g[:size]} points (#{g[:pct]}%) at #{g[:time]}"
         end.join("\n")
+        # rubocop:enable Style/MultilineBlockChain
       end
     end
 
@@ -930,10 +920,12 @@ module Smc
     end
 
       dates = daily_data.keys.sort.last(3)
+      # rubocop:disable Style/MultilineBlockChain
       dates.map do |date|
         d = daily_data[date]
         "- #{date}: Open ₹#{d[:open].round(2)}, High ₹#{d[:high].round(2)}, Low ₹#{d[:low].round(2)}, Close ₹#{d[:close].round(2)}"
       end.join("\n")
+      # rubocop:enable Style/MultilineBlockChain
     end
 
     def direction_recommendation(trend, gap_analysis, pattern)

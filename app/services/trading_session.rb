@@ -95,18 +95,30 @@ module TradingSession
         [deadline.to_i - current_ist.to_i, 0].max
       end
 
-      # Check if market is closed (after 3:30 PM IST)
-      # Used to skip signal generation and entry attempts
+      # Check if market is closed: outside continuous trading window (before 9:20 or after 15:30 IST).
+      # Used to skip signal generation, entry attempts, and off-hours exit enforcement.
       # @return [Boolean]
       def market_closed?
         current_ist = current_ist_time
         hour = current_ist.hour
         minute = current_ist.min
 
+        return true if hour < ENTRY_START_HOUR || (hour == ENTRY_START_HOUR && minute < ENTRY_START_MINUTE)
+        return true if hour > MARKET_CLOSE_HOUR || (hour == MARKET_CLOSE_HOUR && minute >= MARKET_CLOSE_MINUTE)
+
+        false
+      end
+
+      # True when clock is past market close (15:30 IST). Use for EOD windows, not for "skip work".
+      # @return [Boolean]
+      def after_market_close_time?
+        current_ist = current_ist_time
+        hour = current_ist.hour
+        minute = current_ist.min
         hour > MARKET_CLOSE_HOUR || (hour == MARKET_CLOSE_HOUR && minute >= MARKET_CLOSE_MINUTE)
       end
 
-      # Check if market is open (before 3:30 PM IST)
+      # Check if market is open (inside 9:20–15:30 IST window).
       # @return [Boolean]
       def market_open?
         !market_closed?

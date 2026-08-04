@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# rubocop:disable Metrics/BlockNesting
 
 module Options
   # Enhanced ChainAnalyzer that uses Derivative records and integrates with existing infrastructure
@@ -165,10 +166,11 @@ module Options
         derivatives = if derivatives.respond_to?(:where)
                         derivatives.where(strike_price: api_strikes.to_a)
                       else
-                        filtered_ids = Array(derivatives).select do |d|
+                        matching = Array(derivatives).select do |d|
                           strike_bd = BigDecimal(d.strike_price.to_s)
                           api_strikes.include?(strike_bd)
-                        end.map(&:id)
+                        end
+                        filtered_ids = matching.map(&:id)
                         Derivative.where(id: filtered_ids)
                       end
 
@@ -198,19 +200,21 @@ module Options
       if atm_strike_approx
         window = (@config[:strike_window_steps] || 2).to_i
         window = 2 if window <= 0 || window > 2 # Cap at 2OTM only
-        target_strikes = (-window..window).map do |offset|
+        target_strikes_raw = (-window..window).map do |offset|
           atm_strike_approx + (offset * strike_increment)
-        end.select(&:positive?).uniq
+        end
+        target_strikes = target_strikes_raw.select(&:positive?).uniq
 
         if target_strikes.any?
           target_strikes_bd = target_strikes.map { |strike| BigDecimal(strike.to_s) }
           filtered = if derivatives.respond_to?(:where)
                        derivatives.where(strike_price: target_strikes_bd)
                      else
-                       filtered_ids = Array(derivatives).select do |d|
+                       matching_derivs = Array(derivatives).select do |d|
                          strike_bd = BigDecimal(d.strike_price.to_s)
                          target_strikes_bd.include?(strike_bd)
-                       end.map(&:id)
+                       end
+                       filtered_ids = matching_derivs.map(&:id)
                        Derivative.where(id: filtered_ids)
                      end
 
@@ -238,10 +242,10 @@ module Options
         # Try multiple strike formats to match API chain keys (e.g., "27950.000000", "27950.0", "27950")
         strike_float = derivative.strike_price.to_f
         strike_formats = [
-          format('%.6f', strike_float), # "27950.000000" - API format
-          strike_float.to_s,              # "27950.0" - default float format
-          strike_float.to_i.to_s,         # "27950" - integer format
-          format('%.2f', strike_float) # "27950.00" - 2 decimal places
+          format('%<v>.6f', v: strike_float), # "27950.000000" - API format
+          strike_float.to_s,               # "27950.0" - default float format
+          strike_float.to_i.to_s,          # "27950" - integer format
+          format('%<v>.2f', v: strike_float) # "27950.00" - 2 decimal places
         ].uniq
 
         option_type_lower = derivative.option_type.to_s.downcase
@@ -427,7 +431,14 @@ module Options
     # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
     def score_chain(chain, atm, spot, direction)
       @direction = direction # Store for use in reason_for
-      option_type = direction == :bullish ? 'CE' : 'PE'
+      option_type_key = direction == :bullish ? 'CE' : 'PE'
+      flow_side = direction == :bullish ? 'ce' : 'pe'
+
+      # Extract flow scores for lookup
+      flow_scores = (flow_results&.[](flow_side) || []).to_h do |f|
+                      [f[:strike].to_f, f[:score]]
+      end
+
       max_distance_pct = (@config[:strike_distance_pct] || 0.02).to_f
       max_distance = spot * max_distance_pct
 
@@ -529,9 +540,9 @@ module Options
       end
     end
 
-    # Combined scoring function (heuristic - must be backtested)
-    # rubocop:disable Metrics/AbcSize
-    def combined_score(option, atm, spot, _direction)
+    # Combined institutional scoring function
+    # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    def combined_score(option, atm, spot, _direction, flow_score: 1.0, gamma_score: 0.0)
       weights = @config[:scoring_weights] || {
         oi: 0.4,
         spread: 0.25,
@@ -580,7 +591,7 @@ module Options
 
       base_score + atm_bonus
     end
-    # rubocop:enable Metrics/AbcSize
+    # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
     # Build symbol string for candidate (compatible with BaseEngine)
     def build_symbol(derivative, strike, type, _expiry)
@@ -591,6 +602,7 @@ module Options
     end
 
     # Generate human-readable reason for selection
+    # rubocop:disable Metrics/AbcSize
     def reason_for(option, score, atm, spot, direction)
       trade_direction = direction.to_s.downcase.to_sym
       distance = (option[:strike] - spot).abs
@@ -608,6 +620,24 @@ module Options
 
       "Score:#{score.round(3)} IV:#{option[:iv]&.round(2)}% OI:#{option[:oi]} " \
         "Spread:#{spread_str} Strike:#{option[:strike]} (#{strike_type}, #{distance_pct}% from spot)"
+    end
+    # rubocop:enable Metrics/AbcSize
+
+    private
+
+    def transform_chain_for_flow(chain)
+      oc = {}
+      chain.each do |option|
+        strike = option[:strike].to_s
+        oc[strike] ||= {}
+        type = option[:type].to_s.downcase # 'CE' or 'PE'
+        oc[strike][type] = {
+          'oi' => option[:oi],
+          'volume' => option[:volume],
+          'last_price' => option[:ltp]
+        }
+      end
+      oc
     end
   end
   # rubocop:enable Metrics/ClassLength

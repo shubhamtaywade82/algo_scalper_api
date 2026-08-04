@@ -234,9 +234,9 @@ class MultiIndicatorStrategy
 
     # Determine dominant direction
     dominant_direction = if bullish_count > bearish_count && bullish_count > neutral_count
-                           :bullish
+ :bullish
                          elsif bearish_count > bullish_count && bearish_count > neutral_count
-                           :bearish
+ :bearish
                          else
                            :neutral
                          end
@@ -251,11 +251,11 @@ class MultiIndicatorStrategy
 
     # Determine confluence strength
     confluence_strength = if confluence_score >= 80
-                            :strong
+ :strong
                           elsif confluence_score >= 60
-                            :moderate
+ :moderate
                           elsif confluence_score >= 40
-                            :weak
+ :weak
                           else
                             :none
                           end

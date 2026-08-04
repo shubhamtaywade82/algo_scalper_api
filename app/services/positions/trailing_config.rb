@@ -126,14 +126,19 @@ module Positions
     end
 
     def peak_drawdown_active?(profit_pct:, current_sl_offset_pct:)
-      profit_pct.to_f >= config[:activation_profit_pct] &&
+      # Emergency: always protect if peak profit exceeds 2x activation threshold
+      return true if profit_pct.to_f >= config[:activation_profit_pct].to_f * 2.0
+
+      # Normal: either profit threshold OR SL already moved up is sufficient
+      profit_pct.to_f >= config[:activation_profit_pct] ||
         current_sl_offset_pct.to_f >= config[:activation_sl_offset_pct]
     end
 
     def sl_price_from_entry(entry_price, sl_offset_pct)
       raise ArgumentError, 'entry_price required' if entry_price.nil?
 
-      entry_price.to_f * (1.0 + (sl_offset_pct.to_f / 100.0))
+      # sl_offset_pct is DECIMAL format (e.g., -0.15 for -15%)
+      (entry_price.to_f * (1.0 + sl_offset_pct.to_f)).round(2)
     end
 
     def calculate_sl_price(entry_price, profit_pct)

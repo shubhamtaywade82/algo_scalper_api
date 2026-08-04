@@ -126,11 +126,32 @@ def fetch_authority_token!
     token_url = token_authority_url
     authority_token = ENV["DHAN_TOKEN_ACCESS_TOKEN"].presence
 
-    if token_url.blank?
-      raise "Token authority URL invalid/missing (TRADER_API_BASE_URL)"
-    end
-    if authority_token.blank?
-      raise "Token authority bearer missing (DHAN_TOKEN_ACCESS_TOKEN)"
+    if token_url.present? && authority_token.present?
+      begin
+        response = Faraday.get(token_url) do |req|
+          req.headers["Authorization"] = "Bearer #{authority_token}"
+        end
+
+        if response.success?
+          data = JSON.parse(response.body)
+          token = data["access_token"].presence || data["accessToken"].presence
+          return token if token.present?
+        end
+
+        Rails.logger.warn "[SCALPER] Token authority unreachable (#{response.status}), trying TOTP refresh..."
+      rescue StandardError => e
+        Rails.logger.error "[SCALPER] Token authority fetch failed: #{e.message}, trying TOTP refresh..."
+      end
+    elsif token_url.present?
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_missing_bearer",
+        message: "[SCALPER] Token authority token missing (DHAN_TOKEN_ACCESS_TOKEN), trying TOTP refresh..."
+      )
+    else
+      log_token_authority_fallback_once!(
+        key: "scalper:token_authority_invalid_url",
+        message: "[SCALPER] Token authority URL invalid/missing (TRADER_API_BASE_URL), trying TOTP refresh..."
+      )
     end
 
     response = Faraday.get(token_url) do |req|
