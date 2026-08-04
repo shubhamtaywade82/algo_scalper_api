@@ -41,16 +41,19 @@ export default function OpenPositions(props) {
         <div class="overflow-x-auto">
           <table class="w-full border-collapse">
             <thead>
-              <tr class="text-[10px] text-gray-500 uppercase tracking-widest border-b border-white/5 bg-white/[0.01]">
-                <th class="text-left px-6 py-4 font-bold">Asset</th>
-                <th class="text-center px-4 py-4 font-bold">Position</th>
-                <th class="text-right px-4 py-4 font-bold">Size</th>
-                <th class="text-right px-4 py-4 font-bold">Entry</th>
-                <th class="text-right px-4 py-4 font-bold">Current</th>
-                <th class="text-right px-4 py-4 font-bold">Net P&amp;L</th>
-                <th class="text-right px-4 py-4 font-bold">% Change</th>
-                <th class="text-right px-4 py-4 font-bold">Peak (HWM)</th>
-                <th class="text-right px-6 py-4 font-bold">Duration</th>
+              <tr class="text-[10px] text-gray-400 uppercase tracking-[0.15em] border-b border-white/5 bg-white/[0.02]">
+                <th class="text-left px-6 py-4 font-black">Asset</th>
+                <th class="text-center px-4 py-4 font-black">Position</th>
+                <th class="text-right px-4 py-4 font-black">Size</th>
+                <th class="text-right px-4 py-4 font-black">Entry</th>
+                <th class="text-right px-4 py-4 font-black">Current</th>
+                <th class="text-right px-4 py-4 font-black">SL</th>
+                <th class="text-right px-4 py-4 font-black">TP</th>
+                <th class="text-right px-4 py-4 font-black">Net P&amp;L</th>
+                <th class="text-right px-4 py-4 font-black">% Change</th>
+                <th class="text-right px-4 py-4 font-black">Peak (HWM)</th>
+                <th class="text-right px-6 py-4 font-black">Duration</th>
+                <th class="text-center px-4 py-4 font-black w-28">Action</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-white/5">

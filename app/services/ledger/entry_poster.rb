@@ -16,7 +16,7 @@ module Ledger
 
         PostingService.post!(
           idempotency_key: "entry:#{tracker.id}",
-          event_type: "entry_fill",
+          event_type: 'entry_fill',
           mode: :paper,
           position_tracker_id: tracker.id,
           order_no: order_no || tracker.order_no,
@@ -25,14 +25,13 @@ module Ledger
             symbol: tracker.symbol,
             security_id: tracker.security_id,
             gross_premium: gross.to_f,
-            fee: fee.to_f,
-            iv_percentile: tracker.meta&.dig("iv_percentile")
-          }.compact,
+            fee: fee.to_f
+          },
           lines: [
-            { account_code: "premium_deployed", debit: gross },
-            { account_code: "cash", credit: gross },
-            { account_code: "brokerage_expense", debit: fee },
-            { account_code: "cash", credit: fee }
+            { account_code: 'premium_deployed', debit: gross },
+            { account_code: 'cash', credit: gross },
+            { account_code: 'brokerage_expense', debit: fee },
+            { account_code: 'cash', credit: fee }
           ]
         )
       rescue PostingService::InsufficientCashError => e

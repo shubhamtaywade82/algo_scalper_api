@@ -10,6 +10,97 @@
 #     schedule: at 5am every day
 
 development:
+  instruments_import:
+    class: InstrumentsImportJob
+    schedule: at 8:45am every day
+    queue_name: background
+    priority: 1
+    description: "Daily DhanHQ instrument master sync — ensures derivative records exist for strike selection"
+
+  iv_snapshot:
+    class: IvSnapshotJob
+    schedule: at 8:45am every day
+    queue_name: background
+    priority: 2
+    description: "Captures daily ATM Implied Volatility (IV) for alpha strategy history"
+
+  portfolio_reset:
+    class: PortfolioResetJob
+    schedule: at 9:15am every day
+    queue_name: background
+    priority: 1
+    description: "Daily portfolio PnL reset (realized, peak, floor, level) before market open"
+
+  options_buying_daily_metrics:
+    class: OptionsBuying::DailyMetricsJob
+    schedule: at 9:08am every day
+    queue_name: background
+    priority: 2
+    description: "Seed daily ATR metrics for options buying compression radar"
+
+  market_vix_gate_open:
+    class: Market::VixGateJob
+    schedule: at 9:01am every day
+    queue_name: background
+    priority: 1
+    description: "Fetch India VIX and set entry/force-exit gates before open"
+
+  market_vix_gate_refresh:
+    class: Market::VixGateJob
+    schedule: every 15 minutes
+    queue_name: background
+    priority: 6
+    description: "Refresh India VIX gate during session (RBI/macro spikes)"
+
+  options_buying_chain_radar_open:
+    class: OptionsBuying::ChainRadarJob
+    schedule: at 9:16am every day
+    queue_name: background
+    priority: 3
+    description: "Pre-open option chain radar — resistance, liquid strikes, Greeks"
+
+  options_buying_chain_radar_refresh:
+    class: OptionsBuying::ChainRadarJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 8
+    description: "Refresh option chain radar during session"
+
+  options_buying_eod_carry:
+    class: OptionsBuying::EodCarryJob
+    schedule: at 3:10pm every day
+    queue_name: background
+    priority: 2
+    description: "Tag high-ROI positional carries before EOD force-close (positional mode only)"
+
+  entry_funnel_metrics:
+    class: Observability::EntryFunnelMetricsJob
+    schedule: at 3:30pm every day
+    queue_name: background
+    priority: 4
+    description: "Post-session entry funnel report — signal skips, guard blocks, breakout alignment"
+
+  ledger_reconciliation:
+    class: Ledger::ReconciliationJob
+    schedule: every 30 minutes
+    queue_name: background
+    priority: 12
+    description: "Compare ledger cash to legacy paper wallet during shadow mode"
+
+  ledger_daily_close:
+    class: Ledger::DailyCloseJob
+    schedule: at 3:35pm every day
+    queue_name: background
+    priority: 5
+    description: "Roll paper ledger balances into paper_daily_wallets snapshot"
+
+  clear_carried_overnight:
+    class: ClearCarriedOvernightPositionsJob
+    schedule: at 9:15am every day
+    queue_name: background
+    priority: 2
+    description: "Clear BTST/carried-overnight positions at start of trading day (9:15 AM)"
+
   smc_scanner:
     class: SmcScannerJob
     schedule: at 4:00pm every day
@@ -85,7 +176,7 @@ production:
 
   market_vix_gate_refresh:
     class: Market::VixGateJob
-    schedule: every 15 minutes
+    schedule: every 15 minutes during market hours
     queue_name: background
     priority: 6
     description: "Refresh India VIX gate during session (RBI/macro spikes)"

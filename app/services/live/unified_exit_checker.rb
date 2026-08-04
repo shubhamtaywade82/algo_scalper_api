@@ -13,7 +13,20 @@ module Live
 
         pnl_pct = snapshot[:pnl_pct].to_f * 100.0
 
-        # Priority order (first match wins)
+        # Build RuleContext
+        context = Risk::Rules::RuleContext.new(
+          position: OpenStruct.new(
+            current_ltp: snapshot[:ltp],
+            pnl_pct: snapshot[:pnl_pct],
+            pnl_rupees: snapshot[:pnl],
+            high_water_mark: snapshot[:hwm_pnl],
+            hwm_pnl: snapshot[:hwm_pnl],
+            peak_profit_pct: peak_profit_pct_for(snapshot, tracker)
+          ),
+          tracker: tracker,
+          tracker_snapshot: snapshot,
+          risk_config: pinned_config
+        )
 
         # 0. Portfolio Floor Breach (highest priority — overrides all per-position logic)
         if portfolio_floor_breach?
@@ -258,7 +271,7 @@ module Live
 
         OpenStruct.new(
           trend_score: adx_hash[:value]&.to_f || 0,
-          peak_trend_score: tracker.meta&.dig('peak_trend_score') || 0,
+          peak_trend_score: tracker.runtime_meta_fetch('peak_trend_score') || 0,
           adx: adx_hash[:value],
           atr_ratio: calculate_atr_ratio(tracker),
           underlying_price: tracker.entry_price.to_f,
@@ -304,6 +317,90 @@ module Live
           early_exit: { enabled: true, profit_threshold: 7.0 },
           time_based: { enabled: false, exit_time: '15:20' }
         }
+      end
+
+      def trailing_armed?(tracker, snapshot, config)
+        trailing_cfg = config[:trailing] || {}
+        return false unless trailing_cfg[:enabled]
+        activation = trailing_cfg[:activation_profit].to_f
+        return false unless activation.positive?
+        hwm = snapshot[:hwm_pnl].to_f
+        return false unless hwm.positive?
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return false unless entry_value.positive?
+        (hwm / entry_value) >= activation
+      end
+
+      def adaptive_trailing_exit?(tracker, snapshot, peak_profit_pct, adaptive_tiers, tightening_multiplier: 1.0)
+        allowed_dd = Positions::TrailingConfig.adaptive_drawdown_for_peak(peak_profit_pct, adaptive_tiers)
+        return false unless allowed_dd && peak_profit_pct.positive?
+        hwm = snapshot[:hwm_pnl].to_f
+        pnl_value = snapshot[:pnl].to_f
+        effective_allowed_dd = allowed_dd * (tightening_multiplier || 1.0).to_f
+        drop_from_peak_pct = (hwm - pnl_value) / hwm * peak_profit_pct
+        drop_from_peak_pct >= effective_allowed_dd
+      end
+
+      def check_smc_navigator_exit(tracker, snapshot)
+        cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :smc_navigator_exit) || {}
+        return unless cfg[:enabled] && tracker.created_at && (Time.current - tracker.created_at) >= (cfg[:min_hold_seconds] || 120)
+        ltp = snapshot[:ltp].to_f
+        return unless ltp.positive? && tracker.instrument
+        result = Smc::Navigator.evaluate_exit(tracker: tracker, ltp: ltp, instrument: tracker.instrument)
+        return unless result.suggest_exit? && result.confidence >= (cfg[:min_confidence] || 0.65)
+        { exit: true, reason: "SMC_NAVIGATOR_EXIT (#{result.reason})", path: 'smc_navigator' }
+      end
+
+      def check_structure_invalidation(tracker, snapshot)
+        cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :structure_invalidation) || {}
+        return unless cfg.fetch(:enabled, true) && tracker.meta&.dig('structure_invalidation_price') && (Time.current - tracker.created_at) >= (cfg[:min_hold_seconds] || 90)
+        underlying_ltp = resolve_underlying_ltp(tracker.meta['index_key'])
+        return unless underlying_ltp
+        if cfg[:underlying_move_pct] && cfg[:premium_drop_pct]
+          return { exit: true, reason: "STRUCTURE_INVALIDATION (underlying move + premium drop)", path: 'structure_invalidation' } if dual_condition_met?(tracker, underlying_ltp, snapshot[:ltp].to_f, cfg)
+        elsif structure_invalidated?(tracker, underlying_ltp, tracker.meta['structure_invalidation_price'])
+          return { exit: true, reason: "STRUCTURE_INVALIDATION (underlying #{underlying_ltp.round(2)} broke #{tracker.meta['structure_invalidation_price']})", path: 'structure_invalidation' }
+        end
+        nil
+      end
+
+      def structure_invalidated?(tracker, underlying_ltp, invalidation_price)
+        direction = tracker.meta&.dig('direction').to_s
+        level = invalidation_price.to_f
+        pct = (Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :structure_invalidation, :buffer_pct) || 0.002).to_f
+        buffer = (level * pct).abs
+        direction == 'long_pe' ? underlying_ltp > level + buffer : (direction == 'long_ce' ? underlying_ltp < level - buffer : false)
+      end
+
+      def peak_profit_pct_for(snapshot, tracker)
+        return snapshot[:hwm_pnl_pct].to_f if snapshot[:hwm_pnl_pct]
+
+        entry_value = tracker.entry_price.to_f * tracker.quantity.to_i
+        return 0.0 unless entry_value.positive?
+
+        snapshot[:hwm_pnl].to_f / entry_value
+      end
+
+      private
+
+      def resolve_stall_minutes(tracker)
+        pmf_cfg = Positions::ExitConfigResolver.for(tracker).dig(:risk, :exits, :premium_momentum_failure) || {}
+        default_stall = 3
+
+        index_key = tracker.meta&.dig('index_key')
+        base = if index_key
+                 pmf_cfg.dig(:index_overrides, index_key.to_sym, :stall_minutes) ||
+                   pmf_cfg[:default_stall_minutes] || default_stall
+               else
+                 pmf_cfg[:default_stall_minutes] || default_stall
+               end
+
+        session = detect_current_session
+        additive = session ? (pmf_cfg.dig(:session_overrides, session, :stall_minutes_add) || 0) : 0
+
+        (base.to_f + additive.to_f).to_i
+      rescue StandardError
+        3
       end
     end
   end

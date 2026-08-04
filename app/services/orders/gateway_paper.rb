@@ -33,6 +33,42 @@ module Orders
       { success: false, error: e.message, paper: true }
     end
 
+    # Returns unified shape: { cash:, equity:, mtm:, exposure:, utilized:, margin: }
+    # cash = free balance (like broker available); utilized/exposure = premium tied in open legs.
+    def wallet_snapshot
+      return Ledger::WalletReader.snapshot(mode: :paper) if ledger_wallet_enabled?
+
+      legacy_wallet_snapshot
+    rescue StandardError => e
+      Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
+      { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0, utilized: 0, margin: 0 }
+    end
+
+    def legacy_wallet_snapshot
+      cfg = paper_trading_config
+      base = (cfg[:balance] || 100_000).to_f
+      realized = paper_realized_rupees(cfg)
+      deployed = deployed_premium_rupees
+      unrealized = active_unrealized_rupees
+
+      cash_raw = base + realized - deployed
+      cash = [cash_raw, 0.0].max.round(2)
+      mtm = unrealized.round(2)
+      utilized = deployed.round(2)
+      exposure = utilized
+      equity = (cash + utilized + mtm).round(2)
+
+      { cash: cash, equity: equity, mtm: mtm, exposure: exposure, utilized: utilized, margin: 0, source: 'legacy' }
+    end
+
+    def cancel_order(order_id)
+      { success: true, order_id: order_id, status: :canceled, paper: true }
+    rescue StandardError => e
+      Rails.logger.error("[GatewayPaper] cancel_order failed for #{order_id}: #{e.class} - #{e.message}")
+      { success: false, order_id: order_id, status: :failed, error: e.message, paper: true }
+    end
+
+    # Returns unified shape: { qty:, avg_price:, upnl:, rpnl:, last_ltp:, product_type:, exchange_segment:, position_type:, trading_symbol:, status: }
     def position(segment:, security_id:)
       tracker = PositionTracker.active_for(segment, security_id)
       return nil unless tracker
@@ -55,6 +91,10 @@ module Orders
     rescue StandardError => e
       Rails.logger.error("[GatewayPaper] wallet_snapshot failed: #{e.class} - #{e.message}")
       { cash: 100_000, equity: 100_000, mtm: 0, exposure: 0 } # Return default on error
+    end
+
+    def ledger_wallet_enabled?
+      Ledger::Config.paper_enabled?
     end
   end
 end

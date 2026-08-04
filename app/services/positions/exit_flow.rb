@@ -26,19 +26,12 @@ module Positions
 
         metadata = Live::PositionRuntimeCache.instance.flush_to_meta!({}, tracker.id) || {}
         resolved_reason = resolve_exit_reason_string(metadata)
-        exit_triggered_at = metadata["exit_triggered_at"].presence || Time.current
-
-        if resolved_reason.to_s.include?('MANUAL')
-          metadata['exit_path'] = 'manual'
-        end
-        tracker.meta = metadata
-
-        decision = Positions::ExitAnalyticsBuilder.build(tracker: tracker, exit_price: exit_px).stringify_keys
-        decision["exit_reason"] = resolved_reason
-        decision["exit_triggered_at"] = exit_triggered_at
-        if cache_data[:hwm_pnl_pct]
-          decision["hwm_pnl_pct"] = cache_data[:hwm_pnl_pct]
-        end
+        metadata['exit_reason'] = resolved_reason
+        metadata['exit_triggered_at'] ||= Time.current
+        metadata['hwm_pnl_pct'] = cache_data[:hwm_pnl_pct] if cache_data[:hwm_pnl_pct]
+        metadata.merge!(
+          Positions::ExitAnalyticsBuilder.build(tracker: tracker, exit_price: exit_px).stringify_keys
+        )
 
         tracker.update!(
           status: :exited,

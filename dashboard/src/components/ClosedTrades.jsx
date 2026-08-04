@@ -1,5 +1,8 @@
 import { createSignal, createMemo, onMount } from 'solid-js'
 import { Show, For } from 'solid-js'
+import { useDashboardContext } from '../context/DashboardContext'
+import { dashboardApiHeaders } from '../lib/dashboardApi'
+import { exitBadge } from '../lib/exitBadge'
 
 function inr(val, dec = 2) {
   if (val == null) return '—'
@@ -24,22 +27,6 @@ function formatTime(iso) {
   } catch {
     return '—'
   }
-}
-
-function exitBadge(pos) {
-  const classification = pos.exit_classification
-  if (classification === 'profit') return { label: 'TP', cls: 'text-emerald-400 border-emerald-500/30' }
-  if (classification === 'loss') return { label: 'SL', cls: 'text-red-400 border-red-500/30' }
-  if (classification === 'breakeven') return { label: 'BE', cls: 'text-yellow-400 border-yellow-500/30' }
-  const reason = pos.exit_reason
-  if (!reason) return { label: '—', cls: 'text-gray-600 border-gray-700' }
-  const r = reason.toLowerCase()
-  if (r.includes('sl') || r.includes('stop_loss')) return { label: 'SL', cls: 'text-red-400 border-red-500/30' }
-  if (r.includes('time') || r.includes('eod')) return { label: 'TIME', cls: 'text-yellow-400 border-yellow-500/30' }
-  if (r.includes('tp') || r.includes('target') || r.includes('profit')) return { label: 'TP', cls: 'text-emerald-400 border-emerald-500/30' }
-  if (r.includes('trail')) return { label: 'TRAIL', cls: 'text-blue-400 border-blue-500/30' }
-  if (r.includes('manual')) return { label: 'MNL', cls: 'text-purple-400 border-purple-500/30' }
-  return { label: reason.slice(0, 8).toUpperCase(), cls: 'text-gray-400 border-gray-700' }
 }
 
 const SORT_COLS = [

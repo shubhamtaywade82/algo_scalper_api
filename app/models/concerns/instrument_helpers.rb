@@ -306,6 +306,7 @@ module InstrumentHelpers
   end
 
   def historical_ohlc(from_date: nil, to_date: nil, oi: false) # rubocop:disable Naming/MethodParameterName
+    resolved_from, resolved_to = resolve_historical_date_range(from_date, to_date)
     DhanHQ::Models::HistoricalData.daily(
       security_id: security_id.to_s,
       exchange_segment: exchange_segment,

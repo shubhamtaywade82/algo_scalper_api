@@ -95,6 +95,39 @@ RSpec.describe Positions::ExitFlow do
       end
     end
 
+    context 'when exit completes' do
+      it 'stamps exit analytics on meta' do
+        tracker = create(
+          :position_tracker,
+          :option_position,
+          **base_tracker_attrs,
+          meta: { 'expiry_date' => Date.current.to_s, 'exit_path' => 'manual' }
+        )
+        cache = instance_double(
+          Live::RedisPnlCache,
+          fetch_pnl: {},
+          sync_pnl_to_database: true,
+          clear_tracker: nil
+        )
+
+        allow(Live::RedisPnlCache).to receive(:instance).and_return(cache)
+        allow(Positions::DailyPnlRecorder).to receive(:call)
+        allow(Positions::FeedSubscription).to receive(:unsubscribe)
+        allow(Positions::ExitAnalyticsBuilder).to receive(:build).and_return(
+          vix_at_exit: 13.2,
+          dte_at_exit: 0,
+          tier_at_exit: 'standard'
+        )
+
+        described_class.call(tracker: tracker, exit_price: BigDecimal('100'))
+
+        tracker.reload
+        expect(tracker.meta['vix_at_exit']).to eq(13.2)
+        expect(tracker.meta['dte_at_exit']).to eq(0)
+        expect(tracker.meta['tier_at_exit']).to eq('standard')
+      end
+    end
+
     context 'when meta has blank exit_reason string' do
       it 'uses fallback instead of empty string' do
         tracker = create(

@@ -11,6 +11,9 @@ module Positions
       qty = tracker.quantity.to_i
       net_pnl = (cache[:pnl] || tracker.last_pnl_rupees.to_f).to_f
 
+      sl_price = cache[:sl_price] || (entry.positive? ? entry * 0.70 : nil)
+      tp_price = cache[:tp_price] || (entry.positive? ? entry * 1.60 : nil)
+
       base_attributes(tracker).merge(
         entry_price: entry.round(2),
         ltp: ltp.round(2),
@@ -39,8 +42,8 @@ module Positions
         pnl: net_pnl.round(2),
         pnl_pct: net_pnl_pct(net_pnl, entry, qty),
         hwm_pnl: tracker.high_water_mark_pnl.to_f.round(2),
-        exit_reason: tracker.exit_reason,
-        exit_path: tracker.exit_path,
+        exit_reason: tracker.exit_reason || meta['exit_reason'],
+        exit_path: meta['exit_path'],
         exit_classification: classification,
         exited_at: tracker.exited_at&.iso8601
       )

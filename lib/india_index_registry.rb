@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-# Loads index registry from DB (settings.india_index_registry), seeded from
-# config/india_index_registry.yml at bootstrap. Merges canonical identity into algo indices.
+# Loads config/india_index_registry.yml and merges canonical index identity,
+# instrument defaults, and execution settings into algo.yml index overlays.
 class IndiaIndexRegistry
   REGISTRY_PATH = 'config/india_index_registry.yml'
-  REGISTRY_SETTING_KEY = AlgoConfig::REGISTRY_SETTING_KEY
 
   class << self
     def merge_into(index_cfg)
@@ -51,13 +50,6 @@ class IndiaIndexRegistry
     def load_registry
       return @registry if @registry
 
-      db_raw = Setting.fetch(REGISTRY_SETTING_KEY, nil, ttl: AlgoConfig::CACHE_TTL)
-      if db_raw.present?
-        raw = JSON.parse(db_raw, symbolize_names: true)
-        @registry = normalize_registry(raw)
-        return @registry
-      end
-
       path = Rails.root.join(REGISTRY_PATH)
       unless File.exist?(path)
         Rails.logger.warn("[IndiaIndexRegistry] Missing #{REGISTRY_PATH}; skipping registry merge")
@@ -66,15 +58,11 @@ class IndiaIndexRegistry
       end
 
       raw = YAML.load_file(path).deep_symbolize_keys
-      @registry = normalize_registry(raw)
+      indices = Array(raw[:indices].values).index_by { |entry| entry[:key].to_s.upcase }
+      @registry = { indices: indices }
     rescue StandardError => e
       Rails.logger.error("[IndiaIndexRegistry] Failed to load registry: #{e.class} - #{e.message}")
       @registry = { indices: {} }
-    end
-
-    def normalize_registry(raw)
-      indices = Array(raw[:indices].values).index_by { |entry| entry[:key].to_s.upcase }
-      { indices: indices }
     end
 
     def deep_symbolize(value)

@@ -13,7 +13,6 @@ const Signals = lazy(() => import('./views/Signals'))
 const Analysis = lazy(() => import('./views/Analysis'))
 const Settings = lazy(() => import('./views/Settings'))
 const Ledger = lazy(() => import('./views/Ledger'))
-const TrailEngine = lazy(() => import('./views/TrailEngine.jsx'))
 
 function AppShell(props) {
   const {

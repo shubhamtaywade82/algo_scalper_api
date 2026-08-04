@@ -23,10 +23,7 @@ module Entries
         return PASS unless bid.positive? && ask.positive? && ask >= bid
 
         spread_pct = (ask - bid) / ltp
-        if spread_pct > max_spread_pct(context)
-          key = context.dig(:index_cfg, :key) || 'index'
-          return { blocked: "bid-ask spread too wide for #{key}: #{(spread_pct * 100).round(2)}%" }
-        end
+        return PASS if spread_pct <= max_spread_pct(context)
 
         # Quantity / order-depth-aware checks (enabled only when config threshold > 0 and tick has data)
         min_bid_qty = min_bid_qty(context)
@@ -47,7 +44,7 @@ module Entries
       end
 
       def self.guard_enabled?
-        spread_enabled? && (max_spread_pct({}).positive? || min_bid_qty({}).to_i.positive? || min_ask_qty({}).to_i.positive?)
+        spread_enabled? && max_spread_pct({}).positive?
       end
 
       def self.spread_enabled?

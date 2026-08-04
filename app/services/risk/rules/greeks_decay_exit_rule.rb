@@ -72,6 +72,10 @@ module Risk
         skip_result
       end
 
+      def enabled?(_context = nil)
+        cfg.fetch(:enabled, true) != false
+      end
+
       private
 
       def theta_burn_check(greeks:, premium:, pnl_pct:)
@@ -161,10 +165,6 @@ module Risk
         AlgoConfig.fetch.dig(:risk, :greeks_decay_exit) || {}
       rescue StandardError
         {}
-      end
-
-      def enabled?(_context = nil)
-        cfg.fetch(:enabled, true) != false
       end
     end
   end

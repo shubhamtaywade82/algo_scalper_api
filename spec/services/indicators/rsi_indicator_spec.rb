@@ -78,4 +78,18 @@ RSpec.describe Indicators::RsiIndicator do
       expect(result).to be_nil
     end
   end
+
+  describe '#rsi_value_at' do
+    let(:index) { series.candles.size - 1 }
+
+    it 'returns raw RSI even in the neutral zone' do
+      allow_any_instance_of(CandleSeries).to receive(:rsi).and_return(50.0)
+      expect(indicator.rsi_value_at(index)).to eq(50.0)
+    end
+
+    it 'returns nil when RSI cannot be computed' do
+      allow_any_instance_of(CandleSeries).to receive(:rsi).and_return(nil)
+      expect(indicator.rsi_value_at(index)).to be_nil
+    end
+  end
 end

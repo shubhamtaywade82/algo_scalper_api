@@ -222,16 +222,9 @@ RSpec.describe InstrumentHelpers, type: :concern do
       )
     end
 
-    it 'converts security_id to string' do
-      instrument.after_order_track!(
-        instrument: instrument,
-        order_no: 'ORD123456',
-        segment: 'NSE_FNO',
-        security_id: 12_345,
-        side: 'LONG',
-        qty: 50,
-        entry_price: BigDecimal('100.5'),
-        symbol: 'NIFTY'
+    it 'snaps weekend from_date to the previous trading day' do
+      allow(DhanHQ::Models::HistoricalData).to receive(:daily).and_return(
+        { open: [1.0], high: [1.0], low: [1.0], close: [1.0], volume: [1], timestamp: [1_700_000_000] }
       )
 
       banknifty_index.historical_ohlc(from_date: '2026-05-09', to_date: '2026-06-17')

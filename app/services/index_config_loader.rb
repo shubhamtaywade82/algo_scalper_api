@@ -99,15 +99,18 @@ class IndexConfigLoader
       sid: item.security_id.to_s
     }
 
-    # Merge with algo.yml config (algo.yml takes precedence for non-identity fields)
-    if matching_config.is_a?(Hash)
-      # Merge: WatchlistItem provides identity (segment, sid), algo.yml provides rest
-      base_config.merge(matching_config.except(:key, :segment, :sid))
-    else
-      # No matching config found - use defaults or WatchlistItem data only
-      Rails.logger.warn("[IndexConfigLoader] No algo.yml config found for WatchlistItem: #{key} (#{item.segment}/#{item.security_id}) - using minimal config")
-      base_config
-    end
+    merged = if matching_config.is_a?(Hash)
+               # Merge: WatchlistItem provides identity (segment, sid), algo.yml provides rest
+               base_config.merge(matching_config.except(:key, :segment, :sid))
+             else
+               Rails.logger.warn(
+                 "[IndexConfigLoader] No algo.yml config found for WatchlistItem: #{key} " \
+                 "(#{item.segment}/#{item.security_id}) - using minimal config"
+               )
+               base_config
+             end
+
+    IndiaIndexRegistry.merge_into(merged)
   end
 
   # Find matching config from algo.yml by key, segment, or sid

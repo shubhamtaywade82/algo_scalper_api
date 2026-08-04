@@ -47,10 +47,11 @@ module Positions
       end
 
       def dte_at_exit_for(tracker)
-        expiry = tracker.respond_to?(:expiry_date) ? tracker.expiry_date : nil
+        meta = normalized_meta(tracker)
+        expiry = meta['expiry_date']
         return nil if expiry.blank?
 
-        (expiry.to_date - Time.zone.today).to_i
+        (Date.parse(expiry.to_s) - Time.zone.today).to_i
       rescue ArgumentError
         nil
       end
@@ -68,7 +69,12 @@ module Positions
       end
 
       def exit_path_for(tracker)
-        tracker.exit_path.presence || tracker.exit_reason.to_s.split(/\s+/).first.presence
+        meta = normalized_meta(tracker)
+        meta['exit_path'].presence || meta['exit_reason'].to_s.split(/\s+/).first.presence
+      end
+
+      def normalized_meta(tracker)
+        tracker.meta.is_a?(Hash) ? tracker.meta.deep_stringify_keys : {}
       end
     end
   end

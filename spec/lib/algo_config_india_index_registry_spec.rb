@@ -8,12 +8,6 @@ RSpec.describe AlgoConfig do
     IndiaIndexRegistry.reset!
   end
 
-  after do
-    Setting.where(key: AlgoConfig::REGISTRY_SETTING_KEY).delete_all
-    IndiaIndexRegistry.reset!
-    described_class.reset!
-  end
-
   describe '.fetch' do
     it 'merges india_index_registry into indices' do
       allow(AlgoConfig::DocumentStore).to receive(:current_mutable_document).and_return(
@@ -30,23 +24,6 @@ RSpec.describe AlgoConfig do
       expect(nifty[:lot]).to eq(75)
       expect(nifty[:execution][:earliest_entry_time]).to eq('09:30')
       expect(nifty[:capital_alloc_pct]).to eq(0.30)
-    end
-
-    it 'loads registry from DB settings when present' do
-      Setting.put(
-        AlgoConfig::REGISTRY_SETTING_KEY,
-        YAML.load_file(Rails.root.join('config/india_index_registry.yml')).to_json
-      )
-      IndiaIndexRegistry.reset!
-      allow(AlgoConfig::DocumentStore).to receive(:current_mutable_document).and_return(
-        indices: [{ key: 'NIFTY', capital_alloc_pct: 0.30 }],
-        paper_trading: { enabled: true },
-        signals: { signal_tier: 'standard' }
-      )
-      allow(described_class).to receive(:load_signal_tier_presets).and_return(standard: {})
-
-      nifty = described_class.fetch[:indices].find { |idx| idx[:key] == 'NIFTY' }
-      expect(nifty[:lot]).to eq(75)
     end
   end
 end

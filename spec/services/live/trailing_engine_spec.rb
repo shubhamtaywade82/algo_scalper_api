@@ -13,6 +13,10 @@ RSpec.describe Live::TrailingEngine do
     allow(PositionTracker).to receive(:find_by).and_return(tracker)
     allow(bracket_placer).to receive(:update_bracket).and_return({ success: true })
     allow(exit_engine).to receive(:execute_exit)
+    allow(tracker).to receive(:update_column)
+    allow(tracker).to receive(:runtime_meta_fetch).and_return(nil)
+    allow(tracker).to receive(:with_lock).and_yield
+    allow(tracker).to receive(:exited?).and_return(false)
     allow(Rails.logger).to receive_messages(info: nil, warn: nil, error: nil, debug: nil)
   end
 
@@ -91,6 +95,88 @@ RSpec.describe Live::TrailingEngine do
         expect(result_second[:exit_triggered]).to be false
         expect(exit_engine).to have_received(:execute_exit).once
       end
+    end
+
+    it 'passes capital deployed to TrailingConfig' do
+      # Entry 100 * Qty 50 = 5000 capital
+      position = build_position(entry_price: 100.0, quantity: 50, peak_profit_pct: 0.10, pnl_pct: 0.05)
+
+      expect(trailing_view).to receive(:peak_drawdown_triggered?).with(
+        0.10, 0.05, hash_including(_capital_deployed: 5000.0)
+      ).and_return(false)
+
+      engine.check_peak_drawdown(position, exit_engine)
+    end
+  end
+
+  describe '#check_peak_drawdown emergency exit' do
+    it 'triggers emergency exit when peak >= 10% and current < -2%' do
+      allow(tracker).to receive(:meta).and_return(
+        'config_snapshot' => {
+          'position_sizing' => {
+            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
+          }
+        }
+      )
+      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
+      position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.05)
+      allow(Live::ExitEngine).to receive(:execute_exit)
+
+      result = engine.check_peak_drawdown(position, exit_engine)
+      expect(result).to be true
+      expect(Live::ExitEngine).to have_received(:execute_exit).with(
+        hash_including(reason: /emergency_peak_loss_exit/)
+      )
+    end
+
+    it 'does not trigger emergency when peak < 10%' do
+      allow(tracker).to receive(:meta).and_return(
+        'config_snapshot' => {
+          'position_sizing' => {
+            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
+          }
+        }
+      )
+      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
+      allow(Live::ExitEngine).to receive(:execute_exit)
+      position = build_position(peak_profit_pct: 0.05, pnl_pct: -0.05)
+
+      engine.check_peak_drawdown(position, exit_engine)
+      expect(Live::ExitEngine).not_to have_received(:execute_exit)
+    end
+
+    it 'does not trigger emergency when current loss is shallow (> -2%)' do
+      allow(tracker).to receive(:meta).and_return(
+        'config_snapshot' => {
+          'position_sizing' => {
+            'drawdown' => { 'emergency_peak_loss_exit' => true, 'emergency_min_peak_pct' => 0.10 }
+          }
+        }
+      )
+      allow(engine).to receive(:feature_flags).and_return(enable_peak_drawdown_activation: false)
+      allow(Live::ExitEngine).to receive(:execute_exit)
+      position = build_position(peak_profit_pct: 0.15, pnl_pct: -0.01)
+
+      engine.check_peak_drawdown(position, exit_engine)
+      expect(Live::ExitEngine).not_to have_received(:execute_exit)
+    end
+  end
+
+  describe '#update_peak persistence' do
+    it 'persists extremes to Redis when new peak is reached' do
+      runtime_cache = Live::PositionRuntimeCache.instance
+      allow(runtime_cache).to receive(:merge).and_call_original
+
+      position = build_position(entry_price: 100.0, peak_profit_pct: 0.10, pnl_pct: 0.20)
+
+      expect(tracker).not_to receive(:update_column)
+
+      engine.update_peak(position, tracker: tracker)
+
+      expect(runtime_cache).to have_received(:merge).with(
+        tracker.id,
+        hash_including(highest_price: 120.0, lowest_price: kind_of(Numeric))
+      )
     end
   end
 

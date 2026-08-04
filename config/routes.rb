@@ -61,6 +61,11 @@ Rails.application.routes.draw do
     get  'ledger/journal', to: 'ledger#journal'
     get  'ledger/positions/:id', to: 'ledger#position'
 
+    # Ledger (paper double-entry)
+    get  'ledger/balance', to: 'ledger#balance'
+    get  'ledger/journal', to: 'ledger#journal'
+    get  'ledger/positions/:id', to: 'ledger#position'
+
     # Circuit breaker — emergency halt
     resource :circuit_breaker, only: %i[show], controller: 'circuit_breaker' do
       post :trip, on: :member

@@ -9,6 +9,44 @@ module TradingSystem
   module Bootstrap
     module_function
 
+    # Performs startup reconciliation so broker and DB position state are aligned
+    # before risk and signal services start.
+    # @param strict [Boolean] raise on reconciliation errors when true
+    # @return [Object] sync result from PositionSyncService
+    def boot_reconciliation!(strict: true)
+      Rails.logger.info('[Bootstrap] Running startup broker reconciliation...')
+      Live::PositionSyncService.instance.force_sync!
+    rescue StandardError => e
+      Rails.logger.fatal("[Bootstrap] Reconciliation failed: #{e.class} - #{e.message}")
+      raise if strict
+
+      false
+    end
+
+    # Evaluates session gates that normally run on the 9:01 recurring job.
+    # Called when the trading daemon starts during market hours so late boots
+    # do not leave VIX entry_allowed? fail-open until the next 15m refresh.
+    def boot_market_gates!
+      vix = Market::VixGate.evaluate!
+      return log_vix_gate_skipped unless vix
+
+      Rails.logger.info(
+        "[Bootstrap] India VIX gate at boot: VIX=#{vix.round(2)} " \
+        "entry_allowed=#{Market::VixGate.entry_allowed?} " \
+        "force_exit=#{Market::VixGate.force_exit_active?}"
+      )
+      vix
+    rescue StandardError => e
+      Rails.logger.error("[Bootstrap] boot_market_gates! #{e.class} - #{e.message}")
+      nil
+    end
+
+    def log_vix_gate_skipped
+      Rails.logger.warn('[Bootstrap] India VIX gate not evaluated at boot (disabled or LTP unavailable)')
+      nil
+    end
+    private :log_vix_gate_skipped
+
     def build_supervisor
       supervisor = TradingSystem::Supervisor.new
 

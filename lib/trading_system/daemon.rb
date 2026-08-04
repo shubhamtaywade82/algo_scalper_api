@@ -60,8 +60,28 @@ module TradingSystem
         return
       end
 
+      start_full_trading_services!
+    end
+
+    def start_market_open_poller!
+      @market_open_thread = Thread.new do
+        Thread.current.name = 'daemon-market-open-poller'
+        loop do
+          sleep MARKET_OPEN_POLL_INTERVAL
+          next if TradingSession::Service.market_closed?
+
+          Rails.logger.info('[TradingDaemon] Market opened - starting remaining services')
+          start_full_trading_services!
+          Rails.logger.info('[TradingDaemon] Full services started')
+          break
+        end
+      end
+    end
+
+    def start_full_trading_services!
       @supervisor.start_all
       subscribe_active_positions!
+      TradingSystem::Bootstrap.boot_market_gates!
     end
 
     def subscribe_active_positions!

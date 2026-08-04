@@ -6,7 +6,6 @@ module Ledger
       def post!(tracker:, exit_price: nil)
         return nil unless paper_posting?(tracker)
         return nil unless Config.posting_enabled_for_paper?
-        return nil unless LedgerJournalEntry.exists?(idempotency_key: "entry:#{tracker.id}")
 
         Seeder.ensure_ready!
 
@@ -55,11 +54,13 @@ module Ledger
         nil
       end
 
-      # rubocop:disable Rails/Delegate -- `delegate` targets an instance method, not this class method
       def paper_posting?(tracker)
-        EntryPoster.paper_posting?(tracker)
+        return true if tracker.paper?
+
+        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
+      rescue StandardError
+        false
       end
-      # rubocop:enable Rails/Delegate
     end
   end
 end

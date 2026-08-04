@@ -151,7 +151,8 @@ class Derivative < ApplicationRecord
         product_type: product_type
       }
     )
-    return nil unless order.respond_to?(:order_id) && order.order_id.present?
+    order_no = Ledger::OrderResponse.extract_order_id(order)
+    return nil if order_no.blank?
 
     side_label = option_type.to_s.upcase == "CE" ? "long_ce" : "long_pe"
 

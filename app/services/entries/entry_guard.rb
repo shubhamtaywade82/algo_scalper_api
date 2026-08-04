@@ -746,85 +746,22 @@ module Entries
         last_thu
       end
 
-      def paper_trading_enabled?
-        AlgoConfig.fetch.dig(:paper_trading, :enabled) == true
-      end
+      def build_base_meta(index_cfg:, pick:, direction:)
+        snapshot_fields = Entries::EntrySnapshotBuilder.build(index_cfg: index_cfg, pick: pick)
 
-      def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil)
-        # Generate synthetic order number for paper trading
-        order_no = "PAPER-#{index_cfg[:key]}-#{pick[:security_id]}-#{Time.current.to_i}"
-
-        # Determine watchable: derivative for options, instrument for indices
-        watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
-
-        # Build meta hash with entry strategy/path information
-        meta_hash = {
-          index_key: index_cfg[:key],
-          direction: side,
-          placed_at: Time.current,
-          paper_trading: true
-        }
-
-        # Add entry strategy/path metadata if provided
-        if entry_metadata.is_a?(Hash)
-          meta_hash[:entry_path] = entry_metadata[:entry_path] if entry_metadata[:entry_path]
-          meta_hash[:entry_strategy] = entry_metadata[:strategy] if entry_metadata[:strategy]
-          meta_hash[:entry_strategy_mode] = entry_metadata[:strategy_mode] if entry_metadata[:strategy_mode]
-          meta_hash[:entry_timeframe] = entry_metadata[:effective_timeframe] || entry_metadata[:primary_timeframe]
-          if entry_metadata[:confirmation_timeframe]
-            meta_hash[:entry_confirmation_timeframe] =
-              entry_metadata[:confirmation_timeframe]
-          end
-          meta_hash[:entry_validation_mode] = entry_metadata[:validation_mode] if entry_metadata[:validation_mode]
-        end
-
-        tracker = PositionTracker.create!(
-          watchable: watchable,
-          instrument: watchable.is_a?(Derivative) ? watchable.instrument : watchable, # Backward compatibility
-          order_no: order_no,
-          security_id: pick[:security_id].to_s,
-          symbol: pick[:symbol],
-          segment: pick[:segment] || index_cfg[:segment],
-          side: side,
-          quantity: quantity,
-          entry_price: ltp,
-          avg_price: ltp,
-          status: 'active',
-          paper: true,
-          meta: meta_hash
-        )
-
-        # Subscription is handled automatically by after_create_commit :subscribe_to_feed callback
-        # No need to call tracker.subscribe explicitly
-
-        # Initialize PnL in Redis (will be 0 initially since entry_price = ltp)
-        # This ensures the position is tracked in Redis from the start
-        initial_pnl = BigDecimal(0)
-        Live::RedisPnlCache.instance.store_pnl(
-          tracker_id: tracker.id,
-          pnl: initial_pnl,
-          pnl_pct: 0.0,
-          ltp: ltp,
-          hwm: initial_pnl,
-          timestamp: Time.current
-        )
-
-        Rails.logger.info("[EntryGuard] Paper trading: Created position #{order_no} for #{index_cfg[:key]}: #{pick[:symbol]} (qty: #{quantity}, entry: ₹#{ltp}, watchable: #{watchable.class.name})")
-        true
-      rescue ActiveRecord::RecordInvalid => e
-        Rails.logger.error("Failed to persist paper tracker: #{e.record.errors.full_messages.to_sentence}")
-        false
-      end
-
-      def create_tracker!(instrument:, order_no:, pick:, side:, quantity:, index_cfg:, ltp:, entry_metadata: nil)
-        # Determine watchable: derivative for options, instrument for indices
-        watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
-
-        # Build meta hash with entry strategy/path information
-        meta_hash = {
-          index_key: index_cfg[:key],
-          direction: side,
-          placed_at: Time.current
+        {
+          index_key: index_cfg[:key].to_s,
+          symbol: pick[:symbol].to_s,
+          direction: direction || pick[:direction],
+          entry_at: Time.current.iso8601,
+          config_version: AlgoConfig.version,
+          config_snapshot: snapshot_fields[:config_snapshot],
+          dte_at_entry: snapshot_fields[:dte_at_entry],
+          vix_at_entry: snapshot_fields[:vix_at_entry],
+          spread_guard_pct: snapshot_fields[:spread_guard_pct],
+          atm_strike: snapshot_fields[:atm_strike],
+          expiry_date: snapshot_fields[:expiry_date],
+          entry_context: snapshot_fields[:entry_context]
         }
 
         # Add entry strategy/path metadata if provided

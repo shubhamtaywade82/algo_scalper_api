@@ -38,11 +38,8 @@ module Entries
         Guards::EntryPolicyGuard,
         Guards::CircuitBreakerGuard,
         Guards::VixGateGuard,
-        Guards::MomentumGateGuard,
-        Guards::IvVolGateGuard,
-        Guards::OptionVolumeVelocityGuard,
         Guards::EarliestEntryGuard,
-        Guards::TradingTimeRestrictionGuard,
+        Guards::MiddayQualityGuard,          # ADX >= 28 bypass covers all power-trend cases
         Guards::EdgeFailureGuard,
         Guards::LossStreakGuard,
         Guards::DailyLimitsGuard,
@@ -50,14 +47,14 @@ module Entries
         Guards::MaxConcurrentGuard,
         Guards::InstrumentLookupGuard,
         Guards::LtpResolutionGuard,
-        Guards::ExpiryWeekPowerTrendGuard,
-        Guards::TimeRegimeGuard,
-        Guards::SegmentExpectancyGuard,
-        Guards::MiddayQualityGuard,
-        Guards::RegimeGuard,
-        Guards::ChopScoreGuard,
-        Guards::CompressionSetupGuard,
+        Guards::BidAskSpreadGuard,
+        Guards::TransactionCostGuard,        # pre-trade TCM: block when fees+spread+slippage > expected edge
+        Guards::BreakoutReadyGuard,          # intraday: 1m breakout + OI unwind armed
+        Guards::RsiBiasGuard,
+        Guards::ExpiryWeekPowerTrendGuard,   # enriches context[:expiry_power_trend] when pattern detected
+        Guards::TimeRegimeGuard,             # reads context[:expiry_power_trend] to bypass S3/S4 block
         Guards::DteEntryWindowGuard,
+        Guards::BankniftyLastWeekGuard,
         Guards::WeeklyExpiryGuard,
         Guards::BosStructureGuard,
         Guards::SizingGuard,

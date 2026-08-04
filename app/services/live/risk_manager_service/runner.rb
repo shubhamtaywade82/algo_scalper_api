@@ -154,18 +154,17 @@ module Live
       end
 
       def run_enforcement_for_tracker(tracker, exit_engine, position_data: nil)
+        before_meta = nil
+        pending_meta = nil
         return if tracker.exit_requested_at.present? || tracker.exit_sent_at.present?
 
-        # Get high-performance position snapshot from ActiveCache
         position_data ||= Positions::ActiveCache.instance.get_by_tracker_id(tracker.id)
         return unless position_data
 
-        # Track metadata changes locally to avoid multiple DB updates per cycle
-        @pending_meta = (tracker.meta || {}).deep_dup
+        before_meta = hydrate_meta_with_runtime(tracker)
+        pending_meta = before_meta.deep_dup
 
-        # Advance trade state before evaluating rules (updates trade_state, peak_trend_score etc)
-        # Note: advance_trade_state_for might still do its own updates for state columns
-        advance_trade_state_for(tracker, position_data: position_data)
+        advance_trade_state_for(tracker, position_data: position_data, pending_meta: pending_meta)
 
         # Layers will now update @pending_meta instead of the DB directly
         enforce_premium_r_stop_for(tracker, exit_engine: exit_engine, position_data: position_data)
@@ -194,9 +193,8 @@ module Live
 
         enforce_time_based_exit_for(tracker, exit_engine: exit_engine, position_data: position_data)
       ensure
-        # Perform a single consolidated update at the end of the cycle if meta changed
-        if @pending_meta && @pending_meta != tracker.meta
-          tracker.update_columns(meta: @pending_meta) # rubocop:disable Rails/SkipsModelValidations
+        if pending_meta && !exit_requested_or_sent?(tracker) && !tracker.exited?
+          Positions::MetaPatch.apply!(tracker: tracker, before: before_meta, after: pending_meta)
         end
         @pending_meta = nil
       end
@@ -214,6 +212,17 @@ module Live
 
         @last_realtime_skip_log_at = Time.current
         true
+      end
+
+      def hydrate_meta_with_runtime(tracker)
+        base = (tracker.meta || {}).deep_stringify_keys
+        runtime = Live::PositionRuntimeCache.instance.fetch(tracker.id)
+        return base if runtime.empty?
+
+        runtime.each do |key, value|
+          base[key.to_s] = value unless value.nil?
+        end
+        base
       end
 
       def exit_requested_or_sent?(tracker)

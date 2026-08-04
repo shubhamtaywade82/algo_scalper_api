@@ -944,7 +944,106 @@ module Signal
           return { valid: false, name: 'Market Timing', message: 'Not a trading day (weekend/holiday)' }
         end
 
-        expiry_model.trade_allowed?(symbol: symbol)
+        current_ist = TradingSession::Service.current_ist_time
+        hour = current_ist.hour
+        minute = current_ist.min
+
+        # Market hours: 9:15 AM to 3:30 PM IST
+        market_open = hour > 9 || (hour == 9 && minute >= 15)
+        market_close = hour > 15 || (hour == 15 && minute >= 30)
+
+        if !market_open
+          { valid: false, name: 'Market Timing', message: 'Market not yet open' }
+        elsif market_close
+          { valid: false, name: 'Market Timing', message: 'Market closed' }
+        else
+          # Check for session blackouts (Loss Avoidance)
+          restrictions = AlgoConfig.fetch[:trading_time_restrictions]
+          if restrictions&.[](:enabled) && restrictions[:avoid_periods].present?
+            current_hm = current_ist.strftime('%H:%M')
+            restrictions[:avoid_periods].each do |period|
+              start_time, end_time = period.split('-')
+              if current_hm >= start_time && current_hm < end_time
+                return { valid: false, name: 'Market Timing', message: "Loss Avoidance: Blocked during non-profitable session (#{period})" }
+              end
+            end
+          end
+
+          if hour == 9 && minute < 30
+            { valid: true, name: 'Market Timing', message: 'Early market - high volatility period' }
+          elsif hour >= 14 && minute >= 30
+            { valid: true, name: 'Market Timing', message: 'Late market - theta decay risk' }
+          else
+            { valid: true, name: 'Market Timing', message: 'Normal trading hours' }
+          end
+        end
+      end
+
+      # RSI anti-chase gate — blocks CE entries when overbought, PE entries when oversold.
+      # Does NOT interfere with the normal trending RSI zone (45–75 CE, 25–55 PE).
+      def validate_rsi_gate(direction, series, mode_config)
+        return { valid: true } unless mode_config[:require_rsi_check]
+
+        rsi_val = Indicators::RsiIndicator.new(series: series).rsi_value_at(-1)
+        return { valid: true, note: 'RSI unavailable' } if rsi_val.nil?
+
+        rsi_val = rsi_val.to_f
+
+        if direction == :bullish && rsi_val > mode_config.fetch(:rsi_overbought_block, 78).to_f
+          return { valid: false, reason: "RSI overbought (#{rsi_val.round(1)}) — avoid chasing CE entry", check: :rsi_overbought }
+        end
+
+        if direction == :bearish && rsi_val < mode_config.fetch(:rsi_oversold_block, 22).to_f
+          return { valid: false, reason: "RSI oversold (#{rsi_val.round(1)}) — avoid chasing PE entry", check: :rsi_oversold }
+        end
+
+        { valid: true, rsi_value: rsi_val }
+      rescue StandardError => e
+        Rails.logger.warn("[Signal::Engine] RSI gate error — allowing through: #{e.message}")
+        { valid: true }
+      end
+
+      # EMA direction tie-break: if Supertrend and EMA 9/21 disagree,
+      # require ADX >= 25 to proceed (strong momentum overrides cross-current).
+      def check_ema_direction_alignment(direction, series, adx_value)
+        ema_result    = Indicators::EmaDirectionIndicator.new(series: series).calculate
+        ema_direction = ema_result[:direction]
+
+        if ema_direction == :neutral || ema_direction == direction
+          return { aligned: true, adx_override_needed: false, ema_direction: ema_direction }
+        end
+
+        adx_override_threshold = 25.0
+        if adx_value.to_f >= adx_override_threshold
+          return { aligned: true, adx_override_needed: false, ema_direction: ema_direction,
+                   note: 'EMA disagreement overridden by ADX strength' }
+        end
+
+        { aligned: false, adx_override_needed: true, ema_direction: ema_direction,
+          required_adx: adx_override_threshold, actual_adx: adx_value }
+      rescue StandardError => e
+        Rails.logger.debug("[Signal::Engine] EMA alignment check error: #{e.message}")
+        { aligned: true, adx_override_needed: false }
+      end
+
+      # SMC Discount/Premium zone filter:
+      # CE (bullish): ideal in discount; blocked in premium unless ADX >= zone_filter_adx_override.
+      # PE (bearish): ideal in premium; blocked in discount unless ADX >= zone_filter_adx_override.
+      def smc_zone_allows_entry?(direction, index_cfg, adx_value)
+        zone = get_smc_zone(index_cfg)
+        return true if zone == :equilibrium
+
+        zone_override_adx = AlgoConfig.fetch.dig(:signals, :smc, :zone_filter_adx_override).to_f rescue 30.0
+
+        if direction == :bullish && zone == :premium
+          return adx_value.to_f >= zone_override_adx
+        end
+
+        if direction == :bearish && zone == :discount
+          return adx_value.to_f >= zone_override_adx
+        end
+
+        true
       rescue StandardError => e
         Rails.logger.error("[Signal] ExpiryModel unavailable (#{e.class}: #{e.message}); allowing trade")
         true

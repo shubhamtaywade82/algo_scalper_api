@@ -427,46 +427,7 @@ class PositionTracker < ApplicationRecord
     meta_hash[key_s]
   end
 
-  def unsubscribe
-    return unless Live::MarketFeedHub.instance.running?
-
-    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    return unless segment_key && security_id
-
-    # Never unsubscribe from IDX_I (index feeds) - they're needed for signal generation
-    # and may be used by multiple positions
-    if segment_key == 'IDX_I'
-      Rails.logger.debug { "[PositionTracker] Skipping unsubscribe for IDX_I:#{security_id} (index feed must stay subscribed)" }
-      return
-    end
-
-    # Rails.logger.debug { "[PositionTracker] Unsubscribing from market feed: #{segment_key}:#{security_id}" }
-    Live::MarketFeedHub.instance.unsubscribe(segment: segment_key, security_id: security_id)
-
-    # Never unsubscribe from underlying instruments (especially IDX_I)
-    # They are needed for signal generation and may be used by other positions
-    # The underlying index feeds should remain subscribed at all times
-  end
-
-  def subscribe
-    segment_key = segment.presence || watchable&.exchange_segment || instrument&.exchange_segment
-    return unless segment_key && security_id
-
-    hub = Live::MarketFeedHub.instance
-    # Ensure hub is running (will start if not running)
-    hub.start! unless hub.running?
-
-    # Check if already subscribed before calling hub
-    if hub.subscribed?(segment: segment_key, security_id: security_id)
-      Rails.logger.debug { "[PositionTracker] Already subscribed to #{segment_key}:#{security_id}, skipping" }
-      return { segment: segment_key, security_id: security_id, already_subscribed: true }
-    end
-
-    hub.subscribe(segment: segment_key, security_id: security_id)
-  rescue StandardError => e
-    Rails.logger.error("[PositionTracker] Failed to subscribe #{order_no}: #{e.message}")
-    nil
-  end
+  private
 
   def alpha_signal_just_exited?
     alpha_source.present? && saved_change_to_status? && exited?

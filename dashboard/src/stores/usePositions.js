@@ -60,13 +60,18 @@ export function usePositions() {
     backfillTimer = setInterval(fetchPositions, BACKFILL_INTERVAL_MS)
   }
 
-  function scheduleStaleCheck() {
-    clearStaleTimer()
-    staleTimer = setTimeout(() => {
-      if (!connected()) return
-      setIsStale(true)
-      startBackfill()
-    }, WS_STALE_AFTER_MS)
+  // Only carry forward the real-time fields that WS updates provide.
+  // Everything else is authoritative from the server.
+  function pickLiveFields(pos) {
+    const live = {}
+    if (pos.ltp != null)       live.ltp       = pos.ltp
+    if (pos.pnl != null)       live.pnl       = pos.pnl
+    if (pos.pnl_pct != null)   live.pnl_pct   = pos.pnl_pct
+    if (pos.hwm_pnl != null)   live.hwm_pnl   = pos.hwm_pnl
+    if (pos.ltp_stale != null) live.ltp_stale = pos.ltp_stale
+    if (pos.sl_price != null)  live.sl_price  = pos.sl_price
+    if (pos.tp_price != null)  live.tp_price  = pos.tp_price
+    return live
   }
 
   function markFresh() {
@@ -92,7 +97,14 @@ export function usePositions() {
         startBackfill()
       },
       received(data) {
-        if (data.type === 'pnl_update') {
+        // ANY incoming data marks fresh and applies update instantly
+        console.debug('⚡ [WS:Positions] Update:', data)
+        markFresh()
+        if (data.type === 'pnl_stale') {
+          applyPnlStale(data)
+        } else if (data.type === 'keepalive') {
+          // markFresh() above resets WS stale timer
+        } else {
           applyPnlUpdate(data)
           markFresh()
         } else if (data.type === 'pnl_stale') {

@@ -53,6 +53,8 @@ module Signal
               next
             end
 
+            ensure_vix_gate_evaluated!
+
             # Reorder indices by expiry proximity (closer expiry = higher priority)
             # Only do this expensive operation when market is open
             ordered_indices = reorder_indices_by_expiry(indices)
@@ -110,6 +112,17 @@ module Signal
     end
 
     private
+
+    def ensure_vix_gate_evaluated!
+      return if Market::VixGate.evaluated?
+
+      vix = Market::VixGate.ensure_evaluated!
+      return if vix
+
+      Rails.logger.warn('[SignalScheduler] India VIX gate still unevaluated — entries remain fail-closed')
+    rescue StandardError => e
+      Rails.logger.warn("[SignalScheduler] VIX gate ensure failed: #{e.class} - #{e.message}")
+    end
 
     def process_index(index_cfg)
       # Use run_for() which includes full No-Trade Engine integration
