@@ -9,6 +9,8 @@ RSpec.describe Policies::EntryPolicy do
   let(:current_time) { Time.zone.now.change(hour: 10, min: 0, sec: 0) }
   let(:daily_limits) { instance_double(Live::DailyLimits) }
 
+  # ── Helpers: stub all checks to pass by default ─────────────────────────────
+
   before do
     allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(false)
     allow(Live::DailyLimits).to receive(:new).and_return(daily_limits)
@@ -16,6 +18,8 @@ RSpec.describe Policies::EntryPolicy do
       .and_return({ allowed: true, reason: nil })
     allow(Time).to receive(:current).and_return(current_time)
   end
+
+  # ── Permitted: all checks pass ──────────────────────────────────────────────
 
   describe '#permitted? — all clear' do
     it { is_expected.to be_permitted }
@@ -31,7 +35,9 @@ RSpec.describe Policies::EntryPolicy do
   end
 
   context 'when outside market hours' do
-    let(:current_time) { Time.zone.now.change(hour: 8, min: 0, sec: 0) }
+    before do
+      allow(Time).to receive(:current).and_return(Time.zone.now.change(hour: 8, min: 0, sec: 0))
+    end
 
     it { is_expected.to be_forbidden }
     it { expect(policy.reasons).to include('outside_trading_hours') }
@@ -60,6 +66,7 @@ RSpec.describe Policies::EntryPolicy do
   context 'with multiple violations' do
     before do
       allow(Risk::CircuitBreaker.instance).to receive(:tripped?).and_return(true)
+      allow(Time).to receive(:current).and_return(Time.zone.now.change(hour: 8, min: 0, sec: 0))
     end
 
     let(:current_time) { Time.zone.now.change(hour: 8, min: 0, sec: 0) }
