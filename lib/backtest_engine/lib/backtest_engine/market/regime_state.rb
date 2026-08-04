@@ -19,13 +19,13 @@ module BacktestEngine
         direction = direction.to_sym if direction.respond_to?(:to_sym)
         direction = nil if direction == :range
 
-        if direction != @last_direction
+        if direction == @last_direction
+          @same_count += 1
+        else
           @last_flip_at = candle_index
           @cooldown_until = @last_direction.nil? ? nil : candle_index + @cooldown_candles
           @last_direction = direction
           @same_count = 1
-        else
-          @same_count += 1
         end
 
         stable = (@same_count >= @stability_candles) && !direction.nil?

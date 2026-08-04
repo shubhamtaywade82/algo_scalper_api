@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 require "time"
 
@@ -6,7 +8,7 @@ RSpec.describe BacktestEngine::Market::IvExpansionSignal do
 
   def make_series(iv_values)
     candles = iv_values.each_with_index.map do |iv, i|
-      { timestamp: t0 + i * 60, iv: iv.to_f }
+      { timestamp: t0 + (i * 60), iv: iv.to_f }
     end
     BacktestEngine::Market::IvSeries.new(candles)
   end
@@ -16,7 +18,7 @@ RSpec.describe BacktestEngine::Market::IvExpansionSignal do
       it "returns 0.0" do
         series = make_series([20.0, 21.0, 22.0])
         signal = described_class.new(series, period: 10)
-        expect(signal.modifier_at(t0 + 2 * 60)).to eq(0.0)
+        expect(signal.modifier_at(t0 + (2 * 60))).to eq(0.0)
       end
     end
 
@@ -34,7 +36,7 @@ RSpec.describe BacktestEngine::Market::IvExpansionSignal do
         iv_values = Array.new(10, 20.0) + [22.0]
         series = make_series(iv_values)
         signal = described_class.new(series, period: 10)
-        result = signal.modifier_at(t0 + 10 * 60)
+        result = signal.modifier_at(t0 + (10 * 60))
         expect(result).to be_within(0.01).of(10.0)
       end
     end
@@ -44,7 +46,7 @@ RSpec.describe BacktestEngine::Market::IvExpansionSignal do
         iv_values = Array.new(10, 20.0) + [18.0]
         series = make_series(iv_values)
         signal = described_class.new(series, period: 10)
-        result = signal.modifier_at(t0 + 10 * 60)
+        result = signal.modifier_at(t0 + (10 * 60))
         expect(result).to be_within(0.01).of(-10.0)
       end
     end
@@ -61,7 +63,7 @@ RSpec.describe BacktestEngine::Market::IvExpansionSignal do
         iv_values = Array.new(10, 10.0) + [100.0]
         series = make_series(iv_values)
         signal = described_class.new(series, period: 10)
-        expect(signal.modifier_at(t0 + 10 * 60)).to eq(15.0)
+        expect(signal.modifier_at(t0 + (10 * 60))).to eq(15.0)
       end
     end
 
@@ -70,7 +72,7 @@ RSpec.describe BacktestEngine::Market::IvExpansionSignal do
         iv_values = Array.new(10, 100.0) + [1.0]
         series = make_series(iv_values)
         signal = described_class.new(series, period: 10)
-        expect(signal.modifier_at(t0 + 10 * 60)).to eq(-15.0)
+        expect(signal.modifier_at(t0 + (10 * 60))).to eq(-15.0)
       end
     end
 
@@ -79,18 +81,18 @@ RSpec.describe BacktestEngine::Market::IvExpansionSignal do
         iv_values = Array.new(10, 20.0) + [22.0]
         series = make_series(iv_values)
         signal = described_class.new(series, period: 10)
-        result = signal.modifier_at((t0 + 10 * 60).to_i)
-        expect(result).to be > 0
+        result = signal.modifier_at((t0 + (10 * 60)).to_i)
+        expect(result).to be.positive?
       end
     end
 
     context "when rolling average is zero" do
       it "returns 0.0" do
-        candles = 10.times.map { |i| { timestamp: t0 + i * 60, iv: 0.0 } } +
-                  [{ timestamp: t0 + 10 * 60, iv: 20.0 }]
+        candles = Array.new(10) { |i| { timestamp: t0 + (i * 60), iv: 0.0 } } +
+                  [{ timestamp: t0 + (10 * 60), iv: 20.0 }]
         series = BacktestEngine::Market::IvSeries.new(candles)
         signal = described_class.new(series, period: 10)
-        expect(signal.modifier_at(t0 + 10 * 60)).to eq(0.0)
+        expect(signal.modifier_at(t0 + (10 * 60))).to eq(0.0)
       end
     end
   end

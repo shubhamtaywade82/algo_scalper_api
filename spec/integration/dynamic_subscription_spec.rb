@@ -413,7 +413,7 @@ RSpec.describe 'Dynamic Subscription Integration', :vcr, type: :integration do
         # Mock PositionTracker.active to return the tracker with eager loading
         active_relation = PositionTracker.where(id: tracker.id)
         allow(PositionTracker).to receive(:active).and_return(active_relation)
-        
+
         # Mock the chain of calls
         paper_false_relation = active_relation.where(paper: false)
         allow(active_relation).to receive(:where).with(paper: false).and_return(paper_false_relation)

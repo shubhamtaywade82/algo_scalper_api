@@ -28,9 +28,9 @@ RSpec.describe Ai::Calibration::DatasetBuilder do
 
     let!(:telemetry) do
       create(:trade_telemetry, tracker: tracker,
-             bos_age_at_entry: 5,
-             retrace_pct: 0.5,
-             max_r_reached: 2.5)
+                               bos_age_at_entry: 5,
+                               retrace_pct: 0.5,
+                               max_r_reached: 2.5)
     end
 
     let!(:signal) do
@@ -38,7 +38,7 @@ RSpec.describe Ai::Calibration::DatasetBuilder do
              index_key: 'NIFTY',
              signal_timestamp: tracker.created_at - 30.seconds,
              adx_value: 25.0,
-             supertrend_value: 21900.0,
+             supertrend_value: 21_900.0,
              direction: 'bullish',
              confidence_score: 0.8)
     end

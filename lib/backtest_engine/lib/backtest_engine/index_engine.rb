@@ -1,15 +1,15 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   class IndexEngine
     def initialize(candles)
       @candles = Array(candles)
     end
 
-    def each_candle
+    def each_candle(&)
       return enum_for(:each_candle) unless block_given?
 
-      @candles.each_with_index do |candle, index|
-        yield(candle, index)
-      end
+      @candles.each_with_index(&)
     end
 
     def structure_state(index)

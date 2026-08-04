@@ -109,4 +109,4 @@ end
 
 gem "json_schemer", "~> 2.4"
 
-gem "rswag", "~> 2.17", groups: [:development, :test]
+gem "rswag", "~> 2.17", groups: %i[development test]

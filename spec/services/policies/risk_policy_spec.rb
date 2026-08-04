@@ -5,9 +5,9 @@ require 'rails_helper'
 RSpec.describe Policies::RiskPolicy do
   subject(:policy) do
     described_class.new(
-      index_key:    'NIFTY',
+      index_key: 'NIFTY',
       proposed_qty: 50,
-      entry_price:  250.0
+      entry_price: 250.0
     )
   end
 
@@ -23,7 +23,7 @@ RSpec.describe Policies::RiskPolicy do
       .and_return({ allowed: true })
 
     wallet_double = { equity: 500_000.0, exposure: 50_000.0 }
-    gateway_double = instance_double('Orders::GatewayPaper', wallet_snapshot: wallet_double)
+    gateway_double = instance_double(Orders::GatewayPaper, wallet_snapshot: wallet_double)
     config_double  = double('Orders::Config', gateway: gateway_double)
     allow(Orders).to receive(:config).and_return(config_double)
   end
@@ -94,7 +94,7 @@ RSpec.describe Policies::RiskPolicy do
 
     before do
       wallet_double = { equity: 500_000.0, exposure: 490_000.0 }
-      gateway_double = instance_double('Orders::GatewayPaper', wallet_snapshot: wallet_double)
+      gateway_double = instance_double(Orders::GatewayPaper, wallet_snapshot: wallet_double)
       config_double  = double('Orders::Config', gateway: gateway_double)
       allow(Orders).to receive(:config).and_return(config_double)
     end

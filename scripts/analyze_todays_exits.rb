@@ -6,13 +6,13 @@
 
 date_arg = ARGV[0]
 date = date_arg ? Date.parse(date_arg) : Time.zone.today
-range = date.beginning_of_day..date.end_of_day
+range = date.all_day
 
 exited = PositionTracker.paper.exited.where(exited_at: range).order(exited_at: :asc)
 
 puts "\n#{'=' * 100}"
 puts "EXITED POSITIONS ANALYSIS — #{date} (IST)"
-puts "#{'=' * 100}"
+puts('=' * 100)
 puts "Total exited (paper): #{exited.count}"
 puts ""
 
@@ -43,9 +43,9 @@ exited.each_with_index do |t, i|
   puts ""
 end
 
-puts "#{'=' * 100}"
+puts('=' * 100)
 puts "EXIT PATH SUMMARY"
-puts "#{'=' * 100}"
+puts('=' * 100)
 by_path = exited.group_by { |t| (t.meta || {})["exit_path"] || t.exit_reason || "unknown" }
 by_path.each { |path, list| puts "  #{path}: #{list.size}" }
 puts ""

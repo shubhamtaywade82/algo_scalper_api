@@ -20,8 +20,7 @@ RSpec.describe Ai::Calibration::Runner do
     # Mock OllamaClient generate
     client = double('client', enabled?: true)
     allow(Services::Ai::OllamaClient).to receive(:instance).and_return(client)
-    allow(client).to receive(:preferred_text_model).and_return('model')
-    allow(client).to receive(:generate).and_return({ 'system_diagnosis' => {}, 'parameter_changes' => [] })
+    allow(client).to receive_messages(preferred_text_model: 'model', generate: { 'system_diagnosis' => {}, 'parameter_changes' => [] })
 
     # Mock ResultParser
     allow(Ai::Calibration::ResultParser).to receive(:call).and_return({
@@ -52,7 +51,7 @@ RSpec.describe Ai::Calibration::Runner do
 
     it 'raises InsufficientDataError if trades < 20' do
       allow(Ai::Calibration::DatasetBuilder).to receive(:call).and_return({ trades: Array.new(10) })
-      
+
       expect(Rails.logger).to receive(:warn).with(/10 trades < MIN_TRADES/)
       run = described_class.call(symbol: symbol, days: days)
       expect(run).to be_nil

@@ -9,7 +9,7 @@ RSpec.describe Indicators::MlAdaptiveSupertrend do
   let(:config) { { atr_len: 10, factor: 1.0, training_period: 100 } }
   let(:service) { described_class.new(series: series, config: config) }
 
-  def add_candles(count, start_price: 20000.0, volatility: 10.0, trend: 0.0)
+  def add_candles(count, start_price: 20_000.0, volatility: 10.0, trend: 0.0)
     current_price = start_price
     count.times do |_i|
       # Add some randomness but follow the trend
@@ -18,9 +18,9 @@ RSpec.describe Indicators::MlAdaptiveSupertrend do
       close = open + movement
       high = [open, close].max + (rand * volatility * 0.5)
       low = [open, close].min - (rand * volatility * 0.5)
-      
+
       candle = Candle.new(
-        timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + (series.candles.size).minutes,
+        timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + series.candles.size.minutes,
         open: open,
         high: high,
         low: low,
@@ -49,7 +49,7 @@ RSpec.describe Indicators::MlAdaptiveSupertrend do
     context 'with sufficient data' do
       before do
         # Add 150 candles to satisfy training_period (100) + atr_len (10)
-        add_candles(150, start_price: 20000.0, volatility: 20.0, trend: 5.0)
+        add_candles(150, start_price: 20_000.0, volatility: 20.0, trend: 5.0)
       end
 
       it 'calculates super_trend for later candles' do
@@ -76,10 +76,10 @@ RSpec.describe Indicators::MlAdaptiveSupertrend do
 
       it 'transitions from bullish to bearish' do
         # 1. Bullish phase
-        add_candles(20, start_price: 20000.0, volatility: 5.0, trend: 100.0)
+        add_candles(20, start_price: 20_000.0, volatility: 5.0, trend: 100.0)
         # 2. Bearish crash
         add_candles(5, start_price: series.candles.last.close, volatility: 5.0, trend: -300.0)
-        
+
         result = service.call
         # Check that we have at least one bearish signal at the end
         expect(result[:direction].last(5)).to include(1)
@@ -92,12 +92,12 @@ RSpec.describe Indicators::MlAdaptiveSupertrend do
         add_candles(110, volatility: 2.0)
         # 2. High vol spike
         add_candles(10, volatility: 100.0)
-        
+
         result = service.call
         regimes = result[:regimes].compact
         expect(regimes.uniq.size).to be > 1
         # The last few should be high volatility (regime 0)
-        expect(result[:regimes].last).to eq(0) 
+        expect(result[:regimes].last).to eq(0)
       end
     end
   end
@@ -115,7 +115,7 @@ RSpec.describe Indicators::MlAdaptiveSupertrendIndicator do
     120.times do |i|
       candle = Candle.new(
         timestamp: Time.zone.parse('2024-01-01 10:00:00 IST') + i.minutes,
-        open: 20000, high: 20010, low: 19990, close: 20005, volume: 100
+        open: 20_000, high: 20_010, low: 19_990, close: 20_005, volume: 100
       )
       series.add_candle(candle)
     end
@@ -125,8 +125,8 @@ RSpec.describe Indicators::MlAdaptiveSupertrendIndicator do
     it 'returns a valid result hash' do
       result = indicator.calculate_at(115)
       expect(result).to be_a(Hash)
-      expect(result[:direction]).to be_in([:bullish, :bearish])
-      expect(result[:regime]).to be_in([:high_volatility, :medium_volatility, :low_volatility])
+      expect(result[:direction]).to be_in(%i[bullish bearish])
+      expect(result[:regime]).to be_in(%i[high_volatility medium_volatility low_volatility])
       expect(result[:value]).to be_a(Numeric)
     end
 
@@ -138,15 +138,15 @@ RSpec.describe Indicators::MlAdaptiveSupertrendIndicator do
 
     it 'respects trading hours if filter enabled' do
       indicator_with_filter = described_class.new(series: series, config: config.merge(trading_hours_filter: true))
-      
+
       # Forge a candle outside trading hours (9:00 AM IST)
       candle = Candle.new(
         timestamp: Time.zone.parse('2024-01-01 09:00:00 IST'),
-        open: 20000, high: 20010, low: 19990, close: 20005, volume: 100
+        open: 20_000, high: 20_010, low: 19_990, close: 20_005, volume: 100
       )
       series.add_candle(candle)
       idx = series.candles.size - 1
-      
+
       expect(indicator_with_filter.calculate_at(idx)).to be_nil
     end
   end

@@ -33,15 +33,19 @@ class GetMarketContextTool < RubyLLM::Tool
     smc_data   = build_smc(series)
 
     latest = series.candles.last
-    ohlc   = latest ? {
+    ohlc   = if latest
+  {
       open: latest.open.to_f, high: latest.high.to_f,
-      low:  latest.low.to_f,  close: latest.close.to_f,
+      low: latest.low.to_f, close: latest.close.to_f,
       volume: latest.volume.to_i
-    } : {}
+    }
+             else
+  {}
+             end
 
     { index: index_key, ltp: ltp.to_f, ohlc: ohlc, interval: normalized_interval,
       indicators: indicators, smc: smc_data, timestamp: Time.current }
-  rescue => e
+  rescue StandardError => e
     { error: e.message }
   end
 
@@ -51,21 +55,21 @@ class GetMarketContextTool < RubyLLM::Tool
     macd_res = series.macd(12, 26, 9)
     bb_res   = series.bollinger_bands(period: 20, std_dev: 2.0)
     {
-      rsi:             series.rsi(14),
-      macd:            macd_res ? { macd: macd_res[0], signal: macd_res[1], histogram: macd_res[2] } : nil,
-      adx:             series.adx(14),
-      supertrend:      series.supertrend_signal,
-      atr:             series.atr(14),
+      rsi: series.rsi(14),
+      macd: macd_res ? { macd: macd_res[0], signal: macd_res[1], histogram: macd_res[2] } : nil,
+      adx: series.adx(14),
+      supertrend: series.supertrend_signal,
+      atr: series.atr(14),
       bollinger_bands: bb_res ? { upper: bb_res[:upper], middle: bb_res[:middle], lower: bb_res[:lower] } : nil
     }
-  rescue => e
+  rescue StandardError => e
     Rails.logger.warn("[GetMarketContextTool] indicators error: #{e.message}")
     {}
   end
 
   def build_smc(series)
     Smc::Context.new(series).to_h
-  rescue => e
+  rescue StandardError => e
     Rails.logger.warn("[GetMarketContextTool] SMC error: #{e.message}")
     {}
   end

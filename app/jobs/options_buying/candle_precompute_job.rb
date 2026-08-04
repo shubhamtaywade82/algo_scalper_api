@@ -35,7 +35,7 @@ module OptionsBuying
 
     def market_hours?
       now = Time.current
-      now >= now.beginning_of_day + 9.hours + 15.minutes && now <= now.beginning_of_day + 15.hours + 30.minutes
+      now.between?(now.beginning_of_day + 9.hours + 15.minutes, now.beginning_of_day + 15.hours + 30.minutes)
     end
 
     def cache_candles(index_key, sid, segment, timeframe)

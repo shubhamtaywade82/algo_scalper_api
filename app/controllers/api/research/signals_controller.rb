@@ -49,7 +49,7 @@ module Api
         render json: { signal: serialize_signal(signal), candidates: candidates.map { |c| serialize_candidate(c) } },
                status: :created
       rescue ActionController::ParameterMissing, ArgumentError, ActiveRecord::RecordInvalid => e
-        render json: { error: e.message }, status: :unprocessable_entity
+        render json: { error: e.message }, status: :unprocessable_content
       end
 
       private

@@ -3,7 +3,7 @@
 module BacktestEngine
   module Market
     class StructureEngineV2
-      Swing = Struct.new(:index, :price, :type, keyword_init: true) # type: :high / :low
+      Swing = Struct.new(:index, :price, :type) # type: :high / :low
 
       attr_reader :series
 
@@ -43,7 +43,7 @@ module BacktestEngine
 
       def min_lookback
         lookback = 3
-        lookback * 2 + 1
+        (lookback * 2) + 1
       end
 
       def detect_bos
@@ -98,15 +98,14 @@ module BacktestEngine
             }
           end
 
-          if curr.type == :low &&
-             candle.low < prev.price &&
-             candle.close > prev.price
-            sweeps << {
-              index: curr.index,
-              type: :sell_side_liquidity,
-              direction: :bullish
-            }
-          end
+          next unless curr.type == :low &&
+                      candle.low < prev.price &&
+                      candle.close > prev.price
+          sweeps << {
+            index: curr.index,
+            type: :sell_side_liquidity,
+            direction: :bullish
+          }
         end
 
         sweeps
@@ -130,15 +129,15 @@ module BacktestEngine
 
       def swing_high?(index, lookback)
         high = series[index].high
-        left = (index - lookback...index).all? { |j| high > series[j].high }
-        right = (index + 1..index + lookback).all? { |j| high > series[j].high }
+        left = ((index - lookback)...index).all? { |j| high > series[j].high }
+        right = ((index + 1)..(index + lookback)).all? { |j| high > series[j].high }
         left && right
       end
 
       def swing_low?(index, lookback)
         low = series[index].low
-        left = (index - lookback...index).all? { |j| low < series[j].low }
-        right = (index + 1..index + lookback).all? { |j| low < series[j].low }
+        left = ((index - lookback)...index).all? { |j| low < series[j].low }
+        right = ((index + 1)..(index + lookback)).all? { |j| low < series[j].low }
         left && right
       end
 

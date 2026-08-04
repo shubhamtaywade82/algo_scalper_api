@@ -180,7 +180,7 @@ RSpec.describe Entries::NoTradeContextBuilder do
       before do
         allow(described_class).to receive(:calculate_adx_data).and_call_original
         allow(described_class).to receive(:extract_adx_with_di) do
-          raise StandardError.new('ADX error')
+          raise StandardError, 'ADX error'
         end
         allow_any_instance_of(CandleSeries).to receive(:adx).and_return(18.0)
         allow(Rails.logger).to receive(:warn)

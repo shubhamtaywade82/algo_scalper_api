@@ -57,7 +57,7 @@ RSpec.describe Live::UnderlyingContextEvaluator do
     OpenStruct.new(
       trend_score: 20.0,
       bos_state: :broken,
-      bos_direction: :bearish,   # bearish BOS breaks long_ce thesis
+      bos_direction: :bearish, # bearish BOS breaks long_ce thesis
       atr_trend: :rising,
       atr_ratio: 1.1,
       mtf_confirm: false,
@@ -188,7 +188,7 @@ RSpec.describe Live::UnderlyingContextEvaluator do
         OpenStruct.new(
           trend_score: 20.0,
           bos_state: :broken,
-          bos_direction: :bullish,  # bullish BOS breaks long_pe thesis
+          bos_direction: :bullish, # bullish BOS breaks long_pe thesis
           atr_trend: :rising,
           atr_ratio: 1.1,
           mtf_confirm: false,
@@ -258,9 +258,9 @@ RSpec.describe Live::UnderlyingContextEvaluator do
     context 'when ActiveCache provides pos_data with position_direction' do
       let(:pos_data) do
         double(
-          underlying_segment:     'IDX_I',
+          underlying_segment: 'IDX_I',
           underlying_security_id: '51',
-          position_direction:     'long_ce'
+          position_direction: 'long_ce'
         )
       end
 
@@ -300,7 +300,7 @@ RSpec.describe Live::UnderlyingContextEvaluator do
           risk: {
             underlying_context_exit: {
               enabled: true,
-              trend_score_threshold: 25,   # higher threshold
+              trend_score_threshold: 25, # higher threshold
               atr_ratio_threshold: 0.65,
               tightening_multiplier: 0.3
             }

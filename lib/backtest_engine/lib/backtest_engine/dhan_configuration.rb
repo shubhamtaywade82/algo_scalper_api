@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   module DhanConfiguration
     CLIENT_ID_ENV_KEY = "DHAN_CLIENT_ID"

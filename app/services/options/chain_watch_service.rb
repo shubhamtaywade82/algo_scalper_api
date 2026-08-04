@@ -159,7 +159,7 @@ module Options
     end
 
     def nearest_atm(spot, legs)
-      strikes = legs.map { |l| l[:strike] }.uniq
+      strikes = legs.pluck(:strike).uniq
       return nil if strikes.empty?
 
       strikes.min_by { |s| (s - spot).abs }
@@ -208,7 +208,11 @@ module Options
     def strike_increment_for(spot)
       return 25 unless spot&.positive?
 
-      spot >= 50_000 ? 100 : (spot >= 10_000 ? 50 : 25)
+      if spot >= 50_000
+100
+      else
+(spot >= 10_000 ? 50 : 25)
+      end
     end
   end
 end

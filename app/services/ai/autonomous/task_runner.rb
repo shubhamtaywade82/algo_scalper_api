@@ -43,7 +43,7 @@ module Ai
         def run_trailing_optimization(symbol, dry_run: false)
           optimizer = Optimization::TrailingOptimizer.new(index_key: symbol)
           result = optimizer.optimize
-          
+
           if result && result[:best_params]
             # We need to apply these to algo.yml as TrailingOptimizer doesn't self-persist yet
             apply_trailing_params(symbol, result[:best_params], dry_run: dry_run)
@@ -59,8 +59,8 @@ module Ai
 
           # Reusing logic from optimize_trailing.rake but in a service context
           config_path = Rails.root.join('config/algo.yml')
-          config = YAML.safe_load(File.read(config_path))
-          
+          config = YAML.safe_load_file(config_path)
+
           idx_key = symbol.downcase
           if config['risk'] && config['risk']['institutional_trailing']
             config['risk']['institutional_trailing'][idx_key] ||= {}

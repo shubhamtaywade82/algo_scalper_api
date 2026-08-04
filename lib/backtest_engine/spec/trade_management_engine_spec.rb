@@ -7,10 +7,10 @@ RSpec.describe BacktestEngine::TradeManagementEngine do
   let(:t0) { Time.parse("2026-07-09 09:15:00") }
   let(:index_candles) do
     [
-      BacktestEngine::Market::Candle.new(timestamp: t0, open: 24000, high: 24010, low: 23990, close: 24000, volume: 1000),
-      BacktestEngine::Market::Candle.new(timestamp: t0 + 60, open: 24000, high: 24050, low: 24000, close: 24040, volume: 1000),
-      BacktestEngine::Market::Candle.new(timestamp: t0 + 120, open: 24040, high: 24080, low: 24030, close: 24070, volume: 1000),
-      BacktestEngine::Market::Candle.new(timestamp: t0 + 180, open: 24070, high: 24070, low: 23980, close: 23990, volume: 1000)
+      BacktestEngine::Market::Candle.new(timestamp: t0, open: 24_000, high: 24_010, low: 23_990, close: 24_000, volume: 1000),
+      BacktestEngine::Market::Candle.new(timestamp: t0 + 60, open: 24_000, high: 24_050, low: 24_000, close: 24_040, volume: 1000),
+      BacktestEngine::Market::Candle.new(timestamp: t0 + 120, open: 24_040, high: 24_080, low: 24_030, close: 24_070, volume: 1000),
+      BacktestEngine::Market::Candle.new(timestamp: t0 + 180, open: 24_070, high: 24_070, low: 23_980, close: 23_990, volume: 1000)
     ]
   end
 
@@ -75,7 +75,7 @@ RSpec.describe BacktestEngine::TradeManagementEngine do
       it "moves stop loss to breakeven once triggered" do
         tme.evaluate(0, index_candles[0], 100.0, t0)
         tme.evaluate(1, index_candles[1], 110.0, t0 + 60)
-        
+
         expect(tme.evaluate(1, index_candles[1], 90.0, t0 + 60)).to be_nil
 
         tme.evaluate(1, index_candles[1], 120.0, t0 + 60)
@@ -98,7 +98,7 @@ RSpec.describe BacktestEngine::TradeManagementEngine do
 
       it "trails stop-loss dynamically" do
         tme.evaluate(0, index_candles[0], 100.0, t0)
-        
+
         tme.evaluate(1, index_candles[1], 120.0, t0 + 60)
         expect(tme.trailing_sl).to eq(108.0)
 
@@ -132,7 +132,7 @@ RSpec.describe BacktestEngine::TradeManagementEngine do
 
       it "exits if index candle closes below EMA 20" do
         tme.evaluate(0, index_candles[0], 100.0, t0)
-        
+
         result = tme.evaluate(3, index_candles[3], 105.0, t0 + 180)
         expect(result).to be_a(Hash)
         expect(result[:action]).to eq(:exit)

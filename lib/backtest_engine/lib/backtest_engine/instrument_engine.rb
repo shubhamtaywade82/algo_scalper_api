@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   class InstrumentEngine
     DEFAULT_SEGMENT = "NSE_FNO"

@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-RSpec.describe TradingStrategy, type: :model do
+RSpec.describe TradingStrategy do
   describe "#slugify" do
     it "parameterizes the name" do
       strategy = described_class.new(name: "Supertrend ADX v2!")

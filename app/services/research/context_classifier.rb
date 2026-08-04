@@ -47,8 +47,8 @@ module Research
 
         {
           "market_structure" => structure.trend.to_s,
-          "recent_bos" => structure.bos? ? true : false,
-          "recent_choch" => structure.choch? ? true : false,
+          "recent_bos" => structure.bos?,
+          "recent_choch" => structure.choch?,
           "trend" => trend_bucket(series, structure),
           "volatility_regime" => volatility_regime(series),
           "momentum" => momentum_bucket(series),

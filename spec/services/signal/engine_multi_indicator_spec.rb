@@ -71,11 +71,7 @@ RSpec.describe Signal::Engine, :vcr do
     end
     let(:mock_series) do
       series = double('CandleSeries')
-      allow(series).to receive(:candles).and_return(mock_candles)
-      allow(series).to receive(:size).and_return(mock_candles.size)
-      allow(series).to receive(:last).and_return(mock_candles.last)
-      allow(series).to receive(:symbol).and_return('NIFTY')
-      allow(series).to receive(:interval).and_return('5')
+      allow(series).to receive_messages(candles: mock_candles, size: mock_candles.size, last: mock_candles.last, symbol: 'NIFTY', interval: '5')
       series
     end
 
@@ -107,20 +103,18 @@ RSpec.describe Signal::Engine, :vcr do
         ).and_call_original
 
         described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg,
-          instrument: nifty_instrument,
-          timeframe: '5m',
-          signals_cfg: signals_cfg
-        )
+                             index_cfg: index_cfg,
+                             instrument: nifty_instrument,
+                             timeframe: '5m',
+                             signals_cfg: signals_cfg)
       end
 
       it 'returns analysis result with status :ok' do
         result = described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg,
-          instrument: nifty_instrument,
-          timeframe: '5m',
-          signals_cfg: signals_cfg
-        )
+                                      index_cfg: index_cfg,
+                                      instrument: nifty_instrument,
+                                      timeframe: '5m',
+                                      signals_cfg: signals_cfg)
 
         expect(result[:status]).to eq(:ok)
         expect(result).to have_key(:series)
@@ -135,11 +129,10 @@ RSpec.describe Signal::Engine, :vcr do
         )
 
         result = described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg,
-          instrument: nifty_instrument,
-          timeframe: '5m',
-          signals_cfg: signals_cfg
-        )
+                                      index_cfg: index_cfg,
+                                      instrument: nifty_instrument,
+                                      timeframe: '5m',
+                                      signals_cfg: signals_cfg)
 
         expect(result[:direction]).to eq(:bullish)
       end
@@ -148,11 +141,10 @@ RSpec.describe Signal::Engine, :vcr do
         allow_any_instance_of(MultiIndicatorStrategy).to receive(:generate_signal).and_return(nil)
 
         result = described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg,
-          instrument: nifty_instrument,
-          timeframe: '5m',
-          signals_cfg: signals_cfg
-        )
+                                      index_cfg: index_cfg,
+                                      instrument: nifty_instrument,
+                                      timeframe: '5m',
+                                      signals_cfg: signals_cfg)
 
         expect(result[:direction]).to eq(:avoid)
         expect(result[:status]).to eq(:ok)
@@ -173,11 +165,10 @@ RSpec.describe Signal::Engine, :vcr do
 
       it 'returns error status' do
         result = described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg,
-          instrument: nifty_instrument,
-          timeframe: '5m',
-          signals_cfg: signals_cfg
-        )
+                                      index_cfg: index_cfg,
+                                      instrument: nifty_instrument,
+                                      timeframe: '5m',
+                                      signals_cfg: signals_cfg)
 
         expect(result[:status]).to eq(:error)
         expect(result[:message]).to eq('No enabled indicators')
@@ -187,11 +178,10 @@ RSpec.describe Signal::Engine, :vcr do
     context 'when timeframe is invalid' do
       it 'returns error status' do
         result = described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg,
-          instrument: nifty_instrument,
-          timeframe: 'invalid',
-          signals_cfg: signals_cfg
-        )
+                                      index_cfg: index_cfg,
+                                      instrument: nifty_instrument,
+                                      timeframe: 'invalid',
+                                      signals_cfg: signals_cfg)
 
         expect(result[:status]).to eq(:error)
         expect(result[:message]).to match(/Invalid timeframe/)
@@ -205,11 +195,10 @@ RSpec.describe Signal::Engine, :vcr do
 
       it 'returns no_data status' do
         result = described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg,
-          instrument: nifty_instrument,
-          timeframe: '5m',
-          signals_cfg: signals_cfg
-        )
+                                      index_cfg: index_cfg,
+                                      instrument: nifty_instrument,
+                                      timeframe: '5m',
+                                      signals_cfg: signals_cfg)
 
         expect(result[:status]).to eq(:no_data)
         expect(result[:message]).to match(/No candle data/)
@@ -242,11 +231,10 @@ RSpec.describe Signal::Engine, :vcr do
         ).and_call_original
 
         described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg_with_adx,
-          instrument: nifty_instrument,
-          timeframe: '5m',
-          signals_cfg: signals_cfg
-        )
+                             index_cfg: index_cfg_with_adx,
+                             instrument: nifty_instrument,
+                             timeframe: '5m',
+                             signals_cfg: signals_cfg)
       end
     end
 
@@ -259,11 +247,10 @@ RSpec.describe Signal::Engine, :vcr do
         expect(Rails.logger).to receive(:error).with(match(/Multi-indicator analysis failed/))
 
         result = described_class.send(:analyze_with_multi_indicators,
-          index_cfg: index_cfg,
-          instrument: nifty_instrument,
-          timeframe: '5m',
-          signals_cfg: signals_cfg
-        )
+                                      index_cfg: index_cfg,
+                                      instrument: nifty_instrument,
+                                      timeframe: '5m',
+                                      signals_cfg: signals_cfg)
 
         expect(result[:status]).to eq(:error)
         expect(result[:message]).to eq('Test error')

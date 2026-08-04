@@ -19,7 +19,7 @@ module Entries
 
       def call
         return PASS if @is_supertrend || @is_paper
-        
+
         symbol = @index_cfg[:key].to_s.upcase
         return PASS unless %w[NIFTY SENSEX].include?(symbol)
 

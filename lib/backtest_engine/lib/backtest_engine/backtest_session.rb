@@ -1,6 +1,8 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   class BacktestSession
-    Result = Struct.new(:portfolio, :metrics, keyword_init: true)
+    Result = Struct.new(:portfolio, :metrics)
     DEFAULT_INDICATOR_PARAMS = {
       pullback_ema_period: 20,
       volume_spike_period: 10,
@@ -24,7 +26,7 @@ module BacktestEngine
       @indicator_series_ref = indicator_series
       iv_series = build_iv_series
       htf_bias_mapper = build_htf_bias_mapper
-      structure_engine_v2 = (structure_engine == :v2) ? Market::StructureEngineV2.new(indicator_series) : nil
+      structure_engine_v2 = structure_engine == :v2 ? Market::StructureEngineV2.new(indicator_series) : nil
       regime_scorer_instance = regime_scorer ? Market::RegimeScorer.new(indicator_series) : nil
       regime_state_instance = regime_scorer ? Market::RegimeState.new : nil
       router = strategy_router ? Strategies::Router.new : nil
@@ -104,7 +106,7 @@ module BacktestEngine
       )
     end
 
-    def build_indicators(indicator_series:, iv_series:, iv_expansion_signal: nil, htf_bias_mapper:, structure_engine_v2: nil, regime_scorer: nil, regime_state: nil, indicator_params:, candle_index:, timestamp:)
+    def build_indicators(indicator_series:, iv_series:, htf_bias_mapper:, indicator_params:, candle_index:, timestamp:, iv_expansion_signal: nil, structure_engine_v2: nil, regime_scorer: nil, regime_state: nil)
       base = {
         structure: resolve_structure(indicator_series, candle_index, structure_engine_v2),
         pullback: indicator_series.pullback?(candle_index, ema_period: indicator_params[:pullback_ema_period]),
@@ -142,7 +144,7 @@ module BacktestEngine
 
     def build_iv_series
       atm_call = option_data[["ATM", :call]]
-      return nil if atm_call.nil? || atm_call.empty?
+      return nil if atm_call.blank?
 
       Market::IvSeries.new(atm_call)
     end
@@ -180,8 +182,6 @@ module BacktestEngine
 
         candle = option_candle_at(position[:strike], position[:option_type], index_candle.timestamp)
         candle && candle[:close].to_f
-      else
-        nil
       end
     end
 
@@ -271,7 +271,7 @@ module BacktestEngine
 
       index_candle = index_candles[candle_index]
       exit_decision = tme.evaluate(candle_index, index_candle, ltp, timestamp)
-      
+
       # Keep tracking trailing_sl in the position hash for backward compatibility
       position[:trailing_sl] = tme.trailing_sl
 
@@ -358,7 +358,7 @@ module BacktestEngine
         return :e1 if hhmm >= "09:15" && hhmm < "09:30"
         return :e2 if hhmm >= "09:30" && hhmm < "11:00"
         return :e3 if hhmm >= "11:00" && hhmm < "13:30"
-        return :e4 if hhmm >= "13:30" && hhmm <= "15:15"
+        return :e4 if hhmm.between?("13:30", "15:15")
 
         return :off
       end
@@ -366,7 +366,7 @@ module BacktestEngine
       return :s1 if hhmm >= "09:15" && hhmm < "09:45"
       return :s2 if hhmm >= "09:45" && hhmm < "11:30"
       return :s3 if hhmm >= "11:30" && hhmm < "13:45"
-      return :s4 if hhmm >= "13:45" && hhmm <= "15:15"
+      return :s4 if hhmm.between?("13:45", "15:15")
 
       :off
     end

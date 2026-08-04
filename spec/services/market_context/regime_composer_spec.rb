@@ -10,11 +10,11 @@ RSpec.describe MarketContext::RegimeComposer do
       series.add_candle(
         Candle.new(
           timestamp: Time.zone.parse('2026-03-02 09:15') + i.minutes,
-          open: 100 + i * 0.2,
-          high: 102 + i * 0.2,
-          low: 99 + i * 0.2,
-          close: 101 + i * 0.2,
-          volume: 500_000 + i * 10_000
+          open: 100 + (i * 0.2),
+          high: 102 + (i * 0.2),
+          low: 99 + (i * 0.2),
+          close: 101 + (i * 0.2),
+          volume: 500_000 + (i * 10_000)
         )
       )
     end

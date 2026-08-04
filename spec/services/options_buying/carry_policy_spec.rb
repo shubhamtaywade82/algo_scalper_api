@@ -16,8 +16,7 @@ RSpec.describe OptionsBuying::CarryPolicy do
 
     context 'when positional mode is on and DTE is at least 1' do
       before do
-        allow(OptionsBuying::Mode).to receive(:positional_active?).and_return(true)
-        allow(OptionsBuying::Mode).to receive(:config).and_return({ positional: { require_carry_allowed: true } })
+        allow(OptionsBuying::Mode).to receive_messages(positional_active?: true, config: { positional: { require_carry_allowed: true } })
         analyzer = instance_double(Options::DerivativeChainAnalyzer, find_nearest_expiry: Time.zone.today + 2)
         allow(Options::DerivativeChainAnalyzer).to receive(:new).and_return(analyzer)
       end

@@ -18,9 +18,8 @@ module Market
         @streak += 1
         @pending_regime = nil
         @pending_count = 0
-      else
-        if new_regime == @pending_regime
-          @pending_count += 1
+      elsif new_regime == @pending_regime
+        @pending_count += 1
           if @pending_count >= MIN_STABILITY
             @current = new_regime
             @last_flip_at = Time.now
@@ -30,11 +29,10 @@ module Market
           else
             @streak = 0
           end
-        else
+      else
           @pending_regime = new_regime
           @pending_count = 1
           @streak = 0
-        end
       end
 
       {

@@ -18,31 +18,31 @@ module Ai
       # Maps known AI-suggested param names → algo.yml deep key paths and value bounds.
       # Format: key => { path: [...], min:, max: }
       KNOWN_PARAMS = {
-        'sl_pct'                   => { path: %i[risk sl_pct],                 min: 0.05, max: 0.40 },
-        'sl'                       => { path: %i[risk sl_pct],                 min: 0.05, max: 0.40 }, # Alias
-        'sl_multiplier'            => { path: %i[risk sl_pct],                 min: 0.05, max: 0.40 }, # Alias
-        'stop_loss'                => { path: %i[risk sl_pct],                 min: 0.05, max: 0.40 }, # Alias
-        'tp_pct'                   => { path: %i[risk tp_pct],                 min: 0.10, max: 0.80 },
-        'tp'                       => { path: %i[risk tp_pct],                 min: 0.10, max: 0.80 }, # Alias
-        'tp_multiplier'            => { path: %i[risk tp_pct],                 min: 0.10, max: 0.80 }, # Alias
-        'take_profit'              => { path: %i[risk tp_pct],                 min: 0.10, max: 0.80 }, # Alias
-        'per_trade_risk_pct'       => { path: %i[risk per_trade_risk_pct],     min: 0.05, max: 0.80 },
-        'target_rr'                => { path: %i[risk rr_profit_booking target_rr],
-                                        min: 1.0, max: 10.0 },
-        'trailing_activation'      => { path: %i[position_sizing trailing activation_pct],
-                                        min: 0.03, max: 0.30 },
-        'trailing_drawdown'        => { path: %i[position_sizing trailing drawdown_pct],
-                                        min: 0.01, max: 0.20 },
+        'sl_pct' => { path: %i[risk sl_pct], min: 0.05, max: 0.40 },
+        'sl' => { path: %i[risk sl_pct], min: 0.05, max: 0.40 }, # Alias
+        'sl_multiplier' => { path: %i[risk sl_pct], min: 0.05, max: 0.40 }, # Alias
+        'stop_loss' => { path: %i[risk sl_pct], min: 0.05, max: 0.40 }, # Alias
+        'tp_pct' => { path: %i[risk tp_pct], min: 0.10, max: 0.80 },
+        'tp' => { path: %i[risk tp_pct], min: 0.10, max: 0.80 }, # Alias
+        'tp_multiplier' => { path: %i[risk tp_pct], min: 0.10, max: 0.80 }, # Alias
+        'take_profit' => { path: %i[risk tp_pct], min: 0.10, max: 0.80 }, # Alias
+        'per_trade_risk_pct' => { path: %i[risk per_trade_risk_pct], min: 0.05, max: 0.80 },
+        'target_rr' => { path: %i[risk rr_profit_booking target_rr],
+                         min: 1.0, max: 10.0 },
+        'trailing_activation' => { path: %i[position_sizing trailing activation_pct],
+                                   min: 0.03, max: 0.30 },
+        'trailing_drawdown' => { path: %i[position_sizing trailing drawdown_pct],
+                                 min: 0.01, max: 0.20 },
         'direct_trailing_distance' => { path: %i[position_sizing direct_trailing distance_pct],
                                         min: 0.02, max: 0.25 },
-        'profit_floor_lock_pct'    => { path: %i[risk profit_floor lock_pct],  min: 0.05, max: 0.50 },
-        'profit_floor_trail_pct'   => { path: %i[risk profit_floor trail_pct], min: 0.40, max: 0.95 },
-        'primary_adx_min'          => { path: nil, min: 10.0, max: 35.0 }, # per-index, handled separately
-        'adx_threshold'            => { path: nil, min: 10.0, max: 35.0 }, # Alias for primary_adx_min
+        'profit_floor_lock_pct' => { path: %i[risk profit_floor lock_pct], min: 0.05, max: 0.50 },
+        'profit_floor_trail_pct' => { path: %i[risk profit_floor trail_pct], min: 0.40, max: 0.95 },
+        'primary_adx_min' => { path: nil, min: 10.0, max: 35.0 }, # per-index, handled separately
+        'adx_threshold' => { path: nil, min: 10.0, max: 35.0 }, # Alias for primary_adx_min
         'rolling_window_threshold' => { path: %i[risk edge_failure_detector rolling_window_threshold_rupees],
                                         min: -20_000, max: -500 },
-        'max_consecutive_sls'      => { path: %i[risk edge_failure_detector max_consecutive_sls],
-                                        min: 1, max: 10 },
+        'max_consecutive_sls' => { path: %i[risk edge_failure_detector max_consecutive_sls],
+                                   min: 1, max: 10 },
         'trailing_activation_threshold' => { path: %i[position_sizing trailing activation_pct],
                                              min: 0.03, max: 0.30 } # Alias
       }.freeze
@@ -72,13 +72,13 @@ module Ai
         proposed_patch = build_proposed_patch(parameter_changes + entry_filters + exit_improvements)
 
         {
-          diagnosis:         diagnosis,
+          diagnosis: diagnosis,
           parameter_changes: parameter_changes,
-          entry_filters:     entry_filters,
+          entry_filters: entry_filters,
           exit_improvements: exit_improvements,
-          regime_rules:      regime_rules,
-          proposed_patch:    proposed_patch,
-          raw_response:      @raw
+          regime_rules: regime_rules,
+          proposed_patch: proposed_patch,
+          raw_response: @raw
         }
       end
 

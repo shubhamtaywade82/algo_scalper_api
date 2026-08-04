@@ -693,7 +693,7 @@ Rails.logger.error(
       def create_paper_tracker!(instrument:, pick:, side:, quantity:, index_cfg:, ltp:, order_no:, entry_metadata: nil, bos_context: nil)
 
         # Determine watchable: derivative for options, instrument for indices
-        watchable = find_watchable_for_pick(pick: pick, instrument: instrument)
+        find_watchable_for_pick(pick: pick, instrument: instrument)
 
         # Build meta hash with entry strategy/path information
         meta_hash = {
@@ -866,23 +866,25 @@ Rails.logger.error(
         str.gsub(/[^0-9]/, '').to_i
       end
 
-      private
-
       def banknifty_monthly_expiry(instrument, today)
         expiry_list = instrument&.expiry_list&.compact
         if expiry_list.present?
           parsed = expiry_list.filter_map do |raw|
             case raw
             when Date then raw
-            when String then Date.parse(raw) rescue nil
+            when String then begin
+                               Date.parse(raw)
+            rescue StandardError
+                               nil
+            end
             when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
             end
           end.sort
 
           monthly_expiries = parsed
-            .group_by { |d| [d.year, d.month] }
-            .map { |_, dates| dates.max }
-            .sort
+                             .group_by { |d| [d.year, d.month] }
+                             .map { |_, dates| dates.max }
+                             .sort
 
           nearest = monthly_expiries.find { |d| d >= today }
           return nearest if nearest

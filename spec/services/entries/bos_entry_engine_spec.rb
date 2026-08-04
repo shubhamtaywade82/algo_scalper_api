@@ -4,6 +4,14 @@ require 'rails_helper'
 
 RSpec.describe Entries::BosEntryEngine do
   let(:index_cfg) { { key: 'NIFTY', segment: 'NSE_FNO' } }
+  let(:candles) do
+    [
+      build_candle(105, 110, 100),
+      build_candle(115, 120, 110),
+      build_candle(125, 130, 120)
+    ]
+  end
+  let(:series) { double('CandleSeries', candles: candles, timeframe: '5m') }
   let(:instrument) { instance_double(Instrument, symbol_name: 'NIFTY') }
   let(:direction) { :bullish }
   let(:picks) { [{ symbol: 'NIFTY24MAR22000CE', security_id: '12345' }] }
@@ -15,15 +23,6 @@ RSpec.describe Entries::BosEntryEngine do
   def build_candle(close, high, low, open = 100, timestamp = Time.current)
     double('Candle', close: close, high: high, low: low, open: open, timestamp: timestamp)
   end
-
-  let(:candles) do
-    [
-      build_candle(105, 110, 100),
-      build_candle(115, 120, 110),
-      build_candle(125, 130, 120)
-    ]
-  end
-  let(:series) { double('CandleSeries', candles: candles, timeframe: '5m') }
 
   before do
     # Use MemoryStore for cache during tests since test environment uses NullStore
@@ -58,8 +57,7 @@ RSpec.describe Entries::BosEntryEngine do
       end
 
       before do
-        allow(Entries::BosExtractor).to receive(:last_confirmed_bos).and_return(bos)
-        allow(Entries::BosExtractor).to receive(:bos_id).and_return('bos_123')
+        allow(Entries::BosExtractor).to receive_messages(last_confirmed_bos: bos, bos_id: 'bos_123')
       end
 
       it 'initializes state to bos_confirmed and returns false' do
@@ -84,7 +82,7 @@ RSpec.describe Entries::BosEntryEngine do
           bos_level: 120,
           origin_price: 100,
           confirmed_index: 2,
-          confirmed_at: Time.current - 5.minutes
+          confirmed_at: 5.minutes.ago
         }
       end
 
@@ -102,8 +100,7 @@ RSpec.describe Entries::BosEntryEngine do
       before do
         Rails.cache.write("bos_machine:NIFTY:5m", state)
         allow(series).to receive(:candles).and_return(pullback_candles)
-        allow(Entries::BosExtractor).to receive(:last_confirmed_bos).and_return({ direction: :bullish, confirmed_at: state[:confirmed_at], confirmed_index: 2 })
-        allow(Entries::BosExtractor).to receive(:bos_id).and_return('bos_123')
+        allow(Entries::BosExtractor).to receive_messages(last_confirmed_bos: { direction: :bullish, confirmed_at: state[:confirmed_at], confirmed_index: 2 }, bos_id: 'bos_123')
       end
 
       it 'transitions to pullback state' do
@@ -147,8 +144,7 @@ RSpec.describe Entries::BosEntryEngine do
       before do
         Rails.cache.write("bos_machine:NIFTY:5m", state)
         allow(series).to receive(:candles).and_return(continuation_candles)
-        allow(Entries::BosExtractor).to receive(:last_confirmed_bos).and_return({ direction: :bullish, confirmed_at: Time.current, confirmed_index: 2 })
-        allow(Entries::BosExtractor).to receive(:bos_id).and_return('bos_123')
+        allow(Entries::BosExtractor).to receive_messages(last_confirmed_bos: { direction: :bullish, confirmed_at: Time.current, confirmed_index: 2 }, bos_id: 'bos_123')
         allow(Entries::EntryGuard).to receive(:try_enter).and_return(true)
         allow(described_class).to receive(:htf_bias_allows?).and_return(true)
       end

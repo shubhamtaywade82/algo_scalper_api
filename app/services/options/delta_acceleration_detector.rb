@@ -21,7 +21,7 @@ module Options
       # ratio > 12: Very strong acceleration
       # ratio > 8: Moderate acceleration
       # vol_ratio > 1.5: High volume participation
-      
+
       if ratio > 12 && vol_ratio > 1.5 && oi_rising?
         :strong
       elsif ratio > 8 && vol_ratio > 1.5 && oi_rising?
@@ -40,7 +40,7 @@ module Options
 
       # Handle flat index moves (prevent division by zero)
       return 0.0 if idx_ret.abs < 0.0001
-      
+
       # Directional check: acceleration only counts if both move in same direction
       # (Buying calls on index up move, or puts on index down move)
       return 0.0 if (idx_ret * opt_ret).negative?
@@ -56,7 +56,7 @@ module Options
 
     def volume_ratio
       return 1.0 if @volumes.empty?
-      
+
       # Use last 20 for average, compare current to average
       avg = @volumes.last(20).sum / @volumes.last(20).size.to_f
       return 1.0 if avg.zero?

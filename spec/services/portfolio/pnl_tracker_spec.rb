@@ -15,8 +15,7 @@ RSpec.describe Portfolio::PnlTracker do
     allow(redis).to receive(:hdel)
     allow(redis).to receive(:del)
     allow(redis).to receive(:incrbyfloat)
-    allow(redis).to receive(:get).and_return(nil)
-    allow(redis).to receive(:hgetall).and_return({})
+    allow(redis).to receive_messages(get: nil, hgetall: {})
     allow(redis).to receive(:set)
 
     allow(AlgoConfig).to receive(:fetch).and_return({ profit_lock: { enabled: true } })
@@ -74,8 +73,7 @@ RSpec.describe Portfolio::PnlTracker do
     end
 
     it 'returns 0.0 when no state is set' do
-      allow(redis).to receive(:get).and_return(nil)
-      allow(redis).to receive(:hgetall).and_return({})
+      allow(redis).to receive_messages(get: nil, hgetall: {})
       expect(described_class.net_pnl).to eq(0.0)
     end
   end

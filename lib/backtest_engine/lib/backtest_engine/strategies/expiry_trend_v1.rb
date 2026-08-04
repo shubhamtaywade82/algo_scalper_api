@@ -103,13 +103,13 @@ module BacktestEngine
 
       def build_trade(option_type)
         {
-          action:           :buy,
-          option_type:      option_type,
-          strike:           strike_mode,
-          sl_pct:           SL_PCT,
-          target_pct:       TARGET_PCT,
-          trail:            true,
-          trail_trigger:    TRAIL_TRIGGER,
+          action: :buy,
+          option_type: option_type,
+          strike: strike_mode,
+          sl_pct: SL_PCT,
+          target_pct: TARGET_PCT,
+          trail: true,
+          trail_trigger: TRAIL_TRIGGER,
           max_hold_minutes: MAX_HOLD_MINUTES
         }
       end

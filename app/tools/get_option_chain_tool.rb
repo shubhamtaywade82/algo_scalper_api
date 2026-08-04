@@ -42,7 +42,7 @@ class GetOptionChainTool < RubyLLM::Tool
         end,
         timestamp: Time.current
       }
-    rescue => e
+    rescue StandardError => e
       { error: "Failed to fetch option chain: #{e.message}" }
     end
   end

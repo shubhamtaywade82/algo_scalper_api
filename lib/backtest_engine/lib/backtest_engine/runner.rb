@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   class Runner
     def initialize(index_candles:, option_data:, lot_size:, strategy: StrategyEngine.new)

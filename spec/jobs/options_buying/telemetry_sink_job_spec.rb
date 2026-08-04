@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-RSpec.describe OptionsBuying::TelemetrySinkJob, type: :job do
+RSpec.describe OptionsBuying::TelemetrySinkJob do
   describe '#perform' do
     it 'persists breakout telemetry events' do
       allow(OptionsBuying::Mode).to receive(:telemetry_sink_enabled?).and_return(true)

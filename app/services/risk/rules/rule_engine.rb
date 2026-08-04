@@ -41,7 +41,7 @@ module Risk
 
           begin
             result = rule.evaluate(context)
-            
+
             # If we should continue (no_action or skip), move to next rule
             next if result.skip? || result.continue?
 

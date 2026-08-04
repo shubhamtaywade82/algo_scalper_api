@@ -14,7 +14,7 @@ module Orders
     def recommended_sl
       regime = VolatilityRegimeDetector.new(prices: @prices).regime
       gamma_expanding = GammaDetector.new(prices: @prices).gamma_expanding?
-      
+
       # MFE-based stop
       mfe_stop = MfeExitEngine.new(
         position: @position,
@@ -37,9 +37,9 @@ module Orders
 
       # Expiry tightening
       expiry_engine = ExpiryRuleEngine.new(symbol: @position.symbol)
-      
+
       base_stop = [mfe_stop, trailing_stop].compact.max
-      
+
       if expiry_engine.tighten_trailing?
         # Tighten SL to 90% of highest on expiry afternoon
         expiry_stop = (@highest_price * 0.90).round(2)

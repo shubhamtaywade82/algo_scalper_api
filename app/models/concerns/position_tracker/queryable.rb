@@ -76,9 +76,7 @@ class PositionTracker < ApplicationRecord
         }
       end
 
-      def clear_orphaned_redis_pnl!
-        Positions::IndexSync.clear_orphaned_redis_pnl!
-      end
+      delegate :clear_orphaned_redis_pnl!, to: :'Positions::IndexSync'
 
       def should_clear_orphaned?
         @last_clear ||= 5.minutes.ago

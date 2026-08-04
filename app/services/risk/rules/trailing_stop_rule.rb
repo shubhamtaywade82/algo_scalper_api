@@ -15,7 +15,7 @@ module Risk
 
         # First evaluate underlying context (tightens or exits trailing stop)
         underlying_ctx = Live::UnifiedExitChecker.send(:evaluate_underlying_context, tracker, snapshot)
-        
+
         if underlying_ctx[:action] == :exit
           return exit_result(
             reason: underlying_ctx[:reason],

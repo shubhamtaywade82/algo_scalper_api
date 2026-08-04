@@ -2,7 +2,7 @@
 
 module BacktestEngine
   class Optimizer
-    RunResult = Struct.new(:params, :metrics, :analytics, keyword_init: true)
+    RunResult = Struct.new(:params, :metrics, :analytics)
 
     DEFAULT_OBJECTIVE = :expectancy
 
@@ -58,7 +58,7 @@ module BacktestEngine
     end
 
     def apply_params_to_days(days, params)
-      return days if params.nil? || params.empty?
+      return days if params.blank?
 
       days.map do |day|
         day.merge(day_type: params[:day_type] || day[:day_type])

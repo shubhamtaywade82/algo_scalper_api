@@ -11,7 +11,7 @@ module Research
     UNIQUE_BY = %i[underlying_symbol expiry_flag option_type strike_label interval ts].freeze
 
     def initialize(symbol:, option_type:, expiry_flag:, strike_label:, dhan_strike_param:, from_date:, to_date:,
-                    interval: "5", expiry_code: 1)
+                   interval: "5", expiry_code: 1)
       @symbol = symbol.to_s.upcase
       @option_type = option_type.to_s.upcase
       @expiry_flag = expiry_flag
@@ -116,7 +116,7 @@ module Research
 
       Research::OptionBar
         .where(underlying_symbol: @symbol, expiry_flag: @expiry_flag, option_type: @option_type,
-               strike_label: @strike_label, interval: @interval, ts: rows.map { |row| row[:ts] })
+               strike_label: @strike_label, interval: @interval, ts: rows.pluck(:ts))
         .order(:ts)
     end
   end

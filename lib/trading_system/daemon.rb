@@ -147,7 +147,7 @@ module TradingSystem
       end
       @supervisor&.stop_all
     rescue StandardError => e
-      $stderr.puts "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
+      warn "[TradingDaemon] safe_stop! failed: #{e.class} - #{e.message}"
     end
 
     def keep_process_alive!

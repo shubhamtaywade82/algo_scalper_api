@@ -15,14 +15,14 @@ class AlgoConfig
   # Intentionally focused (not every key) and extensible via RULES.
   class Validator
     RULES = [
-      { path: %i[entry_quality min_score],   kind: :number,  min: 0,    max: 100 },
-      { path: %i[entry_quality gates min_adx], kind: :number, min: 0,   max: 100 },
+      { path: %i[entry_quality min_score], kind: :number, min: 0, max: 100 },
+      { path: %i[entry_quality gates min_adx], kind: :number, min: 0, max: 100 },
       { path: %i[entry_quality gates min_body_ratio], kind: :number, min: 0.0, max: 1.0 },
-      { path: %i[signals min_confidence],    kind: :number,  min: 0,    max: 100 },
+      { path: %i[signals min_confidence],    kind: :number,  min: 0, max: 100 },
       { path: %i[signals signal_tier],       kind: :enum,    allowed: %w[exploratory standard selective] },
       { path: %i[signals entry_dte_guard reject_when_days_to_expiry_lte], kind: :integer, min: -5, max: 30 },
       { path: %i[option_chain min_strike_score], kind: :number, min: 0 },
-      { path: %i[risk sl_pct],               kind: :number,  min: 0.0,  max: 1.0 }
+      { path: %i[risk sl_pct], kind: :number, min: 0.0, max: 1.0 }
     ].freeze
 
     class << self

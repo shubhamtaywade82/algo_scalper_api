@@ -32,7 +32,7 @@ RSpec.describe BacktestEngine::Market::RegimeState do
       expect(r4[:allowed_to_trade]).to be false
 
       state.update(5, :bearish)
-      r6 = state.update(6, :bearish)
+      state.update(6, :bearish)
       r7 = state.update(7, :bearish)
       expect(r7[:allowed_to_trade]).to be true
     end

@@ -226,7 +226,7 @@ gross_wins / gross_losses
 
     def self.compute_premium_regime_probabilities(trades, strike_label: "ATM")
       feature_bins = {
-        gap_regime: ->(t) {
+        gap_regime: lambda { |t|
           pct = t[:gap_pct] || 0.0
           if pct < -0.4 then :large_gap_down
           elsif pct < -0.15 then :mod_gap_down
@@ -235,20 +235,20 @@ gross_wins / gross_losses
           else :large_gap_up
           end
         },
-        or_width_regime: ->(t) {
+        or_width_regime: lambda { |t|
           width = t[:or_width] || 0.0
           if width < 25.0 then :narrow_range
           elsif width < 50.0 then :mod_range
           else :wide_range
           end
         },
-        volatility_regime: ->(t) {
+        volatility_regime: lambda { |t|
           t[:regime]&.[](:volatility) || :normal
         },
-        trend_regime: ->(t) {
+        trend_regime: lambda { |t|
           t[:regime]&.[](:trend) || :mean_reverting
         },
-        adx_strength: ->(t) {
+        adx_strength: lambda { |t|
           adx = t[:adx] || 0.0
           if adx < 20.0 then :low_trend
           elsif adx <= 30.0 then :mod_trend
@@ -266,8 +266,7 @@ gross_wins / gross_losses
           next if total_subset.zero?
 
           shape_counts = subset.map { |t| t.dig(:strikes, strike_label, :premium_pattern) || :neutral }
-                               .group_by { |s| s }
-                               .transform_values(&:size)
+                               .tally
 
           distribution = shape_counts.transform_values { |count| ((count.to_f / total_subset) * 100.0).round(1) }
 

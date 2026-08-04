@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # rubocop:disable Metrics/BlockNesting
 
 module Options
@@ -54,7 +55,7 @@ module Options
       gamma_score = gamma_detector.gamma_pressure_score(direction: direction)
 
       atm = find_atm_strike(chain, spot)
-      
+
       # Pass flow and gamma context to scoring
       scored = score_chain(chain, atm, spot, direction, flow_results: flow_results, gamma_score: gamma_score)
       candidates = scored.sort_by { |c| -c[:score] }.first(limit)
@@ -278,9 +279,9 @@ module Options
         # If no tick data, check batch LTP results
         if !tick || !tick.ltp&.positive?
           batch_ltp = batch_ltp_results[derivative.security_id.to_s]
-          if batch_ltp&.positive?
+          if batch_ltp&.positive? && !tick
             # Create a MarketTick with LTP if tick is missing
-            tick = tick ? tick : MarketTick.new(
+            tick ||= MarketTick.new(
               segment: exchange_seg,
               security_id: derivative.security_id,
               ltp: BigDecimal(batch_ltp.to_s),
@@ -324,7 +325,7 @@ module Options
         # Check if already in tick cache
         exchange_seg = derivative.exchange_segment || 'NSE_FNO'
         tick = Live::TickQuery.for_security(segment: exchange_seg, security_id: derivative.security_id)
-        next if tick && tick.ltp&.positive?
+        next if tick&.ltp&.positive?
 
         # Only fetch for ATM candidates (within 2 strikes)
         if atm_strike_approx
@@ -458,10 +459,10 @@ module Options
       @direction = direction # Store for use in reason_for
       option_type_key = direction == :bullish ? 'CE' : 'PE'
       flow_side = direction == :bullish ? 'ce' : 'pe'
-      
+
       # Extract flow scores for lookup
-      flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
-        h[f[:strike].to_f] = f[:score]
+      flow_scores = (flow_results&.[](flow_side) || []).to_h do |f|
+                      [f[:strike].to_f, f[:score]]
       end
 
       max_distance_pct = (@config[:strike_distance_pct] || 0.02).to_f
@@ -580,18 +581,18 @@ module Options
       # 1. Delta Score (0.40–0.60 ideal)
       delta = option[:delta]&.to_f&.abs || 0.5
       delta_score = 1.0 - (delta - 0.5).abs
-      
+
       # 2. Liquidity Score (Spread < 1% preferred)
       spread = calc_spread(option[:bid], option[:ask], option[:ltp]) || 0.05
       liquidity_score = 1.0 - [spread * 10.0, 1.0].min # Aggressive spread penalty
-      
+
       # 3. Flow Score (Integrated from FlowAnalyzer)
       # Normalize flow score around 1.0
       normalized_flow = [flow_score / 2.0, 1.0].min
 
       # 4. Gamma Ramp Bonus (Proximity to OI clusters)
       # gamma_score is 0.0 to 1.0+
-      
+
       base_score = (delta_score * weights[:delta]) +
                    (liquidity_score * weights[:liquidity]) +
                    (normalized_flow * weights[:flow])

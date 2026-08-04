@@ -28,7 +28,7 @@ module Risk
         # Delegate to legacy method for parity and spec compatibility
         # This covers the 'structure_invalidation_price' and 'dual_condition' checks
         result = Live::UnifiedExitChecker.check_structure_invalidation(tracker, snapshot)
-        
+
         if result && result[:exit]
           return exit_result(
             reason: result[:reason] || 'STRUCTURE_INVALIDATION',

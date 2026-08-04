@@ -27,7 +27,7 @@ module Research
         lifecycles = board.flat_map do |option_type, strikes|
           strikes.map do |strike_label, bars|
             persist_lifecycle(symbol, expiry_flag, option_type, strike_label, interval, entry_ts, bars, thresholds,
-                               entry_context_cache)
+                              entry_context_cache)
           end
         end
 
@@ -37,7 +37,7 @@ module Research
       private
 
       def persist_lifecycle(symbol, expiry_flag, option_type, strike_label, interval, entry_ts, bars, thresholds,
-                             entry_context_cache)
+                            entry_context_cache)
         # entry_ts (the anchor) is the record's identity — find_or_initialize_by
         # keys on it and it must never be overwritten by the analyzer's result,
         # which reports the snapped first-bar-at-or-after timestamp instead

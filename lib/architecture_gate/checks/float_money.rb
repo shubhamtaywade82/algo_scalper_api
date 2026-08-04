@@ -34,15 +34,14 @@ module ArchitectureGate
           # Check for .to_f on money-related variables (excluding percentages/ratios/counts like pnl_percent, margin_per, etc.)
           MONEY_FIELDS.each do |field|
             pattern = /\b#{field}(?!(?:_per|_percent|_pct|_ratio|_rate|_count|_size))\b.*\.to_f/i
-            if line.match?(pattern)
-              @report.add_failure(
-                check: "float_money",
-                file: file,
-                line: idx + 1,
-                message: "Float conversion on money field '#{field}': #{line.strip}",
-                severity: :error
-              )
-            end
+            next unless line.match?(pattern)
+            @report.add_failure(
+              check: "float_money",
+              file: file,
+              line: idx + 1,
+              message: "Float conversion on money field '#{field}': #{line.strip}",
+              severity: :error
+            )
           end
         end
       end

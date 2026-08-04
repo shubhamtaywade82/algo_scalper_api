@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "date"
 require "time"
 
@@ -7,7 +9,7 @@ module BacktestEngine
       DEFAULT_SECURITY_ID = 13
       DEFAULT_STRIKES = %w[ATM ATM+1 ATM-1 ATM+2 ATM-2].freeze
 
-      def self.fetch(interval:, from:, to:, expiry: "WEEK", expiry_code:, security_id: DEFAULT_SECURITY_ID, strikes: DEFAULT_STRIKES)
+      def self.fetch(interval:, from:, to:, expiry_code:, expiry: "WEEK", security_id: DEFAULT_SECURITY_ID, strikes: DEFAULT_STRIKES)
         require "dhan_hq"
 
         validate_expiry_code!(expiry_code)
@@ -49,7 +51,7 @@ module BacktestEngine
 
       def self.validate_expiry_code!(expiry_code)
         value = Integer(expiry_code, exception: false)
-        return if value && value.positive?
+        return if value&.positive?
 
         raise ArgumentError, "expiry_code must be a positive Integer for ExpiredOptionsData.fetch (example: 1). Got: #{expiry_code.inspect}"
       end

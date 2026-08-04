@@ -128,7 +128,7 @@ module Smc
 
       indices.each_with_index do |index_cfg, idx|
         # Add delay between indices to avoid rate limits (skip delay for first index)
-        sleep(INDEX_PROCESSING_DELAY) if idx > 0
+        sleep(INDEX_PROCESSING_DELAY) if idx.positive?
 
         process_index(index_cfg)
       end

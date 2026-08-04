@@ -328,7 +328,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       it 'calculates correct quantity using capital allocator' do
         # Remove the global mock for this test
         allow(Capital::Allocator).to receive(:qty_for).and_call_original
-        
+
         # Mock BOS gate to allow entry
         allow(Entries::EntryGuard).to receive(:enforce_structure_entry_gate).and_return({
           bos_id: 'test_bos',
@@ -386,8 +386,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
       end
 
       it 'skips entry when cooldown is active' do
-        allow(Entries::EntryGuard).to receive(:cooldown_active?).and_return(true)
-        allow(Entries::EntryGuard).to receive(:cooldown_active_for_index?).and_return(true)
+        allow(Entries::EntryGuard).to receive_messages(cooldown_active?: true, cooldown_active_for_index?: true)
 
         result = Entries::EntryGuard.try_enter(
           index_cfg: index_config,
@@ -443,8 +442,7 @@ RSpec.describe 'Order Placement Integration', :vcr, type: :integration do
     context 'when handling feed health errors' do
       it 'proceeds with entry via API fallback when feed is stale' do
         # Mock resolve_entry_ltp to return a value (as if API fallback worked)
-        allow(Entries::EntryGuard).to receive(:resolve_entry_ltp).and_return(100.0)
-        allow(Entries::EntryGuard).to receive(:create_tracker!).and_return(true)
+        allow(Entries::EntryGuard).to receive_messages(resolve_entry_ltp: 100.0, create_tracker!: true)
 
         result = Entries::EntryGuard.try_enter(
           index_cfg: index_config,

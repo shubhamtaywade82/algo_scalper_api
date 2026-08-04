@@ -424,11 +424,11 @@ module Live
 
       begin
         pos_data = Positions::ActiveCache.instance.get_by_tracker_id(tracker_id)
-        sl_price = pos_data&.sl_price || (entry_f.positive? ? entry_f * 0.70 : nil)
-        tp_price = pos_data&.tp_price || (entry_f.positive? ? entry_f * 1.60 : nil)
+        pos_data&.sl_price || (entry_f.positive? ? entry_f * 0.70 : nil)
+        pos_data&.tp_price || (entry_f.positive? ? entry_f * 1.60 : nil)
       rescue StandardError
-        sl_price = entry_f.positive? ? entry_f * 0.70 : nil
-        tp_price = entry_f.positive? ? entry_f * 1.60 : nil
+        entry_f.positive? ? entry_f * 0.70 : nil
+        entry_f.positive? ? entry_f * 1.60 : nil
       end
 
       ActionCable.server.broadcast("positions", {
@@ -440,7 +440,11 @@ module Live
         hwm_pnl: hwm.to_f.round(2),
         ltp_stale: false
       })
-      Rails.cache.delete("pnl_stale:#{tracker_id}") rescue nil
+      begin
+        Rails.cache.delete("pnl_stale:#{tracker_id}")
+      rescue StandardError
+        nil
+      end
     rescue StandardError => e
       @logger.debug("[PnlUpdater] broadcast_pnl_update failed: #{e.message}")
     end

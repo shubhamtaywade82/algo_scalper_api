@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'English'
 require "json"
 
 module AutoExp
@@ -11,14 +12,14 @@ module AutoExp
       # Capture stdout for the JSON metrics and ignore stderr (or handle separately)
       output = `rails runner #{SCRIPT}`
 
-      unless $?.success?
-        Rails.logger.error("[AutoExp] Backtest script failed with status #{$?.exitstatus}")
+      unless $CHILD_STATUS.success?
+        Rails.logger.error("[AutoExp] Backtest script failed with status #{$CHILD_STATUS.exitstatus}")
         raise "Backtest failed"
       end
 
       # Extract JSON from output (it might contain logs from Rails boot)
       json_match = output.match(/\{"profit_factor".*\}/m)
-      
+
       unless json_match
         Rails.logger.error("[AutoExp] No JSON found in backtest output: #{output}")
         raise "No JSON metrics found in backtest output"

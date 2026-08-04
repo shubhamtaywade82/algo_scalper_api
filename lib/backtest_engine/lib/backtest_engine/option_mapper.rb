@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   class OptionMapper
     STRIKE_STEP = 50
@@ -28,8 +30,6 @@ module BacktestEngine
         { type: :call, strike: strike }
       when :bearish
         { type: :put, strike: strike }
-      else
-        nil
       end
     end
 

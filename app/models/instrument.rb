@@ -276,7 +276,7 @@ class Instrument < ApplicationRecord
     normalized = normalize_option_chain_response(data)
     return nil unless normalized
 
-    filtered_data = filter_option_chain_data(normalized)
+    filter_option_chain_data(normalized)
 
     filtered_data = filter_option_chain_data(normalized)
 

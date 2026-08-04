@@ -14,7 +14,7 @@ module Risk
 
         # Delegate to legacy method for parity and spec compatibility
         result = Live::UnifiedExitChecker.check_smc_navigator_exit(tracker, snapshot)
-        
+
         if result && result[:exit]
           return exit_result(
             reason: result[:reason] || 'SMC_NAVIGATOR_EXIT',

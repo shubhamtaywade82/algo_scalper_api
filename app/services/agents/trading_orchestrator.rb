@@ -13,7 +13,7 @@ module Agents
 
     DIRECTION_MAP = {
       "BUY_CALL" => :bullish,
-      "BUY_PUT"  => :bearish
+      "BUY_PUT" => :bearish
     }.freeze
 
     def self.call(index_key:, interval: "5")
@@ -42,7 +42,7 @@ module Agents
       # ── Stage 2: Strategy ─────────────────────────────────────────────────
       strategy_result = run_agent("StrategyAgent") do
         StrategyAgent.call(
-          index_key:       @index_key,
+          index_key: @index_key,
           market_analysis: format_for_prompt(analysis)
         )
       end
@@ -100,16 +100,16 @@ module Agents
       size_multiplier = extract_size_multiplier(risk)
 
       entered = Entries::EntryGuard.try_enter(
-        index_cfg:       index_cfg,
-        pick:            pick,
-        direction:       direction,
+        index_cfg: index_cfg,
+        pick: pick,
+        direction: direction,
         scale_multiplier: size_multiplier,
-        entry_metadata:  {
-          entry_contract:   Entries::EntryGuard::SUPERTREND_CONTRACT,
-          permission:       :scale_ready,
-          ai_orchestrated:  true,
-          agent_action:     action,
-          agent_rationale:  extract_rationale(strategy)
+        entry_metadata: {
+          entry_contract: Entries::EntryGuard::SUPERTREND_CONTRACT,
+          permission: :scale_ready,
+          ai_orchestrated: true,
+          agent_action: action,
+          agent_rationale: extract_rationale(strategy)
         }
       )
 
@@ -118,14 +118,14 @@ module Agents
 
       log "Pipeline complete — entered=#{entered}"
       result(
-        action:   action,
-        entered:  entered,
+        action: action,
+        entered: entered,
         telegram_sent: true,
         analysis: analysis,
         strategy: strategy,
-        risk:     risk,
+        risk: risk,
         selection: selection,
-        pick:     pick
+        pick: pick
       )
     rescue StandardError => e
       Rails.logger.error("#{TAG} Unhandled error: #{e.class} - #{e.message}\n#{e.backtrace.first(8).join("\n")}")
@@ -216,7 +216,7 @@ module Agents
       return (strategy[:rationale] || strategy["rationale"]).to_s if strategy.is_a?(Hash)
 
       # Pull last 200 chars of narrative as rationale
-      strategy.to_s.strip.split("\n").reject(&:blank?).last(3).join(" ").truncate(300)
+      strategy.to_s.strip.split("\n").compact_blank.last(3).join(" ").truncate(300)
     end
 
     # ── Telegram Messages ─────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ module Agents
         📊 Bias: #{bias} | Action: #{action}
         ❌ <b>No valid strikes from option chain</b>
 
-        Agent suggested: #{dig(selection, :selected_contract, "unknown")} @ #{dig(selection, :premium, "?")}
+        Agent suggested: #{dig(selection, :selected_contract, 'unknown')} @ #{dig(selection, :premium, '?')}
         Market may be outside normal range.
       HTML
     end

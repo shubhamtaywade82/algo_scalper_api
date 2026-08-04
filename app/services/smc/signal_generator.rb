@@ -121,7 +121,7 @@ module Smc
           generated_at: Time.current
         }
       }
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error("[Smc::SignalGenerator] Failed for #{instrument&.symbol_name}: #{e.message}\n#{e.backtrace.first(6).join("\n")}")
       nil
     end
@@ -134,9 +134,9 @@ module Smc
       end
     end
 
-    def safe_series_call(method, *args)
+    def safe_series_call(method, *)
       return nil unless series.respond_to?(method)
-      series.public_send(method, *args)
+      series.public_send(method, *)
     rescue StandardError => e
       Rails.logger.debug("[Smc::SignalGenerator] safe_series_call #{method} failed: #{e.message}")
       nil
@@ -153,9 +153,9 @@ module Smc
       if defined?(Capital::Allocator)
         allocation = Capital::Allocator.amount_for(config[:capital_alloc_pct] || DEFAULT_CAPITAL_PCT)
         price = strike_data[:premium] || strike_data[:ltp] || 0.0
-        return (strike_data[:lot_size] || instrument.lot_size || 1) if price.to_f <= 0
+        return strike_data[:lot_size] || instrument.lot_size || 1 if price.to_f <= 0
 
-        qty = (allocation.to_f / price.to_f).to_i
+        qty = (allocation.to_f / price).to_i
         lot = strike_data[:lot_size] || instrument.lot_size || 1
         (qty / lot) * lot
       else
@@ -183,7 +183,7 @@ module Smc
     def compute_target(spot:, bos:)
       r_mult = config[:r_mult] || 1.5
       # target set as percentage move relative to SL distance; conservative if no SL computed
-      spot * (bos[:type] == :bos_bull ? (1 + 0.0075 * r_mult) : (1 - 0.0075 * r_mult))
+      spot * (bos[:type] == :bos_bull ? (1 + (0.0075 * r_mult)) : (1 - (0.0075 * r_mult)))
     end
 
     def volume_expansion?(series)

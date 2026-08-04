@@ -59,8 +59,7 @@ RSpec.describe Risk::Rules::GreenTradeCapRule do
 
     context 'when HWM never reached minimum' do
       it 'returns no_action' do
-        allow(context).to receive(:high_water_mark).and_return(100.0)
-        allow(context).to receive(:tracker_snapshot).and_return(snapshot.merge(hwm_pnl: 100.0))
+        allow(context).to receive_messages(high_water_mark: 100.0, tracker_snapshot: snapshot.merge(hwm_pnl: 100.0))
         result = rule.evaluate(context)
 
         expect(result.no_action?).to be true

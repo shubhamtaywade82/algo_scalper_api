@@ -10,7 +10,7 @@ RSpec.describe MultiIndicatorStrategy do
     # Create enough candles for indicators
     50.times do |i|
       if i == 0
-        puts "\nDEBUG: Candle init: #{Candle.instance_method(:initialize).source_location.inspect}\n"
+
       end
       price = base_price + (i * 10)
       candle = Candle.new(

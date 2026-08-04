@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   class ExecutionEngine
     DEFAULT_SLIPPAGE_PCT = 0.02

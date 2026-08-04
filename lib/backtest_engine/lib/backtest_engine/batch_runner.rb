@@ -2,7 +2,7 @@
 
 module BacktestEngine
   class BatchRunner
-    Result = Struct.new(:metrics, :results, keyword_init: true)
+    Result = Struct.new(:metrics, :results)
 
     def self.run(days:, strategy_class:, starting_capital:, lot_size:, risk_per_trade_pct: 1.0, **session_opts)
       new(

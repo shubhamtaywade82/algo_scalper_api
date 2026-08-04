@@ -174,7 +174,6 @@ RSpec.describe Live::ExitEngine do
       end
     end
 
-
     context 'when exit was already requested earlier' do
       it 'returns exit_already_requested and does not place another broker order' do
         tracker.update!(exit_requested_at: Time.current, exit_coid: 'AS-EXIT-EXISTING')

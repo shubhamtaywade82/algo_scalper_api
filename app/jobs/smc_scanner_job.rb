@@ -28,7 +28,7 @@ class SmcScannerJob < ApplicationJob
     Rails.logger.info("[SmcScannerJob] Scanning #{filtered_indices.size} indices...")
 
     indices_with_instruments = fetch_instruments(filtered_indices)
-    
+
     success_count = 0
     error_count = 0
 
@@ -57,7 +57,7 @@ class SmcScannerJob < ApplicationJob
   def fetch_instruments(indices)
     indices.filter_map do |idx_cfg|
       instrument = Instrument.find_by_sid_and_segment(security_id: idx_cfg[:sid].to_s, segment_code: idx_cfg[:segment])
-      
+
       if instrument
         [idx_cfg, instrument]
       else
@@ -91,7 +91,7 @@ class SmcScannerJob < ApplicationJob
   def process_ai_analysis(engine, idx_cfg, decision)
     Rails.logger.info("[SmcScannerJob] Getting AI analysis for #{idx_cfg[:key]}...")
     ai_analysis = engine.analyze_with_ai
-    
+
     if ai_analysis.present?
       send_ai_analysis_telegram_notification(idx_cfg[:key], decision, ai_analysis)
     else
@@ -130,7 +130,11 @@ class SmcScannerJob < ApplicationJob
       when Date then raw
       when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
       when String
-        Date.parse(raw) rescue nil
+        begin
+          Date.parse(raw)
+        rescue StandardError
+          nil
+        end
       end
     end
 
@@ -176,7 +180,7 @@ class SmcScannerJob < ApplicationJob
     return indices if indices.empty?
 
     max_expiry_days = get_max_expiry_days
-    today = Time.zone.today
+    Time.zone.today
     filtered = []
 
     indices.each do |idx_cfg|
@@ -230,8 +234,6 @@ class SmcScannerJob < ApplicationJob
         rescue ArgumentError
           nil
         end
-      else
-        nil
       end
     end
 

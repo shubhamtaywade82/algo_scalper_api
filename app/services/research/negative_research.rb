@@ -12,13 +12,13 @@ module Research
     def self.analyze(underlying_candles, option_candles, trade_opp, expansion_ctx, regime)
       return :none unless trade_opp[:failed]
 
-      entry_time = trade_opp[:entry_time]
+      trade_opp[:entry_time]
       entry_idx = trade_opp[:entry_index]
       breakout_type = trade_opp[:breakout_type]
 
       # Find post-entry candle segments
       post_und = underlying_candles[entry_idx..]
-      post_opt = option_candles[entry_idx..]
+      option_candles[entry_idx..]
 
       # 1. VWAP Reclaim: check if NIFTY crosses back across VWAP
       vwap_reclaimed = false
@@ -44,9 +44,9 @@ module Research
 
       # 2. Volume Vanished: check if breakout volume dropped by 50% in subsequent 5 minutes
       brk_vol = underlying_candles[entry_idx][:volume]
-      if brk_vol > 0
+      if brk_vol.positive?
         post_5m = post_und.first(5)
-        avg_post_vol = post_5m.any? ? (post_5m.map { |c| c[:volume] }.sum.to_f / post_5m.size) : 0.0
+        avg_post_vol = post_5m.any? ? (post_5m.pluck(:volume).sum.to_f / post_5m.size) : 0.0
         return :volume_vanished if avg_post_vol < (brk_vol * 0.5)
       end
 
@@ -58,7 +58,7 @@ module Research
 
       # 5. Gap Filled: did the gap close back to previous close?
       prev_close = trade_opp[:prev_day_close] || 0.0
-      if prev_close > 0
+      if prev_close.positive?
         gap_filled = post_und.any? do |c|
           breakout_type == :bullish ? (c[:close] <= prev_close) : (c[:close] >= prev_close)
         end

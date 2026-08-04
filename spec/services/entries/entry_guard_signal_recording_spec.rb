@@ -8,7 +8,7 @@ RSpec.describe Entries::EntryGuard, '#try_enter signal recording' do
            index_key: 'NIFTY',
            direction: 'bullish',
            timeframe: '1m',
-           supertrend_value: 23440,
+           supertrend_value: 23_440,
            adx_value: 20.4,
            candle_timestamp: 1.minute.ago,
            signal_timestamp: Time.current,
@@ -47,7 +47,7 @@ RSpec.describe Entries::EntryGuard, '#try_enter signal recording' do
       allow(Portfolio::DrawdownGuard).to receive(:triggered?).and_return(false)
       policy_dbl = instance_double(Policies::EntryPolicy,
                                    permitted?: false,
-                                   reasons: ['max_positions_reached', 'direction_locked'])
+                                   reasons: %w[max_positions_reached direction_locked])
       allow(Policies::EntryPolicy).to receive(:new).and_return(policy_dbl)
     end
 
@@ -87,11 +87,11 @@ RSpec.describe Entries::EntryGuard, '#try_enter signal recording' do
     end
 
     it 'does not raise when signal is nil' do
-      expect {
+      expect do
         described_class.try_enter(
           index_cfg: index_cfg, pick: pick, direction: 'bullish', signal: nil
         )
-      }.not_to raise_error
+      end.not_to raise_error
     end
   end
 

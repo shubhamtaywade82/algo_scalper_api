@@ -35,12 +35,12 @@ module Ai
       def performance_stats
         trades = PositionTracker.where(paper: true, status: :exited)
                                 .where('meta->>\'index_key\' = ?', @symbol)
-                                .where('exited_at >= ?', @start_time)
+                                .where(exited_at: @start_time..)
 
         total = trades.size
         return { count: 0 } if total.zero?
 
-        winners = trades.count { |t| t.last_pnl_rupees.to_f > 0 }
+        winners = trades.count { |t| t.last_pnl_rupees.to_f.positive? }
 
         {
           total_trades: total,
@@ -61,7 +61,7 @@ module Ai
 
         {
           reason_breakdown: reasons,
-          sl_hit_rate: (reasons['sl'] || 0).to_f / reasons.values.sum.to_f
+          sl_hit_rate: (reasons['sl'] || 0).to_f / reasons.values.sum
         }
       end
 
@@ -69,8 +69,8 @@ module Ai
         # Join TradingSignal with PositionTracker to see how signals performed
         # For simplicity, we compare TradingSignal direction vs ultimate trade outcome
         signals = TradingSignal.where(index_key: @symbol)
-                               .where('created_at >= ?', @start_time)
-        
+                               .where(created_at: @start_time..)
+
         return { count: 0 } if signals.empty?
 
         {
@@ -101,20 +101,20 @@ module Ai
       def detect_leakages
         leaks = []
         stats = performance_stats
-        return [] if stats[:count] == 0
+        return [] if stats[:count].zero?
 
         leaks << "Low win rate (#{stats[:win_rate]}%)" if stats[:win_rate] < 40
         leaks << "Negative profit factor" if stats[:profit_factor] < 1.0
-        
+
         exits = exit_diagnostics
-        leaks << "High SL hit rate (#{(exits[:sl_hit_rate]*100).round(1)}%)" if exits[:sl_hit_rate] > 0.6
+        leaks << "High SL hit rate (#{(exits[:sl_hit_rate] * 100).round(1)}%)" if exits[:sl_hit_rate] > 0.6
 
         leaks
       end
 
       def calculate_profit_factor(trades)
-        gross_profit = trades.select { |t| t.last_pnl_rupees.to_f > 0 }.sum { |t| t.last_pnl_rupees.to_f }
-        gross_loss   = trades.select { |t| t.last_pnl_rupees.to_f < 0 }.sum { |t| t.last_pnl_rupees.to_f }.abs
+        gross_profit = trades.select { |t| t.last_pnl_rupees.to_f.positive? }.sum { |t| t.last_pnl_rupees.to_f }
+        gross_loss   = trades.select { |t| t.last_pnl_rupees.to_f.negative? }.sum { |t| t.last_pnl_rupees.to_f }.abs
         return gross_profit if gross_loss.zero?
         (gross_profit / gross_loss).round(2)
       end

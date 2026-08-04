@@ -38,7 +38,7 @@ RSpec.describe AlgoConfig::ProfitabilitySlice4 do
       expect(config.dig(:risk, :sl_pct)).to eq(0.08)
 
       entry_guard = config.dig(:risk, :adaptive_trailing, :stages)
-                       .find { |s| s[:name] == 'entry_guard' }
+                          .find { |s| s[:name] == 'entry_guard' }
       expect(entry_guard[:hard_stop]).to eq(-0.08)
     end
   end
@@ -52,7 +52,7 @@ RSpec.describe AlgoConfig::ProfitabilitySlice4 do
       expect(config.dig(:risk, :sl_pct)).to eq(0.10)
 
       entry_guard = config.dig(:risk, :adaptive_trailing, :stages)
-                       .find { |s| s[:name] == 'entry_guard' }
+                          .find { |s| s[:name] == 'entry_guard' }
       expect(entry_guard[:hard_stop]).to eq(-0.30)
     end
   end

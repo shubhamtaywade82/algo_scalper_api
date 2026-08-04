@@ -674,7 +674,7 @@ module Services
         params[:tools] = tools if tools
         params[:tool_choice] = tool_choice if tool_choice
 
-        response = @client.chat.completions.create(**params.merge(**))
+        response = @client.chat.completions.create(**params, **)
 
         # Return full response hash if tools were used, otherwise extract content string
         if tools
@@ -891,17 +891,15 @@ module Services
             content: message['content'],
             tool_calls: message['tool_calls']
           }
-        else
+        elsif response.respond_to?(:dig)
           # Fallback for different response formats
-          if response.respond_to?(:dig)
-            message = response.dig('choices', 0, 'message') || {}
+          message = response.dig('choices', 0, 'message') || {}
             {
               content: message['content'],
               tool_calls: message['tool_calls']
             }
-          else
+        else
             { content: response.to_s, tool_calls: nil }
-          end
         end
       end
 

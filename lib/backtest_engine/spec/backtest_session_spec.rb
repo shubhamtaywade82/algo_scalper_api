@@ -108,7 +108,7 @@ RSpec.describe BacktestEngine::BacktestSession do
       expect(result.metrics.trades.size).to eq(1)
 
       trade = result.metrics.trades.first
-      expect(trade.pnl).to be > 0
+      expect(trade.pnl).to be.positive?
       expect(trade.day_type).to eq(:normal)
       expect(trade.session).to eq(:s3)
       expect(trade.regime).to eq(:trend_bull)

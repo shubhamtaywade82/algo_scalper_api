@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   class Metrics
     Trade = Struct.new(
@@ -17,8 +19,7 @@ module BacktestEngine
       :mae,
       :exit_efficiency,
       :trend_capture_pct,
-      :exit_reason,
-      keyword_init: true
+      :exit_reason
     )
 
     attr_reader :trades, :decision_counts, :skip_reasons

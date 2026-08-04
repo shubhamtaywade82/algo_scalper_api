@@ -57,7 +57,7 @@ RSpec.describe Smc::Detectors::OrderBlocks do
     it 'returns the bullish candle before a bearish impulse' do
       series = build(:candle_series, :five_minute)
       series.add_candle(build(:candle, open: 100, high: 102, low: 99, close: 101)) # bullish OB
-      series.add_candle(build(:candle, open: 101, high: 101, low: 97, close: 98))   # bearish impulse
+      series.add_candle(build(:candle, open: 101, high: 101, low: 97, close: 98)) # bearish impulse
       series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))
       series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))
       series.add_candle(build(:candle, open: 98, high: 99, low: 97, close: 98))

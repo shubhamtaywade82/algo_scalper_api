@@ -61,7 +61,7 @@ RSpec.describe BacktestEngine::Analytics::TradeAnalytics do
 
       analytics = described_class.from_metrics(metrics)
 
-      expect(analytics.max_drawdown).to be > 0
+      expect(analytics.max_drawdown).to be.positive?
     end
   end
 

@@ -17,12 +17,12 @@ RSpec.describe Live::UnderlyingLtpResolver do
 
   describe '#resolve_underlying_ltp' do
     it 'returns LTP for a known index key' do
-      tick = double(ltp: 23850.5)
+      tick = double(ltp: 23_850.5)
       allow(Live::TickQuery).to receive(:for_security)
         .with(segment: 'IDX_I', security_id: '13')
         .and_return(tick)
 
-      expect(resolver.resolve_underlying_ltp('NIFTY')).to eq(23850.5)
+      expect(resolver.resolve_underlying_ltp('NIFTY')).to eq(23_850.5)
     end
 
     it 'returns nil for unknown index key' do

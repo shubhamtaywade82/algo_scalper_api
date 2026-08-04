@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 BaseStrategy = Strategies::Base unless defined?(BaseStrategy)
 
 class SupertrendAdxStrategy < BaseStrategy

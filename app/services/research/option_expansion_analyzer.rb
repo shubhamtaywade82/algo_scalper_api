@@ -10,7 +10,7 @@ module Research
     # @return [Hash] V3 Event-centric option metrics
     def self.analyze(option_candles, underlying_candles, trade_opp, strike_label = "ATM")
       entry_time = trade_opp[:entry_time]
-      entry_idx = trade_opp[:entry_index]
+      trade_opp[:entry_index]
 
       # Find entry index in option candles
       opt_entry_idx = option_candles.index { |c| c[:timestamp] >= entry_time }
@@ -27,8 +27,8 @@ module Research
       # 1. Option Structure Features at entry time (no lookahead)
       first_15m_options = option_candles.first(15)
       prem_open = option_candles.first[:open]
-      prem_high_15m = first_15m_options.map { |c| c[:high] }.max || prem_open
-      prem_low_15m = first_15m_options.map { |c| c[:low] }.min || prem_open
+      prem_high_15m = first_15m_options.pluck(:high).max || prem_open
+      prem_low_15m = first_15m_options.pluck(:low).min || prem_open
 
       # Premium EMA5 at entry
       prem_series = CandleSeries.new(symbol: "PREM", interval: "1")
@@ -67,7 +67,7 @@ module Research
 
       post_entry_options.each_with_index do |c, idx|
         current_idx = execution_idx + idx
-        
+
         # Track Peak
         if c[:high] > peak_price
           peak_price = c[:high]
@@ -76,8 +76,8 @@ module Research
         end
 
         # Calculate returns
-        high_ret = entry_price > 0 ? ((c[:high] - entry_price) / entry_price) * 100.0 : 0.0
-        close_ret = entry_price > 0 ? ((c[:close] - entry_price) / entry_price) * 100.0 : 0.0
+        high_ret = entry_price.positive? ? ((c[:high] - entry_price) / entry_price) * 100.0 : 0.0
+        close_ret = entry_price.positive? ? ((c[:close] - entry_price) / entry_price) * 100.0 : 0.0
 
         # Time to Thresholds
         time_to_20 ||= idx if high_ret >= 20.0
@@ -103,9 +103,9 @@ module Research
       end
 
       # MFE & MAE
-      mfe_pct = entry_price > 0 ? ((peak_price - entry_price) / entry_price) * 100.0 : 0.0
-      lowest_post_entry = post_entry_options.map { |c| c[:low] }.min || entry_price
-      mae_pct = entry_price > 0 ? ((lowest_post_entry - entry_price) / entry_price) * 100.0 : 0.0
+      mfe_pct = entry_price.positive? ? ((peak_price - entry_price) / entry_price) * 100.0 : 0.0
+      lowest_post_entry = post_entry_options.pluck(:low).min || entry_price
+      mae_pct = entry_price.positive? ? ((lowest_post_entry - entry_price) / entry_price) * 100.0 : 0.0
 
       time_to_peak = ((peak_time - entry_time) / 60).round
 
@@ -114,22 +114,22 @@ module Research
       [5, 10, 15, 30, 60].each do |h_mins|
         segment = post_entry_options.first(h_mins)
         peak_seg = segment.any? ? segment.map { |c| c[:high] }.max : entry_price
-        horizons["mfe_#{h_mins}m".to_sym] = (entry_price > 0 ? ((peak_seg - entry_price) / entry_price) * 100.0 : 0.0).round(2)
+        horizons[:"mfe_#{h_mins}m"] = (entry_price.positive? ? ((peak_seg - entry_price) / entry_price) * 100.0 : 0.0).round(2)
       end
-      
+
       # Decay after peak
-      subsequent_lowest = post_entry_options[peak_offset..].map { |c| c[:low] }.min || peak_price
-      drawdown_pct = peak_price > 0 ? ((peak_price - subsequent_lowest) / peak_price) * 100.0 : 0.0
+      subsequent_lowest = post_entry_options[peak_offset..].pluck(:low).min || peak_price
+      drawdown_pct = peak_price.positive? ? ((peak_price - subsequent_lowest) / peak_price) * 100.0 : 0.0
 
       # Velocity & Gamma Efficiency
-      velocity = time_to_peak > 0 ? (mfe_pct / time_to_peak) : mfe_pct
-      
+      velocity = time_to_peak.positive? ? (mfe_pct / time_to_peak) : mfe_pct
+
       und_max_cont = trade_opp[:max_continuation]
-      gamma_efficiency = und_max_cont > 0 ? (mfe_pct / und_max_cont) : 0.0
+      gamma_efficiency = und_max_cont.positive? ? (mfe_pct / und_max_cont) : 0.0
 
       und_entry_price = trade_opp[:underlying_entry_price]
-      und_max_cont_pct = und_entry_price > 0 ? (und_max_cont / und_entry_price) * 100.0 : 0.0
-      trade_elasticity = und_max_cont_pct > 0 ? (mfe_pct / und_max_cont_pct) : 0.0
+      und_max_cont_pct = und_entry_price.positive? ? (und_max_cont / und_entry_price) * 100.0 : 0.0
+      trade_elasticity = und_max_cont_pct.positive? ? (mfe_pct / und_max_cont_pct) : 0.0
 
       # Expansion Quality Score (EQS)
       eqs = compute_eqs(velocity, gamma_efficiency, drawdown_pct, trade_opp[:sustained])
@@ -139,8 +139,8 @@ module Research
       f_open = first_15m_options.any? ? first_15m_options.first[:open].to_f : 0.0
       f_high = first_15m_options.any? ? (first_15m_options.map { |c| c[:high].to_f }.max || f_open) : 0.0
       f_low = first_15m_options.any? ? (first_15m_options.map { |c| c[:low].to_f }.min || f_open) : 0.0
-      f_mfe = f_open > 0 ? ((f_high - f_open) / f_open) * 100.0 : 0.0
-      f_mae = f_open > 0 ? ((f_low - f_open) / f_open) * 100.0 : 0.0
+      f_mfe = f_open.positive? ? ((f_high - f_open) / f_open) * 100.0 : 0.0
+      f_mae = f_open.positive? ? ((f_low - f_open) / f_open) * 100.0 : 0.0
       premium_pattern = Research::PremiumTaxonomyClassifier.classify(first_15m_options, f_mfe, f_mae)
 
       {
@@ -179,22 +179,20 @@ module Research
           premium_open: prem_open.round(2),
           premium_high_15m: prem_high_15m.round(2),
           premium_low_15m: prem_low_15m.round(2),
-          premium_ema5_at_entry: prem_ema5 ? prem_ema5.round(2) : nil,
+          premium_ema5_at_entry: prem_ema5&.round(2),
           premium_volume_at_entry: entry_candle[:volume]
         }
       }
     end
 
-    private
-
     def self.calculate_pes(idx, active_candles, underlying_candles, breakout_type, entry_price, peak_price)
       close = active_candles[idx][:close]
-      
-      pullback = peak_price > 0 ? ((peak_price - close) / peak_price) * 100.0 : 0.0
-      
+
+      pullback = peak_price.positive? ? ((peak_price - close) / peak_price) * 100.0 : 0.0
+
       v_1m = active_candles[idx][:close] - active_candles[idx - 1][:close]
       v_3m = idx >= 3 ? (active_candles[idx][:close] - active_candles[idx - 3][:close]) : 0.0
-      
+
       v_prev = active_candles[idx - 1][:close] - active_candles[idx - 2][:close]
       acceleration = v_1m - v_prev
 
@@ -205,25 +203,25 @@ module Research
       if idx >= 3
         und_prev_3 = underlying_candles[(idx - 3)...idx]
         und_curr = underlying_candles[idx]
-        
+
         und_extreme = false
         if breakout_type == :bullish
-          und_extreme = und_curr && und_prev_3.all? && und_curr[:high] > und_prev_3.map { |x| x[:high] }.max
+          und_extreme = und_curr && und_prev_3.all? && und_curr[:high] > und_prev_3.pluck(:high).max
         else
-          und_extreme = und_curr && und_prev_3.all? && und_curr[:low] < und_prev_3.map { |x| x[:low] }.min
+          und_extreme = und_curr && und_prev_3.all? && und_curr[:low] < und_prev_3.pluck(:low).min
         end
 
         opt_prev_3 = active_candles[(idx - 3)...idx]
-        opt_failed = active_candles[idx][:high] <= opt_prev_3.map { |x| x[:high] }.max
+        opt_failed = active_candles[idx][:high] <= opt_prev_3.pluck(:high).max
         divergence = und_extreme && opt_failed
       end
 
       score = 0
       score += 25 if pullback >= 10.0
-      score += 20 if acceleration < 0
+      score += 20 if acceleration.negative?
       score += 20 if time_since_high >= 3
       score += 25 if divergence
-      score += 10 if v_3m < 0
+      score += 10 if v_3m.negative?
 
       [[score, 100].min, divergence]
     end

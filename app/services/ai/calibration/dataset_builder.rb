@@ -31,11 +31,11 @@ module Ai
         trades = trackers.filter_map { |t| build_trade_row(t) }
 
         {
-          symbol:   @symbol,
-          trades:   trades,
-          meta:     build_meta(trades),
-          from:     from.iso8601,
-          to:       Time.current.iso8601
+          symbol: @symbol,
+          trades: trades,
+          meta: build_meta(trades),
+          from: from.iso8601,
+          to: Time.current.iso8601
         }
       end
 
@@ -56,40 +56,40 @@ module Ai
         signal    = find_signal(tracker)
 
         {
-          symbol:           extract_index_key(tracker, meta),
-          option_type:      extract_option_type(tracker),
-          entry_price:      tracker.entry_price.to_f,
-          exit_price:       tracker.exit_price.to_f,
-          last_pnl_rupees:  tracker.last_pnl_rupees.to_f,
-          last_pnl_pct:     (tracker.last_pnl_pct.to_f * 100).round(2),
-          entry_time:       tracker.created_at&.iso8601,
-          exit_time:        tracker.exited_at&.iso8601,
-          exit_reason:      meta['exit_reason'] || tracker.exit_reason,
-          strategy_name:    meta['entry_strategy'],
-          trade_state:      tracker.trade_state,
+          symbol: extract_index_key(tracker, meta),
+          option_type: extract_option_type(tracker),
+          entry_price: tracker.entry_price.to_f,
+          exit_price: tracker.exit_price.to_f,
+          last_pnl_rupees: tracker.last_pnl_rupees.to_f,
+          last_pnl_pct: (tracker.last_pnl_pct.to_f * 100).round(2),
+          entry_time: tracker.created_at&.iso8601,
+          exit_time: tracker.exited_at&.iso8601,
+          exit_reason: meta['exit_reason'] || tracker.exit_reason,
+          strategy_name: meta['entry_strategy'],
+          trade_state: tracker.trade_state,
 
           # Signal indicators at entry
-          adx_value:        signal&.adx_value.to_f,
+          adx_value: signal&.adx_value.to_f,
           supertrend_value: signal&.supertrend_value.to_f,
           signal_direction: signal&.direction,
           confidence_score: signal&.confidence_score.to_f,
-          signal_metadata:  signal&.metadata,
+          signal_metadata: signal&.metadata,
 
           # SMC telemetry (nil if not filled)
           bos_age_at_entry: telemetry&.bos_age_at_entry,
-          retrace_pct:      telemetry&.retrace_pct.to_f,
+          retrace_pct: telemetry&.retrace_pct.to_f,
           pullback_candles: telemetry&.pullback_candles,
-          max_r_reached:    telemetry&.max_r_reached.to_f,
-          exit_r:           telemetry&.exit_r.to_f,
-          exit_path:        telemetry&.exit_path,
-          entry_tf:         telemetry&.entry_tf,
-          htf_tf:           telemetry&.htf_tf,
+          max_r_reached: telemetry&.max_r_reached.to_f,
+          exit_r: telemetry&.exit_r.to_f,
+          exit_path: telemetry&.exit_path,
+          entry_tf: telemetry&.entry_tf,
+          htf_tf: telemetry&.htf_tf,
 
           # Options Behavior (extracted from Signal metadata)
-          gamma_score:      signal&.metadata&.dig('gamma_pressure').to_f,
-          gamma_strike:     signal&.metadata&.dig('gamma_ramp_strike'),
-          iv_rank:          signal&.metadata&.dig('iv_rank_proxy').to_f,
-          theta_risk:       signal&.metadata&.dig('theta_risk_score').to_f
+          gamma_score: signal&.metadata&.dig('gamma_pressure').to_f,
+          gamma_strike: signal&.metadata&.dig('gamma_ramp_strike'),
+          iv_rank: signal&.metadata&.dig('iv_rank_proxy').to_f,
+          theta_risk: signal&.metadata&.dig('theta_risk_score').to_f
         }
       rescue StandardError => e
         Rails.logger.warn("[DatasetBuilder] Skipping tracker #{tracker.id}: #{e.class} — #{e.message}")
@@ -109,7 +109,7 @@ module Ai
       end
 
       def extract_index_key(tracker, meta)
-        meta['index_key'] || tracker.symbol&.split(' ')&.first || @symbol
+        meta['index_key'] || tracker.symbol&.split&.first || @symbol
       end
 
       def extract_option_type(tracker)
@@ -134,37 +134,37 @@ module Ai
                                .transform_values(&:size)
 
         regime_approx = trades.group_by { |t| t[:trade_state] || 'unknown' }
-                               .transform_values(&:size)
+                              .transform_values(&:size)
 
         ce_trades = trades.select { |t| t[:option_type] == 'CE' }
         pe_trades = trades.select { |t| t[:option_type] == 'PE' }
 
         {
-          total_trades:    total,
-          win_rate:        total.positive? ? (wins.to_f / total * 100).round(2) : 0,
-          total_pnl:       total_pnl.round(2),
-          avg_pnl:         total.positive? ? (total_pnl / total).round(2) : 0,
-          winners:         wins,
-          losers:          total - wins,
-          exit_breakdown:  exit_breakdown,
-          regime_approx:   regime_approx,
-          ce_count:        ce_trades.size,
-          pe_count:        pe_trades.size
+          total_trades: total,
+          win_rate: total.positive? ? (wins.to_f / total * 100).round(2) : 0,
+          total_pnl: total_pnl.round(2),
+          avg_pnl: total.positive? ? (total_pnl / total).round(2) : 0,
+          winners: wins,
+          losers: total - wins,
+          exit_breakdown: exit_breakdown,
+          regime_approx: regime_approx,
+          ce_count: ce_trades.size,
+          pe_count: pe_trades.size
         }
       end
 
       def empty_meta
         {
-          total_trades:    0,
-          win_rate:        0.0,
-          total_pnl:       0.0,
-          avg_pnl:         0.0,
-          winners:         0,
-          losers:          0,
-          exit_breakdown:  {},
-          regime_approx:   {},
-          ce_count:        0,
-          pe_count:        0
+          total_trades: 0,
+          win_rate: 0.0,
+          total_pnl: 0.0,
+          avg_pnl: 0.0,
+          winners: 0,
+          losers: 0,
+          exit_breakdown: {},
+          regime_approx: {},
+          ce_count: 0,
+          pe_count: 0
         }
       end
     end

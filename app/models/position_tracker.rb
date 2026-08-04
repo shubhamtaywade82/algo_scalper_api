@@ -14,7 +14,7 @@ class PositionTracker < ApplicationRecord
     highest_price
   end
 
-  def create_position_meta_snapshot!(config_version_hash:, config_change_log_id: nil, config_snapshot:, entry_at: nil)
+  def create_position_meta_snapshot!(config_version_hash:, config_snapshot:, config_change_log_id: nil, entry_at: nil)
     create_meta_snapshot!(
       config_version_hash: config_version_hash,
       config_change_log_id: config_change_log_id,

@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe Entries::Guards::OptionVolumeVelocityGuard do
   let(:index_cfg) { { key: 'NIFTY' } }
-  let(:pick) { { symbol: 'NIFTY26APR22000CE', security_id: '55112', strike: 22000.0, expiry_date: Date.current } }
+  let(:pick) { { symbol: 'NIFTY26APR22000CE', security_id: '55112', strike: 22_000.0, expiry_date: Date.current } }
   let(:context) do
     {
       index_cfg: index_cfg,

@@ -56,12 +56,12 @@ module Live
 
       @running = true
       start_watchdog
-      
+
       # Subscribe to PnL updates from EventBus for high-frequency evaluation
       @event_subscription = Core::EventBus.instance.subscribe(Core::EventBus::EVENTS[:pnl_update]) do |event|
         handle_pnl_event(event)
       end
-      
+
       Rails.logger.info '[RiskManager] Service started'
     end
 
@@ -94,11 +94,11 @@ module Live
       # Evaluate immediate exits (Hard SL, TP, Trailing)
       # We use UnifiedExitChecker for sub-second logic
       exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
-      
+
       if exit_decision && exit_decision[:exit]
         reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
         Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
-        
+
         # Execute exit immediately
         engine = @exit_engine || self
         dispatch_exit(engine, tracker, reason)
@@ -184,13 +184,11 @@ module Live
       { risk_level: risk_level, max_position_size: max_position_size, recommended_stop_loss: recommended_stop_loss }
     end
 
-    private
-
     # High-frequency risk evaluation (Event-driven)
     # Reacts immediately to price changes without waiting for LOOP_INTERVAL
     def handle_pnl_event(event)
       return unless @running
-      
+
       tracker_id = event[:tracker_id]
       return unless tracker_id
 
@@ -201,11 +199,11 @@ module Live
       # Evaluate immediate exits (Hard SL, TP, Trailing)
       # We use UnifiedExitChecker for sub-second logic
       exit_decision = Live::UnifiedExitChecker.check_exit_conditions(tracker)
-      
+
       if exit_decision && exit_decision[:exit]
         reason = "#{exit_decision[:reason]} (Sub-second Trigger)"
         Rails.logger.info("[RiskManager] ⚡ HIGH-FREQUENCY EXIT for #{tracker.order_no}: #{reason}")
-        
+
         # Execute exit immediately
         engine = @exit_engine || self
         dispatch_exit(engine, tracker, reason)

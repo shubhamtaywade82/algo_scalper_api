@@ -13,7 +13,7 @@ RSpec.describe Signal::DirectionValidator do
 
   let(:instrument) { instance_double(Instrument) }
   let(:primary_series) { build(:candle_series, :with_candles) }
-  let(:primary_supertrend) { { trend: :bullish, last_value: 19500.0 } }
+  let(:primary_supertrend) { { trend: :bullish, last_value: 19_500.0 } }
   let(:primary_adx) { 18.5 }
 
   before do
@@ -39,9 +39,8 @@ RSpec.describe Signal::DirectionValidator do
       before do
         allow(instrument).to receive(:candle_series).with(interval: '15').and_return(primary_series)
         allow(instrument).to receive(:adx).with(14, interval: '15').and_return(18.0)
-        allow(Entries::VWAPUtils).to receive(:calculate_vwap).and_return(19450.0)
-        allow(Entries::StructureDetector).to receive(:bos_direction).and_return(:bullish)
-        allow(Entries::StructureDetector).to receive(:choch?).and_return(:bullish)
+        allow(Entries::VWAPUtils).to receive(:calculate_vwap).and_return(19_450.0)
+        allow(Entries::StructureDetector).to receive_messages(bos_direction: :bullish, choch?: :bullish)
         allow(Indicators::Supertrend).to receive(:new).and_return(
           instance_double(Indicators::Supertrend, call: { trend: :bullish })
         )
@@ -50,14 +49,14 @@ RSpec.describe Signal::DirectionValidator do
       it 'returns valid result when minimum factors agree' do
         # Mock candles with higher highs pattern
         candles = [
-          instance_double(Candle, high: 19400.0, low: 19350.0, close: 19380.0),
-          instance_double(Candle, high: 19450.0, low: 19380.0, close: 19420.0),
-          instance_double(Candle, high: 19500.0, low: 19420.0, close: 19480.0),
-          instance_double(Candle, high: 19550.0, low: 19480.0, close: 19520.0),
-          instance_double(Candle, high: 19600.0, low: 19520.0, close: 19580.0)
+          instance_double(Candle, high: 19_400.0, low: 19_350.0, close: 19_380.0),
+          instance_double(Candle, high: 19_450.0, low: 19_380.0, close: 19_420.0),
+          instance_double(Candle, high: 19_500.0, low: 19_420.0, close: 19_480.0),
+          instance_double(Candle, high: 19_550.0, low: 19_480.0, close: 19_520.0),
+          instance_double(Candle, high: 19_600.0, low: 19_520.0, close: 19_580.0)
         ]
         allow(primary_series).to receive(:candles).and_return(candles)
-        allow(candles.last).to receive(:close).and_return(19580.0)
+        allow(candles.last).to receive(:close).and_return(19_580.0)
 
         result = described_class.validate(
           index_cfg: index_cfg,
@@ -146,19 +145,18 @@ RSpec.describe Signal::DirectionValidator do
     context 'with insufficient agreement' do
       before do
         allow(instrument).to receive(:candle_series).with(interval: '15').and_return(nil)
-        allow(Entries::VWAPUtils).to receive(:calculate_vwap).and_return(19600.0) # Above price (bearish)
-        allow(Entries::StructureDetector).to receive(:bos_direction).and_return(:neutral)
-        allow(Entries::StructureDetector).to receive(:choch?).and_return(:neutral)
+        allow(Entries::VWAPUtils).to receive(:calculate_vwap).and_return(19_600.0) # Above price (bearish)
+        allow(Entries::StructureDetector).to receive_messages(bos_direction: :neutral, choch?: :neutral)
       end
 
       it 'returns invalid result when score < min_agreement' do
         candles = [
-          instance_double(Candle, high: 19500.0, low: 19450.0, close: 19480.0),
-          instance_double(Candle, high: 19480.0, low: 19420.0, close: 19450.0),
-          instance_double(Candle, high: 19450.0, low: 19380.0, close: 19400.0)
+          instance_double(Candle, high: 19_500.0, low: 19_450.0, close: 19_480.0),
+          instance_double(Candle, high: 19_480.0, low: 19_420.0, close: 19_450.0),
+          instance_double(Candle, high: 19_450.0, low: 19_380.0, close: 19_400.0)
         ]
         allow(primary_series).to receive(:candles).and_return(candles)
-        allow(candles.last).to receive(:close).and_return(19400.0)
+        allow(candles.last).to receive(:close).and_return(19_400.0)
 
         result = described_class.validate(
           index_cfg: index_cfg,
@@ -199,25 +197,25 @@ RSpec.describe Signal::DirectionValidator do
   describe '.check_vwap_position' do
     let(:candles) do
       [
-        instance_double(Candle, close: 19400.0),
-        instance_double(Candle, close: 19450.0),
-        instance_double(Candle, close: 19500.0)
+        instance_double(Candle, close: 19_400.0),
+        instance_double(Candle, close: 19_450.0),
+        instance_double(Candle, close: 19_500.0)
       ]
     end
 
     before do
       allow(primary_series).to receive(:candles).and_return(candles)
-      allow(candles.last).to receive(:close).and_return(19500.0)
+      allow(candles.last).to receive(:close).and_return(19_500.0)
     end
 
     it 'agrees when price is above VWAP for bullish' do
-      allow(Entries::VWAPUtils).to receive(:calculate_vwap).and_return(19450.0)
+      allow(Entries::VWAPUtils).to receive(:calculate_vwap).and_return(19_450.0)
       result = described_class.send(:check_vwap_position, series: primary_series, direction: :bullish)
       expect(result[:agrees]).to be true
     end
 
     it 'disagrees when price is below VWAP for bullish' do
-      allow(Entries::VWAPUtils).to receive(:calculate_vwap).and_return(19600.0)
+      allow(Entries::VWAPUtils).to receive(:calculate_vwap).and_return(19_600.0)
       result = described_class.send(:check_vwap_position, series: primary_series, direction: :bullish)
       expect(result[:agrees]).to be false
     end
@@ -227,11 +225,11 @@ RSpec.describe Signal::DirectionValidator do
     context 'with bullish direction' do
       let(:candles) do
         [
-          instance_double(Candle, high: 19400.0),
-          instance_double(Candle, high: 19450.0),
-          instance_double(Candle, high: 19500.0),
-          instance_double(Candle, high: 19550.0),
-          instance_double(Candle, high: 19600.0)
+          instance_double(Candle, high: 19_400.0),
+          instance_double(Candle, high: 19_450.0),
+          instance_double(Candle, high: 19_500.0),
+          instance_double(Candle, high: 19_550.0),
+          instance_double(Candle, high: 19_600.0)
         ]
       end
 
@@ -249,11 +247,11 @@ RSpec.describe Signal::DirectionValidator do
     context 'with bearish direction' do
       let(:candles) do
         [
-          instance_double(Candle, low: 19600.0),
-          instance_double(Candle, low: 19550.0),
-          instance_double(Candle, low: 19500.0),
-          instance_double(Candle, low: 19450.0),
-          instance_double(Candle, low: 19400.0)
+          instance_double(Candle, low: 19_600.0),
+          instance_double(Candle, low: 19_550.0),
+          instance_double(Candle, low: 19_500.0),
+          instance_double(Candle, low: 19_450.0),
+          instance_double(Candle, low: 19_400.0)
         ]
       end
 

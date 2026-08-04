@@ -82,6 +82,7 @@ class AlgoConfig
           merged[key] = val
         end
       end
+    end
 
     def deep_merge_hashes_with_arrays(base, overrides)
       MergeUtil.deep_merge_hashes_with_arrays(base, overrides)

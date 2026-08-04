@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "backtest_engine/version"
 require_relative "backtest_engine/index_engine"
 require_relative "backtest_engine/option_mapper"

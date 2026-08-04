@@ -1,6 +1,8 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
-RSpec.describe OptionChainChannel, type: :channel do
+RSpec.describe OptionChainChannel do
   it 'streams from the index-specific channel name' do
     subscribe(index_key: 'NIFTY')
     expect(subscription).to be_confirmed

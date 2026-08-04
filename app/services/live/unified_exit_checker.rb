@@ -18,18 +18,18 @@ module Live
         return nil unless snapshot
 
         # Use the RuleEngine with exit rules
-        engine = Risk::Rules::RuleEngine.new(
+        Risk::Rules::RuleEngine.new(
           rules: Risk::Rules::RuleFactory.exit_rules(AlgoConfig.fetch)
         )
 
         # Build RuleContext
-        context = Risk::Rules::RuleContext.new(
+        Risk::Rules::RuleContext.new(
           position: OpenStruct.new(
             current_ltp: snapshot[:ltp],
             pnl_pct: snapshot[:pnl_pct],
             pnl_rupees: snapshot[:pnl],
             hwm_pnl: snapshot[:hwm_pnl],
-            peak_profit_pct: (tracker.entry_price.to_f > 0 ? (snapshot[:hwm_pnl].to_f / (tracker.entry_price.to_f * tracker.quantity.to_i)) : 0)
+            peak_profit_pct: (tracker.entry_price.to_f.positive? ? (snapshot[:hwm_pnl].to_f / (tracker.entry_price.to_f * tracker.quantity.to_i)) : 0)
           ),
           tracker: tracker,
           tracker_snapshot: snapshot,
@@ -72,8 +72,6 @@ module Live
       rescue StandardError
         nil
       end
-
-
 
       def portfolio_floor_breach?
         Portfolio::DrawdownGuard.triggered?
@@ -144,7 +142,7 @@ module Live
         return false unless config[:trailing][:enabled]
         ltp = snapshot[:ltp].to_f
         return false unless ltp.positive?
-        
+
         symbol = tracker.symbol.to_s.upcase
         if %w[NIFTY BANKNIFTY SENSEX].any? { |s| symbol.include?(s) }
           entry_value = tracker.entry_price.to_f * tracker.quantity.to_f
@@ -206,7 +204,7 @@ module Live
               highest_price: highest_price
             ).call
 
-            reason = (mfe_sl && sl_price == mfe_sl) ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
+            reason = mfe_sl && sl_price == mfe_sl ? 'MFE_RETRACE_EXIT' : 'GAMMA_AWARE_TRAILING'
 
             Rails.logger.info("[UnifiedExitChecker] #{reason} hit for #{tracker.order_no}: ltp=#{ltp}, sl=#{sl_price}")
             return true
@@ -295,7 +293,11 @@ module Live
         return 1.0 if candles.size < 10
         current_atr = calculate_atr(candles.last(14))
         avg_atr = calculate_atr(candles)
-        (current_atr / avg_atr).round(3) rescue 1.0
+        begin
+          (current_atr / avg_atr).round(3)
+        rescue StandardError
+          1.0
+        end
       end
 
       def calculate_atr(candles)
@@ -305,9 +307,17 @@ module Live
       end
 
       def build_position_data(tracker, _snapshot, instrument)
-        series = instrument.candle_series(interval: '5') rescue nil
+        series = begin
+                   instrument.candle_series(interval: '5')
+        rescue StandardError
+                   nil
+        end
         candles = series&.candles || []
-        adx_value = instrument.adx(14, interval: '5') rescue nil
+        adx_value = begin
+                      instrument.adx(14, interval: '5')
+        rescue StandardError
+                      nil
+        end
         adx_hash = adx_value.is_a?(Hash) ? adx_value : { value: adx_value }
         OpenStruct.new(
           trend_score: adx_hash[:value]&.to_f || 0,
@@ -339,18 +349,18 @@ module Live
         # Read SL from risk config (sl_pct stored as DECIMAL like 0.12 for 12%)
         sl_value = risk_cfg[:sl_pct]
         if sl_value
-          sl_value_pct = sl_value.to_f  # Use DECIMAL directly (0.12)
+          sl_value_pct = sl_value.to_f # Use DECIMAL directly (0.12)
         else
-          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12  # Default 12% as DECIMAL
+          sl_value_pct = exit_cfg.dig(:stop_loss, :value) || 0.12 # Default 12% as DECIMAL
         end
 
         # Read TP from config (can be in either location, stored as DECIMAL)
         tp_value = exit_cfg[:take_profit]
         unless tp_value
           if risk_cfg[:tp_pct]
-            tp_value = risk_cfg[:tp_pct].to_f  # Use DECIMAL directly (0.50)
+            tp_value = risk_cfg[:tp_pct].to_f # Use DECIMAL directly (0.50)
           else
-            tp_value = 0.50  # Default 50% as DECIMAL
+            tp_value = 0.50 # Default 50% as DECIMAL
           end
         end
 
@@ -391,8 +401,8 @@ module Live
 
       def default_exit_config
         {
-          stop_loss: { type: 'static', value: 0.12 },  # 12% stop loss (DECIMAL)
-          take_profit: 0.50,  # 50% take profit (DECIMAL)
+          stop_loss: { type: 'static', value: 0.12 }, # 12% stop loss (DECIMAL)
+          take_profit: 0.50, # 50% take profit (DECIMAL)
           trailing: { enabled: true, type: 'adaptive', activation_profit: 0.035, drop_threshold: 0.025 },
           early_exit: { enabled: true, profit_threshold: 0.07 },
           premium_momentum_failure: { enabled: true },

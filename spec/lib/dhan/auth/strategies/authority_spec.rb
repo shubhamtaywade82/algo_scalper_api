@@ -11,7 +11,7 @@ RSpec.describe Dhan::Auth::Strategies::Authority do
 
   before do
     stub_const("ENV", ENV.to_hash.merge(
-      "TRADER_API_BASE_URL"     => "https://authority.example.com",
+      "TRADER_API_BASE_URL" => "https://authority.example.com",
       "DHAN_TOKEN_ACCESS_TOKEN" => "bearer_secret"
     ))
   end

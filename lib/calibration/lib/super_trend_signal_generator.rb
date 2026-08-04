@@ -27,23 +27,23 @@ module Calibration
   # ── Pine Script defaults ────────────────────────────────────────
   DEFAULT_CONFIG = {
     # SuperTrend2
-    st_factor:     2.0,
-    use_wicks:     true,
-    dynamic_atr:   true,
+    st_factor: 2.0,
+    use_wicks: true,
+    dynamic_atr: true,
 
     # RSI
-    rsi_length:    14,
+    rsi_length: 14,
 
     # Volatility
-    atr_length:           14,
+    atr_length: 14,
     vol_threshold_lookback: 20,
-    atr_expansion_bars:   10,
+    atr_expansion_bars: 10,
 
     # ADX
     use_adx_filter: true,
-    adx_length:     14,
-    adx_smoothing:  14,
-    dir_confirm:    true,
+    adx_length: 14,
+    adx_smoothing: 14,
+    dir_confirm: true,
 
     # Timeframe in minutes — drives dynamic thresholds
     # Set this to match the candle interval of your data
@@ -64,15 +64,19 @@ module Calibration
     base_atr_values = Indicators::ATR.new(length: @cfg[:atr_length]).calculate(bars)
 
     # ── Step 2: dynamic ATR length per bar (Pine: dynAtrLen) ──────────────
-    closes      = bars.map { |b| b[:close] }
+    closes      = bars.pluck(:close)
     rsi_values  = Indicators::RSI.new(length: @cfg[:rsi_length]).calculate(closes)
-    vol_sma20   = Indicators::SMA.calculate(bars.map { |b| b[:volume] }, 20)
+    vol_sma20   = Indicators::SMA.calculate(bars.pluck(:volume), 20)
 
-    dyn_atr_lengths = bars.size.times.map do |i|
+    dyn_atr_lengths = Array.new(bars.size) do |i|
       atr_adj = if @cfg[:dynamic_atr] && rsi_values[i] && vol_sma20[i]
                   vol_spike = bars[i][:volume] > vol_sma20[i] * 1.2
                   rsi = rsi_values[i]
-                  rsi > 60 ? 3 : vol_spike ? 2 : 0
+                  if rsi > 60
+3
+                  else
+vol_spike ? 2 : 0
+                  end
                 else
                   0
                 end
@@ -84,7 +88,7 @@ module Calibration
     # We approximate by computing ATR with each unique length and mapping.
     # For typical use (length varies 8–13) this is equivalent.
     atr_cache = {}
-    dyn_atr_per_bar = bars.size.times.map do |i|
+    dyn_atr_per_bar = Array.new(bars.size) do |i|
       len = dyn_atr_lengths[i]
       unless atr_cache[len]
         atr_cache[len] = Indicators::ATR.new(length: len).calculate(bars)
@@ -98,7 +102,7 @@ module Calibration
     end
 
     st2_results = Indicators::SuperTrend2.new(
-      factor:    @cfg[:st_factor],
+      factor: @cfg[:st_factor],
       use_wicks: @cfg[:use_wicks]
     ).calculate(bars_with_atr)
 
@@ -109,14 +113,14 @@ module Calibration
 
     # ── Step 6: ADX/DMI ───────────────────────────────────────────────────
     dmi_results = Indicators::DMI.new(
-      length:    @cfg[:adx_length],
+      length: @cfg[:adx_length],
       smoothing: @cfg[:adx_smoothing]
     ).calculate(bars)
 
     # ── Step 7: assemble signal per bar ───────────────────────────────────
     open_position = nil
 
-    bars.size.times.map do |i|
+    bars.size.times.filter_map do |i|
       bar      = bars[i]
       st       = st2_results[i]
       dmi      = dmi_results[i] || {}
@@ -133,7 +137,7 @@ module Calibration
       vol_high_thresh = avg_atr * 1.10
 
       # ATR regime
-      atr_rising   = atr_val >= atr_sma * 1.02
+      atr_rising = atr_val >= atr_sma * 1.02
       atr_declining = atr_val <= atr_sma * 0.95
 
       # Volatility gate
@@ -142,11 +146,11 @@ module Calibration
       # SuperTrend state
       st_bullish    = st[:direction] == -1
       st_bearish    = st[:direction] == 1
-      st_flip_bull  = i > 0 && st2_results[i - 1][:direction] == 1  && st[:direction] == -1
-      st_flip_bear  = i > 0 && st2_results[i - 1][:direction] == -1 && st[:direction] == 1
+      st_flip_bull  = i.positive? && st2_results[i - 1][:direction] == 1  && st[:direction] == -1
+      st_flip_bear  = i.positive? && st2_results[i - 1][:direction] == -1 && st[:direction] == 1
 
       # Wick/close cross (mirrors Pine long_wick_entry / short_wick_entry)
-      prev = i > 0 ? bars[i - 1] : nil
+      prev = i.positive? ? bars[i - 1] : nil
       long_wick_entry  = prev && (@cfg[:use_wicks] ? ta_crossover_high(bar, prev, st[:st]) : ta_crossover_close(bar, prev, st[:st]))
       short_wick_entry = prev && (@cfg[:use_wicks] ? ta_crossunder_low(bar, prev, st[:st]) : ta_crossunder_close(bar, prev, st[:st]))
 
@@ -207,54 +211,82 @@ module Calibration
       market_mode     = compute_market_mode(adx_strong, adx_ok, atr_rising, atr_declining, atr_pct, vol_med_thresh)
 
       {
-        bar_index:       i,
-        timestamp:       bar[:timestamp],
-        close:           bar[:close].round(2),
-        signal:          signal,
+        bar_index: i,
+        timestamp: bar[:timestamp],
+        close: bar[:close].round(2),
+        signal: signal,
         # Indicator values (for diagnostics)
-        rsi:             rsi.round(2),
-        atr_pct:         atr_pct.round(4),
-        atr_rising:      atr_rising,
-        atr_declining:   atr_declining,
-        volatility_ok:   volatility_ok,
-        vol_med_thresh:  vol_med_thresh.round(4),
+        rsi: rsi.round(2),
+        atr_pct: atr_pct.round(4),
+        atr_rising: atr_rising,
+        atr_declining: atr_declining,
+        volatility_ok: volatility_ok,
+        vol_med_thresh: vol_med_thresh.round(4),
         vol_high_thresh: vol_high_thresh.round(4),
-        st_value:        st[:st].round(4),
-        st_direction:    st[:direction],
-        st_bullish:      st_bullish,
-        st_flip_bull:    st_flip_bull,
-        st_flip_bear:    st_flip_bear,
-        adx:             adx.round(2),
-        diplus:          diplus.round(2),
-        diminus:         diminus.round(2),
-        adx_ok:          adx_ok,
-        adx_strong:      adx_strong,
-        call_rsi_ok:     call_rsi_ok,
-        put_rsi_ok:      put_rsi_ok,
-        call_buy:        call_buy,
-        put_buy:         put_buy,
+        st_value: st[:st].round(4),
+        st_direction: st[:direction],
+        st_bullish: st_bullish,
+        st_flip_bull: st_flip_bull,
+        st_flip_bear: st_flip_bear,
+        adx: adx.round(2),
+        diplus: diplus.round(2),
+        diminus: diminus.round(2),
+        adx_ok: adx_ok,
+        adx_strong: adx_strong,
+        call_rsi_ok: call_rsi_ok,
+        put_rsi_ok: put_rsi_ok,
+        call_buy: call_buy,
+        put_buy: put_buy,
         profit_book_call: profit_book_call,
-        profit_book_put:  profit_book_put,
-        market_mode:     market_mode,
-        position_size:   position_size,
+        profit_book_put: profit_book_put,
+        market_mode: market_mode,
+        position_size: position_size,
         strike_distance: strike_distance
       }
-    end.compact
+    end
   end
 
-  private
+      private
 
   def derive_dynamic_thresholds
     tf = @cfg[:tf_minutes]
 
     # Direct port of Pine dynamic threshold blocks
-    @st_atr_base      = tf <= 1 ? 8  : tf <= 15 ? 9  : 10
-    @rsi_buy_min      = tf <= 1 ? 30 : tf <= 15 ? 35 : 40
-    @rsi_buy_max      = tf <= 1 ? 80 : tf <= 15 ? 75 : 70
-    @rsi_sell_min     = tf <= 1 ? 20 : tf <= 15 ? 25 : 30
-    @rsi_sell_max     = tf <= 1 ? 70 : tf <= 15 ? 65 : 60
-    @disinterest_level = tf <= 1 ? 12 : tf <= 15 ? 15 : 20
-    @trend_level      = tf <= 1 ? 20 : tf <= 15 ? 28 : 35
+    @st_atr_base      = if tf <= 1
+8
+                        else
+tf <= 15 ? 9 : 10
+                        end
+    @rsi_buy_min      = if tf <= 1
+30
+                        else
+tf <= 15 ? 35 : 40
+                        end
+    @rsi_buy_max      = if tf <= 1
+80
+                        else
+tf <= 15 ? 75 : 70
+                        end
+    @rsi_sell_min     = if tf <= 1
+20
+                        else
+tf <= 15 ? 25 : 30
+                        end
+    @rsi_sell_max     = if tf <= 1
+70
+                        else
+tf <= 15 ? 65 : 60
+                        end
+    @disinterest_level = if tf <= 1
+12
+                         else
+tf <= 15 ? 15 : 20
+                         end
+    @trend_level      = if tf <= 1
+20
+                        else
+tf <= 15 ? 28 : 35
+                        end
     @dir_confirm      = tf >= 15
   end
 
@@ -292,14 +324,12 @@ module Calibration
       else
         "NEUTRAL"
       end
-    else
-      if atr_rising && atr_pct > vol_med_thresh
-        "BUY MODE"
-      elsif atr_declining || atr_pct < vol_med_thresh
+    elsif atr_rising && atr_pct > vol_med_thresh
+      "BUY MODE"
+    elsif atr_declining || atr_pct < vol_med_thresh
         "HOLD/SELL MODE"
-      else
+    else
         "NEUTRAL"
-      end
     end
   end
 
@@ -319,6 +349,6 @@ module Calibration
       current_position
     end
   end
-end
-end
+    end
+  end
 end

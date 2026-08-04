@@ -104,7 +104,6 @@ module Notifications
         false
       end
 
-
       def build_reasons(htf_context, mtf_context, ltf_context)
         reasons = []
 
@@ -189,11 +188,13 @@ module Notifications
             location: zone[:location]&.to_s,
             equilibrium: zone[:equilibrium]&.round(2)
           },
-          navigator: navigator ? {
+          navigator: if navigator
+  {
             allow: navigator.allow,
             reason: navigator.reason.to_s,
             confidence: navigator.confidence.round(3)
-          } : nil
+          }
+                     end
         }
       rescue StandardError => e
         Rails.logger.warn("[SendSmcAlertJob] LTF enrichment failed: #{e.class} - #{e.message}")

@@ -33,7 +33,11 @@ module Smc
       end
 
       # final IV & liquidity re-check
-      if signal[:meta]&.dig(:iv) && signal[:meta][:iv] > (signal[:meta][:max_iv] || (AlgoConfig.fetch[:smc][:max_iv] rescue 60))
+      if signal[:meta]&.dig(:iv) && signal[:meta][:iv] > (signal[:meta][:max_iv] || begin
+                                                                                      AlgoConfig.fetch[:smc][:max_iv]
+      rescue StandardError
+                                                                                      60
+      end)
         Rails.logger.warn("[Smc::Runner] IV too high at execution: #{signal[:meta][:iv]} - aborting")
         return nil
       end
@@ -43,7 +47,7 @@ module Smc
       else
         place_live_order(option_inst)
       end
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error("[Smc::Runner] Execution failure: #{e.message}\n#{e.backtrace.first(8).join("\n")}")
       nil
     end
@@ -51,7 +55,7 @@ module Smc
     private
 
     def valid_signal?
-      signal[:qty].to_i > 0 && signal[:option_symbol].present? && signal[:type].in?([:ce, :pe])
+      signal[:qty].to_i.positive? && signal[:option_symbol].present? && signal[:type].in?(%i[ce pe])
     end
 
     def signal_summary
@@ -81,7 +85,7 @@ module Smc
       else
         true
       end
-    rescue => e
+    rescue StandardError => e
       Rails.logger.error("[Smc::Runner] tradable? check failed: #{e.message}")
       false
     end
@@ -132,12 +136,12 @@ module Smc
           Rails.logger.error("[Smc::Runner] No Bracket order interface available")
           return nil
         end
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error("[Smc::Runner] Order placement failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
         return nil
       end
 
-      if order && order.respond_to?(:order_id) && order.order_id.present?
+      if order.respond_to?(:order_id) && order.order_id.present?
         # Track positions using existing helper on instrument model
         option_inst.after_order_track!(
           instrument: option_inst,
@@ -146,7 +150,7 @@ module Smc
           security_id: option_inst.security_id,
           side: 'LONG',
           qty: qty,
-          entry_price: (order.executed_price || order.avg_price || ltp),
+          entry_price: order.executed_price || order.avg_price || ltp,
           symbol: option_inst.symbol_name
         )
         Rails.logger.info("[Smc::Runner] Order placed successfully: #{order.order_id} for #{option_inst.symbol_name}")
@@ -160,8 +164,12 @@ module Smc
     # Simulate execution for backtest: returns a hash representing executed trade
     def simulate_backtest_execution(option_inst)
       # In backtest mode, we assume immediate fill at next candle open or LTP estimate
-      executed_price = option_inst.fetch_historical_fill_price_at(signal[:meta][:generated_at]) rescue nil
-      executed_price ||= (signal[:meta][:premium] || 0.0)
+      executed_price = begin
+                         option_inst.fetch_historical_fill_price_at(signal[:meta][:generated_at])
+      rescue StandardError
+                         nil
+      end
+      executed_price ||= signal[:meta][:premium] || 0.0
       executed_price = executed_price.to_f
       if executed_price <= 0
         Rails.logger.warn("[Smc::Runner] Backtest: no fill price available for #{option_inst.symbol_name}")
@@ -195,12 +203,12 @@ module Smc
       else
         # fallback: use small % of current option price as stop cushion
         cp = current_option_ltp.to_f
-        stop = if signal[:type] == :ce
-                 [ (cp * 0.6).round(2), (cp - (cp * 0.2)).round(2) ].max
-               else
-                 [ (cp * 0.6).round(2), (cp - (cp * 0.2)).round(2) ].max
-               end
-        stop
+        if signal[:type] == :ce
+                 [(cp * 0.6).round(2), (cp - (cp * 0.2)).round(2)].max
+        else
+                 [(cp * 0.6).round(2), (cp - (cp * 0.2)).round(2)].max
+        end
+
       end
     end
   end

@@ -27,11 +27,11 @@ module Indicators
       calculate_mast_once unless @mast_result
 
       return nil if @mast_result.nil? || @mast_result[:direction].nil?
-      
+
       direction_at = @mast_result[:direction][index]
       regime_at = @mast_result[:regimes][index]
       st_value = @mast_result[:super_trend][index]
-      
+
       return nil if st_value.nil? || direction_at.nil?
 
       {
@@ -53,7 +53,7 @@ module Indicators
     def calculate_confidence(direction, index)
       # Base confidence for ML Adaptive SuperTrend
       base = 65
-      
+
       # Boost confidence if trend is consistent for a few bars
       if index > 3
         prev_dirs = @mast_result[:direction][(index - 3)..index]
@@ -61,8 +61,8 @@ module Indicators
           base += 15
         end
       end
-      
-      # Boost based on volatility regime? 
+
+      # Boost based on volatility regime?
       # High vol regimes might have lower confidence but better profit potential
       # Let's keep it simple for now
       [base, 100].min

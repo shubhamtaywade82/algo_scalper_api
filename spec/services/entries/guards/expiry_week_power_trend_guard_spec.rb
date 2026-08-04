@@ -43,8 +43,8 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
 
     it 'returns PASS and sets expiry_power_trend on context' do
       expect(result).to eq(Entries::EntryGuardPipeline::PASS)
-      expect(context[:expiry_power_trend]).to eq(true)
-      expect(context[:entry_metadata][:expiry_power_trend]).to eq(true)
+      expect(context[:expiry_power_trend]).to be(true)
+      expect(context[:entry_metadata][:expiry_power_trend]).to be(true)
     end
   end
 
@@ -96,7 +96,7 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
 
     it 'sets expiry_power_trend' do
       expect(result).to eq(Entries::EntryGuardPipeline::PASS)
-      expect(context[:expiry_power_trend]).to eq(true)
+      expect(context[:expiry_power_trend]).to be(true)
     end
   end
 
@@ -132,7 +132,7 @@ RSpec.describe Entries::Guards::ExpiryWeekPowerTrendGuard do
 
     it 'sets expiry_power_trend (same-day expiry qualifies)' do
       expect(result).to eq(Entries::EntryGuardPipeline::PASS)
-      expect(context[:expiry_power_trend]).to eq(true)
+      expect(context[:expiry_power_trend]).to be(true)
     end
   end
 

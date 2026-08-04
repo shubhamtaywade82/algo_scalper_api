@@ -55,7 +55,7 @@ module BacktestEngine
       if @position[:trail] || @position[:trail_type]
         pnl_pct = ((option_price - @entry_price) / @entry_price) * 100.0
         trail_trigger = @position[:trail_trigger] || 0.0
-        
+
         if pnl_pct >= trail_trigger.to_f
           computed_sl = compute_trailing_stop(candle_index, index_candle, option_price, timestamp)
           if computed_sl
@@ -101,7 +101,7 @@ module BacktestEngine
       strike_key = @position[:strike]
       option_type = @position[:option_type]
       raw_candles = @option_data[[strike_key, option_type]]
-      return unless raw_candles && raw_candles.any?
+      return unless raw_candles&.any?
 
       candles = Market::Candle.build_series(raw_candles)
       @option_series = Market::CandleSeries.new(candles)
@@ -162,7 +162,7 @@ module BacktestEngine
         st_data = @indicator_series.supertrend(10, 3.0)
         curr_trend = st_data[:trend][candle_index]
         option_type = @position[:option_type]
-        
+
         if (option_type == :call && !curr_trend) || (option_type == :put && curr_trend)
           option_price
         else
@@ -175,7 +175,7 @@ module BacktestEngine
         swing_val = nil
         (0..50).each do |offset|
           check_idx = candle_index - offset
-          break if check_idx < 0
+          break if check_idx.negative?
 
           if option_type == :call && @indicator_series.swing_low?(check_idx, lookback: lookback)
             swing_val = @indicator_series.candles[check_idx].low
@@ -228,7 +228,7 @@ module BacktestEngine
         swing_val = nil
         (0..30).each do |offset|
           check_idx = candle_index - offset
-          break if check_idx < 0
+          break if check_idx.negative?
           if @position[:option_type] == :call && @indicator_series.swing_low?(check_idx, lookback: 3)
             swing_val = @indicator_series.candles[check_idx].low
             break
@@ -256,10 +256,8 @@ module BacktestEngine
       option_type = @position[:option_type]
       if option_type == :call && index_candle.close < ema_20
         true
-      elsif option_type == :put && index_candle.close > ema_20
-        true
       else
-        false
+        option_type == :put && index_candle.close > ema_20
       end
     end
   end

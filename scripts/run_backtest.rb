@@ -10,10 +10,10 @@ def run_backtest
 
   # In a real scenario, we'd load strategy_config.yml and inject it into the strategy
   # For now, let's assume the strategy reads from the config file
-  
+
   service = BacktestService.run(
-    symbol: symbol, 
-    days_back: days, 
+    symbol: symbol,
+    days_back: days,
     strategy: InstitutionalMomentumStrategy
   )
   summary = service.summary
@@ -31,10 +31,14 @@ def run_backtest
 
   # Calculate a simple profit factor (gross win / gross loss)
   wins = summary[:trades].select { |t| t[:pnl_percent].positive? }.sum { |t| t[:pnl_percent] }
-  losses = summary[:trades].select { |t| t[:pnl_percent] < 0 }.sum { |t| t[:pnl_percent] }.abs
-  
-  profit_factor = losses.zero? ? (wins.positive? ? 5.0 : 0.0) : (wins / losses).round(2)
-  
+  losses = summary[:trades].select { |t| t[:pnl_percent].negative? }.sum { |t| t[:pnl_percent] }.abs
+
+  profit_factor = if losses.zero?
+wins.positive? ? 5.0 : 0.0
+                  else
+(wins / losses).round(2)
+                  end
+
   # Estimate drawdown (simplified as max loss in a single trade for this demo)
   drawdown = summary[:max_loss].abs / 100.0
 
@@ -47,7 +51,7 @@ def run_backtest
 
   puts metrics.to_json
 rescue StandardError => e
-  $stderr.puts "Backtest failed: #{e.message}"
+  warn "Backtest failed: #{e.message}"
   exit 1
 end
 

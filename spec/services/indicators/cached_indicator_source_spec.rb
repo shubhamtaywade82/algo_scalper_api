@@ -15,8 +15,8 @@ RSpec.describe Indicators::CachedIndicatorSource do
       described_class.series_for(instrument: instrument, interval: 5)
       expect(Live::CandleSeriesCache).to have_received(:fetch).with(
         instrument: instrument,
-        interval:   5,
-        backfill:   true
+        interval: 5,
+        backfill: true
       )
     end
 
@@ -29,8 +29,8 @@ RSpec.describe Indicators::CachedIndicatorSource do
       described_class.series_for(instrument: instrument)
       expect(Live::CandleSeriesCache).to have_received(:fetch).with(
         instrument: instrument,
-        interval:   5,
-        backfill:   true
+        interval: 5,
+        backfill: true
       )
     end
 

@@ -32,10 +32,7 @@ allow(ENV).to receive(:[]).and_call_original
     allow(ENV).to receive(:[]).with('SCRIPT_MODE').and_return(nil)
 
 allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
-  end
-
-  before do
-    allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
+allow(TradingSystem::Bootstrap).to receive(:boot_reconciliation!).and_return(true)
   end
 
   describe 'when market is closed' do

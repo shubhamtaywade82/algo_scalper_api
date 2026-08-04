@@ -22,8 +22,8 @@ RSpec.describe 'Signal::Engine RSI anti-chase gate' do
   end
 
   def make_series(rsi_value)
-    series = instance_double('CandleSeries', candles: [double(close: 100.0)] * 20)
-    indicator = instance_double('Indicators::RsiIndicator', rsi_value_at: rsi_value)
+    series = instance_double(CandleSeries, candles: [double(close: 100.0)] * 20)
+    indicator = instance_double(Indicators::RsiIndicator, rsi_value_at: rsi_value)
     allow(Indicators::RsiIndicator).to receive(:new).with(series: series).and_return(indicator)
     series
   end

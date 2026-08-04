@@ -32,9 +32,9 @@ module Risk
       private
 
       def config_for_rule(context)
-        cfg = context.risk_config.dig(:exit, :time_based) || 
+        cfg = context.risk_config.dig(:exit, :time_based) ||
               context.risk_config.dig(:risk, :time_based) || {}
-        
+
         # Fallback to direct fetch if context is empty (legacy compat)
         if cfg.empty?
           cfg = AlgoConfig.fetch.dig(:exit, :time_based) || {}

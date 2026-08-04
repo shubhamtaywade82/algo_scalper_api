@@ -7,7 +7,7 @@ RSpec.describe OptionsBuying::TradeScoringEngine do
   let(:direction) { :bullish }
   let(:option_security_id) { '12345' }
   let(:strategy_name) { 'orb_breakout' }
-  let(:spot_ltp) { 22000.0 }
+  let(:spot_ltp) { 22_000.0 }
 
   let(:index_cfg) { { key: 'NIFTY', sid: '26000', segment: 'NSE_IDX' } }
   let(:instrument) { instance_double(Instrument) }
@@ -74,7 +74,7 @@ RSpec.describe OptionsBuying::TradeScoringEngine do
     end
 
     it 'persists a OptionsBuyingSignalEvent' do
-      expect {
+      expect do
         described_class.score!(
           index_key: index_key,
           direction: direction,
@@ -82,7 +82,7 @@ RSpec.describe OptionsBuying::TradeScoringEngine do
           strategy_name: strategy_name,
           spot_ltp: spot_ltp
         )
-      }.to change(OptionsBuyingSignalEvent, :count).by(1)
+      end.to change(OptionsBuyingSignalEvent, :count).by(1)
 
       event = OptionsBuyingSignalEvent.last
       expect(event.event_type).to eq('scoring_decision')

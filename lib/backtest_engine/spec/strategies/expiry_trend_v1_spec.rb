@@ -5,13 +5,13 @@ require "spec_helper"
 RSpec.describe BacktestEngine::Strategies::ExpiryTrendV1 do
   def context_for(overrides = {})
     {
-      structure:    :bullish,
-      pullback:     true,
+      structure: :bullish,
+      pullback: true,
       volume_ratio: 2.0,
       regime_score: 75.0,
       iv_expansion: 5.0,
-      htf_bias:     :bullish,
-      iv:           nil
+      htf_bias: :bullish,
+      iv: nil
     }.merge(overrides)
   end
 

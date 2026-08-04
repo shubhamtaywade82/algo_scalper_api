@@ -3,13 +3,13 @@
 require 'rails_helper'
 
 RSpec.describe Options::PropStrikeSelector do
-  let(:spot) { 24200.0 }
+  let(:spot) { 24_200.0 }
   let(:selector) { described_class.new(spot: spot) }
 
   describe '#score' do
     let(:option) do
       {
-        strike: 24200.0,
+        strike: 24_200.0,
         delta: 0.5,
         oi: 500_000,
         volume: 50_000,
@@ -24,7 +24,7 @@ RSpec.describe Options::PropStrikeSelector do
     end
 
     it 'penalizes strikes far from spot' do
-      far_option = option.merge(strike: 24500.0, delta: 0.2)
+      far_option = option.merge(strike: 24_500.0, delta: 0.2)
       expect(selector.score(far_option)).to be < selector.score(option)
     end
 
@@ -35,15 +35,15 @@ RSpec.describe Options::PropStrikeSelector do
 
     it 'uses ratios when history is provided' do
       history = { avg_volume: 100_000, avg_oi: 1_000_000 }
-      
+
       # Case 1: Volume spike (ratio 2.0)
       spike_option = option.merge(volume: 200_000, oi: 1_000_000)
       score_spike = selector.score(spike_option, history: history)
-      
+
       # Case 2: Normal volume (ratio 1.0)
       normal_option = option.merge(volume: 100_000, oi: 1_000_000)
       score_normal = selector.score(normal_option, history: history)
-      
+
       expect(score_spike).to be > score_normal
     end
 

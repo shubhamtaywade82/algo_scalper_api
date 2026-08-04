@@ -117,7 +117,7 @@ class PositionTracker < ApplicationRecord
       qty = (quantity || 0).to_i
       pnl = BigDecimal((last_pnl_rupees || cached_pnl || 0).to_s)
 
-      self.last_pnl_pct = (entry.positive? && qty.positive?) ? (pnl / (entry * qty)) : BigDecimal('0')
+      self.last_pnl_pct = entry.positive? && qty.positive? ? (pnl / (entry * qty)) : BigDecimal('0')
     end
 
     def persist_hwm_pnl_pct(value)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   module Market
     class CandleSeries
@@ -12,20 +14,16 @@ module BacktestEngine
 
       # Basic access
 
-      def [](index)
-        candles[index]
-      end
+      delegate :[], to: :candles
 
       def last(count = 1)
         count == 1 ? candles.last : candles.last(count)
       end
 
-      def size
-        candles.size
-      end
+      delegate :size, to: :candles
 
-      def each(&block)
-        candles.each(&block)
+      def each(&)
+        candles.each(&)
       end
 
       # Moving averages
@@ -39,7 +37,7 @@ module BacktestEngine
             if index.zero?
               values << candle.close
             else
-              values << (candle.close * k + values[-1] * (1 - k))
+              values << ((candle.close * k) + (values[-1] * (1 - k)))
             end
           end
 
@@ -101,10 +99,10 @@ module BacktestEngine
           end
 
           values = []
-          values << trs.first(period).sum / period.to_f
+          values << (trs.first(period).sum / period.to_f)
 
           trs[period..].each do |tr|
-            values << ((values.last * (period - 1)) + tr) / period
+            values << (((values.last * (period - 1)) + tr) / period)
           end
 
           values
@@ -288,13 +286,13 @@ module BacktestEngine
               prev_ub = upper_bands[index - 1]
               prev_lb = lower_bands[index - 1]
 
-              ub = (basic_ub < prev_ub || prev_close > prev_ub) ? basic_ub : prev_ub
-              lb = (basic_lb > prev_lb || prev_close < prev_lb) ? basic_lb : prev_lb
+              ub = basic_ub < prev_ub || prev_close > prev_ub ? basic_ub : prev_ub
+              lb = basic_lb > prev_lb || prev_close < prev_lb ? basic_lb : prev_lb
 
               upper_bands << ub
               lower_bands << lb
 
-              prev_st = st_values[index - 1]
+              st_values[index - 1]
               prev_trend = trend[index - 1]
 
               curr_trend = prev_trend

@@ -40,7 +40,7 @@ RSpec.describe Strategies::Manager do
       create(:strategy_record, slug: 'lifecycle_test', status: 'deployed', desired_status: 'running')
     end
     let(:version) do
-      path = Rails.root.join('tmp', 'lifecycle_test_strategy.rb')
+      path = Rails.root.join("tmp/lifecycle_test_strategy.rb")
       content = <<~RUBY
         class LifecycleTestStrategy < Strategies::Base
           def call(context) = nil
@@ -55,7 +55,7 @@ RSpec.describe Strategies::Manager do
              manifest: { 'class_name' => 'LifecycleTestStrategy', 'params' => {} })
     end
 
-    let(:path) { Rails.root.join('tmp', 'lifecycle_test_strategy.rb') }
+    let(:path) { Rails.root.join("tmp/lifecycle_test_strategy.rb") }
 
     before do
       strategy_record.update!(current_version: version)

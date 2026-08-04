@@ -17,15 +17,14 @@ module ArchitectureGate
             lines.each_with_index do |line, idx|
               next if line.strip.start_with?("#")
 
-              if line.match?(regex)
-                @report.add_failure(
-                  check: "domain_purity",
-                  file: file,
-                  line: idx + 1,
-                  message: "Domain layer contains forbidden pattern '#{pattern}': #{line.strip}",
-                  severity: :error
-                )
-              end
+              next unless line.match?(regex)
+              @report.add_failure(
+                check: "domain_purity",
+                file: file,
+                line: idx + 1,
+                message: "Domain layer contains forbidden pattern '#{pattern}': #{line.strip}",
+                severity: :error
+              )
             end
           end
         end

@@ -9,11 +9,11 @@ RSpec.describe Entries::EntryGuard do
   let(:signal) { double('Signal', record_entry_outcome: true) }
   let(:instrument) { instance_double(Instrument, id: 1, symbol_name: 'NIFTY', exchange_segment: 'NSE_IDX') }
   let(:ltp) { BigDecimal('150.0') }
-  
+
   before do
     # Generic pipeline pass
-    allow(Entries::EntryGuard.entry_guard_pipeline).to receive(:run).and_return(Entries::EntryGuardPipeline::PASS)
-    
+    allow(described_class.entry_guard_pipeline).to receive(:run).and_return(Entries::EntryGuardPipeline::PASS)
+
     # Mock order execution
     allow(Entries::OrderExecutionService).to receive(:call).and_return(instance_double(PositionTracker))
   end
@@ -21,8 +21,9 @@ RSpec.describe Entries::EntryGuard do
   describe '.try_enter' do
     context 'when pipeline fails' do
       let(:blocked_reason) { 'pipeline_reason' }
+
       before do
-        allow(Entries::EntryGuard.entry_guard_pipeline).to receive(:run).and_return({ blocked: blocked_reason })
+        allow(described_class.entry_guard_pipeline).to receive(:run).and_return({ blocked: blocked_reason })
       end
 
       it 'blocks entry and records outcome' do

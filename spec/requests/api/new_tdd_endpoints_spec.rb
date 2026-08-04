@@ -47,8 +47,8 @@ RSpec.describe "New Frontend TDD API Endpoints" do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: true } })
         allow(Ledger::WalletReader).to receive(:snapshot).and_return({
-          cash: 100000.0,
-          equity: 100000.0,
+          cash: 100_000.0,
+          equity: 100_000.0,
           mtm: 0.0,
           exposure: 0.0,
           utilized: 0.0
@@ -59,7 +59,7 @@ RSpec.describe "New Frontend TDD API Endpoints" do
         get "/api/funds"
         expect(response).to have_http_status(:ok)
         body = response.parsed_body
-        expect(body["cash"]).to eq(100000.0)
+        expect(body["cash"]).to eq(100_000.0)
         expect(body["margin_used"]).to eq(0.0)
       end
     end
@@ -68,11 +68,11 @@ RSpec.describe "New Frontend TDD API Endpoints" do
       before do
         allow(AlgoConfig).to receive(:fetch).and_return({ paper_trading: { enabled: false } })
         mock_funds = double(
-          available_balance: 50000.0,
-          sod_limit: 50000.0,
+          available_balance: 50_000.0,
+          sod_limit: 50_000.0,
           collateral_amount: 0.0,
           receiveable_amount: 0.0,
-          utilized_amount: 15000.0
+          utilized_amount: 15_000.0
         )
         allow(DhanHQ::Models::Funds).to receive(:fetch).and_return(mock_funds)
       end
@@ -81,8 +81,8 @@ RSpec.describe "New Frontend TDD API Endpoints" do
         get "/api/funds"
         expect(response).to have_http_status(:ok)
         body = response.parsed_body
-        expect(body["cash"]).to eq(50000.0)
-        expect(body["margin_used"]).to eq(15000.0)
+        expect(body["cash"]).to eq(50_000.0)
+        expect(body["margin_used"]).to eq(15_000.0)
       end
     end
   end

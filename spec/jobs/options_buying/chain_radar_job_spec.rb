@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-RSpec.describe OptionsBuying::ChainRadarJob, type: :job do
+RSpec.describe OptionsBuying::ChainRadarJob do
   let(:index_cfg) { { key: 'NIFTY', sid: '13', segment: 'IDX_I' } }
 
   before do

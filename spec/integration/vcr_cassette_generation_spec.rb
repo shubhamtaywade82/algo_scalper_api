@@ -18,7 +18,7 @@ RSpec.describe 'VCR Cassette Generation', :vcr, type: :integration do
     context 'when making real API calls' do
       it 'records OHLC API call with filtered sensitive data' do
         # Skip if no credentials are available or if they look like placeholders
-        has_creds = ENV['DHAN_CLIENT_ID'].present? && ENV['DHAN_ACCESS_TOKEN'].present? && !ENV['DHAN_ACCESS_TOKEN'].include?('placeholder')
+        has_creds = ENV['DHAN_CLIENT_ID'].present? && ENV['DHAN_ACCESS_TOKEN'].present? && ENV['DHAN_ACCESS_TOKEN'].exclude?('placeholder')
         skip 'No DhanHQ credentials available' unless has_creds
 
         # Create a real instrument (use find_or_create to avoid duplicate security_id errors)
@@ -45,7 +45,7 @@ RSpec.describe 'VCR Cassette Generation', :vcr, type: :integration do
 
       it 'records historical data API call with filtered sensitive data' do
         # Skip if no credentials are available or if they look like placeholders
-        has_creds = ENV['DHAN_CLIENT_ID'].present? && ENV['DHAN_ACCESS_TOKEN'].present? && !ENV['DHAN_ACCESS_TOKEN'].include?('placeholder')
+        has_creds = ENV['DHAN_CLIENT_ID'].present? && ENV['DHAN_ACCESS_TOKEN'].present? && ENV['DHAN_ACCESS_TOKEN'].exclude?('placeholder')
         skip 'No DhanHQ credentials available' unless has_creds
 
         # Create a real instrument (use find_or_create to avoid duplicate security_id errors)

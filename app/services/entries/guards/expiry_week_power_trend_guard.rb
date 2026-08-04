@@ -35,7 +35,7 @@ module Entries
         private
 
         def config
-          AlgoConfig.fetch.dig(:expiry_week_power_trend) || {}
+          AlgoConfig.fetch[:expiry_week_power_trend] || {}
         rescue StandardError
           {}
         end
@@ -90,9 +90,9 @@ module Entries
           if expiry_list.present?
             parsed = expiry_list.filter_map { |raw| coerce_date(raw) }.uniq.sort
             monthly = parsed
-              .group_by { |d| [d.year, d.month] }
-              .map { |_, dates| dates.max }
-              .sort
+                      .group_by { |d| [d.year, d.month] }
+                      .map { |_, dates| dates.max }
+                      .sort
             nearest = monthly.find { |d| d >= today }
             return nearest if nearest
           end

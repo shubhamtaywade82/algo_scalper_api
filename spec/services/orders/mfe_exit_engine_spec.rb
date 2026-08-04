@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 RSpec.describe Orders::MfeExitEngine do
-  let(:tracker) { instance_double('PositionTracker', symbol: symbol, entry_price: 100.0, highest_price: 100.0, meta: {}) }
+  let(:tracker) { instance_double(PositionTracker, symbol: symbol, entry_price: 100.0, highest_price: 100.0, meta: {}) }
   let(:symbol) { 'NIFTY24MAR22000CE' }
   let(:ltp) { 100.0 }
   let(:engine) { described_class.new(position: tracker, ltp: ltp) }
@@ -29,6 +29,7 @@ RSpec.describe Orders::MfeExitEngine do
 
     context 'with SENSEX (retrace_ratio 0.45)' do
       let(:symbol) { 'SENSEX24MAR72000CE' }
+
       it 'returns stop based on MFE retrace' do
         # Entry 100, Peak 300
         # MFE = 200

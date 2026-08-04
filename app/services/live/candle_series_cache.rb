@@ -252,7 +252,7 @@ module Live
           Rails.logger.error("[CandleSeriesCache] poll_candle_closure publish error: #{e.class} - #{e.message}")
         end
 
-        redis.set(pub_key, max_ts.utc.iso8601(3), ex: 86400) if published.positive? && max_ts
+        redis.set(pub_key, max_ts.utc.iso8601(3), ex: 86_400) if published.positive? && max_ts
 
         store_candles(security_id: security_id, interval: interval, candles: candles)
 

@@ -3,9 +3,9 @@
 require 'rails_helper'
 
 RSpec.describe Policies::ExitPolicy do
-  let(:tracker) { build_stubbed(:position_tracker, status: 'active', order_no: 'ORD010') }
-
   subject(:policy) { described_class.new(tracker: tracker) }
+
+  let(:tracker) { build_stubbed(:position_tracker, status: 'active', order_no: 'ORD010') }
 
   # ── No exit condition ───────────────────────────────────────────────────────
 

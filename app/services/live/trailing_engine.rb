@@ -341,8 +341,8 @@ module Live
 
       # Get symbol or index key
       key = position_data.index_key.to_s.upcase
-      symbol = position_data.security_id.to_s.upcase # security_id often contains the symbol in some contexts, but better check both
-      
+      position_data.security_id.to_s.upcase # security_id often contains the symbol in some contexts, but better check both
+
       # Use index_key or underlying symbol
       search_key = position_data.underlying_symbol.to_s.upcase.presence || key
       %w[NIFTY BANKNIFTY SENSEX].any? { |s| search_key.include?(s) }
@@ -377,8 +377,8 @@ module Live
         entry_price: position_data.entry_price.to_f,
         highest_price: position_data.entry_price.to_f * (1.0 + peak_profit_pct)
       ).call
-      reason_code = (mfe_sl && new_sl_price == mfe_sl) ? 'mfe_retrace' : 'gamma_aware'
-      
+      reason_code = mfe_sl && new_sl_price == mfe_sl ? 'mfe_retrace' : 'gamma_aware'
+
       adjusted = Orders::Adjuster.adjust_sl(
         tracker: tracker,
         recommended_sl: new_sl_price,

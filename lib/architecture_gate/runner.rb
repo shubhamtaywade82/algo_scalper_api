@@ -33,13 +33,13 @@ module ArchitectureGate
 
     def run!(paths: nil)
       report = run(paths: paths)
-      puts report.to_s
+      Rails.logger.debug report
 
       if report.failures.any?
-        puts "\n❌ ARCHITECTURE GATE FAILED (#{report.failures.size} violations)"
+        Rails.logger.debug "\n❌ ARCHITECTURE GATE FAILED (#{report.failures.size} violations)"
         exit 1
       else
-        puts "\n✅ ARCHITECTURE GATE PASSED"
+        Rails.logger.debug "\n✅ ARCHITECTURE GATE PASSED"
         exit 0
       end
     end

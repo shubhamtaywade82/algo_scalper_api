@@ -15,7 +15,7 @@ module Signal
     # @param min_agreement [Integer] Minimum factors that must agree (default: 2)
     # @return [Result] Validation result with direction, score, and factors
     def self.validate(index_cfg:, instrument:, primary_series:, primary_supertrend:,
-                     primary_adx:, min_agreement: 2)
+                      primary_adx:, min_agreement: 2)
       # Input validation
       return invalid_result('Missing instrument') unless instrument
       return invalid_result('Missing primary_series') unless primary_series
@@ -63,7 +63,7 @@ module Signal
 
       # Determine final direction
       direction = primary_supertrend[:trend]
-      valid = score >= min_agreement && direction.in?([:bullish, :bearish])
+      valid = score >= min_agreement && direction.in?(%i[bullish bearish])
 
       unless valid
         reasons << "Insufficient directional agreement: #{score}/6 factors agree (minimum: #{min_agreement})"
@@ -106,7 +106,7 @@ module Signal
 
       # Check alignment AND strength
       if htf_st[:trend] == primary_supertrend[:trend] &&
-         htf_st[:trend].in?([:bullish, :bearish]) &&
+         htf_st[:trend].in?(%i[bullish bearish]) &&
          htf_adx && htf_adx >= min_htf_adx
         { agrees: true, reason: "HTF Supertrend (#{htf_st[:trend]}) aligns with ADX #{htf_adx.round(1)}" }
       elsif htf_st[:trend] != primary_supertrend[:trend]

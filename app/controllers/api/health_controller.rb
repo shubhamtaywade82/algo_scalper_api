@@ -9,7 +9,7 @@ module Api
     def show
       market_feed_status = Live::MarketFeedHub.instance.health_status
       order_update_status = Live::OrderUpdateHub.instance.respond_to?(:health_status) ? Live::OrderUpdateHub.instance.health_status : {}
-      ip_info = Dhan::IpService.fetch_ip_info
+      Dhan::IpService.fetch_ip_info
 
       render json: {
         mode: AlgoConfig.mode,

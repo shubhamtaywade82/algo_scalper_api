@@ -11,22 +11,6 @@ RSpec.describe Signal::MetadataBuilder do
     let(:signals_cfg) { { validation_mode: 'exit_testing' } }
 
     context 'when ta_result has nested indicators with timeframe data' do
-      let(:ta_result) do
-        {
-          signal: :bearish,
-          confidence: 0.72,
-          bias_summary: { summary: { bias: 'bearish' } },
-          indicators: {
-            meta: { exchange_segment: 'IDX_I', security_id: '13' },
-            indicators: {
-              m5:  { rsi: 62.1, macd: { macd: 1.2, signal: 0.8, hist: 0.4 }, atr: 45.0 },
-              m15: { rsi: 58.4, macd: { macd: 0.9, signal: 0.7, hist: 0.2 }, atr: 52.0 },
-              m60: { rsi: 55.0, macd: { macd: 0.5, signal: 0.3, hist: 0.2 }, atr: 60.0 }
-            }
-          }
-        }
-      end
-
       subject(:metadata) do
         described_class.build(
           primary_analysis: primary_analysis,
@@ -48,13 +32,29 @@ RSpec.describe Signal::MetadataBuilder do
         )
       end
 
+      let(:ta_result) do
+        {
+          signal: :bearish,
+          confidence: 0.72,
+          bias_summary: { summary: { bias: 'bearish' } },
+          indicators: {
+            meta: { exchange_segment: 'IDX_I', security_id: '13' },
+            indicators: {
+              m5: { rsi: 62.1, macd: { macd: 1.2, signal: 0.8, hist: 0.4 }, atr: 45.0 },
+              m15: { rsi: 58.4, macd: { macd: 0.9, signal: 0.7, hist: 0.2 }, atr: 52.0 },
+              m60: { rsi: 55.0, macd: { macd: 0.5, signal: 0.3, hist: 0.2 }, atr: 60.0 }
+            }
+          }
+        }
+      end
+
       it 'extracts RSI per timeframe from the nested indicators path' do
         expect(metadata[:mtf_rsi]).to eq({ m5: 62.1, m15: 58.4, m60: 55.0 })
       end
 
       it 'extracts MACD per timeframe from the nested indicators path' do
         expect(metadata[:mtf_macd]).to eq({
-                                            m5:  { macd: 1.2, signal: 0.8, hist: 0.4 },
+                                            m5: { macd: 1.2, signal: 0.8, hist: 0.4 },
                                             m15: { macd: 0.9, signal: 0.7, hist: 0.2 },
                                             m60: { macd: 0.5, signal: 0.3, hist: 0.2 }
                                           })

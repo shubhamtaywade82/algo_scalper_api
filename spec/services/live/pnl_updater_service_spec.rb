@@ -18,7 +18,7 @@ RSpec.describe Live::PnlUpdaterService, :freeze_time do
     allow(Live::TickQuery).to receive(:for_security).and_return(double(ltp: 120.0))
 
     service.cache_intermediate_pnl(tracker_id: tracker.id, pnl: 2000.0, pnl_pct: 0.2, ltp: 120.0, hwm: 2000.0)
-    
+
     # Flush synchronously
     service.flush_now!
 

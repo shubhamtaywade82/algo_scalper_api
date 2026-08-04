@@ -21,7 +21,7 @@ module Smc
     def initialize(series, interval: '5')
       if series.nil?
         raise ArgumentError, "CandleSeries is nil. Check if instrument.candle_series(interval: '#{interval}') returned data. " \
-                            "This usually means OHLC data fetch failed - check DhanHQ API parameters and date ranges."
+                             "This usually means OHLC data fetch failed - check DhanHQ API parameters and date ranges."
       end
       raise ArgumentError, "CandleSeries required (got #{series.class})" unless series.respond_to?(:candles)
       @series = series
@@ -158,9 +158,9 @@ module Smc
       lc = last_candle.close
       if ob
         if ob[:type] == :bull_ob
-          return true if lc >= ob[:low] - tick_buffer && lc <= ob[:high] + tick_buffer
+          return true if lc.between?(ob[:low] - tick_buffer, ob[:high] + tick_buffer)
         elsif ob[:type] == :bear_ob
-          return true if lc <= ob[:high] + tick_buffer && lc >= ob[:low] - tick_buffer
+          return true if lc.between?(ob[:low] - tick_buffer, ob[:high] + tick_buffer)
         end
       elsif fvg
         if fvg[:type] == :bull_fvg
@@ -173,9 +173,9 @@ module Smc
     end
 
     # Helper: safe call series methods returning nil on failure
-    def safe_call_series(method, *args)
+    def safe_call_series(method, *)
       return nil unless series.respond_to?(method)
-      series.public_send(method, *args)
+      series.public_send(method, *)
     rescue StandardError => e
       Rails.logger.debug { "[Smc::Structure] safe_call_series #{method} failed: #{e.message}" }
       nil

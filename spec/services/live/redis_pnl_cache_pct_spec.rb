@@ -40,8 +40,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
 
   before do
     cache.clear_tracker(tracker_id)
-    allow(Positions::MetadataResolver).to receive(:index_key).and_return('NIFTY')
-    allow(Positions::MetadataResolver).to receive(:direction).and_return('long')
+    allow(Positions::MetadataResolver).to receive_messages(index_key: 'NIFTY', direction: 'long')
   end
 
   after do
@@ -94,7 +93,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
 
       result = cache.fetch_pnl(tracker_id)
       expect(result[:hwm_pnl_pct]).to be_within(0.0001).of(0.45)
-      expect(result[:hwm_pnl_pct]).to be < 1.0  # DECIMAL
+      expect(result[:hwm_pnl_pct]).to be < 1.0 # DECIMAL
     end
   end
 
@@ -112,7 +111,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
       result = cache.fetch_pnl(tracker_id)
       # price_change_pct = (130 - 100) / 100 * 100 = 30.0  (PERCENTAGE)
       expect(result[:price_change_pct]).to be_within(0.01).of(30.0)
-      expect(result[:price_change_pct]).to be > 1.0  # NOT decimal (0.30), it's 30.0
+      expect(result[:price_change_pct]).to be > 1.0 # NOT decimal (0.30), it's 30.0
     end
 
     it 'price_change_pct differs from pnl_pct by factor of 100 (different units)' do
@@ -141,7 +140,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
       result = cache.fetch_pnl(tracker_id)
       # drawdown_pct = (3000 - 2250) / 3000 * 100 = 25.0 (PERCENTAGE)
       expect(result[:drawdown_pct]).to be_within(0.1).of(25.0)
-      expect(result[:drawdown_pct]).to be > 1.0  # NOT decimal (0.25), it's 25.0
+      expect(result[:drawdown_pct]).to be > 1.0 # NOT decimal (0.25), it's 25.0
     end
 
     it 'stores drawdown_rupees as absolute ₹' do
@@ -253,8 +252,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
     end
 
     it 'returns nil when entry_price is zero' do
-      allow(tracker).to receive(:entry_price).and_return(0)
-      allow(tracker).to receive(:avg_price).and_return(0)
+      allow(tracker).to receive_messages(entry_price: 0, avg_price: 0)
       result = service.send(:compute_pnl_pct, tracker, BigDecimal('130.0'))
       expect(result).to be_nil
     end
@@ -292,7 +290,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
       tracker.reload
       expect(tracker.last_pnl_pct).not_to be_nil
       expect(tracker.last_pnl_pct).to be_within(BigDecimal('0.0001')).of(BigDecimal('0.30'))
-      expect(tracker.last_pnl_pct).to be < 1  # DECIMAL, not PERCENTAGE
+      expect(tracker.last_pnl_pct).to be < 1 # DECIMAL, not PERCENTAGE
     end
 
     it 'stores last_pnl_pct as negative DECIMAL for a loss' do
@@ -300,7 +298,7 @@ RSpec.describe Live::RedisPnlCache, type: :integration do
 
       tracker.reload
       expect(tracker.last_pnl_pct).to be_within(BigDecimal('0.0001')).of(BigDecimal('-0.12'))
-      expect(tracker.last_pnl_pct).to be > -1  # DECIMAL, not PERCENTAGE
+      expect(tracker.last_pnl_pct).to be > -1 # DECIMAL, not PERCENTAGE
     end
   end
 end

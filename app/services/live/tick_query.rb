@@ -25,11 +25,11 @@ module Live
           security_id: security_id,
           ltp: BigDecimal(raw_ltp.to_s),
           timestamp: tick_data&.dig(:timestamp) || Time.current,
-          oi: tick_data&.dig(:oi)&.to_i || 0,
-          oi_change: tick_data&.dig(:oi_change)&.to_i || 0,
+          oi: tick_data&.dig(:oi).to_i,
+          oi_change: tick_data&.dig(:oi_change).to_i,
           bid: tick_data&.dig(:bid)&.to_f,
           ask: tick_data&.dig(:ask)&.to_f,
-          volume: tick_data&.dig(:volume)&.to_i || 0,
+          volume: tick_data&.dig(:volume).to_i,
           prev_close: tick_data&.dig(:prev_close)&.to_f
         )
       rescue StandardError => e

@@ -74,7 +74,7 @@ module Smc
         return true unless atr
 
         rvr_ok = rvr_above_threshold?(candle, candle_index)
-        rvr_ok.nil? ? true : rvr_ok
+        rvr_ok.nil? || rvr_ok
       end
 
       def rvr_above_threshold?(candle, candle_index = nil)

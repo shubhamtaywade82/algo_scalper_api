@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class HealthController < ActionController::API
   def ready
     # quick checks: db, redis, and required config

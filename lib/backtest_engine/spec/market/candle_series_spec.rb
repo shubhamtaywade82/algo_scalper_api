@@ -24,7 +24,7 @@ RSpec.describe BacktestEngine::Market::CandleSeries do
 
     let(:t0) { Time.parse("2025-01-02 09:15:00") }
     let(:candles) do
-      15.times.map { |i| candle(t0 + i * 60, 100) } + [candle(t0 + 15 * 60, 200)]
+      Array.new(15) { |i| candle(t0 + (i * 60), 100) } + [candle(t0 + (15 * 60), 200)]
     end
     let(:series) { described_class.new(candles) }
 
@@ -38,7 +38,7 @@ RSpec.describe BacktestEngine::Market::CandleSeries do
     end
 
     it "returns 1.0 when all volume in window is zero" do
-      zero_candles = 15.times.map { |i| candle(t0 + i * 60, 0) } + [candle(t0 + 15 * 60, 0)]
+      zero_candles = Array.new(15) { |i| candle(t0 + (i * 60), 0) } + [candle(t0 + (15 * 60), 0)]
       zero_series = described_class.new(zero_candles)
       expect(zero_series.volume_ratio(15, period: 10)).to eq(1.0)
     end

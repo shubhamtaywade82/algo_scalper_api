@@ -205,8 +205,6 @@ module OptionsBuying
       true
     end
 
-    private
-
     def compression_check_due_for_index(index_key)
       return false if index_key.blank?
 

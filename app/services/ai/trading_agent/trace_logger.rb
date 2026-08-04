@@ -5,7 +5,7 @@ module Ai
     # Audit trail for tool calls, observations, risk checks, and final intents.
     # Stores structured trace data for debugging and learning.
     class TraceLogger
-      Entry = Struct.new(:timestamp, :type, :name, :data, keyword_init: true)
+      Entry = Struct.new(:timestamp, :type, :name, :data)
 
       attr_reader :entries
 

@@ -38,10 +38,10 @@ module Policies
     end
 
     def compute_violations
-      checks = [
-        :circuit_breaker_tripped?,
-        :outside_trading_hours?,
-        :daily_loss_limit_reached?
+      checks = %i[
+        circuit_breaker_tripped?
+        outside_trading_hours?
+        daily_loss_limit_reached?
       ]
       checks.each_with_object([]) do |check, acc|
         acc << check.to_s.delete_suffix('?') if send(check)
@@ -68,7 +68,7 @@ module Policies
       result = Live::DailyLimits.new.can_trade?(index_key: index_key)
       return false if result[:allowed]
 
-      !%w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].include?(result[:reason])
+      %w[trade_frequency_limit_exceeded global_trade_frequency_limit_exceeded].exclude?(result[:reason])
     rescue StandardError
       false
     end

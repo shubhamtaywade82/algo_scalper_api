@@ -118,9 +118,17 @@ module OptionsBuying
 
       rsi_points = 50.0
       if @direction == :bullish
-        rsi_points = rsi_val >= 60.0 ? 80.0 : (rsi_val >= 50.0 ? 60.0 : 30.0)
+        rsi_points = if rsi_val >= 60.0
+80.0
+                     else
+(rsi_val >= 50.0 ? 60.0 : 30.0)
+                     end
       elsif @direction == :bearish
-        rsi_points = rsi_val <= 40.0 ? 80.0 : (rsi_val <= 50.0 ? 60.0 : 30.0)
+        rsi_points = if rsi_val <= 40.0
+80.0
+                     else
+(rsi_val <= 50.0 ? 60.0 : 30.0)
+                     end
       end
 
       (adx_points * 0.5) + (rsi_points * 0.5)

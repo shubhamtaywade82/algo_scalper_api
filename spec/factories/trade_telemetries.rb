@@ -12,7 +12,7 @@ FactoryBot.define do
     entry_tf { '5m' }
     htf_tf { '1h' }
     entry_time { Time.current }
-    exit_time { Time.current + 10.minutes }
+    exit_time { 10.minutes.from_now }
     index_key { 'NIFTY' }
   end
 end

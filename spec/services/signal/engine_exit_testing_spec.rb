@@ -49,13 +49,10 @@ RSpec.describe Signal::Engine, 'exit_testing mode pipeline' do
 
   before do
     allow(TradingSession::Service).to receive(:market_closed?).and_return(false)
-    allow(AlgoConfig).to receive(:run_mode).and_return('exit_testing')
-    allow(AlgoConfig).to receive(:fetch).and_return({ signals: signals_cfg })
+    allow(AlgoConfig).to receive_messages(run_mode: 'exit_testing', fetch: { signals: signals_cfg })
     allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).and_return(instrument)
 
-    allow(instrument).to receive(:candle_series).and_return(series)
-    allow(instrument).to receive(:expiry_list).and_return([Date.tomorrow])
-    allow(instrument).to receive(:fetch_option_chain).and_return(nil)
+    allow(instrument).to receive_messages(candle_series: series, expiry_list: [Date.tomorrow], fetch_option_chain: nil)
 
     allow(described_class).to receive(:analyze_timeframe).and_return(primary_analysis)
 

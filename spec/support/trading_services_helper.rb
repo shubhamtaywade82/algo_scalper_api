@@ -38,16 +38,15 @@ RSpec.configure do |config|
       Live::PaperPnlRefresher,
       Signal::Scheduler
     ].each do |service_class|
-      if defined?(service_class) && service_class.respond_to?(:instance)
-        begin
-          service = service_class.instance
-          if service.respond_to?(:running?) && service.running?
-            service.stop! if service.respond_to?(:stop!)
-            service.stop if service.respond_to?(:stop)
-          end
-        rescue StandardError
-          # Ignore
+      next unless defined?(service_class) && service_class.respond_to?(:instance)
+      begin
+        service = service_class.instance
+        if service.respond_to?(:running?) && service.running?
+          service.stop! if service.respond_to?(:stop!)
+          service.stop if service.respond_to?(:stop)
         end
+      rescue StandardError
+        # Ignore
       end
     end
   end

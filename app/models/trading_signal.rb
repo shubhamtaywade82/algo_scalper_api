@@ -41,9 +41,9 @@ class TradingSignal < ApplicationRecord
                                 confidence_score: nil, metadata: {})
     full_metadata = (metadata || {}).deep_stringify_keys
     slim = Signal::LiveMetadataCache.slim_metadata(full_metadata)
-           .merge('index_key' => index_key, 'config_version' => AlgoConfig.version.stringify_keys)
+                                    .merge('index_key' => index_key, 'config_version' => AlgoConfig.version.stringify_keys)
 
-    signal = create!(
+    create!(
       index_key: index_key,
       direction: direction,
       timeframe: timeframe,

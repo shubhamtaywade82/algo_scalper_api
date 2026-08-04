@@ -3,9 +3,9 @@
 require 'rails_helper'
 
 RSpec.describe Policies::EntryPolicy do
-  let(:index_cfg) { { key: 'NIFTY' } }
-
   subject(:policy) { described_class.new(index_cfg: index_cfg, direction: :long) }
+
+  let(:index_cfg) { { key: 'NIFTY' } }
 
   # ── Helpers: stub all checks to pass by default ─────────────────────────────
 
@@ -16,8 +16,6 @@ RSpec.describe Policies::EntryPolicy do
     # Freeze time inside market hours (10:00 IST)
     travel_to(Time.zone.parse('2026-01-13 10:00:00 +0530'))
   end
-
-  after { travel_back }
 
   # ── Permitted: all checks pass ──────────────────────────────────────────────
 

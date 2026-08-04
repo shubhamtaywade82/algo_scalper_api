@@ -16,11 +16,11 @@ RSpec.describe Research::ExpectancyReport do
   describe '.call' do
     it 'groups lifecycles by the requested dimensions and computes avg return / win rate / avg drawdown' do
       make_lifecycle(trend: 'strong_bullish', orb: 'breakout_up', return_pct: 140.0, drawdown_pct: 20.0,
-                      minutes_to_peak: 60)
+                     minutes_to_peak: 60)
       make_lifecycle(trend: 'strong_bullish', orb: 'breakout_up', return_pct: 100.0, drawdown_pct: 30.0,
-                      minutes_to_peak: 80)
+                     minutes_to_peak: 80)
       make_lifecycle(trend: 'neutral', orb: 'inside_range', return_pct: -10.0, drawdown_pct: 40.0,
-                      minutes_to_peak: 30)
+                     minutes_to_peak: 30)
 
       buckets = described_class.call(scope: Research::PremiumLifecycle.all, dimensions: %w[trend opening_range_breakout])
 
@@ -40,9 +40,9 @@ RSpec.describe Research::ExpectancyReport do
 
     it 'ranks buckets by avg_return_pct descending' do
       make_lifecycle(trend: 'strong_bearish', orb: 'breakout_down', return_pct: 5.0, drawdown_pct: 10.0,
-                      minutes_to_peak: 20)
+                     minutes_to_peak: 20)
       make_lifecycle(trend: 'strong_bullish', orb: 'breakout_up', return_pct: 200.0, drawdown_pct: 15.0,
-                      minutes_to_peak: 40)
+                     minutes_to_peak: 40)
 
       buckets = described_class.call(scope: Research::PremiumLifecycle.all, dimensions: %w[trend opening_range_breakout])
 

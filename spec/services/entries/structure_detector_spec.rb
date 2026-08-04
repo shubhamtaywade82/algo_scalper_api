@@ -43,32 +43,32 @@ RSpec.describe Entries::StructureDetector do
 
       it 'respects lookback_minutes parameter' do
         # 20 candles total
-        bars = Array.new(20) do |i|
+        Array.new(20) do |i|
           # Older candles have very high prices
           price = i < 10 ? 30_000 : 25_000
           build(:candle, high: price + 100, low: price - 100, close: price, timestamp: (20 - i).minutes.ago)
         end
-        # bars[19] is newest (close ~25000). 
+        # bars[19] is newest (close ~25000).
         # With lookback=5, it only looks at bars[15..19] where highs are ~25100.
         # If it erroneously looks at bars[0..19], highs are ~30100 and it would definitely be false.
         # Wait, if current close=25000 and previous high=25100, it's false anyway.
-        
+
         # Let's make it more explicit:
         # Lookback range (last 5): highs are all 25100.
         # Current close: 25200 (breaks lookback range)
         # BUT outside lookback (index 0): high is 30000.
         # If lookback works, result=true (breaks 25100).
         # If lookback fails, result=false (doesn't break 30000).
-        
-        # Wait, the test expects false? 
+
+        # Wait, the test expects false?
         # "respects lookback_minutes parameter" ... expect(result).to be false
         # This means it's testing that if a break happens OUTSIDE lookback, it returns false.
-        
+
         # New setup:
         # Bars 0..14: high=25000, close=25500 (BREAK happens here)
         # Bars 15..19: high=26000, close=25000 (NO BREAK here)
         # If lookback=5, it only sees 15..19 -> NO BREAK -> false.
-        
+
         bars = Array.new(20) do |i|
           if i == 10
             # A "historic" break

@@ -6,12 +6,12 @@ def test_llm
   client = Services::Ai::OpenaiClient.instance
   model = ENV["OLLAMA_MODEL"] || "qwen3-vl:latest"
   puts "Testing Ollama connection with model: #{model}..."
-  
+
   prompt = "Say hello and give a very brief trading tip."
-  
+
   # Use generate (the direct method we added)
   response = client.generate(prompt: prompt, model: model)
-  
+
   if response
     puts "\n--- RESPONSE ---\n"
     puts response

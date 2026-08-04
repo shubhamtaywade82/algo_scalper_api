@@ -35,9 +35,9 @@ module Research
         iterations.times do
           resampled = Array.new(all_rets.size) { all_rets.sample }
           bootstrap_means << (resampled.sum / resampled.size)
-          
+
           wins = resampled.count { |r| r > 0.0 }
-          bootstrap_win_rates << (wins.to_f / resampled.size) * 100.0
+          bootstrap_win_rates << ((wins.to_f / resampled.size) * 100.0)
         end
 
         bootstrap_means.sort!
@@ -46,7 +46,7 @@ module Research
         # 95% Confidence Intervals
         ci_lower_idx = (iterations * 0.025).round
         ci_upper_idx = (iterations * 0.975).round - 1
-        ci_lower_idx = 0 if ci_lower_idx < 0
+        ci_lower_idx = 0 if ci_lower_idx.negative?
         ci_upper_idx = bootstrap_means.size - 1 if ci_upper_idx >= bootstrap_means.size
 
         mean_ci = [bootstrap_means[ci_lower_idx], bootstrap_means[ci_upper_idx]]
@@ -62,7 +62,7 @@ module Research
         oos_win_rate = oos_rets.any? ? (oos_wins.to_f / oos_rets.size) * 100.0 : 0.0
 
         # Compute decay of performance between IS and OOS
-        expectancy_decay = is_avg != 0 ? ((is_avg - oos_avg) / is_avg.abs) * 100.0 : 0.0
+        expectancy_decay = is_avg.zero? ? 0.0 : ((is_avg - oos_avg) / is_avg.abs) * 100.0
 
         reports[name] = {
           bootstrap: {

@@ -21,7 +21,7 @@ module Entries
 
         # Calculate ATR for recent periods using sliding windows
         recent_atrs = []
-        ( (period + 1)..(series.candles.size - 1) ).each do |i|
+        ((period + 1)..(series.candles.size - 1)).each do |i|
           # Create a sub-series for this window (needs period + 1 candles)
           window_series = CandleSeries.new(symbol: 'temp', interval: '1')
           series.candles[(i - period)..i].each { |c| window_series.add_candle(c) }

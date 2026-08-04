@@ -3,16 +3,16 @@
 require 'rails_helper'
 
 RSpec.describe Orders::Commands::CancelOrderCommand do
-  let(:gateway) { instance_double('Orders::GatewayPaper') }
-  let(:tracker) { build_stubbed(:position_tracker, status: 'pending', order_no: 'ORD004') }
-
   subject(:command) do
     described_class.new(
-      gateway:  gateway,
-      tracker:  tracker,
+      gateway: gateway,
+      tracker: tracker,
       order_id: 'DHAN456'
     )
   end
+
+  let(:gateway) { instance_double(Orders::GatewayPaper) }
+  let(:tracker) { build_stubbed(:position_tracker, status: 'pending', order_no: 'ORD004') }
 
   # ── Successful cancel ───────────────────────────────────────────────────────
 

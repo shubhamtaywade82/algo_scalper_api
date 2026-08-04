@@ -22,15 +22,15 @@ signals.each do |signal|
   puts "Stop Loss:  ₹#{signal[:stop_loss]}"
   puts "Confidence: #{(signal[:confidence] * 100).round(1)}%"
   puts "Exp. Value: ₹#{signal[:expected_value]}"
-  
+
   puts "\n⚙️ Attempting paper execution..."
-  
+
   result = AlphaExecutionService.execute(signal)
-  
+
   if result[:status] == :success
     puts "✅ EXECUTED successfully."
     puts "   Order ID: #{result[:order_id]}"
-    
+
     tracker = PositionTracker.find_by(order_no: result[:order_id])
     if tracker
       puts "   Tracker ID: #{tracker.id}, Qty: #{tracker.quantity}"

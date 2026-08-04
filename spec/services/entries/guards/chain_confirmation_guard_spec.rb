@@ -4,7 +4,7 @@ require 'rails_helper'
 
 RSpec.describe Entries::Guards::ChainConfirmationGuard do
   let(:index_cfg) { { key: 'NIFTY' } }
-  let(:pick) { { strike: 24800.0, type: 'CE', security_id: '24800CE' } }
+  let(:pick) { { strike: 24_800.0, type: 'CE', security_id: '24800CE' } }
   let(:context) { { index_cfg: index_cfg, pick: pick, direction: :bullish } }
 
   let(:default_config) do
@@ -28,14 +28,14 @@ RSpec.describe Entries::Guards::ChainConfirmationGuard do
 
   def stub_snapshot(legs)
     allow(Options::ChainWatchRegistry).to receive(:snapshot_for).with('NIFTY').and_return(
-      { index_key: 'NIFTY', spot: 24800.0, atm_strike: 24800.0, chain_stale: false, legs: legs }
+      { index_key: 'NIFTY', spot: 24_800.0, atm_strike: 24_800.0, chain_stale: false, legs: legs }
     )
   end
 
   describe '.call' do
     context 'when OI, IV, and delta are all within configured bands' do
       before do
-        stub_snapshot([{ strike: 24800.0, type: 'CE', oi_change: 500, iv: 15.0, delta: 0.5 }])
+        stub_snapshot([{ strike: 24_800.0, type: 'CE', oi_change: 500, iv: 15.0, delta: 0.5 }])
       end
 
       it 'passes' do
@@ -45,7 +45,7 @@ RSpec.describe Entries::Guards::ChainConfirmationGuard do
 
     context 'when OI change is below the minimum (no fresh buildup)' do
       before do
-        stub_snapshot([{ strike: 24800.0, type: 'CE', oi_change: -200, iv: 15.0, delta: 0.5 }])
+        stub_snapshot([{ strike: 24_800.0, type: 'CE', oi_change: -200, iv: 15.0, delta: 0.5 }])
       end
 
       it 'blocks with an OI reason' do
@@ -56,7 +56,7 @@ RSpec.describe Entries::Guards::ChainConfirmationGuard do
 
     context 'when IV is above the configured max' do
       before do
-        stub_snapshot([{ strike: 24800.0, type: 'CE', oi_change: 500, iv: 60.0, delta: 0.5 }])
+        stub_snapshot([{ strike: 24_800.0, type: 'CE', oi_change: 500, iv: 60.0, delta: 0.5 }])
       end
 
       it 'blocks with an IV reason' do
@@ -67,7 +67,7 @@ RSpec.describe Entries::Guards::ChainConfirmationGuard do
 
     context 'when delta is outside the configured band' do
       before do
-        stub_snapshot([{ strike: 24800.0, type: 'CE', oi_change: 500, iv: 15.0, delta: 0.9 }])
+        stub_snapshot([{ strike: 24_800.0, type: 'CE', oi_change: 500, iv: 15.0, delta: 0.9 }])
       end
 
       it 'blocks with a delta reason' do
@@ -97,7 +97,7 @@ RSpec.describe Entries::Guards::ChainConfirmationGuard do
     context 'when the snapshot is stale' do
       before do
         allow(Options::ChainWatchRegistry).to receive(:snapshot_for).with('NIFTY').and_return(
-          { chain_stale: true, legs: [{ strike: 24800.0, type: 'CE', oi_change: -999, iv: 99.0, delta: 0.99 }] }
+          { chain_stale: true, legs: [{ strike: 24_800.0, type: 'CE', oi_change: -999, iv: 99.0, delta: 0.99 }] }
         )
       end
 
@@ -107,7 +107,7 @@ RSpec.describe Entries::Guards::ChainConfirmationGuard do
     end
 
     context 'when no leg in the snapshot matches the picked strike/type' do
-      before { stub_snapshot([{ strike: 25000.0, type: 'CE', oi_change: 500, iv: 15.0, delta: 0.5 }]) }
+      before { stub_snapshot([{ strike: 25_000.0, type: 'CE', oi_change: 500, iv: 15.0, delta: 0.5 }]) }
 
       it 'fails open' do
         expect(described_class.call(context)).to eq(Entries::EntryGuardPipeline::PASS)

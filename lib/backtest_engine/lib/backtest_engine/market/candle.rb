@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "time"
 
 module BacktestEngine
@@ -156,7 +158,7 @@ module BacktestEngine
       end
 
       def between?(price)
-        price >= low && price <= high
+        price.between?(low, high)
       end
 
       def normalize_time(value)

@@ -10,12 +10,12 @@ module Research
       return {} if trades.size <= 2
 
       # Classify outcome: Y = 1 if option MFE >= 30%, else 0
-      y = trades.map { |t| (t[:strikes][strike_label][:mfe_pct] >= 30.0) ? 1 : 0 }
+      y = trades.map { |t| t[:strikes][strike_label][:mfe_pct] >= 30.0 ? 1 : 0 }
       base_entropy = entropy(y)
 
       # 1. Binned Feature extractors
       feature_bins = {
-        gap_regime: ->(t) {
+        gap_regime: lambda { |t|
           pct = t[:gap_pct] || 0.0
           if pct < -0.4 then :large_gap_down
           elsif pct < -0.15 then :mod_gap_down
@@ -24,20 +24,20 @@ module Research
           else :large_gap_up
           end
         },
-        or_width_regime: ->(t) {
+        or_width_regime: lambda { |t|
           width = t[:or_width] || 0.0
           if width < 25.0 then :narrow_range
           elsif width < 50.0 then :mod_range
           else :wide_range
           end
         },
-        volatility_regime: ->(t) {
+        volatility_regime: lambda { |t|
           t[:regime]&.[](:volatility) || :normal
         },
-        trend_regime: ->(t) {
+        trend_regime: lambda { |t|
           t[:regime]&.[](:trend) || :mean_reverting
         },
-        adx_strength: ->(t) {
+        adx_strength: lambda { |t|
           adx = t[:adx] || 0.0
           if adx < 20.0 then :low_trend
           elsif adx <= 30.0 then :mod_trend
@@ -63,7 +63,7 @@ module Research
           matching_idx = x_bins.each_index.select { |i| x_bins[i] == bin }
           sample_size = matching_idx.size
           successes = matching_idx.count { |i| y[i] == 1 }
-          prob = sample_size > 0 ? (successes.to_f / sample_size) * 100.0 : 0.0
+          prob = sample_size.positive? ? (successes.to_f / sample_size) * 100.0 : 0.0
 
           memo[bin] = {
             sample: sample_size,
@@ -81,18 +81,16 @@ module Research
       }
     end
 
-    private
-
     def self.entropy(labels)
       return 0.0 if labels.empty?
 
-      counts = labels.group_by { |x| x }.transform_values(&:size)
+      counts = labels.tally
       total = labels.size.to_f
 
-      counts.values.map { |count|
+      counts.values.sum do |count|
         p = count / total
         -p * Math.log2(p)
-      }.sum
+      end
     end
 
     def self.shannon_information_gain(x, y, base_entropy)
@@ -101,11 +99,11 @@ module Research
 
       # Calculate conditional entropy H(Y|X)
       grouped = x.each_index.group_by { |i| x[i] }
-      conditional_entropy = grouped.values.map { |indices|
+      conditional_entropy = grouped.values.sum do |indices|
         subset_y = indices.map { |i| y[i] }
         weight = indices.size / total
         weight * entropy(subset_y)
-      }.sum
+      end
 
       base_entropy - conditional_entropy
     end

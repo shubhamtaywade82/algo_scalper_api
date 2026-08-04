@@ -68,7 +68,7 @@ module AlphaExecutionService
         meta: meta
       )
 
-      if order&.respond_to?(:order_id) && order.order_id.present?
+      if order.respond_to?(:order_id) && order.order_id.present?
         # Update Audit Trail
         record_signal_audit!(signal, order.order_id, "executed")
         # Record trade in Risk Limits

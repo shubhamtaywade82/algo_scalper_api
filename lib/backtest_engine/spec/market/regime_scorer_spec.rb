@@ -10,7 +10,7 @@ RSpec.describe BacktestEngine::Market::RegimeScorer do
 
   let(:t0) { Time.parse("2025-01-02 09:15:00") }
   let(:candles) do
-    25.times.map { |i| candle(t0 + i * 60, 100 + i, 101 + i, 99 + i, 100 + i) }
+    Array.new(25) { |i| candle(t0 + (i * 60), 100 + i, 101 + i, 99 + i, 100 + i) }
   end
   let(:series) { BacktestEngine::Market::CandleSeries.new(candles) }
 

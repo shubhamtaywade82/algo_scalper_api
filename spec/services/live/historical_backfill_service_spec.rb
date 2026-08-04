@@ -14,11 +14,11 @@ RSpec.describe Live::HistoricalBackfillService do
   # Raw response as returned by DhanHQ's intraday candle endpoint (hash-of-arrays format)
   let(:raw_candle_response) do
     {
-      'open'      => [100.0, 102.0],
-      'high'      => [105.0, 107.0],
-      'low'       => [98.0,  101.0],
-      'close'     => [103.0, 106.0],
-      'volume'    => [1000,  1200],
+      'open' => [100.0, 102.0],
+      'high' => [105.0, 107.0],
+      'low' => [98.0, 101.0],
+      'close' => [103.0, 106.0],
+      'volume' => [1000, 1200],
       'timestamp' => [Time.zone.parse('2026-06-19 09:15:00').to_i,
                       Time.zone.parse('2026-06-19 09:16:00').to_i]
     }
@@ -68,7 +68,7 @@ RSpec.describe Live::HistoricalBackfillService do
           captured << payload
         end
         service.backfill(instrument: instrument, interval: 1)
-        open_ltps = captured.map { |p| p[:ltp] }
+        open_ltps = captured.pluck(:ltp)
         expect(open_ltps).to include(100.0) # open of first candle
       end
 
@@ -132,9 +132,9 @@ RSpec.describe Live::HistoricalBackfillService do
       it 'passes them to intraday_ohlc' do
         service.backfill(
           instrument: instrument,
-          interval:   1,
-          from_date:  '2026-06-19 10:00:00',
-          to_date:    '2026-06-19 10:30:00'
+          interval: 1,
+          from_date: '2026-06-19 10:00:00',
+          to_date: '2026-06-19 10:30:00'
         )
         expect(instrument).to have_received(:intraday_ohlc).with(
           hash_including(interval: '1', from_date: '2026-06-19 10:00:00', to_date: '2026-06-19 10:30:00')

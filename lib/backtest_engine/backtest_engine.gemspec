@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 Gem::Specification.new do |spec|
   spec.name          = "backtest_engine"
   spec.version       = "0.1.0"
@@ -14,5 +16,6 @@ Gem::Specification.new do |spec|
   spec.add_dependency "DhanHQ"
 
   spec.add_development_dependency "rspec"
+spec.metadata['rubygems_mfa_required'] = 'true'
 end
 

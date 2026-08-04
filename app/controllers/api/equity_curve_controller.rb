@@ -11,8 +11,8 @@ module Api
       date_to = parse_date(params[:date_to], Time.zone.today)
 
       records = PaperDailyWallet
-        .where(trading_date: date_from..date_to)
-        .order(trading_date: :asc)
+                .where(trading_date: date_from..date_to)
+                .order(trading_date: :asc)
 
       if records.any?
         render json: build_from_wallet(records)
@@ -28,7 +28,7 @@ module Api
       records.map do |r|
         equity = r.closing_cash.to_f
         peak = equity if equity > peak
-        drawdown_pct = peak > 0 ? ((equity - peak) / peak) * 100 : 0.0
+        drawdown_pct = peak.positive? ? ((equity - peak) / peak) * 100 : 0.0
 
         {
           time: r.trading_date.to_time.to_i,
@@ -41,9 +41,9 @@ module Api
 
     def build_from_positions(date_from, date_to)
       daily_pnl = PositionTracker.exited
-        .where(exited_at: date_from.beginning_of_day..date_to.end_of_day)
-        .group("DATE(exited_at)")
-        .sum(:last_pnl_rupees)
+                                 .where(exited_at: date_from.beginning_of_day..date_to.end_of_day)
+                                 .group("DATE(exited_at)")
+                                 .sum(:last_pnl_rupees)
 
       return [] if daily_pnl.empty?
 
@@ -55,7 +55,7 @@ module Api
       daily_pnl.sort_by { |date, _| date }.each do |date, pnl|
         equity += pnl.to_f
         peak = equity if equity > peak
-        drawdown_pct = peak > 0 ? ((equity - peak) / peak) * 100 : 0.0
+        drawdown_pct = peak.positive? ? ((equity - peak) / peak) * 100 : 0.0
 
         points << {
           time: date.to_time.to_i,

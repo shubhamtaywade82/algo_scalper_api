@@ -64,7 +64,6 @@ module Market
       def trading_days_ago(count)
         current = Date.current
         trading_days_counted = 0
-        days_back = 0
 
         # Look back up to 2x the count to find enough trading days
         (1..(count * 2)).each do |days_back|

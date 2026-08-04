@@ -17,7 +17,7 @@ module Research
       # Range variables
       or_high = nil
       or_low = nil
-      
+
       # State machine variables
       in_trade = false
       active_trade = nil
@@ -34,64 +34,11 @@ module Research
         end
 
         # 2. Check for entry signal if not in trade
-        if !in_trade
-          breakout_type = nil
-          if c[:close] > or_high
-            breakout_type = :bullish
-          elsif c[:close] < or_low
-            breakout_type = :bearish
-          end
-
-          if breakout_type
-            # Entry execution happens at the open of the next minute (idx + 1)
-            entry_idx = idx + 1
-            break if entry_idx >= candles.size
-
-            entry_candle = candles[entry_idx]
-            
-            # Resolve strikes at entry spot
-            spot_open = entry_candle[:open]
-            option_type = breakout_type == :bullish ? "CE" : "PE"
-            candidates = Research::StrikeResolver.candidates(symbol: symbol, spot: spot_open, option_type: option_type)
-
-            # Initialize trade state
-            in_trade = true
-            active_trade = {
-              date: date,
-              breakout_type: breakout_type,
-              entry_time: entry_candle[:timestamp],
-              entry_index: entry_idx,
-              underlying_entry_price: entry_candle[:open],
-              or_high: or_high,
-              or_low: or_low,
-              or_width: or_high - or_low,
-              gap_pct: day_data[:gap_pct] || 0.0,
-              is_inside_day: day_data[:is_inside_day] || false,
-              days_to_expiry: day_data[:days_to_expiry] || 4,
-              day_of_week: date.strftime("%A"),
-              strikes_state: candidates.each_with_object({}) do |cand, memo|
-                memo[cand[:strike_label]] = {
-                  actual_strike: cand[:actual_strike],
-                  option_candles: Research::MarketDataFetcher.load_or_simulate_options(
-                    symbol, option_type, cand[:actual_strike], date, candles, strike_label: cand[:strike_label]
-                  ),
-                  entry_price: nil,
-                  peak_price: nil,
-                  exited: false,
-                  exit_time: nil,
-                  exit_price: nil,
-                  return_pct: 0.0
-                }
-              end
-            }
-          end
-
-        # 3. Manage active trade minute-by-minute
-        else
+        if in_trade
           # Update trade state at current index
           trade_completed = true
-          
-          active_trade[:strikes_state].each do |label, str|
+
+          active_trade[:strikes_state].each_value do |str|
             next if str[:exited]
 
             opt_candles = str[:option_candles]
@@ -108,7 +55,7 @@ module Research
             str[:peak_price] = [str[:peak_price], opt_c[:high]].max
 
             # Compute current return
-            current_return = str[:entry_price] > 0 ? ((opt_c[:close] - str[:entry_price]) / str[:entry_price]) * 100.0 : 0.0
+            current_return = str[:entry_price].positive? ? ((opt_c[:close] - str[:entry_price]) / str[:entry_price]) * 100.0 : 0.0
 
             # Exit rule evaluation: check trailing stop or exhaustion
             pes, = Research::OptionExpansionAnalyzer.send(:calculate_pes, idx, opt_candles, candles, active_trade[:breakout_type], str[:entry_price], str[:peak_price])
@@ -129,7 +76,7 @@ module Research
             # Compute underlying max continuation/MFE
             post_und = candles[active_trade[:entry_index]..idx]
             und_entry = active_trade[:underlying_entry_price]
-            
+
             if active_trade[:breakout_type] == :bullish
               und_highest = post_und.map { |x| x[:high] }.max || und_entry
               active_trade[:max_continuation] = und_highest - und_entry
@@ -144,7 +91,7 @@ module Research
               opp_strikes[label] = {
                 entry_price: str[:entry_price],
                 peak_price: str[:peak_price],
-                mfe_pct: str[:entry_price] > 0 ? ((str[:peak_price] - str[:entry_price]) / str[:entry_price]) * 100.0 : 0.0,
+                mfe_pct: str[:entry_price].positive? ? ((str[:peak_price] - str[:entry_price]) / str[:entry_price]) * 100.0 : 0.0,
                 exits: {
                   hybrid_divergence: {
                     return_pct: str[:return_pct],
@@ -169,6 +116,59 @@ module Research
             in_trade = false
             active_trade = nil
           end
+        else
+          breakout_type = nil
+          if c[:close] > or_high
+            breakout_type = :bullish
+          elsif c[:close] < or_low
+            breakout_type = :bearish
+          end
+
+          if breakout_type
+            # Entry execution happens at the open of the next minute (idx + 1)
+            entry_idx = idx + 1
+            break if entry_idx >= candles.size
+
+            entry_candle = candles[entry_idx]
+
+            # Resolve strikes at entry spot
+            spot_open = entry_candle[:open]
+            option_type = breakout_type == :bullish ? "CE" : "PE"
+            candidates = Research::StrikeResolver.candidates(symbol: symbol, spot: spot_open, option_type: option_type)
+
+            # Initialize trade state
+            in_trade = true
+            active_trade = {
+              date: date,
+              breakout_type: breakout_type,
+              entry_time: entry_candle[:timestamp],
+              entry_index: entry_idx,
+              underlying_entry_price: entry_candle[:open],
+              or_high: or_high,
+              or_low: or_low,
+              or_width: or_high - or_low,
+              gap_pct: day_data[:gap_pct] || 0.0,
+              is_inside_day: day_data[:is_inside_day] || false,
+              days_to_expiry: day_data[:days_to_expiry] || 4,
+              day_of_week: date.strftime("%A"),
+              strikes_state: candidates.to_h do |cand|
+                               [cand[:strike_label], {
+                  actual_strike: cand[:actual_strike],
+                  option_candles: Research::MarketDataFetcher.load_or_simulate_options(
+                    symbol, option_type, cand[:actual_strike], date, candles, strike_label: cand[:strike_label]
+                  ),
+                  entry_price: nil,
+                  peak_price: nil,
+                  exited: false,
+                  exit_time: nil,
+                  exit_price: nil,
+                  return_pct: 0.0
+                }]
+                             end
+            }
+          end
+
+          # 3. Manage active trade minute-by-minute
         end
       end
 

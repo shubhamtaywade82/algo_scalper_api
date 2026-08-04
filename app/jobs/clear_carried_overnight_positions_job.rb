@@ -13,7 +13,7 @@ class ClearCarriedOvernightPositionsJob < ApplicationJob
   def perform
     exit_engine = nil
     today_start = Time.zone.today.beginning_of_day
-    trackers = PositionTracker.active.where('created_at < ?', today_start).to_a
+    trackers = PositionTracker.active.where(created_at: ...today_start).to_a
 
     if trackers.empty?
       Rails.logger.info('[ClearCarriedOvernightPositionsJob] No carried-overnight positions to clear')

@@ -14,12 +14,12 @@ module Market
     # Weekday defaults — used ONLY as last-resort fallback when expiry_list is absent.
     # These are the NSE-scheduled days and may be wrong around public holidays.
     WEEKDAY_BY_INDEX = {
-      'SENSEX'     => 5, # Friday
-      'BANKEX'     => 5, # Friday
+      'SENSEX' => 5, # Friday
+      'BANKEX' => 5, # Friday
       'MIDCPNIFTY' => 1, # Monday
-      'FINNIFTY'   => 2, # Tuesday
-      'BANKNIFTY'  => 3, # Wednesday
-      'NIFTY'      => 4  # Thursday (checked last — must come after more specific NIFTY variants)
+      'FINNIFTY' => 2, # Tuesday
+      'BANKNIFTY' => 3, # Wednesday
+      'NIFTY' => 4 # Thursday (checked last — must come after more specific NIFTY variants)
     }.freeze
 
     # Returns true if today is an expiry day for the given index.
@@ -75,7 +75,11 @@ module Market
         expiry_list.filter_map do |raw|
           case raw
           when Date then raw
-          when String then (Date.parse(raw) rescue nil)
+          when String then begin
+                             Date.parse(raw)
+          rescue StandardError
+                             nil
+          end
           when Time, DateTime, ActiveSupport::TimeWithZone then raw.to_date
           end
         end.to_set

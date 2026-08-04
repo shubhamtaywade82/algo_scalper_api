@@ -4,13 +4,6 @@ require 'rails_helper'
 
 RSpec.describe Strategies::Loader do
   let(:strategy_record) { create(:strategy_record) }
-  let(:file_path) { Rails.root.join('tmp', "#{slug}_strategy.rb").to_s }
-
-  after do
-    FileUtils.rm_f(file_path)
-    Object.send(:remove_const, :MyTestStrategy) if Object.const_defined?(:MyTestStrategy)
-  end
-
   let(:version) do
     Strategies::Version.create!(
       strategy_record: strategy_record,
@@ -20,6 +13,12 @@ RSpec.describe Strategies::Loader do
       manifest: { 'class_name' => 'MyTestStrategy', 'params' => {} },
       deployed_at: Time.current
     )
+  end
+  let(:file_path) { Rails.root.join('tmp', "#{slug}_strategy.rb").to_s }
+
+  after do
+    FileUtils.rm_f(file_path)
+    Object.send(:remove_const, :MyTestStrategy) if Object.const_defined?(:MyTestStrategy)
   end
 
   context 'when checksum matches' do

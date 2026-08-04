@@ -10,8 +10,7 @@ RSpec.describe Risk::Rules::VixForceExitRule do
 
   before do
     allow(AlgoConfig).to receive(:fetch).and_return(market: { vix_gate: { enabled: true } })
-    allow(Market::VixGate).to receive(:force_exit_active?).and_return(true)
-    allow(Market::VixGate).to receive(:current_ltp).and_return(23.4)
+    allow(Market::VixGate).to receive_messages(force_exit_active?: true, current_ltp: 23.4)
   end
 
   it 'exits when VIX force-exit gate is active' do

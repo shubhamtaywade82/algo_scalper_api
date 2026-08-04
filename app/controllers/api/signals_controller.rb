@@ -31,10 +31,10 @@ module Api
       render json: {
         signals: scope.map { |sig| serialize(sig) },
         meta: {
-          total:    total,
-          page:     current_page,
+          total: total,
+          page: current_page,
           per_page: per_page_value,
-          pages:    (total.to_f / per_page_value).ceil
+          pages: (total.to_f / per_page_value).ceil
         }
       }
     end

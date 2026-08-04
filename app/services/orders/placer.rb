@@ -60,7 +60,7 @@ module Orders
           Rails.logger.info("[Orders::Placer] BUY response: #{order.inspect}") if order
         else
           Rails.logger.warn('[Orders::Placer] BUY blocked because PLACE_ORDER is not enabled')
-          order = nil
+          nil
         end
       ensure
         remember(normalized_id)
@@ -131,7 +131,7 @@ module Orders
           Rails.logger.info("[Orders::Placer] SELL response: #{order.inspect}") if order
         else
           Rails.logger.warn("[Orders::Placer] SELL blocked because PLACE_ORDER is not enabled")
-          order = nil
+          nil
         end
 
         nil

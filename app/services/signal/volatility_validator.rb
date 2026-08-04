@@ -4,7 +4,7 @@ module Signal
   # Validates volatility health before entry
   # Ensures market has sufficient volatility for profitable trades
   class VolatilityValidator
-    Result = Struct.new(:valid, :atr_ratio, :factors, :reasons, keyword_init: true)
+    Result = Struct.new(:valid, :atr_ratio, :factors, :reasons)
 
     # Validate volatility health
     # @param series [CandleSeries] Primary timeframe series
@@ -35,9 +35,9 @@ module Signal
 
       unless valid
         reasons << 'Volatility health check failed'
-        reasons.concat(factors.values.select { |f| !f[:valid] && !f[:in_compression] && !f[:in_chop] }.map { |f| f[:reason] })
-        reasons.concat(factors.values.select { |f| f[:in_compression] }.map { |f| f[:reason] })
-        reasons.concat(factors.values.select { |f| f[:in_chop] }.map { |f| f[:reason] })
+        reasons.concat(factors.values.select { |f| !f[:valid] && !f[:in_compression] && !f[:in_chop] }.pluck(:reason))
+        reasons.concat(factors.values.select { |f| f[:in_compression] }.pluck(:reason))
+        reasons.concat(factors.values.select { |f| f[:in_chop] }.pluck(:reason))
       end
 
       Result.new(
@@ -51,8 +51,6 @@ module Signal
       invalid_result("Validation error: #{e.message}")
     end
 
-    private
-
     def self.check_atr_ratio(series:, min_ratio:)
       bars = series.candles
       return { valid: false, ratio: nil, reason: 'Insufficient candles' } if bars.size < 42
@@ -62,7 +60,7 @@ module Signal
       current_atr = Entries::ATRUtils.calculate_atr(current_window)
 
       # Calculate historical ATR (non-overlapping: bars 15-28, previous period)
-      historical_window = bars.last(42).first(14)  # Bars 15-28 (older period)
+      historical_window = bars.last(42).first(14) # Bars 15-28 (older period)
       historical_atr = Entries::ATRUtils.calculate_atr(historical_window)
 
       return { valid: false, ratio: nil, reason: 'ATR calculation failed' } unless current_atr && historical_atr&.positive?

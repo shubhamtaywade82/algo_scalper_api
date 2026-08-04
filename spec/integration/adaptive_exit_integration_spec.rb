@@ -19,22 +19,21 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
   before do
     allow(exit_engine).to receive(:execute_exit)
     allow(service).to receive_messages(seconds_below_entry: 0, calculate_atr_ratio: 1.0)
-    
+
     # Mock MarketFeedHub to avoid real WebSocket calls and leaks
-    allow(Live::MarketFeedHub.instance).to receive(:subscribe).and_return({ success: true })
-    allow(Live::MarketFeedHub.instance).to receive(:unsubscribe).and_return({ success: true })
-    
+    allow(Live::MarketFeedHub.instance).to receive_messages(subscribe: { success: true }, unsubscribe: { success: true })
+
     # Reset TrailingConfig memoization so it picks up the test config
     Positions::TrailingConfig.instance_variable_set(:@config, nil)
-    
+
     # Ensure ActiveCache is clean
     Positions::ActiveCache.instance.clear
   end
 
   def setup_active_cache(tracker, pnl_data)
     # Add position to ActiveCache
-    pos = Positions::ActiveCache.instance.add_position(tracker: tracker)
-    
+    Positions::ActiveCache.instance.add_position(tracker: tracker)
+
     # Update with test PnL data
     Positions::ActiveCache.instance.update_position(
       tracker.id,
@@ -42,7 +41,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       peak_profit_pct: (pnl_data[:hwm_pnl] / (tracker.entry_price * tracker.quantity)).to_f,
       current_ltp: (tracker.entry_price * (1 + pnl_data[:pnl_pct].to_f)).to_f
     )
-    
+
     # Update RedisPnlCache for UnifiedExitChecker
     Live::RedisPnlCache.instance.store_pnl(
       tracker_id: tracker.id,
@@ -53,7 +52,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
       timestamp: Time.current,
       tracker: tracker
     )
-    
+
     tracker.update_columns(trade_state: 'expansion')
   end
 
@@ -81,7 +80,7 @@ RSpec.describe 'Adaptive Exit System Integration', type: :integration do
             reverse_loss: {
               enabled: true,
               max_loss_pct: 0.15, # Tighter
-              min_loss_pct: 0.03,  # Tighter
+              min_loss_pct: 0.03, # Tighter
               loss_span_pct: 0.30,
               time_tighten_per_min: 0.03
             },

@@ -129,7 +129,7 @@ module Risk
 
         chain_data = instrument.fetch_option_chain(expiry)
         oc = chain_data.is_a?(Hash) ? chain_data[:oc] : nil
-        return nil unless oc.present?
+        return nil if oc.blank?
 
         contract = oc[strike.to_f.to_s]&.dig(option_type)
         greeks = contract&.dig('greeks')

@@ -3,17 +3,17 @@
 require 'rails_helper'
 
 RSpec.describe Orders::Commands::ExitOrderCommand do
-  let(:gateway) { instance_double('Orders::GatewayPaper') }
-  let(:tracker) { build_stubbed(:position_tracker, status: 'active', order_no: 'ORD002') }
-
   subject(:command) do
     described_class.new(
-      gateway:         gateway,
-      tracker:         tracker,
+      gateway: gateway,
+      tracker: tracker,
       client_order_id: 'COID-XYZ',
-      reason:          'stop_loss'
+      reason: 'stop_loss'
     )
   end
+
+  let(:gateway) { instance_double(Orders::GatewayPaper) }
+  let(:tracker) { build_stubbed(:position_tracker, status: 'active', order_no: 'ORD002') }
 
   # ── Successful exit ─────────────────────────────────────────────────────────
 
@@ -60,8 +60,8 @@ RSpec.describe Orders::Commands::ExitOrderCommand do
   context 'when client_order_id is blank' do
     subject(:command) do
       described_class.new(
-        gateway:         gateway,
-        tracker:         tracker,
+        gateway: gateway,
+        tracker: tracker,
         client_order_id: ''
       )
     end

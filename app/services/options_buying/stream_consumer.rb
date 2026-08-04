@@ -49,7 +49,7 @@ module OptionsBuying
           if processed.zero?
             empty_reads += 1
             # Exponential backoff: 0.1s, 0.2s, 0.4s, 0.8s, 1.6s, max 2s
-            backoff = [0.1 * (2 ** (empty_reads - 1)), 2.0].min
+            backoff = [0.1 * (2**(empty_reads - 1)), 2.0].min
             sleep(backoff)
           else
             empty_reads = 0

@@ -3,10 +3,10 @@
 module Market
   # Resolves current trading session in IST (Kill Zones: Opening 09:15–10:30, Gamma 14:00–15:15).
   class SessionResolver
-    OPENING_START = 9 * 60 + 15   # 09:15
-    OPENING_END   = 10 * 60 + 30  # 10:30
-    GAMMA_START   = 14 * 60 + 0   # 14:00
-    GAMMA_END     = 15 * 60 + 15  # 15:15
+    OPENING_START = (9 * 60) + 15   # 09:15
+    OPENING_END   = (10 * 60) + 30  # 10:30
+    GAMMA_START   = (14 * 60) + 0   # 14:00
+    GAMMA_END     = (15 * 60) + 15  # 15:15
 
     class << self
       # @return [Symbol] :opening, :gamma, or :midday
@@ -23,7 +23,7 @@ module Market
 
       def current_ist_minutes
         time = Time.current.in_time_zone("Asia/Kolkata")
-        time.hour * 60 + time.min
+        (time.hour * 60) + time.min
       end
     end
   end

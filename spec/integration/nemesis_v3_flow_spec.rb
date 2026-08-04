@@ -43,7 +43,7 @@ RSpec.describe 'NEMESIS V3 Flow Integration', :vcr, type: :integration do
     allow(mock_redis).to receive(:scan_each).and_yield
     allow(mock_redis).to receive_messages(setex: true, expire: true, del: true, hset: true, hmset: true, hgetall: {})
     allow(mock_redis).to receive(:hgetall) { |key| @redis_store[key] || {} }
-    
+
     # Reset singletons to use the new mock_redis
     if defined?(Live::RedisPnlCache)
       Live::RedisPnlCache.instance.instance_variable_set(:@redis, mock_redis)

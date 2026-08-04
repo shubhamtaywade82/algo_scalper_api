@@ -5,7 +5,7 @@ module MarketState
   class TrendDetector
     def self.bullish?(candles)
       return false if candles.size < 2
-      
+
       last = candles[-1]
       prev = candles[-2]
 
@@ -15,7 +15,7 @@ module MarketState
 
     def self.bearish?(candles)
       return false if candles.size < 2
-      
+
       last = candles[-1]
       prev = candles[-2]
 

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # rubocop:disable Metrics/BlockNesting
 
 # rubocop:disable Metrics/BlockNesting
@@ -767,14 +768,14 @@ module Options
           chain_data: chain_data
         )
         flow_results = flow_analyzer.strong_flow_strikes
-        
+
         gamma_detector = Options::GammaRampDetector.new(
           index_key: index_cfg[:key],
           expiry_date: expiry_date,
           chain_data: chain_data
         )
         gamma_pressure = gamma_detector.gamma_pressure_score(direction: direction)
-        
+
         # Index prices for delta acceleration (last 2 close prices)
         # Fallback to current spot if series unavailable
         index_series = instrument.candle_series(interval: '1')
@@ -862,7 +863,7 @@ module Options
         end
 
         leg = legs.first
-        
+
         # Institutional Rule: If no good strike exists (score too low) -> skip trade
         # Threshold 140 (scaled score: institutional base + acceleration + ATM bonus)
         if leg[:score] < 140.0
@@ -882,7 +883,9 @@ module Options
         pick = leg.slice(:segment, :security_id, :symbol, :ltp, :iv, :oi, :spread, :lot_size, :derivative_id, :strike)
                   .merge(strike_type: used_strike_type, score: leg[:score], acceleration_signal: leg[:acceleration_signal])
 
-        unless exit_testing_mode
+        if exit_testing_mode
+          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
+        else
           validator = Options::StrikeQualification::ExpectedMoveValidator.new
           validation = validator.call(
             index_key: index_cfg[:key],
@@ -900,8 +903,6 @@ module Options
             end
             return []
           end
-        else
-          Rails.logger.info("[Options] Exit-testing mode: skipping expected-move validator for #{index_cfg[:key]}") if defined?(Rails)
         end
 
         StrikePickResult.new([pick], nil, nil)
@@ -948,11 +949,11 @@ module Options
                                                flow_analyzer: nil, index_prices: nil)
         # Force reload - debugging index_cfg scope issue
         return [] unless option_chain_data
-        
+
         # Extract flow scores for lookup
         flow_side = side.to_s.downcase # 'ce' or 'pe'
-        flow_scores = (flow_results&.[](flow_side) || []).each_with_object({}) do |f, h|
-          h[f[:strike].to_f] = f[:score]
+        (flow_results&.[](flow_side) || []).to_h do |f|
+                        [f[:strike].to_f, f[:score]]
         end
 
         # Extract flow scores for lookup
@@ -1300,7 +1301,7 @@ module Options
         # Apply sophisticated scoring system
         scored_legs = legs.map do |leg|
           flow_score = flow_scores[leg[:strike].to_f] || 1.0
-          
+
           # Get historical context for this specific strike
           strike_history = flow_analyzer&.get_history(leg[:strike], flow_side)
 
@@ -1324,7 +1325,7 @@ module Options
             acceleration_signal: acceleration_signal,
             history: strike_history
           )
-          
+
           leg.merge(score: score, acceleration_signal: acceleration_signal)
         end
 
@@ -1454,19 +1455,19 @@ module Options
 
       # Calculate sophisticated strike score based on professional prop model
       def calculate_strike_score(leg, side, atm_strike, atm_range_percent, flow_score: 1.0, gamma_pressure: 0.0,
-                                prop_selector: nil, acceleration_signal: :none, history: nil)
+                                 prop_selector: nil, acceleration_signal: :none, history: nil)
         # Use professional PropStrikeSelector if available
         if prop_selector
           # Combine prop model with ATM bonus for legacy compatibility
           prop_score = prop_selector.score(leg, flow_score: flow_score, gamma_pressure: gamma_pressure, history: history)
-          
+
           # Boost score for delta acceleration (explosive premium potential)
           acceleration_boost = case acceleration_signal
                                when :strong then 0.3
                                when :moderate then 0.15
                                else 0.0
                                end
-          
+
           distance_from_atm = (leg[:strike] - atm_strike).abs
           atm_range_points = atm_strike * atm_range_percent
           atm_bonus = if distance_from_atm <= (atm_range_points * 0.1)
@@ -1476,7 +1477,7 @@ module Options
                       else
                         0.0
                       end
-          
+
           return (prop_score * 100.0) + (acceleration_boost * 50.0) + (atm_bonus * 10.0)
         end
 
@@ -1497,17 +1498,17 @@ module Options
 
         # 1. Delta Score (0.40–0.60 ideal) - 40% weight
         delta_score = (1.0 - (delta - 0.5).abs) * 40.0
-        
+
         # 2. Liquidity Score (Spread < 1% preferred) - 30% weight
         liquidity_base = if oi >= 1_000_000
                             30
-                          elsif oi >= 500_000
+                         elsif oi >= 500_000
                             25
-                          elsif oi >= 100_000
+                         elsif oi >= 100_000
                             20
-                          else
+                         else
                             10
-                          end
+                         end
         # Spread penalty (up to 50% reduction)
         liquidity_score = liquidity_base * [1.0 - (spread_pct / 2.0), 0.5].max
 

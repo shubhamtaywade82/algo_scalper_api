@@ -26,7 +26,7 @@ module Risk
         return no_action_result unless enabled?(context)
 
         tracker = context.tracker
-        elapsed  = (Time.current - tracker.created_at).to_f
+        elapsed = (Time.current - tracker.created_at).to_f
         return no_action_result if elapsed < min_hold_seconds(context)
 
         hwm_rupees = context.position.hwm_pnl.to_f
@@ -35,13 +35,13 @@ module Risk
         exit_result(
           reason: "ZERO_HWM_FALSE_ENTRY",
           metadata: {
-            path:               "zero_hwm_false_entry",
-            elapsed_seconds:    elapsed.round(1),
-            min_hold_seconds:   min_hold_seconds(context),
-            hwm_rupees:         hwm_rupees,
-            hwm_threshold:      hwm_threshold(context),
-            current_ltp:        context.current_ltp.to_f,
-            entry_price:        tracker.entry_price.to_f
+            path: "zero_hwm_false_entry",
+            elapsed_seconds: elapsed.round(1),
+            min_hold_seconds: min_hold_seconds(context),
+            hwm_rupees: hwm_rupees,
+            hwm_threshold: hwm_threshold(context),
+            current_ltp: context.current_ltp.to_f,
+            entry_price: tracker.entry_price.to_f
           }
         )
       end

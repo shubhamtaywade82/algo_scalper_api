@@ -148,11 +148,9 @@ RSpec.describe Ai::TradingAgent::ToolRegistry do
                             exchange: 'nse', segment: 'index',
                             instrument_type: 'INDEX', lot_size: 50,
                             expiry_flag: 'N', underlying_symbol: 'NIFTY')
-        allow(Instrument).to receive(:where).and_return(Instrument)
         allow(Instrument).to receive(:where).with(segment: 'index').and_return(Instrument)
         allow(Instrument).to receive(:where).with(anything).and_return(Instrument)
-        allow(Instrument).to receive(:order).and_return([instrument])
-        allow(Instrument).to receive(:first).and_return(instrument)
+        allow(Instrument).to receive_messages(where: Instrument, order: [instrument], first: instrument)
 
         result = described_class.execute('get_instrument', { 'symbol' => 'NIFTY' })
         expect(result).to be_a(Hash)
@@ -161,10 +159,8 @@ RSpec.describe Ai::TradingAgent::ToolRegistry do
       end
 
       it 'returns error for unknown symbol' do
-        allow(Instrument).to receive(:where).and_return(Instrument)
         allow(Instrument).to receive(:where).with(anything).and_return(Instrument)
-        allow(Instrument).to receive(:order).and_return(Instrument)
-        allow(Instrument).to receive(:first).and_return(nil)
+        allow(Instrument).to receive_messages(where: Instrument, order: Instrument, first: nil)
 
         result = described_class.execute('get_instrument', { 'symbol' => 'NONEXISTENT' })
         expect(result[:error]).to be_present
@@ -182,20 +178,11 @@ RSpec.describe Ai::TradingAgent::ToolRegistry do
                             id: 1, security_id: 13, display_name: 'Nifty 50',
                             exchange: 'nse', segment: 'index')
         series = double('CandleSeries')
-        allow(series).to receive(:candles).and_return([double(close: 23_900)])
-        allow(series).to receive(:rsi).and_return(55.0)
-        allow(series).to receive(:macd).and_return({ signal: 10, histogram: 5, macd: 15 })
-        allow(series).to receive(:adx).and_return(25.0)
-        allow(series).to receive(:supertrend_signal).and_return('bullish')
-        allow(series).to receive(:atr).and_return(100.0)
-        allow(series).to receive(:bollinger_bands).and_return({ upper: 24_000, middle: 23_800, lower: 23_600 })
+        allow(series).to receive_messages(candles: [double(close: 23_900)], rsi: 55.0, macd: { signal: 10, histogram: 5, macd: 15 }, adx: 25.0, supertrend_signal: 'bullish', atr: 100.0, bollinger_bands: { upper: 24_000, middle: 23_800, lower: 23_600 })
 
-        allow(Instrument).to receive(:where).and_return(Instrument)
         allow(Instrument).to receive(:where).with(anything).and_return(Instrument)
-        allow(Instrument).to receive(:order).and_return([instrument])
-        allow(Instrument).to receive(:first).and_return(instrument)
-        allow(instrument).to receive(:ltp).and_return(23_900.5)
-        allow(instrument).to receive(:candles).and_return(series)
+        allow(Instrument).to receive_messages(where: Instrument, order: [instrument], first: instrument)
+        allow(instrument).to receive_messages(ltp: 23_900.5, candles: series)
 
         result = described_class.execute('get_market_snapshot', { 'symbol' => 'NIFTY', 'interval' => '15' })
         expect(result).to be_a(Hash)
@@ -279,10 +266,8 @@ RSpec.describe Ai::TradingAgent::ToolRegistry do
                      swing_structure: nil, internal_structure: nil)
         allow(ctx).to receive(:to_h).and_return({})
 
-        allow(Instrument).to receive(:where).and_return(Instrument)
         allow(Instrument).to receive(:where).with(anything).and_return(Instrument)
-        allow(Instrument).to receive(:order).and_return([instrument])
-        allow(Instrument).to receive(:first).and_return(instrument)
+        allow(Instrument).to receive_messages(where: Instrument, order: [instrument], first: instrument)
         allow(instrument).to receive(:candles).and_return(series)
         allow(Smc::Context).to receive(:new).and_return(ctx)
 
@@ -300,10 +285,8 @@ RSpec.describe Ai::TradingAgent::ToolRegistry do
         candle = double('Candle', timestamp: '2026-06-30', open: 23_800, high: 23_900, low: 23_750, close: 23_850, volume: 1000)
         allow(series).to receive(:candles).and_return([candle])
 
-        allow(Instrument).to receive(:where).and_return(Instrument)
         allow(Instrument).to receive(:where).with(anything).and_return(Instrument)
-        allow(Instrument).to receive(:order).and_return([instrument])
-        allow(Instrument).to receive(:first).and_return(instrument)
+        allow(Instrument).to receive_messages(where: Instrument, order: [instrument], first: instrument)
         allow(instrument).to receive(:candles).and_return(series)
 
         result = described_class.execute('get_historical_data', {
@@ -340,7 +323,7 @@ RSpec.describe Ai::TradingAgent::ToolRegistry do
     end
 
     it 'converts Date to ISO8601' do
-      result = described_class.send(:clean_result, { date: Date.today })
+      result = described_class.send(:clean_result, { date: Time.zone.today })
       expect(result[:date]).to match(/\d{4}-\d{2}-\d{2}/)
     end
 

@@ -106,6 +106,7 @@ RSpec.describe Positions::ExitFlow do
         expect(tracker.exit_reason).to eq(Positions::ExitFlow::FALLBACK_EXIT_REASON)
       end
     end
+
     context 'when redis cache has stale peak pnl' do
       it 'persists final pnl from exit_price instead of cache' do
         tracker = create(

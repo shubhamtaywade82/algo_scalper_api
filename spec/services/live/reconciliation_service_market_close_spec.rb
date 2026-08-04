@@ -10,7 +10,7 @@ RSpec.describe Live::ReconciliationService do
     service.stop if service.running?
   end
 
-  after(:each) do
+  after do
     service.stop
     # Reset singleton state
     service.instance_variable_set(:@last_reconciliation, nil)

@@ -44,7 +44,7 @@ module Entries
       # @param lookback_minutes [Integer] Minutes to look back
       # @return [Symbol] :bullish, :bearish, or :neutral
       def choch?(bars, lookback_minutes: 15)
-        return :neutral if bars.nil? || bars.empty? || bars.size < 4
+        return :neutral if bars.blank? || bars.size < 4
 
         lookback_count = [lookback_minutes, bars.size].min
         recent_bars = bars.last(lookback_count)
@@ -67,15 +67,15 @@ module Entries
         return :neutral unless previous_swing_high && previous_swing_low
 
         # Bullish CHOCH: Break above swing high + confirmation
-        if prev.close > previous_swing_high && current.close > prev.close
+        if prev.close > previous_swing_high && current.close > prev.close && (current.high > previous_swing_high)
           # Additional confirmation: current high > previous swing high
-          return :bullish if current.high > previous_swing_high
+          return :bullish
         end
 
         # Bearish CHOCH: Break below swing low + confirmation
-        if prev.close < previous_swing_low && current.close < prev.close
+        if prev.close < previous_swing_low && current.close < prev.close && (current.low < previous_swing_low)
           # Additional confirmation: current low < previous swing low
-          return :bearish if current.low < previous_swing_low
+          return :bearish
         end
 
         :neutral
@@ -87,8 +87,8 @@ module Entries
       # @param min_alignment [Float] Minimum alignment ratio (default: 0.6)
       # @return [Boolean]
       def structure_alignment?(bars, direction:, min_alignment: 0.6)
-        return false unless direction.in?([:bullish, :bearish])
-        return false if bars.nil? || bars.empty?
+        return false unless direction.in?(%i[bullish bearish])
+        return false if bars.blank?
 
         bos_dir = bos_direction(bars, lookback_minutes: 10)
         choch_dir = choch?(bars, lookback_minutes: 15)

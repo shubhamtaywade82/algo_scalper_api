@@ -22,7 +22,11 @@ module Api
           spot = analyzer.spot_ltp
           expiry = analyzer.find_nearest_expiry
           if spot&.positive? && expiry
-            increment = spot >= 50_000 ? 100 : (spot >= 10_000 ? 50 : 25)
+            increment = if spot >= 50_000
+100
+                        else
+(spot >= 10_000 ? 50 : 25)
+                        end
             atm = (spot / increment).round * increment
             contract = Derivative.options.find_by(underlying_symbol: symbol.upcase, expiry_date: expiry, strike_price: atm, option_type: 'CE')
             if contract
@@ -31,7 +35,7 @@ module Api
               return try_redis_depth(contract) || empty_depth("#{symbol} ATM CE")
             end
           end
-        rescue => e
+        rescue StandardError => e
           Rails.logger.warn("[DepthController] Failed to resolve ATM CE option for #{symbol}: #{e.message}")
         end
       end

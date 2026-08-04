@@ -48,9 +48,9 @@ RSpec.describe Research::OptionBarNormalizer do
 
     it 'returns an empty array when the payload has no timestamps' do
       expect(described_class.normalize(nil, symbol: 'NIFTY', exchange_segment: 'NSE_FNO', expiry_flag: 'WEEK',
-                                             option_type: 'CE', strike_label: 'ATM', interval: 5)).to eq([])
-      expect(described_class.normalize({}, symbol: 'NIFTY', exchange_segment: 'NSE_FNO', expiry_flag: 'WEEK',
                                             option_type: 'CE', strike_label: 'ATM', interval: 5)).to eq([])
+      expect(described_class.normalize({}, symbol: 'NIFTY', exchange_segment: 'NSE_FNO', expiry_flag: 'WEEK',
+                                           option_type: 'CE', strike_label: 'ATM', interval: 5)).to eq([])
     end
   end
 end

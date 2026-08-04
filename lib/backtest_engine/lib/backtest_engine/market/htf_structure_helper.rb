@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   module Market
     class HtfStructureHelper
@@ -16,9 +18,7 @@ module BacktestEngine
         )
       end
 
-      def structure
-        @series.structure
-      end
+      delegate :structure, to: :@series
     end
   end
 end

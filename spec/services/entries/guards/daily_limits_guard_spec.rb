@@ -28,7 +28,7 @@ RSpec.describe Entries::Guards::DailyLimitsGuard do
         allow(daily_limits).to receive(:get_daily_trades).with('NIFTY').and_return(3)
 
         result = described_class.call(context)
-        expect(result).to include(blocked: a_string_matching(/daily loss\/profit limits/))
+        expect(result).to include(blocked: a_string_matching(%r{daily loss/profit limits}))
       end
 
       it 'passes when trades_today is below the configured per-symbol cap' do
@@ -42,7 +42,7 @@ RSpec.describe Entries::Guards::DailyLimitsGuard do
         allow(daily_limits).to receive(:get_daily_trades).with('NIFTY').and_return(6)
 
         result = described_class.call(context)
-        expect(result).to include(blocked: a_string_matching(/daily loss\/profit limits/))
+        expect(result).to include(blocked: a_string_matching(%r{daily loss/profit limits}))
       end
 
       it 'uses a per-index override cap when max_trades_per_symbol is a hash' do
@@ -61,7 +61,7 @@ RSpec.describe Entries::Guards::DailyLimitsGuard do
         allow(daily_limits).to receive(:get_daily_trades).with('NIFTY').and_return(20)
 
         result = described_class.call(context)
-        expect(result).to include(blocked: a_string_matching(/daily loss\/profit limits/))
+        expect(result).to include(blocked: a_string_matching(%r{daily loss/profit limits}))
       end
 
       it 'falls back to the hash default cap for an index with no per-index override' do
@@ -71,7 +71,7 @@ RSpec.describe Entries::Guards::DailyLimitsGuard do
         allow(daily_limits).to receive(:get_daily_trades).with('NIFTY').and_return(8)
 
         result = described_class.call(context)
-        expect(result).to include(blocked: a_string_matching(/daily loss\/profit limits/))
+        expect(result).to include(blocked: a_string_matching(%r{daily loss/profit limits}))
       end
 
       it 'blocks when the underlying daily_limits result disallows for a loss/profit reason' do
@@ -79,7 +79,7 @@ RSpec.describe Entries::Guards::DailyLimitsGuard do
         allow(daily_limits).to receive(:can_trade?).and_return(allowed: false, reason: 'daily_loss_limit_exceeded')
 
         result = described_class.call(context)
-        expect(result).to include(blocked: a_string_matching(/daily loss\/profit limits/))
+        expect(result).to include(blocked: a_string_matching(%r{daily loss/profit limits}))
       end
 
       it 'does not block on trade_frequency_limit_exceeded (handled separately by the per-symbol cap)' do

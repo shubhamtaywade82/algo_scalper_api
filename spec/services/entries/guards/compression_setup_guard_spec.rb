@@ -24,8 +24,7 @@ RSpec.describe Entries::Guards::CompressionSetupGuard do
     before do
       allow(OptionsBuying::Mode).to receive(:positional_active?).and_return(true)
       allow(OptionsBuying::CarryPolicy).to receive(:carry_allowed?).and_return(true)
-      allow(OptionsBuying::ATRCompressionChecker).to receive(:compressed?).and_return(false)
-      allow(OptionsBuying::ATRCompressionChecker).to receive(:setup_ratio).and_return(0.55)
+      allow(OptionsBuying::ATRCompressionChecker).to receive_messages(compressed?: false, setup_ratio: 0.55)
     end
 
     it 'blocks entry' do

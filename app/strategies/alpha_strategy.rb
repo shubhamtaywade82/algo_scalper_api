@@ -4,9 +4,9 @@ class AlphaStrategy
   attr_reader :index_key, :signal_score, :confidence, :metadata
 
   INDEX_CONFIG = {
-    nifty:     { security_id: "13", exchange_segment: "IDX_I", lot_size: 75,  tick_step: 50,  min_sl_pct: 0.010, max_otm_pct: 0.015 },
-    banknifty: { security_id: "25", exchange_segment: "IDX_I", lot_size: 30,  tick_step: 100, min_sl_pct: 0.012, max_otm_pct: 0.020 },
-    sensex:    { security_id: "51", exchange_segment: "IDX_I", lot_size: 10,  tick_step: 100, min_sl_pct: 0.010, max_otm_pct: 0.015 }
+    nifty: { security_id: "13", exchange_segment: "IDX_I", lot_size: 75, tick_step: 50, min_sl_pct: 0.010, max_otm_pct: 0.015 },
+    banknifty: { security_id: "25", exchange_segment: "IDX_I", lot_size: 30, tick_step: 100, min_sl_pct: 0.012, max_otm_pct: 0.020 },
+    sensex: { security_id: "51", exchange_segment: "IDX_I", lot_size: 10, tick_step: 100, min_sl_pct: 0.010, max_otm_pct: 0.015 }
   }.freeze
   def initialize(index_key:)
     @index_key = index_key.to_sym
@@ -27,7 +27,9 @@ class AlphaStrategy
   protected
 
   def instrument
-    @instrument ||= Instrument.find_by(symbol_name: @index_key.to_s.upcase, segment: 'index')
+    return @instrument if defined?(@instrument)
+
+@instrument = Instrument.find_by(symbol_name: @index_key.to_s.upcase, segment: 'index')
   end
 
   def underlying_ltp
@@ -98,7 +100,7 @@ class AlphaStrategy
     (rank.to_f / sorted.size * 100).round(2)
   end
 
-  def build_signal(direction:, strike:, option_type:, entry_price:, stop_loss:, target:, trailing_jump: 0, confidence:, alpha_source:, iv_context: {})
+  def build_signal(direction:, strike:, option_type:, entry_price:, stop_loss:, target:, confidence:, alpha_source:, trailing_jump: 0, iv_context: {})
     ltp = underlying_ltp
     # Sanity check: Ensure strike is not too far from current LTP
     max_dist = ltp * (@config[:max_otm_pct] || 0.015)

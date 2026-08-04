@@ -7,10 +7,10 @@ RSpec.describe Options::RegimeDetector do
     CalibrationRun.create!(
       symbol: symbol, weeks_analyzed: 52, strike_mode: 'atm_plus_minus',
       raw_stats: {
-        'avg_gain'        => 14.0,
+        'avg_gain' => 14.0,
         'avg_retrace_abs' => avg_retrace_abs,
-        'avg_loss_abs'    => avg_loss_abs,
-        'oc_stddev'       => oc_stddev
+        'avg_loss_abs' => avg_loss_abs,
+        'oc_stddev' => oc_stddev
       },
       proposed_patch: {}
     )
@@ -49,7 +49,7 @@ RSpec.describe Options::RegimeDetector do
         # Historical mean = 5.0, stddev ≈ 0 → even small deviation → shift
         # Use a clearly high value: 12.0 (well above any reasonable σ band)
         result = described_class.check(symbol: 'NIFTY',
-                                        combined_stats: stable_stats.merge(avg_retrace_abs: 12.0))
+                                       combined_stats: stable_stats.merge(avg_retrace_abs: 12.0))
         expect(result[:shift]).to be true
         expect(result[:reason]).to include('avg_retrace_abs')
       end
@@ -65,7 +65,7 @@ RSpec.describe Options::RegimeDetector do
       it 'returns shift: true when oc_stddev is well above 1.5σ' do
         # mean ≈ 3.0, stddev ≈ 0.5 → 1.5σ band ≈ 3.75; 6.0 is clearly outside
         result = described_class.check(symbol: 'NIFTY',
-                                        combined_stats: stable_stats.merge(oc_stddev: 6.0))
+                                       combined_stats: stable_stats.merge(oc_stddev: 6.0))
         expect(result[:shift]).to be true
         expect(result[:reason]).to include('oc_stddev')
       end
@@ -80,7 +80,7 @@ RSpec.describe Options::RegimeDetector do
       it 'uses only the correct symbol history (NIFTY spike tests against NIFTY history)' do
         # NIFTY history: avg_retrace_abs = 5.0, stddev ≈ 0 → 12.0 is a spike
         result = described_class.check(symbol: 'NIFTY',
-                                        combined_stats: stable_stats.merge(avg_retrace_abs: 12.0))
+                                       combined_stats: stable_stats.merge(avg_retrace_abs: 12.0))
         expect(result[:shift]).to be true
       end
     end

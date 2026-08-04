@@ -78,7 +78,7 @@ module Orders
       end
 
       raw = yml&.[](key) || (key == :sensex ? SENSEX : NIFTY)
-      
+
       # Handle BANKNIFTY default if not in constants
       if key == :banknifty && !yml&.[](key)
         raw = {

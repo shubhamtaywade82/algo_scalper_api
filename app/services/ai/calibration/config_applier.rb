@@ -10,11 +10,11 @@ module Ai
     class ConfigApplier
       def self.call(symbol:, parsed_result:, validation_result:, dataset_meta:, dry_run: false)
         new(
-          symbol:            symbol,
-          parsed_result:     parsed_result,
+          symbol: symbol,
+          parsed_result: parsed_result,
           validation_result: validation_result,
-          dataset_meta:      dataset_meta,
-          dry_run:           dry_run
+          dataset_meta: dataset_meta,
+          dry_run: dry_run
         ).call
       end
 
@@ -43,13 +43,13 @@ module Ai
         end
 
         run = CalibrationRun.create!(
-          symbol:          @symbol,
-          weeks_analyzed:  0, # AI calibration doesn't use weeks; field repurposed as days below via raw_stats
-          strike_mode:     'ai_calibration',
-          raw_stats:       raw_stats,
-          proposed_patch:  patch,
+          symbol: @symbol,
+          weeks_analyzed: 0, # AI calibration doesn't use weeks; field repurposed as days below via raw_stats
+          strike_mode: 'ai_calibration',
+          raw_stats: raw_stats,
+          proposed_patch: patch,
           is_regime_shift: regime_shift?,
-          regime_reason:   regime_reason
+          regime_reason: regime_reason
         )
 
         Rails.logger.info(
@@ -72,15 +72,15 @@ module Ai
 
       def build_raw_stats
         {
-          source:            'ai_calibration',
-          dataset_meta:      @dataset_meta,
-          diagnosis:         @parsed_result[:diagnosis],
+          source: 'ai_calibration',
+          dataset_meta: @dataset_meta,
+          diagnosis: @parsed_result[:diagnosis],
           parameter_changes: @parsed_result[:parameter_changes],
-          entry_filters:     @parsed_result[:entry_filters],
+          entry_filters: @parsed_result[:entry_filters],
           exit_improvements: @parsed_result[:exit_improvements],
-          regime_rules:      @parsed_result[:regime_rules],
-          validation:        @validation_result.except(:baseline_metrics, :projected_metrics).merge(
-            baseline_metrics:  @validation_result[:baseline_metrics],
+          regime_rules: @parsed_result[:regime_rules],
+          validation: @validation_result.except(:baseline_metrics, :projected_metrics).merge(
+            baseline_metrics: @validation_result[:baseline_metrics],
             projected_metrics: @validation_result[:projected_metrics]
           )
         }

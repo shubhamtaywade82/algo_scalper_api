@@ -15,10 +15,10 @@ module OptionsBuying
       trades = query.order(exited_at: :desc).limit(50).to_a
       return nil if trades.size < MIN_TRADES_REQUIRED
 
-      wins = trades.select { |t| t.last_pnl_rupees.to_f > 0 }
+      wins = trades.select { |t| t.last_pnl_rupees.to_f.positive? }
       losses = trades.select { |t| t.last_pnl_rupees.to_f <= 0 }
 
-      win_rate = wins.size.to_f / trades.size.to_f
+      win_rate = wins.size.to_f / trades.size
 
       avg_win = wins.any? ? (wins.sum { |t| t.last_pnl_rupees.to_f } / wins.size) : 0.0
       avg_loss = losses.any? ? (losses.sum { |t| t.last_pnl_rupees.to_f }.abs / losses.size) : 1.0

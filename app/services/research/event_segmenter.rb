@@ -12,11 +12,11 @@ module Research
       return [] if candles.size < 30
 
       events = []
-      
+
       # 1. Identify primary Opening Range boundaries (first 15m)
       first_15m = candles.first(15)
-      or_high = first_15m.map { |c| c[:high] }.max
-      or_low = first_15m.map { |c| c[:low] }.min
+      or_high = first_15m.pluck(:high).max
+      or_low = first_15m.pluck(:low).min
       or_width = or_high - or_low
 
       # Track active state to avoid overlapping event entry signals
@@ -41,7 +41,7 @@ module Research
 
           if event_type
             primary_breakout_triggered = true
-            
+
             # Aligned to the open of the next minute candle
             entry_idx = [idx + 1, candles.size - 1].min
             entry_candle = candles[entry_idx]
@@ -117,7 +117,7 @@ module Research
 
           if is_reversal
             reversal_triggered = true
-            
+
             entry_idx = [idx + 1, candles.size - 1].min
             entry_candle = candles[entry_idx]
 

@@ -7,7 +7,7 @@ module Research
   class OptionBarNormalizer
     class << self
       def normalize(raw_side_data, symbol:, exchange_segment:, expiry_flag:, option_type:, strike_label:,
-                     interval:, source: "rolling_option")
+                    interval:, source: "rolling_option")
         return [] unless raw_side_data && raw_side_data["timestamp"]
 
         raw_side_data["timestamp"].each_with_index.map do |ts, i|

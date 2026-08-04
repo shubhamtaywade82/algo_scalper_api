@@ -20,7 +20,7 @@ module Api
         scope = scope.where(option_type: params[:option_type]) if params[:option_type].present?
         if params[:date].present?
           date = parse_date(params[:date])
-          scope = scope.where(entry_ts: date.beginning_of_day..date.end_of_day) if date
+          scope = scope.where(entry_ts: date.all_day) if date
         end
 
         records, meta = paginate(scope)
@@ -54,7 +54,7 @@ module Api
 
         render json: { lifecycles: lifecycles.map { |lifecycle| serialize_lifecycle(lifecycle) } }
       rescue ActionController::ParameterMissing, ArgumentError, Date::Error => e
-        render json: { error: e.message }, status: :unprocessable_entity
+        render json: { error: e.message }, status: :unprocessable_content
       end
 
       # Context -> Expectancy report: groups persisted lifecycles by a subset
@@ -68,7 +68,7 @@ module Api
         buckets = ::Research::ExpectancyReport.call(scope: scope, dimensions: dimensions, phase: phase)
         render json: { buckets: buckets, dimensions: dimensions, phase: phase, total_lifecycles: scope.count }
       rescue ArgumentError => e
-        render json: { error: e.message }, status: :unprocessable_entity
+        render json: { error: e.message }, status: :unprocessable_content
       end
 
       private

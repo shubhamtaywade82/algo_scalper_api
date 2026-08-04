@@ -17,7 +17,7 @@ RSpec.describe BacktestEngine::Optimizer do
 
   def make_day(t0, option_closes, day_type: :normal)
     index_candles = option_closes.each_with_index.map do |_c, i|
-      candle(t0 + i * 60, 100 + i, 102 + i, 99 + i, 101 + i)
+      candle(t0 + (i * 60), 100 + i, 102 + i, 99 + i, 101 + i)
     end
     option_data = {
       ["ATM", :call] => index_candles.each_with_index.map do |c, i|

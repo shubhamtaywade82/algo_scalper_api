@@ -33,7 +33,7 @@ RSpec.describe Api::AlphaController do
       instrument = create(:instrument)
       tracker = create(:position_tracker, instrument: instrument, segment: "NSE_FNO",
                                           symbol: "NIFTY26APR23000CE", quantity: 75,
-                                          last_pnl_rupees: BigDecimal("1250.5"), atm_strike: 23000)
+                                          last_pnl_rupees: BigDecimal("1250.5"), atm_strike: 23_000)
       signal = create(:strategy_signal, strategy_record: strategy, strategy_version: version, strategy_run: run,
                                         instrument_key: "NIFTY", action: "buy_call", confidence: 0.8,
                                         outcome: "executed", position_tracker: tracker, emitted_at: Time.current)
@@ -48,7 +48,7 @@ RSpec.describe Api::AlphaController do
         "direction" => "bullish",
         "confidence" => 0.8,
         "status" => "entered",
-        "strike_price" => 23000.0,
+        "strike_price" => 23_000.0,
         "pnl" => 1250.5,
         "symbol" => "NIFTY26APR23000CE"
       )
@@ -76,9 +76,9 @@ RSpec.describe Api::AlphaController do
       run = create(:strategy_run, strategy_record: strategy, strategy_version: version)
       instrument = create(:instrument)
       winning_tracker = create(:position_tracker, instrument: instrument, segment: "NSE_FNO",
-                                                   last_pnl_rupees: BigDecimal("500.0"))
+                                                  last_pnl_rupees: BigDecimal("500.0"))
       losing_tracker = create(:position_tracker, instrument: instrument, segment: "NSE_FNO",
-                                                  last_pnl_rupees: BigDecimal("-200.0"))
+                                                 last_pnl_rupees: BigDecimal("-200.0"))
       create(:strategy_signal, strategy_record: strategy, strategy_version: version, strategy_run: run,
                                outcome: "executed", position_tracker: winning_tracker, emitted_at: Time.current)
       create(:strategy_signal, strategy_record: strategy, strategy_version: version, strategy_run: run,

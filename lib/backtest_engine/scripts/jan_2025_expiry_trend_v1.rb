@@ -13,24 +13,24 @@ rescue KeyError, LoadError => e
 end
 
 def print_section(title)
-  puts
-  puts "=" * 90
-  puts title
-  puts "=" * 90
+  Rails.logger.debug
+  Rails.logger.debug "=" * 90
+  Rails.logger.debug title
+  Rails.logger.debug "=" * 90
 end
 
 def print_result(label, result)
   print_section(label)
-  puts "Trades: #{result.metrics.trades.size}"
-  puts "Skip reasons:"
+  Rails.logger.debug "Trades: #{result.metrics.trades.size}"
+  Rails.logger.debug "Skip reasons:"
   result.metrics.skip_reasons.sort_by { |k, _v| k }.each do |reason, count|
-    puts "  - #{reason}: #{count}"
+    Rails.logger.debug "  - #{reason}: #{count}"
   end
-  puts "Analytics summary:"
-  pp BacktestEngine::Analytics::TradeAnalytics.from_result(result).summary
+  Rails.logger.debug "Analytics summary:"
+  Rails.logger.debug BacktestEngine::Analytics::TradeAnalytics.from_result(result).summary
 end
 
-def run_session(index_candles:, option_data:, starting_capital:, lot_size:, **opts)
+def run_session(index_candles:, option_data:, starting_capital:, lot_size:, **)
   BacktestEngine::BacktestSession
     .new(
       index_candles: index_candles,
@@ -38,7 +38,7 @@ def run_session(index_candles:, option_data:, starting_capital:, lot_size:, **op
       starting_capital: starting_capital,
       lot_size: lot_size
     )
-    .run(BacktestEngine::Strategies::ExpiryTrendV1, **opts)
+    .run(BacktestEngine::Strategies::ExpiryTrendV1, **)
 end
 
 from = "2025-01-02 09:15:00"
@@ -66,11 +66,11 @@ option_data = BacktestEngine::Data::OptionsLoader.fetch(
   strikes: BacktestEngine::Data::OptionsLoader::DEFAULT_STRIKES
 )
 
-puts "Index candles: #{index_candles.size}"
-puts "Option series keys: #{option_data.keys.size}"
-puts "Example option series lengths:"
+Rails.logger.debug "Index candles: #{index_candles.size}"
+Rails.logger.debug "Option series keys: #{option_data.keys.size}"
+Rails.logger.debug "Example option series lengths:"
 option_data.keys.first(3).each do |key|
-  puts "  - #{key.inspect}: #{option_data[key].size}"
+  Rails.logger.debug "  - #{key.inspect}: #{option_data[key].size}"
 end
 
 result = run_session(
@@ -97,7 +97,7 @@ batch = BacktestEngine::BatchRunner.run(
 )
 
 print_section("Batch summary (router=true)")
-pp BacktestEngine::Analytics::TradeAnalytics.from_metrics(batch.metrics).summary
+Rails.logger.debug BacktestEngine::Analytics::TradeAnalytics.from_metrics(batch.metrics).summary
 
 print_section("Manual sweep (iv_expansion_period, regime_scorer=true)")
 
@@ -116,7 +116,7 @@ print_section("Manual sweep (iv_expansion_period, regime_scorer=true)")
       iv_expansion_period: period
     }
   )
-  puts "iv_expansion_period=#{period}: #{BacktestEngine::Analytics::TradeAnalytics.from_result(result).summary}"
+  Rails.logger.debug "iv_expansion_period=#{period}: #{BacktestEngine::Analytics::TradeAnalytics.from_result(result).summary}"
 end
 
 result = run_session(

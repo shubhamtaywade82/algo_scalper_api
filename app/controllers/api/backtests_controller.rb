@@ -76,9 +76,13 @@ module Api
         totalTrades: summary[:total_trades],
         winningTrades: summary[:winning_trades],
         losingTrades: summary[:losing_trades],
-        profitFactor: gross_loss.zero? ? (gross_win.positive? ? 5.0 : 0.0) : (gross_win / gross_loss).round(2),
+        profitFactor: if gross_loss.zero?
+gross_win.positive? ? 5.0 : 0.0
+                      else
+(gross_win / gross_loss).round(2)
+                      end,
         maxDrawdown: max_dd.round(2),
-        maxDrawdownPct: peak > 0 ? ((max_dd / (INITIAL_CAPITAL + peak)) * 100).round(2) : 0,
+        maxDrawdownPct: peak.positive? ? ((max_dd / (INITIAL_CAPITAL + peak)) * 100).round(2) : 0,
         expectancy: summary[:expectancy],
         avgWinPct: summary[:avg_win_percent],
         avgLossPct: summary[:avg_loss_percent]
@@ -115,7 +119,7 @@ module Api
         pnl_rupees = (t[:pnl_percent] / 100.0) * INITIAL_CAPITAL
         equity += pnl_rupees
         peak = equity if equity > peak
-        drawdown_pct = peak > 0 ? ((equity - peak) / peak) * 100 : 0.0
+        drawdown_pct = peak.positive? ? ((equity - peak) / peak) * 100 : 0.0
 
         {
           time: t[:exit_time].to_i,

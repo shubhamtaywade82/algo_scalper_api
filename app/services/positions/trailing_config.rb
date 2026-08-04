@@ -186,7 +186,7 @@ module Positions
           dynamic_drawdown_thresholds: parse_dynamic_drawdown_thresholds(risk[:dynamic_drawdown_thresholds]),
           capital_based_thresholds: parse_capital_based_thresholds(risk[:capital_based_thresholds]),
           activation_profit_pct: dd[:activation_profit_pct] || numeric_or_default(risk[:peak_drawdown_activation_profit_pct],
-                                                    DEFAULT_ACTIVATION_PROFIT_PCT),
+                                                                                  DEFAULT_ACTIVATION_PROFIT_PCT),
           activation_sl_offset_pct: numeric_or_default(risk[:peak_drawdown_activation_sl_offset_pct],
                                                        DEFAULT_ACTIVATION_SL_OFFSET_PCT),
           tiered_drawdown_thresholds: parse_tiered_drawdown_thresholds(risk[:tiered_drawdown_thresholds])

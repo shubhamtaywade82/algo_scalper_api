@@ -14,9 +14,9 @@ module Strategies
   # hardcode strategy names.
   class Discovery
     STRATEGIES_ROOT = Rails.root.join("strategies").freeze
-    MANIFEST_NAME = "manifest.yml".freeze
-    STRATEGY_FILE = "strategy.rb".freeze
-    RELEASE_PATH = "releases/v1/strategy.rb".freeze
+    MANIFEST_NAME = "manifest.yml"
+    STRATEGY_FILE = "strategy.rb"
+    RELEASE_PATH = "releases/v1/strategy.rb"
 
     class PluginError < StandardError; end
 
@@ -39,9 +39,8 @@ module Strategies
 
     def plugins
       @plugins ||= Dir.glob("#{STRATEGIES_ROOT}/*/#{MANIFEST_NAME}")
-        .map { |manifest| plugin_from_manifest(Pathname.new(manifest)) }
-        .compact
-        .sort_by { |plugin| plugin[:slug] }
+                      .filter_map { |manifest| plugin_from_manifest(Pathname.new(manifest)) }
+                      .sort_by { |plugin| plugin[:slug] }
     end
 
     def plugin_from_manifest(manifest_path)
@@ -132,7 +131,7 @@ module Strategies
       keys = %w[slug class_name name timeframes instruments params]
       manifest = YAML.safe_load_file(strategy_path.dirname.join(MANIFEST_NAME).to_s, aliases: true) || {}
       missing = keys.reject { |key| manifest[key].present? }
-      raise PluginError, "manifest missing #{missing.join(", ")}" if missing.any?
+      raise PluginError, "manifest missing #{missing.join(', ')}" if missing.any?
 
       unless manifest["class_name"].to_s.match?(/\A[A-Z]\w*\z/)
         raise PluginError, "invalid manifest class_name: #{manifest['class_name']}"

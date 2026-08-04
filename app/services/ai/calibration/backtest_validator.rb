@@ -54,13 +54,13 @@ module Ai
         end
 
         {
-          approved:          true,
-          baseline_metrics:  baseline_metrics,
+          approved: true,
+          baseline_metrics: baseline_metrics,
           projected_metrics: projected_metrics,
-          baseline_pnl:      baseline_pnl.round(2),
-          projected_pnl:     projected_pnl.round(2),
-          pnl_delta:         (projected_pnl - baseline_pnl).round(2),
-          rejection_reason:  nil
+          baseline_pnl: baseline_pnl.round(2),
+          projected_pnl: projected_pnl.round(2),
+          pnl_delta: (projected_pnl - baseline_pnl).round(2),
+          rejection_reason: nil
         }
       end
 
@@ -70,8 +70,8 @@ module Ai
         @baseline_config ||= begin
           cfg = AlgoConfig.fetch
           {
-            sl_pct:  cfg.dig(:risk, :sl_pct).to_f,
-            tp_pct:  cfg.dig(:risk, :tp_pct).to_f
+            sl_pct: cfg.dig(:risk, :sl_pct).to_f,
+            tp_pct: cfg.dig(:risk, :tp_pct).to_f
           }
         rescue StandardError
           { sl_pct: 0.10, tp_pct: 0.25 }
@@ -91,7 +91,7 @@ module Ai
       # We re-apply exits based on the new thresholds against each trade's
       # historical PnL percentage (simplified, not a full tick replay).
       def simulate_trades(config)
-        @trades.map do |trade|
+        @trades.filter_map do |trade|
           entry   = trade[:entry_price].to_f
           exit_p  = trade[:exit_price].to_f
           qty     = 1 # normalised — direction/quantity already captured in pnl
@@ -106,7 +106,7 @@ module Ai
           effective_pnl_pct = apply_sl_tp(raw_pnl_pct, config[:sl_pct], config[:tp_pct])
 
           { pnl: entry * effective_pnl_pct * qty }
-        end.compact
+        end
       end
 
       def apply_sl_tp(pnl_pct, sl_pct, tp_pct)
@@ -117,16 +117,16 @@ module Ai
       def compute_metrics(trades)
         metrics = Backtest::Metrics.new(trades: trades)
         {
-          win_rate:       (metrics.win_rate * 100).round(2),
-          profit_factor:  metrics.profit_factor.round(2),
-          max_drawdown:   metrics.max_drawdown.round(2)
+          win_rate: (metrics.win_rate * 100).round(2),
+          profit_factor: metrics.profit_factor.round(2),
+          max_drawdown: metrics.max_drawdown.round(2)
         }
       end
 
       def reject!(reason, extra = {})
         Rails.logger.warn("[BacktestValidator] Rejected: #{reason}")
         {
-          approved:         false,
+          approved: false,
           rejection_reason: reason,
           **extra
         }

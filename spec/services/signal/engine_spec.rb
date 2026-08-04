@@ -8,7 +8,7 @@ RSpec.describe Signal::Engine, vcr: { match_requests_on: %i[method uri] } do
   before do
     # Mock token authority to avoid external HTTP calls and VCR issues
     allow_any_instance_of(Object).to receive(:fetch_authority_token!).and_return('dummy_token')
-    
+
     travel_to(Time.zone.parse('2025-11-01 11:47:51'))
     allow(IndexInstrumentCache.instance).to receive(:get_or_fetch).with(index_cfg).and_return(nifty_instrument)
 

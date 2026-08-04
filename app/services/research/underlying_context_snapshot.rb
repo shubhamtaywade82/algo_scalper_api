@@ -73,11 +73,11 @@ module Research
 
       def previous_session_close(symbol, timestamp)
         session_start = timestamp.to_date.in_time_zone("Asia/Kolkata").change(hour: SESSION_OPEN[:hour],
-                                                                               min: SESSION_OPEN[:min])
+                                                                              min: SESSION_OPEN[:min])
         Candles::Record
           .for_instrument(symbol)
           .for_timeframe("1m")
-          .where("ts < ?", session_start)
+          .where(ts: ...session_start)
           .order(ts: :desc)
           .first
           &.close

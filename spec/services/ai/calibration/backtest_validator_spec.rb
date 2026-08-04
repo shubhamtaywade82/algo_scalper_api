@@ -6,8 +6,8 @@ RSpec.describe Ai::Calibration::BacktestValidator do
   let(:trades) do
     [
       { entry_price: 100, exit_price: 110, pnl: 1000 }, # +10%
-      { entry_price: 100, exit_price: 90, pnl: -1000 },  # -10%
-      { entry_price: 100, exit_price: 120, pnl: 2000 }  # +20%
+      { entry_price: 100, exit_price: 90, pnl: -1000 }, # -10%
+      { entry_price: 100, exit_price: 120, pnl: 2000 } # +20%
     ]
   end
 
@@ -28,7 +28,6 @@ RSpec.describe Ai::Calibration::BacktestValidator do
     end
 
     it 'approves if projected PnL is better or within tolerance' do
-
       result = described_class.call(trades: trades, proposed_patch: proposed_patch)
 
       expect(result[:approved]).to be true

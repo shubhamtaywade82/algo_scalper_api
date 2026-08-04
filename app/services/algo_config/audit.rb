@@ -22,8 +22,7 @@ class AlgoConfig
       :registry_in_db,
       :yaml_mtime,
       :last_change_log_at,
-      :yaml_newer_than_last_change,
-      keyword_init: true
+      :yaml_newer_than_last_change
     ) do
       def ok_for_production?
         document_present

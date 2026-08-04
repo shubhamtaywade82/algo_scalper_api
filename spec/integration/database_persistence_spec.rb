@@ -10,8 +10,7 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
       hub.instance_variable_set(:@ws_client, nil)
       hub.instance_variable_set(:@running, false)
       hub.instance_variable_set(:@subscribed_keys, Concurrent::Set.new)
-      allow(hub).to receive(:subscribe).and_return({ success: true })
-      allow(hub).to receive(:unsubscribe).and_return({ success: true })
+      allow(hub).to receive_messages(subscribe: { success: true }, unsubscribe: { success: true })
     end
   end
 
@@ -135,7 +134,7 @@ RSpec.describe 'Database Persistence Integration', :vcr, type: :integration do
         allow(position_tracker).to receive(:unsubscribe)
         redis_cache = Live::RedisPnlCache.instance
         allow(redis_cache).to receive(:clear_tracker)
-        
+
         # Allow other cache writes (e.g. from TickQuery)
         allow(Rails.cache).to receive(:write).and_call_original
         expect(Rails.cache).to receive(:write).with(

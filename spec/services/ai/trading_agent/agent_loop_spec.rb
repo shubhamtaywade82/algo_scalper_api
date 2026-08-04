@@ -8,8 +8,7 @@ RSpec.describe Ai::TradingAgent::AgentLoop do
 
   before do
     allow(Services::Ai::OllamaClient).to receive(:instance).and_return(mock_client)
-    allow(mock_client).to receive(:chat_stream).and_return({ content: 'Hello', tool_calls: [] })
-    allow(mock_client).to receive(:chat).and_return({ content: 'Hello', tool_calls: [] })
+    allow(mock_client).to receive_messages(chat_stream: { content: 'Hello', tool_calls: [] }, chat: { content: 'Hello', tool_calls: [] })
   end
 
   describe '#initialize' do
@@ -220,7 +219,7 @@ RSpec.describe Ai::TradingAgent::AgentLoop do
       })
 
       call_count = 0
-      allow(mock_client).to receive(:chat) do |**args|
+      allow(mock_client).to receive(:chat) do |**_args|
         call_count += 1
         { content: 'Analysis complete', tool_calls: [] }
       end

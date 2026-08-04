@@ -156,41 +156,41 @@ module Ai
         cfg = AlgoConfig.fetch
 
         # Extract only calibration-relevant keys to keep prompt concise
-        risk   = cfg.dig(:risk) || {}
-        sizing = cfg.dig(:position_sizing) || {}
+        risk   = cfg[:risk] || {}
+        sizing = cfg[:position_sizing] || {}
 
-        index_cfg = (cfg.dig(:indices) || []).find { |i| i[:key]&.to_s&.upcase == @symbol } || {}
-        adx_thresh = index_cfg.dig(:adx_thresholds) || {}
+        index_cfg = (cfg[:indices] || []).find { |i| i[:key]&.to_s&.upcase == @symbol } || {}
+        adx_thresh = index_cfg[:adx_thresholds] || {}
 
         {
-          symbol:                    @symbol,
+          symbol: @symbol,
           # Risk model
-          sl_pct:                    risk[:sl_pct],
-          tp_pct:                    risk[:tp_pct],
-          per_trade_risk_pct:        risk[:per_trade_risk_pct],
+          sl_pct: risk[:sl_pct],
+          tp_pct: risk[:tp_pct],
+          per_trade_risk_pct: risk[:per_trade_risk_pct],
           # RR profit booking
-          target_rr:                 risk.dig(:rr_profit_booking, :target_rr),
+          target_rr: risk.dig(:rr_profit_booking, :target_rr),
           # Institutional trailing
-          trailing_enabled:          risk.dig(:institutional_trailing, :enabled),
-          trailing_index:            risk.dig(:institutional_trailing, @symbol.downcase.to_sym),
+          trailing_enabled: risk.dig(:institutional_trailing, :enabled),
+          trailing_index: risk.dig(:institutional_trailing, @symbol.downcase.to_sym),
           # Direct trailing
-          direct_trailing_enabled:   sizing.dig(:direct_trailing, :enabled),
-          direct_trailing_distance:  sizing.dig(:direct_trailing, :distance_pct),
-          trailing_activation:       sizing.dig(:trailing, :activation_pct),
-          trailing_drawdown:         sizing.dig(:trailing, :drawdown_pct),
+          direct_trailing_enabled: sizing.dig(:direct_trailing, :enabled),
+          direct_trailing_distance: sizing.dig(:direct_trailing, :distance_pct),
+          trailing_activation: sizing.dig(:trailing, :activation_pct),
+          trailing_drawdown: sizing.dig(:trailing, :drawdown_pct),
           # Profit floor
-          profit_floor_lock_pct:     risk.dig(:profit_floor, :lock_pct),
-          profit_floor_trail_pct:    risk.dig(:profit_floor, :trail_pct),
+          profit_floor_lock_pct: risk.dig(:profit_floor, :lock_pct),
+          profit_floor_trail_pct: risk.dig(:profit_floor, :trail_pct),
           # ADX
-          primary_adx_min:           adx_thresh[:primary_min_strength],
-          confirmation_adx_min:      adx_thresh[:confirmation_min_strength],
+          primary_adx_min: adx_thresh[:primary_min_strength],
+          confirmation_adx_min: adx_thresh[:confirmation_min_strength],
           # Edge failure detector
-          rolling_window_size:       cfg.dig(:risk, :edge_failure_detector, :rolling_window_size),
-          rolling_window_threshold:  cfg.dig(:risk, :edge_failure_detector, :rolling_window_threshold_rupees),
-          max_consecutive_sls:       cfg.dig(:risk, :edge_failure_detector, :max_consecutive_sls),
+          rolling_window_size: cfg.dig(:risk, :edge_failure_detector, :rolling_window_size),
+          rolling_window_threshold: cfg.dig(:risk, :edge_failure_detector, :rolling_window_threshold_rupees),
+          max_consecutive_sls: cfg.dig(:risk, :edge_failure_detector, :max_consecutive_sls),
           # Trade limits
-          max_trades_per_day:        index_cfg.dig(:trade_limits, :max_trades_per_day),
-          global_max_trades:         cfg.dig(:trade_limits, :global_max_trades_per_day)
+          max_trades_per_day: index_cfg.dig(:trade_limits, :max_trades_per_day),
+          global_max_trades: cfg.dig(:trade_limits, :global_max_trades_per_day)
         }.compact
       rescue StandardError => e
         Rails.logger.warn("[PromptBuilder] Failed to load config: #{e.message}")

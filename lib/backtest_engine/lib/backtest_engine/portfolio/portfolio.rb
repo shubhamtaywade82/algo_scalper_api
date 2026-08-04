@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module BacktestEngine
   module Portfolio
     class Portfolio
@@ -37,7 +39,7 @@ module BacktestEngine
       end
 
       def record_equity(pnl: 0.0)
-        equity_curve << cash + open_position_value + pnl
+        equity_curve << (cash + open_position_value + pnl)
       end
 
       def max_drawdown

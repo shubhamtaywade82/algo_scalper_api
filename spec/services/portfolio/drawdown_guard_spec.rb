@@ -64,9 +64,9 @@ RSpec.describe Portfolio::DrawdownGuard do
       end
 
       context 'with active positions' do
-        let(:pos_data)  { double('PositionData', tracker_id: 77) }
+        let(:pos_data) { double('PositionData', tracker_id: 77) }
         let(:active_positions) { [pos_data] }
-        let(:tracker)   { instance_double(PositionTracker, id: 77, active?: true) }
+        let(:tracker) { instance_double(PositionTracker, id: 77, active?: true) }
         let(:exit_engine) { instance_double(Live::ExitEngine) }
 
         before do

@@ -24,7 +24,11 @@ module Ai
       end
 
       def initialize(symbol:, days:, dry_run: false)
-        @symbol  = symbol.to_short_name.upcase rescue symbol.to_s.upcase
+        @symbol = begin
+                     symbol.to_short_name.upcase
+        rescue StandardError
+                     symbol.to_s.upcase
+        end
         @days    = days.to_i
         @dry_run = dry_run
       end
@@ -68,7 +72,7 @@ module Ai
 
         # 5. Backtest validation
         validation = BacktestValidator.call(
-          trades:         dataset[:trades],
+          trades: dataset[:trades],
           proposed_patch: parsed[:proposed_patch]
         )
 
@@ -82,16 +86,15 @@ module Ai
 
         # 6. Persist CalibrationRun (does NOT apply)
         run = ConfigApplier.call(
-          symbol:            @symbol,
-          parsed_result:     parsed,
+          symbol: @symbol,
+          parsed_result: parsed,
           validation_result: validation,
-          dataset_meta:      dataset[:meta],
-          dry_run:           @dry_run
+          dataset_meta: dataset[:meta],
+          dry_run: @dry_run
         )
 
         log "CalibrationRun ##{run&.id} persisted."
         run
-
       rescue InsufficientDataError => e
         Rails.logger.warn("[AiCalibration::Runner] #{e.message}")
         nil
@@ -107,7 +110,7 @@ module Ai
         client = Services::Ai::OllamaClient.instance
         return nil unless client.enabled?
 
-        schema_path = Rails.root.join('config', 'ai_calibration_schema.json')
+        schema_path = Rails.root.join("config/ai_calibration_schema.json")
         schema      = JSON.parse(File.read(schema_path))
 
         # Use the specific model prioritized for calibration if set
@@ -115,7 +118,7 @@ module Ai
 
         client.generate(
           prompt: prompt,
-          model:  model,
+          model: model,
           schema: schema
         )
       rescue StandardError => e

@@ -6,9 +6,9 @@ RSpec.describe Dhan::Auth::StrategyResolver do
   describe ".resolve" do
     {
       "authority" => Dhan::Auth::Strategies::Authority,
-      "totp"      => Dhan::Auth::Strategies::Totp,
-      "manual"    => Dhan::Auth::Strategies::Manual,
-      "renew"     => Dhan::Auth::Strategies::Renew
+      "totp" => Dhan::Auth::Strategies::Totp,
+      "manual" => Dhan::Auth::Strategies::Manual,
+      "renew" => Dhan::Auth::Strategies::Renew
     }.each do |mode, klass|
       context "when DHAN_AUTH_MODE=#{mode}" do
         before { stub_const("ENV", ENV.to_hash.merge("DHAN_AUTH_MODE" => mode)) }

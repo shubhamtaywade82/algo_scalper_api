@@ -27,14 +27,14 @@ RSpec.describe Ai::Calibration::ConfigApplier do
 
   describe '.call' do
     it 'creates a CalibrationRun record' do
-      expect {
+      expect do
         described_class.call(
           symbol: symbol,
           parsed_result: parsed_result,
           validation_result: validation_result,
           dataset_meta: dataset_meta
         )
-      }.to change(CalibrationRun, :count).by(1)
+      end.to change(CalibrationRun, :count).by(1)
 
       run = CalibrationRun.last
       expect(run.symbol).to eq('NIFTY')
@@ -45,14 +45,14 @@ RSpec.describe Ai::Calibration::ConfigApplier do
 
     it 'does Not create if patch is blank' do
       parsed_result[:proposed_patch] = {}
-      expect {
+      expect do
         described_class.call(
           symbol: symbol,
           parsed_result: parsed_result,
           validation_result: validation_result,
           dataset_meta: dataset_meta
         )
-      }.not_to change(CalibrationRun, :count)
+      end.not_to change(CalibrationRun, :count)
     end
   end
 end

@@ -76,7 +76,7 @@ module Positions
     end
 
     def exit_block(tracker)
-      return nil unless tracker.exited_at.present?
+      return nil if tracker.exited_at.blank?
 
       execution_meta = tracker.execution.is_a?(Hash) ? tracker.execution : {}
       {

@@ -43,7 +43,7 @@ module Risk
           nil
         end
         candles = series&.candles || []
-        
+
         # LTP and ADX logic
         adx_value = begin
           instrument.adx(14, interval: '5')
@@ -70,7 +70,7 @@ module Risk
         return 1.0 unless instrument
         series = instrument.candle_series(interval: '5')
         return 1.0 if series.blank? || series.candles.blank?
-        
+
         candles = series.candles.last(20)
         return 1.0 if candles.size < 10
 

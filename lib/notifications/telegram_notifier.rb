@@ -211,7 +211,7 @@ module Notifications
     end
 
     def format_entry_message(tracker, entry_data)
-      symbol     = h(tracker.symbol || entry_data[:symbol] || 'N/A')
+      symbol = h(tracker.symbol || entry_data[:symbol] || 'N/A')
       entry_price = tracker.entry_price&.to_f || entry_data[:entry_price] || 0.0
       quantity   = tracker.quantity || entry_data[:quantity] || 0
       direction  = tracker.direction || entry_data[:direction] || 'BUY'

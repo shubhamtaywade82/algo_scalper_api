@@ -16,11 +16,11 @@ RSpec.describe Options::StrikeAggregator do
   end
 
   describe '.combine' do
+    subject(:result) { described_class.combine(atm_stats: atm, otm1_stats: otm1, otm2_stats: otm2) }
+
     let(:atm)  { engine_result(avg_gain: 20.0, avg_retrace_abs: 4.0, avg_loss_abs: 8.0, avg_oc: 5.0, oc_stddev: 3.0) }
     let(:otm1) { engine_result(avg_gain: 14.0, avg_retrace_abs: 3.0, avg_loss_abs: 6.0, avg_oc: 3.5, oc_stddev: 2.5) }
     let(:otm2) { engine_result(avg_gain: 10.0, avg_retrace_abs: 2.0, avg_loss_abs: 4.0, avg_oc: 2.5, oc_stddev: 2.0) }
-
-    subject(:result) { described_class.combine(atm_stats: atm, otm1_stats: otm1, otm2_stats: otm2) }
 
     it 'returns a hash with avg_gain, avg_retrace_abs, avg_loss_abs, avg_oc, oc_stddev' do
       expect(result).to include(:avg_gain, :avg_retrace_abs, :avg_loss_abs, :avg_oc, :oc_stddev)
