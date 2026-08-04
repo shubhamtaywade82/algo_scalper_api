@@ -1,15 +1,11 @@
 import { createSignal, onMount, onCleanup } from 'solid-js'
-import toast from 'solid-toast'
 import cable from '../cable'
 
-const POLL_STALE_MS   = 2000   // when WS is stale or not yet delivering
-const POLL_LIVE_MS    = 15000  // when WS heartbeats are arriving
-const WS_STALE_AFTER_MS = 5000
+const POLL_INTERVAL_MS = 30000
 
 export function useDashboard(onPositionChange) {
   const [mode, setMode] = createSignal('paper')
   const [connected, setConnected] = createSignal(false)
-  const [isStale, setIsStale] = createSignal(true)
   const [stats, setStats] = createSignal({
     total_trades: 0,
     active_positions: 0,
@@ -21,16 +17,7 @@ export function useDashboard(onPositionChange) {
     losers: 0
   })
   const [balance, setBalance] = createSignal({ cash: 0, equity: 0, mtm: 0, exposure: 0 })
-  const [indices, setIndices] = createSignal({
-    nifty: null,
-    banknifty: null,
-    sensex: null,
-    nifty_prev_close: null,
-    banknifty_prev_close: null,
-    sensex_prev_close: null
-  })
-  const [subscribedIndices, setSubscribedIndices] = createSignal([])
-  const [optionsBuying, setOptionsBuying] = createSignal({ nifty: {}, banknifty: {}, sensex: {} })
+  const [indices, setIndices] = createSignal({ nifty: null, banknifty: null, sensex: null })
   const [system, setSystem] = createSignal({ ws_market_feed: false, ws_order_update: false, scheduler: 'unknown' })
   const [publicIpv4, setPublicIpv4] = createSignal('Unknown')
   const [publicIpv6, setPublicIpv6] = createSignal('Unknown')
@@ -39,134 +26,52 @@ export function useDashboard(onPositionChange) {
   const [lastUpdated, setLastUpdated] = createSignal(null)
   const [recentSignals, setRecentSignals] = createSignal([])
   const [config, setConfig] = createSignal({ risk: {}, signals: {}, time_restrictions: {} })
-  const [marketStatus, setMarketStatus] = createSignal(null)
 
   let subscription = null
   let pollTimer = null
-  let staleTimer = null
-
-  async function fetchInitial() {
-    try {
-      const res = await fetch('/api/dashboard')
-      if (!res.ok) return
-      applyData(await res.json())
-    } catch (e) {
-      console.error('[Dashboard] fetch failed:', e)
-    }
-  }
-
-  function markFresh() {
-    setIsStale(false)
-    clearTimeout(staleTimer)
-    staleTimer = setTimeout(() => {
-      setIsStale(true)
-      schedulePoll() // WS went stale — switch to fast poll immediately
-    }, WS_STALE_AFTER_MS)
-    schedulePoll() // WS is live — reschedule at slow interval
-  }
-
-  function schedulePoll() {
-    clearTimeout(pollTimer)
-    const delay = isStale() ? POLL_STALE_MS : POLL_LIVE_MS
-    pollTimer = setTimeout(() => {
-      fetchInitial()
-      schedulePoll()
-    }, delay)
-  }
 
   function applyData(data) {
-    if (!data) return
-    console.debug('📊 [Dashboard:applyData] Processing:', data)
-    
-    // Core stats
-    if (data.mode !== undefined) setMode(data.mode)
+    if (data.mode != null) setMode(data.mode)
     if (data.balance) setBalance(data.balance)
     if (data.today) setStats(data.today)
-    else if (data.stats) setStats(data.stats)
-    else if (data.today_stats) setStats(data.today_stats)
-
-    // Flat index updates or nested updates
-    const current = { ...indices() }
-    let changed = false
-    
-    // Search top-level AND nested under 'indices' or 'market_indices'
-    const sources = [data, data.indices, data.market_indices].filter(Boolean)
-    
-    for (const src of sources) {
-      if (src.nifty) { current.nifty = src.nifty; changed = true }
-      if (src.banknifty) { current.banknifty = src.banknifty; changed = true }
-      if (src.sensex) { current.sensex = src.sensex; changed = true }
-      if (src.nifty_prev_close !== undefined && src.nifty_prev_close !== null) { current.nifty_prev_close = src.nifty_prev_close; changed = true }
-      if (src.banknifty_prev_close !== undefined && src.banknifty_prev_close !== null) { current.banknifty_prev_close = src.banknifty_prev_close; changed = true }
-      if (src.sensex_prev_close !== undefined && src.sensex_prev_close !== null) { current.sensex_prev_close = src.sensex_prev_close; changed = true }
-    }
-
-    if (changed) {
-      console.debug('📈 [Dashboard:Indices] Updated:', current)
-      setIndices(current)
-    }
-
-    if (data.system) {
-      // pnl_updater_running and ws_order_update are checked via in-process .running?
-      // in the web process — they are always false there. Only the WS heartbeat
-      // (type: "stats") comes from the trading process and has the real values.
-      // Preserve those fields across REST polls so they don't flicker to false.
-      const fromWs = !!data.type
-      setSystem(prev => {
-        const next = { ...prev, ...data.system }
-        if (!fromWs) {
-          next.pnl_updater_running = prev.pnl_updater_running
-          next.ws_order_update     = prev.ws_order_update
-        }
-        return next
-      })
-    }
+    if (data.indices) setIndices(data.indices)
+    if (data.system) setSystem(data.system)
     if (data.public_ipv4) setPublicIpv4(data.public_ipv4)
     if (data.public_ipv6) setPublicIpv6(data.public_ipv6)
     if (data.registered_ips !== undefined) setRegisteredIps(data.registered_ips)
     if (data.circuit_breaker) setCircuitBreaker(data.circuit_breaker)
     if (data.recent_signals) setRecentSignals(data.recent_signals)
     if (data.config) setConfig(data.config)
-    if (data.subscribed_indices) setSubscribedIndices(data.subscribed_indices)
-    if (data.options_buying) setOptionsBuying(data.options_buying)
-    if (data.market_status) setMarketStatus(data.market_status)
+    if (data.timestamp) setLastUpdated(data.timestamp)
+  }
 
-    setLastUpdated(data.timestamp || new Date().toISOString())
+  async function fetchInitial() {
+    try {
+      const res = await fetch('/api/dashboard')
+      const data = await res.json()
+      applyData(data)
+    } catch (e) {
+      console.error('[Dashboard] fetch failed:', e)
+    }
   }
 
   onMount(() => {
     fetchInitial()
-    schedulePoll()
+    pollTimer = setInterval(fetchInitial, POLL_INTERVAL_MS)
 
     subscription = cable.subscriptions.create('DashboardChannel', {
       connected() {
-        console.log('✅ [WS:Dashboard] Connected')
         setConnected(true)
-        markFresh()
+      },
+      disconnected() {
+        setConnected(false)
       },
       received(data) {
-        console.debug('⚡ [WS:Dashboard] Update:', data)
-        markFresh()
-        applyData(data)
-        
-        if (data.type === 'position_activated') {
-          toast.success(`Entry Taken: ${data.position.symbol} @ ₹${data.position.entry_price}`)
+        if (data.type === 'stats') {
+          applyData(data)
+        } else if (data.type === 'position_activated' || data.type === 'position_exited') {
           onPositionChange?.()
           fetchInitial()
-        } else if (data.type === 'position_exited') {
-          const pnlText = data.position.pnl >= 0 ? `+₹${data.position.pnl}` : `-₹${Math.abs(data.position.pnl)}`
-          if (data.position.pnl >= 0) {
-            toast.success(`Position Exited: ${data.position.symbol} (${pnlText})`)
-          } else {
-            toast.error(`Position Exited: ${data.position.symbol} (${pnlText})`)
-          }
-          onPositionChange?.()
-          fetchInitial()
-        } else if (data.type === 'toast') {
-          const body = data.title ? `${data.title}\n${data.message}` : data.message
-          if (data.level === 'error') toast.error(body)
-          else if (data.level === 'warning') toast(body, { icon: '⚠️' })
-          else toast.success(body)
         } else if (data.type === 'circuit_breaker') {
           setCircuitBreaker({ tripped: data.tripped, reason: data.reason, at: data.at })
         }
@@ -176,14 +81,8 @@ export function useDashboard(onPositionChange) {
 
   onCleanup(() => {
     subscription?.unsubscribe()
-    clearTimeout(pollTimer)
-    clearTimeout(staleTimer)
+    clearInterval(pollTimer)
   })
 
-  return {
-    mode, connected, isStale, stats, balance, indices, subscribedIndices, optionsBuying, system,
-    publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config,
-    marketStatus,
-    refresh: fetchInitial
-  }
+  return { mode, connected, stats, balance, indices, system, publicIpv4, publicIpv6, registeredIps, circuitBreaker, lastUpdated, recentSignals, config }
 }

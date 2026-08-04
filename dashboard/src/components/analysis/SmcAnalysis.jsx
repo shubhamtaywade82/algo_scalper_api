@@ -1,6 +1,5 @@
 import { createMemo } from 'solid-js'
 import { Show, For } from 'solid-js'
-import SmcConfluencePanel from './SmcConfluencePanel'
 
 function decisionStyle(d) {
   const map = {
@@ -91,12 +90,6 @@ export default function SmcAnalysis(props) {
               </div>
             </div>
           </Show>
-
-          <SmcConfluencePanel
-            smcConfluenceMtf={smc()?.smc_confluence_mtf}
-            smcConfluenceLtfSummary={smc()?.smc_confluence_ltf_summary}
-            smcConfluenceMtfError={smc()?.smc_confluence_mtf_error}
-          />
         </div>
       </Show>
     </div>

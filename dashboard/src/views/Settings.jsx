@@ -1,7 +1,7 @@
 import { createSignal, onMount, For, Show } from 'solid-js'
 import RecursiveFormNode from '../components/settings/RecursiveFormNode'
+import CalibrationRunsPanel from '../components/settings/CalibrationRunsPanel'
 import NetworkStatusPanel from '../components/settings/NetworkStatusPanel'
-import FastEntryModePanel from '../components/settings/FastEntryModePanel'
 
 export default function Settings() {
   const [configRoot, setConfigRoot] = createSignal(null)
@@ -43,32 +43,14 @@ export default function Settings() {
   }
 
   async function saveSettings() {
-    let token = localStorage.getItem('algo_settings_token')
-    if (!token) {
-      token = window.prompt("Enter Settings Update Token (from your .env file):")
-      if (token) {
-        localStorage.setItem('algo_settings_token', token)
-      } else {
-        showToast('Canceled: Token required', 'error')
-        return
-      }
-    }
-
     setSaving(true)
     try {
       const response = await fetch('/api/settings/bulk', {
         method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Settings-Update-Token': token
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings: configRoot() })
       })
       const data = await response.json()
-      if (response.status === 401) {
-        localStorage.removeItem('algo_settings_token')
-        throw new Error('Invalid token. Try again.')
-      }
       if (data.success) {
         showToast('Settings saved successfully (Overrides stored in DB)')
       } else {
@@ -122,8 +104,6 @@ export default function Settings() {
             </button>
           </div>
         </div>
-
-        <FastEntryModePanel />
 
         <Show when={loading() && !configRoot()}>
           <div class="flex justify-center py-20">
@@ -185,6 +165,12 @@ export default function Settings() {
             </div>
           </div>
         </Show>
+      </div>
+
+      <div class="mt-12 max-w-7xl mx-auto w-full space-y-6">
+        <For each={['NIFTY', 'SENSEX']}>
+          {(sym) => <CalibrationRunsPanel symbol={sym} />}
+        </For>
       </div>
     </div>
   )

@@ -31,40 +31,7 @@ Rails.application.routes.draw do
     get :dashboard, to: "dashboard#show"
     get "public_ip/audit", to: "public_ip#audit"
     get :positions, to: "positions#index"
-    get "positions/:id", to: "positions#show"
-    post "positions/:id/close", to: "positions#close"
-    get :signals, to: "signals#index"
-    get :dhan_access_token, to: "dhan_access_token#show"
-
-    get :holdings, to: "holdings#index"
-    get :funds,    to: "funds#index"
-    post "funds/add", to: "funds#add"
-    post "funds/withdraw", to: "funds#withdraw"
-    get :reports, to: "reports#index"
-    get "reports/pnl", to: "reports#pnl"
-    get "reports/trades", to: "reports#trades"
-    get "reports/performance", to: "reports#performance"
-    get "reports/export", to: "reports#export"
-    get "reports/pnl_by_strategy", to: "reports#pnl_by_strategy"
-    get "reports/pnl_by_instrument", to: "reports#pnl_by_instrument"
-    get "orders", to: "orders#index"
-    get :depth, to: "depth#index"
-    get :equity_curve, to: "equity_curve#index"
-    post :backtests, to: "backtests#create"
-    post :replays, to: "replays#create"
-
-    get :logs,     to: "logs#index"
-    get :alerts,   to: "alerts#index"
-    post :alerts,  to: "alerts#create"
-    patch "alerts/:id", to: "alerts#update"
-    delete "alerts/:id", to: "alerts#destroy"
-    get "scheduler/tasks", to: "scheduler#index"
-    post "scheduler/tasks/:id/execute", to: "scheduler#execute"
-
-    get 'smc/decision', to: 'smc#decision'
-
-    # OHLC candle series for dashboard charting (read-only)
-    get 'candles/:index_key', to: 'candles#index', as: :candles
+    get :signals,   to: "signals#index"
 
     # Live AI analysis dashboard
     get  'analysis/:index_key',            to: 'analysis#show',        as: :analysis
